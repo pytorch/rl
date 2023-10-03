@@ -10,13 +10,19 @@ from .transformer import init_transformer
 __all__ = ["init_actor_critic"]
 
 
-def init_actor_critic(transformer_name_or_path, dropout, device, compile_):
+def init_actor_critic(model_cfg, sys_cfg):
+
+    transformer_name_or_path = model_cfg.name_or_path
+    dropout = model_cfg.dropout
+
+    device = sys_cfg.device
+    compile_model = sys_cfg.compile
     base_model = init_transformer(
         transformer_name_or_path,
         dropout,
         device,
         as_tensordictmodule=False,
-        compile_=compile_,
+        compile_model=compile_model,
         inference=True,
     )
     model = LMHeadActorValueOperator(base_model)

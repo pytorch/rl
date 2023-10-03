@@ -75,6 +75,7 @@ class GPT2RewardModel(nn.Module):
 
         return torch.stack(end_scores)
 
+    # TODO: move to objectives
     @staticmethod
     def compute_reward_loss(chosen_batch, rejected_batch, pad_token_id=50256):
         """Compute the reward loss given a chosen and rejected batch.

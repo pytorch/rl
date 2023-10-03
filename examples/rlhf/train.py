@@ -85,7 +85,7 @@ def main(cfg):
         resolve_name_or_path(model_cfg.name_or_path),
         model_cfg.dropout,
         device,
-        compile_=compile_,
+        compile_model=compile_,
     )
     optimizer = torch.optim.AdamW(model.parameters(), **train_cfg.optimizer)
     scheduler = None

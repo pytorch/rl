@@ -88,13 +88,13 @@ def main(cfg):
         model = init_reward_model(
             reward_model_path=resolve_name_or_path(reward_model_cfg.out_dir),
             device=device,
-            compile_=compile_,
+            compile_model=compile_,
         )
     else:
         model = init_reward_model(
             transformer_path=resolve_name_or_path(model_cfg.name_or_path),
             device=device,
-            compile_=compile_,
+            compile_model=compile_,
         )
     # Freeze the first 70% of the hidden layers of the reward model backbone
     layers = model.transformer.h

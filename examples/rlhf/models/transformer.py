@@ -11,7 +11,7 @@ def init_transformer(
     name_or_path,
     dropout,
     device,
-    compile_,
+    compile_model,
     as_tensordictmodule=True,
     inference=False,
 ):
@@ -26,7 +26,7 @@ def init_transformer(
     )
     model.to(device)
 
-    if compile_:
+    if compile_model:
         # TODO: logging instead of printing?
         print("Compiling transformer model...")
         model = torch.compile(model)

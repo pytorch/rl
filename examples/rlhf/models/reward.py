@@ -10,7 +10,7 @@ from torchrl.modules.models.rlhf import GPT2RewardModel
 
 
 def init_reward_model(
-    transformer_path=None, reward_model_path=None, device=None, compile_=False
+    transformer_path=None, reward_model_path=None, device=None, compile_model=False
 ):
     if not ((transformer_path is None) ^ (reward_model_path is None)):
         raise ValueError(
@@ -22,7 +22,7 @@ def init_reward_model(
         model = GPT2RewardModel.from_pretrained(reward_model_path)
 
     model.to(device)
-    if compile_:
+    if compile_model:
         print("Compiling the reward model...")
         model = torch.compile(model)
 

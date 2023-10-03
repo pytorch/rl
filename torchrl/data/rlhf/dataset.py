@@ -348,7 +348,7 @@ def get_dataloader(
             Defaults to ``False``.
 
     Examples:
-        >>> from torchrl.data.rlhf.comparison import PairwiseDataset
+        >>> from torchrl.data.rlhf.reward import PairwiseDataset
         >>> dataloader = get_dataloader(
         ...     batch_size=256, block_size=550, tensorclass_type=PairwiseDataset, device="cpu")
         >>> for d in dataloader:

@@ -2,9 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import abc
+import collections
 import importlib
-from typing import Tuple
+from typing import Sequence, Tuple
 
 import numpy as np
 import torch
@@ -22,12 +25,12 @@ class KLControllerBase(abc.ABC):
     """Base class for KL controllers.
 
     Each controller must implement an update method that takes the current KL value and
-    the number of steps and updates the kl_coef attribute of the wrapped model, 
+    the number of steps and updates the kl_coef attribute of the wrapped model,
     which will multiply the KL during calculation of the reward.
     """
 
     @abc.abstractmethod
-    def update(self, kl_value: float, n_steps: int):
+    def update(self, kl_values: float):
         pass
 
 
@@ -46,11 +49,13 @@ class ConstantKLController(KLControllerBase):
     def __init__(self, model, kl_coef):
         self.model = model
         if not hasattr(model, "kl_coef"):
-            raise AttributeError("Model input to ConstantKLController doesn't have attribute 'kl_coef'")
+            raise AttributeError(
+                "Model input to ConstantKLController doesn't have attribute 'kl_coef'"
+            )
         self.coef = kl_coef
         self.model.kl_coef = self.coef
 
-    def update(self, kl_value: float, n_steps: int):
+    def update(self, kl_values: Sequence[float] = None):
         self.model.kl_coef = self.coef
 
 
@@ -79,18 +84,26 @@ class AdaptiveKLController(KLControllerBase):
         self.horizon = horizon
         self.model.kl_coef = self.coef
 
-    def update(self, kl_value: float, n_steps: int):
+    def update(self, kl_values: Sequence[float]):
         """Update ``self.coef`` adaptively.
 
         Arguments:
-            kl_value: The current KL value between the newest policy and the initial
+            kl_values (sequence of float): The current KL value between the newest policy and the initial
                 policy.
-            n_steps: The number of training steps taken since last update.
+
         """
+        if kl_values is None:
+            raise ValueError(
+                f"The kl_values were not provided to {type(self)}. "
+                f"Make sure these values are provided for the scheduler to be updated "
+                f"accordingly. "
+            )
+        n_steps = len(kl_values)
+        # renormalize kls
+        kl_value = -torch.tensor(kl_values).mean() / self.coef
         proportional_error = np.clip(kl_value / self.target - 1, -0.2, 0.2)  # ϵₜ
         mult = 1 + proportional_error * n_steps / self.horizon
         self.coef *= mult  # βₜ₊₁
-        self.model.kl_coef = self.coef
 
 
 class RolloutFromModel:
@@ -110,11 +123,13 @@ class RolloutFromModel:
         reward_model: (nn.Module, tensordict.nn.TensorDictModule): a model which, given
             ``input_ids`` and ``attention_mask``, calculates rewards for each token and
             end_scores (the reward for the final token in each sequence).
-        kl_coef: (float, optional): initial kl coefficient.  
+        kl_coef: (float, optional): initial kl coefficient.
         max_new_tokens (int, optional): the maximum length of the sequence.
             Defaults to 50.
         score_clip (float, optional): Scores from the reward model are clipped to the
             range ``(-score_clip, score_clip)``. Defaults to 10.
+        kl_scheduler (KLControllerBase, optional): the KL coefficient scheduler.
+        num_steps (int, optional): number of steps between two optimization.
 
     Examples:
         >>> from tensordict.nn import TensorDictModule
@@ -172,6 +187,8 @@ class RolloutFromModel:
         kl_coef=0.1,
         max_new_tokens=50,
         score_clip=10.0,
+        kl_scheduler: KLControllerBase | None = None,
+        num_steps: int | None = None,
     ):
         if not _has_transformers:
             raise ImportError(
@@ -184,6 +201,14 @@ class RolloutFromModel:
         self.max_new_tokens = max_new_tokens
         self.score_clip = score_clip
         self.kl_coef = kl_coef
+        self.kl_scheduler = kl_scheduler
+        if num_steps is not None:
+            self._kl_queue = collections.deque(maxlen=num_steps)
+        else:
+            # we create a list. Value appended to it will be detached scalars so very cheap to store,
+            # even if the update is not called.
+            # The scheduler update will take care of erasing these values.
+            self._kl_queue = []
 
     @torch.no_grad()
     def rollout_from_data(self, batch):
@@ -267,6 +292,7 @@ class RolloutFromModel:
                 "reward_kl": reward_kl,
             },
         }
+        self._kl_queue.append(reward_kl.detach().mean())
         return TensorDict(
             td, batch_size=done.shape[:2], device=generated.device
         ).refine_names(..., "time")
@@ -289,7 +315,7 @@ class RolloutFromModel:
         terminated = generated == self.EOS_TOKEN_ID
         terminated = terminated.int().cumsum(-1).bool()
         done = terminated.clone()
-        done[..., self.max_new_tokens-1] = 1
+        done[..., self.max_new_tokens - 1] = 1
         return done, terminated
 
     def _get_action(self, generated, batch):
@@ -468,3 +494,11 @@ class RolloutFromModel:
 
         log_ratio = self._log_ratio(generated, batch.prompt_rindex)
         return generated, log_probs_gen, log_ratio
+
+    def step_scheduler(self):
+        # recover true kl
+        self.kl_scheduler.update(self._kl_queue)
+        if isinstance(self._kl_queue, (list, collections.deque)):
+            # remove all values
+            while len(self._kl_queue):
+                self._kl_queue.remove(self._kl_queue[0])
