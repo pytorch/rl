@@ -19,6 +19,7 @@ from torchrl.envs import (
     Compose,
     DoubleToFloat,
     EnvCreator,
+    InitTracker,
     ParallelEnv,
     RewardScaling,
     RewardSum,
@@ -37,19 +38,18 @@ from torchrl.trainers.helpers.models import ACTIVATIONS
 # -----------------
 
 
-def env_maker(task, frame_skip=1, device="cpu", from_pixels=False):
+def env_maker(task, device="cpu", from_pixels=False):
     with set_gym_backend("gym"):
-        return GymEnv(
-            task, device=device, frame_skip=frame_skip, from_pixels=from_pixels
-        )
+        return GymEnv(task, device=device, from_pixels=from_pixels)
 
 
 def apply_env_transforms(env, reward_scaling=1.0):
     transformed_env = TransformedEnv(
         env,
         Compose(
+            InitTracker(),
             RewardScaling(loc=0.0, scale=reward_scaling),
-            DoubleToFloat(in_keys=["observation"], in_keys_inv=[]),
+            DoubleToFloat(),
             RewardSum(),
         ),
     )
@@ -60,7 +60,7 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         train_num_envs,
-        EnvCreator(lambda: env_maker(task=cfg.env.name, frame_skip=cfg.env.frame_skip)),
+        EnvCreator(lambda: env_maker(task=cfg.env.name)),
     )
     parallel_env.set_seed(cfg.env.seed)
 
@@ -69,9 +69,7 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1):
     eval_env = TransformedEnv(
         ParallelEnv(
             eval_num_envs,
-            EnvCreator(
-                lambda: env_maker(task=cfg.env.name, frame_skip=cfg.env.frame_skip)
-            ),
+            EnvCreator(lambda: env_maker(task=cfg.env.name)),
         ),
         train_env.transform.clone(),
     )
@@ -135,7 +133,7 @@ def make_replay_buffer(
 
 def make_offline_replay_buffer(rb_cfg):
     data = D4RLExperienceReplay(
-        rb_cfg.dataset,
+        name=rb_cfg.dataset,
         split_trajs=False,
         batch_size=rb_cfg.batch_size,
         sampler=SamplerWithoutReplacement(drop_last=False),
@@ -164,10 +162,12 @@ def make_offline_replay_buffer(rb_cfg):
 def make_iql_model(cfg, train_env, eval_env, device="cpu"):
     model_cfg = cfg.model
 
-    action_spec = train_env.action_spec
-
-    actor_net, q_net, value_net = make_iql_modules_state(model_cfg, eval_env)
     in_keys = ["observation"]
+    action_spec = train_env.action_spec
+    if train_env.batch_size:
+        action_spec = action_spec[(0,) * len(train_env.batch_size)]
+    actor_net, q_net, value_net = make_iql_modules_state(model_cfg, eval_env)
+
     out_keys = ["loc", "scale"]
 
     actor_module = TensorDictModule(actor_net, in_keys=in_keys, out_keys=out_keys)
