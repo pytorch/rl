@@ -694,7 +694,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 device=tensordict.device,
             ).expand(tensordict.shape[0])
 
-        priority = priority.view(priority.shape[0], -1)
+        priority = priority.reshape(priority.shape[0], -1)
         priority = _reduce(priority, self._sampler.reduction, dim=1)
 
         return priority
