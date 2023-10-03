@@ -279,9 +279,9 @@ print("observation_spec:", env.observation_spec)
 # This info will be useful in order to tell all other TorchRL components where to find each value
 #
 
-print("action_key:", env.action_keys)
-print("reward_key:", env.reward_keys)
-print("done_key:", env.done_keys)
+print("action_keys:", env.action_keys)
+print("reward_keys:", env.reward_keys)
+print("done_keys:", env.done_keys)
 
 
 ######################################################################
