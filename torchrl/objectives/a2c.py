@@ -208,6 +208,7 @@ class A2CLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        sample_log_prob: NestedKey = "sample_log_prob"
 
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.GAE
