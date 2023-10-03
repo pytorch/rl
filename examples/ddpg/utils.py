@@ -1,3 +1,7 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 import torch
 
 from torch import nn, optim
@@ -10,12 +14,14 @@ from torchrl.envs import (
     EnvCreator,
     InitTracker,
     ParallelEnv,
+    RewardSum,
+    StepCounter,
     TransformedEnv,
 )
-from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import RewardScaling
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
+    AdditiveGaussianWrapper,
     MLP,
     OrnsteinUhlenbeckProcessWrapper,
     SafeModule,
@@ -33,17 +39,23 @@ from torchrl.objectives.ddpg import DDPGLoss
 # -----------------
 
 
-def env_maker(task, frame_skip=1, device="cpu", from_pixels=False):
-    return GymEnv(task, device=device, frame_skip=frame_skip, from_pixels=from_pixels)
+def env_maker(task, device="cpu", from_pixels=False):
+    with set_gym_backend("gym"):
+        return GymEnv(
+            task,
+            device=device,
+            from_pixels=from_pixels,
+        )
 
 
-def apply_env_transforms(env, reward_scaling=1.0):
+def apply_env_transforms(env, max_episode_steps=1000):
     transformed_env = TransformedEnv(
         env,
         Compose(
             InitTracker(),
-            RewardScaling(loc=0.0, scale=reward_scaling),
+            StepCounter(max_episode_steps),
             DoubleToFloat(),
+            RewardSum(),
         ),
     )
     return transformed_env
@@ -57,7 +69,9 @@ def make_environment(cfg):
     )
     parallel_env.set_seed(cfg.env.seed)
 
-    train_env = apply_env_transforms(parallel_env)
+    train_env = apply_env_transforms(
+        parallel_env, max_episode_steps=cfg.env.max_episode_steps
+    )
 
     eval_env = TransformedEnv(
         ParallelEnv(
@@ -80,7 +94,8 @@ def make_collector(cfg, train_env, actor_model_explore):
         train_env,
         actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
-        max_frames_per_traj=cfg.collector.max_frames_per_traj,
+        init_random_frames=cfg.collector.init_random_frames,
+        reset_at_each_iter=cfg.collector.reset_at_each_iter,
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.collector_device,
     )
@@ -126,17 +141,6 @@ def make_replay_buffer(
 # ====================================================================
 # Model
 # -----
-
-
-def get_activation(cfg):
-    if cfg.network.activation == "relu":
-        return nn.ReLU
-    elif cfg.network.activation == "tanh":
-        return nn.Tanh
-    elif cfg.network.activation == "leaky_relu":
-        return nn.LeakyReLU
-    else:
-        raise NotImplementedError
 
 
 def make_ddpg_agent(cfg, train_env, eval_env, device):
@@ -199,10 +203,22 @@ def make_ddpg_agent(cfg, train_env, eval_env, device):
     eval_env.close()
 
     # Exploration wrappers:
-    actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-        model[0],
-        annealing_num_steps=1_000_000,
-    ).to(device)
+    if cfg.network.noise_type == "ou":
+        actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
+            model[0],
+            annealing_num_steps=1_000_000,
+        ).to(device)
+    elif cfg.network.noise_type == "gaussian":
+        actor_model_explore = AdditiveGaussianWrapper(
+            model[0],
+            sigma_end=1.0,
+            sigma_init=1.0,
+            mean=0.0,
+            std=0.1,
+        ).to(device)
+    else:
+        raise NotImplementedError
+
     return model, actor_model_explore
 
 
@@ -218,13 +234,13 @@ def make_loss_module(cfg, model):
         actor_network=model[0],
         value_network=model[1],
         loss_function=cfg.optim.loss_function,
+        delay_actor=True,
+        delay_value=True,
     )
     loss_module.make_value_estimator(gamma=cfg.optim.gamma)
 
     # Define Target Network Updater
-    target_net_updater = SoftUpdate(
-        loss_module, eps=cfg.optim.target_update_polyak
-    )
+    target_net_updater = SoftUpdate(loss_module, eps=cfg.optim.target_update_polyak)
     return loss_module, target_net_updater
 
 
@@ -241,3 +257,24 @@ def make_optimizer(cfg, loss_module):
         weight_decay=cfg.optim.weight_decay,
     )
     return optimizer_actor, optimizer_critic
+
+
+# ====================================================================
+# General utils
+# ---------
+
+
+def log_metrics(logger, metrics, step):
+    for metric_name, metric_value in metrics.items():
+        logger.log_scalar(metric_name, metric_value, step)
+
+
+def get_activation(cfg):
+    if cfg.network.activation == "relu":
+        return nn.ReLU
+    elif cfg.network.activation == "tanh":
+        return nn.Tanh
+    elif cfg.network.activation == "leaky_relu":
+        return nn.LeakyReLU
+    else:
+        raise NotImplementedError
