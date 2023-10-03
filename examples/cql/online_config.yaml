@@ -1,9 +1,9 @@
 # Task and env
 env:
-  name: HalfCheetah-v3
+  name: Pendulum-v1
   task: ""
   library: gym
-  exp_name: cql_halfcheetah_gym
+  exp_name: cql_${env.name}
   n_samples_stats: 1000
   frame_skip: 1
   reward_scaling: 1.0

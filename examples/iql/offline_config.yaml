@@ -3,7 +3,7 @@ env:
   name: HalfCheetah-v2
   task: ""
   library: gym
-  exp_name: iql_halfcheetah-medium-v2
+  exp_name: iql_${replay_buffer.dataset}
   n_samples_stats: 1000
   reward_scaling: 1.0
   frame_skip: 1
@@ -27,7 +27,7 @@ optim:
   device: cuda:0
   lr: 3e-4
   weight_decay: 0.0
-  gradient_steps: 100000
+  gradient_steps: 50000
 
 # network
 model:
