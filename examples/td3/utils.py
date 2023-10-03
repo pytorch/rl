@@ -22,7 +22,6 @@ from torchrl.envs import (
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
-from torchrl.envs.transforms import RewardScaling
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     AdditiveGaussianWrapper,
@@ -55,18 +54,16 @@ def env_maker(
         )
 
 
-def apply_env_transforms(env, max_episode_steps, reward_scaling=1.0):
+def apply_env_transforms(env, max_episode_steps):
     transformed_env = TransformedEnv(
         env,
         Compose(
             StepCounter(max_steps=max_episode_steps),
             InitTracker(),
             DoubleToFloat(),
+            RewardSum(),
         ),
     )
-    if reward_scaling != 1.0:
-        transformed_env.append_transform(RewardScaling(loc=0.0, scale=reward_scaling))
-    transformed_env.append_transform(RewardSum())
     return transformed_env
 
 
