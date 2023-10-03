@@ -39,7 +39,7 @@ def apply_env_transforms(env, max_episode_steps=1000):
         Compose(
             InitTracker(),
             StepCounter(max_episode_steps),
-            DoubleToFloat("observation"),
+            DoubleToFloat(),
             RewardSum(),
         ),
     )
