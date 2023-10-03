@@ -62,7 +62,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Make Replay Buffer
     replay_buffer = make_replay_buffer(
-        batch_size=cfg.optimization.batch_size,
+        batch_size=cfg.optim.batch_size,
         prb=cfg.replay_buffer.prb,
         buffer_size=cfg.replay_buffer.size,
         device=device,
@@ -84,9 +84,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     num_updates = int(
         cfg.collector.env_per_collector
         * cfg.collector.frames_per_batch
-        * cfg.optimization.utd_ratio
+        * cfg.optim.utd_ratio
     )
-    delayed_updates = cfg.optimization.policy_update_delay
+    delayed_updates = cfg.optim.policy_update_delay
     prb = cfg.replay_buffer.prb
     env_per_collector = cfg.collector.env_per_collector
     eval_rollout_steps = cfg.collector.max_frames_per_traj // cfg.env.frame_skip

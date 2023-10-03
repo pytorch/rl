@@ -25,7 +25,7 @@ replay_buffer:
   size: 1000000
 
 # Optimization
-optimization:
+optim:
   utd_ratio: 1.0
   gamma: 0.99
   loss_function: l2
