@@ -6152,10 +6152,10 @@ class TestA2C(LossModuleTestBase):
         "td_est",
         [
             ValueEstimators.TD1,
-            # ValueEstimators.TD0,
-            # ValueEstimators.GAE,
-            # ValueEstimators.VTrace,
-            # ValueEstimators.TDLambda,
+            ValueEstimators.TD0,
+            ValueEstimators.GAE,
+            ValueEstimators.VTrace,
+            ValueEstimators.TDLambda,
         ],
     )
     def test_a2c_tensordict_keys(self, td_est):
