@@ -75,6 +75,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         critic_coef=cfg.loss.critic_coef,
     )
 
+    # use end-of-life as done key
+    loss_module.set_keys(done="eol", terminated="eol")
+
     # Create optimizer
     optim = torch.optim.Adam(
         loss_module.parameters(),
