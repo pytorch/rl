@@ -726,62 +726,48 @@ class TensorDictReplayBuffer(ReplayBuffer):
         self.update_tensordict_priority(data_add)
         return index
 
-    def extend(self, tensordicts: Union[List, TensorDictBase]) -> torch.Tensor:
-        if is_tensor_collection(tensordicts):
-            tensordicts = TensorDict(
-                {"_data": tensordicts},
-                batch_size=tensordicts.batch_size[:1],
-            )
-            if tensordicts.batch_dims > 1:
-                # we want the tensordict to have one dimension only. The batch size
-                # of the sampled tensordicts can be changed thereafter
-                if not isinstance(tensordicts, LazyStackedTensorDict):
-                    tensordicts = tensordicts.clone(recurse=False)
-                else:
-                    tensordicts = tensordicts.contiguous()
-                # we keep track of the batch size to reinstantiate it when sampling
-                if "_rb_batch_size" in tensordicts.keys():
-                    raise KeyError(
-                        "conflicting key '_rb_batch_size'. Consider removing from data."
-                    )
-                shape = torch.tensor(tensordicts.batch_size[1:]).expand(
-                    tensordicts.batch_size[0], tensordicts.batch_dims - 1
-                )
-                tensordicts.set("_rb_batch_size", shape)
-            tensordicts.set(
-                "index",
-                torch.zeros(
-                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
-                ),
-            )
+    def extend(self, tensordicts: TensorDictBase) -> torch.Tensor:
 
-        if not is_tensor_collection(tensordicts):
-            stacked_td = torch.stack(tensordicts, 0)
-        else:
-            stacked_td = tensordicts
+        tensordicts = TensorDict(
+            {"_data": tensordicts},
+            batch_size=tensordicts.batch_size[:1],
+        )
+        if tensordicts.batch_dims > 1:
+            # we want the tensordict to have one dimension only. The batch size
+            # of the sampled tensordicts can be changed thereafter
+            if not isinstance(tensordicts, LazyStackedTensorDict):
+                tensordicts = tensordicts.clone(recurse=False)
+            else:
+                tensordicts = tensordicts.contiguous()
+            # we keep track of the batch size to reinstantiate it when sampling
+            if "_rb_batch_size" in tensordicts.keys():
+                raise KeyError(
+                    "conflicting key '_rb_batch_size'. Consider removing from data."
+                )
+            shape = torch.tensor(tensordicts.batch_size[1:]).expand(
+                tensordicts.batch_size[0], tensordicts.batch_dims - 1
+            )
+            tensordicts.set("_rb_batch_size", shape)
+        tensordicts.set(
+            "index",
+            torch.zeros(tensordicts.shape, device=tensordicts.device, dtype=torch.int),
+        )
 
         if self._transform is not None:
-            tensordicts = self._transform.inv(stacked_td.get("_data"))
-            stacked_td.set("_data", tensordicts)
-            if tensordicts.device is not None:
-                stacked_td = stacked_td.to(tensordicts.device)
+            data = self._transform.inv(tensordicts.get("_data"))
+            tensordicts.set("_data", data)
+            if data.device is not None:
+                tensordicts = tensordicts.to(data.device)
 
-        index = super()._extend(stacked_td)
-        self.update_tensordict_priority(stacked_td)
+        index = super()._extend(tensordicts)
+        self.update_tensordict_priority(tensordicts)
         return index
 
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
         if not isinstance(self._sampler, PrioritizedSampler):
             return
         if data.ndim:
-            if isinstance(data, LazyStackedTensorDict):
-                priority = torch.tensor(
-                    [self._get_priority_item(td) for td in data],
-                    dtype=torch.float,
-                    device=data.device,
-                )
-            else:
-                priority = self._get_priority_vector(data)
+            priority = self._get_priority_vector(data)
         else:
             priority = self._get_priority_item(data)
         index = data.get("index")
