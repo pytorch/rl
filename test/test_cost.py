@@ -2419,8 +2419,10 @@ class TestTD3(LossModuleTestBase):
             loss_val = loss(**kwargs)
             for i in loss_val:
                 assert i in loss_val_td.values(), f"{i} not in {loss_val_td.values()}"
-            # for i, key in enumerate(loss_val_td.keys()):
-            # torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
+
+            for i, key in enumerate(loss.out_keys):
+                torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
+
             # test select
             loss.select_out_keys("loss_actor", "loss_qvalue")
             torch.manual_seed(0)
