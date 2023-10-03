@@ -142,9 +142,11 @@ class RolloutFromModel:
               part of the inputs that will be used for generating the next token.
             - ``("next", "attention_mask")``: updated attention_mask after token has been
               generated. Passed to the generative model on the next time step
-            - ``("next", "done")``: Boolean array indicating whether we've reached a
+            - ``("next", "terminated")``: Boolean array indicating whether we've reached a
               terminal state (either because we generated EOS token or because we
               reached the token limit)
+            - ``("next", "done")``: Boolean array indicating whether we've reached a
+              final state. Currently a copy of ``"terminated"``.
             - ``("next", "reward")``: The reward received at each time step
             - ``("next", "reward_raw")``: The raw reward from the reward model, without the
               KL term. This is mainly for debugging and logging, it is not used in
@@ -178,6 +180,7 @@ class RolloutFromModel:
                 "input_ids": rollout_generated[:, 1:].clone(),
                 "attention_mask": rollout_attention_mask[:, 1:].clone(),
                 "done": done,
+                "terminated": done.clone(),
                 "reward": reward,
                 "reward_raw": reward_raw,
                 "reward_kl": reward_kl,
@@ -202,6 +205,7 @@ class RolloutFromModel:
     def _get_done_status(self, generated, batch):
         # done is True when we either first sample an EOS token or reach the maximum number
         # of generated tokens
+        # TODO: differentiate truncated and terminal here
         done_idx = torch.minimum(
             (generated != self.EOS_TOKEN_ID).sum(dim=-1) - batch.prompt_rindex,
             torch.tensor(self.max_new_tokens) - 1,

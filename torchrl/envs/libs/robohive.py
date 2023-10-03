@@ -15,7 +15,7 @@ from tensordict import TensorDict
 from tensordict.tensordict import make_tensordict
 from torchrl._utils import implement_for
 from torchrl.data import UnboundedContinuousTensorSpec
-from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, GymEnv
+from torchrl.envs.libs.gym import _AsyncMeta, _gym_to_torchrl_spec_transform, GymEnv
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
 _has_gym = importlib.util.find_spec("gym") is not None
@@ -50,7 +50,14 @@ class set_directory(object):
         return new_fun
 
 
-class RoboHiveEnv(GymEnv):
+class _RoboHiveBuild(_AsyncMeta):
+    def __call__(self, *args, **kwargs):
+        instance: RoboHiveEnv = super().__call__(*args, **kwargs)
+        instance._refine_specs()
+        return instance
+
+
+class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
     """A wrapper for RoboHive gym environments.
 
     RoboHive is a collection of environments/tasks simulated with the MuJoCo physics engine exposed using the OpenAI-Gym API.
@@ -197,15 +204,8 @@ class RoboHiveEnv(GymEnv):
             cls.env_list += [env_name]
             return env_name
 
-    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
-        # if self.from_pixels:
-        #     num_cams = len(env.visual_keys)
-        # n_pix = 224 * 224 * 3 * num_cams
-        # env.observation_space = gym.spaces.Box(
-        #     -8 * np.ones(env.obs_dim - n_pix),
-        #     8 * np.ones(env.obs_dim - n_pix),
-        #     dtype=np.float32,
-        # )
+    def _refine_specs(self) -> None:  # noqa: F821
+        env = self._env
         self.action_spec = _gym_to_torchrl_spec_transform(
             env.action_space, device=self.device
         )
@@ -257,7 +257,7 @@ class RoboHiveEnv(GymEnv):
 
         rollout = self.rollout(2, return_contiguous=False).get("next")
         rollout = rollout.exclude(
-            self.reward_key, self.done_key, *self.observation_spec.keys(True, True)
+            self.reward_key, *self.done_keys, *self.observation_spec.keys(True, True)
         )
         rollout = rollout[..., 0]
         spec = make_composite_from_td(rollout)
@@ -273,7 +273,7 @@ class RoboHiveEnv(GymEnv):
         if from_pixels is self.from_pixels:
             return
         self.from_pixels = from_pixels
-        self._make_specs(self.env)
+        self._refine_specs()
 
     def read_obs(self, observation):
         # the info is missing from the reset
@@ -321,6 +321,9 @@ class RoboHiveEnv(GymEnv):
             tensordict_out.apply(lambda x: x.reshape((1,)) if not x.shape else x)
         )
         return tensordict_out
+
+    def _init_env(self):
+        pass
 
     def to(self, *args, **kwargs):
         out = super().to(*args, **kwargs)

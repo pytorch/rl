@@ -6,7 +6,14 @@
 from .brax import BraxEnv, BraxWrapper
 from .dm_control import DMControlEnv, DMControlWrapper
 from .envpool import MultiThreadedEnv, MultiThreadedEnvWrapper
-from .gym import GymEnv, GymWrapper
+from .gym import (
+    gym_backend,
+    GymEnv,
+    GymWrapper,
+    MOGymEnv,
+    MOGymWrapper,
+    set_gym_backend,
+)
 from .habitat import HabitatEnv
 from .isaacgym import IsaacGymEnv, IsaacGymWrapper
 from .jumanji import JumanjiEnv, JumanjiWrapper
