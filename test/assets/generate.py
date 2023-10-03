@@ -21,7 +21,7 @@ def generate_small_dataset(comparison=True):
     smalld = {}
     for key in list(d.keys()):
         if any(key.startswith(sub) for sub in ("train", "valid", "test")):
-            smalld[key] = Dataset.from_dict(d[key][:1000])
+            smalld[key] = Dataset.from_dict(d[key][:50])
     smalld = DatasetDict(smalld)
 
     if comparison:

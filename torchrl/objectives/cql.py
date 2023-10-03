@@ -126,6 +126,7 @@ class CQLLoss(LossModule):
         ...         "observation": torch.randn(*batch, n_obs),
         ...         "action": action,
         ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...         ("next", "reward"): torch.randn(*batch, 1),
         ...         ("next", "observation"): torch.randn(*batch, n_obs),
         ...     }, batch)
@@ -145,7 +146,7 @@ class CQLLoss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["action", "next_reward", "next_done"]`` + in_keys of the actor, value, and qvalue network.
+    ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor, value, and qvalue network.
     The return value is a tuple of tensors in the following order:
     ``["loss_actor", "loss_qvalue", "loss_alpha", "loss_alpha_prime", "alpha", "entropy"]``.
 
@@ -184,6 +185,7 @@ class CQLLoss(LossModule):
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
@@ -197,6 +199,7 @@ class CQLLoss(LossModule):
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
@@ -229,6 +232,7 @@ class CQLLoss(LossModule):
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -392,6 +396,7 @@ class CQLLoss(LossModule):
                 value=self._tensor_keys.value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
@@ -431,6 +436,7 @@ class CQLLoss(LossModule):
             "value": self.tensor_keys.value,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)
 
@@ -448,6 +454,7 @@ class CQLLoss(LossModule):
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
             *self.qvalue_network.in_keys,

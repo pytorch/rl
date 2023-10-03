@@ -776,6 +776,9 @@ class TensorSpec:
             )
         return cls.SPEC_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
+    def unbind(self, dim: int):
+        raise NotImplementedError
+
 
 T = TypeVar("T")
 

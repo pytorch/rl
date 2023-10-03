@@ -78,14 +78,18 @@ class PettingZooWrapper(_EnvWrapper):
                         action: Tensor(shape=torch.Size([3, 9]), device=cpu, dtype=torch.int64, is_shared=False),
                         action_mask: Tensor(shape=torch.Size([3, 9]), device=cpu, dtype=torch.bool, is_shared=False),
                         done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                        observation: Tensor(shape=torch.Size([3, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                        observation: Tensor(shape=torch.Size([3, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
                     batch_size=torch.Size([3]))},
                 adversary: TensorDict(
                     fields={
                         action: Tensor(shape=torch.Size([1, 9]), device=cpu, dtype=torch.int64, is_shared=False),
                         action_mask: Tensor(shape=torch.Size([1, 9]), device=cpu, dtype=torch.bool, is_shared=False),
                         done: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                        observation: Tensor(shape=torch.Size([1, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                        observation: Tensor(shape=torch.Size([1, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
                     batch_size=torch.Size([1]))},
             batch_size=torch.Size([]))
         >>> print(env.group_map)
@@ -348,6 +352,18 @@ class PettingZooWrapper(_EnvWrapper):
                     dtype=torch.bool,
                     device=self.device,
                 ),
+                "terminated": DiscreteTensorSpec(
+                    n=2,
+                    shape=torch.Size((n_agents, 1)),
+                    dtype=torch.bool,
+                    device=self.device,
+                ),
+                "truncated": DiscreteTensorSpec(
+                    n=2,
+                    shape=torch.Size((n_agents, 1)),
+                    dtype=torch.bool,
+                    device=self.device,
+                ),
             },
             shape=torch.Size((n_agents,)),
         )
@@ -548,6 +564,8 @@ class PettingZooWrapper(_EnvWrapper):
             group_observation = tensordict_out.get((group, "observation"))
             group_reward = tensordict_out.get((group, "reward"))
             group_done = tensordict_out.get((group, "done"))
+            group_terminated = tensordict_out.get((group, "terminated"))
+            group_truncated = tensordict_out.get((group, "truncated"))
             group_info = tensordict_out.get((group, "info"), None)
 
             for index, agent in enumerate(agent_names):
@@ -562,6 +580,16 @@ class PettingZooWrapper(_EnvWrapper):
                     )
                     group_done[index] = torch.tensor(
                         terminations_dict[agent] or truncations_dict[agent],
+                        device=self.device,
+                        dtype=torch.bool,
+                    )
+                    group_truncated[index] = torch.tensor(
+                        truncations_dict[agent],
+                        device=self.device,
+                        dtype=torch.bool,
+                    )
+                    group_terminated[index] = torch.tensor(
+                        terminations_dict[agent],
                         device=self.device,
                         dtype=torch.bool,
                     )
@@ -734,14 +762,18 @@ class PettingZooEnv(PettingZooWrapper):
                         action: Tensor(shape=torch.Size([3, 9]), device=cpu, dtype=torch.int64, is_shared=False),
                         action_mask: Tensor(shape=torch.Size([3, 9]), device=cpu, dtype=torch.bool, is_shared=False),
                         done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                        observation: Tensor(shape=torch.Size([3, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                        observation: Tensor(shape=torch.Size([3, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
                     batch_size=torch.Size([3]))},
                 adversary: TensorDict(
                     fields={
                         action: Tensor(shape=torch.Size([1, 9]), device=cpu, dtype=torch.int64, is_shared=False),
                         action_mask: Tensor(shape=torch.Size([1, 9]), device=cpu, dtype=torch.bool, is_shared=False),
                         done: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                        observation: Tensor(shape=torch.Size([1, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                        observation: Tensor(shape=torch.Size([1, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
                     batch_size=torch.Size([1]))},
             batch_size=torch.Size([]))
         >>> print(env.group_map)

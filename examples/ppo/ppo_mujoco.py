@@ -100,6 +100,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
     sampling_start = time.time()
+
+    # extract cfg variables
+    cfg_loss_ppo_epochs = cfg.loss.ppo_epochs
+    cfg_optim_anneal_lr = cfg.optim.anneal_lr
+    cfg_optim_lr = cfg.optim.lr
+    cfg_loss_anneal_clip_eps = cfg.loss.anneal_clip_epsilon
+    cfg_loss_clip_epsilon = cfg.loss.clip_epsilon
+    cfg_logger_test_interval = cfg.logger.test_interval
+    cfg_logger_num_test_episodes = cfg.logger.num_test_episodes
+    losses = TensorDict({}, batch_size=[cfg_loss_ppo_epochs, num_mini_batches])
+
     for i, data in enumerate(collector):
 
         log_info = {}
@@ -120,9 +131,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 }
             )
 
-        losses = TensorDict({}, batch_size=[cfg.loss.ppo_epochs, num_mini_batches])
         training_start = time.time()
-        for j in range(cfg.loss.ppo_epochs):
+        for j in range(cfg_loss_ppo_epochs):
 
             # Compute GAE
             with torch.no_grad():
@@ -136,14 +146,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # Linearly decrease the learning rate and clip epsilon
                 alpha = 1.0
-                if cfg.optim.anneal_lr:
+                if cfg_optim_anneal_lr:
                     alpha = 1 - (num_network_updates / total_network_updates)
                     for group in actor_optim.param_groups:
-                        group["lr"] = cfg.optim.lr * alpha
+                        group["lr"] = cfg_optim_lr * alpha
                     for group in critic_optim.param_groups:
-                        group["lr"] = cfg.optim.lr * alpha
-                if cfg.loss.anneal_clip_epsilon:
-                    loss_module.clip_epsilon.copy_(cfg.loss.clip_epsilon * alpha)
+                        group["lr"] = cfg_optim_lr * alpha
+                if cfg_loss_anneal_clip_eps:
+                    loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
                 num_network_updates += 1
 
                 # Forward pass PPO loss
@@ -166,27 +176,27 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Get training losses and times
         training_time = time.time() - training_start
-        losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
-        for key, value in losses.items():
+        losses_mean = losses.apply(lambda x: x.float().mean(), batch_size=[])
+        for key, value in losses_mean.items():
             log_info.update({f"train/{key}": value.item()})
         log_info.update(
             {
-                "train/lr": alpha * cfg.optim.lr,
+                "train/lr": alpha * cfg_optim_lr,
                 "train/sampling_time": sampling_time,
                 "train/training_time": training_time,
-                "train/clip_epsilon": alpha * cfg.loss.clip_epsilon,
+                "train/clip_epsilon": alpha * cfg_loss_clip_epsilon,
             }
         )
 
         # Get test rewards
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if ((i - 1) * frames_in_batch) // cfg.logger.test_interval < (
+            if ((i - 1) * frames_in_batch) // cfg_logger_test_interval < (
                 i * frames_in_batch
-            ) // cfg.logger.test_interval:
+            ) // cfg_logger_test_interval:
                 actor.eval()
                 eval_start = time.time()
                 test_rewards = eval_model(
-                    actor, test_env, num_episodes=cfg.logger.num_test_episodes
+                    actor, test_env, num_episodes=cfg_logger_num_test_episodes
                 )
                 eval_time = time.time() - eval_start
                 log_info.update(
