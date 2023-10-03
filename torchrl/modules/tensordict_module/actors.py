@@ -2038,4 +2038,4 @@ class LMHeadActorValueOperator(ActorValueOperator):
             value_head, in_keys=["x"], out_keys=["state_value"]
         )
 
-        return super().__init__(common, actor_head, value_head)
+        super().__init__(common, actor_head, value_head)
