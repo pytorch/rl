@@ -28,7 +28,7 @@ from torchrl.data import (
 )
 from torchrl.envs import SerialEnv
 from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
-from torchrl.envs.utils import set_exploration_type
+from torchrl.envs.utils import _replace_last, set_exploration_type
 from torchrl.modules import SafeModule, SafeSequential
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import (
@@ -335,7 +335,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
 
     @pytest.mark.parametrize("nested_obs_action", [True, False])
     @pytest.mark.parametrize("nested_done", [True, False])
-    @pytest.mark.parametrize("is_init_key", ["some", ("one", "nested")])
+    @pytest.mark.parametrize("is_init_key", ["some"])
     def test_nested(
         self,
         device,
@@ -381,7 +381,11 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             device=device,
         )
         for _td in collector:
-            assert _td[is_init_key].shape == _td[env.done_key].shape
+            for done_key in env.done_keys:
+                assert (
+                    _td[_replace_last(done_key, is_init_key)].shape
+                    == _td[done_key].shape
+                )
             break
 
         return

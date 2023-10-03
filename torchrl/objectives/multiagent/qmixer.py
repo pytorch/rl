@@ -120,6 +120,7 @@ class QMixerLoss(LossModule):
         ...                "state": torch.zeros(32, 64, 64, 3),
         ...                "reward": torch.zeros(32, 1),
         ...                "done": torch.zeros(32, 1, dtype=torch.bool),
+        ...                "terminated": torch.zeros(32, 1, dtype=torch.bool),
         ...            },
         ...            [32],
         ...        ),
@@ -162,6 +163,9 @@ class QMixerLoss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -173,6 +177,7 @@ class QMixerLoss(LossModule):
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -260,6 +265,7 @@ class QMixerLoss(LossModule):
                 value=self.tensor_keys.global_value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
         self._set_in_keys()
 
@@ -268,6 +274,7 @@ class QMixerLoss(LossModule):
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.global_value_network.in_keys,
             *[("next", key) for key in self.global_value_network.in_keys],
         ]
@@ -312,6 +319,7 @@ class QMixerLoss(LossModule):
             "value": self.tensor_keys.global_value,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)
 

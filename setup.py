@@ -174,10 +174,11 @@ def _main(argv):
     if is_nightly:
         version = get_nightly_version()
         write_version_file(version)
-        print("Building wheel {}-{}".format(package_name, version))
-        print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
     else:
         version = get_version()
+        write_version_file(version)
+    print("Building wheel {}-{}".format(package_name, version))
+    print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
 
     pytorch_package_dep = _get_pytorch_version(is_nightly)
     print("-- PyTorch dependency:", pytorch_package_dep)

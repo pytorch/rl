@@ -232,7 +232,7 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         batch_size=rb_cfg.batch_size,
         sampler=RandomSampler(),  # SamplerWithoutReplacement(drop_last=False),
         transform=transforms,
-        use_timeout_as_done=True,
+        use_truncated_as_done=True,
     )
     full_data = data._get_dataset_from_env(rb_cfg.dataset, {})
     loc = full_data["observation"].mean(axis=0).float()
