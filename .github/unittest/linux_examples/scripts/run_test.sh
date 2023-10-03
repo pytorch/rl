@@ -226,9 +226,12 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   collector.collector_device=cuda:0 \
   optim.batch_size=10 \
   optim.utd_ratio=1 \
+<<<<<<< HEAD
   network.device=cuda:0 \
   optimization.batch_size=10 \
   optimization.utd_ratio=1 \
+=======
+>>>>>>> 0272f031af1aa2ff2be400e283b79de55fcf9178
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
