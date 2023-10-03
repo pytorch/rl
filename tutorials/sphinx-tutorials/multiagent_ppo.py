@@ -682,7 +682,7 @@ for tensordict_data in collector:
     collector.update_policy_weights_()
 
     # Logging
-    done = tensordict_data.get(("next", "done"))
+    done = tensordict_data.get(("next", "agents", "done"))
     episode_reward_mean = (
         tensordict_data.get(("next", "agents", "episode_reward"))[done].mean().item()
     )
