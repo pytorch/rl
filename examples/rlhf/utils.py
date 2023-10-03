@@ -337,6 +337,7 @@ def get_prompt_loaders(data_cfg, sys_cfg):
         sys_cfg.device,
         dataset_name="CarperAI/openai_summarize_tldr",
         split="train",
+        num_workers=data_cfg.num_workers,
     )
     val_prompt_loader = get_dataloader(
         data_cfg.batch_size,
@@ -345,6 +346,7 @@ def get_prompt_loaders(data_cfg, sys_cfg):
         sys_cfg.device,
         dataset_name="CarperAI/openai_summarize_tldr",
         split="valid",
+        num_workers=data_cfg.num_workers,
     )
     return train_prompt_loader, val_prompt_loader
 

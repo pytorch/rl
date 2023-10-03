@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+from __future__ import annotations
 from typing import Optional
 
 import torch
@@ -41,7 +41,7 @@ class PromptData:
 
     @classmethod
     def from_dataset(
-        cls, split, dataset_name=None, max_length=550, root_dir=None, from_disk=False
+        cls, split, dataset_name=None, max_length=550, root_dir=None, from_disk=False, num_workers: int | None=None,
     ):
         """Returns a :class:`PromptData` from a dataset name.
 
@@ -56,6 +56,9 @@ class PromptData:
             from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
                 will be used. Otherwise, :func:`datasets.load_dataset` will be used.
                 Defaults to ``False``.
+            num_workers (int, optional): number of workers for :meth:`datasets.dataset.map`
+                which is called during tokenization.
+                Defaults to ``max(os.cpu_count() // 2, 1)``.
 
         Returns: a :class:`PromptData` instance containing a memory-mapped
             version of the required dataset.
@@ -85,6 +88,7 @@ class PromptData:
             PromptTensorDictTokenizer,
             root_dir=root_dir,
             from_disk=from_disk,
+            num_workers=num_workers,
         )
         data = loader.load()
         return cls(**data, labels=data["input_ids"], batch_size=data.shape)

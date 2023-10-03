@@ -5,6 +5,7 @@ io:
 data:
   batch_size: 4 # if gradient_accumulation_steps > 1, this is the micro-batch size
   block_size: 550
+  num_workers: 1
 model:
   name_or_path: ./out
   out_dir: ./out_rlhf
