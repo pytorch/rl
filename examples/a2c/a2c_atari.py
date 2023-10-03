@@ -75,6 +75,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         critic_coef=cfg.loss.critic_coef,
     )
 
+    # use end-of-life as done key
+    loss_module.set_keys(done="eol", terminated="eol")
+
     # Create optimizer
     optim = torch.optim.Adam(
         loss_module.parameters(),
@@ -123,10 +126,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     / len(episode_length),
                 }
             )
-
-        # Apply episodic end of life
-        data["done"].copy_(data["end_of_life"])
-        data["next", "done"].copy_(data["next", "end_of_life"])
 
         losses = TensorDict({}, batch_size=[num_mini_batches])
         training_start = time.time()

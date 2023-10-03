@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib
+from contextlib import nullcontext
 
 from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.modules import MaskedCategorical
@@ -34,6 +35,7 @@ from _utils_internal import (
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
+    rand_reset,
     rollout_consistency_assertion,
 )
 from packaging import version
@@ -128,18 +130,18 @@ class TestGym:
     @pytest.mark.parametrize(
         "env_name",
         [
+            HALFCHEETAH_VERSIONED,
             PONG_VERSIONED,
             # PENDULUM_VERSIONED,
-            HALFCHEETAH_VERSIONED,
         ],
     )
     @pytest.mark.parametrize("frame_skip", [1, 3])
     @pytest.mark.parametrize(
         "from_pixels,pixels_only",
         [
-            [False, False],
             [True, True],
             [True, False],
+            [False, False],
         ],
     )
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
@@ -151,6 +153,24 @@ class TestGym:
             env_name != PONG_VERSIONED and from_pixels and torch.cuda.device_count() < 1
         ):
             raise pytest.skip("no cuda device")
+
+        def non_null_obs(batched_td):
+            if from_pixels:
+                pix_norm = batched_td.get("pixels").flatten(-3, -1).float().norm(dim=-1)
+                pix_norm_next = (
+                    batched_td.get(("next", "pixels"))
+                    .flatten(-3, -1)
+                    .float()
+                    .norm(dim=-1)
+                )
+                idx = (pix_norm > 1) & (pix_norm_next > 1)
+                # eliminate batch size: all idx must be True (otherwise one could be filled with 0s)
+                while idx.ndim > 1:
+                    idx = idx.all(0)
+                idx = idx.nonzero().squeeze(-1)
+                assert idx.numel(), "Did not find pixels with norm > 1"
+                return idx
+            return slice(None)
 
         tdreset = []
         tdrollout = []
@@ -166,14 +186,22 @@ class TestGym:
             np.random.seed(0)
             final_seed.append(env0.set_seed(0))
             tdreset.append(env0.reset())
-            tdrollout.append(env0.rollout(max_steps=50))
+            rollout = env0.rollout(max_steps=50)
+            tdrollout.append(rollout)
             assert env0.from_pixels is from_pixels
             env0.close()
             env_type = type(env0._env)
-            del env0
 
         assert_allclose_td(*tdreset, rtol=RTOL, atol=ATOL)
-        assert_allclose_td(*tdrollout, rtol=RTOL, atol=ATOL)
+        tdrollout = torch.stack(tdrollout, 0).contiguous()
+
+        # custom filtering of non-null obs: mujoco rendering sometimes fails
+        # and renders black images. To counter this in the tests, we select
+        # tensordicts with all non-null observations
+        idx = non_null_obs(tdrollout)
+        assert_allclose_td(
+            tdrollout[0][..., idx], tdrollout[1][..., idx], rtol=RTOL, atol=ATOL
+        )
         final_seed0, final_seed1 = final_seed
         assert final_seed0 == final_seed1
 
@@ -186,7 +214,15 @@ class TestGym:
         if from_pixels and not _is_from_pixels(base_env):
             base_env = PixelObservationWrapper(base_env, pixels_only=pixels_only)
         assert type(base_env) is env_type
+
+        # Compare GymEnv output with GymWrapper output
         env1 = GymWrapper(base_env, frame_skip=frame_skip)
+        assert env0.get_library_name(env0._env) == env1.get_library_name(env1._env)
+        # check that we didn't do more wrapping
+        assert type(env0._env) == type(env1._env)  # noqa: E721
+        assert env0.output_spec == env1.output_spec
+        assert env0.input_spec == env1.input_spec
+        del env0
         torch.manual_seed(0)
         np.random.seed(0)
         final_seed2 = env1.set_seed(0)
@@ -198,7 +234,12 @@ class TestGym:
 
         assert_allclose_td(tdreset[0], tdreset2, rtol=RTOL, atol=ATOL)
         assert final_seed0 == final_seed2
-        assert_allclose_td(tdrollout[0], rollout2, rtol=RTOL, atol=ATOL)
+        # same magic trick for mujoco as above
+        tdrollout = torch.stack([tdrollout[0], rollout2], 0).contiguous()
+        idx = non_null_obs(tdrollout)
+        assert_allclose_td(
+            tdrollout[0][..., idx], tdrollout[1][..., idx], rtol=RTOL, atol=ATOL
+        )
 
     @pytest.mark.parametrize(
         "env_name",
@@ -327,12 +368,12 @@ class TestGym:
         return
 
     @implement_for("gymnasium", "0.27.0", None)
-    # this env has Dict-based observation which is a nice thing to test
     @pytest.mark.parametrize(
         "envname",
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
+    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):
         import gymnasium
 
@@ -359,23 +400,28 @@ class TestGym:
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
+    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     def test_vecenvs_env(self, envname):
         from _utils_internal import rollout_consistency_assertion
 
         with set_gym_backend("gymnasium"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
-            check_env_specs(env)
-            rollout = env.rollout(100, break_when_any_done=False)
-            for obs_key in env.observation_spec.keys(True, True):
-                rollout_consistency_assertion(
-                    rollout, done_key="done", observation_key=obs_key
-                )
+
+            assert env.get_library_name(env._env) == "gymnasium"
+        # rollouts can be executed without decorator
+        check_env_specs(env)
+        rollout = env.rollout(100, break_when_any_done=False)
+        for obs_key in env.observation_spec.keys(True, True):
+            rollout_consistency_assertion(
+                rollout, done_key="done", observation_key=obs_key
+            )
 
     @implement_for("gym", "0.18", "0.27.0")
     @pytest.mark.parametrize(
         "envname",
         ["CartPole-v1", "HalfCheetah-v4"],
     )
+    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):  # noqa: F811
         import gym
 
@@ -401,19 +447,24 @@ class TestGym:
         "envname",
         ["CartPole-v1", "HalfCheetah-v4"],
     )
+    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     def test_vecenvs_env(self, envname):  # noqa: F811
         with set_gym_backend("gym"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
-            check_env_specs(env)
-            rollout = env.rollout(100, break_when_any_done=False)
-            for obs_key in env.observation_spec.keys(True, True):
-                rollout_consistency_assertion(
-                    rollout, done_key="done", observation_key=obs_key
-                )
+
+            assert env.get_library_name(env._env) == "gym"
+        # rollouts can be executed without decorator
+        check_env_specs(env)
+        rollout = env.rollout(100, break_when_any_done=False)
+        for obs_key in env.observation_spec.keys(True, True):
+            rollout_consistency_assertion(
+                rollout, done_key="done", observation_key=obs_key
+            )
         if envname != "CartPole-v1":
             with set_gym_backend("gym"):
                 env = GymEnv(envname, num_envs=2, from_pixels=True)
-                check_env_specs(env)
+            # rollouts can be executed without decorator
+            check_env_specs(env)
 
     @implement_for("gym", None, "0.18")
     @pytest.mark.parametrize(
@@ -432,6 +483,168 @@ class TestGym:
     def test_vecenvs_env(self, envname):  # noqa: F811
         # skipping tests for older versions of gym
         ...
+
+    @implement_for("gym", None, "0.26")
+    @pytest.mark.parametrize("wrapper", [True, False])
+    def test_gym_output_num(self, wrapper):
+        # gym has 4 outputs, no truncation
+        import gym
+
+        if wrapper:
+            env = GymWrapper(gym.make(PENDULUM_VERSIONED))
+        else:
+            with set_gym_backend("gym"):
+                env = GymEnv(PENDULUM_VERSIONED)
+        # truncated is read from the info
+        assert "truncated" in env.done_keys
+        assert "terminated" in env.done_keys
+        assert "done" in env.done_keys
+        check_env_specs(env)
+
+    @implement_for("gym", "0.26", None)
+    @pytest.mark.parametrize("wrapper", [True, False])
+    def test_gym_output_num(self, wrapper):  # noqa: F811
+        # gym has 5 outputs, with truncation
+        import gym
+
+        if wrapper:
+            env = GymWrapper(gym.make(PENDULUM_VERSIONED))
+        else:
+            with set_gym_backend("gym"):
+                env = GymEnv(PENDULUM_VERSIONED)
+        assert "truncated" in env.done_keys
+        assert "terminated" in env.done_keys
+        assert "done" in env.done_keys
+        check_env_specs(env)
+
+        if wrapper:
+            # let's further test with a wrapper that exposes the env with old API
+            from gym.wrappers.compatibility import EnvCompatibility
+
+            with pytest.raises(
+                ValueError,
+                match="GymWrapper does not support the gym.wrapper.compatibility.EnvCompatibility",
+            ):
+                GymWrapper(EnvCompatibility(gym.make("CartPole-v1")))
+
+    @implement_for("gymnasium", "0.27", None)
+    @pytest.mark.parametrize("wrapper", [True, False])
+    def test_gym_output_num(self, wrapper):  # noqa: F811
+        # gym has 5 outputs, with truncation
+        import gymnasium as gym
+
+        if wrapper:
+            env = GymWrapper(gym.make(PENDULUM_VERSIONED))
+        else:
+            with set_gym_backend("gymnasium"):
+                env = GymEnv(PENDULUM_VERSIONED)
+        assert "truncated" in env.done_keys
+        assert "terminated" in env.done_keys
+        assert "done" in env.done_keys
+        check_env_specs(env)
+
+    def test_gym_gymnasium_parallel(self):
+        # tests that both gym and gymnasium work with wrappers without
+        # decorating with set_gym_backend during execution
+        if importlib.util.find_spec("gym") is not None:
+            import gym
+
+            old_api = version.parse(gym.__version__) < version.parse("0.26")
+            make_fun = EnvCreator(lambda: GymWrapper(gym.make(PENDULUM_VERSIONED)))
+        elif importlib.util.find_spec("gymnasium") is not None:
+            import gymnasium
+
+            old_api = False
+            make_fun = EnvCreator(
+                lambda: GymWrapper(gymnasium.make(PENDULUM_VERSIONED))
+            )
+        else:
+            raise ImportError  # unreachable under pytest.skipif
+        penv = ParallelEnv(2, make_fun)
+        rollout = penv.rollout(2)
+        if old_api:
+            assert "terminated" in rollout.keys()
+            # truncated is read from info
+            assert "truncated" in rollout.keys()
+        else:
+            assert "terminated" in rollout.keys()
+            assert "truncated" in rollout.keys()
+        check_env_specs(penv)
+
+    @implement_for("gym", None, "0.22.0")
+    def test_vecenvs_nan(self):  # noqa: F811
+        # old versions of gym must return nan for next values when there is a done state
+        torch.manual_seed(0)
+        env = GymEnv("CartPole-v0", num_envs=2)
+        env.set_seed(0)
+        rollout = env.rollout(200)
+        assert torch.isfinite(rollout.get("observation")).all()
+        assert not torch.isfinite(rollout.get(("next", "observation"))).all()
+        env.close()
+        del env
+
+        # same with collector
+        env = GymEnv("CartPole-v0", num_envs=2)
+        env.set_seed(0)
+        c = SyncDataCollector(
+            env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
+        )
+        for rollout in c:
+            assert torch.isfinite(rollout.get("observation")).all()
+            assert not torch.isfinite(rollout.get(("next", "observation"))).all()
+            break
+        del c
+        return
+
+    @implement_for("gym", "0.22.0", None)
+    def test_vecenvs_nan(self):  # noqa: F811
+        # new versions of gym must never return nan for next values when there is a done state
+        torch.manual_seed(0)
+        env = GymEnv("CartPole-v0", num_envs=2)
+        env.set_seed(0)
+        rollout = env.rollout(200)
+        assert torch.isfinite(rollout.get("observation")).all()
+        assert torch.isfinite(rollout.get(("next", "observation"))).all()
+        env.close()
+        del env
+
+        # same with collector
+        env = GymEnv("CartPole-v0", num_envs=2)
+        env.set_seed(0)
+        c = SyncDataCollector(
+            env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
+        )
+        for rollout in c:
+            assert torch.isfinite(rollout.get("observation")).all()
+            assert torch.isfinite(rollout.get(("next", "observation"))).all()
+            break
+        del c
+        return
+
+    @implement_for("gymnasium", "0.27.0", None)
+    def test_vecenvs_nan(self):  # noqa: F811
+        # new versions of gym must never return nan for next values when there is a done state
+        torch.manual_seed(0)
+        env = GymEnv("CartPole-v0", num_envs=2)
+        env.set_seed(0)
+        rollout = env.rollout(200)
+        assert torch.isfinite(rollout.get("observation")).all()
+        assert torch.isfinite(rollout.get(("next", "observation"))).all()
+        env.close()
+        del env
+
+        # same with collector
+        env = GymEnv("CartPole-v0", num_envs=2)
+        env.set_seed(0)
+        c = SyncDataCollector(
+            env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
+        )
+        for rollout in c:
+            assert torch.isfinite(rollout.get("observation")).all()
+            assert torch.isfinite(rollout.get(("next", "observation"))).all()
+            break
+        del c
+        return
 
 
 @implement_for("gym", None, "0.26")
@@ -453,12 +666,7 @@ def _make_gym_environment(env_name):  # noqa: F811
 @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
 @pytest.mark.parametrize("frame_skip", [1, 3])
 @pytest.mark.parametrize(
-    "from_pixels,pixels_only",
-    [
-        [True, True],
-        [True, False],
-        [False, False],
-    ],
+    "from_pixels,pixels_only", [[True, True], [True, False], [False, False]]
 )
 class TestDMControl:
     def test_dmcontrol(self, env_name, task, frame_skip, from_pixels, pixels_only):
@@ -533,7 +741,7 @@ class TestDMControl:
         assert_allclose_td(rollout0, rollout2)
 
     def test_faketd(self, env_name, task, frame_skip, from_pixels, pixels_only):
-        if from_pixels and (not torch.has_cuda or not torch.cuda.device_count()):
+        if from_pixels and not torch.cuda.device_count():
             raise pytest.skip("no cuda device")
 
         env = DMControlEnv(
@@ -1420,17 +1628,15 @@ class TestVmas:
             .all()
         )
 
-        _reset = env.done_spec.rand()
-        while not _reset.any():
-            _reset = env.done_spec.rand()
-
-        tensordict = env.reset(
-            TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
+        td_reset = TensorDict(
+            rand_reset(env), batch_size=env.batch_size, device=env.device
         )
-        assert not tensordict["done"][_reset].all().item()
+        reset = td_reset["_reset"]
+        tensordict = env.reset(td_reset)
+        assert not tensordict["done"][reset].all().item()
         # vmas resets all the agent dimension if only one of the agents needs resetting
         # thus, here we check that where we did not reset any agent, all agents are still done
-        assert tensordict["done"].all(dim=2)[~_reset.any(dim=2)].all().item()
+        assert tensordict["done"].all(dim=2)[~reset.any(dim=2)].all().item()
 
     @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
     @pytest.mark.parametrize("first", [0, 1])
@@ -1517,13 +1723,14 @@ class TestVmas:
             n_observations_per_agent,
         )
         assert _td["next", env.reward_key].shape == agents_td_batch + (1,)
-        assert _td[env.done_key].shape == td_batch + (1,)
-        assert _td["next", env.done_key].shape == td_batch + (1,)
+        for done_key in env.done_keys:
+            assert _td[done_key].shape == td_batch + (1,)
+            assert _td["next", done_key].shape == td_batch + (1,)
 
         assert env.reward_key not in _td.keys(True, True)
         assert env.action_key not in _td["next"].keys(True, True)
 
-    def test_collector_hetero(self, n_envs=10, frames_per_batch=20):
+    def test_collector_heterogeneous(self, n_envs=10, frames_per_batch=20):
         env = VmasEnv(
             scenario="simple_tag",
             num_envs=n_envs,
@@ -1552,8 +1759,9 @@ class TestVmas:
         assert _td["next", "agents"].shape == agents_td_batch
         assert _td["collector"].shape == td_batch
         assert _td["next", env.reward_key].shape == agents_td_batch + (1,)
-        assert _td[env.done_key].shape == td_batch + (1,)
-        assert _td["next", env.done_key].shape == td_batch + (1,)
+        for done_key in env.done_keys:
+            assert _td[done_key].shape == td_batch + (1,)
+            assert _td["next", done_key].shape == td_batch + (1,)
 
         assert env.reward_key not in _td.keys(True, True)
         assert env.action_key not in _td["next"].keys(True, True)
@@ -1562,37 +1770,58 @@ class TestVmas:
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
 class TestD4RL:
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
-    def test_terminate_on_end(self, task):
-        t0 = time.time()
-        data_true = D4RLExperienceReplay(
-            task,
-            split_trajs=True,
-            from_env=False,
-            terminate_on_end=True,
-            batch_size=2,
-            use_timeout_as_done=False,
-        )
+    @pytest.mark.parametrize("use_truncated_as_done", [True, False])
+    @pytest.mark.parametrize("split_trajs", [True, False])
+    def test_terminate_on_end(self, task, use_truncated_as_done, split_trajs):
+
+        with pytest.warns(
+            UserWarning, match="Using terminate_on_end=True with from_env=False"
+        ) if use_truncated_as_done else nullcontext():
+            data_true = D4RLExperienceReplay(
+                task,
+                split_trajs=split_trajs,
+                from_env=False,
+                terminate_on_end=True,
+                batch_size=2,
+                use_truncated_as_done=use_truncated_as_done,
+            )
         _ = D4RLExperienceReplay(
             task,
-            split_trajs=True,
+            split_trajs=split_trajs,
             from_env=False,
             terminate_on_end=False,
             batch_size=2,
-            use_timeout_as_done=False,
+            use_truncated_as_done=use_truncated_as_done,
         )
         data_from_env = D4RLExperienceReplay(
             task,
-            split_trajs=True,
+            split_trajs=split_trajs,
             from_env=True,
             batch_size=2,
-            use_timeout_as_done=False,
+            use_truncated_as_done=use_truncated_as_done,
         )
-        keys = set(data_from_env._storage._storage.keys(True, True))
-        keys = keys.intersection(data_true._storage._storage.keys(True, True))
-        assert_allclose_td(
-            data_true._storage._storage.select(*keys),
-            data_from_env._storage._storage.select(*keys),
-        )
+        if not use_truncated_as_done:
+            keys = set(data_from_env._storage._storage.keys(True, True))
+            keys = keys.intersection(data_true._storage._storage.keys(True, True))
+            assert (
+                data_true._storage._storage.shape
+                == data_from_env._storage._storage.shape
+            )
+            assert_allclose_td(
+                data_true._storage._storage.select(*keys),
+                data_from_env._storage._storage.select(*keys),
+            )
+        else:
+            leaf_names = data_from_env._storage._storage.keys(True)
+            leaf_names = [
+                name[-1] if isinstance(name, tuple) else name for name in leaf_names
+            ]
+            assert "truncated" in leaf_names
+            leaf_names = data_true._storage._storage.keys(True)
+            leaf_names = [
+                name[-1] if isinstance(name, tuple) else name for name in leaf_names
+            ]
+            assert "truncated" not in leaf_names
 
     @pytest.mark.parametrize(
         "task",
@@ -1612,7 +1841,7 @@ class TestD4RL:
     def test_d4rl_dummy(self, task):
         t0 = time.time()
         _ = D4RLExperienceReplay(task, split_trajs=True, from_env=True, batch_size=2)
-        print(f"completed test after {time.time()-t0}s")
+        print(f"terminated test after {time.time()-t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -1626,11 +1855,14 @@ class TestD4RL:
         env = GymWrapper(gym.make(task))
         rollout = env.rollout(2)
         for key in rollout.keys(True, True):
+            if "truncated" in key:
+                # truncated is missing from static datasets
+                continue
             sim = rollout[key]
             offline = sample[key]
             assert sim.dtype == offline.dtype, key
             assert sim.shape[-1] == offline.shape[-1], key
-        print(f"completed test after {time.time()-t0}s")
+        print(f"terminated test after {time.time()-t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -1649,7 +1881,7 @@ class TestD4RL:
         for sample in data:  # noqa: B007
             i += 1
         assert len(data) // i == batch_size
-        print(f"completed test after {time.time()-t0}s")
+        print(f"terminated test after {time.time()-t0}s")
 
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")

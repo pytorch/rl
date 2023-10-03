@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import importlib.util
 
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -310,6 +310,8 @@ class JumanjiWrapper(GymLikeEnv):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
+        tensordict_out.set("terminated", done)
+        # tensordict_out.set("terminated", done)
         tensordict_out["state"] = state_dict
 
         return tensordict_out
@@ -333,7 +335,7 @@ class JumanjiWrapper(GymLikeEnv):
         # collect outputs
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
-        done = self.done_spec.zero()
+        done_td = self.full_done_spec.zero()
 
         # build results
         tensordict_out = TensorDict(
@@ -341,10 +343,16 @@ class JumanjiWrapper(GymLikeEnv):
             batch_size=self.batch_size,
             device=self.device,
         )
-        tensordict_out.set("done", done)
+        tensordict_out.update(done_td)
         tensordict_out["state"] = state_dict
 
         return tensordict_out
+
+    def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
+        ...
+
+    def _reset_output_transform(self, reset_outputs_tuple: Tuple) -> Tuple:
+        ...
 
 
 class JumanjiEnv(JumanjiWrapper):
