@@ -7,35 +7,21 @@ import logging
 from contextlib import nullcontext
 from copy import deepcopy
 
-import hydra
 
 import torch
 import torch._dynamo
 
 import wandb
 
-from examples.rlhf.utils import (
-    freeze_layers,
-    get_prompt_loaders,
-    make_loss,
-    make_optimizer,
-    make_ref_model,
-    make_replay_buffer,
-    make_reward_model,
-    RewardEstimator,
-)
 from hydra.utils import to_absolute_path
-from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
 
-from omegaconf import OmegaConf
 
 from tensordict import TensorDict
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.data.rlhf.dataset import get_dataloader
 from torchrl.data.rlhf.prompt import PromptData
-from torchrl.data.rlhf.utils import AdaptiveKLController, RolloutFromModel
 
 from torchrl.data import (
     LazyTensorStorage,
@@ -45,15 +31,7 @@ from torchrl.data import (
 )
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
-from tqdm import tqdm
 from transformers import GenerationConfig, GPT2Tokenizer
-from utils import (
-    flatten_td,
-    get_file_logger,
-    resolve_name_or_path,
-    setup,
-    TestPromptLogger,
-)
 
 
 class TestPromptLogger:
@@ -371,7 +349,8 @@ def get_prompt_loaders(data_cfg, sys_cfg):
     return train_prompt_loader, val_prompt_loader
 
 
-def make_ref_model(model, device="cuda:1"):
+def make_ref_model(model, sys_cfg):
+    device = sys_cfg.ref_device
     ref_model = deepcopy(model).to(device)
     ref_model.requires_grad_(False)
     return ref_model

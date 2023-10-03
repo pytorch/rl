@@ -38,7 +38,7 @@ def main(cfg):
     #############################################
 
     # make path absolute
-    cfg.model.transformer_name_or_path = resolve_name_or_path(cfg.model.name_or_path)
+    cfg.model.name_or_path = resolve_name_or_path(cfg.model.name_or_path)
 
     # Get some constants: number of iters, grad clip...
     batch_size = cfg.data.batch_size
@@ -70,11 +70,11 @@ def main(cfg):
     # Actor (gen model) - critic (value predictor)
     actor, critic, critic_head, model = init_actor_critic(cfg.model, cfg.sys)
     # Freeze initial model to use as ref
-    ref_model = make_ref_model(model)
+    ref_model = make_ref_model(model, sys_cfg=cfg.sys)
     # Freeze layers of the model -- can be customized
     freeze_layers(model)
 
-    reward_model = make_reward_model(cfg.reward_model, cfg.sys)
+    reward_model = make_reward_model(reward_model_cfg=cfg.reward_model, sys_cfg=cfg.sys)
 
     # ================= Loss and optimizer ================= #
     ##########################################################
