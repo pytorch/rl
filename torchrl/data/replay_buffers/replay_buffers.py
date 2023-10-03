@@ -662,7 +662,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         super().__init__(**kw)
         self.priority_key = priority_key
 
-    def _get_priority(self, tensordict: TensorDictBase) -> Optional[torch.Tensor]:
+    def _get_priority_item(self, tensordict: TensorDictBase) -> float:
         if "_data" in tensordict.keys():
             tensordict = tensordict.get("_data")
 
@@ -680,6 +680,23 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 f" {tensordict.get(self.priority_key).shape} but expected "
                 f"scalar value"
             )
+        return priority
+
+    def _get_priority_vector(self, tensordict: TensorDictBase) -> torch.Tensor:
+        if "_data" in tensordict.keys():
+            tensordict = tensordict.get("_data")
+
+        priority = tensordict.get(self.priority_key, None)
+        if priority is None:
+            return torch.tensor(
+                [self._sampler.default_priority],
+                dtype=torch.float,
+                device=tensordict.device,
+            ).expand(tensordict.shape[0])
+
+        priority = priority.view(priority.shape[0], -1)
+        priority = _reduce(priority, self._sampler.reduction, dim=1)
+
         return priority
 
     def add(self, data: TensorDictBase) -> int:
@@ -757,13 +774,16 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if not isinstance(self._sampler, PrioritizedSampler):
             return
         if data.ndim:
-            priority = torch.tensor(
-                [self._get_priority(td) for td in data],
-                dtype=torch.float,
-                device=data.device,
-            )
+            if isinstance(data, LazyStackedTensorDict):
+                priority = torch.tensor(
+                    [self._get_priority_item(td) for td in data],
+                    dtype=torch.float,
+                    device=data.device,
+                )
+            else:
+                priority = self._get_priority_vector(data)
         else:
-            priority = self._get_priority(data)
+            priority = self._get_priority_item(data)
         index = data.get("index")
         while index.shape != priority.shape:
             # reduce index
@@ -1010,16 +1030,16 @@ class InPlaceSampler:
         return self.out
 
 
-def _reduce(tensor: torch.Tensor, reduction: str):
+def _reduce(tensor: torch.Tensor, reduction: str, dim: Optional[int] = None):
     """Reduces a tensor given the reduction method."""
     if reduction == "max":
-        return tensor.max().item()
+        return tensor.max().item() if dim is None else tensor.max(dim=dim)[0]
     elif reduction == "min":
-        return tensor.min().item()
+        return tensor.min().item() if dim is None else tensor.min(dim=dim)[0]
     elif reduction == "mean":
-        return tensor.mean().item()
+        return tensor.mean().item() if dim is None else tensor.mean(dim=dim)
     elif reduction == "median":
-        return tensor.median().item()
+        return tensor.median().item() if dim is None else tensor.median(dim=dim)
     raise NotImplementedError(f"Unknown reduction method {reduction}")
 
 
