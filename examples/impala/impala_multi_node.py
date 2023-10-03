@@ -61,7 +61,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create collector
     remote_config = {
         "num_cpus": 1,
-        "num_gpus": 1.0,
+        "num_gpus": 1.0 / num_workers,
         "memory": 2 * 1024**3,
     }
     collector = RayCollector(
@@ -178,15 +178,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
         training_start = time.time()
         for j in range(sgd_updates):
 
-            for acc_data in accumulator:
+            # Create a single batch of trajectories
+            stacked_data = torch.stack(accumulator, dim=0)
+            stacked_data = stacked_data.to(device)
 
-                acc_data = acc_data.to(device)
-                with torch.no_grad():
-                    acc_data = adv_module(acc_data)
-                acc_data_reshape = acc_data.reshape(-1)
+            # Compute advantage
+            stacked_data = adv_module(stacked_data)
 
-                # Update the data buffer
-                data_buffer.extend(acc_data_reshape)
+            # Add to replay buffer
+            stacked_data_reshape = stacked_data.reshape(-1)
+            data_buffer.extend(stacked_data_reshape)
 
             for batch in data_buffer:
 
