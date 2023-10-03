@@ -19,7 +19,7 @@ from copy import copy
 from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
-from typing import Any, Callable, cast, TypeVar, Union
+from typing import Any, Callable, cast, Dict, TypeVar, Union
 
 import numpy as np
 import torch
@@ -251,6 +251,7 @@ class implement_for:
     # Stores pointers to fitting implementations: dict[func_name] = func_pointer
     _implementations = {}
     _setters = []
+    _cache_modules = {}
 
     def __init__(
         self,
@@ -272,27 +273,58 @@ class implement_for:
     @staticmethod
     def get_class_that_defined_method(f):
         """Returns the class of a method, if it is defined, and None otherwise."""
-        return f.__globals__.get(f.__qualname__.split(".")[0], None)
+        out = f.__globals__.get(f.__qualname__.split(".")[0], None)
+        return out
 
-    @property
-    def func_name(self):
-        return self.fn.__name__
+    @classmethod
+    def func_name(cls, fn):
+        # produces a name like torchrl.module.Class.method or torchrl.module.function
+        first = str(fn).split(".")[0][len("<function ") :]
+        last = str(fn).split(".")[1:]
+        if last:
+            first = [first]
+            last[-1] = last[-1].split(" ")[0]
+        else:
+            last = [first.split(" ")[0]]
+            first = []
+        return ".".join([fn.__module__] + first + last)
 
-    def module_set(self):
-        """Sets the function in its module, if it exists already."""
-        cls = self.get_class_that_defined_method(self.fn)
+    def _get_cls(self, fn):
+        cls = self.get_class_that_defined_method(fn)
         if cls is None:
             # class not yet defined
             return
         if cls.__class__.__name__ == "function":
-            cls = inspect.getmodule(self.fn)
+            cls = inspect.getmodule(fn)
+        return cls
+
+    def module_set(self):
+        """Sets the function in its module, if it exists already."""
+        prev_setter = type(self)._implementations.get(self.func_name(self.fn), None)
+        if prev_setter is not None:
+            prev_setter.do_set = False
+        type(self)._implementations[self.func_name(self.fn)] = self
+        cls = self.get_class_that_defined_method(self.fn)
+        if cls is not None:
+            if cls.__class__.__name__ == "function":
+                cls = inspect.getmodule(self.fn)
+        else:
+            # class not yet defined
+            return
         setattr(cls, self.fn.__name__, self.fn)
 
     @classmethod
     def import_module(cls, module_name: Union[Callable, str]) -> str:
         """Imports module and returns its version."""
         if not callable(module_name):
-            module = import_module(module_name)
+            module = cls._cache_modules.get(module_name, None)
+            if module is None:
+                if module_name in sys.modules:
+                    sys.modules[module_name] = module = import_module(module_name)
+                else:
+                    cls._cache_modules[module_name] = module = import_module(
+                        module_name
+                    )
         else:
             module = module_name()
         return module.__version__
@@ -301,7 +333,7 @@ class implement_for:
         self.fn = fn
 
         # If the module is missing replace the function with the mock.
-        func_name = self.func_name
+        func_name = self.func_name(self.fn)
         implementations = implement_for._implementations
 
         @wraps(fn)
@@ -310,7 +342,7 @@ class implement_for:
                 f"Supported version of '{func_name}' has not been found."
             )
 
-        do_set = False
+        self.do_set = False
         # Return fitting implementation if it was encountered before.
         if func_name in implementations:
             try:
@@ -323,36 +355,45 @@ class implement_for:
                             f"Got multiple backends for {func_name}. "
                             f"Using the last queried ({module} with version {version})."
                         )
-                    do_set = True
-                if not do_set:
-                    return implementations[func_name]
+                    self.do_set = True
+                if not self.do_set:
+                    return implementations[func_name].fn
             except ModuleNotFoundError:
                 # then it's ok, there is no conflict
-                return implementations[func_name]
+                return implementations[func_name].fn
         else:
             try:
                 version = self.import_module(self.module_name)
                 if self.check_version(version, self.from_version, self.to_version):
-                    do_set = True
+                    self.do_set = True
             except ModuleNotFoundError:
                 return unsupported
-        if do_set:
-            implementations[func_name] = fn
+        if self.do_set:
             self.module_set()
             return fn
         return unsupported
 
     @classmethod
-    def reset(cls, setters=None):
+    def reset(cls, setters_dict: Dict[str, implement_for] = None):
+        """Resets the setters in setter_dict.
+
+        ``setter_dict`` is a copy of implementations. We just need to iterate through its
+        values and call :meth:`~.module_set` for each.
+
+        """
         if VERBOSE:
             print("resetting implement_for")
-        if setters is None:
-            setters = copy(cls._setters)
-        cls._setters = []
-        cls._implementations = {}
-        for setter in setters:
-            setter(setter.fn)
-            cls._setters.append(setter)
+        if setters_dict is None:
+            setters_dict = copy(cls._implementations)
+        for setter in setters_dict.values():
+            setter.module_set()
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}("
+            f"module_name={self.module_name}({self.from_version, self.to_version}), "
+            f"fn_name={self.fn.__name__}, cls={self._get_cls(self.fn)}, is_set={self.do_set})"
+        )
 
 
 def accept_remote_rref_invocation(func):

@@ -165,7 +165,7 @@ def test_preproc_data(
         pre_tokenization_hook=pre_tokenization_hook,
         from_disk=True,
         root_dir=tmpdir1,
-        valid_size=500,
+        valid_size=20,
     )
     dataset = loader._load_dataset()
     assert isinstance(dataset, datasets.Dataset)
@@ -533,6 +533,7 @@ class TestRollout:
         expected_keys = {
             ("next", "attention_mask"),
             ("next", "done"),
+            ("next", "terminated"),
             ("next", "input_ids"),
             ("next", "reward"),
             "action",

@@ -12,7 +12,7 @@ from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuff
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import Compose, DoubleToFloat, EnvCreator, ParallelEnv, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
-from torchrl.envs.transforms import InitTracker, RewardSum
+from torchrl.envs.transforms import InitTracker, RewardSum, StepCounter
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
 from torchrl.modules.distributions import TanhNormal
@@ -25,20 +25,20 @@ from torchrl.objectives.sac import SACLoss
 # -----------------
 
 
-def env_maker(task, device="cpu", max_episode_steps=1000):
+def env_maker(task, device="cpu"):
     with set_gym_backend("gym"):
         return GymEnv(
             task,
             device=device,
-            max_episode_steps=max_episode_steps,
         )
 
 
-def apply_env_transforms(env):
+def apply_env_transforms(env, max_episode_steps=1000):
     transformed_env = TransformedEnv(
         env,
         Compose(
             InitTracker(),
+            StepCounter(max_episode_steps),
             DoubleToFloat("observation"),
             RewardSum(),
         ),
@@ -50,24 +50,16 @@ def make_environment(cfg):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         cfg.collector.env_per_collector,
-        EnvCreator(
-            lambda: env_maker(
-                task=cfg.env.name, max_episode_steps=cfg.env.max_episode_steps
-            )
-        ),
+        EnvCreator(lambda: env_maker(task=cfg.env.name)),
     )
     parallel_env.set_seed(cfg.env.seed)
 
-    train_env = apply_env_transforms(parallel_env)
+    train_env = apply_env_transforms(parallel_env, cfg.env.max_episode_steps)
 
     eval_env = TransformedEnv(
         ParallelEnv(
             cfg.collector.env_per_collector,
-            EnvCreator(
-                lambda: env_maker(
-                    task=cfg.env.name, max_episode_steps=cfg.env.max_episode_steps
-                )
-            ),
+            EnvCreator(lambda: env_maker(task=cfg.env.name)),
         ),
         train_env.transform.clone(),
     )
@@ -86,7 +78,6 @@ def make_collector(cfg, train_env, actor_model_explore):
         actor_model_explore,
         init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
-        max_frames_per_traj=cfg.env.max_episode_steps,
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.collector_device,
     )
