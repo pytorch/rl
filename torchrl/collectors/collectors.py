@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import _pickle
 import abc
 import inspect
@@ -391,12 +393,12 @@ class SyncDataCollector(DataCollectorBase):
             If the environment wraps multiple environments together, the number
             of steps is tracked for each environment independently. Negative
             values are allowed, in which case this argument is ignored.
-            Defaults to ``-1`` (i.e. no maximum number of steps).
+            Defaults to ``None`` (i.e. no maximum number of steps).
         init_random_frames (int, optional): Number of frames for which the
             policy is ignored before it is called. This feature is mainly
             intended to be used in offline/model-based settings, where a
             batch of random trajectories can be used to initialize training.
-            Defaults to ``-1`` (i.e. no random frames).
+            Defaults to ``None`` (i.e. no random frames).
         reset_at_each_iter (bool, optional): Whether environments should be reset
             at the beginning of a batch collection.
             Defaults to ``False``.
@@ -498,12 +500,12 @@ class SyncDataCollector(DataCollectorBase):
         total_frames: int,
         device: DEVICE_TYPING = None,
         storing_device: DEVICE_TYPING = None,
-        create_env_kwargs: Optional[dict] = None,
-        max_frames_per_traj: int = -1,
-        init_random_frames: int = -1,
+        create_env_kwargs: dict | None = None,
+        max_frames_per_traj: int | None = None,
+        init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
-        postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        split_trajs: Optional[bool] = None,
+        postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
+        split_trajs: bool | None = None,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
         exploration_mode=None,
         return_same_td: bool = False,
@@ -567,7 +569,7 @@ class SyncDataCollector(DataCollectorBase):
 
         self.env: EnvBase = self.env.to(self.device)
         self.max_frames_per_traj = max_frames_per_traj
-        if self.max_frames_per_traj > 0:
+        if self.max_frames_per_traj is not None and self.max_frames_per_traj > 0:
             # let's check that there is no StepCounter yet
             for key in self.env.output_spec.keys(True, True):
                 if isinstance(key, str):
@@ -621,64 +623,45 @@ class SyncDataCollector(DataCollectorBase):
         )
 
         with torch.no_grad():
-            self._tensordict_out = env.fake_tensordict()
+            self._tensordict_out = self.env.fake_tensordict()
+        # If the policy has a valid spec, we use it
         if (
             hasattr(self.policy, "spec")
             and self.policy.spec is not None
-            and all(
-                v is not None for v in self.policy.spec.values(True, True)
-            )  # if a spec is None, we don't know anything about it
-            # and set(self.policy.spec.keys(True, True)) == set(self.policy.out_keys)
-            and any(
+            and all(v is not None for v in self.policy.spec.values(True, True))
+        ):
+            if any(
                 key not in self._tensordict_out.keys(isinstance(key, tuple))
                 for key in self.policy.spec.keys(True, True)
-            )
-        ):
-            # if policy spec is non-empty, all the values are not None and the keys
-            # match the out_keys we assume the user has given all relevant information
-            # the policy could have more keys than the env:
-            policy_spec = self.policy.spec
-            if policy_spec.ndim < self._tensordict_out.ndim:
-                policy_spec = policy_spec.expand(self._tensordict_out.shape)
-            for key, spec in policy_spec.items(True, True):
-                if key in self._tensordict_out.keys(isinstance(key, tuple)):
-                    continue
-                self._tensordict_out.set(key, spec.zero())
-            self._tensordict_out = (
-                self._tensordict_out.unsqueeze(-1)
-                .expand(*env.batch_size, self.frames_per_batch)
-                .clone()
-            )
-        elif (
-            hasattr(self.policy, "spec")
-            and self.policy.spec is not None
-            and all(v is not None for v in self.policy.spec.values(True, True))
-            and all(
-                key in self._tensordict_out.keys(isinstance(key, tuple))
-                for key in self.policy.spec.keys(True, True)
-            )
-        ):
-            # reach this if the policy has specs and they match with the fake tensordict
-            self._tensordict_out = (
-                self._tensordict_out.unsqueeze(-1)
-                .expand(*env.batch_size, self.frames_per_batch)
-                .clone()
-            )
+            ):
+                # if policy spec is non-empty, all the values are not None and the keys
+                # match the out_keys we assume the user has given all relevant information
+                # the policy could have more keys than the env:
+                policy_spec = self.policy.spec
+                if policy_spec.ndim < self._tensordict_out.ndim:
+                    policy_spec = policy_spec.expand(self._tensordict_out.shape)
+                for key, spec in policy_spec.items(True, True):
+                    if key in self._tensordict_out.keys(isinstance(key, tuple)):
+                        continue
+                    self._tensordict_out.set(key, spec.zero())
+
         else:
             # otherwise, we perform a small number of steps with the policy to
             # determine the relevant keys with which to pre-populate _tensordict_out.
             # This is the safest thing to do if the spec has None fields or if there is
             # no spec at all.
             # See #505 for additional context.
+            self._tensordict_out.update(self._tensordict)
             with torch.no_grad():
-                self._tensordict_out = self._tensordict_out.to(self.device)
-                self._tensordict_out = self.policy(self._tensordict_out).unsqueeze(-1)
-            self._tensordict_out = (
-                self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
-                .clone()
-                .zero_()
-            )
-        # in addition to outputs of the policy, we add traj_ids and step_count to
+                self._tensordict_out = self.policy(self._tensordict_out.to(self.device))
+
+        self._tensordict_out = (
+            self._tensordict_out.unsqueeze(-1)
+            .expand(*env.batch_size, self.frames_per_batch)
+            .clone()
+            .zero_()
+        )
+        # in addition to outputs of the policy, we add traj_ids to
         # _tensordict_out which will be collected during rollout
         self._tensordict_out = self._tensordict_out.to(self.storing_device)
         self._tensordict_out.set(
@@ -842,7 +825,10 @@ class SyncDataCollector(DataCollectorBase):
         tensordicts = []
         with set_exploration_type(self.exploration_type):
             for t in range(self.frames_per_batch):
-                if self._frames < self.init_random_frames:
+                if (
+                    self.init_random_frames is not None
+                    and self._frames < self.init_random_frames
+                ):
                     self.env.rand_step(self._tensordict)
                 else:
                     self.policy(self._tensordict)
@@ -1035,12 +1021,12 @@ class _MultiDataCollector(DataCollectorBase):
             If the environment wraps multiple environments together, the number
             of steps is tracked for each environment independently. Negative
             values are allowed, in which case this argument is ignored.
-            Defaults to ``-1`` (i.e. no maximum number of steps).
+            Defaults to ``None`` (i.e. no maximum number of steps).
         init_random_frames (int, optional): Number of frames for which the
             policy is ignored before it is called. This feature is mainly
             intended to be used in offline/model-based settings, where a
             batch of random trajectories can be used to initialize training.
-            Defaults to ``-1`` (i.e. no random frames).
+            Defaults to ``None`` (i.e. no random frames).
         reset_at_each_iter (bool, optional): Whether environments should be reset
             at the beginning of a batch collection.
             Defaults to ``False``.
@@ -1096,8 +1082,8 @@ class _MultiDataCollector(DataCollectorBase):
         device: DEVICE_TYPING = None,
         storing_device: Optional[Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]]] = None,
         create_env_kwargs: Optional[Sequence[dict]] = None,
-        max_frames_per_traj: int = -1,
-        init_random_frames: int = -1,
+        max_frames_per_traj: int | None = None,
+        init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: Optional[bool] = None,
@@ -1652,7 +1638,10 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 self.update_policy_weights_()
 
             for idx in range(self.num_workers):
-                if self._frames < self.init_random_frames:
+                if (
+                    self.init_random_frames is not None
+                    and self._frames < self.init_random_frames
+                ):
                     msg = "continue_random"
                 else:
                     msg = "continue"
@@ -1888,7 +1877,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             self.update_policy_weights_()
 
         for i in range(self.num_workers):
-            if self.init_random_frames > 0:
+            if self.init_random_frames is not None and self.init_random_frames > 0:
                 self.pipes[i].send((None, "continue_random"))
             else:
                 self.pipes[i].send((None, "continue"))
@@ -1910,7 +1899,10 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
             # the function blocks here until the next item is asked, hence we send the message to the
             # worker to keep on working in the meantime before the yield statement
-            if self._frames < self.init_random_frames:
+            if (
+                self.init_random_frames is not None
+                and self._frames < self.init_random_frames
+            ):
                 msg = "continue_random"
             else:
                 msg = "continue"
@@ -1937,7 +1929,10 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             raise Exception("self.queue_out is full")
         if self.running:
             for idx in range(self.num_workers):
-                if self._frames < self.init_random_frames:
+                if (
+                    self.init_random_frames is not None
+                    and self._frames < self.init_random_frames
+                ):
                     self.pipes[idx].send((idx, "continue_random"))
                 else:
                     self.pipes[idx].send((idx, "continue"))
@@ -1971,14 +1966,14 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             environment wraps multiple environments together, the number of
             steps is tracked for each environment independently. Negative
             values are allowed, in which case this argument is ignored.
-            Default is -1 (i.e. no maximum number of steps)
+            Defaults to ``None`` (i.e. no maximum number of steps)
         frames_per_batch (int): Time-length of a batch.
             reset_at_each_iter and frames_per_batch == n_steps are equivalent configurations.
-            default: 200
+            Defaults to ``200``
         init_random_frames (int): Number of frames for which the policy is ignored before it is called.
             This feature is mainly intended to be used in offline/model-based settings, where a batch of random
             trajectories can be used to initialize training.
-            default=-1 (i.e. no random frames)
+            Defaults to ``None`` (i.e. no random frames)
         reset_at_each_iter (bool): Whether or not environments should be reset for each batch.
             default=False.
         postproc (callable, optional): A PostProcessor is an object that will read a batch of data and process it in a
@@ -2013,9 +2008,9 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[dict] = None,
-        max_frames_per_traj: int = -1,
+        max_frames_per_traj: int | None = None,
         frames_per_batch: int = 200,
-        init_random_frames: int = -1,
+        init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: Optional[bool] = None,
