@@ -1220,7 +1220,7 @@ class GAE(ValueEstimatorBase):
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
             >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> advantage, value_target = module(obs=obs, reward=reward, done=done, next_obs=next_obs, terminated=terminated)
+            >>> advantage, value_target = module(obs=obs, next_reward=reward, next_done=done, next_obs=next_obs, next_terminated=terminated)
 
         """
         if tensordict.batch_dims < 1:
@@ -1448,6 +1448,12 @@ class VTrace(ValueEstimatorBase):
                 "Per-value gamma is not supported yet. Gamma must be a scalar."
             )
 
+    @property
+    def in_keys(self):
+        parent_in_keys = super().in_keys
+        extended_in_keys = parent_in_keys + [self.tensor_keys.sample_log_prob]
+        return extended_in_keys
+
     @_self_set_skip_existing
     @_self_set_grad_enabled
     @dispatch
@@ -1538,7 +1544,9 @@ class VTrace(ValueEstimatorBase):
             ...     "sample_log_prob": sample_log_prob,
             ...     "next": {"obs": next_obs, "reward": reward, "done": done, "terminated": terminated},
             ... }, batch_size=[1, 10])
-            >>> advantage, value_target = module(obs=obs, reward=reward, done=done, next_obs=next_obs, terminated=terminated, sample_log_prob=sample_log_prob)
+            >>> advantage, value_target = module(
+            ...     obs=obs, next_reward=reward, next_done=done, next_obs=next_obs, next_terminated=terminated, sample_log_prob=sample_log_prob
+            ... )
 
         """
         if tensordict.batch_dims < 1:

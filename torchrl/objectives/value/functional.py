@@ -1217,7 +1217,6 @@ def vec_td_lambda_advantage_estimate(
 # -----
 
 
-@torch.compile
 @_transpose_time
 def vtrace_advantage_estimate(
     gamma: float,
