@@ -22,8 +22,9 @@ from examples.rlhf.utils import (
 from models.actor_critic import init_actor_critic
 from torchrl.data.rlhf.utils import AdaptiveKLController, RolloutFromModel
 
-from torchrl.record import WandbLogger
 from tqdm import tqdm
+
+from torchrl.record.loggers import get_logger
 from utils import flatten_td, resolve_name_or_path, setup
 
 
