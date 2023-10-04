@@ -312,11 +312,30 @@ class RolloutFromModel:
     def _get_done_status(self, generated, batch):
         # done is True when we either first sample an EOS token or reach the maximum number
         # of generated tokens
-        terminated = generated == self.EOS_TOKEN_ID
+        done_idx = torch.minimum(
+            (generated != self.EOS_TOKEN_ID).sum(dim=-1) - batch.prompt_rindex,
+            torch.tensor(self.max_new_tokens) - 1,
+        )
+        truncated_idx = torch.tensor(self.max_new_tokens).expand_as(done_idx) - 1
+        zeros = torch.zeros(
+            done_idx.numel(),
+            self.max_new_tokens,
+            dtype=torch.bool,
+            device=generated.device,
+        )
+        truncated = zeros.scatter(-1, truncated_idx.unsqueeze(-1), 1).unsqueeze(-1)
+        done = zeros.scatter(-1, done_idx.unsqueeze(-1), 1).unsqueeze(-1)
+        terminated = done & ~truncated # we assume that if it's not truncated, it was terminated
+        return truncated | terminated, terminated
+
+        print('batch.prompt_rindex', batch.prompt_rindex)
+        print('generated', generated.shape)
+        terminated = (generated == self.EOS_TOKEN_ID)[..., -batch.prompt_rindex:]
         terminated = terminated.int().cumsum(-1).bool()
         done = terminated.clone()
         done[..., self.max_new_tokens - 1] = 1
-        return done, terminated
+        print('self.max_new_tokens', self.max_new_tokens)
+        return done.unsqueeze(-1), terminated.unsqueeze(-1)
 
     def _get_action(self, generated, batch):
         # the sequence of actions for each trajectory is just the generated token ids

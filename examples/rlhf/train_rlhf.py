@@ -122,13 +122,17 @@ def main(cfg):
     # ================= Training loop ================= #
     #####################################################
 
+    stats_logger = TrainLogger(
+        collection_iters,
+        log_interval=cfg.io.log_interval,
+        logger=logger
+        )
     pbar = tqdm(total=max_epochs * collection_iters)
     for _ in range(max_epochs):
         # ----------------- 1. Collect data, fill replay buffer ----------------- #
         # it's possible we didn't fill the replay buffer in the last iteration if
         # generation stopped early, so we empty first before repopulating
         rb.empty()
-        stats_logger = TrainLogger(collection_iters)
         for i in range(collection_iters):
             batch = next(train_prompt_loader)
             td = rollout_from_model.rollout_from_data(batch)

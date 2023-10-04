@@ -33,6 +33,8 @@ from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
 from transformers import GenerationConfig, GPT2Tokenizer
 
+from torchrl.record.loggers import Logger
+
 
 class TestPromptLogger:
     def __init__(self, batch, reward_model, logger, episode_length):
@@ -86,39 +88,33 @@ class TestPromptLogger:
 
 
 class TrainLogger:
-    def __init__(self, size):
+    def __init__(self, size: int, log_interval: int, logger: Logger):
         self.data = TensorDict({}, [size])
         self.counter = 0
+        self.log_interval = log_interval
+        self.logger = logger
+        self.it = -1
 
     def __call__(self, data):
         done = data.get(("next", "done"))
         td_done = data[done.view(data.shape)]
         next_reward = td_done.get(("next", "reward_raw"))
         next_kl = td_done.get(("next", "reward_kl"))
-        data[self.counter]["next_reward"] = next_reward.mean().cpu()
-        data[self.counter]["next_kl"] = next_kl.mean().cpu()
+        self.data[self.counter]["next_reward"] = next_reward.mean().cpu()
+        self.data[self.counter]["next_kl"] = next_kl.mean().cpu()
         self.counter += 1
 
     def aggregate(self):
         result = {}
         for key, item in self.data.items():
             result[key] = item.mean()
-        self.data = TensorDict(result, [])
+        self.aggregated_data = TensorDict(result, [])
 
     def log(self):
-        if it % log_interval == 0:
-            val_reward_logger.info(
-                f"TRAIN: {it=}: {rollout_reward=:.4f} {rollout_kl_reward=:.4f} {rollout_kl=:.4f}"
-            )
-            wandb.log(
-                {
-                    "rollout_reward": rollout_reward,
-                    "rollout_kl_reward": rollout_kl_reward,
-                    "rollout_kl": rollout_kl,
-                },
-                step=it,
-            )
-            pbar.set_description(f"TRAIN: {it=}: {rollout_reward=:.4f}")
+        self.it += 1
+        if self.it % self.log_interval == 0:
+            for key, item in self.aggregated_data.items():
+                self.logger.log_scalar(key, item)
 
 
 class Evaluator:
@@ -224,6 +220,8 @@ class RewardEstimator:
 
 def resolve_name_or_path(name_or_path):
     """Hydra changes the working directory, so we need to absolutify paths."""
+    if not name_or_path:
+        return None
     if name_or_path.startswith("./") or name_or_path.startswith("/"):
         return to_absolute_path(name_or_path)
     return name_or_path

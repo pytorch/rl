@@ -41,7 +41,7 @@ class GPT2RewardModel(nn.Module):
         from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 
         super().__init__()
-        if model_path:
+        if model_path is not None:
             model = GPT2LMHeadModel.from_pretrained(model_path, return_dict=False)
         else:
             model = GPT2LMHeadModel(GPT2LMHeadModel.config_class())
