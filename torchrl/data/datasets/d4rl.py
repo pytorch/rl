@@ -157,7 +157,6 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             if terminate_on_end is None:
                 # we use the default of d4rl
                 terminate_on_end = False
-            env_kwargs.update({"terminate_on_end": terminate_on_end})
             self._import_d4rl()
 
             if not self._has_d4rl:
@@ -173,6 +172,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
                         "as the timeouts (truncation) "
                         "can be absent from the static dataset."
                     )
+                env_kwargs.update({"terminate_on_end": terminate_on_end})
                 dataset = self._get_dataset_direct(name, env_kwargs)
         else:
             if terminate_on_end is False:
