@@ -5,6 +5,7 @@
 import os
 import urllib
 from pathlib import Path
+import warnings
 from typing import Callable, Optional
 
 import numpy as np
@@ -32,7 +33,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
     If present, metadata will be written in ``D4RLExperienceReplay.metadata``
     and excluded from the dataset.
 
-    The transitions are reconstructed using ``done = terminal | timeout`` and
+    The transitions are reconstructed using ``done = terminated | truncated`` and
     the ``("next", "observation")`` of ``"done"`` states are zeroed.
 
     Args:
@@ -54,8 +55,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         split_trajs (bool, optional): if ``True``, the trajectories will be split
             along the first dimension and padded to have a matching shape.
             To split the trajectories, the ``"done"`` signal will be used, which
-            is recovered via ``done = timeout | terminal``. In other words,
-            it is assumed that any ``timeout`` or ``terminal`` signal is
+            is recovered via ``done = truncated | terminated``. In other words,
+            it is assumed that any ``truncated`` or ``terminated`` signal is
             equivalent to the end of a trajectory. For some datasets from
             ``D4RL``, this may not be true. It is up to the user to make
             accurate choices regarding this usage of ``split_trajs``.
@@ -76,13 +77,13 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             .. note::
 
               The keys in ``from_env=True`` and ``from_env=False`` *may* unexpectedly
-              differ. In particular, the ``"timeout"`` key (used to determine the
+              differ. In particular, the ``"truncated"`` key (used to determine the
               end of an episode) may be absent when ``from_env=False`` but present
               otherwise, leading to a different slicing when ``traj_splits`` is enabled.
         direct_download (bool): if ``True`` (default), the data will be downloaded without
             requiring D4RL. This is not compatible with ``from_env=True``.
-        use_timeout_as_done (bool, optional): if ``True``, ``done = terminal | timeout``.
-            Otherwise, only the ``terminal`` key is used. Defaults to ``True``.
+        use_truncated_as_done (bool, optional): if ``True``, ``done = terminated | truncated``.
+            Otherwise, only the ``terminated`` key is used. Defaults to ``True``.
         **env_kwargs (key-value pairs): additional kwargs for
             :func:`d4rl.qlearning_dataset`. Supports ``terminate_on_end``
             (``False`` by default) or other kwargs if defined by D4RL library.
@@ -304,12 +305,12 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         transform: Optional["Transform"] = None,  # noqa-F821
         split_trajs: bool = False,
         from_env: bool = True,
-        use_timeout_as_done: bool = True,
+        use_truncated_as_done: bool = True,
         direct_download: bool = True,
         **env_kwargs,
     ):
         self.from_env = from_env
-        self.use_timeout_as_done = use_timeout_as_done
+        self.use_truncated_as_done = use_truncated_as_done
         if not direct_download:
             self._import_d4rl()
 
@@ -327,6 +328,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
         if split_trajs:
             dataset = split_trajectories(dataset)
+            dataset["next", "done"][:, -1] = True
+
         storage = LazyMemmapStorage(dataset.shape[0])
         super().__init__(
             batch_size=batch_size,
@@ -385,22 +388,19 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset = dataset.unflatten_keys("/")
         else:
             self.metadata = {}
-        dataset.rename_key("observations", "observation")
+        dataset.rename_key_("observations", "observation")
         dataset.set("next", dataset.select())
-        dataset.rename_key("next_observations", ("next", "observation"))
-        dataset.rename_key("terminals", "terminal")
+        dataset.rename_key_("next_observations", ("next", "observation"))
+        dataset.rename_key_("terminals", "terminated")
         if "timeouts" in dataset.keys():
-            dataset.rename_key("timeouts", "timeout")
-        if self.use_timeout_as_done:
-            dataset.set(
-                "done",
-                dataset.get("terminal")
-                | dataset.get("timeout", torch.zeros((), dtype=torch.bool)),
-            )
+            dataset.rename_key_("timeouts", "truncated")
+        if self.use_truncated_as_done:
+            done = dataset.get("terminated") | dataset.get("truncated", False)
+            dataset.set("done", done)
         else:
-            dataset.set("done", dataset.get("terminal"))
-        dataset.rename_key("rewards", "reward")
-        dataset.rename_key("actions", "action")
+            dataset.set("done", dataset.get("terminated"))
+        dataset.rename_key_("rewards", "reward")
+        dataset.rename_key_("actions", "action")
 
         # let's make sure that the dtypes match what's expected
         for key, spec in env.observation_spec.items(True, True):
@@ -408,13 +408,16 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset["next", key] = dataset["next", key].to(spec.dtype)
         dataset["action"] = dataset["action"].to(env.action_spec.dtype)
         dataset["reward"] = dataset["reward"].to(env.reward_spec.dtype)
-        dataset["done"] = dataset["done"].bool()
 
-        dataset["done"] = dataset["done"].unsqueeze(-1)
-        # dataset.rename_key("next_observations", "next/observation")
+        # format done etc
+        dataset["done"] = dataset["done"].bool().unsqueeze(-1)
+        dataset["terminated"] = dataset["terminated"].bool().unsqueeze(-1)
+        if "truncated" in dataset.keys():
+            dataset["truncated"] = dataset["truncated"].bool().unsqueeze(-1)
+        # dataset.rename_key_("next_observations", "next/observation")
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset["next"].update(
-            dataset.select("reward", "done", "terminal", "timeout", strict=False)
+            dataset.select("reward", "done", "terminated", "truncated", strict=False)
         )
         dataset = (
             dataset.clone()
@@ -459,22 +462,22 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         else:
             self.metadata = {}
 
-        dataset.rename_key("observations", "observation")
-        dataset.rename_key("terminals", "terminal")
+        dataset.rename_key_("observations", "observation")
+        dataset.rename_key_("terminals", "terminated")
         if "timeouts" in dataset.keys():
-            dataset.rename_key("timeouts", "timeout")
-        if self.use_timeout_as_done:
+            dataset.rename_key_("timeouts", "truncated")
+        if self.use_truncated_as_done:
             dataset.set(
                 "done",
-                dataset.get("terminal")
-                | dataset.get("timeout", torch.zeros((), dtype=torch.bool)),
+                dataset.get("terminated") | dataset.get("truncated", False),
             )
         else:
-            dataset.set("done", dataset.get("terminal"))
-        dataset.rename_key("rewards", "reward")
-        dataset.rename_key("actions", "action")
+            dataset.set("done", dataset.get("terminated"))
+
+        dataset.rename_key_("rewards", "reward")
+        dataset.rename_key_("actions", "action")
         try:
-            dataset.rename_key("infos", "info")
+            dataset.rename_key_("infos", "info")
         except KeyError:
             pass
 
@@ -484,17 +487,20 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
                 dataset[key] = dataset[key].to(spec.dtype)
             dataset["action"] = dataset["action"].to(env.action_spec.dtype)
             dataset["reward"] = dataset["reward"].to(env.reward_spec.dtype)
-        dataset["done"] = dataset["done"].bool()
 
-        dataset["done"] = dataset["done"].unsqueeze(-1)
-        # dataset.rename_key("next_observations", "next/observation")
+        # format done
+        dataset["done"] = dataset["done"].bool().unsqueeze(-1)
+        dataset["terminated"] = dataset["terminated"].bool().unsqueeze(-1)
+        if "truncated" in dataset.keys():
+            dataset["truncated"] = dataset["truncated"].bool().unsqueeze(-1)
+
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset = dataset[:-1].set(
             "next",
             dataset.select("observation", "info", strict=False)[1:],
         )
         dataset["next"].update(
-            dataset.select("reward", "done", "terminal", "timeout", strict=False)
+            dataset.select("reward", "done", "terminated", "truncated", strict=False)
         )
         dataset = (
             dataset.clone()
@@ -508,11 +514,14 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
     def _shift_reward_done(self, dataset):
         dataset["reward"] = dataset["reward"].clone()
-        dataset["done"] = dataset["done"].clone()
         dataset["reward"][1:] = dataset["reward"][:-1].clone()
-        dataset["done"][1:] = dataset["done"][:-1].clone()
         dataset["reward"][0] = 0
-        dataset["done"][0] = 0
+        for key in ("done", "terminated", "truncated"):
+            if key not in dataset.keys():
+                continue
+            dataset[key] = dataset[key].clone()
+            dataset[key][1:] = dataset[key][:-1].clone()
+            dataset[key][0] = 0
 
 
 def _download_dataset_from_url(dataset_url):

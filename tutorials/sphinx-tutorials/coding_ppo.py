@@ -366,7 +366,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 #     f_{\theta}(\text{observation}) = \mu_{\theta}(\text{observation}), \sigma^{+}_{\theta}(\text{observation})
 #
 # The only extra-difficulty that is brought up here is to split our output in two
-# equal parts and map the second to a scrictly positive space.
+# equal parts and map the second to a strictly positive space.
 #
 # We design the policy in three steps:
 #
@@ -557,7 +557,6 @@ advantage_module = GAE(
 loss_module = ClipPPOLoss(
     actor=policy_module,
     critic=value_module,
-    advantage_key="advantage",
     clip_epsilon=clip_epsilon,
     entropy_bonus=bool(entropy_eps),
     entropy_coef=entropy_eps,

@@ -68,7 +68,7 @@ other cases, the action written in the tensordict is simply the network output.
     :template: rl_template_noinherit.rst
 
     AdditiveGaussianWrapper
-    EGreedyWrapper
+    EGreedyModule
     OrnsteinUhlenbeckProcessWrapper
 
 Probabilistic actors
@@ -261,7 +261,7 @@ without shared parameters. It is mainly intended as a replacement for
     ActorCriticWrapper
     ActorValueOperator
     ValueOperator
-
+    DecisionTransformerInferenceWrapper
 
 Domain-specific TensorDict modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -308,6 +308,7 @@ Regular modules
 
     MLP
     ConvNet
+    Conv3dNet
     LSTMNet
     SqueezeLayer
     Squeeze2dLayer
@@ -322,18 +323,35 @@ algorithms, such as DQN, DDPG or Dreamer.
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
-    DuelingCnnDQNet
-    DistributionalDQNnet
+    DTActor
     DdpgCnnActor
     DdpgCnnQNet
     DdpgMlpActor
     DdpgMlpQNet
+    DecisionTransformer
+    DistributionalDQNnet
     DreamerActor
+    DuelingCnnDQNet
     LSTMModule
-    ObsEncoder
     ObsDecoder
-    RSSMPrior
+    ObsEncoder
+    OnlineDTActor
     RSSMPosterior
+    RSSMPrior
+
+Multi-agent-specific modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These networks implement models that can be used in
+multi-agent contexts.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    MultiAgentMLP
+    QMixer
+    VDNMixer
 
 
 Exploration
@@ -384,6 +402,7 @@ Some distributions are typically used in RL scripts.
     TanhDelta
     OneHotCategorical
     MaskedCategorical
+    MaskedOneHotCategorical
 
 Utils
 -----

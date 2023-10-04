@@ -144,11 +144,11 @@ class PPOLoss(LossModule):
         >>> loss = PPOLoss(actor, value)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
-        >>> data = TensorDict({
-        ...         "observation": torch.randn(*batch, n_obs),
+        >>> data = TensorDict({"observation": torch.randn(*batch, n_obs),
         ...         "action": action,
-        ...         "sample_log_prob": torch.randn_like(action[..., 1]) / 10,
+        ...         "sample_log_prob": torch.randn_like(action[..., 1]),
         ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...         ("next", "reward"): torch.randn(*batch, 1),
         ...         ("next", "observation"): torch.randn(*batch, n_obs),
         ...     }, batch)
@@ -166,7 +166,7 @@ class PPOLoss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["action", "sample_log_prob", "next_reward", "next_done"]`` + in_keys of the actor and value network.
+    ``["action", "sample_log_prob", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and value network.
     The return value is a tuple of tensors in the following order:
     ``["loss_objective"]`` + ``["entropy", "loss_entropy"]`` if entropy_bonus is set
                            + ``"loss_critic"`` if critic_coef is not None.
@@ -204,6 +204,7 @@ class PPOLoss(LossModule):
         ...         action=action,
         ...         sampleLogProb=torch.randn_like(action[..., 1]) / 10,
         ...         next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...         next_reward=torch.randn(*batch, 1),
         ...         next_observation=torch.randn(*batch, n_obs))
         >>> loss_objective.backward()
@@ -233,6 +234,9 @@ class PPOLoss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -242,6 +246,7 @@ class PPOLoss(LossModule):
         action: NestedKey = "action"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
@@ -266,12 +271,6 @@ class PPOLoss(LossModule):
         self._in_keys = None
         self._out_keys = None
         super().__init__()
-        self._set_deprecated_ctor_keys(
-            advantage=advantage_key,
-            value_target=value_target_key,
-            value=value_key,
-        )
-
         self.convert_to_functional(
             actor, "actor", funs_to_decorate=["forward", "get_dist"]
         )
@@ -285,17 +284,24 @@ class PPOLoss(LossModule):
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus
         self.separate_losses = separate_losses
-        self.register_buffer(
-            "entropy_coef", torch.tensor(entropy_coef, device=self.device)
-        )
-        self.register_buffer(
-            "critic_coef", torch.tensor(critic_coef, device=self.device)
-        )
+
+        try:
+            device = next(self.parameters()).device
+        except AttributeError:
+            device = torch.device("cpu")
+
+        self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
+        self.register_buffer("critic_coef", torch.tensor(critic_coef, device=device))
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+        self._set_deprecated_ctor_keys(
+            advantage=advantage_key,
+            value_target=value_target_key,
+            value=value_key,
+        )
 
     def _set_in_keys(self):
         keys = [
@@ -303,6 +309,7 @@ class PPOLoss(LossModule):
             self.tensor_keys.sample_log_prob,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.actor.in_keys,
             *[("next", key) for key in self.actor.in_keys],
             *self.critic.in_keys,
@@ -335,13 +342,14 @@ class PPOLoss(LossModule):
         self._out_keys = values
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
-        if self._value_estimator is not None:
+        if hasattr(self, "_value_estimator") and self._value_estimator is not None:
             self._value_estimator.set_keys(
                 advantage=self.tensor_keys.advantage,
                 value_target=self.tensor_keys.value_target,
                 value=self.tensor_keys.value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
         self._set_in_keys()
 
@@ -470,6 +478,7 @@ class PPOLoss(LossModule):
             "value_target": self.tensor_keys.value_target,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)
 

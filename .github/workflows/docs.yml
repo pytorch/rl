@@ -79,8 +79,9 @@ jobs:
       id: build_doc
       run: |
         cd ./docs
-        #timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
-        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
+        # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        # PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
         cd ..
     - name: Install rsync 📚
       run: |
@@ -91,6 +92,11 @@ jobs:
         rm -rf docs/_local_build/tensordict/.git
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
+    - name: Upload wheel for download
+      uses: actions/upload-artifact@v2
+      with:
+        name: build
+        path: docs/_local_build/
     - name: Deploy
       if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       uses: JamesIves/github-pages-deploy-action@releases/v4

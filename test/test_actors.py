@@ -51,7 +51,7 @@ from torchrl.modules.tensordict_module.actors import (
 def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=3):
     env = NestedCountingEnv(nested_dim=nested_dim)
     action_spec = BoundedTensorSpec(
-        shape=torch.Size((nested_dim, n_actions)), maximum=1, minimum=-1
+        shape=torch.Size((nested_dim, n_actions)), high=1, low=-1
     )
     policy_module = TensorDictModule(
         nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
@@ -112,7 +112,7 @@ def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=
 def test_probabilistic_actor_nested_normal(log_prob_key, nested_dim=5, n_actions=3):
     env = NestedCountingEnv(nested_dim=nested_dim)
     action_spec = BoundedTensorSpec(
-        shape=torch.Size((nested_dim, n_actions)), maximum=1, minimum=-1
+        shape=torch.Size((nested_dim, n_actions)), high=1, low=-1
     )
     actor_net = nn.Sequential(
         nn.Linear(1, 2),
@@ -217,7 +217,7 @@ class TestQValue:
         env = NestedCountingEnv(
             nest_obs_action=nested_action, batch_size=batch_size, nested_dim=nested_dim
         )
-        action_spec = env._input_spec["_action_spec"]
+        action_spec = env._input_spec["full_action_spec"]
         leaf_action_spec = env.action_spec
 
         space_str, spec = _process_action_space_spec(None, action_spec)
@@ -265,6 +265,20 @@ class TestQValue:
             action_space=None,
             spec=action_spec,
         )
+
+    @pytest.mark.parametrize(
+        "action_space, var_nums, expected_action",
+        (
+            ("multi_one_hot", [2, 2, 2], [1, 0, 1, 0, 1, 0]),
+            ("multi_one_hot", [2, 4], [1, 0, 1, 0, 0, 0]),
+        ),
+    )
+    def test_qvalue_module_multi_one_hot(self, action_space, var_nums, expected_action):
+        module = QValueModule(action_space=action_space, var_nums=var_nums)
+        in_values = torch.tensor([1.0, 0, 2, 0, 1, 0])
+        action, values, chosen_action_value = module(in_values)
+        assert (torch.tensor(expected_action, dtype=torch.long) == action).all()
+        assert (values == in_values).all()
 
     @pytest.mark.parametrize(
         "action_space, expected_action",
@@ -599,6 +613,39 @@ class TestQValue:
         assert values.shape == in_values.shape
         assert (values == in_values).all()
 
+    @pytest.mark.parametrize("action_space", ["categorical", "one-hot"])
+    @pytest.mark.parametrize("action_n", [2, 3, 4, 5])
+    def test_qvalue_mask(self, action_space, action_n):
+        torch.manual_seed(0)
+        shape = (3, 4, 3, action_n)
+        action_values = torch.randn(size=shape)
+        td = TensorDict({"action_value": action_values}, [3])
+        module = QValueModule(
+            action_space=action_space,
+            action_value_key="action_value",
+            action_mask_key="action_mask",
+        )
+        with pytest.raises(KeyError, match="Action mask key "):
+            module(td)
+
+        action_mask = torch.randint(high=2, size=shape).to(torch.bool)
+        while not action_mask.any(dim=-1).all() or action_mask.all():
+            action_mask = torch.randint(high=2, size=shape).to(torch.bool)
+
+        td.set("action_mask", action_mask)
+        module(td)
+        new_action_values = td.get("action_value")
+
+        assert (new_action_values[~action_mask] != action_values[~action_mask]).all()
+        assert (new_action_values[action_mask] == action_values[action_mask]).all()
+        assert (td.get("chosen_action_value") > torch.finfo(torch.float).min).all()
+
+        if action_space == "one-hot":
+            assert (td.get("action")[action_mask]).any()
+            assert not (td.get("action")[~action_mask]).any()
+        else:
+            assert action_mask.gather(-1, td.get("action").unsqueeze(-1)).all()
+
 
 @pytest.mark.parametrize("device", get_default_devices())
 def test_value_based_policy(device):
@@ -756,10 +803,11 @@ def test_actorcritic(device):
 @pytest.mark.skipif(not _has_transformers, reason="missing dependencies")
 @pytest.mark.parametrize("device", get_default_devices())
 def test_lmhead_actorvalueoperator(device):
-    from transformers import AutoModelForCausalLM
+    from transformers import AutoModelForCausalLM, GPT2Config
 
-    base_model = AutoModelForCausalLM.from_pretrained("gpt2", return_dict=False)
-    aco = LMHeadActorValueOperator(base_model)
+    config = GPT2Config(return_dict=False)
+    base_model = AutoModelForCausalLM.from_config(config).eval()
+    aco = LMHeadActorValueOperator(base_model).to(device)
 
     # check common
     assert aco.module[0][0].module is base_model.transformer
@@ -786,7 +834,8 @@ def test_lmhead_actorvalueoperator(device):
         batch_size=[
             4,
         ],
-    ).to(device)
+        device=device,
+    )
     td_total = aco(td.clone())
     policy_op = aco.get_policy_operator()
     td_policy = policy_op(td.clone())
