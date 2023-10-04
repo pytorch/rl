@@ -217,7 +217,9 @@ class MultiAgentMLP(nn.Module):
                 # We expand it to maintain the agent dimension, but values will be the same for all agents
                 output = output.view(*output.shape[:-1], self.n_agent_outputs)
                 output = output.unsqueeze(-2)
-                output = output.expand(*output.shape[:-2], self.n_agents, self.n_agent_outputs)
+                output = output.expand(
+                    *output.shape[:-2], self.n_agents, self.n_agent_outputs
+                )
 
         if output.shape[-2:] != (self.n_agents, self.n_agent_outputs):
             raise ValueError(
@@ -403,9 +405,13 @@ class MultiAgentConvNet(nn.Module):
 
     def forward(self, inputs: torch.Tensor):
         if len(inputs.shape) < 4:
-            raise ValueError("""Multi-agent network expects (*batch_size, agent_index, x, y, channels)""")
+            raise ValueError(
+                """Multi-agent network expects (*batch_size, agent_index, x, y, channels)"""
+            )
         if inputs.shape[-4] != self.n_agents:
-            raise ValueError(f"""Multi-agent network expects {self.n_agents} but got {inputs.shape[-4]}""")
+            raise ValueError(
+                f"""Multi-agent network expects {self.n_agents} but got {inputs.shape[-4]}"""
+            )
         # If the model is centralized, agents have full observability
         if self.centralised:
             shape = (
@@ -426,7 +432,9 @@ class MultiAgentConvNet(nn.Module):
                 output = torch.stack(
                     [
                         net(inp)
-                        for i, (net, inp) in enumerate(zip(self.agent_networks, inputs.unbind(-4)))
+                        for i, (net, inp) in enumerate(
+                            zip(self.agent_networks, inputs.unbind(-4))
+                        )
                     ],
                     dim=-2,
                 )
@@ -438,7 +446,9 @@ class MultiAgentConvNet(nn.Module):
                 n_agent_outputs = output.shape[-1]
                 output = output.view(*output.shape[:-1], n_agent_outputs)
                 output = output.unsqueeze(-2)
-                output = output.expand(*output.shape[:-2], self.n_agents, n_agent_outputs)
+                output = output.expand(
+                    *output.shape[:-2], self.n_agents, n_agent_outputs
+                )
         return output
 
 
