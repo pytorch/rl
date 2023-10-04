@@ -308,17 +308,17 @@ def create_infinite_iterator(iterator):
 
 
 def get_dataloader(
-    batch_size:int,
-    block_size:int,
-    tensorclass_type:Type,
-    device:torch.device,
-    dataset_name:str|None=None,
-    infinite:bool=True,
-    prefetch:int=0,
-    split:str="train",
-    root_dir:str|None=None,
-    from_disk:bool=False,
-    num_workers: int|None=None,
+    batch_size: int,
+    block_size: int,
+    tensorclass_type: Type,
+    device: torch.device,
+    dataset_name: str | None = None,
+    infinite: bool = True,
+    prefetch: int = 0,
+    split: str = "train",
+    root_dir: str | None = None,
+    from_disk: bool = False,
+    num_workers: int | None = None,
 ):
     """Creates a dataset and returns a dataloader from it.
 

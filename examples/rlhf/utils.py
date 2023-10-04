@@ -7,7 +7,6 @@ import logging
 from contextlib import nullcontext
 from copy import deepcopy
 
-
 import torch
 import torch._dynamo
 
@@ -16,12 +15,8 @@ import wandb
 from hydra.utils import to_absolute_path
 from models.reward import init_reward_model
 
-
 from tensordict import TensorDict
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torchrl.data.replay_buffers import SamplerWithoutReplacement
-from torchrl.data.rlhf.dataset import get_dataloader
-from torchrl.data.rlhf.prompt import PromptData
 
 from torchrl.data import (
     LazyTensorStorage,
@@ -29,11 +24,14 @@ from torchrl.data import (
     TensorDictReplayBuffer,
     TensorStorage,
 )
+from torchrl.data.replay_buffers import SamplerWithoutReplacement
+from torchrl.data.rlhf.dataset import get_dataloader
+from torchrl.data.rlhf.prompt import PromptData
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
-from transformers import GenerationConfig, GPT2Tokenizer
 
 from torchrl.record.loggers import Logger
+from transformers import GenerationConfig, GPT2Tokenizer
 
 
 class TestPromptLogger:

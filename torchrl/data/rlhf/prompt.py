@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
+
 from typing import Optional
 
 import torch
@@ -41,7 +42,13 @@ class PromptData:
 
     @classmethod
     def from_dataset(
-        cls, split, dataset_name=None, max_length=550, root_dir=None, from_disk=False, num_workers: int | None=None,
+        cls,
+        split,
+        dataset_name=None,
+        max_length=550,
+        root_dir=None,
+        from_disk=False,
+        num_workers: int | None = None,
     ):
         """Returns a :class:`PromptData` from a dataset name.
 

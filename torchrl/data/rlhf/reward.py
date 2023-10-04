@@ -67,7 +67,13 @@ class PairwiseDataset:
 
     @classmethod
     def from_dataset(
-        cls, split, dataset_name: str|None=None, max_length:int=550, root_dir:str|None=None, from_disk:bool=False, num_workers: int | None=None
+        cls,
+        split,
+        dataset_name: str | None = None,
+        max_length: int = 550,
+        root_dir: str | None = None,
+        from_disk: bool = False,
+        num_workers: int | None = None,
     ):
         """Returns a :class:`PairwiseDataset` from a dataset name.
 

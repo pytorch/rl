@@ -325,16 +325,18 @@ class RolloutFromModel:
         )
         truncated = zeros.scatter(-1, truncated_idx.unsqueeze(-1), 1).unsqueeze(-1)
         done = zeros.scatter(-1, done_idx.unsqueeze(-1), 1).unsqueeze(-1)
-        terminated = done & ~truncated # we assume that if it's not truncated, it was terminated
+        terminated = (
+            done & ~truncated
+        )  # we assume that if it's not truncated, it was terminated
         return truncated | terminated, terminated
 
-        print('batch.prompt_rindex', batch.prompt_rindex)
-        print('generated', generated.shape)
-        terminated = (generated == self.EOS_TOKEN_ID)[..., -batch.prompt_rindex:]
+        print("batch.prompt_rindex", batch.prompt_rindex)
+        print("generated", generated.shape)
+        terminated = (generated == self.EOS_TOKEN_ID)[..., -batch.prompt_rindex :]
         terminated = terminated.int().cumsum(-1).bool()
         done = terminated.clone()
         done[..., self.max_new_tokens - 1] = 1
-        print('self.max_new_tokens', self.max_new_tokens)
+        print("self.max_new_tokens", self.max_new_tokens)
         return done.unsqueeze(-1), terminated.unsqueeze(-1)
 
     def _get_action(self, generated, batch):

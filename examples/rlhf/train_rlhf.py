@@ -24,11 +24,7 @@ from torchrl.data.rlhf.utils import AdaptiveKLController, RolloutFromModel
 
 from torchrl.record import WandbLogger
 from tqdm import tqdm
-from utils import (
-    flatten_td,
-    resolve_name_or_path,
-    setup,
-)
+from utils import flatten_td, resolve_name_or_path, setup
 
 
 @hydra.main(version_base="1.1", config_path="config", config_name="train_rlhf")
@@ -123,10 +119,8 @@ def main(cfg):
     #####################################################
 
     stats_logger = TrainLogger(
-        collection_iters,
-        log_interval=cfg.io.log_interval,
-        logger=logger
-        )
+        collection_iters, log_interval=cfg.io.log_interval, logger=logger
+    )
     pbar = tqdm(total=max_epochs * collection_iters)
     for _ in range(max_epochs):
         # ----------------- 1. Collect data, fill replay buffer ----------------- #

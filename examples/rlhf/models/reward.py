@@ -14,7 +14,9 @@ def init_reward_model(
     transformer_path=None, reward_model_path=None, device=None, compile_model=False
 ):
     if transformer_path is None and reward_model_path is None:
-        warnings.warn("You did not provide a path to the reward model, a naive reward model will be used instead.")
+        warnings.warn(
+            "You did not provide a path to the reward model, a naive reward model will be used instead."
+        )
         model = GPT2RewardModel()
     else:
         if not ((transformer_path is None) ^ (reward_model_path is None)):
