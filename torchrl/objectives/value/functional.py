@@ -1217,6 +1217,7 @@ def vec_td_lambda_advantage_estimate(
 # -----
 
 
+@torch.compile
 @_transpose_time
 def vtrace_advantage_estimate(
     gamma: float,
@@ -1226,6 +1227,7 @@ def vtrace_advantage_estimate(
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
+    terminated: torch.Tensor | None = None,
     rho_thresh: Union[float, torch.Tensor] = 1.0,
     c_thresh: Union[float, torch.Tensor] = 1.0,
     time_dim: int = -2,
@@ -1243,6 +1245,7 @@ def vtrace_advantage_estimate(
         next_state_value (Tensor): value function result with next_state input.
         reward (Tensor): reward of taking actions in the environment.
         done (Tensor): boolean flag for end of episode.
+        terminated (torch.Tensor): a [B, T] boolean tensor containing the terminated states.
         rho_thresh (Union[float, Tensor]): rho clipping parameter for importance weights.
         c_thresh (Union[float, Tensor]): c clipping parameter for importance weights.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
@@ -1256,19 +1259,23 @@ def vtrace_advantage_estimate(
     device = state_value.device
 
     not_done = (~done).int()
+    not_terminated = (~terminated).int()
     *batch_size, time_steps, lastdim = not_done.shape
-    discounts = gamma * not_done
+    done_discounts = gamma * not_done
+    terminated_discounts = gamma * not_terminated
 
     rho = (log_pi - log_mu).exp()
     clipped_rho = rho.clamp_max(rho_thresh)
-    deltas = clipped_rho * (reward + discounts * next_state_value - state_value)
+    deltas = clipped_rho * (
+        reward + terminated_discounts * next_state_value - state_value
+    )
     c_thresh = c_thresh.to(device)
     clipped_c = rho.clamp_max(c_thresh)
 
     vs_minus_v_xs = [torch.zeros_like(next_state_value[..., -1, :])]
     for i in reversed(range(time_steps)):
         discount_t, c_t, delta_t = (
-            discounts[..., i, :],
+            done_discounts[..., i, :],
             clipped_c[..., i, :],
             deltas[..., i, :],
         )
@@ -1279,7 +1286,9 @@ def vtrace_advantage_estimate(
     vs_t_plus_1 = torch.cat(
         [vs[..., 1:, :], next_state_value[..., -1:, :]], dim=time_dim
     )
-    advantages = clipped_rho * (reward + discounts * vs_t_plus_1 - state_value)
+    advantages = clipped_rho * (
+        reward + terminated_discounts * vs_t_plus_1 - state_value
+    )
 
     return advantages, vs
 

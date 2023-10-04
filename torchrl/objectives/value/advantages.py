@@ -1478,37 +1478,67 @@ class VTrace(ValueEstimatorBase):
             An updated TensorDict with an advantage and a value_error keys as defined in the constructor.
 
         Examples:
-            >>> from tensordict import TensorDict
-            >>> value_net = TensorDictModule(
-            ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
+            >>> value_net = TensorDictModule(nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"])
+            >>> actor_net = TensorDictModule(nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"])
+            >>> actor_net = ProbabilisticActor(
+            ...     module=actor_net,
+            ...     in_keys=["logits"],
+            ...     out_keys=["action"],
+            ...     distribution_class=OneHotCategorical,
+            ...     return_log_prob=True,
             ... )
             >>> module = VTrace(
             ...     gamma=0.98,
             ...     value_network=value_net,
+            ...     actor_network=actor_net,
             ...     differentiable=False,
             ... )
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> tensordict = TensorDict({"obs": obs, "next": {"obs": next_obs}, "done": done, "reward": reward}, [1, 10])
+            >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> sample_log_prob = torch.randn(1, 10, 1)
+            >>> tensordict = TensorDict({
+            ...     "obs": obs,
+            ...     "done": done,
+            ...     "terminated": terminated,
+            ...     "sample_log_prob": sample_log_prob,
+            ...     "next": {"obs": next_obs, "reward": reward, "done": done, "terminated": terminated},
+            ... }, batch_size=[1, 10])
             >>> _ = module(tensordict)
             >>> assert "advantage" in tensordict.keys()
 
         The module supports non-tensordict (i.e. unpacked tensordict) inputs too:
 
         Examples:
-            >>> value_net = TensorDictModule(
-            ...     nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
+            >>> value_net = TensorDictModule(nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"])
+            >>> actor_net = TensorDictModule(nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"])
+            >>> actor_net = ProbabilisticActor(
+            ...     module=actor_net,
+            ...     in_keys=["logits"],
+            ...     out_keys=["action"],
+            ...     distribution_class=OneHotCategorical,
+            ...     return_log_prob=True,
             ... )
             >>> module = VTrace(
             ...     gamma=0.98,
             ...     value_network=value_net,
+            ...     actor_network=actor_net,
             ...     differentiable=False,
             ... )
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> advantage, value_target = module(obs=obs, reward=reward, done=done, next_obs=next_obs)
+            >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> sample_log_prob = torch.randn(1, 10, 1)
+            >>> tensordict = TensorDict({
+            ...     "obs": obs,
+            ...     "done": done,
+            ...     "terminated": terminated,
+            ...     "sample_log_prob": sample_log_prob,
+            ...     "next": {"obs": next_obs, "reward": reward, "done": done, "terminated": terminated},
+            ... }, batch_size=[1, 10])
+            >>> advantage, value_target = module(obs=obs, reward=reward, done=done, next_obs=next_obs, terminated=terminated, sample_log_prob=sample_log_prob)
 
         """
         if tensordict.batch_dims < 1:
