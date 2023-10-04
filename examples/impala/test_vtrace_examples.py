@@ -4,7 +4,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torchrl.modules.distributions import OneHotCategorical
 from torchrl.modules.tensordict_module.actors import ProbabilisticActor
-from torchrl.objectives.value.advantages import VTrace, GAE
+from torchrl.objectives.value.advantages import GAE, VTrace
 
 value_net = TensorDictModule(nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"])
 actor_net = TensorDictModule(nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"])
@@ -48,5 +48,19 @@ tensordict = TensorDict(
     },
     batch_size=[1, 10],
 )
-advantage, value_target = gae_module(obs=obs, reward=reward, done=done, next_obs=next_obs, terminated=terminated, sample_log_prob=sample_log_prob)
-advantage, value_target = vtrace_module(obs=obs, reward=reward, done=done, next_obs=next_obs, terminated=terminated, sample_log_prob=sample_log_prob)
+advantage, value_target = gae_module(
+    obs=obs,
+    reward=reward,
+    done=done,
+    next_obs=next_obs,
+    terminated=terminated,
+    sample_log_prob=sample_log_prob,
+)
+advantage, value_target = vtrace_module(
+    obs=obs,
+    reward=reward,
+    done=done,
+    next_obs=next_obs,
+    terminated=terminated,
+    sample_log_prob=sample_log_prob,
+)
