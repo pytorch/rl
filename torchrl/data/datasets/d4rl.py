@@ -4,8 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 import os
 import urllib
-from pathlib import Path
 import warnings
+from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
