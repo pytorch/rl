@@ -92,7 +92,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         scheduler.step()
 
         # Log metrics
-        to_log = {"loss": loss_vals["loss"]}
+        to_log = {"train/loss": loss_vals["loss"]}
 
         # Evaluation
         with set_exploration_type(ExplorationType.MODE), torch.no_grad():
@@ -102,7 +102,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     policy=inference_policy,
                     auto_cast_to_device=True,
                 )
-            to_log["evaluation_reward"] = (
+            to_log["eval/reward"] = (
                 eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
             )
 

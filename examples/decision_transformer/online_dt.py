@@ -100,9 +100,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Log metrics
         to_log = {
-            "loss_log_likelihood": loss_vals["loss_log_likelihood"].item(),
-            "loss_entropy": loss_vals["loss_entropy"].item(),
-            "loss_alpha": loss_vals["loss_alpha"].item(),
+            "train/loss_log_likelihood": loss_vals["loss_log_likelihood"].item(),
+            "train/loss_entropy": loss_vals["loss_entropy"].item(),
+            "train/loss_alpha": loss_vals["loss_alpha"].item(),
+            "train/alpha": loss_vals["alpha"].item(),
+            "train/entropy": loss_vals["entropy"].item(),
         }
 
         # Evaluation
@@ -116,7 +118,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     break_when_any_done=False,
                 )
                 inference_policy.train()
-            to_log["evaluation_reward"] = (
+            to_log["eval/reward"] = (
                 eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
             )
 
