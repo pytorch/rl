@@ -5,19 +5,10 @@
 
 import os
 
-# To pickle the environment, in particular the EndOfLifeTransform, we need to
-# add the utils path to the PYTHONPATH
-utils_path = os.path.abspath(os.path.abspath(os.path.dirname(__file__)))
-current_pythonpath = os.environ.get("PYTHONPATH", "")
-new_pythonpath = f"{utils_path}:{current_pythonpath}"
-os.environ["PYTHONPATH"] = new_pythonpath
-
-
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
 from torchrl.data import CompositeSpec, UnboundedDiscreteTensorSpec
-from torchrl.data.tensor_specs import DiscreteBox
 from torchrl.envs import (
     CatFrames,
     DoubleToFloat,
@@ -40,9 +31,17 @@ from torchrl.modules import (
     MLP,
     OneHotCategorical,
     ProbabilisticActor,
-    TanhNormal,
     ValueOperator,
 )
+
+
+# To pickle the environment, in particular the EndOfLifeTransform, we need to
+# add the utils path to the PYTHONPATH
+utils_path = os.path.abspath(os.path.abspath(os.path.dirname(__file__)))
+current_pythonpath = os.environ.get("PYTHONPATH", "")
+new_pythonpath = f"{utils_path}:{current_pythonpath}"
+os.environ["PYTHONPATH"] = new_pythonpath
+
 
 # ====================================================================
 # Environment utils
