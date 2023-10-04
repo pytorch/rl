@@ -7,7 +7,7 @@ from __future__ import annotations
 import os
 import urllib
 import warnings
-from typing import Callable, Optional
+from typing import Callable
 
 import numpy as np
 
