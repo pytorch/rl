@@ -5,11 +5,11 @@
 from typing import Optional, Tuple
 
 import torch
-from tensordict import unravel_key_list
+from tensordict import TensorDictBase, unravel_key_list
 
 from tensordict.nn import TensorDictModuleBase as ModuleBase
 
-from tensordict.tensordict import NO_DEFAULT, TensorDictBase
+from tensordict.tensordict import NO_DEFAULT
 from tensordict.utils import prod
 
 from torch import nn
@@ -208,7 +208,7 @@ class LSTMModule(ModuleBase):
         self._temporal_mode = False
 
     def make_tensordict_primer(self):
-        from torchrl.envs import TensorDictPrimer
+        from torchrl.envs.transforms.transforms import TensorDictPrimer
 
         def make_tuple(key):
             if isinstance(key, tuple):

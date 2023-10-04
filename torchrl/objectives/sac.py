@@ -10,15 +10,14 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
+
 from tensordict.nn import dispatch, make_functional, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
-
 from torchrl.data import CompositeSpec, TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
@@ -138,6 +137,7 @@ class SACLoss(LossModule):
         ...         "observation": torch.randn(*batch, n_obs),
         ...         "action": action,
         ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...         ("next", "reward"): torch.randn(*batch, 1),
         ...         ("next", "observation"): torch.randn(*batch, n_obs),
         ...     }, batch)
@@ -157,7 +157,7 @@ class SACLoss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["action", "next_reward", "next_done"]`` + in_keys of the actor, value, and qvalue network.
+    ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor, value, and qvalue network.
     The return value is a tuple of tensors in the following order:
     ``["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy"]`` + ``"loss_value"`` if version one is used.
 
@@ -200,6 +200,7 @@ class SACLoss(LossModule):
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
@@ -213,6 +214,7 @@ class SACLoss(LossModule):
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
@@ -241,6 +243,9 @@ class SACLoss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         action: NestedKey = "action"
@@ -250,6 +255,7 @@ class SACLoss(LossModule):
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -401,8 +407,19 @@ class SACLoss(LossModule):
                     )
                 if not isinstance(action_spec, CompositeSpec):
                     action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+                if (
+                    isinstance(self.tensor_keys.action, tuple)
+                    and len(self.tensor_keys.action) > 1
+                ):
+                    action_container_shape = action_spec[
+                        self.tensor_keys.action[:-1]
+                    ].shape
+                else:
+                    action_container_shape = action_spec.shape
                 target_entropy = -float(
-                    np.prod(action_spec[self.tensor_keys.action].shape)
+                    action_spec[self.tensor_keys.action]
+                    .shape[len(action_container_shape) :]
+                    .numel()
                 )
             self.register_buffer(
                 "target_entropy_buffer", torch.tensor(target_entropy, device=device)
@@ -416,6 +433,7 @@ class SACLoss(LossModule):
                 value=self.tensor_keys.value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
         self._set_in_keys()
 
@@ -461,6 +479,7 @@ class SACLoss(LossModule):
             "value": self.tensor_keys.value,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)
 
@@ -477,6 +496,7 @@ class SACLoss(LossModule):
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
             *self.qvalue_network.in_keys,
@@ -565,7 +585,8 @@ class SACLoss(LossModule):
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qnetworkN0(
-            td_q, self._cached_detached_qvalue_params  # should we clone?
+            td_q,
+            self._cached_detached_qvalue_params,  # should we clone?
         )
         min_q_logprob = (
             td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
@@ -609,24 +630,23 @@ class SACLoss(LossModule):
                 f"Batch size={tensordict.shape} is incompatible "
                 f"with num_qvqlue_nets={self.num_qvalue_nets}."
             )
-        tensordict_chunks = torch.stack(
-            tensordict.chunk(self.num_qvalue_nets, dim=0), 0
+        tensordict_chunks = tensordict.reshape(
+            self.num_qvalue_nets, -1, *tensordict.shape[1:]
         )
-        target_chunks = torch.stack(target_value.chunk(self.num_qvalue_nets, dim=0), 0)
+        target_chunks = target_value.reshape(
+            self.num_qvalue_nets, -1, *target_value.shape[1:]
+        )
 
         # if vmap=True, it is assumed that the input tensordict must be cast to the param shape
         tensordict_chunks = self._vmap_qnetwork00(
             tensordict_chunks, self.qvalue_network_params
         )
-        pred_val = tensordict_chunks.get(self.tensor_keys.state_action_value).squeeze(
-            -1
-        )
+        pred_val = tensordict_chunks.get(self.tensor_keys.state_action_value)
+        pred_val = pred_val.squeeze(-1)
         loss_value = distance_loss(
             pred_val, target_chunks, loss_function=self.loss_function
         ).view(*shape)
-        metadata = {
-            "td_error": torch.cat((pred_val - target_chunks).pow(2).unbind(0), 0)
-        }
+        metadata = {"td_error": (pred_val - target_chunks).pow(2).flatten(0, 1)}
 
         return loss_value, metadata
 
@@ -692,7 +712,7 @@ class SACLoss(LossModule):
             pred_val,
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
-        ).mean(0)
+        ).sum(0)
         metadata = {"td_error": td_error.detach().max(0)[0]}
         return loss_qval, metadata
 
@@ -822,6 +842,7 @@ class DiscreteSACLoss(LossModule):
     ...     "observation": torch.randn(*batch, n_obs),
     ...     "action": action,
     ...     ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+    ...     ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
     ...     ("next", "reward"): torch.randn(*batch, 1),
     ...     ("next", "observation"): torch.randn(*batch, n_obs),
     ...     }, batch)
@@ -841,7 +862,7 @@ class DiscreteSACLoss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["action", "next_reward", "next_done"]`` + in_keys of the actor and qvalue network.
+    ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and qvalue network.
     The return value is a tuple of tensors in the following order:
     ``["loss_actor", "loss_qvalue", "loss_alpha",
        "alpha", "entropy"]``
@@ -885,6 +906,7 @@ class DiscreteSACLoss(LossModule):
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
@@ -909,6 +931,9 @@ class DiscreteSACLoss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         action: NestedKey = "action"
@@ -917,6 +942,7 @@ class DiscreteSACLoss(LossModule):
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
         log_prob: NestedKey = "log_prob"
 
     default_keys = _AcceptedKeys()
@@ -1037,6 +1063,7 @@ class DiscreteSACLoss(LossModule):
                 value=self._tensor_keys.value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
         self._set_in_keys()
 
@@ -1045,6 +1072,7 @@ class DiscreteSACLoss(LossModule):
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
             *self.qvalue_network.in_keys,
@@ -1260,5 +1288,6 @@ class DiscreteSACLoss(LossModule):
             "value_target": "value_target",
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)

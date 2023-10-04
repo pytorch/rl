@@ -2,6 +2,7 @@ seed: 0
 
 env:
   continuous_actions: True # False for discrete sac
+  categorical_actions: False
   max_steps: 100
   scenario_name: "balance"
   scenario:

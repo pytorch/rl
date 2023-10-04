@@ -11,7 +11,7 @@ import torch
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
-from torch.distributions import Categorical
+from torch.distributions import Categorical, OneHotCategorical
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -19,11 +19,11 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs import RewardSum, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.modules.models.multiagent import MultiAgentMLP
 from torchrl.objectives import DiscreteSACLoss, SACLoss, SoftUpdate, ValueEstimators
 from utils.logging import init_logging, log_evaluation, log_training
+from utils.utils import DoneTransform
 
 
 def rendering_callback(env, td):
@@ -52,6 +52,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         max_steps=cfg.env.max_steps,
         device=cfg.env.device,
         seed=cfg.seed,
+        categorical_actions=cfg.env.categorical_actions,
         # Scenario kwargs
         **cfg.env.scenario,
     )
@@ -100,8 +101,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
             out_keys=[env.action_key],
             distribution_class=TanhNormal,
             distribution_kwargs={
-                "min": env.unbatched_action_spec[("agents", "action")].space.minimum,
-                "max": env.unbatched_action_spec[("agents", "action")].space.maximum,
+                "min": env.unbatched_action_spec[("agents", "action")].space.low,
+                "max": env.unbatched_action_spec[("agents", "action")].space.high,
             },
             return_log_prob=True,
         )
@@ -148,7 +149,9 @@ def train(cfg: "DictConfig"):  # noqa: F821
             spec=env.unbatched_action_spec,
             in_keys=[("agents", "logits")],
             out_keys=[env.action_key],
-            distribution_class=Categorical,
+            distribution_class=OneHotCategorical
+            if not cfg.env.categorical_actions
+            else Categorical,
             return_log_prob=True,
         )
 
@@ -177,6 +180,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         storing_device=cfg.train.device,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
+        postproc=DoneTransform(reward_key=env.reward_key, done_keys=env.done_keys),
     )
 
     replay_buffer = TensorDictReplayBuffer(
@@ -187,12 +191,17 @@ def train(cfg: "DictConfig"):  # noqa: F821
 
     if cfg.env.continuous_actions:
         loss_module = SACLoss(
-            actor_network=policy, qvalue_network=value_module, delay_qvalue=True
+            actor_network=policy,
+            qvalue_network=value_module,
+            delay_qvalue=True,
+            action_spec=env.unbatched_action_spec,
         )
         loss_module.set_keys(
             state_action_value=("agents", "state_action_value"),
             action=env.action_key,
             reward=env.reward_key,
+            done=("agents", "done"),
+            terminated=("agents", "terminated"),
         )
     else:
         loss_module = DiscreteSACLoss(
@@ -206,6 +215,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
             action_value=("agents", "action_value"),
             action=env.action_key,
             reward=env.reward_key,
+            done=("agents", "done"),
+            terminated=("agents", "terminated"),
         )
 
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=cfg.loss.gamma)
@@ -229,13 +240,6 @@ def train(cfg: "DictConfig"):  # noqa: F821
         print(f"\nIteration {i}")
 
         sampling_time = time.time() - sampling_start
-
-        tensordict_data.set(
-            ("next", "done"),
-            tensordict_data.get(("next", "done"))
-            .unsqueeze(-1)
-            .expand(tensordict_data.get(("next", env.reward_key)).shape),
-        )  # We need to expand the done to match the reward shape
 
         current_frames = tensordict_data.numel()
         total_frames += current_frames

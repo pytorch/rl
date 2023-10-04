@@ -6,10 +6,12 @@
 from .r3m import R3MTransform
 from .rlhf import KLRewardTransform
 from .transforms import (
+    ActionMask,
     BinarizeReward,
     CatFrames,
     CatTensors,
     CenterCrop,
+    ClipTransform,
     Compose,
     DeviceCastTransform,
     DiscreteActionProjection,
@@ -25,6 +27,7 @@ from .transforms import (
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,
+    PermuteTransform,
     PinMemoryTransform,
     RandomCropTensorDict,
     RenameTransform,

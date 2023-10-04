@@ -45,7 +45,7 @@ env = GymEnv("Pendulum-v1")
 # The list of available environment can be accessed through this command:
 #
 
-GymEnv.available_envs[:10]
+list(GymEnv.available_envs)[:10]
 
 ###############################################################################
 # Env Specs
@@ -60,7 +60,6 @@ GymEnv.available_envs[:10]
 print("Env observation_spec: \n", env.observation_spec)
 print("Env action_spec: \n", env.action_spec)
 print("Env reward_spec: \n", env.reward_spec)
-print("Env done_spec: \n", env.done_spec)
 
 ###############################################################################
 # Those spec come with a series of useful tools: one can assert whether a
@@ -75,6 +74,18 @@ print("projected action: \n", env.action_spec.project(action))
 ###############################################################################
 
 print("random action: \n", env.action_spec.rand())
+
+###############################################################################
+# Out of these specs, the ``done_spec`` deserves a special attention. In TorchRL,
+# all environments write end-of-trajectory signals of at least two types:
+# ``"terminated"`` (indicating that the Markov Decision Process has reached
+# a final state - the __episode__ is finished) and ``"done"``, indicating that
+# this is the last step of a __trajectory__ (but not necessarily the end of
+# the task). In general, a ``"done"`` entry that is ``True`` when a ``"terminal"``
+# is ``False`` is caused by a ``"truncated"`` signal. Gym environments account for
+# these three signals:
+
+print(env.done_spec)
 
 ###############################################################################
 # Envs are also packed with an ``env.state_spec`` attribute of type

@@ -13,8 +13,8 @@ from typing import Tuple
 import torch
 from tensordict.nn import dispatch, make_functional, repopulate_module, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import NestedKey
 
+from tensordict.utils import NestedKey, unravel_key
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -69,6 +69,7 @@ class DDPGLoss(LossModule):
         ...        "observation": torch.randn(*batch, n_obs),
         ...        "action": spec.rand(batch),
         ...        ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...        ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...        ("next", "reward"): torch.randn(*batch, 1),
         ...        ("next", "observation"): torch.randn(*batch, n_obs),
         ...    }, batch)
@@ -88,7 +89,7 @@ class DDPGLoss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["next_reward", "next_done"]`` + in_keys of the actor_network and value_network.
+    ``["next_reward", "next_done", "next_terminated"]`` + in_keys of the actor_network and value_network.
     The return value is a tuple of tensors in the following order:
     ``["loss_actor", "loss_value", "pred_value", "target_value", "pred_value_max", "target_value_max"]``
 
@@ -117,6 +118,7 @@ class DDPGLoss(LossModule):
         ...     observation=torch.randn(n_obs),
         ...     action=spec.rand(),
         ...     next_done=torch.zeros(1, dtype=torch.bool),
+        ...     next_terminated=torch.zeros(1, dtype=torch.bool),
         ...     next_observation=torch.randn(n_obs),
         ...     next_reward=torch.randn(1))
         >>> loss_actor.backward()
@@ -130,6 +132,7 @@ class DDPGLoss(LossModule):
         ...     observation=torch.randn(n_obs),
         ...     action=spec.rand(),
         ...     next_done=torch.zeros(1, dtype=torch.bool),
+        ...     next_terminated=torch.zeros(1, dtype=torch.bool),
         ...     next_observation=torch.randn(n_obs),
         ...     next_reward=torch.randn(1))
         >>> loss_actor.backward()
@@ -154,6 +157,9 @@ class DDPGLoss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
 
         """
 
@@ -161,6 +167,7 @@ class DDPGLoss(LossModule):
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.TD0
@@ -216,6 +223,9 @@ class DDPGLoss(LossModule):
         self.actor_critic.module[1] = self.value_network
 
         self.actor_in_keys = actor_network.in_keys
+        self.value_exclusive_keys = set(self.value_network.in_keys) - (
+            set(self.actor_in_keys) | set(self.actor_network.out_keys)
+        )
 
         self.loss_function = loss_function
 
@@ -229,18 +239,21 @@ class DDPGLoss(LossModule):
                 value=self._tensor_keys.state_action_value,
                 reward=self._tensor_keys.reward,
                 done=self._tensor_keys.done,
+                terminated=self._tensor_keys.terminated,
             )
         self._set_in_keys()
 
     def _set_in_keys(self):
-        keys = [
-            ("next", self.tensor_keys.reward),
-            ("next", self.tensor_keys.done),
+        in_keys = {
+            unravel_key(("next", self.tensor_keys.reward)),
+            unravel_key(("next", self.tensor_keys.done)),
+            unravel_key(("next", self.tensor_keys.terminated)),
             *self.actor_in_keys,
-            *[("next", key) for key in self.actor_in_keys],
+            *[unravel_key(("next", key)) for key in self.actor_in_keys],
             *self.value_network.in_keys,
-        ]
-        self._in_keys = list(set(keys))
+            *[unravel_key(("next", key)) for key in self.value_network.in_keys],
+        }
+        self._in_keys = sorted(in_keys, key=str)
 
     @property
     def in_keys(self):
@@ -260,7 +273,7 @@ class DDPGLoss(LossModule):
             a priority to items in the tensordict.
 
         Args:
-            tensordict (TensorDictBase): a tensordict with keys ["done", "reward"] and the in_keys of the actor
+            tensordict (TensorDictBase): a tensordict with keys ["done", "terminated", "reward"] and the in_keys of the actor
                 and value networks.
 
         Returns:
@@ -269,7 +282,6 @@ class DDPGLoss(LossModule):
         """
         loss_value, td_error, pred_val, target_value = self._loss_value(tensordict)
         td_error = td_error.detach()
-        td_error = td_error.unsqueeze(tensordict.ndimension())
         if tensordict.device is not None:
             td_error = td_error.to(tensordict.device)
         tensordict.set(
@@ -294,7 +306,9 @@ class DDPGLoss(LossModule):
         self,
         tensordict: TensorDictBase,
     ) -> torch.Tensor:
-        td_copy = tensordict.select(*self.actor_in_keys).detach()
+        td_copy = tensordict.select(
+            *self.actor_in_keys, *self.value_exclusive_keys
+        ).detach()
         td_copy = self.actor_network(
             td_copy,
             params=self.actor_network_params,
@@ -355,6 +369,7 @@ class DDPGLoss(LossModule):
             "value": self.tensor_keys.state_action_value,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)
 
