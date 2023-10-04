@@ -295,7 +295,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/rlhf/train_rlh
   data.batch_size=2 train.ppo.ppo_batch_size=2 \
   train.ppo.ppo_num_epochs=1 reward_model.name_or_path= \
   train.ppo.episode_length=8 train.ppo.num_rollouts_per_epoch=4 \
-  data.block_size=110
+  data.block_size=110 io.logger=csv
 
 coverage combine
 coverage xml -i

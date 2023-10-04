@@ -53,7 +53,9 @@ def main(cfg):
     ###############################################
     ctx = setup(cfg.sys)
 
-    logger = WandbLogger(exp_name="tldr-rlhf", offline=False)
+    logger = get_logger(
+        logger_type=cfg.io.logger, logger_name="./log", experiment_name="torchrlhf-gpt2"
+    )
 
     # =============== Dataloaders =============== #
     ###############################################
