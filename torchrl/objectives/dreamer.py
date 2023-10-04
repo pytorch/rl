@@ -216,12 +216,15 @@ class DreamerActorLoss(LossModule):
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
             done (NestedKey): The input tensordict key where the flag if a
                 trajectory is done is expected ("next", done). Defaults to ``"done"``.
+            terminated (NestedKey): The input tensordict key where the flag if a
+                trajectory is terminated is expected ("next", terminated). Defaults to ``"terminated"``.
         """
 
         belief: NestedKey = "belief"
         reward: NestedKey = "reward"
         value: NestedKey = "state_value"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TDLambda
@@ -297,11 +300,13 @@ class DreamerActorLoss(LossModule):
 
     def lambda_target(self, reward: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
         done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
+        terminated = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
         input_tensordict = TensorDict(
             {
                 ("next", self.tensor_keys.reward): reward,
                 ("next", self.tensor_keys.value): value,
                 ("next", self.tensor_keys.done): done,
+                ("next", self.tensor_keys.terminated): terminated,
             },
             [],
         )
