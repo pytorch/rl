@@ -1823,6 +1823,33 @@ class TestD4RL:
             ]
             assert "truncated" not in leaf_names
 
+    @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
+    def test_direct_download(self, task):
+        data_direct = D4RLExperienceReplay(
+            task,
+            split_trajs=False,
+            from_env=False,
+            batch_size=2,
+            use_truncated_as_done=True,
+            direct_download=True,
+        )
+        data_d4rl = D4RLExperienceReplay(
+            task,
+            split_trajs=False,
+            from_env=False,
+            batch_size=2,
+            use_truncated_as_done=True,
+            direct_download=False,
+            terminate_on_end=True,  # keep the last time step
+        )
+        keys = set(data_direct._storage._storage.keys(True, True))
+        keys = keys.intersection(data_d4rl._storage._storage.keys(True, True))
+        assert len(keys)
+        assert_allclose_td(
+            data_direct._storage._storage.select(*keys),
+            data_d4rl._storage._storage.select(*keys),
+        )
+
     @pytest.mark.parametrize(
         "task",
         [
