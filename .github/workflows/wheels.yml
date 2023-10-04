@@ -84,6 +84,47 @@ jobs:
           name: torchrl-batch.whl
           path: dist/*.whl
 
+  build-wheel-m1:
+    runs-on: macos-m1-12
+    strategy:
+      matrix:
+        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
+    steps:
+      - name: Checkout torchrl
+        uses: actions/checkout@v2
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          python-version: ${{ matrix.python-version[1] }}
+      - name: Binary Build in Conda Environment
+        run: |
+          set -euxo pipefail
+          conda clean --all --quiet --yes
+          conda create \
+            --yes \
+            --quiet \
+            -n buildenv \
+            python=${{ matrix.python_version[1] }}
+
+          conda activate buildenv
+
+          # Install PyTorch RC
+          python3 -mpip install torch --extra-index-url https://download.pytorch.org/whl/cpu
+
+          # Build Wheel
+          export CC=clang CXX=clang++
+          python3 -mpip install wheel
+          BUILD_VERSION=0.1.1 python3 setup.py bdist_wheel
+      - name: Upload wheel for the test-wheel job
+        uses: actions/upload-artifact@v2
+        with:
+          name: torchrl-mac-${{ matrix.python_version[0] }}.whl
+          path: dist/torchrl-*.whl
+      - name: Upload wheel for download
+        uses: actions/upload-artifact@v2
+        with:
+          name: torchrl-batch.whl
+          path: dist/*.whl
+
   build-wheel-windows:
     runs-on: windows-latest
     strategy:
