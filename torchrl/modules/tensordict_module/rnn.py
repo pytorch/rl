@@ -61,7 +61,6 @@ class LSTMModule(ModuleBase):
         dropout: If non-zero, introduces a `Dropout` layer on the outputs of each
             LSTM layer except the last layer, with dropout probability equal to
             :attr:`dropout`. Default: 0
-        proj_size: If ``> 0``, will use LSTM with projections of corresponding size. Default: 0
 
     Keyword Args:
         in_key (str or tuple of str): the input key of the module. Exclusive use
@@ -89,12 +88,12 @@ class LSTMModule(ModuleBase):
         temporal_mode: Returns the temporal mode of the module.
 
     Methods:
-        set_temporal_mode: controls whether the module should be executed in
+        set_recurrent_mode: controls whether the module should be executed in
             temporal mode.
 
     Examples:
         >>> from torchrl.envs import TransformedEnv, InitTracker
-        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> from torchrl.envs import GymEnv
         >>> from torchrl.modules import MLP
         >>> from torch import nn
         >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
@@ -121,6 +120,8 @@ class LSTMModule(ModuleBase):
                     device=cpu,
                     is_shared=False),
                 observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
             batch_size=torch.Size([]),
             device=cpu,
             is_shared=False)
@@ -252,14 +253,14 @@ class LSTMModule(ModuleBase):
 
         Examples:
             >>> from torchrl.envs import TransformedEnv, InitTracker, step_mdp
-            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> from torchrl.envs import GymEnv
             >>> from torchrl.modules import MLP
             >>> from tensordict import TensorDict
             >>> from torch import nn
             >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
             >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
             >>> lstm = nn.LSTM(input_size=env.observation_spec["observation"].shape[-1], hidden_size=64, batch_first=True)
-            >>> lstm_module = LSTMModule(lstm, in_keys=["observation", "hidden0", "hidden1"], out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")])
+            >>> lstm_module = LSTMModule(lstm=lstm, in_keys=["observation", "hidden0", "hidden1"], out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")])
             >>> mlp = MLP(num_cells=[64], out_features=1)
             >>> # building two policies with different behaviours:
             >>> policy_inference = Seq(lstm_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
@@ -425,15 +426,15 @@ class GRUModule(ModuleBase):
         input_size: The number of expected features in the input `x`
         hidden_size: The number of features in the hidden state `h`
         num_layers: Number of recurrent layers. E.g., setting ``num_layers=2``
-            would mean stacking two LSTMs together to form a `stacked LSTM`,
-            with the second LSTM taking in outputs of the first LSTM and
+            would mean stacking two GRUs together to form a `stacked GRU`,
+            with the second GRU taking in outputs of the first GRU and
             computing the final results. Default: 1
-        bias: If ``False``, then the layer does not use bias weights `b_ih` and `b_hh`.
+        bias: If ``False``, then the layer does not use bias weights.
             Default: ``True``
         dropout: If non-zero, introduces a `Dropout` layer on the outputs of each
-            LSTM layer except the last layer, with dropout probability equal to
+            GRU layer except the last layer, with dropout probability equal to
             :attr:`dropout`. Default: 0
-        proj_size: If ``> 0``, will use LSTM with projections of corresponding size. Default: 0
+        proj_size: If ``> 0``, will use GRU with projections of corresponding size. Default: 0
 
     Keyword Args:
         in_key (str or tuple of str): the input key of the module. Exclusive use
@@ -460,12 +461,12 @@ class GRUModule(ModuleBase):
         temporal_mode: Returns the temporal mode of the module.
 
     Methods:
-        set_temporal_mode: controls whether the module should be executed in
+        set_recurrent_mode: controls whether the module should be executed in
             temporal mode.
 
     Examples:
         >>> from torchrl.envs import TransformedEnv, InitTracker
-        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> from torchrl.envs import GymEnv
         >>> from torchrl.modules import MLP
         >>> from torch import nn
         >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
@@ -486,12 +487,43 @@ class GRUModule(ModuleBase):
                 is_init: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
                 next: TensorDict(
                     fields={
-                        rs: Tensor(shape=torch.Size([1, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                        rs: Tensor(shape=torch.Size([1, 64]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([]),
                     device=cpu,
                     is_shared=False),
-                observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
             batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
+        >>> gru_module_training = gru_module.set_recurrent_mode()
+        >>> policy_training = Seq(gru_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
+        >>> traj_td = env.rollout(3) # some random temporal data
+        >>> traj_td = policy_training(traj_td)
+        >>> print(traj_td)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                intermediate: Tensor(shape=torch.Size([3, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                is_init: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        is_init: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        rs: Tensor(shape=torch.Size([3, 1, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([3]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([3]),
             device=cpu,
             is_shared=False)
 
@@ -508,7 +540,6 @@ class GRUModule(ModuleBase):
         bias: bool = True,
         batch_first=True,
         dropout=0,
-        proj_size=0,
         bidirectional=False,
         *,
         in_key=None,
@@ -539,7 +570,6 @@ class GRUModule(ModuleBase):
                 num_layers=num_layers,
                 bias=bias,
                 dropout=dropout,
-                proj_size=proj_size,
                 device=device,
                 batch_first=True,
                 bidirectional=False,
@@ -616,19 +646,18 @@ class GRUModule(ModuleBase):
         in various parts of the code (inference vs training):
 
         Examples:
-            >>> from torchrl.envs import TransformedEnv, InitTracker, step_mdp
-            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> from torchrl.envs import GymEnv, TransformedEnv, InitTracker, step_mdp
             >>> from torchrl.modules import MLP
             >>> from tensordict import TensorDict
             >>> from torch import nn
             >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
             >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
-            >>> lstm = nn.LSTM(input_size=env.observation_spec["observation"].shape[-1], hidden_size=64, batch_first=True)
-            >>> lstm_module = LSTMModule(lstm, in_keys=["observation", "hidden0", "hidden1"], out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")])
+            >>> gru = nn.GRU(input_size=env.observation_spec["observation"].shape[-1], hidden_size=64, batch_first=True)
+            >>> gru_module = GRUModule(gru=gru, in_keys=["observation", "hidden"], out_keys=["intermediate", ("next", "hidden")])
             >>> mlp = MLP(num_cells=[64], out_features=1)
             >>> # building two policies with different behaviours:
-            >>> policy_inference = Seq(lstm_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
-            >>> policy_training = Seq(lstm_module.set_recurrent_mode(True), Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
+            >>> policy_inference = Seq(gru_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
+            >>> policy_training = Seq(gru_module.set_recurrent_mode(True), Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> traj_td = env.rollout(3) # some random temporal data
             >>> traj_td = policy_training(traj_td)
             >>> # let's check that both return the same results
@@ -638,17 +667,17 @@ class GRUModule(ModuleBase):
             ...     td_inf = policy_inference(td_inf)
             ...     td_inf = step_mdp(td_inf)
             ...
-            >>> torch.testing.assert_close(td_inf["hidden0"], traj_td[..., -1]["next", "hidden0"])
+            >>> torch.testing.assert_close(td_inf["hidden"], traj_td[..., -1]["next", "hidden"])
         """
         if mode is self._temporal_mode:
             return self
-        out = LSTMModule(lstm=self.gru, in_keys=self.in_keys, out_keys=self.out_keys)
+        out = GRUModule(gru=self.gru, in_keys=self.in_keys, out_keys=self.out_keys)
         out._temporal_mode = mode
         return out
 
     def forward(self, tensordict: TensorDictBase):
         # we want to get an error if the value input is missing, but not the hidden states
-        defaults = [NO_DEFAULT, None, None]
+        defaults = [NO_DEFAULT, None]
         shape = tensordict.shape
         tensordict_shaped = tensordict
         if self.temporal_mode:
@@ -684,7 +713,7 @@ class GRUModule(ModuleBase):
             )
             is_init = tensordict_shaped.get("is_init").squeeze(-1)
 
-        value, hidden0, hidden1 = (
+        value, hidden = (
             tensordict_shaped.get(key, default)
             for key, default in zip(self.in_keys, defaults)
         )
@@ -694,15 +723,11 @@ class GRUModule(ModuleBase):
         # packed sequences do not help to get the accurate last hidden values
         # if splits is not None:
         #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
-        if is_init.any() and hidden0 is not None:
-            hidden0[is_init] = 0
-            hidden1[is_init] = 0
-        val, hidden0, hidden1 = self._lstm(
-            value, batch, steps, device, dtype, hidden0, hidden1
-        )
+        if is_init.any() and hidden is not None:
+            hidden[is_init] = 0
+        val, hidden = self._lstm(value, batch, steps, device, dtype, hidden)
         tensordict_shaped.set(self.out_keys[0], val)
-        tensordict_shaped.set(self.out_keys[1], hidden0)
-        tensordict_shaped.set(self.out_keys[2], hidden1)
+        tensordict_shaped.set(self.out_keys[1], hidden)
         if splits is not None:
             # let's recover our original shape
             tensordict_shaped = _inv_pad_sequence(tensordict_shaped, splits).reshape(
@@ -720,47 +745,34 @@ class GRUModule(ModuleBase):
         steps,
         device,
         dtype,
-        hidden0_in: Optional[torch.Tensor] = None,
-        hidden1_in: Optional[torch.Tensor] = None,
+        hidden_in: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
         if not self.temporal_mode and steps != 1:
             raise ValueError("Expected a single step")
 
-        if hidden1_in is None and hidden0_in is None:
+        if hidden_in is None:
             shape = (batch, steps)
-            hidden0_in, hidden1_in = [
-                torch.zeros(
-                    *shape,
-                    self.gru.num_layers,
-                    self.gru.hidden_size,
-                    device=device,
-                    dtype=dtype,
-                )
-                for _ in range(2)
-            ]
-        elif hidden1_in is None or hidden0_in is None:
-            raise RuntimeError(
-                f"got type(hidden0)={type(hidden0_in)} and type(hidden1)={type(hidden1_in)}"
+            hidden_in = torch.zeros(
+                *shape,
+                self.gru.num_layers,
+                self.gru.hidden_size,
+                device=device,
+                dtype=dtype,
             )
 
         # we only need the first hidden state
-        _hidden0_in = hidden0_in[:, 0]
-        _hidden1_in = hidden1_in[:, 0]
-        hidden = (
-            _hidden0_in.transpose(-3, -2).contiguous(),
-            _hidden1_in.transpose(-3, -2).contiguous(),
-        )
+        _hidden_in = hidden_in[:, 0]
+        hidden = _hidden_in.transpose(-3, -2).contiguous()
 
         y, hidden = self.gru(input, hidden)
         # dim 0 in hidden is num_layers, but that will conflict with tensordict
-        hidden = tuple(_h.transpose(0, 1) for _h in hidden)
+        hidden = hidden.transpose(0, 1)
 
-        out = [y, *hidden]
         # we pad the hidden states with zero to make tensordict happy
-        for i in range(1, 3):
-            out[i] = torch.stack(
-                [torch.zeros_like(out[i]) for _ in range(steps - 1)] + [out[i]],
-                1,
-            )
+        hidden = torch.stack(
+            [torch.zeros_like(hidden) for _ in range(steps - 1)] + [hidden],
+            1,
+        )
+        out = [y, hidden]
         return tuple(out)

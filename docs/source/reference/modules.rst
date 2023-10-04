@@ -332,6 +332,7 @@ algorithms, such as DQN, DDPG or Dreamer.
     DistributionalDQNnet
     DreamerActor
     DuelingCnnDQNet
+    GRUModule
     LSTMModule
     ObsDecoder
     ObsEncoder
