@@ -1593,6 +1593,7 @@ class VTrace(ValueEstimatorBase):
 
         # Compute the V-Trace correction
         done = tensordict.get(("next", self.tensor_keys.done))
+        terminated = tensordict.get(("next", self.tensor_keys.terminated))
 
         adv, value_target = vtrace_advantage_estimate(
             gamma,
@@ -1602,6 +1603,7 @@ class VTrace(ValueEstimatorBase):
             next_value,
             reward,
             done,
+            terminated,
             rho_thresh=self.rho_thresh,
             c_thresh=self.c_thresh,
             time_dim=tensordict.ndim - 1,
