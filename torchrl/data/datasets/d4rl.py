@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import os
 import urllib
+import warnings
 from typing import Callable, Optional
 
 import numpy as np
@@ -121,11 +122,21 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         prefetch: Optional[int] = None,
         transform: Optional["Transform"] = None,  # noqa-F821
         split_trajs: bool = False,
-        from_env: bool = True,
+        from_env: bool = None,
         use_truncated_as_done: bool = True,
         direct_download: bool = True,
         **env_kwargs,
     ):
+        if from_env is None:
+            warnings.warn(
+                "from_env will soon default to ``False``, ie the data will be "
+                "downloaded without relying on d4rl by default. "
+                "For now, ``True`` will still be the default. "
+                "To disable this warning, explicitly pass the ``from_env`` argument "
+                "during construction of the dataset.",
+                category=DeprecationWarning,
+            )
+            from_env = True
         self.from_env = from_env
         self.use_truncated_as_done = use_truncated_as_done
         if not direct_download:
