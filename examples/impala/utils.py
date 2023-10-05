@@ -3,15 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import os
-
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
-from torchrl.data import CompositeSpec, UnboundedDiscreteTensorSpec
+from torchrl.data import CompositeSpec
 from torchrl.envs import (
     CatFrames,
     DoubleToFloat,
+    EndOfLifeTransform,
     ExplorationType,
     GrayScale,
     GymEnv,
@@ -21,7 +20,6 @@ from torchrl.envs import (
     RewardSum,
     StepCounter,
     ToTensorImage,
-    Transform,
     TransformedEnv,
     VecNorm,
 )
@@ -35,45 +33,9 @@ from torchrl.modules import (
 )
 
 
-# To pickle the environment, in particular the EndOfLifeTransform, we need to
-# add the utils path to the PYTHONPATH
-utils_path = os.path.abspath(os.path.abspath(os.path.dirname(__file__)))
-current_pythonpath = os.environ.get("PYTHONPATH", "")
-new_pythonpath = f"{utils_path}:{current_pythonpath}"
-os.environ["PYTHONPATH"] = new_pythonpath
-
-
 # ====================================================================
 # Environment utils
 # --------------------------------------------------------------------
-
-
-class EndOfLifeTransform(Transform):
-    def _step(self, tensordict, next_tensordict):
-        # lives = self.parent.base_env._env.unwrapped.ale.lives()
-        lives = 0
-        end_of_life = torch.tensor(
-            [tensordict["lives"] < lives], device=self.parent.device
-        )
-        end_of_life = end_of_life | next_tensordict.get("done")
-        next_tensordict.set("eol", end_of_life)
-        next_tensordict.set("lives", lives)
-        return next_tensordict
-
-    def reset(self, tensordict):
-        lives = self.parent.base_env._env.unwrapped.ale.lives()
-        end_of_life = False
-        tensordict.set("eol", [end_of_life])
-        tensordict.set("lives", lives)
-        return tensordict
-
-    def transform_observation_spec(self, observation_spec):
-        full_done_spec = self.parent.output_spec["full_done_spec"]
-        observation_spec["eol"] = full_done_spec["done"].clone()
-        observation_spec["lives"] = UnboundedDiscreteTensorSpec(
-            self.parent.batch_size, device=self.parent.device
-        )
-        return observation_spec
 
 
 def make_env(env_name, device, is_test=False):

@@ -7,7 +7,6 @@
 This script reproduces the IMPALA Algorithm
 results from Espeholt et al. 2018 for the on Atari Environments.
 """
-
 import hydra
 
 
@@ -21,7 +20,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     from tensordict import TensorDict
     from torchrl.collectors import SyncDataCollector
-    from torchrl.collectors.distributed import RayCollector, RPCDataCollector
+    from torchrl.collectors.distributed import RayCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -57,10 +56,30 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor, critic = actor.to(device), critic.to(device)
 
     # Create collector
+    ray_init_config = {
+        "address": cfg.ray_init_config.address,
+        "num_cpus": cfg.ray_init_config.num_cpus,
+        "num_gpus": cfg.ray_init_config.num_gpus,
+        "resources": cfg.ray_init_config.resources,
+        "object_store_memory": cfg.ray_init_config.object_store_memory,
+        "local_mode": cfg.ray_init_config.local_mode,
+        "ignore_reinit_error": cfg.ray_init_config.ignore_reinit_error,
+        "include_dashboard": cfg.ray_init_config.include_dashboard,
+        "dashboard_host": cfg.ray_init_config.dashboard_host,
+        "dashboard_port": cfg.ray_init_config.dashboard_port,
+        "job_config": cfg.ray_init_config.job_config,
+        "configure_logging": cfg.ray_init_config.configure_logging,
+        "logging_level": cfg.ray_init_config.logging_level,
+        "logging_format": cfg.ray_init_config.logging_format,
+        "log_to_driver": cfg.ray_init_config.log_to_driver,
+        "namespace": cfg.ray_init_config.namespace,
+        "runtime_env": cfg.ray_init_config.runtime_env,
+        "storage": cfg.ray_init_config.storage,
+    }
     remote_config = {
-        "num_cpus": 1,
-        "num_gpus": 1.0 / num_workers,
-        "memory": 2 * 1024**3,
+        "num_cpus": cfg.remote_worker_resources.num_cpus,
+        "num_gpus": cfg.remote_worker_resources.num_gpus,
+        "memory": cfg.remote_worker_resources.memory,
     }
     collector = RayCollector(
         create_env_fn=[make_env(cfg.env.env_name, device)] * num_workers,
@@ -69,28 +88,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
         max_frames_per_traj=-1,
+        ray_init_config=ray_init_config,
         remote_configs=remote_config,
         sync=False,
         storing_device=device,
         update_after_each_batch=True,
     )
-
-    # collector = RPCDataCollector(
-    #     create_env_fn=[make_env(cfg.env.env_name, device)] * 1,
-    #     policy=actor,
-    #     collector_class=SyncDataCollector,
-    #     frames_per_batch=frames_per_batch,
-    #     total_frames=total_frames,
-    #     max_frames_per_traj=-1,
-    #     slurm_kwargs={
-    #         "timeout_min": 10,
-    #         "slurm_partition": "3090",
-    #         "slurm_cpus_per_task": 1,
-    #         "slurm_gpus_per_node": 0,
-    #     },
-    #     sync=False,
-    #     update_after_each_batch=True,
-    # )
 
     # Create data buffer
     sampler = SamplerWithoutReplacement()
