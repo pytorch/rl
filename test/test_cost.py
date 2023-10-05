@@ -5988,6 +5988,7 @@ class TestA2C(LossModuleTestBase):
         reward_key="reward",
         done_key="done",
         terminated_key="terminated",
+        sample_log_prob_key="sample_log_prob",
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
@@ -6017,7 +6018,7 @@ class TestA2C(LossModuleTestBase):
                 },
                 "collector": {"mask": mask},
                 action_key: action.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(
+                sample_log_prob_key: torch.randn_like(action[..., 1]).masked_fill_(
                     ~mask, 0.0
                 )
                 / 10,
@@ -6317,6 +6318,7 @@ class TestA2C(LossModuleTestBase):
             reward_key=reward_key,
             done_key=done_key,
             terminated_key=terminated_key,
+            sample_log_prob_key=sample_log_prob_key,
         )
 
         actor = self._create_mock_actor(
