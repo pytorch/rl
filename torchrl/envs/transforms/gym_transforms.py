@@ -121,7 +121,8 @@ class EndOfLifeTransform(Transform):
         if not isinstance(base_env, GymWrapper):
             warnings.warn(
                 f"The base_env is not a gym env. Compatibility of {type(self)} is not guaranteed with "
-                f"environment types that do not inherit fromo GymWrapper."
+                f"environment types that do not inherit from GymWrapper.",
+                category=UserWarning,
             )
         # getattr falls back on _env by default
         lives = getattr(base_env, self.eol_attribute[0])
