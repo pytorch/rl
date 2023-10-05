@@ -47,7 +47,7 @@ except ImportError as err:
 def _delezify(func):
     @wraps(func)
     def new_func(self, *args, **kwargs):
-        self._target_entropy
+        self.target_entropy
         return func(self, *args, **kwargs)
 
     return new_func

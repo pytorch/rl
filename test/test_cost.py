@@ -3287,6 +3287,22 @@ class TestSAC(LossModuleTestBase):
         )
         loss.load_state_dict(state)
 
+        # with an access in between
+        loss = SACLoss(
+            actor_network=policy,
+            qvalue_network=value,
+            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+        )
+        loss.target_entropy
+        state = loss.state_dict()
+
+        loss = SACLoss(
+            actor_network=policy,
+            qvalue_network=value,
+            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+        )
+        loss.load_state_dict(state)
+
 
 @pytest.mark.skipif(
     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
