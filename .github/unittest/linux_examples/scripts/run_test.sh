@@ -282,8 +282,10 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/multiagent/sac
   train.minibatch_size=100 \
   logger.backend=
 
-
 python .github/unittest/helpers/coverage_run_parallel.py examples/bandits/dqn.py --n_steps=100
+
+## RLHF
+# RLHF tests are executed in the dedicated workflow
 
 coverage combine
 coverage xml -i

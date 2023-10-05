@@ -308,16 +308,17 @@ def create_infinite_iterator(iterator):
 
 
 def get_dataloader(
-    batch_size,
-    block_size,
-    tensorclass_type,
-    device,
-    dataset_name=None,
-    infinite=True,
-    prefetch=0,
-    split="train",
-    root_dir=None,
-    from_disk=False,
+    batch_size: int,
+    block_size: int,
+    tensorclass_type: Type,
+    device: torch.device,
+    dataset_name: str | None = None,
+    infinite: bool = True,
+    prefetch: int = 0,
+    split: str = "train",
+    root_dir: str | None = None,
+    from_disk: bool = False,
+    num_workers: int | None = None,
 ):
     """Creates a dataset and returns a dataloader from it.
 
@@ -346,9 +347,12 @@ def get_dataloader(
         from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
             will be used. Otherwise, :func:`datasets.load_dataset` will be used.
             Defaults to ``False``.
+        num_workers (int, optional): number of workers for :meth:`datasets.dataset.map`
+            which is called during tokenization.
+            Defaults to ``max(os.cpu_count() // 2, 1)``.
 
     Examples:
-        >>> from torchrl.data.rlhf.comparison import PairwiseDataset
+        >>> from torchrl.data.rlhf.reward import PairwiseDataset
         >>> dataloader = get_dataloader(
         ...     batch_size=256, block_size=550, tensorclass_type=PairwiseDataset, device="cpu")
         >>> for d in dataloader:
@@ -381,6 +385,7 @@ def get_dataloader(
         max_length=block_size,
         root_dir=root_dir,
         from_disk=from_disk,
+        num_workers=num_workers,
     )
     out = TensorDictReplayBuffer(
         storage=TensorStorage(data),
