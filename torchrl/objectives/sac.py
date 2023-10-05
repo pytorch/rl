@@ -5,6 +5,7 @@
 import math
 import warnings
 from dataclasses import dataclass
+from functools import wraps
 from numbers import Number
 from typing import Dict, Optional, Tuple, Union
 
@@ -41,6 +42,15 @@ try:
 except ImportError as err:
     _has_functorch = False
     FUNCTORCH_ERROR = err
+
+
+def _delezify(func):
+    @wraps(func)
+    def new_func(self, *args, **kwargs):
+        self.target_entropy
+        return func(self, *args, **kwargs)
+
+    return new_func
 
 
 class SACLoss(LossModule):
@@ -371,7 +381,6 @@ class SACLoss(LossModule):
 
         self._target_entropy = target_entropy
         self._action_spec = action_spec
-        self.target_entropy_buffer = None
         if self._version == 1:
             self.actor_critic = ActorCriticWrapper(
                 self.actor_network, self.value_network
@@ -385,47 +394,53 @@ class SACLoss(LossModule):
             self._vmap_qnetwork00 = vmap(qvalue_network)
 
     @property
+    def target_entropy_buffer(self):
+        return self.target_entropy
+
+    @property
     def target_entropy(self):
-        target_entropy = self.target_entropy_buffer
-        if target_entropy is None:
-            delattr(self, "target_entropy_buffer")
-            target_entropy = self._target_entropy
-            action_spec = self._action_spec
-            actor_network = self.actor_network
-            device = next(self.parameters()).device
-            if target_entropy == "auto":
-                action_spec = (
-                    action_spec
-                    if action_spec is not None
-                    else getattr(actor_network, "spec", None)
-                )
-                if action_spec is None:
-                    raise RuntimeError(
-                        "Cannot infer the dimensionality of the action. Consider providing "
-                        "the target entropy explicitely or provide the spec of the "
-                        "action tensor in the actor network."
-                    )
-                if not isinstance(action_spec, CompositeSpec):
-                    action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
-                if (
-                    isinstance(self.tensor_keys.action, tuple)
-                    and len(self.tensor_keys.action) > 1
-                ):
-                    action_container_shape = action_spec[
-                        self.tensor_keys.action[:-1]
-                    ].shape
-                else:
-                    action_container_shape = action_spec.shape
-                target_entropy = -float(
-                    action_spec[self.tensor_keys.action]
-                    .shape[len(action_container_shape) :]
-                    .numel()
-                )
-            self.register_buffer(
-                "target_entropy_buffer", torch.tensor(target_entropy, device=device)
+        target_entropy = self._buffers.get("_target_entropy", None)
+        if target_entropy is not None:
+            return target_entropy
+        target_entropy = self._target_entropy
+        action_spec = self._action_spec
+        actor_network = self.actor_network
+        device = next(self.parameters()).device
+        if target_entropy == "auto":
+            action_spec = (
+                action_spec
+                if action_spec is not None
+                else getattr(actor_network, "spec", None)
             )
-            return self.target_entropy_buffer
-        return target_entropy
+            if action_spec is None:
+                raise RuntimeError(
+                    "Cannot infer the dimensionality of the action. Consider providing "
+                    "the target entropy explicitely or provide the spec of the "
+                    "action tensor in the actor network."
+                )
+            if not isinstance(action_spec, CompositeSpec):
+                action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+            if (
+                isinstance(self.tensor_keys.action, tuple)
+                and len(self.tensor_keys.action) > 1
+            ):
+             
+                action_container_shape = action_spec[self.tensor_keys.action[:-1]].shape
+            else:
+                action_container_shape = action_spec.shape
+            target_entropy = -float(
+                action_spec[self.tensor_keys.action]
+                .shape[len(action_container_shape) :]
+                .numel()
+            )
+        delattr(self, "_target_entropy")
+        self.register_buffer(
+            "_target_entropy", torch.tensor(target_entropy, device=device)
+        )
+        return self._target_entropy
+
+    state_dict = _delezify(LossModule.state_dict)
+    load_state_dict = _delezify(LossModule.load_state_dict)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
