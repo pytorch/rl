@@ -3,20 +3,23 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from copy import copy
 from typing import Optional, Sequence
 
 import torch
+
+from tensordict.tensordict import TensorDictBase
+
+from tensordict.utils import NestedKey
+
+from torchrl.envs.transforms import ObservationTransform, Transform
+from torchrl.record.loggers import Logger
 
 try:
     from torchvision.transforms.functional import center_crop as center_crop_fn
     from torchvision.utils import make_grid
 except ImportError:
     center_crop_fn = None
-
-from tensordict.tensordict import TensorDictBase
-
-from torchrl.envs.transforms import ObservationTransform, Transform
-from torchrl.record.loggers import Logger
 
 
 class VideoRecorder(ObservationTransform):
@@ -29,7 +32,7 @@ class VideoRecorder(ObservationTransform):
         logger (Logger): a Logger instance where the video
             should be written.
         tag (str): the video tag in the logger.
-        in_keys (Sequence[str], optional): keys to be read to produce the video.
+        in_keys (Sequence of NestedKey, optional): keys to be read to produce the video.
             Default is :obj:`"pixels"`.
         skip (int): frame interval in the output video.
             Default is 2.
@@ -37,6 +40,8 @@ class VideoRecorder(ObservationTransform):
         make_grid (bool, optional): if ``True``, a grid is created assuming that a
             tensor of shape [B x W x H x 3] is provided, with B being the batch
             size. Default is True.
+        out_keys (sequence of NestedKey, optional): destination keys. Defaults
+            to ``in_keys`` if not provided.
 
     """
 
@@ -44,16 +49,18 @@ class VideoRecorder(ObservationTransform):
         self,
         logger: Logger,
         tag: str,
-        in_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
         skip: int = 2,
         center_crop: Optional[int] = None,
         make_grid: bool = True,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         **kwargs,
     ) -> None:
         if in_keys is None:
             in_keys = ["pixels"]
-
-        super().__init__(in_keys=in_keys)
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         video_kwargs = {"fps": 6}
         video_kwargs.update(kwargs)
         self.video_kwargs = video_kwargs

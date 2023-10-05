@@ -6,6 +6,7 @@ import abc
 import argparse
 
 import itertools
+import pickle
 import sys
 from copy import copy
 from functools import partial
@@ -32,11 +33,14 @@ from mocking_classes import (
     IncrementingEnv,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
+    MultiKeyCountingEnv,
+    MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
 from tensordict import unravel_key
 from tensordict.nn import TensorDictSequential
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import _unravel_key_to_tuple
 from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import prod
 from torchrl.data import (
@@ -104,7 +108,7 @@ from torchrl.envs.transforms.rlhf import KLRewardTransform
 from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
-from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.envs.utils import _replace_last, check_env_specs, step_mdp
 from torchrl.modules import LSTMModule, MLP, ProbabilisticActor, TanhNormal
 
 TIMEOUT = 100.0
@@ -2259,12 +2263,6 @@ class TestDoubleToFloat(TransformBase):
             )
             action_spec = double2float.transform_input_spec(input_spec)
             assert action_spec.dtype == torch.float
-
-        elif len(keys) == 1:
-            observation_spec = BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
-            observation_spec = double2float.transform_observation_spec(observation_spec)
-            assert observation_spec.dtype == torch.float
-
         else:
             observation_spec = CompositeSpec(
                 {
@@ -2274,7 +2272,7 @@ class TestDoubleToFloat(TransformBase):
             )
             observation_spec = double2float.transform_observation_spec(observation_spec)
             for key in keys:
-                assert observation_spec[key].dtype == torch.float
+                assert observation_spec[key].dtype == torch.float, key
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
@@ -2326,6 +2324,7 @@ class TestDoubleToFloat(TransformBase):
             base_env.state_spec[key] = spec.to(torch.float64)
         if base_env.action_spec.dtype == torch.float32:
             base_env.action_spec = base_env.action_spec.to(torch.float64)
+        check_env_specs(base_env)
         env = TransformedEnv(
             base_env,
             DoubleToFloat(),
@@ -2335,6 +2334,8 @@ class TestDoubleToFloat(TransformBase):
         for spec in env.state_spec.values(True, True):
             assert spec.dtype == torch.float32
         assert env.action_spec.dtype != torch.float64
+        assert env.transform.in_keys == env.transform.out_keys
+        assert env.transform.in_keys_inv == env.transform.out_keys_inv
         check_env_specs(env)
 
     def test_single_trans_env_check(self, dtype_fixture):  # noqa: F811
@@ -4530,6 +4531,36 @@ class TestRewardSum(TransformBase):
         r = env.rollout(4)
         assert r["next", "episode_reward"].unique().numel() > 1
 
+    @pytest.mark.parametrize("has_in_keys,", [True, False])
+    def test_trans_multi_key(
+        self, has_in_keys, n_workers=2, batch_size=(3, 2), max_steps=5
+    ):
+        torch.manual_seed(0)
+        env_fun = lambda: MultiKeyCountingEnv(batch_size=batch_size)
+        base_env = SerialEnv(n_workers, env_fun)
+        if has_in_keys:
+            t = RewardSum(in_keys=base_env.reward_keys, reset_keys=base_env.reset_keys)
+        else:
+            t = RewardSum()
+        env = TransformedEnv(
+            base_env,
+            Compose(t),
+        )
+        policy = MultiKeyCountingEnvPolicy(
+            full_action_spec=env.action_spec, deterministic=True
+        )
+
+        check_env_specs(env)
+        td = env.rollout(max_steps, policy=policy)
+        for reward_key in env.reward_keys:
+            reward_key = _unravel_key_to_tuple(reward_key)
+            assert (
+                td.get(
+                    ("next", _replace_last(reward_key, f"episode_{reward_key[-1]}"))
+                )[(0,) * (len(batch_size) + 1)][-1]
+                == max_steps
+            ).all()
+
     @pytest.mark.parametrize("in_key", ["reward", ("some", "nested")])
     def test_transform_no_env(self, in_key):
         t = RewardSum(in_keys=[in_key], out_keys=[("some", "nested_sum")])
@@ -4553,7 +4584,8 @@ class TestRewardSum(TransformBase):
     def test_transform_compose(
         self,
     ):
-        t = Compose(RewardSum())
+        # reset keys should not be needed for offline run
+        t = Compose(RewardSum(in_keys=["reward"], out_keys=["episode_reward"]))
         reward = torch.randn(10)
         td = TensorDict({("next", "reward"): reward}, [])
         with pytest.raises(
@@ -4652,6 +4684,9 @@ class TestRewardSum(TransformBase):
 
         # reset environments
         td.set("_reset", torch.ones(batch, dtype=torch.bool, device=device))
+        with pytest.raises(TypeError, match="reset_keys not provided but parent"):
+            rs.reset(td)
+        rs._reset_keys = ["_reset"]
         rs.reset(td)
 
         # apply a third time, episode_reward should be equal to reward again
@@ -6723,8 +6758,8 @@ class TestVIP(TransformBase):
         with pytest.raises(AssertionError):
             torch.testing.assert_close(cur_embedding[:, 1:], last_embedding[:, :-1])
 
-        explicit_reward = -torch.norm(cur_embedding - goal_embedding, dim=-1) - (
-            -torch.norm(last_embedding - goal_embedding, dim=-1)
+        explicit_reward = -torch.linalg.norm(cur_embedding - goal_embedding, dim=-1) - (
+            -torch.linalg.norm(last_embedding - goal_embedding, dim=-1)
         )
         torch.testing.assert_close(explicit_reward, td["next", "reward"].squeeze())
 
@@ -7292,6 +7327,15 @@ class TestVecNorm:
         if not env_t.is_closed:
             env_t.close()
         self.SEED = 0
+
+    def test_pickable(self):
+
+        transform = VecNorm()
+        serialized = pickle.dumps(transform)
+        transform2 = pickle.loads(serialized)
+        assert transform.__dict__.keys() == transform2.__dict__.keys()
+        for key in sorted(transform.__dict__.keys()):
+            assert isinstance(transform.__dict__[key], type(transform2.__dict__[key]))
 
 
 def test_added_transforms_are_in_eval_mode_trivial():

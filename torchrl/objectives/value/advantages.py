@@ -171,12 +171,14 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 Will be used for the underlying value estimator. Defaults to ``"advantage"``.
             value_target (NestedKey): The input tensordict key where the target state value is written to.
                 Will be used for the underlying value estimator Defaults to ``"value_target"``.
-            value_key (NestedKey): The input tensordict key where the state value is expected.
+            value (NestedKey): The input tensordict key where the state value is expected.
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
-            reward_key (NestedKey): The input tensordict key where the reward is written to.
+            reward (NestedKey): The input tensordict key where the reward is written to.
                 Defaults to ``"reward"``.
-            done_key (NestedKey): The key in the input TensorDict that indicates
+            done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done.  Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated.  Defaults to ``"terminated"``.
             steps_to_next_obs_key (NestedKey): The key in the input tensordict
                 that indicates the number of steps to the next observation.
                 Defaults to ``"steps_to_next_obs"``.
@@ -187,6 +189,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         value: NestedKey = "state_value"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
         steps_to_next_obs: NestedKey = "steps_to_next_obs"
 
     default_keys = _AcceptedKeys()
@@ -213,6 +216,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
         return self.tensor_keys.done
 
     @property
+    def terminated_key(self):
+        return self.tensor_keys.terminated
+
+    @property
     def steps_to_next_obs_key(self):
         return self.tensor_keys.steps_to_next_obs
 
@@ -230,10 +237,14 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
         Args:
             tensordict (TensorDictBase): A TensorDict containing the data
-                (an observation key, "action", ("next", "reward"), ("next", "done") and "next" tensordict state
-                as returned by the environment) necessary to compute the value estimates and the TDEstimate.
-                The data passed to this module should be structured as :obj:`[*B, T, F]` where :obj:`B` are
-                the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
+                (an observation key, ``"action"``, ``("next", "reward")``,
+                ``("next", "done")``, ``("next", "terminated")``,
+                and ``"next"`` tensordict state as returned by the environment)
+                necessary to compute the value estimates and the TDEstimate.
+                The data passed to this module should be structured as
+                :obj:`[*B, T, *F]` where :obj:`B` are
+                the batch size, :obj:`T` the time dimension and :obj:`F` the
+                feature dimension(s). The tensordict must have shape ``[*B, T]``.
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
@@ -302,6 +313,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 + [
                     ("next", self.tensor_keys.reward),
                     ("next", self.tensor_keys.done),
+                    ("next", self.tensor_keys.terminated),
                 ]
                 + [("next", in_key) for in_key in self.value_network.in_keys]
             )
@@ -483,10 +495,14 @@ class TD0Estimator(ValueEstimatorBase):
 
         Args:
             tensordict (TensorDictBase): A TensorDict containing the data
-                (an observation key, "action", ("next", "reward"), ("next", "done") and "next" tensordict state
-                as returned by the environment) necessary to compute the value estimates and the TDEstimate.
-                The data passed to this module should be structured as :obj:`[*B, T, F]` where :obj:`B` are
-                the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
+                (an observation key, ``"action"``, ``("next", "reward")``,
+                ``("next", "done")``, ``("next", "terminated")``, and ``"next"``
+                tensordict state as returned by the environment) necessary to
+                compute the value estimates and the TDEstimate.
+                The data passed to this module should be structured as
+                :obj:`[*B, T, *F]` where :obj:`B` are
+                the batch size, :obj:`T` the time dimension and :obj:`F` the
+                feature dimension(s). The tensordict must have shape ``[*B, T]``.
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
@@ -507,7 +523,8 @@ class TD0Estimator(ValueEstimatorBase):
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> tensordict = TensorDict({"obs": obs, "next": {"obs": next_obs, "done": done, "reward": reward}}, [1, 10])
+            >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> tensordict = TensorDict({"obs": obs, "next": {"obs": next_obs, "done": done, "terminated": terminated, "reward": reward}}, [1, 10])
             >>> _ = module(tensordict)
             >>> assert "advantage" in tensordict.keys()
 
@@ -524,7 +541,8 @@ class TD0Estimator(ValueEstimatorBase):
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> advantage, value_target = module(obs=obs, reward=reward, done=done, next_obs=next_obs)
+            >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> advantage, value_target = module(obs=obs, next_reward=reward, next_done=done, next_obs=next_obs, next_terminated=terminated)
 
         """
         if tensordict.batch_dims < 1:
@@ -587,8 +605,13 @@ class TD0Estimator(ValueEstimatorBase):
             next_value = self._next_value(tensordict, target_params, kwargs=kwargs)
 
         done = tensordict.get(("next", self.tensor_keys.done))
+        terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         value_target = td0_return_estimate(
-            gamma=gamma, next_state_value=next_value, reward=reward, done=done
+            gamma=gamma,
+            next_state_value=next_value,
+            reward=reward,
+            done=done,
+            terminated=terminated,
         )
         return value_target
 
@@ -674,10 +697,13 @@ class TD1Estimator(ValueEstimatorBase):
 
         Args:
             tensordict (TensorDictBase): A TensorDict containing the data
-                (an observation key, "action", ("next", "reward"), ("next", "done") and "next" tensordict state
-                as returned by the environment) necessary to compute the value estimates and the TDEstimate.
-                The data passed to this module should be structured as :obj:`[*B, T, F]` where :obj:`B` are
+                (an observation key, ``"action"``, ``("next", "reward")``,
+                ``("next", "done")``, ``("next", "terminated")``,
+                and ``"next"`` tensordict state as returned by the environment)
+                necessary to compute the value estimates and the TDEstimate.
+                The data passed to this module should be structured as :obj:`[*B, T, *F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
+                The tensordict must have shape ``[*B, T]``.
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
@@ -698,7 +724,8 @@ class TD1Estimator(ValueEstimatorBase):
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> tensordict = TensorDict({"obs": obs, "next": {"obs": next_obs, "done": done, "reward": reward}}, [1, 10])
+            >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> tensordict = TensorDict({"obs": obs, "next": {"obs": next_obs, "done": done, "reward": reward, "terminated": terminated}}, [1, 10])
             >>> _ = module(tensordict)
             >>> assert "advantage" in tensordict.keys()
 
@@ -715,7 +742,8 @@ class TD1Estimator(ValueEstimatorBase):
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> advantage, value_target = module(obs=obs, reward=reward, done=done, next_obs=next_obs)
+            >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> advantage, value_target = module(obs=obs, next_reward=reward, next_done=done, next_obs=next_obs, next_terminated=terminated)
 
         """
         if tensordict.batch_dims < 1:
@@ -779,8 +807,14 @@ class TD1Estimator(ValueEstimatorBase):
             next_value = self._next_value(tensordict, target_params, kwargs=kwargs)
 
         done = tensordict.get(("next", self.tensor_keys.done))
+        terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         value_target = vec_td1_return_estimate(
-            gamma, next_value, reward, done, time_dim=tensordict.ndim - 1
+            gamma,
+            next_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            time_dim=tensordict.ndim - 1,
         )
         return value_target
 
@@ -873,10 +907,13 @@ class TDLambdaEstimator(ValueEstimatorBase):
 
         Args:
             tensordict (TensorDictBase): A TensorDict containing the data
-                (an observation key, "action", ("next", "reward"), ("next", "done") and "next" tensordict state
-                as returned by the environment) necessary to compute the value estimates and the TDLambdaEstimate.
-                The data passed to this module should be structured as :obj:`[*B, T, F]` where :obj:`B` are
+                (an observation key, ``"action"``, ``("next", "reward")``,
+                ``("next", "done")``, ``("next", "terminated")``,
+                and ``"next"`` tensordict state as returned by the environment)
+                necessary to compute the value estimates and the TDLambdaEstimate.
+                The data passed to this module should be structured as :obj:`[*B, T, *F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
+                The tensordict must have shape ``[*B, T]``.
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
@@ -898,7 +935,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> tensordict = TensorDict({"obs": obs, "next": {"obs": next_obs, "done": done, "reward": reward}}, [1, 10])
+            >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> tensordict = TensorDict({"obs": obs, "next": {"obs": next_obs, "done": done, "reward": reward, "terminated": terminated}}, [1, 10])
             >>> _ = module(tensordict)
             >>> assert "advantage" in tensordict.keys()
 
@@ -916,7 +954,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> advantage, value_target = module(obs=obs, reward=reward, done=done, next_obs=next_obs)
+            >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> advantage, value_target = module(obs=obs, next_reward=reward, next_done=done, next_obs=next_obs, next_terminated=terminated)
 
         """
         if tensordict.batch_dims < 1:
@@ -980,13 +1019,26 @@ class TDLambdaEstimator(ValueEstimatorBase):
             next_value = self._next_value(tensordict, target_params, kwargs=kwargs)
 
         done = tensordict.get(("next", self.tensor_keys.done))
+        terminated = tensordict.get(("next", self.tensor_keys.done), default=done)
         if self.vectorized:
             val = vec_td_lambda_return_estimate(
-                gamma, lmbda, next_value, reward, done, time_dim=tensordict.ndim - 1
+                gamma,
+                lmbda,
+                next_value,
+                reward,
+                done=done,
+                terminated=terminated,
+                time_dim=tensordict.ndim - 1,
             )
         else:
             val = td_lambda_return_estimate(
-                gamma, lmbda, next_value, reward, done, time_dim=tensordict.ndim - 1
+                gamma,
+                lmbda,
+                next_value,
+                reward,
+                done=done,
+                terminated=terminated,
+                time_dim=tensordict.ndim - 1,
             )
         return val
 
@@ -1096,10 +1148,13 @@ class GAE(ValueEstimatorBase):
 
         Args:
             tensordict (TensorDictBase): A TensorDict containing the data
-                (an observation key, "action", "reward", "done" and "next" tensordict state
-                as returned by the environment) necessary to compute the value estimates and the GAE.
-                The data passed to this module should be structured as :obj:`[*B, T, F]` where :obj:`B` are
+                (an observation key, ``"action"``, ``("next", "reward")``,
+                ``("next", "done")``, ``("next", "terminated")``,
+                and ``"next"`` tensordict state as returned by the environment)
+                necessary to compute the value estimates and the GAE.
+                The data passed to this module should be structured as :obj:`[*B, T, *F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
+                The tensordict must have shape ``[*B, T]``.
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
@@ -1122,7 +1177,8 @@ class GAE(ValueEstimatorBase):
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> tensordict = TensorDict({"obs": obs, "next": {"obs": next_obs}, "done": done, "reward": reward}, [1, 10])
+            >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> tensordict = TensorDict({"obs": obs, "next": {"obs": next_obs}, "done": done, "reward": reward, "terminated": terminated}, [1, 10])
             >>> _ = module(tensordict)
             >>> assert "advantage" in tensordict.keys()
 
@@ -1141,7 +1197,8 @@ class GAE(ValueEstimatorBase):
             >>> obs, next_obs = torch.randn(2, 1, 10, 3)
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> advantage, value_target = module(obs=obs, reward=reward, done=done, next_obs=next_obs)
+            >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> advantage, value_target = module(obs=obs, next_reward=reward, next_done=done, next_obs=next_obs, next_terminated=terminated)
 
         """
         if tensordict.batch_dims < 1:
@@ -1178,6 +1235,7 @@ class GAE(ValueEstimatorBase):
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
         done = tensordict.get(("next", self.tensor_keys.done))
+        terminated = tensordict.get(("next", self.tensor_keys.done), default=done)
         if self.vectorized:
             adv, value_target = vec_generalized_advantage_estimate(
                 gamma,
@@ -1185,7 +1243,8 @@ class GAE(ValueEstimatorBase):
                 value,
                 next_value,
                 reward,
-                done,
+                done=done,
+                terminated=done,
                 time_dim=tensordict.ndim - 1,
             )
         else:
@@ -1195,7 +1254,8 @@ class GAE(ValueEstimatorBase):
                 value,
                 next_value,
                 reward,
-                done,
+                done=done,
+                terminated=terminated,
                 time_dim=tensordict.ndim - 1,
             )
 
@@ -1254,8 +1314,16 @@ class GAE(ValueEstimatorBase):
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
         done = tensordict.get(("next", self.tensor_keys.done))
+        terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         _, value_target = vec_generalized_advantage_estimate(
-            gamma, lmbda, value, next_value, reward, done, time_dim=tensordict.ndim - 1
+            gamma,
+            lmbda,
+            value,
+            next_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            time_dim=tensordict.ndim - 1,
         )
         return value_target
 
