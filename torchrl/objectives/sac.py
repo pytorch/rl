@@ -424,7 +424,7 @@ class SACLoss(LossModule):
                 isinstance(self.tensor_keys.action, tuple)
                 and len(self.tensor_keys.action) > 1
             ):
-             
+
                 action_container_shape = action_spec[self.tensor_keys.action[:-1]].shape
             else:
                 action_container_shape = action_spec.shape
