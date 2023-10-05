@@ -1,4 +1,4 @@
-# Task and env
+# environment and task
 env:
   name: HalfCheetah-v3
   task: ""
@@ -25,7 +25,7 @@ logger:
   fintune_log_interval: 1
   eval_steps: 1000
 
-# Buffer
+# replay buffer
 replay_buffer:
   dataset: halfcheetah-medium-v2
   batch_size: 64
@@ -37,13 +37,12 @@ replay_buffer:
   device: cpu
   prefetch: 3
 
-# Optimization
+# optimization
 optim:
   device: cuda:0
   lr: 1.0e-4
   weight_decay: 5.0e-4
   batch_size: 64
-  lr_scheduler: ""
   pretrain_gradient_steps: 55000
   updates_per_episode: 300
   warmup_steps: 10000
@@ -52,7 +51,8 @@ optim:
 # loss
 loss: 
   loss_function: "l2"
-
+  
+# transformer model
 transformer:
   n_embd: 128
   n_layer: 3 
