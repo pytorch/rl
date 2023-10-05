@@ -1646,9 +1646,9 @@ class TestLSTMModule:
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
         )
         assert lstm_module.set_recurrent_mode(False) is lstm_module
-        assert not lstm_module.set_recurrent_mode(False).temporal_mode
+        assert not lstm_module.set_recurrent_mode(False).recurrent_mode
         assert lstm_module.set_recurrent_mode(True) is not lstm_module
-        assert lstm_module.set_recurrent_mode(True).temporal_mode
+        assert lstm_module.set_recurrent_mode(True).recurrent_mode
         assert set(lstm_module.set_recurrent_mode(True).parameters()) == set(
             lstm_module.parameters()
         )
@@ -1907,9 +1907,9 @@ class TestGRUModule:
             out_keys=["intermediate", ("next", "hidden")],
         )
         assert gru_module.set_recurrent_mode(False) is gru_module
-        assert not gru_module.set_recurrent_mode(False).temporal_mode
+        assert not gru_module.set_recurrent_mode(False).recurrent_mode
         assert gru_module.set_recurrent_mode(True) is not gru_module
-        assert gru_module.set_recurrent_mode(True).temporal_mode
+        assert gru_module.set_recurrent_mode(True).recurrent_mode
         assert set(gru_module.set_recurrent_mode(True).parameters()) == set(
             gru_module.parameters()
         )

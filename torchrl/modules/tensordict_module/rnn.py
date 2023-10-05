@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import warnings
 from typing import Optional, Tuple
 
 import torch
@@ -35,10 +36,10 @@ class LSTMModule(ModuleBase):
       multi-step. This class enables both usages.
 
 
-    After construction, the module is *not* set in temporal mode, ie. it will
+    After construction, the module is *not* set in recurrent mode, ie. it will
     expect single steps inputs.
 
-    If in temporal mode, it is expected that the last dimension of the tensordict
+    If in recurrent mode, it is expected that the last dimension of the tensordict
     marks the number of steps. There is no constrain on the dimensionality of the
     tensordict (except that it must be greater than one for temporal inputs).
 
@@ -85,11 +86,11 @@ class LSTMModule(ModuleBase):
             Exclusive with other nn.LSTM arguments.
 
     Attributes:
-        temporal_mode: Returns the temporal mode of the module.
+        recurrent_mode: Returns the recurrent mode of the module.
 
     Methods:
         set_recurrent_mode: controls whether the module should be executed in
-            temporal mode.
+            recurrent mode.
 
     Examples:
         >>> from torchrl.envs import TransformedEnv, InitTracker
@@ -206,7 +207,7 @@ class LSTMModule(ModuleBase):
             in_keys = in_keys + ["is_init"]
         self.in_keys = in_keys
         self.out_keys = out_keys
-        self._temporal_mode = False
+        self._recurrent_mode = False
 
     def make_tensordict_primer(self):
         from torchrl.envs.transforms.transforms import TensorDictPrimer
@@ -238,15 +239,25 @@ class LSTMModule(ModuleBase):
         )
 
     @property
-    def temporal_mode(self):
-        return self._temporal_mode
+    def recurrent_mode(self):
+        return self._recurrent_mode
 
-    @temporal_mode.setter
-    def temporal_mode(self, value):
-        raise RuntimeError("temporal_mode cannot be changed in-place. Call `module.set")
+    @recurrent_mode.setter
+    def recurrent_mode(self, value):
+        raise RuntimeError(
+            "recurrent_mode cannot be changed in-place. Call `module.set"
+        )
+
+    @property
+    def temporal_mode(self):
+        warnings.warn(
+            "temporal_mode is deprecated, use recurrent_mode instead.",
+            category=DeprecationWarning,
+        )
+        return self.recurrent_mode
 
     def set_recurrent_mode(self, mode: bool = True):
-        """Returns a new copy of the module that shares the same lstm model but with a different ``temporal_mode`` attribute (if it differs).
+        """Returns a new copy of the module that shares the same lstm model but with a different ``recurrent_mode`` attribute (if it differs).
 
         A copy is created such that the module can be used with divergent behaviour
         in various parts of the code (inference vs training):
@@ -276,10 +287,10 @@ class LSTMModule(ModuleBase):
             ...
             >>> torch.testing.assert_close(td_inf["hidden0"], traj_td[..., -1]["next", "hidden0"])
         """
-        if mode is self._temporal_mode:
+        if mode is self._recurrent_mode:
             return self
         out = LSTMModule(lstm=self.lstm, in_keys=self.in_keys, out_keys=self.out_keys)
-        out._temporal_mode = mode
+        out._recurrent_mode = mode
         return out
 
     def forward(self, tensordict: TensorDictBase):
@@ -287,7 +298,7 @@ class LSTMModule(ModuleBase):
         defaults = [NO_DEFAULT, None, None]
         shape = tensordict.shape
         tensordict_shaped = tensordict
-        if self.temporal_mode:
+        if self.recurrent_mode:
             # if less than 2 dims, unsqueeze
             ndim = tensordict_shaped.get(self.in_keys[0]).ndim
             while ndim < 3:
@@ -306,7 +317,7 @@ class LSTMModule(ModuleBase):
 
         is_init = tensordict_shaped.get("is_init").squeeze(-1)
         splits = None
-        if self.temporal_mode and is_init[..., 1:].any():
+        if self.recurrent_mode and is_init[..., 1:].any():
             # if we have consecutive trajectories, things get a little more complicated
             # we have a tensordict of shape [B, T]
             # we will split / pad things such that we get a tensordict of shape
@@ -360,7 +371,7 @@ class LSTMModule(ModuleBase):
         hidden1_in: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
-        if not self.temporal_mode and steps != 1:
+        if not self.recurrent_mode and steps != 1:
             raise ValueError("Expected a single step")
 
         if hidden1_in is None and hidden0_in is None:
@@ -415,10 +426,10 @@ class GRUModule(ModuleBase):
       multi-step. This class enables both usages.
 
 
-    After construction, the module is *not* set in temporal mode, ie. it will
+    After construction, the module is *not* set in recurrent mode, ie. it will
     expect single steps inputs.
 
-    If in temporal mode, it is expected that the last dimension of the tensordict
+    If in recurrent mode, it is expected that the last dimension of the tensordict
     marks the number of steps. There is no constrain on the dimensionality of the
     tensordict (except that it must be greater than one for temporal inputs).
 
@@ -458,11 +469,11 @@ class GRUModule(ModuleBase):
             Exclusive with other nn.GRU arguments.
 
     Attributes:
-        temporal_mode: Returns the temporal mode of the module.
+        recurrent_mode: Returns the recurrent mode of the module.
 
     Methods:
         set_recurrent_mode: controls whether the module should be executed in
-            temporal mode.
+            recurrent mode.
 
     Examples:
         >>> from torchrl.envs import TransformedEnv, InitTracker
@@ -552,18 +563,18 @@ class GRUModule(ModuleBase):
         super().__init__()
         if gru is not None:
             if not gru.batch_first:
-                raise ValueError("The input lstm must have batch_first=True.")
+                raise ValueError("The input gru must have batch_first=True.")
             if gru.bidirectional:
-                raise ValueError("The input lstm cannot be bidirectional.")
+                raise ValueError("The input gru cannot be bidirectional.")
             if input_size is not None or hidden_size is not None:
                 raise ValueError(
-                    "An LSTM instance cannot be passed along with class argument."
+                    "An GRU instance cannot be passed along with class argument."
                 )
         else:
             if not batch_first:
-                raise ValueError("The input lstm must have batch_first=True.")
+                raise ValueError("The input gru must have batch_first=True.")
             if bidirectional:
-                raise ValueError("The input lstm cannot be bidirectional.")
+                raise ValueError("The input gru cannot be bidirectional.")
             gru = nn.GRU(
                 input_size=input_size,
                 hidden_size=hidden_size,
@@ -594,18 +605,18 @@ class GRUModule(ModuleBase):
             len(in_keys) != 2 and not (len(in_keys) == 3 and in_keys[-1] == "is_init")
         ):
             raise ValueError(
-                f"LSTMModule expects 3 inputs: a value, and two hidden states (and potentially an 'is_init' marker). Got in_keys {in_keys} instead."
+                f"GRUModule expects 3 inputs: a value, and two hidden states (and potentially an 'is_init' marker). Got in_keys {in_keys} instead."
             )
         if not isinstance(out_keys, (tuple, list)) or len(out_keys) != 2:
             raise ValueError(
-                f"LSTMModule expects 3 outputs: a value, and two hidden states. Got out_keys {out_keys} instead."
+                f"GRUModule expects 3 outputs: a value, and two hidden states. Got out_keys {out_keys} instead."
             )
         self.gru = gru
         if "is_init" not in in_keys:
             in_keys = in_keys + ["is_init"]
         self.in_keys = in_keys
         self.out_keys = out_keys
-        self._temporal_mode = False
+        self._recurrent_mode = False
 
     def make_tensordict_primer(self):
         from torchrl.envs import TensorDictPrimer
@@ -632,15 +643,25 @@ class GRUModule(ModuleBase):
         )
 
     @property
-    def temporal_mode(self):
-        return self._temporal_mode
+    def recurrent_mode(self):
+        return self._recurrent_mode
 
-    @temporal_mode.setter
-    def temporal_mode(self, value):
-        raise RuntimeError("temporal_mode cannot be changed in-place. Call `module.set")
+    @recurrent_mode.setter
+    def recurrent_mode(self, value):
+        raise RuntimeError(
+            "recurrent_mode cannot be changed in-place. Call `module.set"
+        )
+
+    @property
+    def temporal_mode(self):
+        warnings.warn(
+            "temporal_mode is deprecated, use recurrent_mode instead.",
+            category=DeprecationWarning,
+        )
+        return self.recurrent_mode
 
     def set_recurrent_mode(self, mode: bool = True):
-        """Returns a new copy of the module that shares the same lstm model but with a different ``temporal_mode`` attribute (if it differs).
+        """Returns a new copy of the module that shares the same gru model but with a different ``recurrent_mode`` attribute (if it differs).
 
         A copy is created such that the module can be used with divergent behaviour
         in various parts of the code (inference vs training):
@@ -669,10 +690,10 @@ class GRUModule(ModuleBase):
             ...
             >>> torch.testing.assert_close(td_inf["hidden"], traj_td[..., -1]["next", "hidden"])
         """
-        if mode is self._temporal_mode:
+        if mode is self._recurrent_mode:
             return self
         out = GRUModule(gru=self.gru, in_keys=self.in_keys, out_keys=self.out_keys)
-        out._temporal_mode = mode
+        out._recurrent_mode = mode
         return out
 
     def forward(self, tensordict: TensorDictBase):
@@ -680,7 +701,7 @@ class GRUModule(ModuleBase):
         defaults = [NO_DEFAULT, None]
         shape = tensordict.shape
         tensordict_shaped = tensordict
-        if self.temporal_mode:
+        if self.recurrent_mode:
             # if less than 2 dims, unsqueeze
             ndim = tensordict_shaped.get(self.in_keys[0]).ndim
             while ndim < 3:
@@ -699,7 +720,7 @@ class GRUModule(ModuleBase):
 
         is_init = tensordict_shaped.get("is_init").squeeze(-1)
         splits = None
-        if self.temporal_mode and is_init[..., 1:].any():
+        if self.recurrent_mode and is_init[..., 1:].any():
             # if we have consecutive trajectories, things get a little more complicated
             # we have a tensordict of shape [B, T]
             # we will split / pad things such that we get a tensordict of shape
@@ -725,7 +746,7 @@ class GRUModule(ModuleBase):
         #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
         if is_init.any() and hidden is not None:
             hidden[is_init] = 0
-        val, hidden = self._lstm(value, batch, steps, device, dtype, hidden)
+        val, hidden = self._gru(value, batch, steps, device, dtype, hidden)
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden)
         if splits is not None:
@@ -738,7 +759,7 @@ class GRUModule(ModuleBase):
             tensordict.update(tensordict_shaped.reshape(shape))
         return tensordict
 
-    def _lstm(
+    def _gru(
         self,
         input: torch.Tensor,
         batch,
@@ -748,7 +769,7 @@ class GRUModule(ModuleBase):
         hidden_in: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
-        if not self.temporal_mode and steps != 1:
+        if not self.recurrent_mode and steps != 1:
             raise ValueError("Expected a single step")
 
         if hidden_in is None:
