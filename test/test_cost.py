@@ -10333,7 +10333,7 @@ class TestAdv:
             [GAE, {"lmbda": 0.95}],
             [TD1Estimator, {}],
             [TDLambdaEstimator, {"lmbda": 0.95}],
-            [VTrace, {}]
+            [VTrace, {}],
         ],
     )
     def test_dispatch(
@@ -10345,7 +10345,9 @@ class TestAdv:
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
         )
         if adv == VTrace:
-            actor_net = TensorDictModule(nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"])
+            actor_net = TensorDictModule(
+                nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
+            )
             actor_net = ProbabilisticActor(
                 module=actor_net,
                 in_keys=["logits"],
@@ -10362,9 +10364,10 @@ class TestAdv:
             )
             kwargs = {
                 "obs": torch.randn(1, 10, 3),
-                "sample_log_prob": torch.log(torch.rand(1, 10, 4)),
+                "sample_log_prob": torch.log(torch.rand(1, 10, 1)),
                 "next_reward": torch.randn(1, 10, 1, requires_grad=True),
                 "next_done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                "next_terminated": torch.zeros(1, 10, 1, dtype=torch.bool),
                 "next_obs": torch.randn(1, 10, 3),
             }
         else:
@@ -10378,6 +10381,7 @@ class TestAdv:
                 "obs": torch.randn(1, 10, 3),
                 "next_reward": torch.randn(1, 10, 1, requires_grad=True),
                 "next_done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                "next_terminated": torch.zeros(1, 10, 1, dtype=torch.bool),
                 "next_obs": torch.randn(1, 10, 3),
             }
         advantage, value_target = module(**kwargs)
@@ -10390,6 +10394,7 @@ class TestAdv:
             [GAE, {"lmbda": 0.95}],
             [TD1Estimator, {}],
             [TDLambdaEstimator, {"lmbda": 0.95}],
+            [VTrace, {}],
         ],
     )
     def test_diff_reward(
@@ -10400,23 +10405,55 @@ class TestAdv:
         value_net = TensorDictModule(
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
         )
-        module = adv(
-            gamma=0.98,
-            value_network=value_net,
-            differentiable=True,
-            **kwargs,
-        )
-        td = TensorDict(
-            {
-                "obs": torch.randn(1, 10, 3),
-                "next": {
+        if adv == VTrace:
+            actor_net = TensorDictModule(
+                nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
+            )
+            actor_net = ProbabilisticActor(
+                module=actor_net,
+                in_keys=["logits"],
+                out_keys=["action"],
+                distribution_class=OneHotCategorical,
+                return_log_prob=True,
+            )
+            module = adv(
+                gamma=0.98,
+                actor_network=actor_net,
+                value_network=value_net,
+                differentiable=False,
+                **kwargs,
+            )
+            td = TensorDict(
+                {
                     "obs": torch.randn(1, 10, 3),
-                    "reward": torch.randn(1, 10, 1, requires_grad=True),
-                    "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                    "sample_log_prob": torch.log(torch.rand(1, 10, 1)),
+                    "next": {
+                        "obs": torch.randn(1, 10, 3),
+                        "reward": torch.randn(1, 10, 1, requires_grad=True),
+                        "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                        "terminated": torch.zeros(1, 10, 1, dtype=torch.bool),
+                    },
                 },
-            },
-            [1, 10],
-        )
+                [1, 10],
+            )
+        else:
+            module = adv(
+                gamma=0.98,
+                value_network=value_net,
+                differentiable=True,
+                **kwargs,
+            )
+            td = TensorDict(
+                {
+                    "obs": torch.randn(1, 10, 3),
+                    "next": {
+                        "obs": torch.randn(1, 10, 3),
+                        "reward": torch.randn(1, 10, 1, requires_grad=True),
+                        "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                    },
+                },
+                [1, 10],
+            )
         td = module(td.clone(False))
         # check that the advantage can't backprop to the value params
         td["advantage"].sum().backward()
@@ -10431,6 +10468,7 @@ class TestAdv:
             [GAE, {"lmbda": 0.95}],
             [TD1Estimator, {}],
             [TDLambdaEstimator, {"lmbda": 0.95}],
+            [VTrace, {}],
         ],
     )
     @pytest.mark.parametrize("shifted", [True, False])
@@ -10438,25 +10476,60 @@ class TestAdv:
         value_net = TensorDictModule(
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
         )
-        module = adv(
-            gamma=0.98,
-            value_network=value_net,
-            differentiable=False,
-            shifted=shifted,
-            **kwargs,
-        )
-        td = TensorDict(
-            {
-                "obs": torch.randn(1, 10, 3),
-                "next": {
+
+        if adv == VTrace:
+            actor_net = TensorDictModule(
+                nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
+            )
+            actor_net = ProbabilisticActor(
+                module=actor_net,
+                in_keys=["logits"],
+                out_keys=["action"],
+                distribution_class=OneHotCategorical,
+                return_log_prob=True,
+            )
+            module = adv(
+                gamma=0.98,
+                actor_network=actor_net,
+                value_network=value_net,
+                differentiable=False,
+                shifted=shifted,
+                **kwargs,
+            )
+            td = TensorDict(
+                {
                     "obs": torch.randn(1, 10, 3),
-                    "reward": torch.randn(1, 10, 1, requires_grad=True),
-                    "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                    "sample_log_prob": torch.log(torch.rand(1, 10, 1)),
+                    "next": {
+                        "obs": torch.randn(1, 10, 3),
+                        "reward": torch.randn(1, 10, 1, requires_grad=True),
+                        "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                        "terminated": torch.zeros(1, 10, 1, dtype=torch.bool),
+                    },
                 },
-            },
-            [1, 10],
-            names=[None, "time"],
-        )
+                [1, 10],
+                names=[None, "time"],
+            )
+        else:
+            module = adv(
+                gamma=0.98,
+                value_network=value_net,
+                differentiable=False,
+                shifted=shifted,
+                **kwargs,
+            )
+            td = TensorDict(
+                {
+                    "obs": torch.randn(1, 10, 3),
+                    "next": {
+                        "obs": torch.randn(1, 10, 3),
+                        "reward": torch.randn(1, 10, 1, requires_grad=True),
+                        "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                    },
+                },
+                [1, 10],
+                names=[None, "time"],
+            )
         td = module(td.clone(False))
         assert td["advantage"].is_leaf
 
@@ -10466,6 +10539,7 @@ class TestAdv:
             [GAE, {"lmbda": 0.95}],
             [TD1Estimator, {}],
             [TDLambdaEstimator, {"lmbda": 0.95}],
+            [VTrace, {}],
         ],
     )
     @pytest.mark.parametrize("has_value_net", [True, False])
@@ -10488,28 +10562,64 @@ class TestAdv:
         else:
             value_net = None
 
-        module = adv(
-            gamma=0.98,
-            value_network=value_net,
-            differentiable=True,
-            shifted=shifted,
-            skip_existing=skip_existing,
-            **kwargs,
-        )
-        td = TensorDict(
-            {
-                "obs": torch.randn(1, 10, 3),
-                "state_value": torch.ones(1, 10, 1),
-                "next": {
+        if adv == VTrace:
+            actor_net = TensorDictModule(
+                nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
+            )
+            actor_net = ProbabilisticActor(
+                module=actor_net,
+                in_keys=["logits"],
+                out_keys=["action"],
+                distribution_class=OneHotCategorical,
+                return_log_prob=True,
+            )
+            module = adv(
+                gamma=0.98,
+                actor_network=actor_net,
+                value_network=value_net,
+                differentiable=False,
+                shifted=shifted,
+                **kwargs,
+            )
+            td = TensorDict(
+                {
+                    "obs": torch.randn(1, 10, 3),
+                    "sample_log_prob": torch.log(torch.rand(1, 10, 1)),
+                    "state_value": torch.ones(1, 10, 1),
+                    "next": {
+                        "obs": torch.randn(1, 10, 3),
+                        "state_value": torch.ones(1, 10, 1),
+                        "reward": torch.randn(1, 10, 1, requires_grad=True),
+                        "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                        "terminated": torch.zeros(1, 10, 1, dtype=torch.bool),
+                    },
+                },
+                [1, 10],
+                names=[None, "time"],
+            )
+        else:
+            module = adv(
+                gamma=0.98,
+                value_network=value_net,
+                differentiable=True,
+                shifted=shifted,
+                skip_existing=skip_existing,
+                **kwargs,
+            )
+            td = TensorDict(
+                {
                     "obs": torch.randn(1, 10, 3),
                     "state_value": torch.ones(1, 10, 1),
-                    "reward": torch.randn(1, 10, 1, requires_grad=True),
-                    "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                    "next": {
+                        "obs": torch.randn(1, 10, 3),
+                        "state_value": torch.ones(1, 10, 1),
+                        "reward": torch.randn(1, 10, 1, requires_grad=True),
+                        "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                    },
                 },
-            },
-            [1, 10],
-            names=[None, "time"],
-        )
+                [1, 10],
+                names=[None, "time"],
+            )
         td = module(td.clone(False))
         if has_value_net and not skip_existing:
             exp_val = 0
@@ -10527,15 +10637,34 @@ class TestAdv:
             [GAE, {"lmbda": 0.95}],
             [TD1Estimator, {}],
             [TDLambdaEstimator, {"lmbda": 0.95}],
+            [VTrace, {}],
         ],
     )
     def test_set_keys(self, value, adv, kwargs):
         value_net = TensorDictModule(nn.Linear(3, 1), in_keys=["obs"], out_keys=[value])
-        module = adv(
-            gamma=0.98,
-            value_network=value_net,
-            **kwargs,
-        )
+        if adv == VTrace:
+            actor_net = TensorDictModule(
+                nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
+            )
+            actor_net = ProbabilisticActor(
+                module=actor_net,
+                in_keys=["logits"],
+                out_keys=["action"],
+                distribution_class=OneHotCategorical,
+                return_log_prob=True,
+            )
+            module = adv(
+                gamma=0.98,
+                actor_network=actor_net,
+                value_network=value_net,
+                **kwargs,
+            )
+        else:
+            module = adv(
+                gamma=0.98,
+                value_network=value_net,
+                **kwargs,
+            )
         module.set_keys(value=value)
         assert module.tensor_keys.value == value
 
@@ -10549,6 +10678,7 @@ class TestAdv:
             [GAE, {"lmbda": 0.95}],
             [TD1Estimator, {}],
             [TDLambdaEstimator, {"lmbda": 0.95}],
+            [VTrace, {}],
         ],
     )
     def test_set_deprecated_keys(self, adv, kwargs):
@@ -10557,14 +10687,36 @@ class TestAdv:
         )
 
         with pytest.warns(DeprecationWarning):
-            module = adv(
-                gamma=0.98,
-                value_network=value_net,
-                value_key="test_value",
-                advantage_key="advantage_test",
-                value_target_key="value_target_test",
-                **kwargs,
-            )
+
+            if adv == VTrace:
+                actor_net = TensorDictModule(
+                    nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
+                )
+                actor_net = ProbabilisticActor(
+                    module=actor_net,
+                    in_keys=["logits"],
+                    out_keys=["action"],
+                    distribution_class=OneHotCategorical,
+                    return_log_prob=True,
+                )
+                module = adv(
+                    gamma=0.98,
+                    actor_network=actor_net,
+                    value_network=value_net,
+                    value_key="test_value",
+                    advantage_key="advantage_test",
+                    value_target_key="value_target_test",
+                    **kwargs,
+                )
+            else:
+                module = adv(
+                    gamma=0.98,
+                    value_network=value_net,
+                    value_key="test_value",
+                    advantage_key="advantage_test",
+                    value_target_key="value_target_test",
+                    **kwargs,
+                )
             assert module.tensor_keys.value == "test_value"
             assert module.tensor_keys.advantage == "advantage_test"
             assert module.tensor_keys.value_target == "value_target_test"

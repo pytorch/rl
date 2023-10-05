@@ -1227,8 +1227,8 @@ def vtrace_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rho_thresh: torch.Tensor = torch.tensor(1.0),
-    c_thresh: torch.Tensor = torch.tensor(1.0),
+    rho_thresh: Union[float, torch.Tensor] = 1.0,
+    c_thresh: Union[float, torch.Tensor] = 1.0,
     time_dim: int = -2,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Computes V-Trace off-policy actor critic targets.
@@ -1256,11 +1256,17 @@ def vtrace_advantage_estimate(
         raise RuntimeError(SHAPE_ERR)
 
     device = state_value.device
+
+    if not isinstance(rho_thresh, torch.Tensor):
+        rho_thresh = torch.tensor(rho_thresh, device=device)
+    if not isinstance(c_thresh, torch.Tensor):
+        c_thresh = torch.tensor(c_thresh, device=device)
+
     c_thresh = c_thresh.to(device)
     rho_thresh = rho_thresh.to(device)
 
     not_done = (~done).int()
-    not_terminated = (~terminated).int()
+    not_terminated = not_done if terminated is None else (~terminated).int()
     *batch_size, time_steps, lastdim = not_done.shape
     done_discounts = gamma * not_done
     terminated_discounts = gamma * not_terminated
