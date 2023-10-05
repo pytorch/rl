@@ -5881,6 +5881,7 @@ class TestA2C(LossModuleTestBase):
         action_dim=4,
         device="cpu",
         observation_key="observation",
+        sample_log_prob_key="sample_log_prob",
     ):
         # Actor
         action_spec = BoundedTensorSpec(
@@ -5895,6 +5896,8 @@ class TestA2C(LossModuleTestBase):
             in_keys=["loc", "scale"],
             spec=action_spec,
             distribution_class=TanhNormal,
+            return_log_prob=True,
+            log_prob_key=sample_log_prob_key,
         )
         return actor.to(device)
 
@@ -6027,7 +6030,7 @@ class TestA2C(LossModuleTestBase):
         return td
 
     @pytest.mark.parametrize("gradient_mode", (True, False))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_a2c(self, device, gradient_mode, advantage, td_est):
@@ -6039,6 +6042,10 @@ class TestA2C(LossModuleTestBase):
         if advantage == "gae":
             advantage = GAE(
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9, value_network=value, actor_network=actor, differentiable=gradient_mode,
             )
         elif advantage == "td":
             advantage = TD1Estimator(
@@ -6164,7 +6171,7 @@ class TestA2C(LossModuleTestBase):
         not _has_functorch, reason=f"functorch not found, {FUNCTORCH_ERR}"
     )
     @pytest.mark.parametrize("gradient_mode", (True, False))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     def test_a2c_diff(self, device, gradient_mode, advantage):
         if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
@@ -6181,6 +6188,13 @@ class TestA2C(LossModuleTestBase):
         elif advantage == "td":
             advantage = TD1Estimator(
                 gamma=0.9, value_network=value, differentiable=gradient_mode
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
+                differentiable=gradient_mode,
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimator(
@@ -6231,6 +6245,7 @@ class TestA2C(LossModuleTestBase):
             ValueEstimators.TD1,
             ValueEstimators.TD0,
             ValueEstimators.GAE,
+            ValueEstimators.VTrace,
             ValueEstimators.TDLambda,
         ],
     )
@@ -6248,6 +6263,7 @@ class TestA2C(LossModuleTestBase):
             "reward": "reward",
             "done": "done",
             "terminated": "terminated",
+            "sample_log_prob": "sample_log_prob",
         }
 
         self.tensordict_keys_test(
@@ -6270,8 +6286,9 @@ class TestA2C(LossModuleTestBase):
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_a2c_tensordict_keys_run(self, device):
+    def test_a2c_tensordict_keys_run(self, device, advantage):
         """Test A2C loss module with non-default tensordict keys."""
         torch.manual_seed(self.seed)
         gradient_mode = True
@@ -6280,6 +6297,7 @@ class TestA2C(LossModuleTestBase):
         value_key = "state_value_test"
         action_key = "action_test"
         reward_key = "reward_test"
+        sample_log_prob_key = "sample_log_prob_test"
         done_key = ("done", "test")
         terminated_key = ("terminated", "test")
 
@@ -6291,14 +6309,19 @@ class TestA2C(LossModuleTestBase):
             terminated_key=terminated_key,
         )
 
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(device=device, sample_log_prob_key=sample_log_prob_key)
         value = self._create_mock_value(device=device, out_keys=[value_key])
-        advantage = GAE(
-            gamma=0.9,
-            lmbda=0.9,
-            value_network=value,
-            differentiable=gradient_mode,
-        )
+        if advantage == "gae":
+            advantage = GAE(
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
+                differentiable=gradient_mode,
+            )
         advantage.set_keys(
             advantage=advantage_key,
             value_target=value_target_key,
@@ -6306,6 +6329,7 @@ class TestA2C(LossModuleTestBase):
             reward=reward_key,
             done=done_key,
             terminated=terminated_key,
+            sample_log_prob=sample_log_prob_key,
         )
         loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
         loss_fn.set_keys(
@@ -6316,6 +6340,7 @@ class TestA2C(LossModuleTestBase):
             reward=reward_key,
             done=done_key,
             terminated=done_key,
+            sample_log_prob=sample_log_prob_key,
         )
 
         advantage(td)
