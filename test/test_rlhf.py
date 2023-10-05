@@ -453,7 +453,10 @@ class TestRollout:
 
     def _get_rollout_model(self, max_new_tokens=10):
         return RolloutFromModel(
-            self._model, self._ref_model, self._reward_model, max_new_tokens
+            model=self._model,
+            ref_model=self._ref_model,
+            reward_model=self._reward_model,
+            max_new_tokens=max_new_tokens,
         )
 
     def test_padded_right_to_left(self):
