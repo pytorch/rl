@@ -18,7 +18,7 @@ Please note that we provide 2 examples, one for single node training and one for
 You can execute the single node IMPALA algorithm on Atari environments by running the following command:
 
 ```bash
-python impala_single_node_ray.py
+python impala_single_node.py
 ```
 
 You can execute the multi-node IMPALA algorithm on Atari environments by running the following command:
