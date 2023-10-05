@@ -9292,6 +9292,7 @@ class TestValues:
         torch.testing.assert_close(r1, r3, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.99, 0.5, 0.1])
     @pytest.mark.parametrize("N", [(1,), (3,), (7, 3)])
     @pytest.mark.parametrize("T", [200, 5, 3])

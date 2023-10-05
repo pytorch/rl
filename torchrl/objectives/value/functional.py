@@ -1227,8 +1227,8 @@ def vtrace_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rho_thresh: Union[float, torch.Tensor] = 1.0,
-    c_thresh: Union[float, torch.Tensor] = 1.0,
+    rho_thresh: torch.Tensor = torch.tensor(1.0),
+    c_thresh: torch.Tensor = torch.tensor(1.0),
     time_dim: int = -2,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Computes V-Trace off-policy actor critic targets.
