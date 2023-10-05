@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from copy import deepcopy
 
 import hydra
 import torch
@@ -22,9 +21,9 @@ from examples.rlhf.utils import (
 from models.actor_critic import init_actor_critic
 from torchrl.data.rlhf.utils import AdaptiveKLController, RolloutFromModel
 
-from tqdm import tqdm
-
 from torchrl.record.loggers import get_logger
+
+from tqdm import tqdm
 from utils import flatten_td, resolve_name_or_path, setup
 
 
@@ -130,7 +129,7 @@ def main(cfg):
         # it's possible we didn't fill the replay buffer in the last iteration if
         # generation stopped early, so we empty first before repopulating
         rb.empty()
-        for i in range(collection_iters):
+        for _ in range(collection_iters):
             batch = next(train_prompt_loader)
             td = rollout_from_model.rollout_from_data(batch)
             with torch.no_grad(), ctx:
