@@ -4,24 +4,24 @@ env:
 
 # Ray init kwargs - https://docs.ray.io/en/latest/ray-core/api/doc/ray.init.html
 ray_init_config:
-  address: None
-  num_cpus: None
-  num_gpus: None
-  resources: None
-  object_store_memory: None
+  address: null
+  num_cpus: null
+  num_gpus: null
+  resources: null
+  object_store_memory: null
   local_mode: False
   ignore_reinit_error: False
-  include_dashboard: None
-  dashboard_host: "127.0.0.1"
-  dashboard_port: None
-  job_config: None
+  include_dashboard: null
+  dashboard_host: 127.0.0.1
+  dashboard_port: null
+  job_config: null
   configure_logging: True
-  logging_level: "info"
-  logging_format: None
+  logging_level: info
+  logging_format: null
   log_to_driver: True
-  namespace: None
-  runtime_env: None
-  storage: None
+  namespace: null
+  runtime_env: null
+  storage: null
 
 # Resources assigned to each IMPALA rollout collection worker
 remote_worker_resources:

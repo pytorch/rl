@@ -90,7 +90,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
         max_frames_per_traj=-1,
-        # ray_init_config=ray_init_config,
+        ray_init_config=ray_init_config,
         remote_configs=remote_config,
         sync=False,
         storing_device=device,

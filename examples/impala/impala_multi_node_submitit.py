@@ -10,7 +10,9 @@ results from Espeholt et al. 2018 for the on Atari Environments.
 import hydra
 
 
-@hydra.main(config_path=".", config_name="config_multi_node_submitit", version_base="1.1")
+@hydra.main(
+    config_path=".", config_name="config_multi_node_submitit", version_base="1.1"
+)
 def main(cfg: "DictConfig"):  # noqa: F821
 
     import time
