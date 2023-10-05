@@ -56,6 +56,7 @@ from .tensordict_module import (
     DistributionalQValueModule,
     EGreedyModule,
     EGreedyWrapper,
+    GRUModule,
     LMHeadActorValueOperator,
     LSTMModule,
     OrnsteinUhlenbeckProcessWrapper,
