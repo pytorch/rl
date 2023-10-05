@@ -20,10 +20,10 @@ version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
 git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
-pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu116 --force-reinstall
+pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu116 --force-reinstall
 
 # install tensordict
-pip3 install git+https://github.com/pytorch-labs/tensordict.git
+pip3 install git+https://github.com/pytorch/tensordict.git
 
 # smoke test
 python3 -c "import functorch;import tensordict"
