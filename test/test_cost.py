@@ -10579,6 +10579,7 @@ class TestAdv:
                 value_network=value_net,
                 differentiable=True,
                 shifted=shifted,
+                skip_existing=skip_existing,
                 **kwargs,
             )
             td = TensorDict(
