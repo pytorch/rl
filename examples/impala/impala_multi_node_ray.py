@@ -20,7 +20,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     from tensordict import TensorDict
     from torchrl.collectors import SyncDataCollector
-    from torchrl.collectors.distributed import RPCDataCollector
+    from torchrl.collectors.distributed import RayCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -55,24 +55,44 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor, critic = make_ppo_models(cfg.env.env_name)
     actor, critic = actor.to(device), critic.to(device)
 
-    slurm_kwargs = {
-        "timeout_min": cfg.slurm.config.timeout_min,
-        "slurm_partition": cfg.slurm.config.slurm_partition,
-        "slurm_cpus_per_task": cfg.slurm.config.slurm_cpus_per_task,
-        "slurm_gpus_per_node": cfg.slurm.config.slurm_gpus_per_node,
-    }
-
     # Create collector
-    collector = RPCDataCollector(
+    ray_init_config = {
+        "address": cfg.ray_init_config.address,
+        "num_cpus": cfg.ray_init_config.num_cpus,
+        "num_gpus": cfg.ray_init_config.num_gpus,
+        "resources": cfg.ray_init_config.resources,
+        "object_store_memory": cfg.ray_init_config.object_store_memory,
+        "local_mode": cfg.ray_init_config.local_mode,
+        "ignore_reinit_error": cfg.ray_init_config.ignore_reinit_error,
+        "include_dashboard": cfg.ray_init_config.include_dashboard,
+        "dashboard_host": cfg.ray_init_config.dashboard_host,
+        "dashboard_port": cfg.ray_init_config.dashboard_port,
+        "job_config": cfg.ray_init_config.job_config,
+        "configure_logging": cfg.ray_init_config.configure_logging,
+        "logging_level": cfg.ray_init_config.logging_level,
+        "logging_format": cfg.ray_init_config.logging_format,
+        "log_to_driver": cfg.ray_init_config.log_to_driver,
+        "namespace": cfg.ray_init_config.namespace,
+        "runtime_env": cfg.ray_init_config.runtime_env,
+        "storage": cfg.ray_init_config.storage,
+    }
+    remote_config = {
+        "num_cpus": cfg.remote_worker_resources.num_cpus,
+        "num_gpus": cfg.remote_worker_resources.num_gpus
+        if torch.cuda.device_count()
+        else 0,
+        "memory": cfg.remote_worker_resources.memory,
+    }
+    collector = RayCollector(
         create_env_fn=[make_env(cfg.env.env_name, device)] * num_workers,
         policy=actor,
         collector_class=SyncDataCollector,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
         max_frames_per_traj=-1,
+        ray_init_config=ray_init_config,
+        remote_configs=remote_config,
         sync=False,
-        slurm_kwargs=slurm_kwargs,
-        launcher="submitit",
         storing_device=device,
         update_after_each_batch=True,
     )
