@@ -117,7 +117,7 @@ class Evaluator:
     def __init__(
         self,
         *,
-        reward_estimator,
+        reward_estimatecr,
         model,
         prompt_logger,
         io_cfg,
