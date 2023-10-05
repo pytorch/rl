@@ -12,8 +12,7 @@ from tensordict import TensorDictBase
 from tensordict.utils import expand_as_right, NestedKey
 from torchrl.data.tensor_specs import UnboundedDiscreteTensorSpec
 
-from torchrl.envs.transforms import Transform
-from torchrl.envs.transforms.transforms import FORWARD_NOT_IMPLEMENTED
+from torchrl.envs.transforms.transforms import FORWARD_NOT_IMPLEMENTED, Transform
 
 
 class EndOfLifeTransform(Transform):
