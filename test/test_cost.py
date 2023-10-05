@@ -10353,6 +10353,13 @@ class TestAdv:
                 distribution_class=OneHotCategorical,
                 return_log_prob=True,
             )
+            module = adv(
+                gamma=0.98,
+                actor_network=actor_net,
+                value_network=value_net,
+                differentiable=False,
+                **kwargs,
+            )
             kwargs = {
                 "obs": torch.randn(1, 10, 3),
                 "sample_log_prob": torch.log(torch.rand(1, 10, 4)),
