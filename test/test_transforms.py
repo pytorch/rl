@@ -8712,7 +8712,7 @@ class TestActionMask(TransformBase):
     def test_transform_model(self):
         t = ActionMask()
         with pytest.raises(
-            RuntimeError, match="ActionMask must be executed within an environment"
+            RuntimeError, match=FORWARD_NOT_IMPLEMENTED.format(type(t))
         ):
             t(TensorDict({}, []))
 
@@ -8722,7 +8722,7 @@ class TestActionMask(TransformBase):
         rb.append_transform(t)
         rb.extend(TensorDict({"a": [1]}, [1]).expand(10))
         with pytest.raises(
-            RuntimeError, match="ActionMask must be executed within an environment"
+            RuntimeError, match=FORWARD_NOT_IMPLEMENTED.format(type(t))
         ):
             rb.sample(3)
 
