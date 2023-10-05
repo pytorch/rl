@@ -8,14 +8,16 @@ from typing import List, Optional, Union
 from warnings import warn
 
 import torch
-from tensordict.nn import TensorDictModuleWrapper
+from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from torchrl.collectors.collectors import _DataCollector
+from torchrl._utils import VERBOSE
+from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
-from torchrl.modules import reset_noise, SafeModule
+from torchrl.envs.utils import ExplorationType
+from torchrl.modules import reset_noise
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
@@ -76,11 +78,13 @@ class TrainerConfig:
 
 
 def make_trainer(
-    collector: _DataCollector,
+    collector: DataCollectorBase,
     loss_module: LossModule,
     recorder: Optional[EnvBase] = None,
     target_net_updater: Optional[TargetNetUpdater] = None,
-    policy_exploration: Optional[Union[TensorDictModuleWrapper, SafeModule]] = None,
+    policy_exploration: Optional[
+        Union[TensorDictModuleWrapper, TensorDictModule]
+    ] = None,
     replay_buffer: Optional[ReplayBuffer] = None,
     logger: Optional[Logger] = None,
     cfg: "DictConfig" = None,  # noqa: F821
@@ -88,7 +92,7 @@ def make_trainer(
     """Creates a Trainer instance given its constituents.
 
     Args:
-        collector (_DataCollector): A data collector to be used to collect data.
+        collector (DataCollectorBase): A data collector to be used to collect data.
         loss_module (LossModule): A TorchRL loss module
         recorder (EnvBase, optional): a recorder environment. If None, the trainer will train the policy without
             testing it.
@@ -168,16 +172,17 @@ def make_trainer(
     else:
         raise NotImplementedError(f"lr scheduler {cfg.lr_scheduler}")
 
-    print(
-        f"collector = {collector}; \n"
-        f"loss_module = {loss_module}; \n"
-        f"recorder = {recorder}; \n"
-        f"target_net_updater = {target_net_updater}; \n"
-        f"policy_exploration = {policy_exploration}; \n"
-        f"replay_buffer = {replay_buffer}; \n"
-        f"logger = {logger}; \n"
-        f"cfg = {cfg}; \n"
-    )
+    if VERBOSE:
+        print(
+            f"collector = {collector}; \n"
+            f"loss_module = {loss_module}; \n"
+            f"recorder = {recorder}; \n"
+            f"target_net_updater = {target_net_updater}; \n"
+            f"policy_exploration = {policy_exploration}; \n"
+            f"replay_buffer = {replay_buffer}; \n"
+            f"logger = {logger}; \n"
+            f"cfg = {cfg}; \n"
+        )
 
     if logger is not None:
         # log hyperparams
@@ -209,7 +214,11 @@ def make_trainer(
         # replay buffer is used 2 or 3 times: to register data, to sample
         # data and to update priorities
         rb_trainer = ReplayBufferTrainer(
-            replay_buffer, cfg.batch_size, memmap=False, device=device
+            replay_buffer,
+            cfg.batch_size,
+            flatten_tensordicts=False,
+            memmap=False,
+            device=device,
         )
 
         trainer.register_op("batch_process", rb_trainer.extend)
@@ -253,7 +262,7 @@ def make_trainer(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
             policy_exploration=policy_exploration,
-            recorder=recorder,
+            environment=recorder,
             record_interval=cfg.record_interval,
             log_keys=cfg.recorder_log_keys,
         )
@@ -266,11 +275,11 @@ def make_trainer(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
             policy_exploration=policy_exploration,
-            recorder=recorder,
+            environment=recorder,
             record_interval=cfg.record_interval,
-            exploration_mode="random",
+            exploration_type=ExplorationType.RANDOM,
             suffix="exploration",
-            out_keys={"reward": "r_evaluation_exploration"},
+            out_keys={("next", "reward"): "r_evaluation_exploration"},
         )
         trainer.register_op(
             "post_steps_log",

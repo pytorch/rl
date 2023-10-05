@@ -5,40 +5,36 @@
 from __future__ import annotations
 
 import collections
+
+import importlib
 import os
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
 
-from torchrl.data import (
+from torchrl._utils import VERBOSE
+
+from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
+    DiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
 
-from ...data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
-from ..gym_like import GymLikeEnv
+from torchrl.data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
+from torchrl.envs.gym_like import GymLikeEnv
+from torchrl.envs.utils import _classproperty
 
-if torch.has_cuda and torch.cuda.device_count() > 1:
+if torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
     os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
-    print("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
+    if VERBOSE:
+        print("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
 
-try:
-
-    import dm_control
-    import dm_env
-    from dm_control import suite
-    from dm_control.suite.wrappers import pixels
-
-    _has_dmc = True
-
-except ImportError as err:
-    _has_dmc = False
-    IMPORT_ERR = str(err)
+_has_dmc = _has_dm_control = importlib.util.find_spec("dm_control") is not None
 
 __all__ = ["DMControlEnv", "DMControlWrapper"]
 
@@ -48,6 +44,8 @@ def _dmcontrol_to_torchrl_spec_transform(
     dtype: Optional[torch.dtype] = None,
     device: DEVICE_TYPING = None,
 ) -> TensorSpec:
+    import dm_env
+
     if isinstance(spec, collections.OrderedDict):
         spec = {
             k: _dmcontrol_to_torchrl_spec_transform(item, device=device)
@@ -62,8 +60,8 @@ def _dmcontrol_to_torchrl_spec_transform(
             shape = torch.Size([1])
         return BoundedTensorSpec(
             shape=shape,
-            minimum=spec.minimum,
-            maximum=spec.maximum,
+            low=spec.minimum,
+            high=spec.maximum,
             dtype=dtype,
             device=device,
         )
@@ -85,8 +83,10 @@ def _dmcontrol_to_torchrl_spec_transform(
 
 
 def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
-    if not _has_dmc:
-        return {}
+    if not _has_dm_control:
+        raise ImportError("Cannot find dm_control in virtual environment.")
+    from dm_control import suite
+
     if not to_dict:
         return tuple(suite.BENCHMARKING) + tuple(suite.EXTRA)
     d = {}
@@ -96,7 +96,7 @@ def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
     for tup in suite.EXTRA:
         env_name = tup[0]
         d.setdefault(env_name, []).append(tup[1])
-    return d
+    return d.items()
 
 
 def _robust_to_tensor(array: Union[float, np.ndarray]) -> torch.Tensor:
@@ -111,7 +111,7 @@ class DMControlWrapper(GymLikeEnv):
 
     Args:
         env (dm_control.suite env): environment instance
-        from_pixels (bool): if True, the observation
+        from_pixels (bool): if ``True``, the observation
 
     Examples:
         >>> env = dm_control.suite.load("cheetah", "run")
@@ -125,7 +125,18 @@ class DMControlWrapper(GymLikeEnv):
 
     git_url = "https://github.com/deepmind/dm_control"
     libname = "dm_control"
-    available_envs = _get_envs()
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_dm_control:
+            return
+        yield from _get_envs()
+
+    @property
+    def lib(self):
+        import dm_control
+
+        return dm_control
 
     def __init__(self, env=None, **kwargs):
         if env is not None:
@@ -146,6 +157,8 @@ class DMControlWrapper(GymLikeEnv):
         self.pixels_only = pixels_only
 
         if from_pixels:
+            from dm_control.suite.wrappers import pixels
+
             self._set_egl_device(self.device)
             self.render_kwargs = {"camera_id": camera_id}
             if render_kwargs is not None:
@@ -159,9 +172,33 @@ class DMControlWrapper(GymLikeEnv):
 
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         # specs are defined when first called
-        return
+        self.observation_spec = _dmcontrol_to_torchrl_spec_transform(
+            self._env.observation_spec(), device=self.device
+        )
+        reward_spec = _dmcontrol_to_torchrl_spec_transform(
+            self._env.reward_spec(), device=self.device
+        )
+        if len(reward_spec.shape) == 0:
+            reward_spec.shape = torch.Size([1])
+        self.reward_spec = reward_spec
+        # populate default done spec
+        done_spec = DiscreteTensorSpec(
+            n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
+        )
+        self.done_spec = CompositeSpec(
+            done=done_spec.clone(),
+            truncated=done_spec.clone(),
+            terminated=done_spec.clone(),
+            device=self.device,
+        )
+        self.action_spec = _dmcontrol_to_torchrl_spec_transform(
+            self._env.action_spec(), device=self.device
+        )
 
     def _check_kwargs(self, kwargs: Dict):
+        dm_control = self.lib
+        from dm_control.suite.wrappers import pixels
+
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
@@ -189,6 +226,8 @@ class DMControlWrapper(GymLikeEnv):
         return seed
 
     def _set_seed(self, _seed: Optional[int]) -> Optional[int]:
+        from dm_control.suite.wrappers import pixels
+
         if _seed is None:
             return None
         random_state = np.random.RandomState(_seed)
@@ -205,70 +244,27 @@ class DMControlWrapper(GymLikeEnv):
 
     def _output_transform(
         self, timestep_tuple: Tuple["TimeStep"]  # noqa: F821
-    ) -> Tuple[np.ndarray, float, bool]:
+    ) -> Tuple[np.ndarray, float, bool, bool, dict]:
         if type(timestep_tuple) is not tuple:
             timestep_tuple = (timestep_tuple,)
         reward = timestep_tuple[0].reward
 
-        done = False  # dm_control envs are non-terminating
+        done = truncated = terminated = False  # dm_control envs are non-terminating
         observation = timestep_tuple[0].observation
-        return observation, reward, done
+        info = {}
 
-    @property
-    def input_spec(self) -> TensorSpec:
-        if self._input_spec is None:
-            self.__dict__["_input_spec"] = CompositeSpec(
-                action=_dmcontrol_to_torchrl_spec_transform(
-                    self._env.action_spec(), device=self.device
-                )
-            )
-        return self._input_spec
+        return observation, reward, terminated, truncated, done, info
 
-    @input_spec.setter
-    def input_spec(self, value: TensorSpec) -> None:
-        if not isinstance(value, CompositeSpec):
-            raise TypeError("The type of an input_spec must be Composite.")
-        self.__dict__["_input_spec"] = value
-
-    @property
-    def observation_spec(self) -> TensorSpec:
-        if self._observation_spec is None:
-            self.__dict__["_observation_spec"] = _dmcontrol_to_torchrl_spec_transform(
-                self._env.observation_spec(), device=self.device
-            )
-        return self._observation_spec
-
-    @observation_spec.setter
-    def observation_spec(self, value: TensorSpec) -> None:
-        if not isinstance(value, CompositeSpec):
-            raise TypeError("The type of an observation_spec must be Composite.")
-        self.__dict__["_observation_spec"] = value
-
-    @property
-    def reward_spec(self) -> TensorSpec:
-        if self._reward_spec is None:
-            reward_spec = _dmcontrol_to_torchrl_spec_transform(
-                self._env.reward_spec(), device=self.device
-            )
-            if len(reward_spec.shape) == 0:
-                reward_spec.shape = torch.Size([1])
-            self.__dict__["_reward_spec"] = reward_spec
-        return self._reward_spec
-
-    @reward_spec.setter
-    def reward_spec(self, value: TensorSpec) -> None:
-        if not hasattr(value, "shape"):
-            raise TypeError(
-                f"reward_spec of type {type(value)} do not have a shape " f"attribute."
-            )
-        if len(value.shape) == 0:
-            raise RuntimeError(
-                "the reward_spec shape cannot be empty (this error"
-                " usually comes from trying to set a reward_spec"
-                " with a null number of dimensions. Try using a multidimensional"
-                " spec instead, for instance with a singleton dimension at the tail)."
-            )
-        self.__dict__["_reward_spec"] = value
+    def _reset_output_transform(self, reset_data):
+        (
+            observation,
+            reward,
+            terminated,
+            truncated,
+            done,
+            info,
+        ) = self._output_transform(reset_data)
+        return observation, info
 
     def __repr__(self) -> str:
         return (
@@ -283,7 +279,7 @@ class DMControlEnv(DMControlWrapper):
         env_name (str): name of the environment
         task_name (str): name of the task
         seed (int, optional): seed to use for the environment
-        from_pixels (bool, optional): if True, the observation will be returned
+        from_pixels (bool, optional): if ``True``, the observation will be returned
             as an image.
             Default is False.
 
@@ -299,9 +295,7 @@ class DMControlEnv(DMControlWrapper):
     def __init__(self, env_name, task_name, **kwargs):
         if not _has_dmc:
             raise ImportError(
-                f"""dm_control python package was not found. Please install this dependency.
-(Got the error message: {IMPORT_ERR}).
-"""
+                "dm_control python package was not found. Please install this dependency."
             )
         kwargs["env_name"] = env_name
         kwargs["task_name"] = task_name
@@ -314,6 +308,8 @@ class DMControlEnv(DMControlWrapper):
         _seed: Optional[int] = None,
         **kwargs,
     ):
+        from dm_control import suite
+
         self.env_name = env_name
         self.task_name = task_name
 
@@ -325,7 +321,7 @@ class DMControlEnv(DMControlWrapper):
             del kwargs["pixels_only"]
 
         if not _has_dmc:
-            raise RuntimeError(
+            raise ImportError(
                 f"dm_control not found, unable to create {env_name}:"
                 f" {task_name}. Consider downloading and installing "
                 f"dm_control from {self.git_url}"
@@ -354,9 +350,10 @@ class DMControlEnv(DMControlWrapper):
             env_name = kwargs["env_name"]
             if "task_name" in kwargs:
                 task_name = kwargs["task_name"]
+                available_envs = dict(self.available_envs)
                 if (
-                    env_name not in self.available_envs
-                    or task_name not in self.available_envs[env_name]
+                    env_name not in available_envs
+                    or task_name not in available_envs[env_name]
                 ):
                     raise RuntimeError(
                         f"{env_name} with task {task_name} is unknown in {self.libname}"

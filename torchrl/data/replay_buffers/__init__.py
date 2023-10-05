@@ -10,4 +10,17 @@ from .replay_buffers import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from .storages import LazyMemmapStorage, LazyTensorStorage, ListStorage, Storage
+from .samplers import (
+    PrioritizedSampler,
+    RandomSampler,
+    Sampler,
+    SamplerWithoutReplacement,
+)
+from .storages import (
+    LazyMemmapStorage,
+    LazyTensorStorage,
+    ListStorage,
+    Storage,
+    TensorStorage,
+)
+from .writers import RoundRobinWriter, TensorDictRoundRobinWriter, Writer

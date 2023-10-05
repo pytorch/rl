@@ -119,10 +119,10 @@ This demo was presented at ICML 2022 on the industry demo day.
 # other dependencies (gym, torchvision, wandb / tensorboard) are optional.
 #
 # Data
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^
 #
 # TensorDict
-# ------------------------------
+# ----------
 
 # sphinx_gallery_start_ignore
 import warnings
@@ -279,7 +279,10 @@ for i, val in enumerate(rb._sampler._sum_tree):
     if i == len(rb):
         break
 
-import gym
+try:
+    import gymnasium as gym
+except ModuleNotFoundError:
+    import gym
 
 ###############################################################################
 # Envs
@@ -366,7 +369,10 @@ env.reset()
 
 ###############################################################################
 
-env.action_spec
+print(env.action_spec)
+
+env.close()
+del env
 
 ###############################################################################
 # Modules
@@ -468,10 +474,10 @@ sequence(tensordict, params)
 
 ###############################################################################
 
-import functorch
+from torch import vmap
 
 params_expand = params.expand(4)
-tensordict_exp = functorch.vmap(sequence, (None, 0))(tensordict, params_expand)
+tensordict_exp = vmap(sequence, (None, 0))(tensordict, params_expand)
 print(tensordict_exp)
 
 ###############################################################################
@@ -548,26 +554,26 @@ print(td)
 ###############################################################################
 
 # Sampling vs mode / mean
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 td = TensorDict({"input": torch.randn(3, 5)}, [3])
 
 torch.manual_seed(0)
-with set_exploration_mode("random"):
+with set_exploration_type(ExplorationType.RANDOM):
     td_module(td)
     print("random:", td["action"])
 
-with set_exploration_mode("mode"):
+with set_exploration_type(ExplorationType.MODE):
     td_module(td)
     print("mode:", td["action"])
 
-with set_exploration_mode("mean"):
+with set_exploration_type(ExplorationType.MODE):
     td_module(td)
     print("mean:", td["action"])
 
 ###############################################################################
 # Using Environments and Modules
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 from torchrl.envs.utils import step_mdp
 
@@ -621,36 +627,37 @@ print(tensordicts_stack)
 
 ###############################################################################
 
-# helper
 torch.manual_seed(0)
 env.set_seed(0)
 tensordict_rollout = env.rollout(policy=actor, max_steps=max_steps)
 tensordict_rollout
 
-###############################################################################
 
 (tensordict_rollout == tensordicts_prealloc).all()
 
 from tensordict.nn import TensorDictModule
 
+###############################################################################
 # Collectors
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^
 
 from torchrl.collectors import MultiaSyncDataCollector, MultiSyncDataCollector
-
-###############################################################################
 
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
 
+###############################################################################
 # EnvCreator makes sure that we can send a lambda function from process to process
+
 parallel_env = ParallelEnv(3, EnvCreator(lambda: GymEnv("Pendulum-v1")))
 create_env_fn = [parallel_env, parallel_env]
 
 actor_module = nn.Linear(3, 1)
 actor = TensorDictModule(actor_module, in_keys=["observation"], out_keys=["action"])
 
+###############################################################################
 # Sync data collector
+
 devices = ["cpu", "cpu"]
 
 collector = MultiSyncDataCollector(
@@ -659,7 +666,7 @@ collector = MultiSyncDataCollector(
     total_frames=240,
     max_frames_per_traj=-1,  # envs are terminating, we don't need to stop them early
     frames_per_batch=60,  # we want 60 frames at a time (we have 3 envs per sub-collector)
-    passing_devices=devices,  # len must match len of env created
+    storing_devices=devices,  # len must match len of env created
     devices=devices,
 )
 
@@ -682,7 +689,7 @@ collector = MultiaSyncDataCollector(
     total_frames=240,
     max_frames_per_traj=-1,  # envs are terminating, we don't need to stop them early
     frames_per_batch=60,  # we want 60 frames at a time (we have 3 envs per sub-collector)
-    passing_devices=devices,  # len must match len of env created
+    storing_devices=devices,  # len must match len of env created
     devices=devices,
 )
 
@@ -693,10 +700,12 @@ for i, d in enumerate(collector):
 print(i)
 collector.shutdown()
 del collector
+del create_env_fn
+del parallel_env
 
 ###############################################################################
 # Objectives
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^
 
 # TorchRL delivers meta-RL compatible loss functions
 # Disclaimer: This APi may change in the future
@@ -723,10 +732,12 @@ loss_fn = DDPGLoss(actor, value, gamma=0.99)
 tensordict = TensorDict(
     {
         "observation": torch.randn(10, 3),
-        "next": {"observation": torch.randn(10, 3)},
-        "reward": torch.randn(10, 1),
+        "next": {
+            "observation": torch.randn(10, 3),
+            "reward": torch.randn(10, 1),
+            "done": torch.zeros(10, 1, dtype=torch.bool),
+        },
         "action": torch.randn(10, 1),
-        "done": torch.zeros(10, 1, dtype=torch.bool),
     },
     batch_size=[10],
     device="cpu",
@@ -743,7 +754,7 @@ print(tensordict)
 
 ###############################################################################
 # State of the Library
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^
 #
 # TorchRL is currently an **alpha-release**: there may be bugs and there is no
 # guarantee about BC-breaking changes. We should be able to move to a beta-release
@@ -764,6 +775,6 @@ print(tensordict)
 
 ###############################################################################
 # Installing the Library
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^^
 #
 # The library is on PyPI: *pip install torchrl*

@@ -71,6 +71,15 @@ extensions = [
     "myst_parser",
 ]
 
+intersphinx_mapping = {
+    "torch": ("https://pytorch.org/docs/stable/", None),
+    "tensordict": ("https://pytorch-labs.github.io/tensordict/", None),
+    # "torchrl": ("https://pytorch.org/rl/", None),
+    "torchaudio": ("https://pytorch.org/audio/stable/", None),
+    "torchtext": ("https://pytorch.org/text/stable/", None),
+    "torchvision": ("https://pytorch.org/vision/stable/", None),
+}
+
 sphinx_gallery_conf = {
     "examples_dirs": "reference/generated/tutorials/",  # path to your example scripts
     "gallery_dirs": "tutorials",  # path to where to save gallery generated output
@@ -79,6 +88,9 @@ sphinx_gallery_conf = {
     "filename_pattern": "reference/generated/tutorials/",  # files to parse
     "notebook_images": "reference/generated/tutorials/media/",  # images to parse
     "download_all_examples": True,
+    "abort_on_example_error": False,
+    "only_warn_on_example_error": True,
+    "show_memory": True,
 }
 
 napoleon_use_ivar = True
@@ -160,14 +172,6 @@ texinfo_documents = [
         "Miscellaneous",
     ),
 ]
-
-
-# Example configuration for intersphinx: refer to the Python standard library.
-intersphinx_mapping = {
-    "python": ("https://docs.python.org/3/", None),
-    "torch": ("https://pytorch.org/docs/stable/", None),
-    "numpy": ("https://numpy.org/doc/stable/", None),
-}
 
 
 aafig_default_options = {"scale": 1.5, "aspect": 1.0, "proportional": True}

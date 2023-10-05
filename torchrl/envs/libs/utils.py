@@ -5,14 +5,26 @@
 
 # Copied from gym > 0.19 release
 
+# this file should only be accessed when gym is installed
+
 import collections
 import copy
 from collections.abc import MutableMapping
 
 import numpy as np
-from gym import ObservationWrapper, spaces
 
-STATE_KEY = "state"
+IMPORT_ERROR = None
+try:
+    # rule of thumbs: gym precedes
+    from gym import ObservationWrapper, spaces
+except ImportError as err:
+    IMPORT_ERROR = err
+    try:
+        from gymnasium import ObservationWrapper, spaces
+    except ImportError as err2:
+        raise err from err2
+
+STATE_KEY = "observation"
 
 
 class GymPixelObservationWrapper(ObservationWrapper):
@@ -20,9 +32,9 @@ class GymPixelObservationWrapper(ObservationWrapper):
 
     Args:
         env: The environment to wrap.
-        pixels_only: If :obj:`True` (default), the original observation returned
+        pixels_only: If ``True`` (default), the original observation returned
             by the wrapped environment will be discarded, and a dictionary
-            observation will only include pixels. If :obj:`False`, the
+            observation will only include pixels. If ``False``, the
             observation dictionary will contain both the original
             observations and the pixel observations.
         render_kwargs: Optional :obj:`dict` containing keyword arguments passed
@@ -52,7 +64,10 @@ class GymPixelObservationWrapper(ObservationWrapper):
             render_kwargs.setdefault(key, {})
 
             render_mode = render_kwargs[key].pop("mode", "rgb_array")
-            assert render_mode == "rgb_array", render_mode
+            if render_mode != "rgb_array":
+                raise ValueError(
+                    f"Expected render_mode to be 'rgb_array', git {render_mode}"
+                )
             render_kwargs[key]["mode"] = "rgb_array"
 
         wrapped_observation_space = env.observation_space

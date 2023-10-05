@@ -1,0 +1,38 @@
+name: Tests on Linux GPU (Gym)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+  workflow_dispatch:
+
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
+jobs:
+  unittests:
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      # gpu-arch-type: "cuda"
+      # gpu-arch-version: "11.6"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        set -euxo pipefail
+        export PYTHON_VERSION="3.8"
+        # export CU_VERSION="${{ inputs.gpu-arch-version }}"
+        export CU_VERSION="11.4"
+        export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/work/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin"
+        export TAR_OPTIONS="--no-same-owner"
+
+        ./.github/unittest/linux_libs/scripts_gym/setup_env.sh
+        ./.github/unittest/linux_libs/scripts_gym/batch_scripts.sh
+        ./.github/unittest/linux_libs/scripts_gym/post_process.sh

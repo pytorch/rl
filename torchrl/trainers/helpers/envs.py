@@ -2,12 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+from copy import copy
 from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import torch
 
+from torchrl._utils import VERBOSE
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
@@ -19,7 +20,6 @@ from torchrl.envs.transforms import (
     CenterCrop,
     Compose,
     DoubleToFloat,
-    FiniteTensorDictCheck,
     GrayScale,
     NoopResetEnv,
     ObservationNorm,
@@ -29,7 +29,12 @@ from torchrl.envs.transforms import (
     TransformedEnv,
     VecNorm,
 )
-from torchrl.envs.transforms.transforms import FlattenObservation, gSDENoise
+from torchrl.envs.transforms.transforms import (
+    FlattenObservation,
+    gSDENoise,
+    InitTracker,
+    StepCounter,
+)
 from torchrl.record.loggers import Logger
 from torchrl.record.recorder import VideoRecorder
 
@@ -108,9 +113,6 @@ def make_env_transforms(
             ),
         )
 
-    if cfg.noops:
-        env.append_transform(NoopResetEnv(cfg.noops))
-
     if from_pixels:
         if not cfg.catframes:
             raise RuntimeError(
@@ -123,19 +125,16 @@ def make_env_transforms(
         env.append_transform(Resize(cfg.image_size, cfg.image_size))
         if cfg.grayscale:
             env.append_transform(GrayScale())
-        env.append_transform(FlattenObservation(0, -3))
-        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
-        if stats is None:
-            obs_stats = {
-                "loc": torch.zeros(env.observation_spec["pixels"].shape),
-                "scale": torch.ones(env.observation_spec["pixels"].shape),
-            }
+        env.append_transform(FlattenObservation(0, -3, allow_positive_dim=True))
+        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"], dim=-3))
+        if stats is None and obs_norm_state_dict is None:
+            obs_stats = {}
+        elif stats is None:
+            obs_stats = copy(obs_norm_state_dict)
         else:
-            obs_stats = stats
+            obs_stats = copy(stats)
         obs_stats["standard_normal"] = True
         obs_norm = ObservationNorm(**obs_stats, in_keys=["pixels"])
-        if obs_norm_state_dict:
-            obs_norm.load_state_dict(obs_norm_state_dict)
         env.append_transform(obs_norm)
     if norm_rewards:
         reward_scaling = 1.0
@@ -146,21 +145,11 @@ def make_env_transforms(
     if reward_scaling is not None:
         env.append_transform(RewardScaling(reward_loc, reward_scaling))
 
-    double_to_float_list = []
-    double_to_float_inv_list = []
-    if env_library is DMControlEnv:
-        double_to_float_list += [
-            "reward",
-        ]
-        double_to_float_list += [
-            "action",
-        ]
-        double_to_float_inv_list += ["action"]  # DMControl requires double-precision
     if not from_pixels:
         selected_keys = [
             key
-            for key in env.observation_spec.keys()
-            if ("pixels" not in key) and (key not in env.input_spec.keys())
+            for key in env.observation_spec.keys(True, True)
+            if ("pixels" not in key) and (key not in env.state_spec.keys(True, True))
         ]
 
         # even if there is a single tensor, it'll be renamed in "observation_vector"
@@ -168,18 +157,17 @@ def make_env_transforms(
         env.append_transform(CatTensors(in_keys=selected_keys, out_key=out_key))
 
         if not vecnorm:
-            if stats is None:
-                _stats = {
-                    "loc": torch.zeros(env.observation_spec[out_key].shape),
-                    "scale": torch.ones(env.observation_spec[out_key].shape),
-                }
+            if stats is None and obs_norm_state_dict is None:
+                _stats = {}
+            elif stats is None:
+                _stats = copy(obs_norm_state_dict)
             else:
-                _stats = stats
+                _stats = copy(stats)
+            _stats.update({"standard_normal": True})
             obs_norm = ObservationNorm(
-                **_stats, in_keys=[out_key], standard_normal=True
+                **_stats,
+                in_keys=[out_key],
             )
-            if obs_norm_state_dict:
-                obs_norm.load_state_dict(obs_norm_state_dict)
             env.append_transform(obs_norm)
         else:
             env.append_transform(
@@ -189,33 +177,34 @@ def make_env_transforms(
                 )
             )
 
-        double_to_float_list.append(out_key)
-        env.append_transform(
-            DoubleToFloat(
-                in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
-            )
-        )
+        env.append_transform(DoubleToFloat())
 
         if hasattr(cfg, "catframes") and cfg.catframes:
-            env.append_transform(
-                CatFrames(N=cfg.catframes, in_keys=[out_key], cat_dim=-1)
-            )
+            env.append_transform(CatFrames(N=cfg.catframes, in_keys=[out_key], dim=-1))
 
     else:
-        env.append_transform(
-            DoubleToFloat(
-                in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
-            )
-        )
+        env.append_transform(DoubleToFloat())
 
     if hasattr(cfg, "gSDE") and cfg.gSDE:
         env.append_transform(
             gSDENoise(action_dim=action_dim_gsde, state_dim=state_dim_gsde)
         )
 
-    env.append_transform(FiniteTensorDictCheck())
+    env.append_transform(StepCounter())
+    env.append_transform(InitTracker())
 
     return env
+
+
+def get_norm_state_dict(env):
+    """Gets the normalization loc and scale from the env state_dict."""
+    sd = env.state_dict()
+    sd = {
+        key: val
+        for key, val in sd.items()
+        if key.endswith("loc") or key.endswith("scale")
+    }
+    return sd
 
 
 def transformed_env_constructor(
@@ -252,7 +241,7 @@ def transformed_env_constructor(
         custom_env (EnvBase, optional): if an existing environment needs to be
             transformed_in, it can be passed directly to this helper. `custom_env_maker`
             and `custom_env` are exclusive features.
-        return_transformed_envs (bool, optional): if True, a transformed_in environment
+        return_transformed_envs (bool, optional): if ``True``, a transformed_in environment
             is returned.
         action_dim_gsde (int, Optional): if gSDE is used, this can present the action dim to initialize the noise.
             Make sure this is indicated in environment executed in parallel.
@@ -274,13 +263,13 @@ def transformed_env_constructor(
         categorical_action_encoding = cfg.categorical_action_encoding
 
         if custom_env is None and custom_env_maker is None:
-            if isinstance(cfg.collector_devices, str):
-                device = cfg.collector_devices
-            elif isinstance(cfg.collector_devices, Sequence):
-                device = cfg.collector_devices[0]
+            if isinstance(cfg.collector_device, str):
+                device = cfg.collector_device
+            elif isinstance(cfg.collector_device, Sequence):
+                device = cfg.collector_device[0]
             else:
                 raise ValueError(
-                    "collector_devices must be either a string or a sequence of strings"
+                    "collector_device must be either a string or a sequence of strings"
                 )
             env_kwargs = {
                 "env_name": env_name,
@@ -308,6 +297,11 @@ def transformed_env_constructor(
         else:
             raise RuntimeError("cannot provive both custom_env and custom_env_maker")
 
+        if cfg.noops and custom_env is None:
+            # this is a bit hacky: if custom_env is not None, it is probably a ParallelEnv
+            # that already has its NoopResetEnv set for the contained envs.
+            # There is a risk however that we're just skipping the NoopsReset instantiation
+            env = TransformedEnv(env, NoopResetEnv(cfg.noops))
         if not return_transformed_envs:
             return env
 
@@ -341,6 +335,11 @@ def parallel_env_constructor(
         kwargs: keyword arguments for the `transformed_env_constructor` method.
     """
     batch_transform = cfg.batch_transform
+    if not batch_transform:
+        raise NotImplementedError(
+            "batch_transform must be set to True for the recorder to be synced "
+            "with the collection envs."
+        )
     if cfg.env_per_collector == 1:
         kwargs.update({"cfg": cfg, "use_env_creator": True})
         make_transformed_env = transformed_env_constructor(**kwargs)
@@ -393,7 +392,8 @@ def get_stats_random_rollout(
             cfg=cfg, use_env_creator=False, stats={"loc": 0.0, "scale": 1.0}
         )()
 
-    print("computing state stats")
+    if VERBOSE:
+        print("computing state stats")
     if not hasattr(cfg, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
@@ -408,7 +408,7 @@ def get_stats_random_rollout(
     val_stats = torch.cat(val_stats, 0)
 
     if key is None:
-        keys = list(proof_environment.observation_spec.keys())
+        keys = list(proof_environment.observation_spec.keys(True, True))
         key = keys.pop()
         if len(keys):
             raise RuntimeError(
@@ -425,11 +425,12 @@ def get_stats_random_rollout(
     m[s == 0] = 0.0
     s[s == 0] = 1.0
 
-    print(
-        f"stats computed for {val_stats.numel()} steps. Got: \n"
-        f"loc = {m}, \n"
-        f"scale = {s}"
-    )
+    if VERBOSE:
+        print(
+            f"stats computed for {val_stats.numel()} steps. Got: \n"
+            f"loc = {m}, \n"
+            f"scale = {s}"
+        )
     if not torch.isfinite(m).all():
         raise RuntimeError("non-finite values found in mean")
     if not torch.isfinite(s).all():
@@ -473,7 +474,7 @@ def initialize_observation_norm_transforms(
         return
 
     if key is None:
-        keys = list(proof_environment.base_env.observation_spec.keys())
+        keys = list(proof_environment.base_env.observation_spec.keys(True, True))
         key = keys.pop()
         if len(keys):
             raise RuntimeError(
@@ -483,16 +484,9 @@ def initialize_observation_norm_transforms(
 
     if isinstance(proof_environment.transform, Compose):
         for transform in proof_environment.transform:
-            if (
-                isinstance(transform, ObservationNorm)
-                and transform.loc is None
-                and transform.scale is None
-            ):
+            if isinstance(transform, ObservationNorm) and not transform.initialized:
                 transform.init_stats(num_iter=num_iter, key=key)
-    elif (
-        proof_environment.transform.loc is None
-        and proof_environment.transform.scale is None
-    ):
+    elif not proof_environment.transform.initialized:
         proof_environment.transform.init_stats(num_iter=num_iter, key=key)
 
 
@@ -559,7 +553,7 @@ class EnvConfig:
     max_frames_per_traj: int = 1000
     # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
     batch_transform: bool = False
-    # if True, the transforms will be applied to the parallel env, and not to each individual env.\
+    # if ``True``, the transforms will be applied to the parallel env, and not to each individual env.\
     image_size: int = 84
     # if True and environment has discrete action space, then it is encoded as categorical values rather than one-hot.
     categorical_action_encoding: bool = False

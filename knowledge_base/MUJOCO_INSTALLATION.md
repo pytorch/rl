@@ -1,4 +1,4 @@
-## About MuJoCo
+# Working with MuJoCo-based environments
 
 From its [official repository](https://github.com/deepmind/mujoco/),
 > MuJoCo stands for Multi-Joint dynamics with Contact. It is a general purpose 
@@ -29,7 +29,7 @@ to enable fast rendering:
 $ sudo apt-get install libglfw3 libglew2.0 libgl1-mesa-glx libosmesa6
 ```
 If you don't, these libraries can be installed via conda but be aware of the fact
-that this is not the indented workflow and things may not work as expected:
+that this is not the intended workflow and things may not work as expected:
 ```shell
 $ conda activate mujoco_env
 $ conda install -c conda-forge glew
@@ -119,31 +119,58 @@ $ python
 ```
 This should trigger the building pipeline.
 
-**Known issues**
+
+**Sanity check**
+
+To check that your mujoco-py has been built against the GPU, run
+```python
+>>> import mujoco_py
+>>> print(mujoco_py.cymj) # check it has the tag: linuxgpuextensionbuilder
+```
+The result should contain a filename with the tag `linuxgpuextensionbuilder`.
+
+## Common Issues during import or when rendering Mujoco Environments
+
 The above setup will most likely cause some problems. We give a list of known 
 issues when running `import mujoco_py` and some troubleshooting for each of them:
 
 1. GL/glew.h not found
     ```
     /path/to/mujoco-py/mujoco_py/gl/eglshim.c:4:10: fatal error: GL/glew.h: No such file or directory
-     #include <GL/glew.h>
-              ^~~~~~~~~~~
-    ```
-    _Solution_: make sure glew is installed (see above: `conda install -c conda-forge glew` or the `apt-get` version of it).
+    4 | #include <GL/glew.h>
+      |          ^~~~~~~~~~~
+   ```
+
+   _Solution_: install glew and glew-devel
+
+   - Ubuntu: `sudo apt-get install libglew-dev libglew`
+   - CentOS: `sudo yum install glew glew-devel`
+   - Conda: `conda install -c conda-forge glew`
+
 2. 
     ```
     include/GL/glu.h:38:10: fatal error: GL/gl.h: No such file or directory
       #include <GL/gl.h>
                ^~~~~~~~~
     ```
+
     _Solution_: This should disappear once `mesalib` is installed: `conda install -y -c conda-forge mesalib`
 3. 
+   ```
+   ImportError: /lib/x86_64-linux-gnu/libstdc++.so.6: version `GLIBCXX_3.4.29' not found (required by /path/to/conda/envs/compile/bin/../lib/libOSMesa.so.8)
+   ```
+   
+   _Solution_: Install libgcc, e.g.: `conda install libgcc -y`. Then make sure that it is being loaded during execution:
+   ```
+   export LD_PRELOAD=$LD_PRELOAD:/path/to/conda/envs/compile/lib/libstdc++.so.6
+   ```
+4. 
    ```
    FileNotFoundError: [Errno 2] No such file or directory: 'patchelf'
    ```
 
-   _Solution_: `pip install patchelf`
-4. 
+    _Solution_: `pip install patchelf`
+5. 
     ```
     ImportError: /usr/lib/x86_64-linux-gnu/libOpenGL.so.0: undefined symbol: _glapi_tls_Current
     ```
@@ -155,7 +182,7 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
     conda env config vars set LD_PRELOAD=/path/to/conda/envs/mujoco_env/x86_64-conda-linux-gnu/sysroot/usr/lib64/libGLdispatch.so.0
     ```
 
-5.
+6. 
     ```
     mujoco.FatalError: gladLoadGL error
     
@@ -165,17 +192,8 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
     _Solution_: This can usually be sovled by setting EGL as your mujoco_gl backend: `MUJOCO_GL=egl python myscript.py`
 
 
-**Sanity check**
-To check that your mujoco-py has been built against the GPU, run
-```python
->>> import mujoco_py
->>> print(mujoco_py.cymj) # check it has the tag: linuxgpuextensionbuilder
-```
-The result should contain a filename with the tag `linuxgpuextensionbuilder`.
 
-## Common Issues when rendering Mujoco Environments
-
-1. RuntimeError with error stack like this when running jobs using schedulers like slurm:
+7. RuntimeError with error stack like this when running jobs using schedulers like slurm:
 
 ```
     File "mjrendercontext.pyx", line 46, in mujoco_py.cymj.MjRenderContext.__init__
@@ -187,21 +205,64 @@ The result should contain a filename with the tag `linuxgpuextensionbuilder`.
 RuntimeError: Failed to initialize OpenGL
 ```
 
-> Mujoco's EGL code indexes devices globally while CUDA_VISIBLE_DEVICES (when used with job schedulers like slurm) returns the local device ids. This can be worked around by setting the `GPUS` environment variable to the global device id. For slurm, it can be obtained using `SLURM_STEP_GPUS` enviroment variable.
+> Mujoco's EGL code indexes devices globally while CUDA_VISIBLE_DEVICES 
+  (when used with job schedulers like slurm) returns the local device ids. 
+  This can be worked around by setting the `GPUS` environment variable to the 
+  global device id. For slurm, it can be obtained using `SLURM_STEP_GPUS` enviroment variable.
 
-2. Rendered images are completely black.
+8. Rendered images are completely black.
 
-> Make sure to call `env.render()` before reading the pixels.
+   _Solution_: Make sure to call `env.render()` before reading the pixels.
 
-3. `patchelf` dependency is missing.
+9. `patchelf` dependency is missing.
 
-> Install using `conda install patchelf` or `pip install patchelf`
+   _Solution_: Install using `conda install patchelf` or `pip install patchelf`
 
-4. Errors like "Onscreen rendering needs 101 device"
+10. Errors like "Onscreen rendering needs 101 device"
 
-> Make sure to set `DISPLAY` environment variable correctly.
+    _Solution_: Make sure to set `DISPLAY` environment variable correctly.
 
-5. `ImportError: Cannot initialize a headless EGL display.`
-  Make sure you have installed mujoco and all its dependencies (see instructions above).
-  Make sure you have set the `MUJOCO_GL=egl`.
-  Make sure you have a GPU accessible on your machine.
+11. `ImportError: Cannot initialize a headless EGL display.`
+
+    _Solution_: Make sure you have installed mujoco and all its dependencies (see instructions above).
+    Make sure you have set the `MUJOCO_GL=egl`.
+    Make sure you have a GPU accessible on your machine.
+
+12. `cannot find -lGL: No such file or directory`
+
+    _Solution_: call `conda install -c anaconda mesa-libgl-devel-cos6-x86_64`
+
+13. ```
+    RuntimeError: Failed to initialize OpenGL
+    ```
+
+    _Solution_: Install libEGL:
+
+    - Ubuntu: `sudo apt install libegl-dev libegl`
+    - CentOS: `sudo yum install mesa-libEGL mesa-libEGL-devel`
+    - Conda: `conda install -c anaconda mesa-libegl-cos6-x86_64`
+
+14. ```
+    fatal error: X11/Xlib.h: No such file or directory
+       | #include <X11/Xlib.h>
+       |          ^~~~~~~~~~~~
+    ```
+
+    _Solution_: Install X11:
+
+    - Ubuntu: `sudo apt install libx11-dev`
+    - CentOS: `sudo yum install libX11`
+    - Conda: `conda install -c conda-forge xorg-libx11`
+
+15. ```
+    fatal error: GL/osmesa.h: No such file or directory
+        1 | #include <GL/osmesa.h>
+          |          ^~~~~~~~~~~~~
+    compilation terminated.
+    ```
+
+    _Solution_: Install Osmesa:
+
+    - Ubuntu: `sudo apt-get install libosmesa6-dev`
+    - CentOS: `sudo yum install mesa-libOSMesa-devel`
+    - Conda: `conda install -c menpo osmesa`

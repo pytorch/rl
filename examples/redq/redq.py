@@ -12,7 +12,7 @@ import torch.cuda
 from hydra.core.config_store import ConfigStore
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -23,6 +23,7 @@ from torchrl.trainers.helpers.collectors import (
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     EnvConfig,
+    get_norm_state_dict,
     initialize_observation_norm_transforms,
     parallel_env_constructor,
     retrieve_observation_norms_state_dict,
@@ -63,7 +64,7 @@ DEFAULT_REWARD_SCALING = {
 }
 
 
-@hydra.main(version_base=None, config_path=".", config_name="config")
+@hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
@@ -134,7 +135,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         actor_model_explore.share_memory()
 
     if cfg.gSDE:
-        with torch.no_grad(), set_exploration_mode("random"):
+        with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
             # get dimensions to build the parallel env
             proof_td = actor_model_explore(proof_env.reset().to(device))
         action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]
@@ -170,23 +171,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger=logger,
         use_env_creator=False,
     )()
-
-    # remove video recorder from recorder to have matching state_dict keys
-    if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.base_env)
-        for transform in recorder.transform:
-            if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform.clone())
-    else:
-        recorder_rm = recorder
-
     if isinstance(create_env_fn, ParallelEnv):
-        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
-        create_env_fn.close()
+        raise NotImplementedError("This behaviour is deprecated")
     elif isinstance(create_env_fn, EnvCreator):
-        recorder_rm.load_state_dict(create_env_fn().state_dict())
+        recorder.transform[1:].load_state_dict(
+            get_norm_state_dict(create_env_fn()), strict=False
+        )
+    elif isinstance(create_env_fn, TransformedEnv):
+        recorder.transform = create_env_fn.transform.clone()
     else:
-        recorder_rm.load_state_dict(create_env_fn.state_dict())
+        raise NotImplementedError(f"Unsupported env type {type(create_env_fn)}")
+    if logger is not None and video_tag:
+        recorder.insert_transform(0, VideoRecorder(logger=logger, tag=video_tag))
 
     # reset reward scaling
     for t in recorder.transform:

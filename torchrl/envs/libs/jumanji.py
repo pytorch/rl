@@ -2,14 +2,18 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib.util
 
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+from torchrl.envs.utils import _classproperty
 
-from torchrl.data import (
+_has_jumanji = importlib.util.find_spec("jumanji") is not None
+
+from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DEVICE_TYPING,
@@ -20,31 +24,23 @@ from torchrl.data import (
     UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
-from torchrl.envs import GymLikeEnv
+from torchrl.envs.gym_like import GymLikeEnv
 
-try:
-    import jax
-    import jumanji
-    from jax import numpy as jnp
-    from torchrl.envs.libs.jax_utils import (
-        _extract_spec,
-        _ndarray_to_tensor,
-        _object_to_tensordict,
-        _tensordict_to_object,
-        _tree_flatten,
-        _tree_reshape,
-    )
-
-    _has_jumanji = True
-    IMPORT_ERR = ""
-except ImportError as err:
-    _has_jumanji = False
-    IMPORT_ERR = str(err)
+from torchrl.envs.libs.jax_utils import (
+    _extract_spec,
+    _ndarray_to_tensor,
+    _object_to_tensordict,
+    _tensordict_to_object,
+    _tree_flatten,
+    _tree_reshape,
+)
 
 
 def _get_envs():
     if not _has_jumanji:
-        return []
+        raise ImportError("Jumanji is not installed in your virtual environment.")
+    import jumanji
+
     return jumanji.registered_environments()
 
 
@@ -54,6 +50,8 @@ def _jumanji_to_torchrl_spec_transform(
     device: DEVICE_TYPING = None,
     categorical_action_encoding: bool = True,
 ) -> TensorSpec:
+    import jumanji
+
     if isinstance(spec, jumanji.specs.DiscreteArray):
         action_space_cls = (
             DiscreteTensorSpec
@@ -69,8 +67,8 @@ def _jumanji_to_torchrl_spec_transform(
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return BoundedTensorSpec(
             shape=shape,
-            minimum=np.asarray(spec.minimum),
-            maximum=np.asarray(spec.maximum),
+            low=np.asarray(spec.minimum),
+            high=np.asarray(spec.maximum),
             dtype=dtype,
             device=device,
         )
@@ -132,18 +130,25 @@ class JumanjiWrapper(GymLikeEnv):
     """
 
     git_url = "https://github.com/instadeepai/jumanji"
-    available_envs = _get_envs()
     libname = "jumanji"
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_jumanji:
+            return
+        yield from _get_envs()
 
     @property
     def lib(self):
+        import jumanji
+
         return jumanji
 
-    def __init__(self, env: "jumanji.env.Environment" = None, **kwargs):
+    def __init__(self, env: "jumanji.env.Environment" = None, **kwargs):  # noqa: F821
         if not _has_jumanji:
             raise ImportError(
                 "jumanji is not installed or importing it failed. Consider checking your installation."
-            ) from IMPORT_ERR
+            )
         if env is not None:
             kwargs["env"] = env
         super().__init__(**kwargs)
@@ -166,6 +171,9 @@ class JumanjiWrapper(GymLikeEnv):
         return env
 
     def _make_state_example(self, env):
+        import jax
+        from jax import numpy as jnp
+
         key = jax.random.PRNGKey(0)
         keys = jax.random.split(key, self.batch_size.numel())
         state, _ = jax.vmap(env.reset)(jnp.stack(keys))
@@ -173,20 +181,24 @@ class JumanjiWrapper(GymLikeEnv):
         return state
 
     def _make_state_spec(self, env) -> TensorSpec:
+        import jax
+
         key = jax.random.PRNGKey(0)
         state, _ = env.reset(key)
         state_dict = _object_to_tensordict(state, self.device, batch_size=())
         state_spec = _extract_spec(state_dict)
         return state_spec
 
-    def _make_input_spec(self, env) -> TensorSpec:
-        return CompositeSpec(
-            action=_jumanji_to_torchrl_spec_transform(
-                env.action_spec(), device=self.device
-            ),
-        ).expand(self.batch_size)
+    def _make_action_spec(self, env) -> TensorSpec:
+        action_spec = _jumanji_to_torchrl_spec_transform(
+            env.action_spec(), device=self.device
+        )
+        action_spec = action_spec.expand(*self.batch_size, *action_spec.shape)
+        return action_spec
 
     def _make_observation_spec(self, env) -> TensorSpec:
+        jumanji = self.lib
+
         spec = env.observation_spec()
         new_spec = _jumanji_to_torchrl_spec_transform(spec, device=self.device)
         if isinstance(spec, jumanji.specs.Array):
@@ -209,18 +221,20 @@ class JumanjiWrapper(GymLikeEnv):
     def _make_specs(self, env: "jumanji.env.Environment") -> None:  # noqa: F821
 
         # extract spec from jumanji definition
-        self.input_spec = self._make_input_spec(env)
+        self.action_spec = self._make_action_spec(env)
         self.observation_spec = self._make_observation_spec(env)
         self.reward_spec = self._make_reward_spec(env)
 
         # extract state spec from instance
-        self.state_spec = self._make_state_spec(env).expand(self.batch_size)
-        self.input_spec["state"] = self.state_spec
+        state_spec = self._make_state_spec(env).expand(self.batch_size)
+        self.state_spec["state"] = state_spec
+        self.observation_spec["state"] = state_spec.clone()
 
         # build state example for data conversion
         self._state_example = self._make_state_example(env)
 
     def _check_kwargs(self, kwargs: Dict):
+        jumanji = self.lib
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
@@ -230,16 +244,33 @@ class JumanjiWrapper(GymLikeEnv):
     def _init_env(self):
         pass
 
+    @property
+    def key(self):
+        key = getattr(self, "_key", None)
+        if key is None:
+            raise RuntimeError(
+                "the env.key attribute wasn't found. Make sure to call `env.set_seed(seed)` before any interaction."
+            )
+        return key
+
+    @key.setter
+    def key(self, value):
+        self._key = value
+
     def _set_seed(self, seed):
+        import jax
+
         if seed is None:
             raise Exception("Jumanji requires an integer seed.")
         self.key = jax.random.PRNGKey(seed)
 
     def read_state(self, state):
         state_dict = _object_to_tensordict(state, self.device, self.batch_size)
-        return self.state_spec.encode(state_dict)
+        return self.state_spec["state"].encode(state_dict)
 
     def read_obs(self, obs):
+        from jax import numpy as jnp
+
         if isinstance(obs, (list, jnp.ndarray, np.ndarray)):
             obs_dict = _ndarray_to_tensor(obs).to(self.device)
         else:
@@ -247,11 +278,11 @@ class JumanjiWrapper(GymLikeEnv):
         return super().read_obs(obs_dict)
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        import jax
 
         # prepare inputs
         state = _tensordict_to_object(tensordict.get("state"), self._state_example)
         action = self.read_action(tensordict.get("action"))
-        reward = self.reward_spec.zero()
 
         # flatten batch size into vector
         state = _tree_flatten(state, self.batch_size)
@@ -267,7 +298,7 @@ class JumanjiWrapper(GymLikeEnv):
         # collect outputs
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
-        reward = self.read_reward(reward, np.asarray(timestep.reward))
+        reward = self.read_reward(np.asarray(timestep.reward))
         done = timestep.step_type == self.lib.types.StepType.LAST
         done = _ndarray_to_tensor(done).view(torch.bool).to(self.device)
 
@@ -279,6 +310,8 @@ class JumanjiWrapper(GymLikeEnv):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
+        tensordict_out.set("terminated", done)
+        # tensordict_out.set("terminated", done)
         tensordict_out["state"] = state_dict
 
         return tensordict_out
@@ -286,6 +319,8 @@ class JumanjiWrapper(GymLikeEnv):
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
+        import jax
+        from jax import numpy as jnp
 
         # generate random keys
         self.key, *keys = jax.random.split(self.key, self.numel() + 1)
@@ -300,7 +335,7 @@ class JumanjiWrapper(GymLikeEnv):
         # collect outputs
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
-        done = torch.zeros(self.batch_size, dtype=torch.bool)
+        done_td = self.full_done_spec.zero()
 
         # build results
         tensordict_out = TensorDict(
@@ -308,10 +343,16 @@ class JumanjiWrapper(GymLikeEnv):
             batch_size=self.batch_size,
             device=self.device,
         )
-        tensordict_out.set("done", done)
+        tensordict_out.update(done_td)
         tensordict_out["state"] = state_dict
 
         return tensordict_out
+
+    def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
+        ...
+
+    def _reset_output_transform(self, reset_outputs_tuple: Tuple) -> Tuple:
+        ...
 
 
 class JumanjiEnv(JumanjiWrapper):
@@ -332,16 +373,17 @@ class JumanjiEnv(JumanjiWrapper):
         self,
         env_name: str,
         **kwargs,
-    ) -> "jumanji.env.Environment":
+    ) -> "jumanji.env.Environment":  # noqa: F821
         if not _has_jumanji:
-            raise RuntimeError(
+            raise ImportError(
                 f"jumanji not found, unable to create {env_name}. "
                 f"Consider installing jumanji. More info:"
                 f" {self.git_url}."
-            ) from IMPORT_ERR
+            )
         from_pixels = kwargs.pop("from_pixels", False)
         pixels_only = kwargs.pop("pixels_only", True)
-        assert not kwargs
+        if kwargs:
+            raise ValueError(f"Extra kwargs are not supported by {type(self)}.")
         self.wrapper_frame_skip = 1
         env = self.lib.make(env_name, **kwargs)
         return super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)

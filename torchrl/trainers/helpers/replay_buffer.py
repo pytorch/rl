@@ -35,6 +35,7 @@ def make_replay_buffer(
         sampler=sampler,
         pin_memory=device != torch.device("cpu"),
         prefetch=cfg.buffer_prefetch,
+        batch_size=cfg.batch_size,
     )
     return buffer
 

@@ -5,7 +5,9 @@
 
 from .collectors import (
     aSyncDataCollector,
+    DataCollectorBase,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
+    RandomPolicy,
     SyncDataCollector,
 )

@@ -5,7 +5,13 @@
 import os
 from warnings import warn
 
+import torch
+
 from torch import multiprocessing as mp
+
+if torch.cuda.device_count() > 1:
+    n = torch.cuda.device_count() - 1
+    os.environ["MUJOCO_EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
 
 from ._extension import _init_extension
 
@@ -16,9 +22,6 @@ except ImportError:
     __version__ = None
 
 _init_extension()
-
-# if not HAS_OPS:
-#     print("could not load C++ libraries")
 
 try:
     mp.set_start_method("spawn")
@@ -38,3 +41,7 @@ import torchrl.envs
 import torchrl.modules
 import torchrl.objectives
 import torchrl.trainers
+
+# Filter warnings in subprocesses: True by default given the multiple optional
+# deps of the library. This can be turned on via `torchrl.filter_warnings_subprocess = False`.
+filter_warnings_subprocess = True

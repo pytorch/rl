@@ -6,19 +6,19 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
-from tensordict.nn import TensorDictModuleWrapper
+from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
 
 from torchrl.collectors.collectors import (
-    _DataCollector,
+    DataCollectorBase,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
-from torchrl.data import MultiStep
-from torchrl.envs import ParallelEnv
+from torchrl.data.postprocs import MultiStep
+from torchrl.envs.batched_envs import ParallelEnv
 from torchrl.envs.common import EnvBase
-from torchrl.modules import SafeProbabilisticSequential
+from torchrl.envs.utils import ExplorationType
 
 
 def sync_async_collector(
@@ -34,7 +34,7 @@ def sync_async_collector(
 
 
             +----------------------------------------------------------------------+
-            |           "MultiConcurrentCollector"                |                |
+            |           "MultiaSyncDataCollector"                 |                |
             |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |
             |  "Collector 1"  |  "Collector 2"  |  "Collector 3"  |     "Main"     |
             |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|
@@ -95,7 +95,7 @@ def sync_sync_collector(
     .. aafig::
 
             +----------------------------------------------------------------------+
-            |            "MultiConcurrentCollector"               |                |
+            |            "MultiSyncDataCollector"                 |                |
             |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |
             |   "Collector 1" |  "Collector 2"  |  "Collector 3"  |     Main       |
             |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|
@@ -141,10 +141,10 @@ def sync_sync_collector(
 
     """
     if num_collectors == 1:
-        if "devices" in kwargs:
-            kwargs["device"] = kwargs.pop("devices")
-        if "passing_devices" in kwargs:
-            kwargs["passing_device"] = kwargs.pop("passing_devices")
+        if "device" in kwargs:
+            kwargs["device"] = kwargs.pop("device")
+        if "storing_device" in kwargs:
+            kwargs["storing_device"] = kwargs.pop("storing_device")
         return _make_collector(
             SyncDataCollector,
             env_fns=env_fns,
@@ -175,7 +175,7 @@ def _make_collector(
     num_env_per_collector: Optional[int] = None,
     num_collectors: Optional[int] = None,
     **kwargs,
-) -> _DataCollector:
+) -> DataCollectorBase:
     if env_kwargs is None:
         env_kwargs = {}
     if isinstance(env_fns, list):
@@ -249,10 +249,12 @@ def _make_collector(
 
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticSequential],
+    actor_model_explore: Union[
+        TensorDictModuleWrapper, ProbabilisticTensorDictSequential
+    ],
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
-) -> _DataCollector:
+) -> DataCollectorBase:
     """Returns a data collector for off-policy algorithms.
 
     Args:
@@ -270,7 +272,7 @@ def make_collector_offpolicy(
     if cfg.multi_step:
         ms = MultiStep(
             gamma=cfg.gamma,
-            n_steps_max=cfg.n_steps_return,
+            n_steps=cfg.n_steps_return,
         )
     else:
         ms = None
@@ -280,10 +282,10 @@ def make_collector_offpolicy(
         env_kwargs.update(make_env_kwargs)
     elif make_env_kwargs is not None:
         env_kwargs = make_env_kwargs
-    cfg.collector_devices = (
-        cfg.collector_devices
-        if len(cfg.collector_devices) > 1
-        else cfg.collector_devices[0]
+    cfg.collector_device = (
+        cfg.collector_device
+        if len(cfg.collector_device) > 1
+        else cfg.collector_device[0]
     )
     collector_helper_kwargs = {
         "env_fns": make_env,
@@ -296,14 +298,12 @@ def make_collector_offpolicy(
         "num_env_per_collector": 1,
         # we already took care of building the make_parallel_env function
         "num_collectors": -cfg.num_workers // -cfg.env_per_collector,
-        "devices": cfg.collector_devices,
-        "passing_devices": cfg.collector_devices,
+        "device": cfg.collector_device,
+        "storing_device": cfg.collector_device,
         "init_random_frames": cfg.init_random_frames,
-        "pin_memory": cfg.pin_memory,
         "split_trajs": True,
         # trajectories must be separated if multi-step is used
-        "init_with_lag": cfg.init_with_lag,
-        "exploration_mode": cfg.exploration_mode,
+        "exploration_type": ExplorationType.from_str(cfg.exploration_mode),
     }
 
     collector = collector_helper(**collector_helper_kwargs)
@@ -313,10 +313,12 @@ def make_collector_offpolicy(
 
 def make_collector_onpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[TensorDictModuleWrapper, SafeProbabilisticSequential],
+    actor_model_explore: Union[
+        TensorDictModuleWrapper, ProbabilisticTensorDictSequential
+    ],
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
-) -> _DataCollector:
+) -> DataCollectorBase:
     """Makes a collector in on-policy settings.
 
     Args:
@@ -335,10 +337,10 @@ def make_collector_onpolicy(
         env_kwargs.update(make_env_kwargs)
     elif make_env_kwargs is not None:
         env_kwargs = make_env_kwargs
-    cfg.collector_devices = (
-        cfg.collector_devices
-        if len(cfg.collector_devices) > 1
-        else cfg.collector_devices[0]
+    cfg.collector_device = (
+        cfg.collector_device
+        if len(cfg.collector_device) > 1
+        else cfg.collector_device[0]
     )
     collector_helper_kwargs = {
         "env_fns": make_env,
@@ -351,12 +353,10 @@ def make_collector_onpolicy(
         "num_env_per_collector": 1,
         # we already took care of building the make_parallel_env function
         "num_collectors": -cfg.num_workers // -cfg.env_per_collector,
-        "devices": cfg.collector_devices,
-        "passing_devices": cfg.collector_devices,
-        "pin_memory": cfg.pin_memory,
+        "device": cfg.collector_device,
+        "storing_device": cfg.collector_device,
         "split_trajs": True,
         # trajectories must be separated in online settings
-        "init_with_lag": cfg.init_with_lag,
         "exploration_mode": cfg.exploration_mode,
     }
 
@@ -369,16 +369,12 @@ def make_collector_onpolicy(
 class OnPolicyCollectorConfig:
     """On-policy collector config struct."""
 
-    collector_devices: Any = field(default_factory=lambda: ["cpu"])
+    collector_device: Any = field(default_factory=lambda: ["cpu"])
     # device on which the data collector should store the trajectories to be passed to this script.
     # If the collector device differs from the policy device (cuda:0 if available), then the
     # weights of the collector policy are synchronized with collector.update_policy_weights_().
     pin_memory: bool = False
-    # if True, the data collector will call pin_memory before dispatching tensordicts onto the passing device
-    init_with_lag: bool = False
-    # if True, the first trajectory will be truncated earlier at a random step. This is helpful
-    # to desynchronize the environments, such that steps do no match in all collected
-    # rollouts. Especially useful for online training, to prevent cyclic sample indices.
+    # if ``True``, the data collector will call pin_memory before dispatching tensordicts onto the passing device
     frames_per_batch: int = 1000
     # number of steps executed in the environment per collection.
     # This value represents how many steps will the data collector execute and return in *each*
@@ -401,7 +397,7 @@ class OnPolicyCollectorConfig:
     # for each of these parallel wrappers. If env_per_collector=num_workers, no parallel wrapper is created
     seed: int = 42
     # seed used for the environment, pytorch and numpy.
-    exploration_mode: str = ""
+    exploration_mode: str = "random"
     # exploration mode of the data collector.
     async_collection: bool = False
     # whether data collection should be done asynchrously. Asynchrounous data collection means

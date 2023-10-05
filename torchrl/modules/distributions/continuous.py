@@ -11,11 +11,17 @@ import torch
 from torch import distributions as D, nn
 from torch.distributions import constraints
 
-from torchrl._torchrl import safetanh
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
-from torchrl.modules.distributions.utils import _cast_device
+
+# from torchrl._torchrl import safeatanh, safetanh
+from torchrl.modules.distributions.utils import (
+    _cast_device,
+    FasterTransformedDistribution,
+    safeatanh,
+    safetanh,
+)
 from torchrl.modules.utils import mappings
 
 __all__ = [
@@ -54,9 +60,9 @@ class IndependentNormal(D.Independent):
 
             Default is 5.0
 
-        tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw value
-            is kept.
-            Default is :obj:`True`;
+        tanh_loc (bool, optional): if ``False``, the above formula is used for
+            the location scaling, otherwise the raw value
+            is kept. Default is ``False``;
     """
 
     num_params: int = 2
@@ -66,7 +72,7 @@ class IndependentNormal(D.Independent):
         loc: torch.Tensor,
         scale: torch.Tensor,
         upscale: float = 5.0,
-        tanh_loc: bool = True,
+        tanh_loc: bool = False,
         event_dim: int = 1,
         **kwargs,
     ):
@@ -90,16 +96,18 @@ class SafeTanhTransform(D.TanhTransform):
     """TanhTransform subclass that ensured that the transformation is numerically invertible."""
 
     def _call(self, x: torch.Tensor) -> torch.Tensor:
-        y = safetanh(x)
-        return y
+        if x.dtype.is_floating_point:
+            eps = torch.finfo(x.dtype).resolution
+        else:
+            raise NotImplementedError(f"No tanh transform for {x.dtype} inputs.")
+        return safetanh(x, eps)
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
         if y.dtype.is_floating_point:
-            eps = torch.finfo(y.dtype).eps
+            eps = torch.finfo(y.dtype).resolution
         else:
-            raise NotImplementedError("No inverse tanh for integer inputs.")
-        y = y.clamp(-1 + eps, 1 - eps)
-        x = super()._inverse(y)
+            raise NotImplementedError(f"No inverse tanh for {y.dtype} inputs.")
+        x = safeatanh(y, eps)
         return x
 
 
@@ -180,9 +188,9 @@ class TruncatedNormal(D.Independent):
 
         min (torch.Tensor or number, optional): minimum value of the distribution. Default = -1.0;
         max (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
-        tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw value
-            is kept.
-            Default is :obj:`True`;
+        tanh_loc (bool, optional): if ``True``, the above formula is used for
+            the location scaling, otherwise the raw value is kept.
+            Default is ``False``;
     """
 
     num_params: int = 2
@@ -199,7 +207,7 @@ class TruncatedNormal(D.Independent):
         upscale: Union[torch.Tensor, float] = 5.0,
         min: Union[torch.Tensor, float] = -1.0,
         max: Union[torch.Tensor, float] = 1.0,
-        tanh_loc: bool = True,
+        tanh_loc: bool = False,
     ):
         err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
@@ -273,17 +281,17 @@ class TruncatedNormal(D.Independent):
         return super().log_prob(value, **kwargs)
 
 
-class TanhNormal(D.TransformedDistribution):
+class TanhNormal(FasterTransformedDistribution):
     """Implements a TanhNormal distribution with location scaling.
 
-    Location scaling prevents the location to be "too far" from 0 when a TanhTransform is applied, which ultimately
-    leads to numerically unstable samples and poor gradient computation (e.g. gradient explosion).
-    In practice, the location is computed according to
+    Location scaling prevents the location to be "too far" from 0 when a
+    ``TanhTransform`` is applied, but ultimately
+    leads to numerically unstable samples and poor gradient computation
+    (e.g. gradient explosion).
+    In practice, with location scaling the location is computed according to
 
         .. math::
             loc = tanh(loc / upscale) * upscale.
-
-    This behaviour can be disabled by switching off the tanh_loc parameter (see below).
 
 
     Args:
@@ -298,8 +306,8 @@ class TanhNormal(D.TransformedDistribution):
         max (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
         event_dims (int, optional): number of dimensions describing the action.
             Default is 1;
-        tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw
-            value is kept. Default is :obj:`True`;
+        tanh_loc (bool, optional): if ``True``, the above formula is used for the location scaling, otherwise the raw
+            value is kept. Default is ``False``;
     """
 
     arg_constraints = {
@@ -317,7 +325,7 @@ class TanhNormal(D.TransformedDistribution):
         min: Union[torch.Tensor, Number] = -1.0,
         max: Union[torch.Tensor, Number] = 1.0,
         event_dims: int = 1,
-        tanh_loc: bool = True,
+        tanh_loc: bool = False,
     ):
         err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
@@ -485,7 +493,7 @@ class Delta(D.Distribution):
         return self.param
 
 
-class TanhDelta(D.TransformedDistribution):
+class TanhDelta(FasterTransformedDistribution):
     """Implements a Tanh transformed_in Delta distribution.
 
     Args:

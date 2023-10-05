@@ -18,6 +18,8 @@ from hydra.core.config_store import ConfigStore
 # float16
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
+
+from torchrl.envs import EnvBase
 from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
@@ -67,7 +69,7 @@ def retrieve_stats_from_state_dict(obs_norm_state_dict):
     }
 
 
-@hydra.main(version_base=None, config_path=".", config_name="config")
+@hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
@@ -170,6 +172,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
+    if isinstance(create_env_fn, EnvBase):
+        create_env_fn.rollout(2)
+    else:
+        create_env_fn().rollout(2)
 
     # Create the replay buffer
 
@@ -177,10 +183,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_env=create_env_fn,
         actor_model_explore=exploration_policy,
         cfg=cfg,
-        # make_env_kwargs=[
-        #     {"device": device}
-        #     for device in cfg.collector_devices
-        # ],
     )
     print("collector:", collector)
 
@@ -190,7 +192,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         record_frames=cfg.record_frames,
         frame_skip=cfg.frame_skip,
         policy_exploration=policy,
-        recorder=make_recorder_env(
+        environment=make_recorder_env(
             cfg=cfg,
             video_tag=video_tag,
             obs_norm_state_dict=obs_norm_state_dict,
@@ -226,15 +228,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
         current_frames = tensordict.numel()
         collected_frames += current_frames
 
-        # Compared to the original paper, the replay buffer is not temporally sampled. We fill it with trajectories of length batch_length.
-        # To be closer to the paper, we would need to fill it with trajectories of lentgh 1000 and then sample subsequences of length batch_length.
+        # Compared to the original paper, the replay buffer is not temporally
+        # sampled. We fill it with trajectories of length batch_length.
+        # To be closer to the paper, we would need to fill it with trajectories
+        # of length 1000 and then sample subsequences of length batch_length.
 
-        # tensordict = tensordict.reshape(-1, cfg.batch_length)
-        print(tensordict.shape)
+        tensordict = tensordict.reshape(-1, cfg.batch_length)
         replay_buffer.extend(tensordict.cpu())
         logger.log_scalar(
             "r_training",
-            tensordict["reward"].mean().detach().item(),
+            tensordict["next", "reward"].mean().detach().item(),
             step=collected_frames,
         )
 

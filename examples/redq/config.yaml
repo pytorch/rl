@@ -18,8 +18,7 @@ init_random_frames: 25000
 activation: elu
 gSDE: 0
 from_pixels: 0
-#collector_devices: [cuda:1,cuda:1,cuda:1,cuda:1]
-collector_devices: [cpu,cpu]
+collector_device: cpu
 env_per_collector: 1
 num_workers: 2
 lr_scheduler: ""

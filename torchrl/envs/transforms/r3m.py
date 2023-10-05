@@ -34,6 +34,22 @@ try:
 except ImportError:
     _has_tv = False
 
+try:
+    from torchvision.models import ResNet18_Weights, ResNet34_Weights, ResNet50_Weights
+    from torchvision.models._api import WeightsEnum
+except ImportError:
+
+    class WeightsEnum:  # noqa: D101
+        # placeholder
+        pass
+
+
+R3M_MODEL_MAP = {
+    "resnet18": "r3m_18",
+    "resnet34": "r3m_34",
+    "resnet50": "r3m_50",
+}
+
 
 class _R3MNet(Transform):
 
@@ -45,18 +61,19 @@ class _R3MNet(Transform):
                 "Tried to instantiate R3M without torchvision. Make sure you have "
                 "torchvision installed in your environment."
             )
+        self.model_name = model_name
         if model_name == "resnet18":
-            self.model_name = "r3m_18"
+            # self.model_name = "r3m_18"
             self.outdim = 512
-            convnet = models.resnet18(pretrained=False)
+            convnet = models.resnet18()
         elif model_name == "resnet34":
-            self.model_name = "r3m_34"
+            # self.model_name = "r3m_34"
             self.outdim = 512
-            convnet = models.resnet34(pretrained=False)
+            convnet = models.resnet34()
         elif model_name == "resnet50":
-            self.model_name = "r3m_50"
+            # self.model_name = "r3m_50"
             self.outdim = 2048
-            convnet = models.resnet50(pretrained=False)
+            convnet = models.resnet50()
         else:
             raise NotImplementedError(
                 f"model {model_name} is currently not supported by R3M"
@@ -73,6 +90,8 @@ class _R3MNet(Transform):
             tensordict.exclude(*self.in_keys, inplace=True)
         return tensordict
 
+    forward = _call
+
     @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:
         shape = None
@@ -88,11 +107,11 @@ class _R3MNet(Transform):
         if not isinstance(observation_spec, CompositeSpec):
             raise ValueError("_R3MNet can only infer CompositeSpec")
 
-        keys = [key for key in observation_spec._specs.keys() if key in self.in_keys]
+        keys = [key for key in observation_spec.keys(True, True) if key in self.in_keys]
         device = observation_spec[keys[0]].device
         dim = observation_spec[keys[0]].shape[:-3]
 
-        observation_spec = CompositeSpec(observation_spec)
+        observation_spec = observation_spec.clone()
         if self.del_keys:
             for in_key in keys:
                 del observation_spec[in_key]
@@ -110,7 +129,6 @@ class _R3MNet(Transform):
             raise ValueError(
                 "model_name should be one of 'r3m_50', 'r3m_34' or 'r3m_18'"
             )
-        # url = "https://download.pytorch.org/models/rl/r3m/" + model_name
         url = "https://pytorch.s3.amazonaws.com/models/rl/r3m/" + model_name + ".pt"
         d = load_state_dict_from_url(
             url,
@@ -123,17 +141,34 @@ class _R3MNet(Transform):
         state_dict = td_flatten.to_dict()
         r3m_instance.convnet.load_state_dict(state_dict)
 
-    def load_weights(self, dir_prefix=None):
-        self._load_weights(self.model_name, self, dir_prefix)
-
-
-def _init_first(fun):
-    def new_fun(self, *args, **kwargs):
-        if not self.initialized:
-            self._init()
-        return fun(self, *args, **kwargs)
-
-    return new_fun
+    def load_weights(self, dir_prefix=None, tv_weights=None):
+        if dir_prefix is not None and tv_weights is not None:
+            raise RuntimeError(
+                "torchvision weights API does not allow for custom download path."
+            )
+        elif tv_weights is not None:
+            model_name = self.model_name
+            if model_name == "resnet18":
+                if isinstance(tv_weights, str):
+                    tv_weights = getattr(ResNet18_Weights, tv_weights)
+                convnet = models.resnet18(weights=tv_weights)
+            elif model_name == "resnet34":
+                if isinstance(tv_weights, str):
+                    tv_weights = getattr(ResNet34_Weights, tv_weights)
+                convnet = models.resnet34(weights=tv_weights)
+            elif model_name == "resnet50":
+                if isinstance(tv_weights, str):
+                    tv_weights = getattr(ResNet50_Weights, tv_weights)
+                convnet = models.resnet50(weights=tv_weights)
+            else:
+                raise NotImplementedError(
+                    f"model {model_name} is currently not supported by R3M"
+                )
+            convnet.fc = Identity()
+            self.convnet.load_state_dict(convnet.state_dict())
+        else:
+            model_name = R3M_MODEL_MAP[self.model_name]
+            self._load_weights(model_name, self, dir_prefix)
 
 
 class R3MTransform(Compose):
@@ -154,7 +189,7 @@ class R3MTransform(Compose):
     can ensure that the following code snippet works as expected:
 
     Examples:
-        >>> transform = R3MTransform("resenet50", in_keys=["pixels"])
+        >>> transform = R3MTransform("resnet50", in_keys=["pixels"])
         >>> env.append_transform(transform)
         >>> # the forward method will first call _init which will look at env.observation_spec
         >>> env.reset()
@@ -169,9 +204,14 @@ class R3MTransform(Compose):
             Defaults to 244.
         stack_images (bool, optional): if False, the images given in the :obj:`in_keys`
              argument will be treaded separetely and each will be given a single,
-             separated entry in the output tensordict. Defaults to :obj:`True`.
-        download (bool, optional): if True, the weights will be downloaded using
-            the torch.hub download API (i.e. weights will be cached for future use).
+             separated entry in the output tensordict. Defaults to ``True``.
+        download (bool, torchvision Weights config or corresponding string):
+            if ``True``, the weights will be downloaded using the torch.hub download
+            API (i.e. weights will be cached for future use).
+            These weights are the original weights from the R3M publication.
+            If the torchvision weights are needed, there are two ways they can be
+            obtained: :obj:`download=ResNet50_Weights.IMAGENET1K_V1` or :obj:`download="IMAGENET1K_V1"`
+            where :obj:`ResNet50_Weights` can be imported via :obj:`from torchvision.models import resnet50, ResNet50_Weights`.
             Defaults to False.
         download_path (str, optional): path where to download the models.
             Default is None (cache path determined by torch.hub utils).
@@ -194,7 +234,7 @@ class R3MTransform(Compose):
         out_keys: List[str] = None,
         size: int = 244,
         stack_images: bool = True,
-        download: bool = False,
+        download: Union[bool, WeightsEnum, str] = False,
         download_path: Optional[str] = None,
         tensor_pixels_keys: List[str] = None,
     ):
@@ -302,8 +342,12 @@ class R3MTransform(Compose):
 
         for transform in transforms:
             self.append(transform)
-        if self.download:
-            self[-1].load_weights(dir_prefix=self.download_path)
+        if self.download is True:
+            self[-1].load_weights(dir_prefix=self.download_path, tv_weights=None)
+        elif self.download:
+            self[-1].load_weights(
+                dir_prefix=self.download_path, tv_weights=self.download
+            )
 
         if self._device is not None:
             self.to(self._device)

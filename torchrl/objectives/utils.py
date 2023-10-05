@@ -4,15 +4,65 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
+import warnings
+from enum import Enum
 from typing import Iterable, Optional, Union
 
 import torch
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.nn import TensorDictModule
+from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import SafeModule
+
+_GAMMA_LMBDA_DEPREC_WARNING = (
+    "Passing gamma / lambda parameters through the loss constructor "
+    "is deprecated and will be removed soon. To customize your value function, "
+    "run `loss_module.make_value_estimator(ValueEstimators.<value_fun>, gamma=val)`."
+)
+
+
+class ValueEstimators(Enum):
+    """Value function enumerator for custom-built estimators.
+
+    Allows for a flexible usage of various value functions when the loss module
+    allows it.
+
+    Examples:
+        >>> dqn_loss = DQNLoss(actor)
+        >>> dqn_loss.make_value_estimator(ValueEstimators.TD0, gamma=0.9)
+
+    """
+
+    TD0 = "Bootstrapped TD (1-step return)"
+    TD1 = "TD(1) (infinity-step return)"
+    TDLambda = "TD(lambda)"
+    GAE = "Generalized advantage estimate"
+
+
+def default_value_kwargs(value_type: ValueEstimators):
+    """Default value function keyword argument generator.
+
+    Args:
+        value_type (Enum.value): the value function type, from the
+        :class:`~torchrl.objectives.utils.ValueEstimators` class.
+
+    Examples:
+        >>> kwargs = default_value_kwargs(ValueEstimators.TDLambda)
+        {"gamma": 0.99, "lmbda": 0.95}
+
+    """
+    if value_type == ValueEstimators.TD1:
+        return {"gamma": 0.99, "differentiable": True}
+    elif value_type == ValueEstimators.TD0:
+        return {"gamma": 0.99, "differentiable": True}
+    elif value_type == ValueEstimators.GAE:
+        return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
+    elif value_type == ValueEstimators.TDLambda:
+        return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
+    else:
+        raise NotImplementedError(f"Unknown value type {value_type}.")
 
 
 class _context_manager:
@@ -42,7 +92,7 @@ def distance_loss(
         v2 (Tensor): a tensor with a shape compatible with v1
         loss_function (str): One of "l2", "l1" or "smooth_l1" representing which loss function is to be used.
         strict_shape (bool): if False, v1 and v2 are allowed to have a different shape.
-            Default is :obj:`True`.
+            Default is ``True``.
 
     Returns:
          A tensor of the shape v1.view_as(v2) or v2.view_as(v1) with values equal to the distance loss between the
@@ -89,53 +139,47 @@ class TargetNetUpdater:
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "TD3Loss"],  # noqa: F821
+        loss_module: "LossModule",  # noqa: F821
     ):
+        from torchrl.objectives.common import LossModule
 
-        _target_names = []
-        # for properties
-        for name in loss_module.__class__.__dict__:
-            if (
-                name.startswith("target_")
-                and (name.endswith("params") or name.endswith("buffers"))
-                and (getattr(loss_module, name) is not None)
-            ):
-                _target_names.append(name)
+        if not isinstance(loss_module, LossModule):
+            raise ValueError("The loss_module must be a LossModule instance.")
+        _has_update_associated = getattr(loss_module, "_has_update_associated", None)
+        for k in loss_module._has_update_associated.keys():
+            loss_module._has_update_associated[k] = True
+        try:
+            _target_names = []
+            for name, _ in loss_module.named_children():
+                # the TensorDictParams is a nn.Module instance
+                if name.startswith("target_") and name.endswith("_params"):
+                    _target_names.append(name)
 
-        # for regular lists: raise an exception
-        for name in loss_module.__dict__:
-            if (
-                name.startswith("target_")
-                and (name.endswith("params") or name.endswith("buffers"))
-                and (getattr(loss_module, name) is not None)
-            ):
+            if len(_target_names) == 0:
                 raise RuntimeError(
-                    "Your module seems to have a target tensor list contained "
-                    "in a non-dynamic structure (such as a list). If the "
-                    "module is cast onto a device, the reference to these "
-                    "tensors will be lost."
+                    "Did not find any target parameters or buffers in the loss module."
                 )
 
-        if len(_target_names) == 0:
-            raise RuntimeError(
-                "Did not find any target parameters or buffers in the loss module."
-            )
+            _source_names = ["".join(name.split("target_")) for name in _target_names]
 
-        _source_names = ["".join(name.split("target_")) for name in _target_names]
+            for _source in _source_names:
+                try:
+                    getattr(loss_module, _source)
+                except AttributeError as err:
+                    raise RuntimeError(
+                        f"Incongruent target and source parameter lists: "
+                        f"{_source} is not an attribute of the loss_module"
+                    ) from err
 
-        for _source in _source_names:
-            try:
-                getattr(loss_module, _source)
-            except AttributeError:
-                raise RuntimeError(
-                    f"Incongruent target and source parameter lists: "
-                    f"{_source} is not an attribute of the loss_module"
-                )
-
-        self._target_names = _target_names
-        self._source_names = _source_names
-        self.loss_module = loss_module
-        self.initialized = False
+            self._target_names = _target_names
+            self._source_names = _source_names
+            self.loss_module = loss_module
+            self.initialized = False
+            self.init_()
+            _has_update_associated = True
+        finally:
+            for k in loss_module._has_update_associated.keys():
+                loss_module._has_update_associated[k] = _has_update_associated
 
     @property
     def _targets(self):
@@ -152,6 +196,10 @@ class TargetNetUpdater:
         )
 
     def init_(self) -> None:
+        if self.initialized:
+            warnings.warn("Updated already initialized.")
+        found_distinct = False
+        self._distinct = {}
         for key, source in self._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
@@ -160,7 +208,18 @@ class TargetNetUpdater:
             # for p_source, p_target in zip(source, target):
             if target.requires_grad:
                 raise RuntimeError("the target parameter is part of a graph.")
+            self._distinct[key] = target.data_ptr() != source.data.data_ptr()
+            found_distinct = found_distinct or self._distinct[key]
             target.data.copy_(source.data)
+        if not found_distinct:
+            raise RuntimeError(
+                f"The target and source data are identical for all params. "
+                "Have you created proper target parameters? "
+                "If the loss has a ``delay_value`` kwarg, make sure to set it "
+                "to True if it is not done by default. "
+                f"If no target parameter is needed, do not use a target updater such as {type(self)}."
+            )
+
         self.initialized = True
 
     def step(self) -> None:
@@ -173,6 +232,8 @@ class TargetNetUpdater:
             if not isinstance(key, tuple):
                 key = (key,)
             key = ("target_" + key[0], *key[1:])
+            if not self._distinct[key]:
+                continue
             target = self._targets[key]
             if target.requires_grad:
                 raise RuntimeError("the target parameter is part of a graph.")
@@ -193,15 +254,21 @@ class TargetNetUpdater:
 
 
 class SoftUpdate(TargetNetUpdater):
-    """A soft-update class for target network update in Double DQN/DDPG.
+    r"""A soft-update class for target network update in Double DQN/DDPG.
 
     This was proposed in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf
+
+    One and only one decay factor (tau or eps) must be specified.
 
     Args:
         loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
         eps (scalar): epsilon in the update equation:
-            param = prev_param * eps + new_param * (1-eps)
-            default: 0.999
+            .. math::
+
+                \theta_t = \theta_{t-1} * \epsilon + \theta_t * (1-\epsilon)
+
+            Exclusive with ``tau``.
+        tau (scalar): Polyak tau. It is equal to ``1-eps``, and exclusive with it.
     """
 
     def __init__(
@@ -213,9 +280,28 @@ class SoftUpdate(TargetNetUpdater):
             "REDQLoss",  # noqa: F821
             "TD3Loss",  # noqa: F821
         ],
-        eps: float = 0.999,
+        *,
+        eps: float = None,
+        tau: Optional[float] = None,
     ):
-        if not (eps < 1.0 and eps > 0.0):
+        if eps is None and tau is None:
+            warnings.warn(
+                "Neither eps nor tau was provided. Taking the default value "
+                "eps=0.999. This behaviour will soon be deprecated.",
+                category=DeprecationWarning,
+            )
+            eps = 0.999
+        if (eps is None) ^ (tau is None):
+            if eps is None:
+                eps = 1 - tau
+        else:
+            raise ValueError("One and only one argument (tau or eps) can be specified.")
+        if eps < 0.5:
+            warnings.warn(
+                "Found an eps value < 0.5, which is unexpected. "
+                "You may want to use the `tau` keyword argument instead."
+            )
+        if not (eps <= 1.0 and eps >= 0.0):
             raise ValueError(
                 f"Got eps = {eps} when it was supposed to be between 0 and 1."
             )
@@ -234,6 +320,8 @@ class HardUpdate(TargetNetUpdater):
 
     Args:
         loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
+
+    Keyword Args:
         value_network_update_interval (scalar): how often the target network should be updated.
             default: 1000
     """
@@ -241,6 +329,7 @@ class HardUpdate(TargetNetUpdater):
     def __init__(
         self,
         loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "TD3Loss"],  # noqa: F821
+        *,
         value_network_update_interval: float = 1000,
     ):
         super(HardUpdate, self).__init__(loss_module)
@@ -266,7 +355,7 @@ class hold_out_net(_context_manager):
         self.network = network
         try:
             self.p_example = next(network.parameters())
-        except StopIteration:
+        except (AttributeError, StopIteration):
             self.p_example = torch.tensor([])
         self._prev_state = []
 
@@ -297,7 +386,7 @@ class hold_out_params(_context_manager):
 @torch.no_grad()
 def next_state_value(
     tensordict: TensorDictBase,
-    operator: Optional[SafeModule] = None,
+    operator: Optional[TensorDictModule] = None,
     next_val_key: str = "state_action_value",
     gamma: float = 0.99,
     pred_next_val: Optional[Tensor] = None,
@@ -332,8 +421,10 @@ def next_state_value(
     else:
         steps_to_next_obs = 1
 
-    rewards = tensordict.get("reward").squeeze(-1)
-    done = tensordict.get("done").squeeze(-1)
+    rewards = tensordict.get(("next", "reward")).squeeze(-1)
+    done = tensordict.get(("next", "done")).squeeze(-1)
+    if done.all() or gamma == 0:
+        return rewards
 
     if pred_next_val is None:
         next_td = step_mdp(tensordict)  # next_observation -> observation
@@ -347,3 +438,28 @@ def next_state_value(
     rewards = rewards.to(torch.float)
     target_value = rewards + (gamma**steps_to_next_obs) * target_value
     return target_value
+
+
+def _cache_values(fun):
+    """Caches the tensordict returned by a property."""
+    name = fun.__name__
+
+    def new_fun(self, netname=None):
+        __dict__ = self.__dict__
+        _cache = __dict__["_cache"]
+        attr_name = name
+        if netname is not None:
+            attr_name += "_" + netname
+        if attr_name in _cache:
+            out = _cache[attr_name]
+            return out
+        if netname is not None:
+            out = fun(self, netname)
+        else:
+            out = fun(self)
+        if is_tensor_collection(out):
+            out.lock_()
+        _cache[attr_name] = out
+        return out
+
+    return new_fun

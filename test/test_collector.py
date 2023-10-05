@@ -4,41 +4,73 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+
 import sys
 
 import numpy as np
 import pytest
 import torch
-from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
+from _utils_internal import (
+    check_rollout_consistency_multikey_env,
+    decorate_thread_sub_func,
+    generate_seeds,
+    get_default_devices,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+)
 from mocking_classes import (
     ContinuousActionVecMockEnv,
+    CountingBatchedEnv,
+    CountingEnv,
+    CountingEnvCountPolicy,
     DiscreteActionConvMockEnv,
     DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
+    HeteroCountingEnv,
+    HeteroCountingEnvPolicy,
     MockSerialEnv,
+    MultiKeyCountingEnv,
+    MultiKeyCountingEnvPolicy,
+    NestedCountingEnv,
 )
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
+
 from torch import nn
-from torchrl._utils import seed_generator
+from torchrl._utils import prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
+    _Interruptor,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
     RandomPolicy,
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
-from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
-from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.envs import (
+    EnvBase,
+    EnvCreator,
+    InitTracker,
+    ParallelEnv,
+    SerialEnv,
+    StepCounter,
+)
+from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
 from torchrl.envs.transforms import TransformedEnv, VecNorm
+from torchrl.envs.utils import (
+    _aggregate_resets,
+    _replace_last,
+    check_env_specs,
+    PARTIAL_MISSING_ERR,
+)
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
 # torch.set_default_dtype(torch.double)
-_os_is_windows = sys.platform == "win32"
-_python_is_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
-_python_is_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
+IS_WINDOWS = sys.platform == "win32"
+IS_OSX = sys.platform == "darwin"
+PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
+PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 
 
 class WrappablePolicy(nn.Module):
@@ -131,9 +163,9 @@ def make_policy(env):
 
 
 def _is_consistent_device_type(
-    device_type, policy_device_type, passing_device_type, tensordict_device_type
+    device_type, policy_device_type, storing_device_type, tensordict_device_type
 ):
-    if passing_device_type is None:
+    if storing_device_type is None:
         if device_type is None:
             if policy_device_type is None:
                 return tensordict_device_type == "cpu"
@@ -142,26 +174,26 @@ def _is_consistent_device_type(
 
         return tensordict_device_type == device_type
 
-    return tensordict_device_type == passing_device_type
+    return tensordict_device_type == storing_device_type
 
 
 @pytest.mark.skipif(
-    _os_is_windows and _python_is_3_10,
+    IS_WINDOWS and PYTHON_3_10,
     reason="Windows Access Violation in torch.multiprocessing / BrokenPipeError in multiprocessing.connection",
 )
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [2])
 @pytest.mark.parametrize("device", ["cuda", "cpu", None])
 @pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
-@pytest.mark.parametrize("passing_device", ["cuda", "cpu", None])
+@pytest.mark.parametrize("storing_device", ["cuda", "cpu", None])
 def test_output_device_consistency(
-    num_env, device, policy_device, passing_device, seed=40
+    num_env, device, policy_device, storing_device, seed=40
 ):
     if (
-        device == "cuda" or policy_device == "cuda" or passing_device == "cuda"
+        device == "cuda" or policy_device == "cuda" or storing_device == "cuda"
     ) and not torch.cuda.is_available():
         pytest.skip("cuda is not available")
 
-    if _os_is_windows and _python_is_3_7:
+    if IS_WINDOWS and PYTHON_3_7:
         if device == "cuda" and policy_device == "cuda" and device is None:
             pytest.skip(
                 "BrokenPipeError in multiprocessing.connection with Python 3.7 on Windows"
@@ -169,7 +201,7 @@ def test_output_device_consistency(
 
     _device = "cuda:0" if device == "cuda" else device
     _policy_device = "cuda:0" if policy_device == "cuda" else policy_device
-    _passing_device = "cuda:0" if passing_device == "cuda" else passing_device
+    _storing_device = "cuda:0" if storing_device == "cuda" else storing_device
 
     if num_env == 1:
 
@@ -181,7 +213,9 @@ def test_output_device_consistency(
     else:
 
         def env_fn(seed):
-            env = ParallelEnv(
+            # 1226: faster execution
+            # env = ParallelEnv(
+            env = SerialEnv(
                 num_workers=num_env,
                 create_env_fn=make_make_env("vec"),
                 create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
@@ -201,14 +235,14 @@ def test_output_device_consistency(
         max_frames_per_traj=2000,
         total_frames=20000,
         device=_device,
-        passing_device=_passing_device,
-        pin_memory=False,
+        storing_device=_storing_device,
     )
     for _, d in enumerate(collector):
         assert _is_consistent_device_type(
-            device, policy_device, passing_device, d.device.type
+            device, policy_device, storing_device, d.device.type
         )
         break
+    assert d.names[-1] == "time"
 
     collector.shutdown()
 
@@ -220,20 +254,21 @@ def test_output_device_consistency(
         max_frames_per_traj=2000,
         total_frames=20000,
         device=_device,
-        passing_device=_passing_device,
-        pin_memory=False,
+        storing_device=_storing_device,
     )
 
     for _, d in enumerate(ccollector):
         assert _is_consistent_device_type(
-            device, policy_device, passing_device, d.device.type
+            device, policy_device, storing_device, d.device.type
         )
         break
+    assert d.names[-1] == "time"
 
     ccollector.shutdown()
+    del ccollector
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     if num_env == 1:
@@ -263,7 +298,6 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
         max_frames_per_traj=2000,
         total_frames=20000,
         device="cpu",
-        pin_memory=False,
     )
     for i, d in enumerate(collector):
         if i == 0:
@@ -272,6 +306,7 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
             b2 = d
         else:
             break
+    assert d.names[-1] == "time"
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b2)
     collector.shutdown()
@@ -283,7 +318,6 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
         frames_per_batch=20,
         max_frames_per_traj=2000,
         total_frames=20000,
-        pin_memory=False,
     )
     for i, d in enumerate(ccollector):
         if i == 0:
@@ -292,6 +326,7 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
             b2c = d
         else:
             break
+    assert d.names[-1] == "time"
     with pytest.raises(AssertionError):
         assert_allclose_td(b1c, b2c)
 
@@ -306,18 +341,21 @@ def test_collector_env_reset():
     torch.manual_seed(0)
 
     def make_env():
-        return GymEnv(PONG_VERSIONED, frame_skip=4)
+        # This is currently necessary as the methods in GymWrapper may have mismatching backend
+        # versions.
+        with set_gym_backend(gym_backend()):
+            return TransformedEnv(GymEnv(PONG_VERSIONED, frame_skip=4), StepCounter())
 
     env = SerialEnv(2, make_env)
-    # env = SerialEnv(3, lambda: GymEnv("CartPole-v1", frame_skip=4))
+    # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
     env.set_seed(0)
     collector = SyncDataCollector(
-        env, total_frames=10000, frames_per_batch=10000, split_trajs=False
+        env, policy=None, total_frames=10000, frames_per_batch=10000, split_trajs=False
     )
     for _data in collector:
         continue
-    steps = _data["step_count"][..., 1:]
-    done = _data["done"][..., :-1, :].squeeze(-1)
+    steps = _data["next", "step_count"][..., 1:, :]
+    done = _data["next", "done"][..., :-1, :]
     # we don't want just one done
     assert done.sum() > 3
     # check that after a done, the next step count is always 1
@@ -327,61 +365,60 @@ def test_collector_env_reset():
     # check that if step is 1, then the env was done before
     assert (steps == 1)[done].all()
     # check that split traj has a minimum total reward of -21 (for pong only)
-    _data = split_trajectories(_data)
-    assert _data["reward"].sum(-2).min() == -21
+    _data = split_trajectories(_data, prefix="collector")
+    assert _data["next", "reward"].sum(-2).min() == -21
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
-@pytest.mark.parametrize("env_name", ["vec"])
-def test_collector_done_persist(num_env, env_name, seed=5):
-    if num_env == 1:
-
-        def env_fn(seed):
-            env = MockSerialEnv(device="cpu")
-            env.set_seed(seed)
-            return env
-
-    else:
-
-        def env_fn(seed):
-            def make_env(seed):
-                env = MockSerialEnv(device="cpu")
-                env.set_seed(seed)
-                return env
-
-            env = ParallelEnv(
-                num_workers=num_env,
-                create_env_fn=make_env,
-                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
-                allow_step_when_done=True,
-            )
-            env.set_seed(seed)
-            return env
-
-    policy = make_policy(env_name)
-
-    collector = SyncDataCollector(
-        create_env_fn=env_fn,
-        create_env_kwargs={"seed": seed},
-        policy=policy,
-        frames_per_batch=200 * num_env,
-        max_frames_per_traj=2000,
-        total_frames=20000,
-        device="cpu",
-        pin_memory=False,
-        reset_when_done=False,
-    )
-    for _, d in enumerate(collector):  # noqa
-        break
-
-    assert (d["done"].sum(-2) >= 1).all()
-    assert torch.unique(d["traj_ids"], dim=-1).shape[-1] == 1
-
-    del collector
+# Deprecated reset_when_done
+# @pytest.mark.parametrize("num_env", [1, 2])
+# @pytest.mark.parametrize("env_name", ["vec"])
+# def test_collector_done_persist(num_env, env_name, seed=5):
+#     if num_env == 1:
+#
+#         def env_fn(seed):
+#             env = MockSerialEnv(device="cpu")
+#             env.set_seed(seed)
+#             return env
+#
+#     else:
+#
+#         def env_fn(seed):
+#             def make_env(seed):
+#                 env = MockSerialEnv(device="cpu")
+#                 env.set_seed(seed)
+#                 return env
+#
+#             env = ParallelEnv(
+#                 num_workers=num_env,
+#                 create_env_fn=make_env,
+#                 create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+#             )
+#             env.set_seed(seed)
+#             return env
+#
+#     policy = make_policy(env_name)
+#
+#     collector = SyncDataCollector(
+#         create_env_fn=env_fn,
+#         create_env_kwargs={"seed": seed},
+#         policy=policy,
+#         frames_per_batch=200 * num_env,
+#         max_frames_per_traj=2000,
+#         total_frames=20000,
+#         device="cpu",
+#         reset_when_done=False,
+#     )
+#     for _, d in enumerate(collector):  # noqa
+#         break
+#
+#     assert (d["done"].sum(-2) >= 1).all()
+#     assert torch.unique(d["collector", "traj_ids"], dim=-1).shape[-1] == 1
+#
+#     del collector
 
 
 @pytest.mark.parametrize("frames_per_batch", [200, 10])
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["vec"])
 def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
     if num_env == 1:
@@ -403,7 +440,6 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
                 num_workers=num_env,
                 create_env_fn=make_env,
                 create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
-                allow_step_when_done=True,
             )
             env.set_seed(seed)
             return env
@@ -418,7 +454,6 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
         max_frames_per_traj=2000,
         total_frames=20000,
         device="cpu",
-        pin_memory=False,
         reset_when_done=True,
         split_trajs=True,
     )
@@ -426,12 +461,14 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
         break
 
     assert d.ndimension() == 2
-    assert d["mask"].shape == d.shape
-    assert d["step_count"].shape == d.shape
-    assert d["traj_ids"].shape == d.shape
+    assert d["collector", "mask"].shape == d.shape
+    assert d["next", "step_count"].shape == d["next", "done"].shape
+    assert d["collector", "traj_ids"].shape == d.shape
     for traj in d.unbind(0):
-        assert traj["traj_ids"].unique().numel() == 1
-        assert (traj["step_count"][1:] - traj["step_count"][:-1] == 1).all()
+        assert traj["collector", "traj_ids"].unique().numel() == 1
+        assert (
+            traj["next", "step_count"][1:] - traj["next", "step_count"][:-1] == 1
+        ).all()
 
     del collector
 
@@ -456,7 +493,6 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 #         frames_per_batch=20,
 #         max_frames_per_traj=2000,
 #         total_frames=20000,
-#         pin_memory=False,
 #     )
 #     for i, d in enumerate(ccollector):
 #         if i == 0:
@@ -472,10 +508,18 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 #         ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
-@pytest.mark.parametrize("env_name", ["vec", "conv"])
-def test_collector_batch_size(num_env, env_name, seed=100):
-    if num_env == 3 and _os_is_windows:
+@pytest.mark.parametrize("num_env", [1, 2])
+@pytest.mark.parametrize(
+    "env_name",
+    [
+        "vec",
+    ],
+)  # 1226: for efficiency, we just test vec, not "conv"
+def test_collector_batch_size(
+    num_env, env_name, seed=100, num_workers=2, frames_per_batch=20
+):
+    """Tests that there are 'frames_per_batch' frames in each batch of a collection."""
+    if num_env == 3 and IS_WINDOWS:
         pytest.skip("Test timeout (> 10 min) on CI pipeline Windows machine with GPU")
     if num_env == 1:
 
@@ -486,30 +530,29 @@ def test_collector_batch_size(num_env, env_name, seed=100):
     else:
 
         def env_fn():
-            env = ParallelEnv(
-                num_workers=num_env, create_env_fn=make_make_env(env_name)
-            )
+            # 1226: For efficiency, we don't use Parallel but Serial
+            # env = ParallelEnv(
+            env = SerialEnv(num_workers=num_env, create_env_fn=make_make_env(env_name))
             return env
 
     policy = make_policy(env_name)
 
     torch.manual_seed(0)
     np.random.seed(0)
-    num_workers = 4
-    frames_per_batch = 20
+
     ccollector = MultiaSyncDataCollector(
         create_env_fn=[env_fn for _ in range(num_workers)],
         policy=policy,
         frames_per_batch=frames_per_batch,
         max_frames_per_traj=1000,
         total_frames=frames_per_batch * 100,
-        pin_memory=False,
     )
     ccollector.set_seed(seed)
     for i, b in enumerate(ccollector):
         assert b.numel() == -(-frames_per_batch // num_env) * num_env
         if i == 5:
             break
+    assert b.names[-1] == "time"
     ccollector.shutdown()
 
     ccollector = MultiSyncDataCollector(
@@ -518,7 +561,6 @@ def test_collector_batch_size(num_env, env_name, seed=100):
         frames_per_batch=frames_per_batch,
         max_frames_per_traj=1000,
         total_frames=frames_per_batch * 100,
-        pin_memory=False,
     )
     ccollector.set_seed(seed)
     for i, b in enumerate(ccollector):
@@ -528,10 +570,12 @@ def test_collector_batch_size(num_env, env_name, seed=100):
         )
         if i == 5:
             break
+    assert b.names[-1] == "time"
     ccollector.shutdown()
+    del ccollector
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_concurrent_collector_seed(num_env, env_name, seed=100):
     if num_env == 1:
@@ -559,7 +603,6 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
         frames_per_batch=20,
         max_frames_per_traj=20,
         total_frames=300,
-        pin_memory=False,
     )
     ccollector.set_seed(seed)
     for i, data in enumerate(ccollector):
@@ -578,9 +621,10 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
     ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
+    """Tests that a rollout gathered with env.rollout matches one gathered with the collector."""
     if num_env == 1:
 
         def env_fn(seed):
@@ -605,10 +649,11 @@ def test_collector_consistency(num_env, env_name, seed=100):
 
     # Get a single rollout with dummypolicy
     env = env_fn(seed)
-    rollout1a = env.rollout(policy=policy, max_steps=20, auto_reset=True)
+    env = TransformedEnv(env, StepCounter(20))
+    rollout1a = env.rollout(policy=policy, max_steps=50, auto_reset=True)
     env.set_seed(seed)
-    rollout1b = env.rollout(policy=policy, max_steps=20, auto_reset=True)
-    rollout2 = env.rollout(policy=policy, max_steps=20, auto_reset=True)
+    rollout1b = env.rollout(policy=policy, max_steps=50, auto_reset=True)
+    rollout2 = env.rollout(policy=policy, max_steps=50, auto_reset=True)
     assert_allclose_td(rollout1a, rollout1b)
     with pytest.raises(AssertionError):
         assert_allclose_td(rollout1a, rollout2)
@@ -622,7 +667,6 @@ def test_collector_consistency(num_env, env_name, seed=100):
         max_frames_per_traj=20,
         total_frames=200,
         device="cpu",
-        pin_memory=False,
     )
     collector_iter = iter(collector)
     b1 = next(collector_iter)
@@ -630,20 +674,24 @@ def test_collector_consistency(num_env, env_name, seed=100):
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b2)
 
-    if num_env == 1:
-        # rollouts collected through DataCollector are padded using pad_sequence, which introduces a first dimension
-        rollout1a = rollout1a.unsqueeze(0)
+    # if num_env == 1:
+    #     # rollouts collected through DataCollector are padded using pad_sequence, which introduces a first dimension
+    #     rollout1a = rollout1a.unsqueeze(0)
     assert (
         rollout1a.batch_size == b1.batch_size
     ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
-
-    assert_allclose_td(rollout1a, b1.select(*rollout1a.keys()))
+    assert_allclose_td(rollout1a, b1.select(*rollout1a.keys(True, True)))
     collector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
-@pytest.mark.parametrize("collector_class", [SyncDataCollector, aSyncDataCollector])
-@pytest.mark.parametrize("env_name", ["conv", "vec"])
+@pytest.mark.parametrize("num_env", [1, 2])
+@pytest.mark.parametrize(
+    "collector_class",
+    [
+        SyncDataCollector,
+    ],
+)  # aSyncDataCollector])
+@pytest.mark.parametrize("env_name", ["vec"])  # 1226: removing "conv" for efficiency
 def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     """Tests that various frames_per_batch lead to the same results."""
 
@@ -667,9 +715,6 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
 
     policy = make_policy(env_name)
 
-    def make_frames_per_batch(frames_per_batch):
-        return -(-frames_per_batch // num_env) * num_env
-
     collector1 = collector_class(
         create_env_fn=env_fn,
         create_env_kwargs={"seed": seed},
@@ -678,19 +723,18 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
         device="cpu",
-        seed=seed,
-        pin_memory=False,
     )
+    collector1.set_seed(seed)
     count = 0
     data1 = []
     for d in collector1:
         data1.append(d)
-        count += d.shape[1]
+        count += d.shape[-1]
         if count > max_frames_per_traj:
             break
 
-    data1 = torch.cat(data1, 1)
-    data1 = data1[:, :max_frames_per_traj]
+    data1 = torch.cat(data1, d.ndim - 1)
+    data1 = data1[..., :max_frames_per_traj]
 
     collector1.shutdown()
     del collector1
@@ -700,22 +744,21 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         create_env_kwargs={"seed": seed},
         policy=policy,
         frames_per_batch=10 * num_env,
-        max_frames_per_traj=20,
+        max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
         device="cpu",
-        seed=seed,
-        pin_memory=False,
     )
+    collector10.set_seed(seed)
     count = 0
     data10 = []
     for d in collector10:
         data10.append(d)
-        count += d.shape[1]
+        count += d.shape[-1]
         if count > max_frames_per_traj:
             break
 
-    data10 = torch.cat(data10, 1)
-    data10 = data10[:, :max_frames_per_traj]
+    data10 = torch.cat(data10, data1.ndim - 1)
+    data10 = data10[..., :max_frames_per_traj]
 
     collector10.shutdown()
     del collector10
@@ -728,26 +771,30 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
         device="cpu",
-        seed=seed,
-        pin_memory=False,
     )
+    collector20.set_seed(seed)
     count = 0
     data20 = []
     for d in collector20:
         data20.append(d)
-        count += d.shape[1]
+        count += d.shape[-1]
         if count > max_frames_per_traj:
             break
 
     collector20.shutdown()
     del collector20
-    data20 = torch.cat(data20, 1)
-    data20 = data20[:, :max_frames_per_traj]
+    data20 = torch.cat(data20, data1.ndim - 1)
+    data20 = data20[..., :max_frames_per_traj]
 
     assert_allclose_td(data1, data20)
     assert_allclose_td(data10, data20)
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 11),
+    reason="Nested spawned multiprocessed is currently failing in python 3.11. "
+    "See https://github.com/python/cpython/pull/108568 for info and fix.",
+)
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
 @pytest.mark.parametrize("static_seed", [True, False])
 def test_collector_vecnorm_envcreator(static_seed):
@@ -807,7 +854,7 @@ def test_collector_vecnorm_envcreator(static_seed):
     td4 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"]["td"].clone()
     assert (td3 == td4).all()
     assert (td1 != td4).any()
-
+    c.shutdown()
     del c
 
 
@@ -830,7 +877,7 @@ def test_update_weights(use_async):
         [create_env] * 3,
         policy=policy,
         devices=[torch.device("cuda:0")] * 3,
-        passing_devices=[torch.device("cuda:0")] * 3,
+        storing_devices=[torch.device("cuda:0")] * 3,
     )
     # collect state_dict
     state_dict = collector.state_dict()
@@ -897,6 +944,7 @@ def test_excluded_keys(collector_class, exclude):
         "create_env_fn": make_env,
         "policy": policy_explore,
         "frames_per_batch": 30,
+        "total_frames": -1,
     }
     if collector_class is not SyncDataCollector:
         collector_kwargs["create_env_fn"] = [
@@ -914,20 +962,25 @@ def test_excluded_keys(collector_class, exclude):
         break
     collector.shutdown()
     dummy_env.close()
+    del collector
 
 
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
 @pytest.mark.parametrize(
     "collector_class",
     [
+        SyncDataCollector,
         MultiaSyncDataCollector,
         MultiSyncDataCollector,
-        SyncDataCollector,
     ],
 )
-@pytest.mark.parametrize("init_random_frames", [0, 50])
-@pytest.mark.parametrize("explicit_spec", [True, False])
-def test_collector_output_keys(collector_class, init_random_frames, explicit_spec):
+@pytest.mark.parametrize("init_random_frames", [50])  # 1226: faster execution
+@pytest.mark.parametrize(
+    "explicit_spec,split_trajs", [[True, True], [False, False]]
+)  # 1226: faster execution
+def test_collector_output_keys(
+    collector_class, init_random_frames, explicit_spec, split_trajs
+):
     from torchrl.envs.libs.gym import GymEnv
 
     out_features = 1
@@ -974,6 +1027,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "total_frames": total_frames,
         "frames_per_batch": frames_per_batch,
         "init_random_frames": init_random_frames,
+        "split_trajs": split_trajs,
     }
 
     if collector_class is not SyncDataCollector:
@@ -986,18 +1040,25 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     keys = {
         "action",
         "done",
+        "collector",
         "hidden1",
         "hidden2",
-        "mask",
         ("next", "hidden1"),
         ("next", "hidden2"),
         ("next", "observation"),
+        ("next", "done"),
+        ("next", "reward"),
         "next",
         "observation",
-        "reward",
-        "step_count",
-        "traj_ids",
+        ("collector", "traj_ids"),
     }
+    if split_trajs:
+        keys.add(("collector", "mask"))
+
+    keys.add(("next", "terminated"))
+    keys.add("terminated")
+    keys.add(("next", "truncated"))
+    keys.add("truncated")
     b = next(iter(collector))
 
     assert set(b.keys(True)) == keys
@@ -1006,15 +1067,10 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
 
 
 @pytest.mark.parametrize("device", ["cuda", "cpu"])
-@pytest.mark.parametrize("passing_device", ["cuda", "cpu"])
+@pytest.mark.parametrize("storing_device", ["cuda", "cpu"])
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
-def test_collector_device_combinations(device, passing_device):
-    if (
-        _os_is_windows
-        and _python_is_3_10
-        and passing_device == "cuda"
-        and device == "cuda"
-    ):
+def test_collector_device_combinations(device, storing_device):
+    if IS_WINDOWS and PYTHON_3_10 and storing_device == "cuda" and device == "cuda":
         pytest.skip("Windows fatal exception: access violation in torch.storage")
 
     def env_fn(seed):
@@ -1032,11 +1088,10 @@ def test_collector_device_combinations(device, passing_device):
         max_frames_per_traj=2000,
         total_frames=20000,
         device=device,
-        passing_device=passing_device,
-        pin_memory=False,
+        storing_device=storing_device,
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(passing_device)
+    assert batch.device == torch.device(storing_device)
     collector.shutdown()
 
     collector = MultiSyncDataCollector(
@@ -1053,13 +1108,12 @@ def test_collector_device_combinations(device, passing_device):
         devices=[
             device,
         ],
-        passing_devices=[
-            passing_device,
+        storing_devices=[
+            storing_device,
         ],
-        pin_memory=False,
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(passing_device)
+    assert batch.device == torch.device(storing_device)
     collector.shutdown()
 
     collector = MultiaSyncDataCollector(
@@ -1076,14 +1130,14 @@ def test_collector_device_combinations(device, passing_device):
         devices=[
             device,
         ],
-        passing_devices=[
-            passing_device,
+        storing_devices=[
+            storing_device,
         ],
-        pin_memory=False,
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(passing_device)
+    assert batch.device == torch.device(storing_device)
     collector.shutdown()
+    del collector
 
 
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
@@ -1096,7 +1150,7 @@ def test_collector_device_combinations(device, passing_device):
     ],
 )
 class TestAutoWrap:
-    num_envs = 3
+    num_envs = 2
 
     @pytest.fixture
     def env_maker(self):
@@ -1105,7 +1159,12 @@ class TestAutoWrap:
         return lambda: GymEnv(PENDULUM_VERSIONED)
 
     def _create_collector_kwargs(self, env_maker, collector_class, policy):
-        collector_kwargs = {"create_env_fn": env_maker, "policy": policy}
+        collector_kwargs = {
+            "create_env_fn": env_maker,
+            "policy": policy,
+            "frames_per_batch": 200,
+            "total_frames": -1,
+        }
 
         if collector_class is not SyncDataCollector:
             collector_kwargs["create_env_fn"] = [
@@ -1138,11 +1197,14 @@ class TestAutoWrap:
             assert isinstance(collector.policy, TensorDictModule)
             assert collector.policy.out_keys == out_keys
             assert collector.policy.module is policy
+        collector.shutdown()
+        del collector
 
     def test_no_wrap_compatible_module(self, collector_class, env_maker):
         policy = TensorDictCompatiblePolicy(
             out_features=env_maker().action_spec.shape[-1]
         )
+        policy(env_maker().reset())
 
         collector = collector_class(
             **self._create_collector_kwargs(env_maker, collector_class, policy)
@@ -1161,25 +1223,841 @@ class TestAutoWrap:
             assert isinstance(collector.policy, TensorDictCompatiblePolicy)
             assert collector.policy.out_keys == ["action"]
             assert collector.policy is policy
+        collector.shutdown()
+        del collector
 
     def test_auto_wrap_error(self, collector_class, env_maker):
         policy = UnwrappablePolicy(out_features=env_maker().action_spec.shape[-1])
 
         with pytest.raises(
             TypeError,
-            match=(
-                "Arguments to policy.forward are incompatible with entries in "
-                "env.observation_spec."
-            ),
+            match=(r"Arguments to policy.forward are incompatible with entries in"),
         ):
             collector_class(
                 **self._create_collector_kwargs(env_maker, collector_class, policy)
             )
 
 
+@pytest.mark.parametrize("env_class", [CountingEnv, CountingBatchedEnv])
+def test_initial_obs_consistency(env_class, seed=1):
+    # non regression test on #938
+    torch.manual_seed(seed)
+    start_val = 4
+    if env_class == CountingEnv:
+        num_envs = 1
+        env = CountingEnv(device="cpu", max_steps=8, start_val=start_val)
+        max_steps = 8
+    elif env_class == CountingBatchedEnv:
+        num_envs = 2
+        env = CountingBatchedEnv(
+            device="cpu",
+            batch_size=[num_envs],
+            max_steps=torch.arange(num_envs) + 17,
+            start_val=torch.ones([num_envs]) * start_val,
+        )
+        max_steps = env.max_steps.max().item()
+    env.set_seed(seed)
+    policy = lambda tensordict: tensordict.set(
+        "action", torch.ones(tensordict.shape, dtype=torch.int)
+    )
+    collector = SyncDataCollector(
+        create_env_fn=env,
+        policy=policy,
+        frames_per_batch=((max_steps - 3) * 2 + 2) * num_envs,  # at least two episodes
+        split_trajs=False,
+        total_frames=-1,
+    )
+    for _d in collector:
+        break
+    obs = _d["observation"].squeeze()
+    if env_class == CountingEnv:
+        arange_0 = start_val + torch.arange(max_steps - 3)
+        arange = start_val + torch.arange(2)
+        expected = torch.cat([arange_0, arange_0, arange])
+    else:
+        # the first env has a shorter horizon than the second
+        arange_0 = start_val + torch.arange(max_steps - 3 - 1)
+        arange = start_val + torch.arange(start_val)
+        expected_0 = torch.cat([arange_0, arange_0, arange])
+        arange_0 = start_val + torch.arange(max_steps - 3)
+        arange = start_val + torch.arange(2)
+        expected_1 = torch.cat([arange_0, arange_0, arange])
+        expected = torch.stack([expected_0, expected_1])
+    assert torch.allclose(obs, expected.to(obs.dtype))
+    collector.shutdown()
+    del collector
+
+
 def weight_reset(m):
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
         m.reset_parameters()
+
+
+@pytest.mark.skipif(IS_OSX, reason="Queue.qsize does not work on osx.")
+class TestPreemptiveThreshold:
+    @pytest.mark.parametrize("env_name", ["conv", "vec"])
+    def test_sync_collector_interruptor_mechanism(self, env_name, seed=100):
+        def env_fn(seed):
+            env = make_make_env(env_name)()
+            env.set_seed(seed)
+            return env
+
+        policy = make_policy(env_name)
+        interruptor = _Interruptor()
+        interruptor.start_collection()
+
+        collector = SyncDataCollector(
+            create_env_fn=env_fn,
+            create_env_kwargs={"seed": seed},
+            policy=policy,
+            frames_per_batch=50,
+            total_frames=200,
+            device="cpu",
+            interruptor=interruptor,
+            split_trajs=False,
+        )
+
+        interruptor.stop_collection()
+        for batch in collector:
+            assert batch["collector"]["traj_ids"][0] != -1
+            assert batch["collector"]["traj_ids"][1] == -1
+        collector.shutdown()
+        del collector
+
+    @pytest.mark.parametrize(
+        "env_name", ["vec"]
+    )  # 1226: removing "conv" for efficiency
+    def test_multisync_collector_interruptor_mechanism(self, env_name, seed=100):
+
+        frames_per_batch = 800
+
+        def env_fn(seed):
+            env = make_make_env(env_name)()
+            env.set_seed(seed)
+            return env
+
+        policy = make_policy(env_name)
+
+        collector = MultiSyncDataCollector(
+            create_env_fn=[env_fn] * 4,
+            create_env_kwargs=[{"seed": seed}] * 4,
+            policy=policy,
+            total_frames=800,
+            max_frames_per_traj=50,
+            frames_per_batch=frames_per_batch,
+            init_random_frames=-1,
+            reset_at_each_iter=False,
+            devices=get_default_devices()[0],
+            storing_devices=get_default_devices()[0],
+            split_trajs=False,
+            preemptive_threshold=0.0,  # stop after one iteration
+        )
+
+        for batch in collector:
+            trajectory_ids = batch["collector"]["traj_ids"]
+            trajectory_ids_mask = trajectory_ids != -1  # valid frames mask
+            assert trajectory_ids[trajectory_ids_mask].numel() < frames_per_batch
+        collector.shutdown()
+        del collector
+
+
+def test_maxframes_error():
+    env = TransformedEnv(CountingEnv(), StepCounter(2))
+    _ = SyncDataCollector(
+        env, RandomPolicy(env.action_spec), total_frames=10_000, frames_per_batch=1000
+    )
+    with pytest.raises(ValueError):
+        _ = SyncDataCollector(
+            env,
+            RandomPolicy(env.action_spec),
+            total_frames=10_000,
+            frames_per_batch=1000,
+            max_frames_per_traj=2,
+        )
+
+
+def test_reset_heterogeneous_envs():
+    env1 = lambda: TransformedEnv(CountingEnv(), StepCounter(2))
+    env2 = lambda: TransformedEnv(CountingEnv(), StepCounter(3))
+    env = SerialEnv(2, [env1, env2])
+    collector = SyncDataCollector(
+        env, RandomPolicy(env.action_spec), total_frames=10_000, frames_per_batch=1000
+    )
+    for data in collector:  # noqa: B007
+        break
+    collector.shutdown()
+    del collector
+    assert (
+        data[0]["next", "truncated"].squeeze()
+        == torch.tensor([False, True]).repeat(250)[:500]
+    ).all()
+    assert (
+        data[1]["next", "truncated"].squeeze()
+        == torch.tensor([False, False, True]).repeat(168)[:500]
+    ).all()
+
+
+def test_policy_with_mask():
+    env = CountingBatchedEnv(start_val=torch.tensor(10), max_steps=torch.tensor(1e5))
+
+    def policy(td):
+        obs = td.get("observation")
+        # This policy cannot work with obs all 0s
+        if not obs.any():
+            raise AssertionError
+        action = obs.clone()
+        td.set("action", action)
+        return td
+
+    collector = SyncDataCollector(
+        env, policy=policy, frames_per_batch=10, total_frames=20
+    )
+    for _ in collector:
+        break
+    collector.shutdown()
+
+
+class TestNestedEnvsCollector:
+    def test_multi_collector_nested_env_consistency(self, seed=1):
+        env = NestedCountingEnv()
+        torch.manual_seed(seed)
+        env_fn = lambda: TransformedEnv(env, InitTracker())
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+
+        ccollector = MultiaSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=100,
+            device=get_default_devices()[0],
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                c1 = d
+            elif i == 1:
+                c2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(c1, c2)
+        ccollector.shutdown()
+        del ccollector
+
+        ccollector = MultiSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=100,
+            device=get_default_devices()[0],
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                d1 = d
+            elif i == 1:
+                d2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(d1, d2)
+        ccollector.shutdown()
+        del ccollector
+        assert_allclose_td(c1, d1)
+        assert_allclose_td(c2, d2)
+
+    @pytest.mark.parametrize("nested_obs_action", [True, False])
+    @pytest.mark.parametrize("nested_done", [True, False])
+    @pytest.mark.parametrize("nested_reward", [True, False])
+    def test_collector_nested_env_combinations(
+        self,
+        nested_obs_action,
+        nested_done,
+        nested_reward,
+        seed=1,
+        frames_per_batch=20,
+    ):
+        env = NestedCountingEnv(
+            nest_reward=nested_reward,
+            nest_done=nested_done,
+            nest_obs_action=nested_obs_action,
+        )
+        torch.manual_seed(seed)
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        ccollector = SyncDataCollector(
+            create_env_fn=env,
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device=get_default_devices()[0],
+        )
+
+        for _td in ccollector:
+            break
+        ccollector.shutdown()
+        del ccollector
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 2)])
+    def test_nested_env_dims(self, batch_size, nested_dim=5, frames_per_batch=20):
+        from mocking_classes import CountingEnvCountPolicy, NestedCountingEnv
+
+        env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
+        env_fn = lambda: NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
+        torch.manual_seed(0)
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        policy(env.reset())
+        ccollector = SyncDataCollector(
+            create_env_fn=env_fn,
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device=get_default_devices()[0],
+        )
+
+        for _td in ccollector:
+            break
+        ccollector.shutdown()
+        del ccollector
+        assert ("data", "reward") not in _td.keys(True)
+        assert _td.batch_size == (*batch_size, frames_per_batch // prod(batch_size))
+        assert _td["data"].batch_size == (
+            *batch_size,
+            frames_per_batch // prod(batch_size),
+            nested_dim,
+        )
+        assert _td["next", "data"].batch_size == (
+            *batch_size,
+            frames_per_batch // prod(batch_size),
+            nested_dim,
+        )
+
+
+class TestHetEnvsCollector:
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    @pytest.mark.parametrize("frames_per_batch", [4, 8, 16])
+    def test_collector_het_env(self, batch_size, frames_per_batch, seed=1, max_steps=4):
+        batch_size = torch.Size(batch_size)
+        env = HeteroCountingEnv(max_steps=max_steps - 1, batch_size=batch_size)
+        torch.manual_seed(seed)
+        device = get_default_devices()[0]
+        policy = HeteroCountingEnvPolicy(env.input_spec["full_action_spec"])
+        ccollector = SyncDataCollector(
+            create_env_fn=env,
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device=device,
+        )
+
+        for _td in ccollector:
+            break
+        ccollector.shutdown()
+        collected_frames = frames_per_batch // batch_size.numel()
+
+        for i in range(env.n_nested_dim):
+            if collected_frames >= max_steps:
+                agent_obs = _td["lazy"][(0,) * len(batch_size)][..., i][f"tensor_{i}"]
+                for _ in range(i + 1):
+                    agent_obs = agent_obs.mean(-1)
+                assert (
+                    agent_obs
+                    == torch.arange(max_steps, device=device).repeat(
+                        collected_frames // max_steps
+                    )
+                ).all()  # Check reset worked
+            assert (_td["lazy"][..., i]["action"] == 1).all()
+        del ccollector
+
+    def test_multi_collector_het_env_consistency(
+        self, seed=1, frames_per_batch=20, batch_dim=10
+    ):
+        env = HeteroCountingEnv(max_steps=3, batch_size=(batch_dim,))
+        torch.manual_seed(seed)
+        env_fn = lambda: TransformedEnv(env, InitTracker())
+        check_env_specs(env_fn(), return_contiguous=False)
+        policy = HeteroCountingEnvPolicy(env.input_spec["full_action_spec"])
+
+        ccollector = MultiaSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device=get_default_devices()[0],
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                c1 = d
+            elif i == 1:
+                c2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(c1, c2)
+        ccollector.shutdown()
+
+        ccollector = MultiSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device=get_default_devices()[0],
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                d1 = d
+            elif i == 1:
+                d2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(d1, d2)
+        ccollector.shutdown()
+        del ccollector
+
+        assert_allclose_td(c1, d1)
+        assert_allclose_td(c2, d2)
+
+
+class TestMultiKeyEnvsCollector:
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    @pytest.mark.parametrize("frames_per_batch", [4, 8, 16])
+    @pytest.mark.parametrize("max_steps", [2, 3])
+    def test_collector(self, batch_size, frames_per_batch, max_steps, seed=1):
+        env = MultiKeyCountingEnv(batch_size=batch_size, max_steps=max_steps)
+        torch.manual_seed(seed)
+        policy = MultiKeyCountingEnvPolicy(env.input_spec["full_action_spec"])
+        ccollector = SyncDataCollector(
+            create_env_fn=env,
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device=get_default_devices()[0],
+        )
+
+        for _td in ccollector:
+            break
+        ccollector.shutdown()
+        del ccollector
+        for done_key in env.done_keys:
+            assert _replace_last(done_key, "_reset") not in _td.keys(True, True)
+        check_rollout_consistency_multikey_env(_td, max_steps=max_steps)
+
+    def test_multi_collector_consistency(
+        self, seed=1, frames_per_batch=20, batch_dim=10
+    ):
+        env = MultiKeyCountingEnv(batch_size=(batch_dim,))
+        env_fn = lambda: env
+        torch.manual_seed(seed)
+        policy = MultiKeyCountingEnvPolicy(
+            env.input_spec["full_action_spec"], deterministic=True
+        )
+
+        ccollector = MultiaSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device=get_default_devices()[0],
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                c1 = d
+            elif i == 1:
+                c2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(c1, c2)
+        ccollector.shutdown()
+
+        ccollector = MultiSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device=get_default_devices()[0],
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                d1 = d
+            elif i == 1:
+                d2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(d1, d2)
+        ccollector.shutdown()
+        del ccollector
+
+        assert_allclose_td(c1, d1)
+        assert_allclose_td(c2, d2)
+
+
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="No casting if no cuda")
+class TestUpdateParams:
+    class DummyEnv(EnvBase):
+        def __init__(self, device, batch_size=[]):  # noqa: B006
+            super().__init__(batch_size=batch_size, device=device)
+            self.state = torch.zeros(self.batch_size, device=device)
+            self.observation_spec = CompositeSpec(
+                state=UnboundedContinuousTensorSpec(shape=(), device=device)
+            )
+            self.action_spec = UnboundedContinuousTensorSpec(
+                shape=batch_size, device=device
+            )
+            self.reward_spec = UnboundedContinuousTensorSpec(
+                shape=(*batch_size, 1), device=device
+            )
+
+        def _step(
+            self,
+            tensordict,
+        ):
+            action = tensordict.get("action")
+            self.state += action
+            return TensorDict(
+                {
+                    "state": self.state.clone(),
+                    "reward": self.reward_spec.zero(),
+                    **self.full_done_spec.zero(),
+                },
+                self.batch_size,
+            )
+
+        def _reset(self, tensordict=None):
+            self.state.zero_()
+            return TensorDict({"state": self.state.clone()}, self.batch_size)
+
+        def _set_seed(self, seed):
+            return seed
+
+    class Policy(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.param = nn.Parameter(torch.zeros(()))
+            self.register_buffer("buf", torch.zeros(()))
+            self.in_keys = []
+            self.out_keys = ["action"]
+
+        def forward(self, td):
+            td["action"] = (self.param + self.buf).expand(td.shape)
+            return td
+
+    @pytest.mark.parametrize(
+        "collector", [MultiSyncDataCollector, MultiaSyncDataCollector]
+    )
+    @pytest.mark.parametrize("give_weights", [True, False])
+    @pytest.mark.parametrize(
+        "policy_device,env_device",
+        [
+            ["cpu", "cuda"],
+            ["cuda", "cpu"],
+            # ["cpu", "cuda:0"],  # 1226: faster execution
+            # ["cuda:0", "cpu"],
+            # ["cuda", "cuda:0"],
+            # ["cuda:0", "cuda"],
+        ],
+    )
+    def test_param_sync(self, give_weights, collector, policy_device, env_device):
+        policy = TestUpdateParams.Policy().to(policy_device)
+
+        env = EnvCreator(lambda: TestUpdateParams.DummyEnv(device=env_device))
+        device = env().device
+        env = [env]
+        col = collector(
+            env, policy, device=device, total_frames=200, frames_per_batch=10
+        )
+        try:
+            for i, data in enumerate(col):
+                if i == 0:
+                    assert (data["action"] == 0).all()
+                    # update policy
+                    policy.param.data += 1
+                    policy.buf.data += 2
+                    if give_weights:
+                        d = dict(policy.named_parameters())
+                        d.update(policy.named_buffers())
+                        p_w = TensorDict(d, [])
+                    else:
+                        p_w = None
+                    col.update_policy_weights_(p_w)
+                elif i == 20:
+                    if (data["action"] == 1).all():
+                        raise RuntimeError("Failed to update buffer")
+                    elif (data["action"] == 2).all():
+                        raise RuntimeError("Failed to update params")
+                    elif (data["action"] == 0).all():
+                        raise RuntimeError("Failed to update params and buffers")
+                    assert (data["action"] == 3).all()
+        finally:
+            col.shutdown()
+            del col
+
+
+class TestAggregateReset:
+    def test_aggregate_reset_to_root(self):
+        # simple
+        td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [])
+        assert _aggregate_resets(td).shape == ()
+        # td with batch size
+        td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [1])
+        assert _aggregate_resets(td).shape == (1,)
+        td = TensorDict({"_reset": torch.zeros((1, 2), dtype=torch.bool)}, [1])
+        assert _aggregate_resets(td).shape == (1,)
+        # nested td
+        td = TensorDict(
+            {
+                "_reset": torch.zeros((1,), dtype=torch.bool),
+                "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
+            },
+            [1],
+        )
+        assert _aggregate_resets(td).shape == (1,)
+        # nested td with greater number of dims
+        td = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (1, 2),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
+            },
+            [1, 2],
+        )
+        # test reduction
+        assert _aggregate_resets(td).shape == (1, 2)
+        td = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (1, 2),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+            },
+            [1, 2],
+        )
+        # test reduction, partial
+        assert _aggregate_resets(td).shape == (1, 2)
+        td = TensorDict(
+            {
+                "_reset": torch.tensor([True, False]).view(1, 2),
+                "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
+            },
+            [1, 2],
+        )
+        assert (_aggregate_resets(td) == torch.tensor([True, False]).view(1, 2)).all()
+        # with a stack
+        td0 = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (1, 2),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+                "b": {"c": torch.randn(1, 2)},
+            },
+            [1, 2],
+        )
+        td1 = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (1, 2),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+                "b": {"c": torch.randn(1, 2, 5)},
+            },
+            [1, 2],
+        )
+        td = torch.stack([td0, td1], 0)
+        assert _aggregate_resets(td).all()
+
+    def test_aggregate_reset_to_root_keys(self):
+        # simple
+        td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [])
+        assert _aggregate_resets(td, reset_keys=["_reset"]).shape == ()
+        # td with batch size
+        td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [1])
+        assert _aggregate_resets(td, reset_keys=["_reset"]).shape == (1,)
+        td = TensorDict({"_reset": torch.zeros((1, 2), dtype=torch.bool)}, [1])
+        assert _aggregate_resets(td, reset_keys=["_reset"]).shape == (1,)
+        # nested td
+        td = TensorDict(
+            {
+                "_reset": torch.zeros((1,), dtype=torch.bool),
+                "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
+            },
+            [1],
+        )
+        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).shape == (
+            1,
+        )
+        # nested td with greater number of dims
+        td = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (1, 2),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
+            },
+            [1, 2],
+        )
+        # test reduction
+        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).shape == (
+            1,
+            2,
+        )
+        td = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (1, 2),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+            },
+            [1, 2],
+        )
+        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).all()
+        # test reduction, partial
+        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).shape == (
+            1,
+            2,
+        )
+        td = TensorDict(
+            {
+                "_reset": torch.tensor(
+                    [True, False],
+                ).view(1, 2),
+                "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
+            },
+            [1, 2],
+        )
+        assert (
+            _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")])
+            == torch.tensor([True, False]).view(1, 2)
+        ).all()
+        # with a stack
+        td0 = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (1, 2),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+                "b": {"c": torch.randn(1, 2)},
+            },
+            [1, 2],
+        )
+        td1 = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (1, 2),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+                "b": {"c": torch.randn(1, 2, 5)},
+            },
+            [1, 2],
+        )
+        td = torch.stack([td0, td1], 0)
+        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).all()
+
+    def test_aggregate_reset_to_root_errors(self):
+        # the order matters: if the first or another key is missing, the ValueError is raised at a different line
+        with pytest.raises(ValueError, match=PARTIAL_MISSING_ERR):
+            _aggregate_resets(
+                TensorDict({"_reset": False}, []),
+                reset_keys=["_reset", ("another", "_reset")],
+            )
+        with pytest.raises(ValueError, match=PARTIAL_MISSING_ERR):
+            _aggregate_resets(
+                TensorDict({"_reset": False}, []),
+                reset_keys=[("another", "_reset"), "_reset"],
+            )
+
+
+@pytest.mark.parametrize(
+    "collector_class",
+    [MultiSyncDataCollector, MultiaSyncDataCollector, SyncDataCollector],
+)
+def test_collector_reloading(collector_class):
+    def make_env():
+        return ContinuousActionVecMockEnv()
+
+    dummy_env = make_env()
+    obs_spec = dummy_env.observation_spec["observation"]
+    policy_module = nn.Linear(obs_spec.shape[-1], dummy_env.action_spec.shape[-1])
+    policy = Actor(policy_module, spec=dummy_env.action_spec)
+    policy_explore = OrnsteinUhlenbeckProcessWrapper(policy)
+
+    collector_kwargs = {
+        "create_env_fn": make_env,
+        "policy": policy_explore,
+        "frames_per_batch": 30,
+        "total_frames": 90,
+    }
+    if collector_class is not SyncDataCollector:
+        collector_kwargs["create_env_fn"] = [
+            collector_kwargs["create_env_fn"] for _ in range(3)
+        ]
+
+    collector = collector_class(**collector_kwargs)
+    for i, _ in enumerate(collector):
+        if i == 3:
+            break
+    collector_frames = collector._frames
+    collector_iter = collector._iter
+    collector_state_dict = collector.state_dict()
+    collector.shutdown()
+
+    collector = collector_class(**collector_kwargs)
+    collector.load_state_dict(collector_state_dict)
+    assert collector._frames == collector_frames
+    assert collector._iter == collector_iter
+    for _ in enumerate(collector):
+        raise AssertionError
+    collector.shutdown()
+    del collector
+
+
+@pytest.mark.skipif(
+    IS_OSX, reason="setting different threads across workeres can randomly fail on OSX."
+)
+def test_num_threads():
+    from torchrl.collectors import collectors
+
+    _main_async_collector_saved = collectors._main_async_collector
+    collectors._main_async_collector = decorate_thread_sub_func(
+        collectors._main_async_collector, num_threads=3
+    )
+    num_threads = torch.get_num_threads()
+    try:
+        env = ContinuousActionVecMockEnv()
+        c = MultiSyncDataCollector(
+            [env],
+            policy=RandomPolicy(env.action_spec),
+            num_threads=7,
+            num_sub_threads=3,
+            total_frames=200,
+            frames_per_batch=200,
+        )
+        assert torch.get_num_threads() == 7
+        for _ in c:
+            pass
+    finally:
+        try:
+            c.shutdown()
+            del c
+        except Exception:
+            print("Failed to shut down collector")
+        # reset vals
+        collectors._main_async_collector = _main_async_collector_saved
+        torch.set_num_threads(num_threads)
 
 
 if __name__ == "__main__":

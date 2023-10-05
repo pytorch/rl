@@ -2,27 +2,26 @@ matplotlib
 numpy
 sphinx-copybutton
 sphinx-gallery
-sphinx
-Jinja2
+sphinx===5.0.0
+Jinja2==3.1.2
 sphinx-autodoc-typehints
-sphinx-serve
+sphinx-serve==1.0.1
 git+https://github.com/vmoens/aafig@4319769eae88fff8e3464858f3cf8c277f35335d
 sphinxcontrib-htmlhelp
 -e git+https://github.com/pytorch/pytorch_sphinx_theme.git#egg=pytorch_sphinx_theme
 myst-parser
 docutils
 
-functorch
-gym[classic_control]
 torchvision
 dm_control
-gym
 atari-py
 ale-py
-gym[accept-rom-license]
+gym[classic_control,accept-rom-license]
 pygame
 tqdm
 ipython
-imageio
-imageio[ffmpeg]
-imageio[pyav]
+imageio[ffmpeg,pyav]
+memory_profiler
+pyrender
+pytest
+vmas==1.2.11

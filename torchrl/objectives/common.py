@@ -5,50 +5,154 @@
 
 from __future__ import annotations
 
-import itertools
+import warnings
 from copy import deepcopy
-from typing import Iterator, List, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import Iterator, List, Optional, Tuple
 
-import torch
+from tensordict import TensorDictBase
 
-from tensordict.nn import make_functional, repopulate_module
-
-from tensordict.tensordict import TensorDictBase
-from torch import nn, Tensor
+from tensordict.nn import (
+    make_functional,
+    repopulate_module,
+    TensorDictModule,
+    TensorDictModuleBase,
+    TensorDictParams,
+)
+from torch import nn
 from torch.nn import Parameter
 
-from torchrl.modules import SafeModule
-from torchrl.modules.utils import Buffer
-
-_has_functorch = False
-try:
-    import functorch as ft  # noqa
-
-    _has_functorch = True
-    FUNCTORCH_ERR = ""
-except ImportError:
-    print(
-        "failed to import functorch. TorchRL's features that do not require "
-        "functional programming should work, but functionality and performance "
-        "may be affected. Consider installing functorch and/or upgrating pytorch."
-    )
-    FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
+from torchrl._utils import RL_WARNINGS
+from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.objectives.utils import ValueEstimators
+from torchrl.objectives.value import ValueEstimatorBase
 
 
-class LossModule(nn.Module):
+def _updater_check_forward_prehook(module, *args, **kwargs):
+    if not all(v for v in module._has_update_associated.values()) and RL_WARNINGS:
+        warnings.warn(
+            module.TARGET_NET_WARNING,
+            category=UserWarning,
+        )
+
+
+class LossModule(TensorDictModuleBase):
     """A parent class for RL losses.
 
-    LossModule inherits from nn.Module. It is designed to read an input TensorDict and return another tensordict
-    with loss keys named "loss_*".
-    Splitting the loss in its component can then be used by the trainer to log the various loss values throughout
+    LossModule inherits from nn.Module. It is designed to read an input
+    TensorDict and return another tensordict
+    with loss keys named ``"loss_*"``.
+
+    Splitting the loss in its component can then be used by the trainer to log
+    the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
 
+    :cvar default_value_estimator: The default value type of the class.
+        Losses that require a value estimation are equipped with a default value
+        pointer. This class attribute indicates which value estimator will be
+        used if none other is specified.
+        The value estimator can be changed using the :meth:`~.make_value_estimator` method.
+
+    By default, the forward method is always decorated with a
+    gh :class:`torchrl.envs.ExplorationType.MODE`
+
+    To utilize the ability configuring the tensordict keys via
+    :meth:`~.set_keys()` a subclass must define an _AcceptedKeys dataclass.
+    This dataclass should include all keys that are intended to be configurable.
+    In addition, the subclass must implement the
+    :meth:._forward_value_estimator_keys() method. This function is crucial for
+    forwarding any altered tensordict keys to the underlying value_estimator.
+
+    Examples:
+        >>> class MyLoss(LossModule):
+        >>>     @dataclass
+        >>>     class _AcceptedKeys:
+        >>>         action = "action"
+        >>>
+        >>>     def _forward_value_estimator_keys(self, **kwargs) -> None:
+        >>>         pass
+        >>>
+        >>> loss = MyLoss()
+        >>> loss.set_keys(action="action2")
     """
+
+    @dataclass
+    class _AcceptedKeys:
+        """Maintains default values for all configurable tensordict keys.
+
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values.
+        """
+
+        pass
+
+    default_value_estimator: ValueEstimators = None
+    SEP = "_sep_"
+    TARGET_NET_WARNING = (
+        "No target network updater has been associated "
+        "with this loss module, but target parameters have been found. "
+        "While this is supported, it is expected that the target network "
+        "updates will be manually performed. You can deactivate this warning "
+        "by turning the RL_WARNINGS env variable to False."
+    )
+
+    @property
+    def tensor_keys(self) -> _AcceptedKeys:
+        return self._tensor_keys
+
+    def __new__(cls, *args, **kwargs):
+        cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
+        self = super().__new__(cls)
+        return self
 
     def __init__(self):
         super().__init__()
+        self._cache = {}
         self._param_maps = {}
+        self._value_estimator = None
+        self._has_update_associated = {}
+        self.value_type = self.default_value_estimator
+        self._tensor_keys = self._AcceptedKeys()
+        self.register_forward_pre_hook(_updater_check_forward_prehook)
         # self.register_forward_pre_hook(_parameters_to_tensordict)
+
+    def _set_deprecated_ctor_keys(self, **kwargs) -> None:
+        """Helper function to set a tensordict key from a constructor and raise a warning simultaneously."""
+        for key, value in kwargs.items():
+            if value is not None:
+                warnings.warn(
+                    f"Setting '{key}' via the constructor is deprecated, use .set_keys(<key>='some_key') instead.",
+                    category=DeprecationWarning,
+                )
+                self.set_keys(**{key: value})
+
+    def set_keys(self, **kwargs) -> None:
+        """Set tensordict key names.
+
+        Examples:
+            >>> from torchrl.objectives import DQNLoss
+            >>> # initialize the DQN loss
+            >>> actor = torch.nn.Linear(3, 4)
+            >>> dqn_loss = DQNLoss(actor, action_space="one-hot")
+            >>> dqn_loss.set_keys(priority_key="td_error", action_value_key="action_value")
+        """
+        for key, value in kwargs.items():
+            if key not in self._AcceptedKeys.__dict__:
+                raise ValueError(f"{key} it not an accepted tensordict key")
+            if value is not None:
+                setattr(self.tensor_keys, key, value)
+            else:
+                setattr(self.tensor_keys, key, self.default_keys.key)
+
+        try:
+            self._forward_value_estimator_keys(**kwargs)
+        except AttributeError as err:
+            raise AttributeError(
+                "To utilize `.set_keys(...)` for tensordict key configuration, the subclassed loss module "
+                "must define an _AcceptedKeys dataclass containing all keys intended for configuration. "
+                "Moreover, the subclass needs to implement `._forward_value_estimator_keys()` method to "
+                "facilitate forwarding of any modified tensordict keys to the underlying value_estimator."
+            ) from err
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".
@@ -69,24 +173,77 @@ class LossModule(nn.Module):
 
     def convert_to_functional(
         self,
-        module: SafeModule,
+        module: TensorDictModule,
         module_name: str,
         expand_dim: Optional[int] = None,
         create_target_params: bool = False,
         compare_against: Optional[List[Parameter]] = None,
         funs_to_decorate=None,
     ) -> None:
+        """Converts a module to functional to be used in the loss.
+
+        Args:
+            module (TensorDictModule or compatible): a stateful tensordict module.
+                This module will be made functional, yet still stateful, meaning
+                that it will be callable with the following alternative signatures:
+
+                >>> module(tensordict)
+                >>> module(tensordict, params=params)
+
+                ``params`` is a :class:`tensordict.TensorDict` instance with parameters
+                stuctured as the output of :func:`tensordict.nn.make_functional`
+                is.
+            module_name (str): name where the module will be found.
+                The parameters of the module will be found under ``loss_module.<module_name>_params``
+                whereas the module will be found under ``loss_module.<module_name>``.
+            expand_dim (int, optional): if provided, the parameters of the module
+                will be expanded ``N`` times, where ``N = expand_dim`` along the
+                first dimension. This option is to be used whenever a target
+                network with more than one configuration is to be used.
+
+                .. note::
+                  If a ``compare_against`` list of values is provided, the
+                  resulting parameters will simply be a detached expansion
+                  of the original parameters. If ``compare_against`` is not
+                  provided, the value of the parameters will be resampled uniformly
+                  between the minimum and maximum value of the parameter content.
+
+             create_target_params (bool, optional): if ``True``, a detached
+                copy of the parameter will be available to feed a target network
+                under the name ``loss_module.<module_name>_target_params``.
+                If ``False`` (default), this attribute will still be available
+                but it will be a detached instance of the parameters, not a copy.
+                In other words, any modification of the parameter value
+                will directly be reflected in the target parameters.
+            compare_against (iterable of parameters, optional): if provided,
+                this list of parameters will be used as a comparison set for
+                the parameters of the module. If the parameters are expanded
+                (``expand_dim > 0``), the resulting parameters for the module
+                will be a simple expansion of the original parameter. Otherwise,
+                the resulting parameters will be a detached version of the
+                original parameters. If ``None``, the resulting parameters
+                will carry gradients as expected.
+            funs_to_decorate (list of str, optional): if provided, the list of
+                methods of ``module`` to make functional, ie the list of
+                methods that will accept the ``params`` keyword argument.
+
+        """
         if funs_to_decorate is None:
             funs_to_decorate = ["forward"]
         # To make it robust to device casting, we must register list of
         # tensors as lazy calls to `getattr(self, name_of_tensor)`.
         # Otherwise, casting the module to a device will keep old references
         # to uncast tensors
-        try:
-            buffer_names = next(itertools.islice(zip(*module.named_buffers()), 1))
-        except StopIteration:
-            buffer_names = ()
+        sep = self.SEP
         params = make_functional(module, funs_to_decorate=funs_to_decorate)
+        # buffer_names = next(itertools.islice(zip(*module.named_buffers()), 1))
+        buffer_names = []
+        for key, value in params.items(True, True):
+            # we just consider all that is not param as a buffer, but if the module has been made
+            # functional and the params have been replaced this may break
+            if not isinstance(value, nn.Parameter):
+                key = sep.join(key) if not isinstance(key, str) else key
+                buffer_names.append(key)
         functional_module = deepcopy(module)
         repopulate_module(module, params)
 
@@ -94,42 +251,28 @@ class LossModule(nn.Module):
         # we transform the buffers in params to make sure they follow the device
         # as tensor = nn.Parameter(tensor) keeps its identity when moved to another device
 
-        def create_buffers(tensor):
-
-            if isinstance(tensor, torch.Tensor) and not isinstance(
-                tensor, (Buffer, nn.Parameter)
-            ):
-                return Buffer(tensor, requires_grad=tensor.requires_grad)
-            return tensor
-
         # separate params and buffers
-        params_and_buffers = params_and_buffers.apply(create_buffers)
+        params_and_buffers = TensorDictParams(params_and_buffers, no_convert=True)
+        # sanity check
         for key in params_and_buffers.keys(True):
-            if "_sep_" in key:
+            if sep in key:
                 raise KeyError(
                     f"The key {key} contains the '_sep_' pattern which is prohibited. Consider renaming the parameter / buffer."
                 )
-        params_and_buffers_flat = params_and_buffers.flatten_keys("_sep_")
+        params_and_buffers_flat = params_and_buffers.flatten_keys(sep)
         buffers = params_and_buffers_flat.select(*buffer_names)
         params = params_and_buffers_flat.exclude(*buffer_names)
-
-        if expand_dim and not _has_functorch:
-            raise ImportError(
-                "expanding params is only possible when functorch is installed,"
-                "as this feature requires calls to the vmap operator."
-            )
+        if compare_against is not None:
+            compare_against = set(compare_against)
+        else:
+            compare_against = set()
         if expand_dim:
             # Expands the dims of params and buffers.
             # If the param already exist in the module, we return a simple expansion of the
             # original one. Otherwise, we expand and resample it.
             # For buffers, a cloned expansion (or equivalently a repeat) is returned.
-            if compare_against is not None:
-                compare_against = set(compare_against)
-            else:
-                compare_against = set()
 
             def _compare_and_expand(param):
-
                 if param in compare_against:
                     expanded_param = param.data.expand(expand_dim, *param.shape)
                     # the expanded parameter must be sent to device when to()
@@ -144,18 +287,17 @@ class LossModule(nn.Module):
                     )
                     return p_out
 
-            params_udpated = params.apply(
+            params = params.apply(
                 _compare_and_expand, batch_size=[expand_dim, *params.shape]
             )
 
-            params = params_udpated
             buffers = buffers.apply(
-                lambda buffer: Buffer(buffer.expand(expand_dim, *buffer.shape).clone()),
+                lambda buffer: buffer.expand(expand_dim, *buffer.shape).clone(),
                 batch_size=[expand_dim, *buffers.shape],
             )
 
-            params_and_buffers.update(params.unflatten_keys("_sep_"))
-            params_and_buffers.update(buffers.unflatten_keys("_sep_"))
+            params_and_buffers.update(params.unflatten_keys(sep))
+            params_and_buffers.update(buffers.unflatten_keys(sep))
             params_and_buffers.batch_size = params.batch_size
 
             # self.params_to_map = params_to_map
@@ -165,135 +307,61 @@ class LossModule(nn.Module):
         prev_set_params = set(self.parameters())
 
         # register parameters and buffers
-        for key, parameter in params.items():
+        for key, parameter in list(params_and_buffers.items(True, True)):
             if parameter not in prev_set_params:
-                setattr(self, "_sep_".join([module_name, key]), parameter)
-            else:
-                for _param_name, p in self.named_parameters():
-                    if parameter is p:
-                        break
-                else:
-                    raise RuntimeError("parameter not found")
-                setattr(self, "_sep_".join([module_name, key]), _param_name)
-        prev_set_buffers = set(self.buffers())
-        for key, buffer in buffers.items():
-            if buffer not in prev_set_buffers:
-                self.register_buffer("_sep_".join([module_name, key]), buffer)
-            else:
-                for _buffer_name, b in self.named_buffers():
-                    if buffer is b:
-                        break
-                else:
-                    raise RuntimeError("buffer not found")
-                setattr(self, "_sep_".join([module_name, key]), _buffer_name)
+                pass
+            elif compare_against is not None and parameter in compare_against:
+                params_and_buffers.set(key, parameter.data)
 
-        setattr(self, "_" + param_name, params_and_buffers)
-        setattr(
-            self.__class__,
-            param_name,
-            property(lambda _self=self: _self._param_getter(module_name)),
-        )
+        setattr(self, param_name, params_and_buffers)
 
         # set the functional module
         setattr(self, module_name, functional_module)
 
-        # creates a map nn.Parameter name -> expanded parameter name
-        for key, value in params.items(True, True):
-            if not isinstance(key, tuple):
-                key = (key,)
-            if not isinstance(value, nn.Parameter):
-                # find the param name
-                for name, param in self.named_parameters():
-                    if param.data.data_ptr() == value.data_ptr() and param is not value:
-                        self._param_maps[name] = "_sep_".join([module_name, *key])
-                        break
-                else:
-                    raise RuntimeError("did not find matching param.")
-
-        name_params_target = "_target_" + module_name
+        name_params_target = "target_" + module_name
         if create_target_params:
-            target_params = params_and_buffers.detach().clone()
-            target_params_items = target_params.items(True, True)
-            target_params_list = []
-            for (key, val) in target_params_items:
-                if not isinstance(key, tuple):
-                    key = (key,)
-                name = "_sep_".join([name_params_target, *key])
-                self.register_buffer(name, Buffer(val))
-                target_params_list.append((name, key))
+            # if create_target_params:
+            # we create a TensorDictParams to keep the target params as Buffer instances
+            target_params = TensorDictParams(
+                params_and_buffers.apply(
+                    _make_target_param(clone=create_target_params)
+                ),
+                no_convert=True,
+            )
             setattr(self, name_params_target + "_params", target_params)
-        else:
-            setattr(self, name_params_target + "_params", None)
-        setattr(
-            self.__class__,
-            name_params_target[1:] + "_params",
-            property(lambda _self=self: _self._target_param_getter(module_name)),
-        )
+        self._has_update_associated[module_name] = not create_target_params
 
-    def _param_getter(self, network_name):
-        name = "_" + network_name + "_params"
-        param_name = network_name + "_params"
-        if name in self.__dict__:
-            params = getattr(self, name)
-            if params is not None:
-                # get targets and update
-                for key in params.keys(True, True):
-                    if not isinstance(key, tuple):
-                        key = (key,)
-                    value_to_set = getattr(self, "_sep_".join([network_name, *key]))
-                    if isinstance(value_to_set, str):
-                        value_to_set = getattr(self, value_to_set).detach()
-                    params.set(key, value_to_set)
-                return params
-            else:
-                params = getattr(self, param_name)
-                return params.detach()
+    def __getattr__(self, item):
+        if item.startswith("target_") and item.endswith("_params"):
+            params = self._modules.get(item, None)
+            if params is None:
+                # no target param, take detached data
+                params = getattr(self, item[7:])
+                params = params.data
+            elif not self._has_update_associated[item[7:-7]] and RL_WARNINGS:
+                # no updater associated
+                warnings.warn(
+                    self.TARGET_NET_WARNING,
+                    category=UserWarning,
+                )
+            return params
+        return super().__getattr__(item)
 
-        else:
-            raise RuntimeError(
-                f"{self.__class__.__name__} does not have the target param {name}"
-            )
+    def _apply(self, fn):
+        # any call to apply erases the cache: the reason is that detached
+        # params will fail to be cast so we need to get the cache back
+        self._erase_cache()
+        return super()._apply(fn)
 
-    def _target_param_getter(self, network_name):
-        target_name = "_target_" + network_name + "_params"
-        param_name = network_name + "_params"
-        if target_name in self.__dict__:
-            target_params = getattr(self, target_name)
-            if target_params is not None:
-                # get targets and update
-                for key in target_params.keys(True, True):
-                    if not isinstance(key, tuple):
-                        key = (key,)
-                    value_to_set = getattr(
-                        self, "_sep_".join(["_target_" + network_name, *key])
-                    )
-                    target_params.set(key, value_to_set)
-                return target_params
-            else:
-                params = getattr(self, param_name)
-                return params.detach()
-
-        else:
-            raise RuntimeError(
-                f"{self.__class__.__name__} does not have the target param {target_name}"
-            )
+    def _erase_cache(self):
+        for key in list(self.__dict__):
+            if key.startswith("_cache"):
+                del self.__dict__[key]
 
     def _networks(self) -> Iterator[nn.Module]:
         for item in self.__dir__():
             if isinstance(item, nn.Module):
                 yield item
-
-    @property
-    def device(self) -> torch.device:
-        for p in self.parameters():
-            return p.device
-        return torch.device("cpu")
-
-    def register_buffer(
-        self, name: str, tensor: Optional[Tensor], persistent: bool = True
-    ) -> None:
-        # tensor = tensor.to(self.device)
-        return super().register_buffer(name, tensor, persistent)
 
     def parameters(self, recurse: bool = True) -> Iterator[Parameter]:
         for _, param in self.named_parameters(recurse=recurse):
@@ -310,42 +378,170 @@ class LossModule(nn.Module):
         # mainly used for PPO with KL target
         pass
 
-    def to(self, *args, **kwargs):
-        # get the names of the parameters to map
-        out = super().to(*args, **kwargs)
-        for origin, target in self._param_maps.items():
-            origin_value = getattr(self, origin)
-            target_value = getattr(self, target)
-            setattr(self, target, origin_value.expand_as(target_value))
-
-        # lists_of_params = {
-        #     name: value
-        #     for name, value in self.__dict__.items()
-        #     if name.endswith("_params") and isinstance(value, TensorDictBase)
-        # }
-        # for list_of_params in lists_of_params.values():
-        #     for key, param in list(list_of_params.items(True)):
-        #         if isinstance(param, TensorDictBase):
-        #             continue
-        #         # we replace the param by the expanded form if needs be
-        #         if param in self._param_maps:
-        #             list_of_params[key] = self._param_maps[param].data.expand_as(param)
+    @property
+    def value_estimator(self) -> ValueEstimatorBase:
+        """The value function blends in the reward and value estimate(s) from upcoming state(s)/state-action pair(s) into a target value estimate for the value network."""
+        out = self._value_estimator
+        if out is None:
+            self._default_value_estimator()
+            return self._value_estimator
         return out
 
-    def cuda(self, device: Optional[Union[int, device]] = None) -> LossModule:
-        if device is None:
-            return self.to("cuda")
+    @value_estimator.setter
+    def value_estimator(self, value):
+        self._value_estimator = value
+
+    def _default_value_estimator(self):
+        """A value-function constructor when none is provided.
+
+        No kwarg should be present as default parameters should be retrieved
+        from :obj:`torchrl.objectives.utils.DEFAULT_VALUE_FUN_PARAMS`.
+
+        """
+        self.make_value_estimator(self.default_value_estimator)
+
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        """Value-function constructor.
+
+        If the non-default value function is wanted, it must be built using
+        this method.
+
+        Args:
+            value_type (ValueEstimators): A :class:`~torchrl.objectives.utils.ValueEstimators`
+                enum type indicating the value function to use. If none is provided,
+                the default stored in the ``default_value_estimator``
+                attribute will be used. The resulting value estimator class
+                will be registered in ``self.value_type``, allowing
+                future refinements.
+            **hyperparams: hyperparameters to use for the value function.
+                If not provided, the value indicated by
+                :func:`~torchrl.objectives.utils.default_value_kwargs` will be
+                used.
+
+        Examples:
+            >>> from torchrl.objectives import DQNLoss
+            >>> # initialize the DQN loss
+            >>> actor = torch.nn.Linear(3, 4)
+            >>> dqn_loss = DQNLoss(actor, action_space="one-hot")
+            >>> # updating the parameters of the default value estimator
+            >>> dqn_loss.make_value_estimator(gamma=0.9)
+            >>> dqn_loss.make_value_estimator(
+            ...     ValueEstimators.TD1,
+            ...     gamma=0.9)
+            >>> # if we want to change the gamma value
+            >>> dqn_loss.make_value_estimator(dqn_loss.value_type, gamma=0.9)
+
+        """
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
+        if value_type == ValueEstimators.TD1:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type == ValueEstimators.TD0:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type == ValueEstimators.GAE:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type == ValueEstimators.TDLambda:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
         else:
-            return self.to(device)
+            raise NotImplementedError(f"Unknown value type {value_type}")
 
-    def double(self) -> LossModule:
-        return self.to(torch.double)
+        # def _apply(self, fn, recurse=True):
+        #     """Modifies torch.nn.Module._apply to work with Buffer class."""
+        #     if recurse:
+        #         for module in self.children():
+        #             module._apply(fn)
+        #
+        #     def compute_should_use_set_data(tensor, tensor_applied):
+        #         if torch._has_compatible_shallow_copy_type(tensor, tensor_applied):
+        #             # If the new tensor has compatible tensor type as the existing tensor,
+        #             # the current behavior is to change the tensor in-place using `.data =`,
+        #             # and the future behavior is to overwrite the existing tensor. However,
+        #             # changing the current behavior is a BC-breaking change, and we want it
+        #             # to happen in future releases. So for now we introduce the
+        #             # `torch.__future__.get_overwrite_module_params_on_conversion()`
+        #             # global flag to let the user control whether they want the future
+        #             # behavior of overwriting the existing tensor or not.
+        #             return not torch.__future__.get_overwrite_module_params_on_conversion()
+        #         else:
+        #             return False
+        #
+        #     for key, param in self._parameters.items():
+        #         if param is None:
+        #             continue
+        #         # Tensors stored in modules are graph leaves, and we don't want to
+        #         # track autograd history of `param_applied`, so we have to use
+        #         # `with torch.no_grad():`
+        #         with torch.no_grad():
+        #             param_applied = fn(param)
+        #         should_use_set_data = compute_should_use_set_data(param, param_applied)
+        #         if should_use_set_data:
+        #             param.data = param_applied
+        #             out_param = param
+        #         else:
+        #             assert isinstance(param, Parameter)
+        #             assert param.is_leaf
+        #             out_param = Parameter(param_applied, param.requires_grad)
+        #             self._parameters[key] = out_param
+        #
+        #         if param.grad is not None:
+        #             with torch.no_grad():
+        #                 grad_applied = fn(param.grad)
+        #             should_use_set_data = compute_should_use_set_data(param.grad, grad_applied)
+        #             if should_use_set_data:
+        #                 assert out_param.grad is not None
+        #                 out_param.grad.data = grad_applied
+        #             else:
+        #                 assert param.grad.is_leaf
+        #                 out_param.grad = grad_applied.requires_grad_(param.grad.requires_grad)
+        #
+        #     for key, buffer in self._buffers.items():
+        #         if buffer is None:
+        #             continue
+        #         # Tensors stored in modules are graph leaves, and we don't want to
+        #         # track autograd history of `buffer_applied`, so we have to use
+        #         # `with torch.no_grad():`
+        #         with torch.no_grad():
+        #             buffer_applied = fn(buffer)
+        #         should_use_set_data = compute_should_use_set_data(buffer, buffer_applied)
+        #         if should_use_set_data:
+        #             buffer.data = buffer_applied
+        #             out_buffer = buffer
+        #         else:
+        #             assert isinstance(buffer, Buffer)
+        #             assert buffer.is_leaf
+        #             out_buffer = Buffer(buffer_applied, buffer.requires_grad)
+        #             self._buffers[key] = out_buffer
+        #
+        #         if buffer.grad is not None:
+        #             with torch.no_grad():
+        #                 grad_applied = fn(buffer.grad)
+        #             should_use_set_data = compute_should_use_set_data(buffer.grad, grad_applied)
+        #             if should_use_set_data:
+        #                 assert out_buffer.grad is not None
+        #                 out_buffer.grad.data = grad_applied
+        #             else:
+        #                 assert buffer.grad.is_leaf
+        #                 out_buffer.grad = grad_applied.requires_grad_(buffer.grad.requires_grad)
 
-    def float(self) -> LossModule:
-        return self.to(torch.float)
+        return self
 
-    def half(self) -> LossModule:
-        return self.to(torch.half)
 
-    def cpu(self) -> LossModule:
-        return self.to(torch.device("cpu"))
+class _make_target_param:
+    def __init__(self, clone):
+        self.clone = clone
+
+    def __call__(self, x):
+        if isinstance(x, nn.Parameter):
+            return nn.Parameter(
+                x.data.clone() if self.clone else x.data, requires_grad=False
+            )
+        return x.data.clone() if self.clone else x.data

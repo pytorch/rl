@@ -4,8 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 # import tree
 import typing
-from functools import wraps
-from typing import Union
+from typing import Any, Callable, Union
 
 import numpy as np
 import torch
@@ -40,23 +39,27 @@ def _to_torch(
     return data
 
 
-def accept_remote_rref_invocation(func):
-    """Object method decorator that allows a method to be invoked remotely by passing the `rpc.RRef` associated with the remote object construction as first argument in place of the object reference."""
+def pin_memory_output(fun) -> Callable:
+    """Calls pin_memory on outputs of decorated function if they have such method."""
 
-    @wraps(func)
-    def unpack_rref_and_invoke_function(self, *args, **kwargs):
-        if isinstance(self, torch._C._distributed_rpc.PyRRef):
-            self = self.local_value()
-        return func(self, *args, **kwargs)
+    def decorated_fun(self, *args, **kwargs):
+        output = fun(self, *args, **kwargs)
+        if self._pin_memory:
+            _tuple_out = True
+            if not isinstance(output, tuple):
+                _tuple_out = False
+                output = (output,)
+            output = tuple(_pin_memory(_output) for _output in output)
+            if _tuple_out:
+                return output
+            return output[0]
+        return output
 
-    return unpack_rref_and_invoke_function
+    return decorated_fun
 
 
-def accept_remote_rref_udf_invocation(decorated_class):
-    """Class decorator that applies `accept_remote_rref_invocation` to all public methods."""
-    # ignores private methods
-    for name in dir(decorated_class):
-        method = getattr(decorated_class, name)
-        if callable(method) and not name.startswith("_"):
-            setattr(decorated_class, name, accept_remote_rref_invocation(method))
-    return decorated_class
+def _pin_memory(output: Any) -> Any:
+    if hasattr(output, "pin_memory") and output.device == torch.device("cpu"):
+        return output.pin_memory()
+    else:
+        return output

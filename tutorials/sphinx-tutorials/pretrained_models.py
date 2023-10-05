@@ -37,10 +37,16 @@ base_env = GymEnv("Ant-v4", from_pixels=True, device=device)
 # in the output tensordict. Our policy, consisting of a single layer MLP, will then read this vector and compute
 # the corresponding action.
 #
-r3m = R3MTransform("resnet50", in_keys=["pixels"], download=True).to(device)
+r3m = R3MTransform(
+    "resnet50",
+    in_keys=["pixels"],
+    download=True,
+)
 env_transformed = TransformedEnv(base_env, r3m)
 net = nn.Sequential(
-    nn.LazyLinear(128), nn.Tanh(), nn.Linear(128, base_env.action_spec.shape[-1])
+    nn.LazyLinear(128, device=device),
+    nn.Tanh(),
+    nn.Linear(128, base_env.action_spec.shape[-1], device=device),
 )
 policy = Actor(net, in_keys=["r3m_vec"])
 
@@ -82,7 +88,7 @@ print("rollout, fine tuning:", rollout)
 #
 from torchrl.data import LazyMemmapStorage, ReplayBuffer
 
-storage = LazyMemmapStorage(1000)
+storage = LazyMemmapStorage(1000, device=device)
 rb = ReplayBuffer(storage=storage, transform=r3m)
 
 ##############################################################################
@@ -106,3 +112,9 @@ print("stored data:", storage._storage)
 #
 batch = rb.sample(32)
 print("data after sampling:", batch)
+
+# sphinx_gallery_start_ignore
+import time
+
+time.sleep(10)
+# sphinx_gallery_end_ignore

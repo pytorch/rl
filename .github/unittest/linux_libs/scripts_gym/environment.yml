@@ -1,0 +1,27 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - protobuf
+  - pip:
+    # Initial version is required to install Atari ROMS in setup_env.sh
+    - gym[atari]==0.13
+    - hypothesis
+    - future
+    - cloudpickle
+    - pygame
+    - moviepy
+    - tqdm
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - pytest-error-for-skips
+    - expecttest
+    - pyyaml
+    - scipy
+    - hydra-core
+    - patchelf
+    - pyopengl==3.1.0

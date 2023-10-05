@@ -5,15 +5,15 @@
 
 from __future__ import annotations
 
-from tensordict.nn import TensorDictSequential
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 
-from torchrl.data import CompositeSpec
+from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.modules.tensordict_module.common import SafeModule
 
 
 class SafeSequential(TensorDictSequential, SafeModule):
-    """A sequence of SafeModules.
+    """A safe sequence of TensorDictModules.
 
     Similarly to :obj:`nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
     each, this module will read and write over a tensordict by querying each of the input modules.
@@ -21,11 +21,11 @@ class SafeSequential(TensorDictSequential, SafeModule):
     buffers) will be concatenated in a single list.
 
     Args:
-         modules (iterable of SafeModules): ordered sequence of SafeModule instances to be run sequentially.
-         partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
+         modules (iterable of TensorDictModules): ordered sequence of TensorDictModule instances to be run sequentially.
+         partial_tolerant (bool, optional): if ``True``, the input tensordict can miss some of the input keys.
             If so, the only module that will be executed are those who can be executed given the keys that
             are present.
-            Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is :obj:`True` AND if the
+            Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is ``True`` AND if the
             stack does not have the required keys, then SafeSequential will scan through the sub-tensordicts
             looking for those that have the required keys, if any.
 
@@ -35,23 +35,23 @@ class SafeSequential(TensorDictSequential, SafeModule):
         >>> from tensordict import TensorDict
         >>> from tensordict.nn.functional_modules import make_functional
         >>> from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
-        >>> from torchrl.modules import TanhNormal, SafeSequential, SafeModule, NormalParamWrapper
+        >>> from torchrl.modules import TanhNormal, SafeSequential, TensorDictModule, NormalParamWrapper
         >>> from torchrl.modules.tensordict_module import SafeProbabilisticModule
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
         >>> spec1 = CompositeSpec(hidden=UnboundedContinuousTensorSpec(4), loc=None, scale=None)
         >>> net1 = NormalParamWrapper(torch.nn.Linear(4, 8))
-        >>> module1 = SafeModule(net1, in_keys=["input"], out_keys=["loc", "scale"])
+        >>> module1 = TensorDictModule(net1, in_keys=["input"], out_keys=["loc", "scale"])
         >>> td_module1 = SafeProbabilisticModule(
         ...     module=module1,
         ...     spec=spec1,
-        ...     dist_in_keys=["loc", "scale"],
-        ...     sample_out_key=["hidden"],
+        ...     in_keys=["loc", "scale"],
+        ...     out_keys=["hidden"],
         ...     distribution_class=TanhNormal,
         ...     return_log_prob=True,
         ... )
         >>> spec2 = UnboundedContinuousTensorSpec(8)
         >>> module2 = torch.nn.Linear(4, 8)
-        >>> td_module2 = SafeModule(
+        >>> td_module2 = TensorDictModule(
         ...    module=module2,
         ...    spec=spec2,
         ...    in_keys=["hidden"],
@@ -75,15 +75,15 @@ class SafeSequential(TensorDictSequential, SafeModule):
         >>> # The module spec aggregates all the input specs:
         >>> print(td_module.spec)
         CompositeSpec(
-            hidden: NdUnboundedContinuousTensorSpec(
+            hidden: UnboundedContinuousTensorSpec(
                 shape=torch.Size([4]), space=None, device=cpu, dtype=torch.float32, domain=continuous),
             loc: None,
             scale: None,
-            output: NdUnboundedContinuousTensorSpec(
+            output: UnboundedContinuousTensorSpec(
                 shape=torch.Size([8]), space=None, device=cpu, dtype=torch.float32, domain=continuous))
 
     In the vmap case:
-        >>> from functorch import vmap
+        >>> from torch import vmap
         >>> params = params.expand(4, *params.shape)
         >>> td_vmap = vmap(td_module, (None, 0))(td, params)
         >>> print(td_vmap)
@@ -105,7 +105,7 @@ class SafeSequential(TensorDictSequential, SafeModule):
 
     def __init__(
         self,
-        *modules: SafeModule,
+        *modules: TensorDictModule,
         partial_tolerant: bool = False,
     ):
         self.partial_tolerant = partial_tolerant
@@ -114,9 +114,9 @@ class SafeSequential(TensorDictSequential, SafeModule):
 
         spec = CompositeSpec()
         for module in modules:
-            if isinstance(module, SafeModule) or hasattr(module, "spec"):
+            try:
                 spec.update(module.spec)
-            else:
+            except AttributeError:
                 spec.update(CompositeSpec({key: None for key in module.out_keys}))
 
         super(TensorDictSequential, self).__init__(

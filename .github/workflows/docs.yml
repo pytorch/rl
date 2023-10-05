@@ -8,95 +8,100 @@ on:
     branches:
       - "*"
   workflow_dispatch:
+
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
 jobs:
   build_docs_job:
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        include:
-         - os: linux.4xlarge.nvidia.gpu
-           python-version: 3.8
+    runs-on: linux.g5.4xlarge.nvidia.gpu
     defaults:
       run:
         shell: bash -l {0}
-    container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu18.04
+    container: nvidia/cudagl:11.4.0-runtime
     steps:
     - name: Install deps
       run: |
-        apt-get update -y
-        apt-get install software-properties-common -y
-        add-apt-repository ppa:git-core/candidate -y
-        apt-get update -y
-        apt-get upgrade -y
-        apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev
-    - name: Install rsync 📚
-      run: |
-        apt-get update && apt-get install -y rsync
-    - name: Check ldd --version
-      run: ldd --version
+        apt-get update && apt-get install -y git wget gcc g++
     - name: Checkout
       uses: actions/checkout@v3
     # Update references
+    - name: Setup conda
+      run: |
+        root_dir="$(pwd)"
+        conda_dir="${root_dir}/conda"
+        env_dir="${root_dir}/env"
+        os=Linux
+        # 1. Install conda at ./conda
+        printf "* Installing conda\n"
+        wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
+        bash ./miniconda.sh -b -f -p "${conda_dir}"
+        eval "$(${conda_dir}/bin/conda shell.bash hook)"
+        printf "* Creating a test environment\n"
+        conda create --prefix "${env_dir}" -y python=3.8
+        printf "* Activating\n"
+        conda activate "${env_dir}"
     - name: Update pip
       run: |
         apt-get install python3.8 python3-pip -y
         pip3 install --upgrade pip
-    - name: Setup conda
-      run: |
-        rm -rf $HOME/miniconda
-        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
-        bash ~/miniconda.sh -b -p $HOME/miniconda
-    - name: setup Path
-      run: |
-        echo "$HOME/miniconda/bin" >> $GITHUB_PATH
-        echo "CONDA=$HOME/miniconda" >> $GITHUB_PATH
-    - name: create and activate conda env
-      run: |
-        $HOME/miniconda/bin/conda create --name build_binary python=${{ matrix.python-version }}
-        $HOME/miniconda/bin/conda info
-        $HOME/miniconda/bin/activate build_binary
     - name: check python version
       run: |
-        python --version
+        python3 --version
     - name: Check git version
       run: git version
-    - name: setup Path
-      run: |
-        echo /usr/local/bin >> $GITHUB_PATH
     - name: Install PyTorch
       shell: bash
       run: |
-        python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
+        pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
+        #pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
     - name: Install tensordict
       run: |
-        python3 -m pip install git+https://github.com/pytorch-labs/tensordict.git
+        pip3 install git+https://github.com/pytorch-labs/tensordict.git --quiet --root-user-action=ignore
     - name: Install TorchRL
       run: |
-        python -m pip install -e .
+        python3 setup.py develop
+    - name: Install requirements
+      run: |
+        pip3 install -r docs/requirements.txt --quiet --root-user-action=ignore
     - name: Test torchrl installation
       shell: bash
       run: |
         mkdir _tmp
         cd _tmp
-        python -c "import torchrl;from torchrl.envs.libs.dm_control import DMControlEnv"
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
+        print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
         cd ..
     - name: Build the docset
       id: build_doc
       run: |
-        python -m pip install -r docs/requirements.txt
         cd ./docs
-        timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        # PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
         cd ..
+    - name: Install rsync 📚
+      run: |
+        apt-get update && apt-get install -y rsync
     - name: Pull TensorDict docs
       run: |
         git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/_local_build/tensordict
         rm -rf docs/_local_build/tensordict/.git
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
+    - name: Upload wheel for download
+      uses: actions/upload-artifact@v2
+      with:
+        name: build
+        path: docs/_local_build/
     - name: Deploy
-      if: ${{ github.ref == 'refs/heads/main' }}
+      if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       uses: JamesIves/github-pages-deploy-action@releases/v4
       with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: gh-pages # The branch the action should deploy to.
           folder: docs/_local_build/ # The folder the action should deploy.
+          CLEAN: false

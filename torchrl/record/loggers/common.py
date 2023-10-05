@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+from typing import Dict, Sequence, Union
 
 from torch import Tensor
 
@@ -21,20 +22,24 @@ class Logger:
 
     @abc.abstractmethod
     def _create_experiment(self) -> "Experiment":  # noqa: F821
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def log_scalar(self, name: str, value: float, step: int = None) -> None:
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def log_video(self, name: str, video: Tensor, step: int = None, **kwargs) -> None:
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
-    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
-        raise NotImplementedError
+    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
+        ...
 
     @abc.abstractmethod
     def __repr__(self) -> str:
-        raise NotImplementedError
+        ...
+
+    @abc.abstractmethod
+    def log_histogram(self, name: str, data: Sequence, **kwargs):
+        ...

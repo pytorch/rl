@@ -8,7 +8,7 @@ from typing import Optional
 import torch
 from tensordict.tensordict import TensorDictBase
 
-from torchrl.envs import EnvBase
+from torchrl.envs.common import EnvBase
 from torchrl.modules import SafeModule
 
 
@@ -34,7 +34,7 @@ class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
                 "Environment is batch_locked. MPCPlanners need an environnement that accepts batched inputs with any batch size"
             )
         out_keys = [action_key]
-        in_keys = list(env.observation_spec.keys())
+        in_keys = list(env.observation_spec.keys(True, True))
         super().__init__(env, in_keys=in_keys, out_keys=out_keys)
         self.env = env
         self.action_spec = env.action_spec

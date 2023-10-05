@@ -14,6 +14,40 @@ The :obj:`trainer.train()` method can be sketched as follows:
 .. code-block::
    :caption: Trainer loops
 
+           >>> for batch in collector:
+           ...     batch = self._process_batch_hook(batch)  # "batch_process"
+           ...     self._pre_steps_log_hook(batch)  # "pre_steps_log"
+           ...     self._pre_optim_hook()  # "pre_optim_steps"
+           ...     for j in range(self.optim_steps_per_batch):
+           ...         sub_batch = self._process_optim_batch_hook(batch)  # "process_optim_batch"
+           ...         losses = self.loss_module(sub_batch)
+           ...         self._post_loss_hook(sub_batch)  # "post_loss"
+           ...         self.optimizer.step()
+           ...         self.optimizer.zero_grad()
+           ...         self._post_optim_hook()  # "post_optim"
+           ...         self._post_optim_log(sub_batch)  # "post_optim_log"
+           ...     self._post_steps_hook()  # "post_steps"
+           ...     self._post_steps_log_hook(batch)  #  "post_steps_log"
+
+   There are 10 hooks that can be used in a trainer loop:
+
+           >>> for batch in collector:
+           ...     batch = self._process_batch_hook(batch)  # "batch_process"
+           ...     self._pre_steps_log_hook(batch)  # "pre_steps_log"
+           ...     self._pre_optim_hook()  # "pre_optim_steps"
+           ...     for j in range(self.optim_steps_per_batch):
+           ...         sub_batch = self._process_optim_batch_hook(batch)  # "process_optim_batch"
+           ...         losses = self.loss_module(sub_batch)
+           ...         self._post_loss_hook(sub_batch)  # "post_loss"
+           ...         self.optimizer.step()
+           ...         self.optimizer.zero_grad()
+           ...         self._post_optim_hook()  # "post_optim"
+           ...         self._post_optim_log(sub_batch)  # "post_optim_log"
+           ...     self._post_steps_hook()  # "post_steps"
+           ...     self._post_steps_log_hook(batch)  #  "post_steps_log"
+
+   There are 10 hooks that can be used in a trainer loop:
+
         >>> for batch in collector:
         ...     batch = self._process_batch_hook(batch)  # "batch_process"
         ...     self._pre_steps_log_hook(batch)  # "pre_steps_log"
@@ -39,7 +73,7 @@ Hooks can be split into 3 categories: **data processing** (:obj:`"batch_process"
 - **Data processing** hooks update a tensordict of data. Hooks :obj:`__call__` method should accept
   a :obj:`TensorDict` object as input and update it given some strategy.
   Examples of such hooks include Replay Buffer extension (:obj:`ReplayBufferTrainer.extend`), data normalization (including normalization
-  constants update), data subsampling (:doc:`BatchSubSampler`) and such.
+  constants update), data subsampling (:class:`~torchrl.trainers.BatchSubSampler`) and such.
 
 - **Logging** hooks take a batch of data presented as a :obj:`TensorDict` and write in the logger
   some information retrieved from that data. Examples include the :obj:`Recorder` hook, the reward
@@ -141,7 +175,7 @@ Trainer and hooks
     LogReward
     OptimizerHook
     Recorder
-    ReplayBuffer
+    ReplayBufferTrainer
     RewardNormalizer
     SelectKeys
     Trainer
@@ -158,21 +192,12 @@ Builders
     :toctree: generated/
     :template: rl_template_fun.rst
 
-    make_a2c_loss
-    make_a2c_model
     make_collector_offpolicy
     make_collector_onpolicy
-    make_ddpg_actor
-    make_ddpg_loss
-    make_dqn_actor
     make_dqn_loss
-    make_ppo_loss
-    make_ppo_model
     make_redq_loss
     make_redq_model
     make_replay_buffer
-    make_sac_loss
-    make_sac_model
     make_target_updater
     make_trainer
     parallel_env_constructor
@@ -193,16 +218,29 @@ Utils
 Loggers
 -------
 
-.. currentmodule:: torchrl.recorder.loggers
+.. currentmodule:: torchrl.record.loggers
 
 .. autosummary::
     :toctree: generated/
     :template: rl_template_fun.rst
 
     Logger
-    CSVLogger
-    MLFlowLogger
-    TensorboardLogger
-    WandbLogger
+    csv.CSVLogger
+    mlflow.MLFlowLogger
+    tensorboard.TensorboardLogger
+    wandb.WandbLogger
     get_logger
     generate_exp_name
+
+
+Recording utils
+---------------
+
+.. currentmodule:: torchrl.record
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    VideoRecorder
+    TensorDictRecorder

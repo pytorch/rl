@@ -89,19 +89,21 @@ def make_env_transforms(
         env.append_transform(Resize(cfg.image_size, cfg.image_size))
         if cfg.grayscale:
             env.append_transform(GrayScale())
-        env.append_transform(FlattenObservation(0, -3))
-        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"]))
-        if stats is None:
+        env.append_transform(FlattenObservation(0, -3, allow_positive_dim=True))
+        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"], dim=-3))
+        if stats is None and obs_norm_state_dict is None:
             obs_stats = {
-                "loc": torch.zeros(env.observation_spec["pixels"].shape),
-                "scale": torch.ones(env.observation_spec["pixels"].shape),
+                "loc": torch.zeros(()),
+                "scale": torch.ones(()),
             }
+        elif stats is None and obs_norm_state_dict is not None:
+            obs_stats = obs_norm_state_dict
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
         obs_norm = ObservationNorm(**obs_stats, in_keys=["pixels"])
-        if obs_norm_state_dict:
-            obs_norm.load_state_dict(obs_norm_state_dict)
+        # if obs_norm_state_dict:
+        #     obs_norm.load_state_dict(obs_norm_state_dict)
         env.append_transform(obs_norm)
     if norm_rewards:
         reward_scaling = 1.0
@@ -117,16 +119,15 @@ def make_env_transforms(
     if env_library is DMControlEnv:
         double_to_float_list += [
             "reward",
-            "action",
         ]
         float_to_double_list += ["action"]  # DMControl requires double-precision
-    env.append_transform(
-        DoubleToFloat(in_keys=double_to_float_list, in_keys_inv=float_to_double_list)
-    )
+    env.append_transform(DoubleToFloat())
 
     default_dict = {
-        "state": UnboundedContinuousTensorSpec(cfg.state_dim),
-        "belief": UnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
+        "state": UnboundedContinuousTensorSpec(shape=(*env.batch_size, cfg.state_dim)),
+        "belief": UnboundedContinuousTensorSpec(
+            shape=(*env.batch_size, cfg.rssm_hidden_dim)
+        ),
     }
     env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -191,13 +192,13 @@ def transformed_env_constructor(
         from_pixels = cfg.from_pixels
 
         if custom_env is None and custom_env_maker is None:
-            if isinstance(cfg.collector_devices, str):
-                device = cfg.collector_devices
-            elif isinstance(cfg.collector_devices, Sequence):
-                device = cfg.collector_devices[0]
+            if isinstance(cfg.collector_device, str):
+                device = cfg.collector_device
+            elif isinstance(cfg.collector_device, Sequence):
+                device = cfg.collector_device[0]
             else:
                 raise ValueError(
-                    "collector_devices must be either a string or a sequence of strings"
+                    "collector_device must be either a string or a sequence of strings"
                 )
             env_kwargs = {
                 "env_name": env_name,
@@ -366,12 +367,22 @@ def make_recorder_env(cfg, video_tag, obs_norm_state_dict, logger, create_env_fn
         recorder_rm = recorder
 
     if isinstance(create_env_fn, ParallelEnv):
-        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
-        create_env_fn.close()
+        sd = create_env_fn.state_dict()["worker0"]
     elif isinstance(create_env_fn, EnvCreator):
-        recorder_rm.load_state_dict(create_env_fn().state_dict())
+        _env = create_env_fn()
+        _env.rollout(2)
+        sd = _env.state_dict()
+        del _env
     else:
-        recorder_rm.load_state_dict(create_env_fn.state_dict())
+        sd = create_env_fn.state_dict()
+    sd = {
+        key: val
+        for key, val in sd.items()
+        if key.endswith("loc") or key.endswith("scale")
+    }
+    if not len(sd):
+        raise ValueError("Empty state dict")
+    recorder_rm.load_state_dict(sd, strict=False)
     # reset reward scaling
     for t in recorder.transform:
         if isinstance(t, RewardScaling):
@@ -417,6 +428,6 @@ class EnvConfig:
     # Disables grayscale transform.
     max_frames_per_traj: int = 1000
     # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
-    batch_transform: bool = False
+    batch_transform: bool = True
     # if True, the transforms will be applied to the parallel env, and not to each individual env.\
     image_size: int = 84

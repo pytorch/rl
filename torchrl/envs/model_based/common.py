@@ -4,18 +4,19 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import warnings
 from typing import List, Optional, Union
 
 import numpy as np
 import torch
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-from torchrl.modules.tensordict_module import SafeModule
 
 
-class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
+class ModelBasedEnvBase(EnvBase):
     """Basic environnement for Model Based RL algorithms.
 
     Wrapper around the model of the MBRL algorithm.
@@ -34,10 +35,10 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         ...         self.observation_spec = CompositeSpec(
         ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
         ...         )
-        ...         self.input_spec = CompositeSpec(
+        ...         self.state_spec = CompositeSpec(
         ...             hidden_observation=UnboundedContinuousTensorSpec((4,)),
-        ...             action=UnboundedContinuousTensorSpec((1,)),
         ...         )
+        ...         self.action_spec = UnboundedContinuousTensorSpec((1,))
         ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
@@ -45,19 +46,19 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         ...             batch_size=self.batch_size,
         ...             device=self.device,
         ...         )
-        ...         tensordict = tensordict.update(self.input_spec.rand())
+        ...         tensordict = tensordict.update(self.state_spec.rand())
         ...         tensordict = tensordict.update(self.observation_spec.rand())
         ...         return tensordict
         >>> # This environment is used as follows:
         >>> import torch.nn as nn
         >>> from torchrl.modules import MLP, WorldModelWrapper
         >>> world_model = WorldModelWrapper(
-        ...     SafeModule(
+        ...     TensorDictModule(
         ...         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
         ...         in_keys=["hidden_observation", "action"],
         ...         out_keys=["hidden_observation"],
         ...     ),
-        ...     SafeModule(
+        ...     TensorDictModule(
         ...         nn.Linear(4, 1),
         ...         in_keys=["hidden_observation"],
         ...         out_keys=["reward"],
@@ -112,7 +113,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
 
     def __init__(
         self,
-        world_model: SafeModule,
+        world_model: TensorDictModule,
         params: Optional[List[torch.Tensor]] = None,
         buffers: Optional[List[torch.Tensor]] = None,
         device: DEVICE_TYPING = "cpu",
@@ -140,7 +141,9 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         """Sets the specs of the environment from the specs of the given environment."""
         self.observation_spec = env.observation_spec.clone().to(self.device)
         self.reward_spec = env.reward_spec.clone().to(self.device)
-        self.input_spec = env.input_spec.clone().to(self.device)
+        self.action_spec = env.action_spec.clone().to(self.device)
+        self.done_spec = env.done_spec.clone().to(self.device)
+        self.state_spec = env.state_spec.clone().to(self.device)
 
     def _step(
         self,
@@ -157,18 +160,18 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
             )
         else:
             tensordict_out = self.world_model(tensordict_out)
-        # Step requires a done flag. No sense for MBRL so we set it to False
-        if "done" not in self.world_model.out_keys:
-            tensordict_out["done"] = torch.zeros(
-                tensordict_out.shape,
-                dtype=torch.bool,
-                device=tensordict_out.device,
-            )
-        return tensordict_out
+        # done can be missing, it will be filled by `step`
+        return tensordict_out.select(
+            *self.observation_spec.keys(),
+            *self.full_done_spec.keys(),
+            *self.full_reward_spec.keys(),
+            strict=False,
+        )
 
     @abc.abstractmethod
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         raise NotImplementedError
 
     def _set_seed(self, seed: Optional[int]) -> int:
-        raise Warning("Set seed isn't needed for model based environments")
+        warnings.warn("Set seed isn't needed for model based environments")
+        return seed

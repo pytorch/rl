@@ -8,12 +8,12 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 
-from torchrl.data import CompositeSpec
+from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs import EnvBase
+from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based import ModelBasedEnvBase
-from torchrl.modules.tensordict_module import SafeModule
 
 
 class DreamerEnv(ModelBasedEnvBase):
@@ -21,10 +21,10 @@ class DreamerEnv(ModelBasedEnvBase):
 
     def __init__(
         self,
-        world_model: SafeModule,
+        world_model: TensorDictModule,
         prior_shape: Tuple[int, ...],
         belief_shape: Tuple[int, ...],
-        obs_decoder: SafeModule = None,
+        obs_decoder: TensorDictModule = None,
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
@@ -47,18 +47,19 @@ class DreamerEnv(ModelBasedEnvBase):
         #         shape=self.belief_shape, device=self.device
         #     ),
         # )
-        self.input_spec = CompositeSpec(
+        self.action_spec = self.action_spec.to(self.device)
+        self.state_spec = CompositeSpec(
             state=self.observation_spec["state"],
             belief=self.observation_spec["belief"],
-            action=self.action_spec.to(self.device),
             shape=env.batch_size,
         )
 
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
         batch_size = tensordict.batch_size if tensordict is not None else []
         device = tensordict.device if tensordict is not None else self.device
-        td = self.input_spec.rand(shape=batch_size).to(device)
-        td["reward"] = self.reward_spec.rand(shape=batch_size).to(device)
+        td = self.state_spec.rand(shape=batch_size).to(device)
+        td.set("action", self.action_spec.rand(shape=batch_size).to(device))
+        td[("next", "reward")] = self.reward_spec.rand(shape=batch_size).to(device)
         td.update(self.observation_spec.rand(shape=batch_size).to(device))
         return td
 
