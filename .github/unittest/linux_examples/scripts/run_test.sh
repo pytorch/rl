@@ -285,6 +285,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/multiagent/sac
 python .github/unittest/helpers/coverage_run_parallel.py examples/bandits/dqn.py --n_steps=100
 
 ## RLHF
+pip install datasets
 python .github/unittest/helpers/coverage_run_parallel.py examples/rlhf/train_rlhf.py \
   sys.device=cuda:0 sys.ref_device=cuda:0 \
   model.name_or_path=gpt2 train.max_epochs=2 \
