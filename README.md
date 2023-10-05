@@ -499,6 +499,7 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 - [SAC](examples/sac/sac.py)
 - [REDQ](examples/redq/redq.py)
 - [Dreamer](examples/dreamer/dreamer.py)
+- [RLHF](examples/rlhf)
 
 and many more to come!
 
