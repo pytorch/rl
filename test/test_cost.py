@@ -1767,7 +1767,7 @@ class TestDDPG(LossModuleTestBase):
         with pytest.warns(UserWarning, match="No target network updater has been"):
             loss_val_td = loss(td)
             loss_val = loss(**kwargs)
-            for i, key in enumerate(loss_val_td.keys()):
+            for i, key in enumerate(loss.out_keys):
                 torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
             # test select
             loss.select_out_keys("loss_actor", "target_value")

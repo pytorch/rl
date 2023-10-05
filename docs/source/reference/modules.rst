@@ -332,6 +332,7 @@ algorithms, such as DQN, DDPG or Dreamer.
     DistributionalDQNnet
     DreamerActor
     DuelingCnnDQNet
+    GRUModule
     LSTMModule
     ObsDecoder
     ObsEncoder
@@ -350,6 +351,7 @@ multi-agent contexts.
     :template: rl_template_noinherit.rst
 
     MultiAgentMLP
+    MultiAgentConvNet
     QMixer
     VDNMixer
 
