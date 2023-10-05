@@ -33,9 +33,9 @@ if [ "${CU_VERSION:-}" == cpu ] ; then
     # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
     # use pip to install pytorch as conda can frequently pick older release
 #    conda install -y pytorch cpuonly -c pytorch-nightly
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu --force-reinstall
+    pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu --force-reinstall
 else
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu116 --force-reinstall
+    pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu116 --force-reinstall
 fi
 
 # install tensordict
