@@ -10420,7 +10420,7 @@ class TestAdv:
                 gamma=0.98,
                 actor_network=actor_net,
                 value_network=value_net,
-                differentiable=False,
+                differentiable=True,
                 **kwargs,
             )
             td = TensorDict(
@@ -10577,7 +10577,7 @@ class TestAdv:
                 gamma=0.98,
                 actor_network=actor_net,
                 value_network=value_net,
-                differentiable=False,
+                differentiable=True,
                 shifted=shifted,
                 **kwargs,
             )
