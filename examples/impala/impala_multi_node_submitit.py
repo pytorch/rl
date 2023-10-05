@@ -75,7 +75,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         sync=False,
         slurm_kwargs=slurm_kwargs,
         launcher="submitit",
-        storing_device=device,
         update_after_each_batch=True,
     )
 

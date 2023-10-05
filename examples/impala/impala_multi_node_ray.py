@@ -93,7 +93,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         ray_init_config=ray_init_config,
         remote_configs=remote_config,
         sync=False,
-        storing_device=device,
         update_after_each_batch=True,
     )
 
