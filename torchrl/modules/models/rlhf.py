@@ -41,7 +41,7 @@ class GPT2RewardModel(nn.Module):
         from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 
         super().__init__()
-        if model_path:
+        if model_path is not None:
             model = GPT2LMHeadModel.from_pretrained(model_path, return_dict=False)
         else:
             model = GPT2LMHeadModel(GPT2LMHeadModel.config_class())
@@ -75,6 +75,7 @@ class GPT2RewardModel(nn.Module):
 
         return torch.stack(end_scores)
 
+    # TODO: move to objectives
     @staticmethod
     def compute_reward_loss(chosen_batch, rejected_batch, pad_token_id=50256):
         """Compute the reward loss given a chosen and rejected batch.
