@@ -140,7 +140,7 @@ jobs:
           python3 -mpip install --upgrade pip
       - name: Install tensordict
         run: |
-          python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
+          python3 -mpip install git+https://github.com/pytorch/tensordict.git
       - name: Install test dependencies
         run: |
           python3 -mpip install numpy pytest pytest-cov codecov unittest-xml-reporting pillow>=4.1.1 scipy av networkx expecttest pyyaml
@@ -192,7 +192,7 @@ jobs:
       - name: Install tensordict
         shell: bash
         run: |
-          python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
+          python3 -mpip install git+https://github.com/pytorch/tensordict.git
       - name: Install test dependencies
         shell: bash
         run: |

@@ -23,7 +23,7 @@ printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
 
 # install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict.git
+pip install git+https://github.com/pytorch/tensordict.git
 
 # smoke test
 python -c "import functorch"
