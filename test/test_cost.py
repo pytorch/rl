@@ -5133,6 +5133,7 @@ class TestPPO(LossModuleTestBase):
         action_dim=4,
         device="cpu",
         observation_key="observation",
+        sample_log_prob_key="sample_log_prob",
     ):
         # Actor
         action_spec = BoundedTensorSpec(
@@ -5148,6 +5149,7 @@ class TestPPO(LossModuleTestBase):
             in_keys=["loc", "scale"],
             spec=action_spec,
             return_log_prob=True,
+            log_prob_key=sample_log_prob_key,
         )
         return actor.to(device)
 
@@ -5700,7 +5702,7 @@ class TestPPO(LossModuleTestBase):
             sample_log_prob_key=tensor_keys["sample_log_prob"],
             action_key=tensor_keys["action"],
         )
-        actor = self._create_mock_actor()
+        actor = self._create_mock_actor(sample_log_prob_key=tensor_keys["sample_log_prob"])
         value = self._create_mock_value(out_keys=[tensor_keys["value"]])
 
         if advantage == "gae":
@@ -5810,7 +5812,7 @@ class TestPPO(LossModuleTestBase):
             terminated_key=terminated_key,
         )
 
-        actor = self._create_mock_actor(observation_key=observation_key)
+        actor = self._create_mock_actor(observation_key=observation_key, sample_log_prob_key=sample_log_prob_key)
         value = self._create_mock_value(observation_key=observation_key)
 
         loss = loss_class(actor=actor, critic=value)
