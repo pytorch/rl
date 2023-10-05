@@ -5,8 +5,15 @@
 
 import hydra
 import torch
+from models.actor_critic import init_actor_critic
+from torchrl.data.rlhf.utils import AdaptiveKLController, RolloutFromModel
 
-from examples.rlhf.utils import (
+from torchrl.record.loggers import get_logger
+
+from tqdm import tqdm
+
+from utils import (
+    flatten_td,
     freeze_layers,
     get_prompt_loaders,
     make_evaluator,
@@ -16,15 +23,10 @@ from examples.rlhf.utils import (
     make_replay_buffer,
     make_reward_model,
     make_sub_replay_buffer,
+    resolve_name_or_path,
+    setup,
     TrainLogger,
 )
-from models.actor_critic import init_actor_critic
-from torchrl.data.rlhf.utils import AdaptiveKLController, RolloutFromModel
-
-from torchrl.record.loggers import get_logger
-
-from tqdm import tqdm
-from utils import flatten_td, resolve_name_or_path, setup
 
 
 @hydra.main(version_base="1.1", config_path="config", config_name="train_rlhf")
