@@ -493,12 +493,14 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 - [DQN and Rainbow](examples/dqn/dqn.py)
 - [DDPG](examples/ddpg/ddpg.py)
 - [IQL](examples/iql/iql.py)
+- [CQL](examples/iql/cql.py)
 - [TD3](examples/td3/td3.py)
 - [A2C](examples/a2c_old/a2c.py)
 - [PPO](examples/ppo/ppo.py)
 - [SAC](examples/sac/sac.py)
 - [REDQ](examples/redq/redq.py)
 - [Dreamer](examples/dreamer/dreamer.py)
+- [Decision Transformers](examples/decision_transformer)
 - [RLHF](examples/rlhf)
 
 and many more to come!
