@@ -6045,7 +6045,10 @@ class TestA2C(LossModuleTestBase):
             )
         elif advantage == "vtrace":
             advantage = VTrace(
-                gamma=0.9, value_network=value, actor_network=actor, differentiable=gradient_mode,
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
+                differentiable=gradient_mode,
             )
         elif advantage == "td":
             advantage = TD1Estimator(
@@ -6286,9 +6289,16 @@ class TestA2C(LossModuleTestBase):
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
-    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
+    @pytest.mark.parametrize(
+        "td_est",
+        [
+            ValueEstimators.GAE,
+            ValueEstimators.VTrace,
+        ],
+    )
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", None))
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_a2c_tensordict_keys_run(self, device, advantage):
+    def test_a2c_tensordict_keys_run(self, device, advantage, td_est):
         """Test A2C loss module with non-default tensordict keys."""
         torch.manual_seed(self.seed)
         gradient_mode = True
@@ -6309,7 +6319,9 @@ class TestA2C(LossModuleTestBase):
             terminated_key=terminated_key,
         )
 
-        actor = self._create_mock_actor(device=device, sample_log_prob_key=sample_log_prob_key)
+        actor = self._create_mock_actor(
+            device=device, sample_log_prob_key=sample_log_prob_key
+        )
         value = self._create_mock_value(device=device, out_keys=[value_key])
         if advantage == "gae":
             advantage = GAE(
@@ -6322,15 +6334,11 @@ class TestA2C(LossModuleTestBase):
                 actor_network=actor,
                 differentiable=gradient_mode,
             )
-        advantage.set_keys(
-            advantage=advantage_key,
-            value_target=value_target_key,
-            value=value_key,
-            reward=reward_key,
-            done=done_key,
-            terminated=terminated_key,
-            sample_log_prob=sample_log_prob_key,
-        )
+        elif advantage is None:
+            pass
+        else:
+            raise NotImplementedError
+
         loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
         loss_fn.set_keys(
             advantage=advantage_key,
@@ -6343,7 +6351,20 @@ class TestA2C(LossModuleTestBase):
             sample_log_prob=sample_log_prob_key,
         )
 
-        advantage(td)
+        if advantage is not None:
+            advantage.set_keys(
+                advantage=advantage_key,
+                value_target=value_target_key,
+                value=value_key,
+                reward=reward_key,
+                done=done_key,
+                terminated=terminated_key,
+                sample_log_prob=sample_log_prob_key,
+            )
+            advantage(td)
+        else:
+            if td_est is not None:
+                loss_fn.make_value_estimator(td_est)
 
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
