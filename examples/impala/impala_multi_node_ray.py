@@ -77,11 +77,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         "storage": cfg.ray_init_config.storage,
     }
     remote_config = {
-        "num_cpus": cfg.remote_worker_resources.num_cpus,
-        "num_gpus": cfg.remote_worker_resources.num_gpus
+        "num_cpus": float(cfg.remote_worker_resources.num_cpus),
+        "num_gpus": float(cfg.remote_worker_resources.num_gpus)
         if torch.cuda.device_count()
         else 0,
-        "memory": cfg.remote_worker_resources.memory,
+        "memory": float(cfg.remote_worker_resources.memory),
     }
     collector = RayCollector(
         create_env_fn=[make_env(cfg.env.env_name, device)] * num_workers,
@@ -90,7 +90,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
         max_frames_per_traj=-1,
-        ray_init_config=ray_init_config,
+        # ray_init_config=ray_init_config,
         remote_configs=remote_config,
         sync=False,
         storing_device=device,

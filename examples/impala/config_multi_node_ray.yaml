@@ -27,7 +27,7 @@ ray_init_config:
 remote_worker_resources:
   num_cpus: 1
   num_gpus: 0.25
-  memory: 2 * 1024**3
+  memory: 1073741824 # 1*1024**3 - 1GB
 
 # collector
 collector:
