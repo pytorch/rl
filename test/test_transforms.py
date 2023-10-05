@@ -65,6 +65,7 @@ from torchrl.envs import (
     DiscreteActionProjection,
     DMControlEnv,
     DoubleToFloat,
+    EndOfLifeTransform,
     EnvBase,
     EnvCreator,
     ExcludeTransform,
@@ -101,11 +102,11 @@ from torchrl.envs import (
     VIPTransform,
 )
 from torchrl.envs.libs.dm_control import _has_dm_control
-from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.envs.libs.gym import _has_gym, GymEnv, set_gym_backend
 from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.rlhf import KLRewardTransform
-from torchrl.envs.transforms.transforms import _has_tv
+from torchrl.envs.transforms.transforms import _has_tv, FORWARD_NOT_IMPLEMENTED
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import _replace_last, check_env_specs, step_mdp
@@ -8962,6 +8963,113 @@ class TestPermuteTransform(TransformBase):
         td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
         td = trans(td)
         assert td["pixels"].shape == torch.Size((*batch, C, D, H, W))
+
+
+@pytest.mark.skipif(
+    not _has_gym, reason="EndOfLifeTransform can only be tested when Gym is present."
+)
+class TestEndOfLife(TransformBase):
+    def test_trans_parallel_env_check(self):
+        def make():
+            with set_gym_backend("gymnasium"):
+                return GymEnv("ALE/Breakout-v5")
+
+        with pytest.warns(UserWarning, match="The base_env is not a gym env"):
+            with pytest.raises(AttributeError):
+                env = TransformedEnv(
+                    ParallelEnv(2, make), transform=EndOfLifeTransform()
+                )
+                check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        def make():
+            with set_gym_backend("gymnasium"):
+                return GymEnv("ALE/Breakout-v5")
+
+        with pytest.warns(UserWarning, match="The base_env is not a gym env"):
+            env = TransformedEnv(SerialEnv(2, make), transform=EndOfLifeTransform())
+            check_env_specs(env)
+
+    @pytest.mark.parametrize("eol_key", ["eol_key", ("nested", "eol")])
+    @pytest.mark.parametrize("lives_key", ["lives_key", ("nested", "lives")])
+    def test_single_trans_env_check(self, eol_key, lives_key):
+        with set_gym_backend("gymnasium"):
+            env = TransformedEnv(
+                GymEnv("ALE/Breakout-v5"),
+                transform=EndOfLifeTransform(eol_key=eol_key, lives_key=lives_key),
+            )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("eol_key", ["eol_key", ("nested", "eol")])
+    @pytest.mark.parametrize("lives_key", ["lives_key", ("nested", "lives")])
+    def test_serial_trans_env_check(self, eol_key, lives_key):
+        def make():
+            with set_gym_backend("gymnasium"):
+                return TransformedEnv(
+                    GymEnv("ALE/Breakout-v5"),
+                    transform=EndOfLifeTransform(eol_key=eol_key, lives_key=lives_key),
+                )
+
+        env = SerialEnv(2, make)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("eol_key", ["eol_key", ("nested", "eol")])
+    @pytest.mark.parametrize("lives_key", ["lives_key", ("nested", "lives")])
+    def test_parallel_trans_env_check(self, eol_key, lives_key):
+        def make():
+            with set_gym_backend("gymnasium"):
+                return TransformedEnv(
+                    GymEnv("ALE/Breakout-v5"),
+                    transform=EndOfLifeTransform(eol_key=eol_key, lives_key=lives_key),
+                )
+
+        env = ParallelEnv(2, make)
+        check_env_specs(env)
+
+    def test_transform_no_env(self):
+        t = EndOfLifeTransform()
+        with pytest.raises(RuntimeError, match=t.NO_PARENT_ERR.format(type(t))):
+            t._step(TensorDict({}, []), TensorDict({}, []))
+
+    def test_transform_compose(self):
+        t = EndOfLifeTransform()
+        with pytest.raises(RuntimeError, match=t.NO_PARENT_ERR.format(type(t))):
+            Compose(t)._step(TensorDict({}, []), TensorDict({}, []))
+
+    @pytest.mark.parametrize("eol_key", ["eol_key", ("nested", "eol")])
+    @pytest.mark.parametrize("lives_key", ["lives_key", ("nested", "lives")])
+    def test_transform_env(self, eol_key, lives_key):
+        from tensordict.nn import TensorDictModule
+        from torchrl.objectives import DQNLoss
+        from torchrl.objectives.value import GAE
+
+        with set_gym_backend("gymnasium"):
+            env = TransformedEnv(
+                GymEnv("ALE/Breakout-v5"),
+                transform=EndOfLifeTransform(eol_key=eol_key, lives_key=lives_key),
+            )
+        check_env_specs(env)
+        loss = DQNLoss(nn.Identity(), action_space="categorical")
+        env.transform.register_keys(loss)
+        assert ("next", eol_key) in loss.in_keys
+        gae = GAE(
+            gamma=0.9,
+            lmbda=0.9,
+            value_network=TensorDictModule(nn.Identity(), ["x"], ["y"]),
+        )
+        env.transform.register_keys(gae)
+        assert ("next", eol_key) in gae.in_keys
+
+    def test_transform_model(self):
+        t = EndOfLifeTransform()
+        with pytest.raises(RuntimeError, match=FORWARD_NOT_IMPLEMENTED.format(type(t))):
+            nn.Sequential(t)(TensorDict({}, []))
+
+    def test_transform_rb(self):
+        pass
+
+    def test_transform_inverse(self):
+        pass
 
 
 if __name__ == "__main__":

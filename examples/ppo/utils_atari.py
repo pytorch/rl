@@ -7,10 +7,11 @@ import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
 from torchrl.data import CompositeSpec
-from torchrl.data.tensor_specs import DiscreteBox, UnboundedDiscreteTensorSpec
+from torchrl.data.tensor_specs import DiscreteBox
 from torchrl.envs import (
     CatFrames,
     DoubleToFloat,
+    EndOfLifeTransform,
     EnvCreator,
     ExplorationType,
     GrayScale,
@@ -22,7 +23,6 @@ from torchrl.envs import (
     RewardSum,
     StepCounter,
     ToTensorImage,
-    Transform,
     TransformedEnv,
     VecNorm,
 )
@@ -39,38 +39,6 @@ from torchrl.modules import (
 # ====================================================================
 # Environment utils
 # --------------------------------------------------------------------
-
-
-class EndOfLifeTransform(Transform):
-    """Registers the end-of-life signal from a Gym env with a `lives` method.
-
-    Done by DeepMind for the DQN and co. It helps value estimation.
-    """
-
-    def _step(self, tensordict, next_tensordict):
-        lives = self.parent.base_env._env.unwrapped.ale.lives()
-        end_of_life = torch.tensor(
-            [tensordict["lives"] < lives], device=self.parent.device
-        )
-        end_of_life = end_of_life | next_tensordict.get("done")
-        next_tensordict.set("eol", end_of_life)
-        next_tensordict.set("lives", lives)
-        return next_tensordict
-
-    def reset(self, tensordict):
-        lives = self.parent.base_env._env.unwrapped.ale.lives()
-        end_of_life = False
-        tensordict.set("eol", [end_of_life])
-        tensordict.set("lives", lives)
-        return tensordict
-
-    def transform_observation_spec(self, observation_spec):
-        full_done_spec = self.parent.output_spec["full_done_spec"]
-        observation_spec["eol"] = full_done_spec["done"].clone()
-        observation_spec["lives"] = UnboundedDiscreteTensorSpec(
-            self.parent.batch_size, device=self.parent.device
-        )
-        return observation_spec
 
 
 def make_base_env(
