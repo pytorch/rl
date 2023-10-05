@@ -303,6 +303,10 @@ class IQLLoss(LossModule):
 
     @property
     def device(self) -> torch.device:
+        warnings.warn(
+            "The device attributes of the looses will be deprecated in v0.3.",
+            category=DeprecationWarning,
+        )
         for p in self.parameters():
             return p.device
         raise RuntimeError(
@@ -357,12 +361,9 @@ class IQLLoss(LossModule):
         else:
             tensordict_reshape = tensordict
 
-        device = self.device
-        td_device = tensordict_reshape.to(device)
-
-        loss_actor = self._loss_actor(td_device)
-        loss_qvalue, priority = self._loss_qvalue(td_device)
-        loss_value = self._loss_value(td_device)
+        loss_actor = self._loss_actor(tensordict_reshape)
+        loss_qvalue, priority = self._loss_qvalue(tensordict_reshape)
+        loss_value = self._loss_value(tensordict_reshape)
 
         tensordict_reshape.set(self.tensor_keys.priority, priority)
         if (loss_actor.shape != loss_qvalue.shape) or (
@@ -377,7 +378,9 @@ class IQLLoss(LossModule):
             "loss_actor": loss_actor.mean(),
             "loss_qvalue": loss_qvalue.mean(),
             "loss_value": loss_value.mean(),
-            "entropy": -td_device.get(self.tensor_keys.log_prob).mean().detach(),
+            "entropy": -tensordict_reshape.get(self.tensor_keys.log_prob)
+            .mean()
+            .detach(),
         }
 
         return TensorDict(
@@ -419,7 +422,7 @@ class IQLLoss(LossModule):
 
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
-        return -(exp_a * log_prob).mean()
+        return -(exp_a * log_prob).mean(), {}
 
     def _loss_value(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         # Min Q value
