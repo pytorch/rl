@@ -10333,6 +10333,7 @@ class TestAdv:
             [GAE, {"lmbda": 0.95}],
             [TD1Estimator, {}],
             [TDLambdaEstimator, {"lmbda": 0.95}],
+            [VTrace, {}]
         ],
     )
     def test_dispatch(
@@ -10343,18 +10344,35 @@ class TestAdv:
         value_net = TensorDictModule(
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
         )
-        module = adv(
-            gamma=0.98,
-            value_network=value_net,
-            differentiable=False,
-            **kwargs,
-        )
-        kwargs = {
-            "obs": torch.randn(1, 10, 3),
-            "next_reward": torch.randn(1, 10, 1, requires_grad=True),
-            "next_done": torch.zeros(1, 10, 1, dtype=torch.bool),
-            "next_obs": torch.randn(1, 10, 3),
-        }
+        if adv == VTrace:
+            actor_net = TensorDictModule(nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"])
+            actor_net = ProbabilisticActor(
+                module=actor_net,
+                in_keys=["logits"],
+                out_keys=["action"],
+                distribution_class=OneHotCategorical,
+                return_log_prob=True,
+            )
+            kwargs = {
+                "obs": torch.randn(1, 10, 3),
+                "sample_log_prob": torch.log(torch.rand(1, 10, 4)),
+                "next_reward": torch.randn(1, 10, 1, requires_grad=True),
+                "next_done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                "next_obs": torch.randn(1, 10, 3),
+            }
+        else:
+            module = adv(
+                gamma=0.98,
+                value_network=value_net,
+                differentiable=False,
+                **kwargs,
+            )
+            kwargs = {
+                "obs": torch.randn(1, 10, 3),
+                "next_reward": torch.randn(1, 10, 1, requires_grad=True),
+                "next_done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                "next_obs": torch.randn(1, 10, 3),
+            }
         advantage, value_target = module(**kwargs)
         assert advantage.shape == torch.Size([1, 10, 1])
         assert value_target.shape == torch.Size([1, 10, 1])
