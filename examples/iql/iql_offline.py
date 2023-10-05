@@ -106,8 +106,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
             eval_reward = eval_td["next", "reward"].sum(1).mean().item()
             to_log["evaluation_reward"] = eval_reward
-
-        log_metrics(logger, to_log, i)
+        if logger is not None:
+            log_metrics(logger, to_log, i)
 
     pbar.close()
     print(f"Training time: {time.time() - start_time}")

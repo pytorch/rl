@@ -172,8 +172,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 metrics_to_log["eval/reward"] = eval_reward
                 metrics_to_log["eval/time"] = eval_time
-
-        log_metrics(logger, metrics_to_log, collected_frames)
+        if logger is not None:
+            log_metrics(logger, metrics_to_log, collected_frames)
         sampling_start = time.time()
 
     collector.shutdown()
