@@ -316,7 +316,12 @@ class RolloutFromModel:
             (generated != self.EOS_TOKEN_ID).sum(dim=-1) - batch.prompt_rindex,
             torch.tensor(self.max_new_tokens) - 1,
         )
-        truncated_idx = torch.tensor(self.max_new_tokens).expand_as(done_idx) - 1
+        truncated_idx = (
+            torch.tensor(self.max_new_tokens, device=generated.device).expand_as(
+                done_idx
+            )
+            - 1
+        )
         zeros = torch.zeros(
             done_idx.numel(),
             self.max_new_tokens,

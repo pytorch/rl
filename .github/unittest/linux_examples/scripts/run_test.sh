@@ -285,14 +285,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/multiagent/sac
 python .github/unittest/helpers/coverage_run_parallel.py examples/bandits/dqn.py --n_steps=100
 
 ## RLHF
-pip install datasets
-python .github/unittest/helpers/coverage_run_parallel.py examples/rlhf/train_rlhf.py \
-  sys.device=cuda:0 sys.ref_device=cuda:0 \
-  model.name_or_path=gpt2 train.max_epochs=2 \
-  data.batch_size=2 train.ppo.ppo_batch_size=2 \
-  train.ppo.ppo_num_epochs=1 reward_model.name_or_path= \
-  train.ppo.episode_length=8 train.ppo.num_rollouts_per_epoch=4 \
-  data.block_size=110 io.logger=csv
+# RLHF tests are executed in the dedicated workflow
 
 coverage combine
 coverage xml -i
