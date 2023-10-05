@@ -5337,7 +5337,10 @@ class TestPPO(LossModuleTestBase):
             )
         elif advantage == "vtrace":
             advantage = VTrace(
-                gamma=0.9, value_network=value, actor_network=actor, differentiable=gradient_mode
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
+                differentiable=gradient_mode,
             )
         elif advantage == "td":
             advantage = TD1Estimator(
@@ -5578,7 +5581,10 @@ class TestPPO(LossModuleTestBase):
             )
         elif advantage == "vtrace":
             advantage = VTrace(
-                gamma=0.9, value_network=value, actor_network=actor, differentiable=gradient_mode
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
+                differentiable=gradient_mode,
             )
         elif advantage == "td":
             advantage = TD1Estimator(
@@ -5702,7 +5708,9 @@ class TestPPO(LossModuleTestBase):
             sample_log_prob_key=tensor_keys["sample_log_prob"],
             action_key=tensor_keys["action"],
         )
-        actor = self._create_mock_actor(sample_log_prob_key=tensor_keys["sample_log_prob"])
+        actor = self._create_mock_actor(
+            sample_log_prob_key=tensor_keys["sample_log_prob"]
+        )
         value = self._create_mock_value(out_keys=[tensor_keys["value"]])
 
         if advantage == "gae":
@@ -5812,7 +5820,9 @@ class TestPPO(LossModuleTestBase):
             terminated_key=terminated_key,
         )
 
-        actor = self._create_mock_actor(observation_key=observation_key, sample_log_prob_key=sample_log_prob_key)
+        actor = self._create_mock_actor(
+            observation_key=observation_key, sample_log_prob_key=sample_log_prob_key
+        )
         value = self._create_mock_value(observation_key=observation_key)
 
         loss = loss_class(actor=actor, critic=value)

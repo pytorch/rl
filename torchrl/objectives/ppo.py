@@ -4,11 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 import math
 import warnings
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
+from tensordict.nn import (
+    dispatch,
+    ProbabilisticTensorDictSequential,
+    repopulate_module,
+    TensorDictModule,
+)
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -470,8 +476,12 @@ class PPOLoss(LossModule):
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.VTrace:
+            # VTrace currently does not support functional call on the actor
+            actor_with_params = repopulate_module(
+                deepcopy(self.actor), self.actor_params
+            )
             self._value_estimator = VTrace(
-                value_network=self.critic, actor_network=self.actor, **hp
+                value_network=self.critic, actor_network=actor_with_params, **hp
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
