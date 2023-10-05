@@ -78,7 +78,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     }
     remote_config = {
         "num_cpus": cfg.remote_worker_resources.num_cpus,
-        "num_gpus": cfg.remote_worker_resources.num_gpus if torch.cuda.device_count() else 0,
+        "num_gpus": cfg.remote_worker_resources.num_gpus
+        if torch.cuda.device_count()
+        else 0,
         "memory": cfg.remote_worker_resources.memory,
     }
     collector = RayCollector(

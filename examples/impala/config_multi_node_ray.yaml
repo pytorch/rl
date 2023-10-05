@@ -2,7 +2,7 @@
 env:
   env_name: PongNoFrameskip-v4
 
-# Ray Config - https://docs.ray.io/en/latest/ray-core/api/doc/ray.init.html
+# Ray init kwargs - https://docs.ray.io/en/latest/ray-core/api/doc/ray.init.html
 ray_init_config:
   address: None
   num_cpus: None
