@@ -58,10 +58,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor, critic = actor.to(device), critic.to(device)
 
     slurm_kwargs = {
-        "timeout_min": cfg.slurm.config.timeout_min,
-        "slurm_partition": cfg.slurm.config.slurm_partition,
-        "slurm_cpus_per_task": cfg.slurm.config.slurm_cpus_per_task,
-        "slurm_gpus_per_node": cfg.slurm.config.slurm_gpus_per_node,
+        "timeout_min": cfg.slurm_config.timeout_min,
+        "slurm_partition": cfg.slurm_config.slurm_partition,
+        "slurm_cpus_per_task": cfg.slurm_config.slurm_cpus_per_task,
+        "slurm_gpus_per_node": cfg.slurm_config.slurm_gpus_per_node,
     }
 
     # Create collector

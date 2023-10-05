@@ -6,14 +6,14 @@ env:
 slurm_config:
   timeout_min: 10
   slurm_partition: train
-  slurm_cpus_per_task: 32
-  slurm_gpus_per_node: 0
+  slurm_cpus_per_task: 1
+  slurm_gpus_per_node: 1
 
 # collector
 collector:
   frames_per_batch: 80
   total_frames: 200_000_000
-  num_workers: 12
+  num_workers: 4
 
 # logger
 logger:
