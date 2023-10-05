@@ -29,6 +29,7 @@ from .models import (
     DuelingCnnDQNet,
     LSTMNet,
     MLP,
+    MultiAgentConvNet,
     MultiAgentMLP,
     NoisyLazyLinear,
     NoisyLinear,

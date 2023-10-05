@@ -351,6 +351,7 @@ multi-agent contexts.
     :template: rl_template_noinherit.rst
 
     MultiAgentMLP
+    MultiAgentConvNet
     QMixer
     VDNMixer
 
