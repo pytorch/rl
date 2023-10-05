@@ -10,8 +10,6 @@ from copy import deepcopy
 import torch
 import torch._dynamo
 
-import wandb
-
 from hydra.utils import to_absolute_path
 from models.reward import init_reward_model
 
@@ -156,7 +154,7 @@ class Evaluator:
                 val_reward = self.reward_estimator(self.model, self.val_loader)
                 self.prompt_logger.log(self.model)
             self.val_reward_logger.info(f"VALID: {self.it=}: {val_reward=:.4f}")
-            wandb.log({"val_reward": val_reward}, step=self.it)
+            self.logger.log_scalar({"val_reward": val_reward}, step=self.it)
             # pbar.set_description(f"VALID: {it=}: {val_reward=:.4f}")
             if val_reward > self.best_val_reward:
                 self.best_val_reward = val_reward
