@@ -79,7 +79,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # use end-of-life as done key
-    loss_module.set_keys(done="eol", terminated="eol")
+    loss_module.set_keys(done="end-of-life", terminated="end-of-life")
 
     # Create optimizer
     optim = torch.optim.Adam(

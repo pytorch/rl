@@ -476,6 +476,7 @@ to be able to create this other composition:
     DiscreteActionProjection
     DoubleToFloat
     DTypeCastTransform
+    EndOfLifeTransform
     ExcludeTransform
     FiniteTensorDictCheck
     FlattenObservation

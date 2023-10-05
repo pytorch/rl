@@ -5958,7 +5958,7 @@ class ActionMask(Transform):
         )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        raise RuntimeError("ActionMask must be executed within an environment.")
+        raise RuntimeError(FORWARD_NOT_IMPLEMENTED.format(type(self)))
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         parent = self.parent
@@ -6133,3 +6133,6 @@ class VecGymEnvTransform(Transform):
         if self.final_name in observation_spec.keys(True):
             del observation_spec[self.final_name]
         return observation_spec
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise RuntimeError(FORWARD_NOT_IMPLEMENTED.format(type(self)))
