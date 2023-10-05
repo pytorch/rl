@@ -5147,6 +5147,7 @@ class TestPPO(LossModuleTestBase):
             distribution_class=TanhNormal,
             in_keys=["loc", "scale"],
             spec=action_spec,
+            return_log_prob=True,
         )
         return actor.to(device)
 
@@ -5184,6 +5185,7 @@ class TestPPO(LossModuleTestBase):
             distribution_class=TanhNormal,
             in_keys=["loc", "scale"],
             spec=action_spec,
+            return_log_prob=True,
         )
         module = nn.Sequential(base_layer, nn.Linear(5, 1))
         value = ValueOperator(
@@ -5210,6 +5212,7 @@ class TestPPO(LossModuleTestBase):
             distribution_class=TanhNormal,
             in_keys=["loc", "scale"],
             spec=action_spec,
+            return_log_prob=True,
         )
         module = nn.Linear(5, 1)
         value_head = ValueOperator(
@@ -5317,7 +5320,7 @@ class TestPPO(LossModuleTestBase):
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_ppo(self, loss_class, device, gradient_mode, advantage, td_est):
@@ -5329,6 +5332,10 @@ class TestPPO(LossModuleTestBase):
         if advantage == "gae":
             advantage = GAE(
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9, value_network=value, actor_network=actor, differentiable=gradient_mode
             )
         elif advantage == "td":
             advantage = TD1Estimator(
@@ -5396,7 +5403,7 @@ class TestPPO(LossModuleTestBase):
         loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     def test_ppo_shared(self, loss_class, device, advantage):
         torch.manual_seed(self.seed)
@@ -5408,6 +5415,12 @@ class TestPPO(LossModuleTestBase):
                 gamma=0.9,
                 lmbda=0.9,
                 value_network=value,
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
             )
         elif advantage == "td":
             advantage = TD1Estimator(
@@ -5470,6 +5483,7 @@ class TestPPO(LossModuleTestBase):
         "advantage",
         (
             "gae",
+            "vtrace",
             "td",
             "td_lambda",
         ),
@@ -5488,6 +5502,12 @@ class TestPPO(LossModuleTestBase):
                 gamma=0.9,
                 lmbda=0.9,
                 value_network=value,
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
             )
         elif advantage == "td":
             advantage = TD1Estimator(
@@ -5540,7 +5560,7 @@ class TestPPO(LossModuleTestBase):
     )
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     def test_ppo_diff(self, loss_class, device, gradient_mode, advantage):
         if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
@@ -5553,6 +5573,10 @@ class TestPPO(LossModuleTestBase):
         if advantage == "gae":
             advantage = GAE(
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9, value_network=value, actor_network=actor, differentiable=gradient_mode
             )
         elif advantage == "td":
             advantage = TD1Estimator(
@@ -5616,6 +5640,7 @@ class TestPPO(LossModuleTestBase):
             ValueEstimators.TD1,
             ValueEstimators.TD0,
             ValueEstimators.GAE,
+            ValueEstimators.VTrace,
             ValueEstimators.TDLambda,
         ],
     )
@@ -5657,7 +5682,7 @@ class TestPPO(LossModuleTestBase):
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_ppo_tensordict_keys_run(self, loss_class, advantage, td_est):
         """Test PPO loss module with non-default tensordict keys."""
@@ -5683,6 +5708,13 @@ class TestPPO(LossModuleTestBase):
                 gamma=0.9,
                 lmbda=0.9,
                 value_network=value,
+                differentiable=gradient_mode,
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
                 differentiable=gradient_mode,
             )
         elif advantage == "td":
