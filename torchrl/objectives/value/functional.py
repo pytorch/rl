@@ -1256,6 +1256,8 @@ def vtrace_advantage_estimate(
         raise RuntimeError(SHAPE_ERR)
 
     device = state_value.device
+    c_thresh = c_thresh.to(device)
+    rho_thresh = rho_thresh.to(device)
 
     not_done = (~done).int()
     not_terminated = (~terminated).int()
@@ -1268,7 +1270,6 @@ def vtrace_advantage_estimate(
     deltas = clipped_rho * (
         reward + terminated_discounts * next_state_value - state_value
     )
-    c_thresh = c_thresh.to(device)
     clipped_c = rho.clamp_max(c_thresh)
 
     vs_minus_v_xs = [torch.zeros_like(next_state_value[..., -1, :])]
