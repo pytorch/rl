@@ -8711,9 +8711,7 @@ class TestActionMask(TransformBase):
 
     def test_transform_model(self):
         t = ActionMask()
-        with pytest.raises(
-            RuntimeError, match=FORWARD_NOT_IMPLEMENTED.format(type(t))
-        ):
+        with pytest.raises(RuntimeError, match=FORWARD_NOT_IMPLEMENTED.format(type(t))):
             t(TensorDict({}, []))
 
     def test_transform_rb(self):
@@ -8721,9 +8719,7 @@ class TestActionMask(TransformBase):
         rb = ReplayBuffer(storage=LazyTensorStorage(100))
         rb.append_transform(t)
         rb.extend(TensorDict({"a": [1]}, [1]).expand(10))
-        with pytest.raises(
-            RuntimeError, match=FORWARD_NOT_IMPLEMENTED.format(type(t))
-        ):
+        with pytest.raises(RuntimeError, match=FORWARD_NOT_IMPLEMENTED.format(type(t))):
             rb.sample(3)
 
     def test_transform_inverse(self):
