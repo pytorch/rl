@@ -490,7 +490,7 @@ If you would like to contribute to new features, check our [call for contributio
 ## Examples, tutorials and demos
 
 A series of [examples](examples/) are provided with an illustrative purpose:
-- [DQN and Rainbow](examples/dqn/dqn_atari.py)
+- [DQN](examples/dqn)
 - [DDPG](examples/ddpg/ddpg.py)
 - [IQL](examples/iql/iql.py)
 - [TD3](examples/td3/td3.py)
