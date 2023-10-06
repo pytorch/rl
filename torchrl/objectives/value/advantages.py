@@ -542,7 +542,7 @@ class TD0Estimator(ValueEstimatorBase):
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
             >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> advantage, value_target = module(obs=obs, reward=reward, done=done, next_obs=next_obs, terminated=terminated)
+            >>> advantage, value_target = module(obs=obs, next_reward=reward, next_done=done, next_obs=next_obs, next_terminated=terminated)
 
         """
         if tensordict.batch_dims < 1:
@@ -743,7 +743,7 @@ class TD1Estimator(ValueEstimatorBase):
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
             >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> advantage, value_target = module(obs=obs, reward=reward, done=done, next_obs=next_obs, terminated=terminated)
+            >>> advantage, value_target = module(obs=obs, next_reward=reward, next_done=done, next_obs=next_obs, next_terminated=terminated)
 
         """
         if tensordict.batch_dims < 1:
@@ -955,7 +955,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
             >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> advantage, value_target = module(obs=obs, reward=reward, done=done, next_obs=next_obs, terminated=terminated)
+            >>> advantage, value_target = module(obs=obs, next_reward=reward, next_done=done, next_obs=next_obs, next_terminated=terminated)
 
         """
         if tensordict.batch_dims < 1:
@@ -1198,7 +1198,7 @@ class GAE(ValueEstimatorBase):
             >>> reward = torch.randn(1, 10, 1)
             >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
             >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
-            >>> advantage, value_target = module(obs=obs, reward=reward, done=done, next_obs=next_obs, terminated=terminated)
+            >>> advantage, value_target = module(obs=obs, next_reward=reward, next_done=done, next_obs=next_obs, next_terminated=terminated)
 
         """
         if tensordict.batch_dims < 1:

@@ -1765,7 +1765,7 @@ class TestDDPG(LossModuleTestBase):
         with pytest.warns(UserWarning, match="No target network updater has been"):
             loss_val_td = loss(td)
             loss_val = loss(**kwargs)
-            for i, key in enumerate(loss_val_td.keys()):
+            for i, key in enumerate(loss.out_keys):
                 torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
             # test select
             loss.select_out_keys("loss_actor", "target_value")
@@ -3259,6 +3259,49 @@ class TestSAC(LossModuleTestBase):
             return
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_alpha == loss_val_td["loss_alpha"]
+
+    def test_state_dict(self, version):
+        if version == 1:
+            pytest.skip("Test not implemented for version 1.")
+        model = torch.nn.Linear(3, 4)
+        actor_module = TensorDictModule(model, in_keys=["obs"], out_keys=["logits"])
+        policy = ProbabilisticActor(
+            module=actor_module,
+            in_keys=["logits"],
+            out_keys=["action"],
+            distribution_class=TanhDelta,
+        )
+        value = ValueOperator(module=model, in_keys=["obs"], out_keys="value")
+
+        loss = SACLoss(
+            actor_network=policy,
+            qvalue_network=value,
+            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+        )
+        state = loss.state_dict()
+
+        loss = SACLoss(
+            actor_network=policy,
+            qvalue_network=value,
+            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+        )
+        loss.load_state_dict(state)
+
+        # with an access in between
+        loss = SACLoss(
+            actor_network=policy,
+            qvalue_network=value,
+            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+        )
+        loss.target_entropy
+        state = loss.state_dict()
+
+        loss = SACLoss(
+            actor_network=policy,
+            qvalue_network=value,
+            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+        )
+        loss.load_state_dict(state)
 
 
 @pytest.mark.skipif(

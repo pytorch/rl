@@ -120,18 +120,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # Sample from replay buffer
                 sampled_tensordict = replay_buffer.sample().clone()
 
-                # Compute loss
-                loss_td = loss_module(sampled_tensordict)
-
-                actor_loss = loss_td["loss_actor"]
-                q_loss = loss_td["loss_value"]
-
                 # Update critic
+                q_loss, *_ = loss_module.loss_value(sampled_tensordict)
                 optimizer_critic.zero_grad()
                 q_loss.backward()
                 optimizer_critic.step()
 
                 # Update actor
+                actor_loss, *_ = loss_module.loss_actor(sampled_tensordict)
                 optimizer_actor.zero_grad()
                 actor_loss.backward()
                 optimizer_actor.step()

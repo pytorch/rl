@@ -1775,7 +1775,7 @@ class TestD4RL:
     def test_terminate_on_end(self, task, use_truncated_as_done, split_trajs):
 
         with pytest.warns(
-            UserWarning, match="Using terminate_on_end=True with from_env=False"
+            UserWarning, match="Using use_truncated_as_done=True"
         ) if use_truncated_as_done else nullcontext():
             data_true = D4RLExperienceReplay(
                 task,
@@ -1822,6 +1822,37 @@ class TestD4RL:
                 name[-1] if isinstance(name, tuple) else name for name in leaf_names
             ]
             assert "truncated" not in leaf_names
+
+    @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
+    def test_direct_download(self, task):
+        data_direct = D4RLExperienceReplay(
+            task,
+            split_trajs=False,
+            from_env=False,
+            batch_size=2,
+            use_truncated_as_done=True,
+            direct_download=True,
+        )
+        data_d4rl = D4RLExperienceReplay(
+            task,
+            split_trajs=False,
+            from_env=True,
+            batch_size=2,
+            use_truncated_as_done=True,
+            direct_download=False,
+            terminate_on_end=True,  # keep the last time step
+        )
+        keys = set(data_direct._storage._storage.keys(True, True))
+        keys = keys.intersection(data_d4rl._storage._storage.keys(True, True))
+        assert len(keys)
+        assert_allclose_td(
+            data_direct._storage._storage.select(*keys).apply(
+                lambda t: t.as_tensor().float()
+            ),
+            data_d4rl._storage._storage.select(*keys).apply(
+                lambda t: t.as_tensor().float()
+            ),
+        )
 
     @pytest.mark.parametrize(
         "task",
