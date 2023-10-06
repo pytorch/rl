@@ -5,10 +5,11 @@
 
 import torch.nn
 import torch.optim
-from torchrl.data import CompositeSpec, UnboundedDiscreteTensorSpec
+from torchrl.data import CompositeSpec
 from torchrl.envs import (
     CatFrames,
     DoubleToFloat,
+    EndOfLifeTransform,
     GrayScale,
     GymEnv,
     NoopResetEnv,
@@ -17,8 +18,8 @@ from torchrl.envs import (
     RewardSum,
     StepCounter,
     ToTensorImage,
-    Transform,
     TransformedEnv,
+    VecNorm,
 )
 
 from torchrl.modules import ConvNet, MLP, QValueActor
@@ -27,33 +28,6 @@ from torchrl.modules import ConvNet, MLP, QValueActor
 # ====================================================================
 # Environment utils
 # --------------------------------------------------------------------
-
-
-class EndOfLifeTransform(Transform):
-    def _step(self, tensordict, next_tensordict):
-        lives = self.parent.base_env._env.unwrapped.ale.lives()
-        end_of_life = torch.tensor(
-            [tensordict["lives"] < lives], device=self.parent.device
-        )
-        end_of_life = end_of_life | next_tensordict.get("done")
-        next_tensordict.set("eol", end_of_life)
-        next_tensordict.set("lives", lives)
-        return next_tensordict
-
-    def reset(self, tensordict):
-        lives = self.parent.base_env._env.unwrapped.ale.lives()
-        end_of_life = False
-        tensordict.set("eol", [end_of_life])
-        tensordict.set("lives", lives)
-        return tensordict
-
-    def transform_observation_spec(self, observation_spec):
-        full_done_spec = self.parent.output_spec["full_done_spec"]
-        observation_spec["eol"] = full_done_spec["done"].clone()
-        observation_spec["lives"] = UnboundedDiscreteTensorSpec(
-            self.parent.batch_size, device=self.parent.device
-        )
-        return observation_spec
 
 
 def make_env(env_name, frame_skip, device, is_test=False):
@@ -76,6 +50,7 @@ def make_env(env_name, frame_skip, device, is_test=False):
     env.append_transform(RewardSum())
     env.append_transform(StepCounter(max_steps=4500))
     env.append_transform(DoubleToFloat())
+    env.append_transform(VecNorm(in_keys=["pixels"]))
     return env
 
 
