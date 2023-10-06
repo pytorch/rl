@@ -899,3 +899,39 @@ def _aggregate_resets(data: TensorDictBase, reset_keys=None) -> torch.Tensor:
 
     reset = skim_through(data)
     return reset
+
+
+def _update_during_reset(
+    tensordict_reset: TensorDictBase,
+    tensordict: TensorDictBase,
+    reset_keys: List[NestedKey],
+):
+    for reset_key in reset_keys:
+        # get the node of the reset key
+        if isinstance(reset_key, tuple):
+            # the reset key *must* have gone through unravel_key
+            # we don't test it to avoid induced overhead
+            node_key = reset_key[:-1]
+            node_reset = tensordict_reset.get(node_key)
+            node = tensordict.get(node_key)
+        else:
+            node_reset = tensordict_reset
+            node = tensordict
+        # get the reset signal
+        reset = tensordict.pop(reset_key, None)
+        if reset is None or reset.all():
+            # perform simple update, at a single level.
+            # by contract, a reset signal at one level cannot
+            # be followed by other resets at nested levels, so it's safe to
+            # simply update
+            node.update(node_reset)
+        else:
+            # there can be two cases: (1) the key is present in both tds,
+            # in which case we use the reset mask to update
+            # (2) the key is not present in the input tensordict, in which
+            # case we just return the data
+
+            # empty tensordicts won't be returned
+            reset = reset.reshape(node)
+            node.where(reset, node_reset, out=node, pad=0)
+    return tensordict

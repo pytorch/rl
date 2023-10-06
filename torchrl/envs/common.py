@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import abc
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterator, List, Optional, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Union, Tuple
 
 import numpy as np
 import torch
@@ -26,6 +26,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
     _replace_last,
+    _update_during_reset,
     get_available_libraries,
     step_mdp,
     terminated_or_truncated,
@@ -1535,13 +1536,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                             raise RuntimeError(
                                 f"Env done entry '{done_key}' was (partially) True after a call to reset(). This is not allowed."
                             )
-
-        if tensordict is not None:
-            tensordict.update(tensordict_reset)
-        else:
-            tensordict = tensordict_reset
-        tensordict.exclude(*self.reset_keys, inplace=True)
-        return tensordict
+        return (
+            _update_during_reset(tensordict_reset, tensordict, self.reset_keys)
+            if tensordict is not None
+            else tensordict_reset
+        )
 
     def numel(self) -> int:
         return prod(self.batch_size)
@@ -1835,6 +1834,30 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             out_td = out_td.contiguous()
         out_td.refine_names(..., "time")
         return out_td
+
+    def step_and_maybe_reset(
+        self, tensordict: TensorDictBase
+    ) -> Tuple[TensorDictBase, TensorDictBase]:
+        tensordict = self.step(tensordict)
+        tensordict_ = step_mdp(
+            tensordict,
+            keep_other=True,
+            exclude_action=False,
+            exclude_reward=True,
+            reward_keys=self.reward_keys,
+            action_keys=self.action_keys,
+            done_keys=self.done_keys,
+        )
+        # done and truncated are in done_keys
+        # We read if any key is done.
+        any_done = terminated_or_truncated(
+            tensordict,
+            full_done_spec=self.output_spec["full_done_spec"],
+            key="_reset",
+        )
+        if any_done:
+            tensordict_ = self.reset(tensordict_)
+        return tensordict, tensordict_
 
     @property
     def reset_keys(self) -> List[NestedKey]:
