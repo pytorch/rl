@@ -152,24 +152,30 @@ def main(cfg: "DictConfig"):  # noqa: F821
             episode_reward_mean = episode_rewards.mean().item()
             episode_length = data["next", "step_count"][data["next", "done"]]
             episode_length_mean = episode_length.sum().item() / len(episode_length)
-            log_info.update({
-                "train/episode_reward": episode_reward_mean,
-                "train/episode_length": episode_length_mean,
-            })
+            log_info.update(
+                {
+                    "train/episode_reward": episode_reward_mean,
+                    "train/episode_length": episode_length_mean,
+                }
+            )
 
         # Get and log training losses
         training_time = time.time() - training_start
         q_losses = q_losses.apply(lambda x: x.float().mean(), batch_size=[])
-        log_info.update({f"train/{key}": value.item() for key, value in q_losses.items()})
+        log_info.update(
+            {f"train/{key}": value.item() for key, value in q_losses.items()}
+        )
 
         # Get and log epsilon, sampling time and training time
-        log_info.update({
-            "train/epsilon": greedy_module.eps,
-            "train/sampling_time": sampling_time,
-            "train/training_time": training_time,
-        })
+        log_info.update(
+            {
+                "train/epsilon": greedy_module.eps,
+                "train/sampling_time": sampling_time,
+                "train/training_time": training_time,
+            }
+        )
 
-        # Get evaluation rewards and eval time
+        # Get and log evaluation rewards and eval time
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
             if (collected_frames - frames_per_batch) // test_interval < (
                 collected_frames // test_interval
