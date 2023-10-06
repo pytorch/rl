@@ -936,5 +936,6 @@ def _update_during_reset(
 
             # empty tensordicts won't be returned
             reset = reset.reshape(node.shape)
+            # node.update(node.where(~reset, other=node_reset, pad=0))
             node.where(~reset, other=node_reset, out=node, pad=0)
     return tensordict

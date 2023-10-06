@@ -1395,19 +1395,20 @@ def test_reset_heterogeneous_envs():
     collector = SyncDataCollector(
         env, RandomPolicy(env.action_spec), total_frames=10_000, frames_per_batch=1000
     )
-    for data in collector:  # noqa: B007
-        break
-    collector.shutdown()
-    del collector
-    assert (
-        data[0]["next", "truncated"].squeeze()
-        == torch.tensor([False, True]).repeat(250)[:500]
-    ).all()
-    assert (
-        data[1]["next", "truncated"].squeeze()
-        == torch.tensor([False, False, True]).repeat(168)[:500]
-    ).all()
-
+    try:
+        for data in collector:  # noqa: B007
+            break
+        assert (
+            data[0]["next", "truncated"].squeeze()
+            == torch.tensor([False, True]).repeat(250)[:500]
+        ).all(), data[0]["next", "truncated"][:10]
+        assert (
+            data[1]["next", "truncated"].squeeze()
+            == torch.tensor([False, False, True]).repeat(168)[:500]
+        ).all(), data[1]["next", "truncated"][:10]
+    finally:
+        collector.shutdown()
+        del collector
 
 def test_policy_with_mask():
     env = CountingBatchedEnv(start_val=torch.tensor(10), max_steps=torch.tensor(1e5))
