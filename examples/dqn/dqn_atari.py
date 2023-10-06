@@ -148,7 +148,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Get and log training rewards and episode lengths
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
-        if episode_rewards.size > 0:
+        if len(episode_rewards) > 0:
             episode_reward_mean = episode_rewards.mean().item()
             episode_length = data["next", "step_count"][data["next", "done"]]
             episode_length_mean = episode_length.sum().item() / len(episode_length)
