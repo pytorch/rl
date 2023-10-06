@@ -45,6 +45,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         annealing_num_steps=cfg.collector.annealing_frames,
         eps_init=cfg.collector.eps_start,
         eps_end=cfg.collector.eps_end,
+        spec=model.spec,
     )
     model_explore = TensorDictSequential(
         model,
