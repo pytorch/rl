@@ -39,7 +39,7 @@ if __name__ == "__main__":
         # the number of collectors won't affect the resources, just impacts how the envs are split in sub-sub-processes
         for num_workers, num_collectors in zip((8, 16, 32, 64), (2, 4, 8, 8)):
             with open(
-                f"atari_{envname}_{num_workers}.txt".replace("/", "-"), "w+"
+                f"{envname}_{num_workers}.txt".replace("/", "-"), "w+"
             ) as log:
                 if "myo" in envname:
                     gym_backend = "gym"
