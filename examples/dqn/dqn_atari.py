@@ -16,7 +16,6 @@ import hydra
 import torch.nn
 import torch.optim
 import tqdm
-from tensordict import TensorDict
 from tensordict.nn import TensorDictSequential
 
 from torchrl.collectors import SyncDataCollector
@@ -54,12 +53,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create the collector
     collector = SyncDataCollector(
-        create_env_fn=make_env(cfg.env.env_name, frame_skip, device),
+        create_env_fn=make_env(cfg.env.env_name, frame_skip, "cpu"),
         policy=model_explore,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
-        device=device,
-        storing_device=device,
+        device="cpu",
+        storing_device="cpu",
         max_frames_per_traj=-1,
         init_random_frames=init_random_frames,
     )
@@ -115,6 +114,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     max_grad = cfg.optim.max_grad_norm
     test_interval = cfg.logger.test_interval
     num_test_episodes = cfg.logger.num_test_episodes
+    q_losses = torch.zeros(num_updates, device=device)
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     for data in collector:
 
@@ -129,7 +129,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # optimization steps
         training_start = time.time()
-        q_losses = TensorDict({}, batch_size=[num_updates])
         for j in range(num_updates):
 
             sampled_tensordict = replay_buffer.sample()
@@ -144,7 +143,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
             optimizer.step()
             target_net_updater.step()
-            q_losses[j] = loss_td.select("loss").detach()
+            q_losses[j].copy_(q_loss.detach())
+
+        training_time = time.time() - training_start
+
+        # Get and log q-values, loss, epsilon, sampling time and training time
+        log_info.update(
+            {
+                "train/q_values": (data["action_value"] * data["action"]).sum().item()
+                / frames_per_batch,
+                "train/q_loss": q_losses.mean().item(),
+                "train/epsilon": greedy_module.eps,
+                "train/sampling_time": sampling_time,
+                "train/training_time": training_time,
+            }
+        )
 
         # Get and log training rewards and episode lengths
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
@@ -158,22 +171,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     "train/episode_length": episode_length_mean,
                 }
             )
-
-        # Get and log training losses
-        training_time = time.time() - training_start
-        q_losses = q_losses.apply(lambda x: x.float().mean(), batch_size=[])
-        log_info.update(
-            {f"train/{key}": value.item() for key, value in q_losses.items()}
-        )
-
-        # Get and log epsilon, sampling time and training time
-        log_info.update(
-            {
-                "train/epsilon": greedy_module.eps,
-                "train/sampling_time": sampling_time,
-                "train/training_time": training_time,
-            }
-        )
 
         # Get and log evaluation rewards and eval time
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):

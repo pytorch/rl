@@ -6,7 +6,7 @@
 import torch.nn
 import torch.optim
 from torchrl.data import CompositeSpec
-from torchrl.envs import DoubleToFloat, RewardSum, StepCounter, TransformedEnv
+from torchrl.envs import RewardSum, StepCounter, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import MLP, QValueActor
 
@@ -20,7 +20,6 @@ def make_env(env_name="CartPole-v1", device="cpu"):
     env = TransformedEnv(env)
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
-    env.append_transform(DoubleToFloat())
     return env
 
 
