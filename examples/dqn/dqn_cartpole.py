@@ -109,24 +109,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         collected_frames += current_frames
         greedy_module.step(current_frames)
 
-        # Get training rewards, episode lengths and q-values
-        log_info.update(
-            {
-                "train/q_values": (data["action_value"] * data["action"]).sum().item()
-                / frames_per_batch,
-            }
-        )
-        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
-        if len(episode_rewards) > 0:
-            episode_length = data["next", "step_count"][data["next", "done"]]
-            log_info.update(
-                {
-                    "train/episode_reward": episode_rewards.mean().item(),
-                    "train/episode_length": episode_length.sum().item()
-                    / len(episode_length),
-                }
-            )
-
         # optimization steps
         q_losses = TensorDict({}, batch_size=[num_updates])
         training_start = time.time()
@@ -141,18 +123,32 @@ def main(cfg: "DictConfig"):  # noqa: F821
             target_net_updater.step()
             q_losses[j] = loss_td.select("loss").detach()
 
-        # Get training losses, epsilon and times
+        # Get and log q-values
+        q_values = (data["action_value"] * data["action"]).sum().item() / frames_per_batch
+        log_info["train/q_values"] = q_values
+
+        # Get and log training rewards and episode lengths
+        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
+        if episode_rewards.size > 0:
+            episode_reward_mean = episode_rewards.mean().item()
+            episode_length = data["next", "step_count"][data["next", "done"]]
+            episode_length_mean = episode_length.sum().item() / len(episode_length)
+            log_info.update({
+                "train/episode_reward": episode_reward_mean,
+                "train/episode_length": episode_length_mean,
+            })
+
+        # Get and log training losses
         training_time = time.time() - training_start
         q_losses = q_losses.apply(lambda x: x.float().mean(), batch_size=[])
-        for key, value in q_losses.items():
-            log_info.update({f"train/{key}": value.item()})
-        log_info.update(
-            {
-                "train/epsilon": greedy_module.eps,
-                "train/sampling_time": sampling_time,
-                "train/training_time": training_time,
-            }
-        )
+        log_info.update({f"train/{key}": value.item() for key, value in q_losses.items()})
+
+        # Get and log epsilon, sampling time and training time
+        log_info.update({
+            "train/epsilon": greedy_module.eps,
+            "train/sampling_time": sampling_time,
+            "train/training_time": training_time,
+        })
 
         # Get evaluation rewards and eval time
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
