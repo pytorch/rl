@@ -34,7 +34,6 @@ if __name__ == "__main__":
         "HalfCheetah-v4",
         "myoHandReachRandom-v0",
         "ALE/Breakout-v5",
-        "CartPole-v1",
     ]:
         # the number of collectors won't affect the resources, just impacts how the envs are split in sub-sub-processes
         for num_workers, num_collectors in zip((32, 64, 8, 16), (8,8, 2, 4)):
