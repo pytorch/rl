@@ -219,7 +219,7 @@ if __name__ == "__main__":
 
                     penv = EnvCreator(
                         lambda num_workers=num_workers // num_collectors: make_env(
-                            num_workers
+                            num_workers=num_workers
                         )
                     )
                     collector = MultiaSyncDataCollector(
@@ -306,7 +306,7 @@ if __name__ == "__main__":
 
                     penv = EnvCreator(
                         lambda num_workers=num_workers // num_collectors: make_env(
-                            num_workers
+                            num_workers=num_workers
                         )
                     )
                     collector = MultiSyncDataCollector(

@@ -1789,7 +1789,21 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             def policy(td):
                 self.rand_action(td)
                 return td
+        kwargs = {
+            "tensordict": tensordict,
+            "auto_cast_to_device": auto_cast_to_device,
+            "max_steps": max_steps,
+            "policy": policy,
+            "policy_device": policy_device,
+            "env_device": env_device,
+            "callback": callback,
+            "return_contiguous": return_contiguous,
+        }
+        if break_when_any_done:
+            return self._rollout_stop_early(**kwargs)
+        return self._rollout_nonstop(**kwargs)
 
+    def _rollout_stop_early(self, *, tensordict, auto_cast_to_device, max_steps, policy, policy_device, env_device, callback, return_contiguous):
         tensordicts = []
         for i in range(max_steps):
             if auto_cast_to_device:
@@ -1817,13 +1831,35 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             any_done = terminated_or_truncated(
                 tensordict,
                 full_done_spec=self.output_spec["full_done_spec"],
-                key=None if break_when_any_done else "_reset",
+                key=None,
             )
-            if break_when_any_done and any_done:
+            if any_done:
                 break
-            if not break_when_any_done and any_done:
-                tensordict = self.reset(tensordict)
 
+            if callback is not None:
+                callback(self, tensordict)
+
+        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
+        out_td = torch.stack(tensordicts, len(batch_size))
+        if return_contiguous:
+            out_td = out_td.contiguous()
+        out_td.refine_names(..., "time")
+        return out_td
+
+    def _rollout_nonstop(self, *, tensordict, auto_cast_to_device, max_steps, policy, policy_device, env_device, callback, return_contiguous):
+        tensordicts = []
+        tensordict_ = tensordict
+        for i in range(max_steps):
+            if auto_cast_to_device:
+                tensordict_ = tensordict_.to(policy_device, non_blocking=True)
+            tensordict = policy(tensordict_)
+            if auto_cast_to_device:
+                tensordict_ = tensordict.to(env_device, non_blocking=True)
+            tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
+            tensordicts.append(tensordict.clone(False))
+            if i == max_steps - 1:
+                # we don't truncated as one could potentially continue the run
+                break
             if callback is not None:
                 callback(self, tensordict)
 
