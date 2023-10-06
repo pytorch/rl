@@ -186,7 +186,7 @@ def _main(argv):
     # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
 
     this_directory = Path(__file__).parent
-    long_description = (this_directory / "README.md.md").read_text()
+    long_description = (this_directory / "README.md").read_text()
     sys.argv = [sys.argv[0]] + unknown
 
     setup(
