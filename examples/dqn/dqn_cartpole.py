@@ -6,15 +6,15 @@
 import time
 
 import hydra
-import numpy as np
 import torch.nn
 import torch.optim
 import tqdm
 from tensordict import TensorDict
+from tensordict.nn import TensorDictSequential
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.envs import ExplorationType, set_exploration_type
-from torchrl.modules import EGreedyWrapper
+from torchrl.modules import EGreedyModule
 from torchrl.objectives import DQNLoss, HardUpdate
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils_cartpole import eval_model, make_dqn_model, make_env
@@ -27,11 +27,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Make the components
     model = make_dqn_model(cfg.env.env_name)
-    model_explore = EGreedyWrapper(
-        policy=model,
-        annealing_num_steps=cfg.collector.annealing_frames,
-        eps_init=cfg.collector.eps_start,
-        eps_end=cfg.collector.eps_end,
+
+    model_explore = TensorDictSequential(
+        model,
+        EGreedyModule(
+            annealing_num_steps=cfg.collector.annealing_frames,
+            eps_init=cfg.collector.eps_start,
+            eps_end=cfg.collector.eps_end,
+        ),
     ).to(device)
 
     # Create the collector
@@ -52,7 +55,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         prefetch=3,
         storage=LazyTensorStorage(
             max_size=cfg.buffer.buffer_size,
-            device=device,
         ),
         batch_size=cfg.buffer.batch_size,
     )
@@ -64,7 +66,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         loss_function="l2",
         delay_value=True,
     )
-    loss_module.make_value_estimator(gamma=cfg.loss.gamma)
+    loss_module.make_value_estimator()
     target_net_updater = HardUpdate(
         loss_module, value_network_update_interval=cfg.loss.hard_update_freq
     )
@@ -76,7 +78,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     logger = None
     if cfg.logger.backend:
         exp_name = generate_exp_name("DQN", f"CartPole_{cfg.env.env_name}")
-        logger = get_logger(cfg.logger.backend, logger_name="dqn", experiment_name=exp_name)
+        logger = get_logger(
+            cfg.logger.backend, logger_name="dqn", experiment_name=exp_name
+        )
 
     # Create the test environment
     test_env = make_env(cfg.env.env_name, device)
@@ -99,7 +103,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(data.numel())
         data = data.reshape(-1)
         current_frames = data.numel()
-        replay_buffer.extend(data.to(device))
+        replay_buffer.extend(data)
         collected_frames += current_frames
         model_explore.step(current_frames)
 
@@ -126,6 +130,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         training_start = time.time()
         for j in range(num_updates):
             sampled_tensordict = replay_buffer.sample(batch_size)
+            sampled_tensordict = sampled_tensordict.to(device)
             loss_td = loss_module(sampled_tensordict)
             q_loss = loss_td["loss"]
             optimizer.zero_grad()

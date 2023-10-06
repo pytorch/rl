@@ -8,18 +8,21 @@ DQN: Reproducing experimental results from Mnih et al. 2015 for the
 Deep Q-Learning Algorithm on Atari Environments.
 """
 
+import tempfile
 import time
+from contextlib import nullcontext
 
 import hydra
 import torch.nn
 import torch.optim
 import tqdm
 from tensordict import TensorDict
+from tensordict.nn import TensorDictSequential
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
 from torchrl.envs import ExplorationType, set_exploration_type
-from torchrl.modules import EGreedyWrapper
+from torchrl.modules import EGreedyModule
 from torchrl.objectives import DQNLoss, HardUpdate
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils_atari import eval_model, make_dqn_model, make_env
@@ -38,10 +41,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Make the components
     model = make_dqn_model(cfg.env.env_name, frame_skip)
-    model_explore = EGreedyWrapper(
+    model_explore = TensorDictSequential(
         model,
-        annealing_num_steps=cfg.collector.annealing_frames,
-        eps_end=cfg.collector.end_e,
+        EGreedyModule(
+            annealing_num_steps=cfg.collector.annealing_frames,
+            eps_init=cfg.collector.eps_start,
+            eps_end=cfg.collector.eps_end,
+        ),
     ).to(device)
 
     # Create the collector
@@ -57,16 +63,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create the replay buffer
-    replay_buffer = TensorDictReplayBuffer(
-        pin_memory=False,
-        prefetch=3,
-        storage=LazyMemmapStorage(
-            max_size=cfg.buffer.buffer_size,
-            scratch_dir="/tmp/",
-            device=device,
-        ),
-        batch_size=cfg.buffer.batch_size,
-    )
+    with (
+        tempfile.TemporaryDirectory()
+        if cfg.buffer.scratch_dir is None
+        else nullcontext(cfg.buffer.scratch_dir)
+    ) as scratch_dir:
+        replay_buffer = TensorDictReplayBuffer(
+            pin_memory=False,
+            prefetch=3,
+            storage=LazyMemmapStorage(
+                max_size=cfg.buffer.buffer_size,
+                scratch_dir=scratch_dir,
+            ),
+            batch_size=cfg.buffer.batch_size,
+        )
 
     # Create the loss module
     loss_module = DQNLoss(
@@ -75,7 +85,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         loss_function="l2",
         delay_value=True,
     )
-    loss_module.make_value_estimator(gamma=cfg.loss.gamma)
+    loss_module.make_value_estimator()
     target_net_updater = HardUpdate(
         loss_module, value_network_update_interval=cfg.loss.hard_update_freq
     )
@@ -113,7 +123,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         current_frames = data.numel() * frame_skip
         collected_frames += current_frames
         model_explore.step(current_frames)
-        replay_buffer.extend(data.to(device))
+        replay_buffer.extend(data)
 
         # Get training rewards, episode lengths and q-values
         log_info.update(
@@ -139,6 +149,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for j in range(num_updates):
 
             sampled_tensordict = replay_buffer.sample()
+            sampled_tensordict = sampled_tensordict.to(device)
 
             loss_td = loss_module(sampled_tensordict)
             q_loss = loss_td["loss"]
