@@ -337,7 +337,8 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
 
 
 @pytest.mark.skipif(not _has_gym, reason="gym library is not installed")
-def test_collector_env_reset():
+@pytest.mark.parametrize("parallel", [False, True])
+def test_collector_env_reset(parallel):
     torch.manual_seed(0)
 
     def make_env():
@@ -346,27 +347,38 @@ def test_collector_env_reset():
         with set_gym_backend(gym_backend()):
             return TransformedEnv(GymEnv(PONG_VERSIONED, frame_skip=4), StepCounter())
 
-    env = SerialEnv(2, make_env)
-    # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
-    env.set_seed(0)
-    collector = SyncDataCollector(
-        env, policy=None, total_frames=10000, frames_per_batch=10000, split_trajs=False
-    )
-    for _data in collector:
-        continue
-    steps = _data["next", "step_count"][..., 1:, :]
-    done = _data["next", "done"][..., :-1, :]
-    # we don't want just one done
-    assert done.sum() > 3
-    # check that after a done, the next step count is always 1
-    assert (steps[done] == 1).all()
-    # check that if the env is not done, the next step count is > 1
-    assert (steps[~done] > 1).all()
-    # check that if step is 1, then the env was done before
-    assert (steps == 1)[done].all()
-    # check that split traj has a minimum total reward of -21 (for pong only)
-    _data = split_trajectories(_data, prefix="collector")
-    assert _data["next", "reward"].sum(-2).min() == -21
+    if parallel:
+        env = ParallelEnv(2, make_env)
+    else:
+        env = SerialEnv(2, make_env)
+    try:
+        # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
+        env.set_seed(0)
+        collector = SyncDataCollector(
+            env,
+            policy=None,
+            total_frames=10001,
+            frames_per_batch=10000,
+            split_trajs=False,
+        )
+        for _data in collector:
+            break
+        steps = _data["next", "step_count"][..., 1:, :]
+        done = _data["next", "done"][..., :-1, :]
+        # we don't want just one done
+        assert done.sum() > 3
+        # check that after a done, the next step count is always 1
+        assert (steps[done] == 1).all()
+        # check that if the env is not done, the next step count is > 1
+        assert (steps[~done] > 1).all()
+        # check that if step is 1, then the env was done before
+        assert (steps == 1)[done].all()
+        # check that split traj has a minimum total reward of -21 (for pong only)
+        _data = split_trajectories(_data, prefix="collector")
+        assert _data["next", "reward"].sum(-2).min() == -21
+    finally:
+        env.close()
+        del env
 
 
 # Deprecated reset_when_done

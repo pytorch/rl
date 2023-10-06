@@ -772,31 +772,14 @@ class SyncDataCollector(DataCollectorBase):
                     # >>> assert data0["done"] is not data1["done"]
                     yield tensordict_out.clone()
 
-    def _step_and_maybe_reset(self) -> None:
-
-        self._tensordict = step_mdp(
-            self._tensordict,
-            reward_keys=self.env.reward_keys,
-            done_keys=self.env.done_keys,
-            action_keys=self.env.action_keys,
+    def _update_traj_ids(self, tensordict) -> None:
+        # we can't use the reset keys because they're gone
+        traj_sop = _aggregate_resets(
+            tensordict.get("next"), done_keys=self.env.done_keys
         )
-        if not self.reset_when_done:
-            return
-        td_reset = self._tensordict.clone(False)
-        any_done = terminated_or_truncated(
-            td_reset,
-            full_done_spec=self.env.output_spec["full_done_spec"],
-            key="_reset",
-        )
-
-        if any_done:
+        if traj_sop.any():
             traj_ids = self._tensordict.get(("collector", "traj_ids"))
             traj_ids = traj_ids.clone()
-            # collectors do not support passing other tensors than `"_reset"`
-            # to `reset()`.
-            td_reset = self.env.reset(td_reset)
-
-            traj_sop = _aggregate_resets(td_reset, reset_keys=self.env.reset_keys)
             traj_ids[traj_sop] = traj_ids.max() + torch.arange(
                 1, traj_sop.sum() + 1, device=traj_ids.device
             )
@@ -822,14 +805,18 @@ class SyncDataCollector(DataCollectorBase):
                     self.init_random_frames is not None
                     and self._frames < self.init_random_frames
                 ):
-                    self.env.rand_step(self._tensordict)
+                    self.env.rand_action(self._tensordict)
                 else:
                     self.policy(self._tensordict)
-                    self.env.step(self._tensordict)
-                # we must clone all the values, since the step / traj_id updates are done in-place
-                tensordicts.append(self._tensordict.to(self.storing_device))
+                tensordict, tensordict_ = self.env.step_and_maybe_reset(
+                    self._tensordict
+                )
+                self._tensordict = tensordict_.set(
+                    "collector", tensordict.get("collector").clone(False)
+                )
+                tensordicts.append(tensordict.to(self.storing_device))
 
-                self._step_and_maybe_reset()
+                self._update_traj_ids(tensordict)
                 if (
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()

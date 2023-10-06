@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import abc
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterator, List, Optional, Union, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -1536,11 +1536,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                             raise RuntimeError(
                                 f"Env done entry '{done_key}' was (partially) True after a call to reset(). This is not allowed."
                             )
-        return (
-            _update_during_reset(tensordict_reset, tensordict, self.reset_keys)
-            if tensordict is not None
-            else tensordict_reset
-        )
+        if tensordict is not None:
+            result = _update_during_reset(tensordict_reset, tensordict, self.reset_keys)
+            return result
+        return tensordict_reset
 
     def numel(self) -> int:
         return prod(self.batch_size)
@@ -1839,6 +1838,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
         tensordict = self.step(tensordict)
+        # done and truncated are in done_keys
+        # We read if any key is done.
         tensordict_ = step_mdp(
             tensordict,
             keep_other=True,
@@ -1848,10 +1849,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             action_keys=self.action_keys,
             done_keys=self.done_keys,
         )
-        # done and truncated are in done_keys
-        # We read if any key is done.
         any_done = terminated_or_truncated(
-            tensordict,
+            tensordict_,
             full_done_spec=self.output_spec["full_done_spec"],
             key="_reset",
         )

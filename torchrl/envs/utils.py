@@ -851,12 +851,15 @@ def terminated_or_truncated(
 PARTIAL_MISSING_ERR = "Some reset keys were present but not all. Either all the `'_reset'` entries must be present, or none."
 
 
-def _aggregate_resets(data: TensorDictBase, reset_keys=None) -> torch.Tensor:
+def _aggregate_resets(
+    data: TensorDictBase, reset_keys=None, done_keys=None
+) -> torch.Tensor:
     # goes through the tensordict and brings the _reset information to
     # a boolean tensor of the shape of the tensordict.
     batch_size = data.batch_size
     n = len(batch_size)
-
+    if done_keys is not None and reset_keys is None:
+        reset_keys = {_replace_last(key, "done") for key in done_keys}
     if reset_keys is not None:
         reset = False
         has_missing = None
@@ -932,6 +935,6 @@ def _update_during_reset(
             # case we just return the data
 
             # empty tensordicts won't be returned
-            reset = reset.reshape(node)
-            node.where(reset, node_reset, out=node, pad=0)
+            reset = reset.reshape(node.shape)
+            node.where(~reset, other=node_reset, out=node, pad=0)
     return tensordict

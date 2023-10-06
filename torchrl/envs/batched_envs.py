@@ -11,7 +11,7 @@ from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 from warnings import warn
 
 import torch
@@ -796,6 +796,43 @@ class ParallelEnv(_BatchedEnv):
             event.clear()
 
     @_check_start
+    def step_and_maybe_reset(
+        self, tensordict: TensorDictBase
+    ) -> Tuple[TensorDictBase, TensorDictBase]:
+        if self._single_task and not self.has_lazy_inputs:
+            # this is faster than update_ but won't work for lazy stacks
+            for key in self._env_input_keys:
+                key = _unravel_key_to_tuple(key)
+                self.shared_tensordict_parent._set_tuple(
+                    key,
+                    tensordict._get_tuple(key, None),
+                    inplace=True,
+                    validated=True,
+                )
+        else:
+            self.shared_tensordict_parent.update_(
+                tensordict.select(*self._env_input_keys, strict=False)
+            )
+        if self.event is not None:
+            self.event.record()
+            self.event.synchronize()
+        for i in range(self.num_workers):
+            self.parent_channels[i].send(("step_and_maybe_reset", None))
+
+        for i in range(self.num_workers):
+            event = self._events[i]
+            event.wait()
+            event.clear()
+
+        # We must pass a clone of the tensordict, as the values of this tensordict
+        # will be modified in-place at further steps
+        tensordict.set("next", self.shared_tensordict_parent.get("next").clone())
+        tensordict_ = self.shared_tensordict_parent.exclude(
+            "next", *self.reset_keys
+        ).clone()
+        return tensordict, tensordict_
+
+    @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self._single_task and not self.has_lazy_inputs:
             # this is faster than update_ but won't work for lazy stacks
@@ -1085,6 +1122,19 @@ def _run_worker_pipe_shared_mem(
             i += 1
             next_td = env._step(shared_tensordict)
             next_shared_tensordict.update_(next_td)
+            if event is not None:
+                event.record()
+                event.synchronize()
+            mp_event.set()
+
+        elif cmd == "step_and_maybe_reset":
+            if not initialized:
+                raise RuntimeError("called 'init' before step")
+            i += 1
+            td, root_next_td = env.step_and_maybe_reset(shared_tensordict.clone(False))
+            assert "_reset" not in td.get("next").keys()
+            next_shared_tensordict.update_(td.get("next"))
+            shared_tensordict.update_(root_next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
