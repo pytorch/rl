@@ -28,13 +28,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Make the components
     model = make_dqn_model(cfg.env.env_name)
 
+    greedy_module = EGreedyModule(
+        annealing_num_steps=cfg.collector.annealing_frames,
+        eps_init=cfg.collector.eps_start,
+        eps_end=cfg.collector.eps_end,
+        spec=model.spec,
+    )
     model_explore = TensorDictSequential(
         model,
-        EGreedyModule(
-            annealing_num_steps=cfg.collector.annealing_frames,
-            eps_init=cfg.collector.eps_start,
-            eps_end=cfg.collector.eps_end,
-        ),
+        greedy_module,
     ).to(device)
 
     # Create the collector
@@ -105,7 +107,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         current_frames = data.numel()
         replay_buffer.extend(data)
         collected_frames += current_frames
-        model_explore.step(current_frames)
+        greedy_module.step(current_frames)
 
         # Get training rewards, episode lengths and q-values
         log_info.update(
@@ -146,7 +148,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             log_info.update({f"train/{key}": value.item()})
         log_info.update(
             {
-                "train/epsilon": model_explore.eps,
+                "train/epsilon": greedy_module.eps,
                 "train/sampling_time": sampling_time,
                 "train/training_time": training_time,
             }
