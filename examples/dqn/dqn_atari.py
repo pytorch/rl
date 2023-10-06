@@ -53,12 +53,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create the collector
     collector = SyncDataCollector(
-        create_env_fn=make_env(cfg.env.env_name, frame_skip, "cpu"),
+        create_env_fn=make_env(cfg.env.env_name, frame_skip, device),
         policy=model_explore,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
-        device="cpu",
-        storing_device="cpu",
+        device=device,
+        storing_device=device,
         max_frames_per_traj=-1,
         init_random_frames=init_random_frames,
     )
