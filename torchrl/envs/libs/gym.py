@@ -1019,8 +1019,8 @@ class GymEnv(GymWrapper):
             try:
                 env = self._async_env([CloudpickleWrapper(lambda: env)] * num_envs)
             except RuntimeError:
-                # It would fail if the environment is not pickable. In such a case,
-                # delegating environment instantiation to the subprocesses as a falling.
+                # It would fail if the environment is not pickable. In that case,
+                # delegating environment instantiation to each subprocess as a fallback.
                 env = self._async_env(
                     [lambda: self.lib.make(env_name, **kwargs)] * num_envs
                 )
