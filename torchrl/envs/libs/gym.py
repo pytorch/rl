@@ -1021,7 +1021,9 @@ class GymEnv(GymWrapper):
             except RuntimeError:
                 # It would fail if the environment is not pickable. In such a case,
                 # delegating environment instantiation to the subprocesses as a falling.
-                env = self._async_env([lambda: self.lib.make(env_name, **kwargs)] * num_envs)
+                env = self._async_env(
+                    [lambda: self.lib.make(env_name, **kwargs)] * num_envs
+                )
             self.batch_size = torch.Size([num_envs, *self.batch_size])
         return env
 
