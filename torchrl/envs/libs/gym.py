@@ -1016,7 +1016,14 @@ class GymEnv(GymWrapper):
                     raise err
         env = super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
         if num_envs > 0:
-            env = self._async_env([CloudpickleWrapper(lambda: env)] * num_envs)
+            try:
+                env = self._async_env([CloudpickleWrapper(lambda: env)] * num_envs)
+            except RuntimeError:
+                # It would fail if the environment is not pickable. In that case,
+                # delegating environment instantiation to each subprocess as a fallback.
+                env = self._async_env(
+                    [lambda: self.lib.make(env_name, **kwargs)] * num_envs
+                )
             self.batch_size = torch.Size([num_envs, *self.batch_size])
         return env
 
