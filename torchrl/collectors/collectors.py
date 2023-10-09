@@ -398,7 +398,7 @@ class SyncDataCollector(DataCollectorBase):
             policy is ignored before it is called. This feature is mainly
             intended to be used in offline/model-based settings, where a
             batch of random trajectories can be used to initialize training.
-            If provided, it will be rounded to the closest multiple of frames_per_batch.
+            If provided, it will be rounded up to the closest multiple of frames_per_batch.
             Defaults to ``None`` (i.e. no random frames).
         reset_at_each_iter (bool, optional): Whether environments should be reset
             at the beginning of a batch collection.
@@ -1040,7 +1040,7 @@ class _MultiDataCollector(DataCollectorBase):
             policy is ignored before it is called. This feature is mainly
             intended to be used in offline/model-based settings, where a
             batch of random trajectories can be used to initialize training.
-            If provided, it will be rounded to the closest multiple of frames_per_batch.
+            If provided, it will be rounded up to the closest multiple of frames_per_batch.
             Defaults to ``None`` (i.e. no random frames).
         reset_at_each_iter (bool, optional): Whether environments should be reset
             at the beginning of a batch collection.
