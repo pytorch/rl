@@ -3329,6 +3329,21 @@ class TestSpecMasking:
             assert (sp != s).all()
 
 
+class TestOOBound:
+    @pytest.mark.parametrize(
+        "low,high",
+        [
+            [-1, -0.5],
+            [0.5, 1],
+            [torch.tensor([-1, -1]), torch.tensor([-0.5, 1.0])],
+            [torch.tensor([1, -1.0]), torch.tensor([2.0, 2.0])],
+        ],
+    )
+    def test_zero_error(self, low, high):
+        with pytest.raises(ValueError, match="Calling zero()"):
+            BoundedTensorSpec(low=low, high=high, shape=(2,)).zero()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

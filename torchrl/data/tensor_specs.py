@@ -1744,6 +1744,13 @@ class BoundedTensorSpec(TensorSpec):
             dtype=self.dtype,
         )
 
+    def zero(self, shape=None) -> torch.Tensor:
+        if (self.space.low > 0).any() or (self.space.high < 0).any():
+            raise ValueError(
+                f"Calling zero() on a {type(self)} where 0 is not in space is not permitted."
+            )
+        return super().zero(shape=shape)
+
 
 def _is_nested_list(index, notuple=False):
     if not notuple and isinstance(index, tuple):
