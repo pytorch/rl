@@ -30,17 +30,14 @@ from torchrl.envs.libs.gym import gym_backend as gym_bc, set_gym_backend
 
 if __name__ == "__main__":
     for envname in [
-        "HalfCheetah-v4",
         "CartPole-v1",
+        "HalfCheetah-v4",
         "myoHandReachRandom-v0",
         "ALE/Breakout-v5",
-        "CartPole-v1",
     ]:
         # the number of collectors won't affect the resources, just impacts how the envs are split in sub-sub-processes
-        for num_workers, num_collectors in zip((8, 16, 32, 64), (2, 4, 8, 8)):
-            with open(
-                f"atari_{envname}_{num_workers}.txt".replace("/", "-"), "w+"
-            ) as log:
+        for num_workers, num_collectors in zip((32, 64, 8, 16), (8, 8, 2, 4)):
+            with open(f"{envname}_{num_workers}.txt".replace("/", "-"), "w+") as log:
                 if "myo" in envname:
                     gym_backend = "gym"
                 else:
@@ -219,7 +216,7 @@ if __name__ == "__main__":
 
                     penv = EnvCreator(
                         lambda num_workers=num_workers // num_collectors: make_env(
-                            num_workers
+                            num_workers=num_workers
                         )
                     )
                     collector = MultiaSyncDataCollector(
@@ -306,7 +303,7 @@ if __name__ == "__main__":
 
                     penv = EnvCreator(
                         lambda num_workers=num_workers // num_collectors: make_env(
-                            num_workers
+                            num_workers=num_workers
                         )
                     )
                     collector = MultiSyncDataCollector(
