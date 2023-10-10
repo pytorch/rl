@@ -1223,7 +1223,6 @@ def _run_worker_pipe_cuda(
     verbose: bool = False,
 ) -> None:
     stream = torch.cuda.Stream(device)
-    env = env.to("cpu")
     with torch.cuda.StreamContext(stream):
         parent_pipe.close()
         pid = os.getpid()
@@ -1235,7 +1234,7 @@ def _run_worker_pipe_cuda(
                     "env_fun_kwargs must be empty if an environment is passed to a process."
                 )
             env = env_fun
-        env = env.to(device)
+        env = env.to("cpu")
         del env_fun
 
         i = -1
