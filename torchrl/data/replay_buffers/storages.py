@@ -582,17 +582,18 @@ class LazyMemmapStorage(LazyTensorStorage):
                     f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
                 )
         elif is_tensorclass(data):
-            out = (
-                data.clone()
-                .expand(self.max_size, *data.shape)
-                .memmap_like(prefix=self.scratch_dir)
-            )
-            if self.device.type != "cpu":
+            if self.device.type == "cpu":
+                out = data.clone()
+                out = out.expand(self.max_size, *data.shape)
+                out = out.memmap_like(prefix=self.scratch_dir)
+            else:
                 warnings.warn(
                     "Support for Memmap device other than CPU will be deprecated in v0.4.0.",
                     category=DeprecationWarning,
                 )
-                out = out.to(self.device).memmap_()
+                out = data.clone().to(self.device)
+                out = out.expand(self.max_size, *data.shape)
+                out = out.memmap_like(prefix=self.scratch_dir)
 
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
@@ -605,17 +606,18 @@ class LazyMemmapStorage(LazyTensorStorage):
         else:
             if VERBOSE:
                 print("The storage is being created: ")
-            out = (
-                data.clone()
-                .expand(self.max_size, *data.shape)
-                .memmap_like(prefix=self.scratch_dir)
-            )
-            if self.device.type != "cpu":
+            if self.device.type == "cpu":
+                out = data.clone()
+                out = out.expand(self.max_size, *data.shape)
+                out = out.memmap_like(prefix=self.scratch_dir)
+            else:
                 warnings.warn(
                     "Support for Memmap device other than CPU will be deprecated in v0.4.0.",
                     category=DeprecationWarning,
                 )
-                out = out.to(self.device).memmap_()
+                out = data.clone().to(self.device)
+                out = out.expand(self.max_size, *data.shape)
+                out = out.memmap_like(prefix=self.scratch_dir)
 
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
