@@ -477,7 +477,6 @@ class _BatchedEnv(EnvBase):
         self.__dict__["_input_spec"] = None
         self.__dict__["_output_spec"] = None
         self._properties_set = False
-        self._cuda_events = None
 
         self._shutdown_workers()
         self.is_closed = True
@@ -983,13 +982,14 @@ class ParallelEnv(_BatchedEnv):
                     self._cuda_stream.wait_event(event)
 
         del self.shared_tensordicts, self.shared_tensordict_parent
-
         for channel in self.parent_channels:
             channel.close()
         for proc in self._workers:
             proc.join()
         del self._workers
         del self.parent_channels
+        self._cuda_events = None
+        self._events = None
 
     @_check_start
     def set_seed(
