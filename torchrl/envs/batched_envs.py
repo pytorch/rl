@@ -724,7 +724,9 @@ class ParallelEnv(_BatchedEnv):
         if self.device.type == "cuda":
             func = _run_worker_pipe_cuda
             self._cuda_stream = torch.cuda.Stream(self.device)
-            self._cuda_events = [torch.cuda.Event(interprocess=True) for _ in range(_num_workers)]
+            self._cuda_events = [
+                torch.cuda.Event(interprocess=True) for _ in range(_num_workers)
+            ]
             self._events = None
             kwargs = [{"cuda_event": self._cuda_events[i]} for i in range(_num_workers)]
         else:
@@ -742,17 +744,20 @@ class ParallelEnv(_BatchedEnv):
                 env_fun = self.create_env_fn[idx]
                 if not isinstance(env_fun, EnvCreator):
                     env_fun = CloudpickleWrapper(env_fun)
-                kwargs[idx].update({
-    "parent_pipe": parent_pipe,
-    "child_pipe": child_pipe,
-    "env_fun": env_fun,
-    "env_fun_kwargs": self.create_env_kwargs[idx],
-    "shared_tensordict": self.shared_tensordicts[idx],
-    "_selected_input_keys": self._selected_input_keys,
-    "_selected_reset_keys": self._selected_reset_keys,
-    "_selected_step_keys": self._selected_step_keys,
-    "has_lazy_inputs": self.has_lazy_inputs,
-                })
+                kwargs[idx].update(
+                    {
+                        "parent_pipe": parent_pipe,
+                        "child_pipe": child_pipe,
+                        "env_fun": env_fun,
+                        "device": self.device,
+                        "env_fun_kwargs": self.create_env_kwargs[idx],
+                        "shared_tensordict": self.shared_tensordicts[idx],
+                        "_selected_input_keys": self._selected_input_keys,
+                        "_selected_reset_keys": self._selected_reset_keys,
+                        "_selected_step_keys": self._selected_step_keys,
+                        "has_lazy_inputs": self.has_lazy_inputs,
+                    }
+                )
                 process = _ProcessNoWarn(
                     target=func,
                     num_threads=self.num_sub_threads,
@@ -794,9 +799,13 @@ class ParallelEnv(_BatchedEnv):
             )
         for i, channel in enumerate(self.parent_channels):
             channel.send(("load_state_dict", state_dict[f"worker{i}"]))
-        for event in self._events:
-            event.wait()
-            event.clear()
+        if self._events is not None:
+            for event in self._events:
+                event.wait()
+                event.clear()
+        else:
+            for event in self._cuda_events:
+                self._cuda_stream.wait_event(event)
 
     @_check_start
     def step_and_maybe_reset(
@@ -818,7 +827,6 @@ class ParallelEnv(_BatchedEnv):
             )
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step_and_maybe_reset", None))
-
 
         if self._events is not None:
             # CPU case
@@ -967,8 +975,12 @@ class ParallelEnv(_BatchedEnv):
             if self._verbose:
                 print(f"closing {i}")
             channel.send(("close", None))
-            self._events[i].wait()
-            self._events[i].clear()
+            if self._events is not None:
+                self._events[i].wait()
+                self._events[i].clear()
+            else:
+                for event in self._cuda_events:
+                    self._cuda_stream.wait_event(event)
 
         del self.shared_tensordicts, self.shared_tensordict_parent
 
@@ -1053,6 +1065,7 @@ def _recursively_strip_locks_from_state_dict(state_dict: OrderedDict) -> Ordered
             for k, item in state_dict.items()
         }
     )
+
 
 def _run_worker_pipe_shared_mem(
     parent_pipe: connection.Connection,
@@ -1249,8 +1262,7 @@ def _run_worker_pipe_cuda(
                 shared_tensordict = shared_tensordict.clone(False)
                 del shared_tensordict["next"]
 
-                if not (
-                    shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
+                if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
                     raise RuntimeError(
                         "tensordict must be placed in shared memory (share_memory_() or memmap_())"
                     )
@@ -1274,7 +1286,6 @@ def _run_worker_pipe_cuda(
                 next_shared_tensordict.update_(next_td)
                 stream.record(cuda_event)
                 stream.synchronize()
-                mp_event.set()
 
             elif cmd == "step_and_maybe_reset":
                 if not initialized:
@@ -1291,7 +1302,6 @@ def _run_worker_pipe_cuda(
                 shared_tensordict.update_(root_next_td)
                 stream.record(cuda_event)
                 stream.synchronize()
-                mp_event.set()
 
             elif cmd == "close":
                 del shared_tensordict, data
@@ -1299,7 +1309,8 @@ def _run_worker_pipe_cuda(
                     raise RuntimeError("call 'init' before closing")
                 env.close()
                 del env
-                mp_event.set()
+                stream.record(cuda_event)
+                stream.synchronize()
                 child_pipe.close()
                 if verbose:
                     print(f"{pid} closed")
@@ -1307,7 +1318,8 @@ def _run_worker_pipe_cuda(
 
             elif cmd == "load_state_dict":
                 env.load_state_dict(data)
-                mp_event.set()
+                stream.record(cuda_event)
+                stream.synchronize()
 
             elif cmd == "state_dict":
                 state_dict = _recursively_strip_locks_from_state_dict(env.state_dict())
