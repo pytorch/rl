@@ -814,12 +814,15 @@ class ParallelEnv(_BatchedEnv):
             # this is faster than update_ but won't work for lazy stacks
             for key in self._env_input_keys:
                 key = _unravel_key_to_tuple(key)
-                self.shared_tensordict_parent._set_tuple(
-                    key,
-                    tensordict._get_tuple(key, None),
-                    inplace=True,
-                    validated=True,
-                )
+                val = tensordict._get_tuple(key, None)
+                if val is not None:
+                    self.shared_tensordict_parent.get(key).copy_(val, non_blocking=True)
+                # self.shared_tensordict_parent._set_tuple(
+                #     key,
+                #     val,
+                #     inplace=True,
+                #     validated=True,
+                # )
         else:
             self.shared_tensordict_parent.update_(
                 tensordict.select(*self._env_input_keys, strict=False)
