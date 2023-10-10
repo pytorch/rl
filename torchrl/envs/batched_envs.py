@@ -1132,10 +1132,12 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             td, root_next_td = env.step_and_maybe_reset(shared_tensordict.clone(False))
-            assert td.device == next_shared_tensordict.device
-            assert root_next_td.device == shared_tensordict.device
-            next_shared_tensordict.update_(td.get("next"))
-            shared_tensordict.update_(root_next_td)
+            for key, val in td.get("next").items(True, True):
+                next_shared_tensordict.get(key).copy_(val, non_blocking=True)
+            # next_shared_tensordict.update_(td.get("next"))
+            for key, val in root_next_td.items(True, True):
+                shared_tensordict.get(key).copy_(val, non_blocking=True)
+            # shared_tensordict.update_(root_next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
