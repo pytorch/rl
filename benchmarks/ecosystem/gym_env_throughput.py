@@ -36,7 +36,7 @@ if __name__ == "__main__":
         "ALE/Breakout-v5",
     ]:
         # the number of collectors won't affect the resources, just impacts how the envs are split in sub-sub-processes
-        for num_workers, num_collectors in zip((32, 64, 8, 16), (8,8, 2, 4)):
+        for num_workers, num_collectors in zip((32, 64, 8, 16), (8, 8, 2, 4)):
             with open(f"{envname}_{num_workers}.txt".replace("/", "-"), "w+") as log:
                 if "myo" in envname:
                     gym_backend = "gym"

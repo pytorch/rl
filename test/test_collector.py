@@ -1410,6 +1410,7 @@ def test_reset_heterogeneous_envs():
         collector.shutdown()
         del collector
 
+
 def test_policy_with_mask():
     env = CountingBatchedEnv(start_val=torch.tensor(10), max_steps=torch.tensor(1e5))
 

@@ -48,8 +48,6 @@ from torchrl.envs.utils import (
     _convert_exploration_type,
     ExplorationType,
     set_exploration_type,
-    step_mdp,
-    terminated_or_truncated,
 )
 
 _TIMEOUT = 1.0
@@ -828,7 +826,7 @@ class SyncDataCollector(DataCollectorBase):
                 self._tensordict = tensordict_.set(
                     "collector", tensordict.get("collector").clone(False)
                 )
-                tensordicts.append(tensordict.to(self.storing_device))
+                tensordicts.append(tensordict.to(self.storing_device, non_blocking=True))
 
                 self._update_traj_ids(tensordict)
                 if (

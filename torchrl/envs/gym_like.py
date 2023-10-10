@@ -262,7 +262,9 @@ class GymLikeEnv(_EnvWrapper):
         obs_dict["done"] = done
         obs_dict["terminated"] = terminated
 
-        tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size, device=self.device)
+        tensordict_out = TensorDict(
+            obs_dict, batch_size=tensordict.batch_size, device=self.device
+        )
 
         if self.info_dict_reader and info is not None:
             if not isinstance(info, dict):

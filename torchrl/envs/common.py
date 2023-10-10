@@ -1650,6 +1650,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         break_when_any_done: bool = True,
         return_contiguous: bool = True,
         tensordict: Optional[TensorDictBase] = None,
+        out = None,
     ):
         """Executes a rollout in the environment.
 
@@ -1789,6 +1790,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             def policy(td):
                 self.rand_action(td)
                 return td
+
         kwargs = {
             "tensordict": tensordict,
             "auto_cast_to_device": auto_cast_to_device,
@@ -1797,20 +1799,29 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             "policy_device": policy_device,
             "env_device": env_device,
             "callback": callback,
-            "return_contiguous": return_contiguous,
         }
         if break_when_any_done:
             tensordicts = self._rollout_stop_early(**kwargs)
         else:
             tensordicts = self._rollout_nonstop(**kwargs)
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
-        out_td = torch.stack(tensordicts, len(batch_size))
+        out_td = torch.stack(tensordicts, len(batch_size), out=out)
         if return_contiguous:
             out_td = out_td.contiguous()
         out_td.refine_names(..., "time")
         return out_td
 
-    def _rollout_stop_early(self, *, tensordict, auto_cast_to_device, max_steps, policy, policy_device, env_device, callback, return_contiguous):
+    def _rollout_stop_early(
+        self,
+        *,
+        tensordict,
+        auto_cast_to_device,
+        max_steps,
+        policy,
+        policy_device,
+        env_device,
+        callback,
+    ):
         tensordicts = []
         for i in range(max_steps):
             if auto_cast_to_device:
@@ -1847,7 +1858,17 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 callback(self, tensordict)
         return tensordicts
 
-    def _rollout_nonstop(self, *, tensordict, auto_cast_to_device, max_steps, policy, policy_device, env_device, callback, return_contiguous):
+    def _rollout_nonstop(
+        self,
+        *,
+        tensordict,
+        auto_cast_to_device,
+        max_steps,
+        policy,
+        policy_device,
+        env_device,
+        callback,
+    ):
         tensordicts = []
         tensordict_ = tensordict
         for i in range(max_steps):
