@@ -586,8 +586,14 @@ class LazyMemmapStorage(LazyTensorStorage):
                 data.clone()
                 .expand(self.max_size, *data.shape)
                 .memmap_like(prefix=self.scratch_dir)
-                .to(self.device)
             )
+            if self.device.type != "cpu":
+                warnings.warn(
+                    "Support for Memmap device other than CPU will be deprecated in v0.4.0.",
+                    category=DeprecationWarning,
+                )
+                out = out.to(self.device).memmap_()
+
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
@@ -603,8 +609,14 @@ class LazyMemmapStorage(LazyTensorStorage):
                 data.clone()
                 .expand(self.max_size, *data.shape)
                 .memmap_like(prefix=self.scratch_dir)
-                .to(self.device)
             )
+            if self.device.type != "cpu":
+                warnings.warn(
+                    "Support for Memmap device other than CPU will be deprecated in v0.4.0.",
+                    category=DeprecationWarning,
+                )
+                out = out.to(self.device).memmap_()
+
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
             ):

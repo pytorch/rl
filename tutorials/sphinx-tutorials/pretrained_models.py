@@ -88,7 +88,7 @@ print("rollout, fine tuning:", rollout)
 #
 from torchrl.data import LazyMemmapStorage, ReplayBuffer
 
-storage = LazyMemmapStorage(1000, device=device)
+storage = LazyMemmapStorage(1000)
 rb = ReplayBuffer(storage=storage, transform=r3m)
 
 ##############################################################################
