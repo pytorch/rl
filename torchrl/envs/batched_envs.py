@@ -1295,7 +1295,7 @@ def _run_worker_pipe_cuda(
                     raise RuntimeError("called 'init' before step")
                 i += 1
                 td, root_next_td = env.step_and_maybe_reset(
-                    shared_tensordict.clone(False)
+                    shared_tensordict.select(*_selected_input_keys).cpu()
                 )
                 for key, val in td.get("next").items(True, True):
                     next_shared_tensordict.get(key).copy_(val, non_blocking=True)
