@@ -96,13 +96,18 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
 
 
 class TensorDictMaxValueWriter(Writer):
-    """A Writer class for composable replay buffers that keeps the top elements based on some ranking key."""
+    """A Writer class for composable replay buffers that keeps the top elements based on some ranking key.
 
-    def __init__(self, rank_key, **kw) -> None:
+    If rank_key is not provided, the key will be ("next", "reward").
+    """
+
+    def __init__(self, rank_key=None, **kw) -> None:
         super().__init__(**kw)
         self._cursor = 0
         self._current_top_values = []
         self._rank_key = rank_key
+        if self._rank_key is None:
+            self._rank_key = ("next", "reward")
 
     def add(self, data: Any) -> int:
 
@@ -146,10 +151,10 @@ class TensorDictMaxValueWriter(Writer):
 
         return ret
 
-    def extend(self, data: Sequence):
+    def extend(self, data: Sequence) -> None:
         for sample in data:
             self.add(sample)
 
-    def _empty(self):
+    def _empty(self) -> None:
         self._cursor = 0
         self._current_top_values = []
