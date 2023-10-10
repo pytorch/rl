@@ -29,7 +29,7 @@ pip3 install git+https://github.com/pytorch/tensordict.git
 python3 -c "import functorch;import tensordict"
 
 printf "* Installing torchrl\n"
-pip3 install -e .
+python setup.py develop
 
 # smoke test
 python3 -c "import torchrl"
