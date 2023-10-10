@@ -723,14 +723,14 @@ class ParallelEnv(_BatchedEnv):
         self._workers = []
         if self.device.type == "cuda":
             func = _run_worker_pipe_cuda
-            self._cuda_streams = [torch.cuda.Stream(self.device) for _ in range(_num_workers)]
+            self._cuda_stream = torch.cuda.Stream(self.device)
             self._cuda_events = [torch.cuda.Event(interprocess=True) for _ in range(_num_workers)]
             self._events = None
-            kwargs = [{"stream": self._cuda_streams[i], "cuda_event": self._cuda_events[i]} for i in range(_num_workers)]
+            kwargs = [{"cuda_event": self._cuda_events[i]} for i in range(_num_workers)]
         else:
             func = _run_worker_pipe_shared_mem
             kwargs = [{} for i in range(_num_workers)]
-            self._cuda_streams = None
+            self._cuda_stream = None
             self._cuda_events = None
             self._events = [ctx.Event() for _ in range(_num_workers)]
         with clear_mpi_env_vars():
@@ -830,7 +830,7 @@ class ParallelEnv(_BatchedEnv):
             # CUDA case
             for i in range(self.num_workers):
                 event = self._cuda_events[i]
-                event.wait(self._cuda_streams[i])
+                self._cuda_stream.wait_event(event)
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -869,7 +869,7 @@ class ParallelEnv(_BatchedEnv):
             # CUDA case
             for i in range(self.num_workers):
                 event = self._cuda_events[i]
-                event.wait(self._cuda_streams[i])
+                self._cuda_stream.wait_event(event)
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -940,7 +940,7 @@ class ParallelEnv(_BatchedEnv):
             # CUDA case
             for i in workers:
                 event = self._cuda_events[i]
-                event.wait(self._cuda_streams[i])
+                self._cuda_stream.wait_event(event)
 
         selected_output_keys = self._selected_reset_keys_filt
         if self._single_task:
@@ -1198,7 +1198,6 @@ def _run_worker_pipe_cuda(
     env_fun: Union[EnvBase, Callable],
     env_fun_kwargs: Dict[str, Any],
     device: DEVICE_TYPING = None,
-    stream: torch.cuda.Stream = None,
     cuda_event: torch.cuda.Event = None,
     shared_tensordict: TensorDictBase = None,
     _selected_input_keys=None,
@@ -1207,6 +1206,7 @@ def _run_worker_pipe_cuda(
     has_lazy_inputs: bool = False,
     verbose: bool = False,
 ) -> None:
+    stream = torch.cuda.Stream(device)
     with torch.cuda.StreamContext(stream):
         parent_pipe.close()
         pid = os.getpid()
