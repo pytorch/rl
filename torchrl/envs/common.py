@@ -1800,8 +1800,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             "return_contiguous": return_contiguous,
         }
         if break_when_any_done:
-            return self._rollout_stop_early(**kwargs)
-        return self._rollout_nonstop(**kwargs)
+            tensordicts = self._rollout_stop_early(**kwargs)
+        else:
+            tensordicts = self._rollout_nonstop(**kwargs)
+        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
+        out_td = torch.stack(tensordicts, len(batch_size))
+        if return_contiguous:
+            out_td = out_td.contiguous()
+        out_td.refine_names(..., "time")
+        return out_td
 
     def _rollout_stop_early(self, *, tensordict, auto_cast_to_device, max_steps, policy, policy_device, env_device, callback, return_contiguous):
         tensordicts = []
@@ -1838,37 +1845,26 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
             if callback is not None:
                 callback(self, tensordict)
-
-        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
-        out_td = torch.stack(tensordicts, len(batch_size))
-        if return_contiguous:
-            out_td = out_td.contiguous()
-        out_td.refine_names(..., "time")
-        return out_td
+        return tensordicts
 
     def _rollout_nonstop(self, *, tensordict, auto_cast_to_device, max_steps, policy, policy_device, env_device, callback, return_contiguous):
         tensordicts = []
         tensordict_ = tensordict
         for i in range(max_steps):
-            # if auto_cast_to_device:
-            #     tensordict_ = tensordict_.to(policy_device, non_blocking=True)
+            if auto_cast_to_device:
+                tensordict_ = tensordict_.to(policy_device, non_blocking=True)
             tensordict_ = policy(tensordict_)
-            # if auto_cast_to_device:
-            #     tensordict_ = tensordict.to(env_device, non_blocking=True)
+            if auto_cast_to_device:
+                tensordict_ = tensordict.to(env_device, non_blocking=True)
             tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
-            tensordicts.append(tensordict.clone(False))
+            tensordicts.append(tensordict)
             if i == max_steps - 1:
                 # we don't truncated as one could potentially continue the run
                 break
             if callback is not None:
                 callback(self, tensordict)
 
-        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
-        out_td = torch.stack(tensordicts, len(batch_size))
-        if return_contiguous:
-            out_td = out_td.contiguous()
-        out_td.refine_names(..., "time")
-        return out_td
+        return tensordicts
 
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
