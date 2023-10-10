@@ -70,10 +70,7 @@ if __name__ == "__main__":
                 log.flush()
 
                 # regular parallel env
-                for device in (
-                    "cuda:0",
-                    "cpu",
-                ):
+                for device in ("cpu", "cuda:0"):
 
                     def make(envname=envname, gym_backend=gym_backend, device=device):
                         with set_gym_backend(gym_backend):
@@ -88,7 +85,9 @@ if __name__ == "__main__":
                         t0 = time.time()
                         data = None
                         for _ in range(100):
-                            data = penv.rollout(100, break_when_any_done=False, out=data)
+                            data = penv.rollout(
+                                100, break_when_any_done=False, out=data
+                            )
                             pbar.update(100 * num_workers)
                     log.write(
                         f"penv {device}: {num_workers * 10_000 / (time.time() - t0): 4.4f} fps\n"
@@ -98,7 +97,7 @@ if __name__ == "__main__":
                     timeit.print()
                     del penv
 
-                for device in ("cuda:0", "cpu"):
+                for device in ("cpu", "cuda:0"):
 
                     def make(envname=envname, gym_backend=gym_backend, device=device):
                         with set_gym_backend(gym_backend):
@@ -131,10 +130,7 @@ if __name__ == "__main__":
                     collector.shutdown()
                     del collector
 
-                for device in (
-                    "cuda:0",
-                    "cpu",
-                ):
+                for device in ("cpu", "cuda:0"):
                     # gym parallel env
                     def make_env(
                         envname=envname,
@@ -201,10 +197,7 @@ if __name__ == "__main__":
                     collector.shutdown()
                     del collector
 
-                for device in (
-                    "cuda:0",
-                    "cpu",
-                ):
+                for device in ("cpu", "cuda:0"):
                     # async collector
                     # + gym async env
                     def make_env(
@@ -248,10 +241,7 @@ if __name__ == "__main__":
                     collector.shutdown()
                     del collector
 
-                for device in (
-                    "cuda:0",
-                    "cpu",
-                ):
+                for device in ("cpu", "cuda:0"):
                     # sync collector
                     # + torchrl parallel env
                     def make_env(
@@ -288,10 +278,7 @@ if __name__ == "__main__":
                     collector.shutdown()
                     del collector
 
-                for device in (
-                    "cuda:0",
-                    "cpu",
-                ):
+                for device in ("cpu", "cuda:0"):
                     # sync collector
                     # + gym async env
                     def make_env(

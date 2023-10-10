@@ -1650,7 +1650,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         break_when_any_done: bool = True,
         return_contiguous: bool = True,
         tensordict: Optional[TensorDictBase] = None,
-        out = None,
+        out=None,
     ):
         """Executes a rollout in the environment.
 
@@ -1787,9 +1787,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             raise RuntimeError("tensordict must be provided when auto_reset is False")
         if policy is None:
 
-            def policy(td):
-                self.rand_action(td)
-                return td
+            policy = self.rand_action
 
         kwargs = {
             "tensordict": tensordict,
