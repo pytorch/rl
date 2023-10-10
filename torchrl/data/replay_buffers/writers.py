@@ -96,7 +96,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
 
 
 class TensorDictMaxValueWriter(Writer):
-    """A Writer class for composable replay buffers that keeps the top elements based on some ranking keys."""
+    """A Writer class for composable replay buffers that keeps the top elements based on some ranking key."""
 
     def __init__(self, rank_key, **kw) -> None:
         super().__init__(**kw)
