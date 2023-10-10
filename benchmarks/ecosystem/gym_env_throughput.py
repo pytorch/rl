@@ -78,8 +78,8 @@ if __name__ == "__main__":
 
                     env_make = EnvCreator(make)
                     penv = ParallelEnv(num_workers, env_make)
-                    # warmup
                     with torch.inference_mode():
+                        # warmup
                         penv.rollout(2)
                         pbar = tqdm.tqdm(total=num_workers * 10_000)
                         t0 = time.time()
@@ -112,17 +112,17 @@ if __name__ == "__main__":
                         frames_per_batch=1024,
                         total_frames=num_workers * 10_000,
                     )
+                    assert collector.env.device == torch.device(device)
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0
                     for i, data in enumerate(collector):
-                        if i == num_collectors:
-                            t0 = time.time()
-                        if i >= num_collectors:
-                            total_frames += data.numel()
-                            pbar.update(data.numel())
-                            pbar.set_description(
-                                f"single collector + torchrl penv: {total_frames / (time.time() - t0): 4.4f} fps"
-                            )
+                        t0 = time.time()
+                        total_frames += data.numel()
+                        pbar.update(data.numel())
+                        pbar.set_description(
+                            f"single collector + torchrl penv: {total_frames / (time.time() - t0): 4.4f} fps"
+                        )
+                        assert data.device == torch.device(device)
                     log.write(
                         f"single collector + torchrl penv {device}: {total_frames / (time.time() - t0): 4.4f} fps\n"
                     )
@@ -157,10 +157,7 @@ if __name__ == "__main__":
                     penv.close()
                     del penv
 
-                for device in (
-                    "cuda:0",
-                    "cpu",
-                ):
+                for device in ("cpu", "cuda:0"):
                     # async collector
                     # + torchrl parallel env
                     def make_env(
