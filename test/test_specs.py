@@ -651,6 +651,22 @@ class TestComposite:
         }
         assert ts["nested_cp"]["act"] is not None
 
+    def test_change_batch_size(self, shape, is_complete, device, dtype):
+        ts = self._composite_spec(shape, is_complete, device, dtype)
+        ts["nested"] = CompositeSpec(
+            leaf=UnboundedContinuousTensorSpec(shape), shape=shape
+        )
+        ts = ts.expand(3, *shape)
+        assert ts["nested"].shape == (3, *shape)
+        assert ts["nested", "leaf"].shape == (3, *shape)
+        ts.shape = ()
+        # this does not change
+        assert ts["nested"].shape == (3, *shape)
+        ts["nested"].shape = ()
+        ts.shape = (3,)
+        assert ts.shape == (3,)
+        assert ts["nested"].shape == (3,)
+
 
 @pytest.mark.parametrize("shape", [(), (2, 3)])
 @pytest.mark.parametrize("device", get_default_devices())
