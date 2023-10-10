@@ -1139,7 +1139,6 @@ class terminal_obs_reader(BaseInfoDictReader):
 
     def __init__(self, observation_spec: CompositeSpec, backend, name="final"):
         self.name = name
-        print(observation_spec)
         self._info_spec = CompositeSpec(
             {(self.name, key): item.clone() for key, item in observation_spec.items()},
             shape=observation_spec.shape,
