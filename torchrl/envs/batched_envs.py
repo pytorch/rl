@@ -723,8 +723,8 @@ class ParallelEnv(_BatchedEnv):
         self._workers = []
         self._events = []
         if self.device.type == "cuda":
-            self.streams = [torch.cuda.Stream(self.device) for _ in range(_num_workers)]
-            self.cuda_events = [torch.cuda.Event(interprocess=True) for _ in range(_num_workers)]
+            self.streams = torch.cuda.Stream(self.device)
+            self.cuda_events = torch.cuda.Event(interprocess=True)
             # self.cuda_events = torch.cuda.Event(interprocess=True)
         else:
             self.streams = [None] * _num_workers
