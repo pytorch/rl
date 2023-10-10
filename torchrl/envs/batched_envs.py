@@ -742,7 +742,7 @@ class ParallelEnv(_BatchedEnv):
                 env_fun = self.create_env_fn[idx]
                 if not isinstance(env_fun, EnvCreator):
                     env_fun = CloudpickleWrapper(env_fun)
-                kwargs.update({
+                kwargs[idx].update({
     "parent_pipe": parent_pipe,
     "child_pipe": child_pipe,
     "env_fun": env_fun,
