@@ -654,7 +654,7 @@ class TestComposite:
     def test_change_batch_size(self, shape, is_complete, device, dtype):
         ts = self._composite_spec(shape, is_complete, device, dtype)
         ts["nested"] = CompositeSpec(
-            leaf=UnboundedContinuousTensorSpec(shape),
+            leaf=UnboundedContinuousTensorSpec(shape, device=device),
             shape=shape,
             device=device,
         )
