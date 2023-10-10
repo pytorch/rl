@@ -748,7 +748,7 @@ class ParallelEnv(_BatchedEnv):
     "env_fun": env_fun,
     "env_fun_kwargs": self.create_env_kwargs[idx],
     "shared_tensordict": self.shared_tensordicts[idx],
-    "_selected_input_keys": _selected_input_keys,
+    "_selected_input_keys": self._selected_input_keys,
     "_selected_reset_keys": self._selected_reset_keys,
     "_selected_step_keys": self._selected_step_keys,
     "has_lazy_inputs": self.has_lazy_inputs,
