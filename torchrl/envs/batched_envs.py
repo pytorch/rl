@@ -820,9 +820,11 @@ class ParallelEnv(_BatchedEnv):
             self.parent_channels[i].send(("step_and_maybe_reset", None))
 
         for i in range(self.num_workers):
-            event = self._events[i]
-            event.wait()
-            event.clear()
+            msg = self.parent_channels[i].recv()
+            assert msg == "smr done"
+            # event = self._events[i]
+            # event.wait()
+            # event.clear()
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -1138,7 +1140,8 @@ def _run_worker_pipe_shared_mem(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_event.set()
+            # mp_event.set()
+            child_pipe.send("smr done")
 
         elif cmd == "close":
             del shared_tensordict, data
