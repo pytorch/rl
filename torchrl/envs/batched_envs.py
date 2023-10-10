@@ -756,7 +756,7 @@ class ParallelEnv(_BatchedEnv):
                 process = _ProcessNoWarn(
                     target=func,
                     num_threads=self.num_sub_threads,
-                    kwargs=kwargs,
+                    kwargs=kwargs[idx],
                 )
                 process.daemon = True
                 process.start()
