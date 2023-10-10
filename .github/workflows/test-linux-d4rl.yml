@@ -29,7 +29,7 @@ jobs:
       timeout: 120
       script: |
         set -euo pipefail
-        export PYTHON_VERSION="3.8"
+        export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"

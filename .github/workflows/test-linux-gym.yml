@@ -31,7 +31,7 @@ jobs:
       timeout: 120
       script: |
         set -euxo pipefail
-        export PYTHON_VERSION="3.8"
+        export PYTHON_VERSION="3.9"
         # export CU_VERSION="${{ inputs.gpu-arch-version }}"
         export CU_VERSION="11.4"
         export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/work/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin"
