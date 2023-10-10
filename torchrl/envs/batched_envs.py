@@ -730,10 +730,10 @@ class ParallelEnv(_BatchedEnv):
             kwargs = [{"cuda_event": self._cuda_events[i]} for i in range(_num_workers)]
         else:
             func = _run_worker_pipe_shared_mem
-            kwargs = [{} for i in range(_num_workers)]
             self._cuda_stream = None
             self._cuda_events = None
             self._events = [ctx.Event() for _ in range(_num_workers)]
+            kwargs = [{"mp_event": self._events[i]} for i in range(_num_workers)]
         with clear_mpi_env_vars():
             for idx in range(_num_workers):
                 if self._verbose:
@@ -1285,7 +1285,9 @@ def _run_worker_pipe_cuda(
                 if not initialized:
                     raise RuntimeError("called 'init' before step")
                 i += 1
-                next_td = env._step(shared_tensordict)
+                next_td = env._step(
+                    shared_tensordict.select(*_selected_input_keys).cpu()
+                )
                 next_shared_tensordict.update_(next_td)
                 stream.record_event(cuda_event)
                 stream.synchronize()
