@@ -662,6 +662,7 @@ class TestComposite:
         ts.shape = ()
         # this does not change
         assert ts["nested"].shape == (3, *shape)
+        assert ts.shape == ()
         ts["nested"].shape = ()
         ts.shape = (3,)
         assert ts.shape == (3,)
