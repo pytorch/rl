@@ -70,14 +70,14 @@ if __name__ == "__main__":
                 log.flush()
 
                 # regular parallel env
-                for device in ("cpu", "cuda:0"):
+                for device in ("cuda:0", "cpu"):
 
                     def make(envname=envname, gym_backend=gym_backend, device=device):
                         with set_gym_backend(gym_backend):
                             return GymEnv(envname, device=device)
 
                     # env_make = EnvCreator(make)
-                    penv = ParallelEnv(num_workers, [EnvCreator(make) for _ in range(num_workers)])
+                    penv = ParallelEnv(num_workers, EnvCreator(make))
                     with torch.inference_mode():
                         # warmup
                         penv.rollout(2)
@@ -111,8 +111,9 @@ if __name__ == "__main__":
                         RandomPolicy(penv.action_spec),
                         frames_per_batch=1024,
                         total_frames=num_workers * 10_000,
+                        device=device,
+                        storing_device=device,
                     )
-                    assert collector.env.device == torch.device(device)
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0
                     for i, data in enumerate(collector):
@@ -122,7 +123,6 @@ if __name__ == "__main__":
                         pbar.set_description(
                             f"single collector + torchrl penv: {total_frames / (time.time() - t0): 4.4f} fps"
                         )
-                        assert data.device == torch.device(device)
                     log.write(
                         f"single collector + torchrl penv {device}: {total_frames / (time.time() - t0): 4.4f} fps\n"
                     )
@@ -175,6 +175,7 @@ if __name__ == "__main__":
                         frames_per_batch=1024,
                         total_frames=num_workers * 10_000,
                         device=device,
+                        storing_device=device,
                     )
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0
@@ -219,6 +220,7 @@ if __name__ == "__main__":
                         total_frames=num_workers * 10_000,
                         num_sub_threads=num_workers // num_collectors,
                         device=device,
+                        storing_device=device,
                     )
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0
@@ -256,6 +258,7 @@ if __name__ == "__main__":
                         frames_per_batch=1024,
                         total_frames=num_workers * 10_000,
                         device=device,
+                        storing_device=device,
                     )
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0

@@ -477,7 +477,7 @@ class _BatchedEnv(EnvBase):
         self.__dict__["_input_spec"] = None
         self.__dict__["_output_spec"] = None
         self._properties_set = False
-        self.event = None
+        self.cuda_events = None
 
         self._shutdown_workers()
         self.is_closed = True
@@ -723,9 +723,11 @@ class ParallelEnv(_BatchedEnv):
         self._workers = []
         self._events = []
         if self.device.type == "cuda":
-            self.event = torch.cuda.Event()
+            # self.streams = [torch.cuda.Stream(self.device) for _ in range(_num_workers)]
+            # self.cuda_events = [torch.cuda.Event(interprocess=True) for _ in range(_num_workers)]
+            self.cuda_events = torch.cuda.Event(interprocess=True)
         else:
-            self.event = None
+            self.cuda_events = None
         with clear_mpi_env_vars():
             for idx in range(_num_workers):
                 if self._verbose:
@@ -813,9 +815,9 @@ class ParallelEnv(_BatchedEnv):
             self.shared_tensordict_parent.update_(
                 tensordict.select(*self._env_input_keys, strict=False)
             )
-        if self.event is not None:
-            self.event.record()
-            self.event.synchronize()
+        if self.cuda_events is not None:
+            self.cuda_events.record()
+            self.cuda_events.synchronize()
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step_and_maybe_reset", None))
 
@@ -848,9 +850,9 @@ class ParallelEnv(_BatchedEnv):
             self.shared_tensordict_parent.update_(
                 tensordict.select(*self._env_input_keys, strict=False)
             )
-        if self.event is not None:
-            self.event.record()
-            self.event.synchronize()
+        if self.cuda_events is not None:
+            self.cuda_events.record()
+            self.cuda_events.synchronize()
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
