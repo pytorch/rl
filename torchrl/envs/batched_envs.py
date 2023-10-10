@@ -1275,7 +1275,7 @@ def _run_worker_pipe_cuda(
                     raise RuntimeError("call 'init' before resetting")
                 cur_td = env._reset(tensordict=data)
                 shared_tensordict.update_(cur_td)
-                stream.record(cuda_event)
+                stream.record_event(cuda_event)
                 stream.synchronize()
 
             elif cmd == "step":
@@ -1284,7 +1284,7 @@ def _run_worker_pipe_cuda(
                 i += 1
                 next_td = env._step(shared_tensordict)
                 next_shared_tensordict.update_(next_td)
-                stream.record(cuda_event)
+                stream.record_event(cuda_event)
                 stream.synchronize()
 
             elif cmd == "step_and_maybe_reset":
@@ -1300,7 +1300,7 @@ def _run_worker_pipe_cuda(
                 # for key, val in root_next_td.items(True, True):
                 #     shared_tensordict.get(key).copy_(val, non_blocking=True)
                 shared_tensordict.update_(root_next_td)
-                stream.record(cuda_event)
+                stream.record_event(cuda_event)
                 stream.synchronize()
 
             elif cmd == "close":
@@ -1309,7 +1309,7 @@ def _run_worker_pipe_cuda(
                     raise RuntimeError("call 'init' before closing")
                 env.close()
                 del env
-                stream.record(cuda_event)
+                stream.record_event(cuda_event)
                 stream.synchronize()
                 child_pipe.close()
                 if verbose:
@@ -1318,7 +1318,7 @@ def _run_worker_pipe_cuda(
 
             elif cmd == "load_state_dict":
                 env.load_state_dict(data)
-                stream.record(cuda_event)
+                stream.record_event(cuda_event)
                 stream.synchronize()
 
             elif cmd == "state_dict":
