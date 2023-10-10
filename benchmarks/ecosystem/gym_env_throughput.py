@@ -116,8 +116,8 @@ if __name__ == "__main__":
                     )
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0
+                    t0 = time.time()
                     for i, data in enumerate(collector):
-                        t0 = time.time()
                         total_frames += data.numel()
                         pbar.update(data.numel())
                         pbar.set_description(
