@@ -17,6 +17,7 @@ The tests are executed with various number of cpus, and on different devices.
 import time
 
 import myosuite  # noqa: F401
+import torch
 import tqdm
 from torchrl._utils import timeit
 from torchrl.collectors import (
@@ -81,13 +82,14 @@ if __name__ == "__main__":
                     env_make = EnvCreator(make)
                     penv = ParallelEnv(num_workers, env_make)
                     # warmup
-                    penv.rollout(2)
-                    pbar = tqdm.tqdm(total=num_workers * 10_000)
-                    t0 = time.time()
-                    data = None
-                    for _ in range(100):
-                        data = penv.rollout(100, break_when_any_done=False, out=data)
-                        pbar.update(100 * num_workers)
+                    with torch.inference_mode():
+                        penv.rollout(2)
+                        pbar = tqdm.tqdm(total=num_workers * 10_000)
+                        t0 = time.time()
+                        data = None
+                        for _ in range(100):
+                            data = penv.rollout(100, break_when_any_done=False, out=data)
+                            pbar.update(100 * num_workers)
                     log.write(
                         f"penv {device}: {num_workers * 10_000 / (time.time() - t0): 4.4f} fps\n"
                     )
