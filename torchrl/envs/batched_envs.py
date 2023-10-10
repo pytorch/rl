@@ -722,10 +722,10 @@ class ParallelEnv(_BatchedEnv):
         self.parent_channels = []
         self._workers = []
         self._events = []
-        if self.device.type == "cuda":
-            self.event = torch.cuda.Event()
-        else:
-            self.event = None
+        # if self.device.type == "cuda":
+        #     self.event = torch.cuda.Event()
+        # else:
+        self.event = None
         with clear_mpi_env_vars():
             for idx in range(_num_workers):
                 if self._verbose:
@@ -1052,10 +1052,10 @@ def _run_worker_pipe_shared_mem(
 ) -> None:
     if device is None:
         device = torch.device("cpu")
-    if device.type == "cuda":
-        event = torch.cuda.Event()
-    else:
-        event = None
+    # if device.type == "cuda":
+    #     event = torch.cuda.Event()
+    # else:
+    event = None
 
     parent_pipe.close()
     pid = os.getpid()
@@ -1132,12 +1132,12 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             td, root_next_td = env.step_and_maybe_reset(shared_tensordict.clone(False))
-            for key, val in td.get("next").items(True, True):
-                next_shared_tensordict.get(key).copy_(val, non_blocking=True)
-            # next_shared_tensordict.update_(td.get("next"))
-            for key, val in root_next_td.items(True, True):
-                shared_tensordict.get(key).copy_(val, non_blocking=True)
-            # shared_tensordict.update_(root_next_td)
+            # for key, val in td.get("next").items(True, True):
+            #     next_shared_tensordict.get(key).copy_(val, non_blocking=True)
+            next_shared_tensordict.update_(td.get("next"))
+            # for key, val in root_next_td.items(True, True):
+            #     shared_tensordict.get(key).copy_(val, non_blocking=True)
+            shared_tensordict.update_(root_next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
