@@ -46,7 +46,7 @@ from torchrl._utils import prod
 from torchrl.data import (
     BoundedTensorSpec,
     CompositeSpec,
-    LazyMemmapStorage,
+    LazyTensorStorage,
     ReplayBuffer,
     TensorDictReplayBuffer,
     TensorStorage,
