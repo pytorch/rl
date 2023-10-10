@@ -1850,11 +1850,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordicts = []
         tensordict_ = tensordict
         for i in range(max_steps):
-            if auto_cast_to_device:
-                tensordict_ = tensordict_.to(policy_device, non_blocking=True)
-            tensordict = policy(tensordict_)
-            if auto_cast_to_device:
-                tensordict_ = tensordict.to(env_device, non_blocking=True)
+            # if auto_cast_to_device:
+            #     tensordict_ = tensordict_.to(policy_device, non_blocking=True)
+            tensordict_ = policy(tensordict_)
+            # if auto_cast_to_device:
+            #     tensordict_ = tensordict.to(env_device, non_blocking=True)
             tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
             tensordicts.append(tensordict.clone(False))
             if i == max_steps - 1:
