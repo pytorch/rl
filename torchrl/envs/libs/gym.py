@@ -2,11 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
+from __future__ import annotations
+
 import importlib
 import warnings
 from copy import copy
 from types import ModuleType
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 from warnings import warn
 
 import numpy as np
@@ -310,7 +313,8 @@ def _gym_to_torchrl_spec_transform(
                 categorical_action_encoding=categorical_action_encoding,
                 remap_state_to_observation=remap_state_to_observation,
             )
-        return CompositeSpec(**spec_out)
+        # the batch-size must be set later
+        return CompositeSpec(spec_out)
     elif isinstance(spec, gym_spaces.dict.Dict):
         return _gym_to_torchrl_spec_transform(
             spec.spaces,
@@ -910,7 +914,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         self._info_dict_reader = value
 
     def _reset(
-        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+        self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
         if self._is_batched:
             # batched (aka 'vectorized') env reset is a bit special: envs are
