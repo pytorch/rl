@@ -3135,10 +3135,10 @@ class CompositeSpec(TensorSpec):
             raise RuntimeError("Cannot modify shape of locked composite spec.")
         for key, spec in self.items():
             if isinstance(spec, CompositeSpec):
-                if spec.shape[: self.ndim] != self.shape:
+                if spec.shape[: len(value)] != value:
                     spec.shape = value
             elif spec is not None:
-                if spec.shape[: self.ndim] != self.shape:
+                if spec.shape[: len(value)] != value:
                     raise ValueError(
                         f"The shape of the spec and the CompositeSpec mismatch during shape resetting: the "
                         f"{self.ndim} first dimensions should match but got self['{key}'].shape={spec.shape} and "
