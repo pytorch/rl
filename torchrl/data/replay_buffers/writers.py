@@ -96,7 +96,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
 
 
 class TensorDictMaxValueWriter(Writer):
-    """A Writer class for composable replay buffers that keeps the top elements based on some ranking key."""
+    """A Writer class for composable replay buffers that keeps the top elements based on some ranking keys."""
 
     def __init__(self, rank_key, **kw) -> None:
         super().__init__(**kw)
@@ -146,7 +146,7 @@ class TensorDictMaxValueWriter(Writer):
 
         return ret
 
-    def extend(self, data: Sequence) -> torch.Tensor:
+    def extend(self, data: Sequence):
         for sample in data:
             self.add(sample)
 
