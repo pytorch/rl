@@ -1223,6 +1223,7 @@ def _run_worker_pipe_cuda(
     verbose: bool = False,
 ) -> None:
     stream = torch.cuda.Stream(device)
+    env = env.to("cpu")
     with torch.cuda.StreamContext(stream):
         parent_pipe.close()
         pid = os.getpid()
@@ -1297,12 +1298,12 @@ def _run_worker_pipe_cuda(
                 td, root_next_td = env.step_and_maybe_reset(
                     shared_tensordict.clone(False)
                 )
-                # for key, val in td.get("next").items(True, True):
-                #     next_shared_tensordict.get(key).copy_(val, non_blocking=True)
-                next_shared_tensordict.update_(td.get("next"))
-                # for key, val in root_next_td.items(True, True):
-                #     shared_tensordict.get(key).copy_(val, non_blocking=True)
-                shared_tensordict.update_(root_next_td)
+                for key, val in td.get("next").items(True, True):
+                    next_shared_tensordict.get(key).copy_(val, non_blocking=True)
+                # next_shared_tensordict.update_(td.get("next"))
+                for key, val in root_next_td.items(True, True):
+                    shared_tensordict.get(key).copy_(val, non_blocking=True)
+                # shared_tensordict.update_(root_next_td)
                 stream.record_event(cuda_event)
                 stream.synchronize()
 
