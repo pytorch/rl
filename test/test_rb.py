@@ -328,29 +328,39 @@ class TestStorages:
         ],
     )
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
-    def test_storage_device(self, device_data, device_storage, storage_type):
+    @pytest.mark.parametrize("data_type", ["tensor", "tc", "td"])
+    def test_storage_device(self, device_data, device_storage, storage_type, data_type):
         @tensorclass
         class TC:
             a: torch.Tensor
 
-        for data in (
-            torch.randn(3, device=device_data),
-            TensorDict(
+        if data_type == "tensor":
+            data = torch.randn(3, device=device_data)
+        elif data_type == "td":
+            data = TensorDict(
                 {"a": torch.randn(3, device=device_data)}, [], device=device_data
-            ),
-            TC(a=torch.randn(3, device=device_data), batch_size=[], device=device_data),
-        ):
-            storage = storage_type(max_size=10, device=device_storage)
-            if device_storage == "auto":
-                device_storage = device_data
-            if storage_type is LazyMemmapStorage and device_storage.type == "cuda":
-                with pytest.raises(
-                    DeprecationWarning, match="Support for Memmap device other than CPU"
-                ):
-                    storage.set(0, data)
-            else:
+            )
+        elif data_type == "tc":
+            data = (
+                TC(
+                    a=torch.randn(3, device=device_data),
+                    batch_size=[],
+                    device=device_data,
+                ),
+            )
+        else:
+            raise NotImplementedError
+        storage = storage_type(max_size=10, device=device_storage)
+        if device_storage == "auto":
+            device_storage = device_data
+        if storage_type is LazyMemmapStorage and device_storage.type == "cuda":
+            with pytest.raises(
+                DeprecationWarning, match="Support for Memmap device other than CPU"
+            ):
                 storage.set(0, data)
-            assert storage.get(0).device.type == device_storage.type
+        else:
+            storage.set(0, data)
+        assert storage.get(0).device.type == device_storage.type
 
 
 @pytest.mark.parametrize("max_size", [1000])
