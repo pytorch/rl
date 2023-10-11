@@ -49,7 +49,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create data buffer
     sampler = SamplerWithoutReplacement()
     data_buffer = TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(cfg.collector.frames_per_batch, device=device),
+        storage=LazyMemmapStorage(cfg.collector.frames_per_batch),
         sampler=sampler,
         batch_size=cfg.loss.mini_batch_size,
     )
