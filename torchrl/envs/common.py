@@ -30,7 +30,7 @@ from torchrl.envs.utils import (
     _update_during_reset,
     get_available_libraries,
     step_mdp,
-    terminated_or_truncated,
+    _terminated_or_truncated,
 )
 
 LIBRARIES = get_available_libraries()
@@ -1857,7 +1857,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             )
             # done and truncated are in done_keys
             # We read if any key is done.
-            any_done = terminated_or_truncated(
+            any_done = _terminated_or_truncated(
                 tensordict,
                 full_done_spec=self.output_spec["full_done_spec"],
                 key=None,
@@ -1952,7 +1952,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             action_keys=self.action_keys,
             done_keys=self.done_keys,
         )
-        any_done = terminated_or_truncated(
+        any_done = _terminated_or_truncated(
             tensordict_,
             full_done_spec=self.output_spec["full_done_spec"],
             key="_reset",

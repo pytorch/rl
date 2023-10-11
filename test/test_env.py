@@ -72,7 +72,7 @@ from torchrl.envs.utils import (
     make_composite_from_td,
     MarlGroupMapType,
     step_mdp,
-    terminated_or_truncated,
+    _terminated_or_truncated,
 )
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
@@ -2060,9 +2060,9 @@ def test_mocking_envs(envclass):
 class TestTerminatedOrTruncated:
     def test_terminated_or_truncated_nospec(self):
         data = TensorDict({"done": torch.zeros(2, 1, dtype=torch.bool)}, [2])
-        assert not terminated_or_truncated(data, write_full_false=True)
+        assert not _terminated_or_truncated(data, write_full_false=True)
         assert data["_reset"].shape == (2, 1)
-        assert not terminated_or_truncated(data, write_full_false=False)
+        assert not _terminated_or_truncated(data, write_full_false=False)
         assert data.get("_reset", None) is None
 
         data = TensorDict(
@@ -2072,7 +2072,7 @@ class TestTerminatedOrTruncated:
             },
             [2],
         )
-        assert terminated_or_truncated(data)
+        assert _terminated_or_truncated(data)
         assert data["_reset"].shape == (2, 1)
         assert data["nested", "_reset"].shape == (2, 1)
 
@@ -2083,10 +2083,10 @@ class TestTerminatedOrTruncated:
             },
             [2],
         )
-        assert not terminated_or_truncated(data, write_full_false=False)
+        assert not _terminated_or_truncated(data, write_full_false=False)
         assert data.get("_reset", None) is None
         assert data.get(("nested", "_reset"), None) is None
-        assert not terminated_or_truncated(data, write_full_false=True)
+        assert not _terminated_or_truncated(data, write_full_false=True)
         assert data["_reset"].shape == (2, 1)
         assert data["nested", "_reset"].shape == (2, 1)
 
@@ -2098,7 +2098,7 @@ class TestTerminatedOrTruncated:
             },
             [2],
         )
-        assert terminated_or_truncated(data, write_full_false=False)
+        assert _terminated_or_truncated(data, write_full_false=False)
         assert data["_reset"].shape == (2, 1)
         assert data["nested", "_reset"].shape == (2, 1)
         assert data["_reset"].all()
@@ -2112,11 +2112,11 @@ class TestTerminatedOrTruncated:
             ],
         )
         data = TensorDict({"done": torch.zeros(2, 1, dtype=torch.bool)}, [2])
-        assert not terminated_or_truncated(
+        assert not _terminated_or_truncated(
             data, write_full_false=True, full_done_spec=spec
         )
         assert data["_reset"].shape == (2, 1)
-        assert not terminated_or_truncated(
+        assert not _terminated_or_truncated(
             data, write_full_false=False, full_done_spec=spec
         )
         assert data.get("_reset", None) is None
@@ -2139,7 +2139,7 @@ class TestTerminatedOrTruncated:
             },
             [2],
         )
-        assert terminated_or_truncated(data, full_done_spec=spec)
+        assert _terminated_or_truncated(data, full_done_spec=spec)
         assert data["_reset"].shape == (2, 1)
         assert data["nested", "_reset"].shape == (2, 1)
 
@@ -2150,12 +2150,12 @@ class TestTerminatedOrTruncated:
             },
             [2],
         )
-        assert not terminated_or_truncated(
+        assert not _terminated_or_truncated(
             data, write_full_false=False, full_done_spec=spec
         )
         assert data.get("_reset", None) is None
         assert data.get(("nested", "_reset"), None) is None
-        assert not terminated_or_truncated(
+        assert not _terminated_or_truncated(
             data, write_full_false=True, full_done_spec=spec
         )
         assert data["_reset"].shape == (2, 1)
@@ -2179,7 +2179,7 @@ class TestTerminatedOrTruncated:
             },
             [2],
         )
-        assert terminated_or_truncated(
+        assert _terminated_or_truncated(
             data, write_full_false=False, full_done_spec=spec
         )
         assert data["_reset"].shape == (2, 1)

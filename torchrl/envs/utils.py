@@ -729,6 +729,124 @@ def check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str])
             raise ValueError(f"Agent {agent_name} not found in any group")
 
 
+def _terminated_or_truncated(
+    data: TensorDictBase,
+    full_done_spec: TensorSpec | None = None,
+    key: str = "_reset",
+    write_full_false: bool = False,
+) -> bool:
+    """Reads the done / terminated / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
+
+    The modification occurs in-place within the TensorDict instance provided.
+    This function can be used to compute the `"_reset"` signals in batched
+    or multiagent settings, hence the default name of the output key.
+
+    Args:
+        data (TensorDictBase): the input data, generally resulting from a call
+            to :meth:`~torchrl.envs.EnvBase.step`.
+        full_done_spec (TensorSpec, optional): the done_spec from the env,
+            indicating where the done leaves have to be found.
+            If not provided, the default
+            ``"done"``, ``"terminated"`` and ``"truncated"`` entries will be
+            searched for in the data.
+        key (NestedKey, optional): where the aggregated result should be written.
+            If ``None``, then the function will not write any key but just output
+            whether any of the done values was true.
+            .. note:: if a value is already present for the ``key`` entry,
+                the previous value will prevail and no update will be achieved.
+        write_full_false (bool, optional): if ``True``, the reset keys will be
+            written even if the output is ``False`` (ie, no done is ``True``
+            in the provided data structure).
+            Defaults to ``False``.
+
+    Returns: a boolean value indicating whether any of the done states found in the data
+        contained a ``True``.
+
+    Examples:
+        >>> from torchrl.data.tensor_specs import DiscreteTensorSpec
+        >>> from tensordict import TensorDict
+        >>> spec = CompositeSpec(
+        ...     done=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...     truncated=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...     nested=CompositeSpec(
+        ...         done=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...         truncated=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...     )
+        ... )
+        >>> data = TensorDict({
+        ...     "done": True, "truncated": False,
+        ...     "nested": {"done": False, "truncated": True}},
+        ...     batch_size=[]
+        ... )
+        >>> data = _terminated_or_truncated(data, spec)
+        >>> print(data["_reset"])
+        tensor(True)
+        >>> print(data["nested", "_reset"])
+        tensor(True)
+    """
+    list_of_keys = []
+
+    def inner_terminated_or_truncated(data, full_done_spec, key, curr_done_key=()):
+        any_eot = False
+        aggregate = None
+        if full_done_spec is None:
+            for eot_key, item in data.items():
+                if eot_key == "done":
+                    done = data.get(eot_key, None)
+                    if done is None:
+                        done = torch.zeros(
+                            (*data.shape, 1), dtype=torch.bool, device=data.device
+                        )
+                    if aggregate is None:
+                        aggregate = torch.tensor(False, device=done.device)
+                    aggregate = aggregate | done
+                elif eot_key in ("terminated", "truncated"):
+                    done = data.get(eot_key, None)
+                    if done is None:
+                        done = torch.zeros(
+                            (*data.shape, 1), dtype=torch.bool, device=data.device
+                        )
+                    if aggregate is None:
+                        aggregate = torch.tensor(False, device=done.device)
+                    aggregate = aggregate | done
+                elif isinstance(item, TensorDictBase):
+                    any_eot = any_eot | inner_terminated_or_truncated(
+                        data=item,
+                        full_done_spec=None,
+                        key=key,
+                        curr_done_key=curr_done_key + (eot_key,),
+                    )
+        else:
+            for eot_key, item in full_done_spec.items():
+                if isinstance(item, CompositeSpec):
+                    any_eot = any_eot | inner_terminated_or_truncated(
+                        data=data.get(eot_key),
+                        full_done_spec=item,
+                        key=key,
+                        curr_done_key=curr_done_key + (eot_key,),
+                    )
+                else:
+                    sop = data.get(eot_key, None)
+                    if sop is None:
+                        sop = torch.zeros(
+                            (*data.shape, 1), dtype=torch.bool, device=data.device
+                        )
+                    if aggregate is None:
+                        aggregate = torch.tensor(False, device=sop.device)
+                    aggregate = aggregate | sop
+        if aggregate is not None:
+            if key is not None:
+                data.set(key, aggregate)
+                list_of_keys.append(curr_done_key + (key,))
+            any_eot = any_eot | aggregate.any()
+        return any_eot
+
+    any_eot = inner_terminated_or_truncated(data, full_done_spec, key)
+    if not any_eot and not write_full_false:
+        # remove the list of reset keys
+        data.exclude(*list_of_keys, inplace=True)
+    return any_eot
+
 def terminated_or_truncated(
     data: TensorDictBase,
     full_done_spec: TensorSpec | None = None,
@@ -778,7 +896,7 @@ def terminated_or_truncated(
         ...     "nested": {"done": False, "truncated": True}},
         ...     batch_size=[]
         ... )
-        >>> data = terminated_or_truncated(data, spec)
+        >>> data = _terminated_or_truncated(data, spec)
         >>> print(data["_reset"])
         tensor(True)
         >>> print(data["nested", "_reset"])
