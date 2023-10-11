@@ -144,6 +144,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
             for k, batch in enumerate(data_buffer):
 
+                # Get a data batch
+                batch = batch.to(device)
+
                 # Linearly decrease the learning rate and clip epsilon
                 alpha = 1.0
                 if cfg_optim_anneal_lr:
