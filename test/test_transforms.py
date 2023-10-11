@@ -46,7 +46,6 @@ from torchrl._utils import prod
 from torchrl.data import (
     BoundedTensorSpec,
     CompositeSpec,
-    LazyMemmapStorage,
     LazyTensorStorage,
     ReplayBuffer,
     TensorDictReplayBuffer,
@@ -8799,10 +8798,9 @@ class TestDeviceCastTransform(TransformBase):
         assert t(TensorDict({}, [], device="cpu:0")).device == torch.device("cpu:1")
 
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
-    @pytest.mark.parametrize(
-        "storage", [TensorStorage, LazyTensorStorage, LazyMemmapStorage]
-    )
+    @pytest.mark.parametrize("storage", [TensorStorage, LazyTensorStorage])
     def test_transform_rb(self, rbclass, storage):
+        # we don't test casting to cuda on Memmap tensor storage since it's discouraged
         t = Compose(DeviceCastTransform("cpu:1", "cpu:0"))
         storage_kwargs = (
             {

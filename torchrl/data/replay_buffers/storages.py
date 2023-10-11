@@ -571,6 +571,11 @@ class LazyMemmapStorage(LazyTensorStorage):
             print("Creating a MemmapStorage...")
         if self.device == "auto":
             self.device = data.device
+        if self.device.type != "cpu":
+            warnings.warn(
+                "Support for Memmap device other than CPU will be deprecated in v0.4.0.",
+                category=DeprecationWarning,
+            )
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
             out = MemmapTensor(
@@ -581,30 +586,11 @@ class LazyMemmapStorage(LazyTensorStorage):
                 print(
                     f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
                 )
-        elif is_tensorclass(data):
-            out = (
-                data.clone()
-                .expand(self.max_size, *data.shape)
-                .memmap_like(prefix=self.scratch_dir)
-                .to(self.device)
-            )
-            for key, tensor in sorted(
-                out.items(include_nested=True, leaves_only=True), key=str
-            ):
-                filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                if VERBOSE:
-                    print(
-                        f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
-                    )
-        else:
-            if VERBOSE:
-                print("The storage is being created: ")
-            out = (
-                data.clone()
-                .expand(self.max_size, *data.shape)
-                .memmap_like(prefix=self.scratch_dir)
-                .to(self.device)
-            )
+        elif is_tensor_collection(data):
+            out = data.clone().to(self.device)
+            out = out.expand(self.max_size, *data.shape)
+            out = out.memmap_like(prefix=self.scratch_dir)
+
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
