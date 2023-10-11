@@ -121,11 +121,16 @@ class _BatchedEnv(EnvBase):
         memmap (bool): whether or not the returned tensordict will be placed in memory map.
         policy_proof (callable, optional): if provided, it'll be used to get the list of
             tensors to return through the :obj:`step()` and :obj:`reset()` methods, such as :obj:`"hidden"` etc.
-        device (str, int, torch.device): for consistency, this argument is kept. However this
-            argument should not be passed, as the device will be inferred from the environments.
-            It is assumed that all environments will run on the same device as a common shared
-            tensordict will be used to pass data from process to process. The device can be
-            changed after instantiation using :obj:`env.to(device)`.
+        device (str, int, torch.device): The device of the batched environment can be passed.
+            If not, it is inferred from the env. In this case, it is assumed that
+            the device of all environments match. If it is provided, it can differ
+            from the sub-environment device(s). In that case, the data will be
+            automatically cast to the appropriate device during collection.
+            This can be used to speed up collection in case casting to device
+            introduces an overhead (eg, numpy-based environents etc.): by using
+            a ``"cuda"`` device for the batched environment but a ``"cpu"``
+            device for the nested environments, one can keep the overhead to a
+            minimum.
         num_threads (int, optional): number of threads for this process.
             Defaults to the number of workers.
             This parameter has no effect for the :class:`~SerialEnv` class.
@@ -161,14 +166,7 @@ class _BatchedEnv(EnvBase):
         num_threads: int = None,
         num_sub_threads: int = 1,
     ):
-        if device is not None:
-            raise ValueError(
-                "Device setting for batched environment can't be done at initialization. "
-                "The device will be inferred from the constructed environment. "
-                "It can be set through the `to(device)` method."
-            )
-
-        super().__init__(device=None)
+        super().__init__(device=device)
         self.is_closed = True
         if num_threads is None:
             num_threads = num_workers + 1  # 1 more thread for this proc
@@ -217,7 +215,7 @@ class _BatchedEnv(EnvBase):
                 "memmap and shared memory are mutually exclusive features."
             )
         self._batch_size = None
-        self._device = None
+        self._device = torch.device(device)
         self._dummy_env_str = None
         self._seeds = None
         self.__dict__["_input_spec"] = None
@@ -272,7 +270,9 @@ class _BatchedEnv(EnvBase):
         self._properties_set = True
         if self._single_task:
             self._batch_size = meta_data.batch_size
-            device = self._device = meta_data.device
+            device = meta_data.device
+            if self._device is None:
+                self._device = device
 
             input_spec = meta_data.specs["input_spec"].to(device)
             output_spec = meta_data.specs["output_spec"].to(device)
@@ -288,8 +288,18 @@ class _BatchedEnv(EnvBase):
             self._batch_locked = meta_data.batch_locked
         else:
             self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
-            device = self._device = meta_data[0].device
-            # TODO: check that all action_spec and reward spec match (issue #351)
+            devices = set()
+            for _meta_data in meta_data:
+                device = _meta_data.device
+                devices.append(device)
+            if self._device is None:
+                if len(devices) > 1:
+                    raise ValueError(
+                        f"The device wasn't passed to {type(self)}, but more than one device was found in the sub-environments. "
+                        f"Please indicate a device to be used for collection."
+                    )
+                device = list(devices)[0]
+                self._device = device
 
             input_spec = []
             for md in meta_data:
@@ -500,11 +510,6 @@ class _BatchedEnv(EnvBase):
         if device == self.device:
             return self
         self._device = device
-        self.meta_data = (
-            self.meta_data.to(device)
-            if self._single_task
-            else [meta_data.to(device) for meta_data in self.meta_data]
-        )
         if not self.is_closed:
             warn(
                 "Casting an open environment to another device requires closing and re-opening it. "
@@ -536,7 +541,7 @@ class SerialEnv(_BatchedEnv):
 
         for idx in range(_num_workers):
             env = self.create_env_fn[idx](**self.create_env_kwargs[idx])
-            self._envs.append(env.to(self.device))
+            self._envs.append(env)
         self.is_closed = False
 
     @_check_start
@@ -566,7 +571,12 @@ class SerialEnv(_BatchedEnv):
         for i in range(self.num_workers):
             # shared_tensordicts are locked, and we need to select the keys since we update in-place.
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
-            out_td = self._envs[i]._step(tensordict_in[i])
+            env_device = self._envs[i].device
+            if env_device != self.device:
+                data_in = tensordict_in[i].to(env_device)
+            else:
+                data_in = tensordict_in[i]
+            out_td = self._envs[i]._step(data_in)
             next_td[i].update_(out_td.select(*self._env_output_keys, strict=False))
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -617,6 +627,10 @@ class SerialEnv(_BatchedEnv):
                 tensordict_ = tensordict[i]
                 if tensordict_.is_empty():
                     tensordict_ = None
+                else:
+                    env_device = _env.device
+                    if env_device != self.device:
+                        tensordict_ = tensordict_.to(env_device)
             else:
                 tensordict_ = None
 
@@ -637,6 +651,7 @@ class SerialEnv(_BatchedEnv):
                         tensordict_.select(*self._selected_reset_keys, strict=False)
                     )
                 continue
+
             _td = _env._reset(tensordict=tensordict_, **kwargs)
             self.shared_tensordicts[i].update_(
                 _td.select(*self._selected_reset_keys, strict=False)
@@ -815,14 +830,12 @@ class ParallelEnv(_BatchedEnv):
             for key in self._env_input_keys:
                 key = _unravel_key_to_tuple(key)
                 val = tensordict._get_tuple(key, None)
-                if val is not None:
-                    self.shared_tensordict_parent.get(key).copy_(val, non_blocking=True)
-                # self.shared_tensordict_parent._set_tuple(
-                #     key,
-                #     val,
-                #     inplace=True,
-                #     validated=True,
-                # )
+                self.shared_tensordict_parent._set_tuple(
+                    key,
+                    val,
+                    inplace=True,
+                    validated=True,
+                )
         else:
             self.shared_tensordict_parent.update_(
                 tensordict.select(*self._env_input_keys, strict=False)
@@ -1094,8 +1107,10 @@ def _run_worker_pipe_shared_mem(
                 "env_fun_kwargs must be empty if an environment is passed to a process."
             )
         env = env_fun
-    env = env.to(device)
-    del env_fun
+    env_device = env.device
+    # we check if the devices mismatch. This tells us that the data need
+    # to be cast onto the right device before any op
+    device_mismatch = device != env_device
 
     i = -1
     initialized = False
@@ -1136,6 +1151,8 @@ def _run_worker_pipe_shared_mem(
                 print(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
+            if data is not None and device_mismatch:
+                data = data.to(env_device, non_blocking=True)
             cur_td = env._reset(tensordict=data)
             shared_tensordict.update_(cur_td)
             mp_event.set()
@@ -1144,7 +1161,13 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            next_td = env._step(shared_tensordict)
+            if device_mismatch:
+                env_input = shared_tensordict.select(*_selected_input_keys).to(
+                    env_device, non_blocking=True
+                )
+            else:
+                env_input = shared_tensordict
+            next_td = env._step(env_input)
             next_shared_tensordict.update_(next_td)
             mp_event.set()
 
@@ -1152,12 +1175,14 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            td, root_next_td = env.step_and_maybe_reset(shared_tensordict.clone(False))
-            # for key, val in td.get("next").items(True, True):
-            #     next_shared_tensordict.get(key).copy_(val, non_blocking=True)
+            if device_mismatch:
+                env_input = shared_tensordict.select(*_selected_input_keys).to(
+                    env_device, non_blocking=True
+                )
+            else:
+                env_input = shared_tensordict
+            td, root_next_td = env.step_and_maybe_reset(env_input)
             next_shared_tensordict.update_(td.get("next"))
-            # for key, val in root_next_td.items(True, True):
-            #     shared_tensordict.get(key).copy_(val, non_blocking=True)
             shared_tensordict.update_(root_next_td)
             mp_event.set()
 
@@ -1234,9 +1259,11 @@ def _run_worker_pipe_cuda(
                     "env_fun_kwargs must be empty if an environment is passed to a process."
                 )
             env = env_fun
-        env = env.to("cpu")
         del env_fun
-
+        env_device = env.device
+        # we check if the devices mismatch. This tells us that the data need
+        # to be cast onto the right device before any op
+        device_mismatch = device != env_device
         i = -1
         initialized = False
 
@@ -1276,6 +1303,8 @@ def _run_worker_pipe_cuda(
                     print(f"resetting worker {pid}")
                 if not initialized:
                     raise RuntimeError("call 'init' before resetting")
+                if data is not None and device_mismatch:
+                    data = data.to(env_device, non_blocking=True)
                 cur_td = env._reset(tensordict=data)
                 shared_tensordict.update_(cur_td)
                 stream.record_event(cuda_event)
@@ -1285,9 +1314,13 @@ def _run_worker_pipe_cuda(
                 if not initialized:
                     raise RuntimeError("called 'init' before step")
                 i += 1
-                next_td = env._step(
-                    shared_tensordict.select(*_selected_input_keys).cpu()
-                )
+                if device_mismatch:
+                    env_input = shared_tensordict.select(*_selected_input_keys).to(
+                        env_device, non_blocking=True
+                    )
+                else:
+                    env_input = shared_tensordict
+                next_td = env._step(env_input)
                 next_shared_tensordict.update_(next_td)
                 stream.record_event(cuda_event)
                 stream.synchronize()
@@ -1296,15 +1329,15 @@ def _run_worker_pipe_cuda(
                 if not initialized:
                     raise RuntimeError("called 'init' before step")
                 i += 1
-                td, root_next_td = env.step_and_maybe_reset(
-                    shared_tensordict.select(*_selected_input_keys).cpu()
-                )
-                for key, val in td.get("next").items(True, True):
-                    next_shared_tensordict.get(key).copy_(val, non_blocking=True)
-                # next_shared_tensordict.update_(td.get("next"))
-                for key, val in root_next_td.items(True, True):
-                    shared_tensordict.get(key).copy_(val, non_blocking=True)
-                # shared_tensordict.update_(root_next_td)
+                if device_mismatch:
+                    env_input = shared_tensordict.select(*_selected_input_keys).to(
+                        env_device, non_blocking=True
+                    )
+                else:
+                    env_input = shared_tensordict
+                td, root_next_td = env.step_and_maybe_reset(env_input)
+                next_shared_tensordict.update_(td.get("next"))
+                shared_tensordict.update_(root_next_td)
                 stream.record_event(cuda_event)
                 stream.synchronize()
 
