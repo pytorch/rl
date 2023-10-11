@@ -99,6 +99,42 @@ class TensorDictMaxValueWriter(Writer):
     """A Writer class for composable replay buffers that keeps the top elements based on some ranking key.
 
     If rank_key is not provided, the key will be ("next", "reward").
+
+    Examples:
+    >>> import torch
+    >>> from tensordict import TensorDict
+    >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer, TensorDictMaxValueWriter
+    >>> from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
+
+    >>> rb = TensorDictReplayBuffer(
+    ...     storage=LazyTensorStorage(1),
+    ...     sampler=SamplerWithoutReplacement(),
+    ...     batch_size=1,
+    ...     writer=TensorDictMaxValueWriter(rank_key="key"),
+    ... )
+    >>> td = TensorDict({
+    ...     "key": torch.tensor(range(10)),
+    ...     "obs": torch.tensor(range(10))
+    ... }, batch_size=10)
+    >>> rb.extend(td)
+    >>> print(rb.sample().get("obs").item())
+    9
+
+    >>> td = TensorDict({
+    ...     "key": torch.tensor(range(10, 20)),
+    ...     "obs": torch.tensor(range(10, 20))
+    ... }, batch_size=10)
+    >>> rb.extend(td)
+    >>> print(rb.sample().get("obs").item())
+    19
+
+    >>> td = TensorDict({
+    ...     "key": torch.tensor(range(10)),
+    ...     "obs": torch.tensor(range(10))
+    ... }, batch_size=10)
+    >>> rb.extend(td)
+    >>> print(rb.sample().get("obs").item())
+    9
     """
 
     def __init__(self, rank_key=None, **kw) -> None:
@@ -112,9 +148,10 @@ class TensorDictMaxValueWriter(Writer):
     def add(self, data: Any) -> int:
 
         ret = None
+        rank_data = data.get("_data", self._rank_key)
 
         # Sum the rank key, in case it is a whole trajectory
-        rank_data = data.get("_data")[self._rank_key].sum()
+        rank_data = rank_data.sum().item()
 
         if rank_data is None:
             raise ValueError(f"Rank key {self._rank_key} not found in data.")
@@ -123,7 +160,7 @@ class TensorDictMaxValueWriter(Writer):
         if len(self._storage) < self._storage.max_size:
 
             ret = self._cursor
-            data["index"] = ret
+            data.set("index", ret)
             self._storage[self._cursor] = data
             self._cursor = (self._cursor + 1) % self._storage.max_size
 
@@ -141,7 +178,7 @@ class TensorDictMaxValueWriter(Writer):
             self._storage[min_sample_value] = data
 
             # set new data index
-            data["index"] = min_sample_value
+            data.set("index", min_sample_value)
 
             # set return value
             ret = min_sample_value
