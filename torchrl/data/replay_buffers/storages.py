@@ -16,7 +16,7 @@ from tensordict.memmap import MemmapTensor
 from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.utils import expand_right
 
-from torchrl._utils import _CKPT_BACKEND, VERBOSE
+from torchrl._utils import _CKPT_BACKEND, implement_for, VERBOSE
 from torchrl.data.replay_buffers.utils import INT_CLASSES
 
 try:
@@ -304,6 +304,7 @@ class TensorStorage(Storage):
         self.initialized = state_dict["initialized"]
         self._len = state_dict["_len"]
 
+    @implement_for("torch", "2.0", None)
     def set(
         self,
         cursor: Union[int, Sequence[int], slice],
@@ -319,6 +320,31 @@ class TensorStorage(Storage):
                 self._init(data[0])
             else:
                 self._init(data)
+        self._storage[cursor] = data
+
+    @implement_for("torch", None, "2.0")
+    def set(  # noqa: F811
+        self,
+        cursor: Union[int, Sequence[int], slice],
+        data: Union[TensorDictBase, torch.Tensor],
+    ):
+        if isinstance(cursor, INT_CLASSES):
+            self._len = max(self._len, cursor + 1)
+        else:
+            self._len = max(self._len, max(cursor) + 1)
+
+        if not self.initialized:
+            if not isinstance(cursor, INT_CLASSES):
+                self._init(data[0])
+            else:
+                self._init(data)
+        if not isinstance(cursor, slice):
+            if not isinstance(cursor, torch.Tensor):
+                cursor = torch.tensor(cursor)
+            if cursor.unique().numel() < cursor.numel():
+                raise RuntimeError(
+                    "More than one example of some indices have been provided, data assignment cannot be achieved."
+                )
         self._storage[cursor] = data
 
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
