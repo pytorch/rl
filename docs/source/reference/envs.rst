@@ -58,6 +58,23 @@ With these, the following methods are implemented:
 - :meth:`env.step`: a step method that takes a :class:`tensordict.TensorDict` input
   containing an input action as well as other inputs (for model-based or stateless
   environments, for instance).
+- :meth:`env.step_and_maybe_reset`: executes a step, and (partially) resets the
+  environments if it needs to. It returns the updated input with a ``"next"``
+  key containing the data of the next step, as well as a tensordict containing
+  the input data for the next step (ie, reset or result or
+  :func:`~torchrl.envs.utils.step_mdp`)
+  This is done by reading the ``done_keys`` and
+  assigning a ``"_reset"`` signal to each done state. This method allows
+  to code non-stopping rollout functions with little effort:
+
+    >>> data_ = env.reset()
+    >>> result = []
+    >>> for i in range(N):
+    ...     data, data_ = env.step_and_maybe_reset(data_)
+    ...     result.append(data)
+    ...
+    >>> result = torch.stack(result)
+
 - :meth:`env.set_seed`: a seeding method that will return the next seed
   to be used in a multi-env setting. This next seed is deterministically computed
   from the preceding one, such that one can seed multiple environments with a different
@@ -169,7 +186,37 @@ one can simply call:
         >>> print(a)
         9.81
 
-It is also possible to reset some but not all of the environments:
+TorchRL uses a private ``"_reset"`` key to indicate to the environment which
+sub-environments should be reset.
+This allows to reset some but not all of the environments.
+Keep in mind that this is a private key, and it should only be used when coding
+specific environment features that are internal facing.
+The way an environment deals with the ``"_reset"`` keys is proper to it and
+designing an environment that behaves according to ``"_reset"`` inputs is the
+developer's responsibility. The following assumptions are made:
+
+- Each ``"_reset"`` is paired with a ``"done"`` (and/or ``"terminated"``,
+  ``"truncated"`` etc.). This means that the following structure is not
+  allowed: ``TensorDict({"done": done, "nested": {"_reset": reset}}, [])``.
+- A reset at one level precludes the presence of a ``"_reset"`` at lower
+  levels below it. For instance, this is not allowed:
+  ``TensorDict({"_reset": reset_main, "nested": {"_reset": reset_leaf}}, [])``
+- When calling :meth:`env.reset(tensordict)` with a partial ``"_reset"`` entry
+  that will reset some but not all the done sub-environments, the input data
+  should contain the data of the sub-environemtns that are __not__ being reset.
+  The reason for this constrain is that the output of the ``env._reset(data)``
+  can only be predicted for the entries that are reset. For the others, we
+  cannot know in advance if they will be meaningful or not. For instance,
+  one could perfectly just pad the values of the non-reset environments, in
+  which case the data will be meaningless and should be discarded.
+  :meth:`~torchrl.envs.EnvBase.reset` will merge the input tensordict with
+  the one resulting from reset and pad missing values with 0 (except for
+  ``done`` signals).
+  The other reason why this constrain is enforced is that usually,
+  setting ``"_reset"`` is achieved by internal methods that have access to
+  the data at the previous step, and use that data to call ``reset`` (after
+  passing it through :func:`~torchrl.envs.utils.step_mdp`). We can safely
+  assume that the data presented to ``reset`` is therefore complete.
 
 .. code-block::
    :caption: Parallel environment reset

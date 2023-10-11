@@ -1901,6 +1901,45 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
+        """Runs a step in the environment and (partially) resets it if needed.
+
+        Args:
+            tensordict (TensorDictBase): an input data structure for the :meth:`~.step`
+                method.
+
+        This method allows to easily code non-stopping rollout functions.
+
+        Examples:
+            >>> from torchrl.envs import ParallelEnv, GymEnv
+            >>> def rollout(env, n):
+            ...     data_ = env.reset()
+            ...     result = []
+            ...     for i in range(n):
+            ...         data, data_ = env.step_and_maybe_reset(data_)
+            ...         result.append(data)
+            ...     return torch.stack(result).contiguous()
+            >>> env = ParallelEnv(2, lambda: GymEnv("CartPole-v1"))
+            >>> print(rollout(env, 2))
+            TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    next: TensorDict(
+                        fields={
+                            done: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            observation: Tensor(shape=torch.Size([2, 2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                            reward: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                            terminated: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            truncated: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                        batch_size=torch.Size([2, 2]),
+                        device=cpu,
+                        is_shared=False),
+                    observation: Tensor(shape=torch.Size([2, 2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([2, 2]),
+                device=cpu,
+                is_shared=False)
+        """
         tensordict = self.step(tensordict)
         # done and truncated are in done_keys
         # We read if any key is done.
