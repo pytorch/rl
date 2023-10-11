@@ -134,7 +134,7 @@ class TensorDictMaxValueWriter(Writer):
     ... }, batch_size=10)
     >>> rb.extend(td)
     >>> print(rb.sample().get("obs").item())
-    9
+    19
     """
 
     def __init__(self, rank_key=None, **kw) -> None:
