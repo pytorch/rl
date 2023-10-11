@@ -1398,10 +1398,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return data
 
     def _step_proc_data(self, next_tensordict_out):
-        # TODO: Refactor this using reward spec
-        # unsqueeze rewards if needed
-        # the input tensordict may have more leading dimensions than the batch_size
-        # e.g. in model-based contexts.
         batch_size = self.batch_size
         dims = len(batch_size)
         leading_batch_size = (
@@ -1511,8 +1507,25 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
 
-        self._complete_done(self.full_done_spec, tensordict_reset)
+        return self._reset_proc_data(tensordict, tensordict_reset)
 
+    def _reset_proc_data(self, tensordict, tensordict_reset):
+        self._complete_done(self.full_done_spec, tensordict_reset)
+        self._reset_check_done(tensordict, tensordict_reset)
+        if tensordict is not None:
+            return _update_during_reset(tensordict_reset, tensordict, self.reset_keys)
+        return tensordict_reset
+
+    def _reset_check_done(self, tensordict, tensordict_reset):
+        """Checks the done status after reset.
+
+        If _reset signals were passed, we check that the env is not done for these
+        indices.
+
+        We also check that the input tensordict contained ``"done"``s if the
+        reset is partial and incomplete.
+
+        """
         # we iterate over (reset_key, (done_key, truncated_key)) and check that all
         # values where reset was true now have a done set to False.
         # If no reset was present, all done and truncated must be False
@@ -1549,10 +1562,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                         raise RuntimeError(
                             f"Env done entry '{done_key}' was (partially) True after a call to reset(). This is not allowed."
                         )
-        if tensordict is not None:
-            result = _update_during_reset(tensordict_reset, tensordict, self.reset_keys)
-            return result
-        return tensordict_reset
 
     def numel(self) -> int:
         return prod(self.batch_size)

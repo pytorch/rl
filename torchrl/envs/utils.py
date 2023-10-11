@@ -1041,6 +1041,8 @@ def _update_during_reset(
             node = tensordict
         # get the reset signal
         reset = tensordict.pop(reset_key, None)
+        if reset_key in tensordict_reset.keys(True):
+            raise ValueError((reset_key, tensordict_reset))
         if reset is None or reset.all():
             # perform simple update, at a single level.
             # by contract, a reset signal at one level cannot
@@ -1054,6 +1056,9 @@ def _update_during_reset(
             # case we just return the data
 
             # empty tensordicts won't be returned
+            if reset.ndim > node.ndim:
+                reset = reset.flatten(node.ndim, reset.ndim-1)
+                reset = reset.any(-1)
             reset = reset.reshape(node.shape)
             # node.update(node.where(~reset, other=node_reset, pad=0))
             node.where(~reset, other=node_reset, out=node, pad=0)

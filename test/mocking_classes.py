@@ -1499,7 +1499,8 @@ class HeteroCountingEnv(EnvBase):
         reset_td.update(self.output_spec["full_done_spec"].zero())
 
         assert reset_td.batch_size == self.batch_size
-
+        for key in reset_td.keys(True):
+            assert "_reset" not in key
         return reset_td
 
     def _step(

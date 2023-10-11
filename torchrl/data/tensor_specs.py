@@ -3254,19 +3254,13 @@ class CompositeSpec(TensorSpec):
 
     def __getitem__(self, idx):
         """Indexes the current CompositeSpec based on the provided index."""
-        if (
-            isinstance(idx, str)
-            or isinstance(idx, tuple)
-            and all(isinstance(item, str) for item in idx)
-        ):
-            if isinstance(idx, tuple) and len(idx) > 1:
+        idx_unravel = unravel_key(idx)
+        if idx_unravel:
+            if isinstance(idx_unravel, tuple):
                 return self[idx[0]][idx[1:]]
-            elif isinstance(idx, tuple):
-                return self[idx[0]]
-
-            if idx in {"shape", "device", "dtype", "space"}:
-                raise AttributeError(f"CompositeSpec has no key {idx}")
-            return self._specs[idx]
+            if idx_unravel in {"shape", "device", "dtype", "space"}:
+                raise AttributeError(f"CompositeSpec has no key {idx_unravel}")
+            return self._specs[idx_unravel]
 
         indexed_shape = _shape_indexing(self.shape, idx)
         indexed_specs = {}

@@ -967,7 +967,7 @@ class TestCatFrames(TransformBase):
         buffer = getattr(cat_frames, f"_cat_buffers_{key1}")
 
         tdc = td.clone()
-        passed_back_td = cat_frames.reset(tdc)
+        passed_back_td = cat_frames._reset(tdc, tdc)
 
         assert tdc is passed_back_td
         assert (buffer == 0).all()
@@ -1547,12 +1547,16 @@ class TestStepCounter(TransformBase):
         step_counter[0]._truncated_keys = ["truncated"]
         step_counter[0]._reset_keys = ["_reset"]
         step_counter[0]._done_keys = ["done"]
-        td = step_counter.reset(td)
-        assert not torch.all(td.get("step_count"))
+        td_reset = td.empty()
+        td_reset = step_counter._reset(td, td_reset)
+        assert not torch.all(td_reset.get("step_count"))
         i = 0
+        td_next = td.get('next')
+        td = td_reset
         while max_steps is None or i < max_steps:
-            next_td = step_counter._step(td, td.get("next"))
-            td.set("next", next_td)
+            td_next = step_counter._step(td, td_next)
+            td.set("next", td_next)
+
             i += 1
             assert torch.all(td.get(("next", "step_count")) == i), (
                 td.get(("next", "step_count")),
@@ -1567,12 +1571,15 @@ class TestStepCounter(TransformBase):
         if max_steps is not None:
             assert torch.all(td.get("step_count") == max_steps)
             assert torch.all(td.get("truncated"))
-        td = step_counter.reset(td)
+        td_reset = td.empty()
         if reset_workers:
-            assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
-            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset) == i)
+            td.set("_reset", _reset)
+            td_reset = step_counter._reset(td, td_reset)
+            assert torch.all(torch.masked_select(td_reset.get("step_count"), _reset) == 0)
+            assert torch.all(torch.masked_select(td_reset.get("step_count"), ~_reset) == i)
         else:
-            assert torch.all(td.get("step_count") == 0)
+            td_reset = step_counter._reset(td, td_reset)
+            assert torch.all(td_reset.get("step_count") == 0)
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for StepCounter")
@@ -1611,11 +1618,16 @@ class TestStepCounter(TransformBase):
         step_counter._reset_keys = ["_reset"]
         step_counter._completed_keys = ["completed"]
 
-        td = step_counter.reset(td)
-        assert not torch.all(td.get("step_count"))
+        td_reset = td.empty()
+        td_reset = step_counter._reset(td, td_reset)
+        assert not torch.all(td_reset.get("step_count"))
         i = 0
+        td_next = td.get('next')
+        td = td_reset
         while max_steps is None or i < max_steps:
-            td.set("next", step_counter._step(td, td.get("next")))
+            td_next = step_counter._step(td, td_next)
+            td.set("next", td_next)
+
             i += 1
             assert torch.all(td.get(("next", "step_count")) == i), (
                 td.get(("next", "step_count")),
@@ -1630,12 +1642,15 @@ class TestStepCounter(TransformBase):
         if max_steps is not None:
             assert torch.all(td.get("step_count") == max_steps)
             assert torch.all(td.get("truncated"))
-        td = step_counter.reset(td)
+        td_reset = td.empty()
         if reset_workers:
-            assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
-            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset) == i)
+            td.set("_reset", _reset)
+            td_reset = step_counter._reset(td, td_reset)
+            assert torch.all(torch.masked_select(td_reset.get("step_count"), _reset) == 0)
+            assert torch.all(torch.masked_select(td_reset.get("step_count"), ~_reset) == i)
         else:
-            assert torch.all(td.get("step_count") == 0)
+            td_reset = step_counter._reset(td, td_reset)
+            assert torch.all(td_reset.get("step_count") == 0)
 
     def test_step_counter_observation_spec(self):
         transformed_env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(50))
@@ -3459,7 +3474,8 @@ class TestNoop(TransformBase):
             RuntimeError,
             match="NoopResetEnv.parent not found. Make sure that the parent is set.",
         ):
-            t.reset(TensorDict({"next": {}}, []))
+            td = TensorDict({"next": {}}, [])
+            t._reset(td, td)
         td = TensorDict({"next": {}}, [])
         t._step(td, td.get("next"))
 
@@ -3469,7 +3485,8 @@ class TestNoop(TransformBase):
             RuntimeError,
             match="NoopResetEnv.parent not found. Make sure that the parent is set.",
         ):
-            t.reset(TensorDict({"next": {}}, []))
+            td = TensorDict({"next": {}}, [])
+            t.reset(td, td)
         td = TensorDict({"next": {}}, [])
         t._step(td, td.get("next"))
 
@@ -4685,9 +4702,9 @@ class TestRewardSum(TransformBase):
         # reset environments
         td.set("_reset", torch.ones(batch, dtype=torch.bool, device=device))
         with pytest.raises(TypeError, match="reset_keys not provided but parent"):
-            rs.reset(td)
+            rs._reset(td, td)
         rs._reset_keys = ["_reset"]
-        rs.reset(td)
+        rs._reset(td, td.empty())
 
         # apply a third time, episode_reward should be equal to reward again
         td_next = rs._step(td, td.get("next"))
@@ -5559,9 +5576,9 @@ class TestTargetReturn(TransformBase):
             device=device,
             batch_size=batch,
         )
-        td = t.reset(td)
+        td_reset = t._reset(td, td.empty())
         next_td = td.get("next")
-        next_td = t._step(td, next_td)
+        next_td = t._step(td_reset, next_td)
         td.set("next", next_td)
 
         if mode == "reduce":
@@ -5638,8 +5655,8 @@ class TestTargetReturn(TransformBase):
         )
         reward = torch.randn(10, 1)
         td = TensorDict({("next", in_key): reward}, [10])
-        td = t.reset(td)
-        td_next = t._step(td, td.get("next"))
+        td_reset = t._reset(td, td.empty())
+        td_next = t._step(td_reset, td.get("next"))
         td.set("next", td_next)
         if mode == "reduce":
             assert (td["next", out_key] + td["next", in_key] == 10.0).all()
@@ -6248,7 +6265,7 @@ class TestTimeMaxPool(TransformBase):
         buffer = getattr(t, f"_maxpool_buffer_{key1}")
 
         tdc = td.clone()
-        passed_back_td = t.reset(tdc)
+        passed_back_td = t._reset(tdc, tdc.empty())
 
         assert tdc is passed_back_td
         assert (buffer == 0).all()
