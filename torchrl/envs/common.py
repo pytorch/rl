@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import warnings
 from copy import deepcopy
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
@@ -1512,30 +1513,42 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         self._complete_done(self.full_done_spec, tensordict_reset)
 
-        if not self._allow_done_after_reset:
-            # we iterate over (reset_key, (done_key, truncated_key)) and check that all
-            # values where reset was true now have a done set to False.
-            # If no reset was present, all done and truncated must be False
-            for reset_key, done_key_group in zip(
-                self.reset_keys, self.done_keys_groups
-            ):
-                reset_value = (
-                    tensordict.get(reset_key, default=None)
-                    if tensordict is not None
-                    else None
-                )
-                if reset_value is not None:
-                    for done_key in done_key_group:
-                        if tensordict_reset.get(done_key)[reset_value].any():
-                            raise RuntimeError(
-                                f"Env done entry '{done_key}' was (partially) True after reset on specified '_reset' dimensions. This is not allowed."
-                            )
-                else:
-                    for done_key in done_key_group:
-                        if tensordict_reset.get(done_key).any():
-                            raise RuntimeError(
-                                f"Env done entry '{done_key}' was (partially) True after a call to reset(). This is not allowed."
-                            )
+        # we iterate over (reset_key, (done_key, truncated_key)) and check that all
+        # values where reset was true now have a done set to False.
+        # If no reset was present, all done and truncated must be False
+        for reset_key, done_key_group in zip(self.reset_keys, self.done_keys_groups):
+            reset_value = (
+                tensordict.get(reset_key, default=None)
+                if tensordict is not None
+                else None
+            )
+            if reset_value is not None:
+                for done_key in done_key_group:
+                    done_val = tensordict_reset.get(done_key)
+                    if done_val[reset_value].any() and not self._allow_done_after_reset:
+                        raise RuntimeError(
+                            f"Env done entry '{done_key}' was (partially) True after reset on specified '_reset' dimensions. This is not allowed."
+                        )
+                    if (
+                        done_key not in tensordict.keys(True)
+                        and done_val[~reset_value].any()
+                    ):
+                        warnings.warn(
+                            f"A partial `'_reset'` key has been passed to `reset` ({reset_key}), "
+                            f"but the corresponding done_key ({done_key}) was not present in the input "
+                            f"tensordict. "
+                            f"This is discouraged, since the input tensordict should contain "
+                            f"all the data not being reset."
+                        )
+                        # we set the done val to tensordict, to make sure that
+                        # _update_during_reset does not pad the value
+                        tensordict.set(done_key, done_val)
+            elif self._allow_done_after_reset:
+                for done_key in done_key_group:
+                    if tensordict_reset.get(done_key).any():
+                        raise RuntimeError(
+                            f"Env done entry '{done_key}' was (partially) True after a call to reset(). This is not allowed."
+                        )
         if tensordict is not None:
             result = _update_during_reset(tensordict_reset, tensordict, self.reset_keys)
             return result

@@ -909,6 +909,8 @@ def _update_during_reset(
     tensordict: TensorDictBase,
     reset_keys: List[NestedKey],
 ):
+    """Updates the input tensordict with the reset data, based on the reset keys."""
+
     for reset_key in reset_keys:
         # get the node of the reset key
         if isinstance(reset_key, tuple):

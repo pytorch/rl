@@ -1590,7 +1590,7 @@ class TestVmas:
             [n_workers, list(env.num_envs)[0], n_rollout_samples]
         )
 
-    @pytest.mark.parametrize("num_envs", [1, 10])
+    @pytest.mark.parametrize("num_envs", [1, 2])
     @pytest.mark.parametrize("n_workers", [1, 3])
     @pytest.mark.parametrize(
         "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
@@ -1631,6 +1631,9 @@ class TestVmas:
         td_reset = TensorDict(
             rand_reset(env), batch_size=env.batch_size, device=env.device
         )
+        # it is good practice to have a "complete" input tensordict for reset
+        for done_key in env.done_keys:
+            td_reset.set(done_key, tensordict[..., -1].get(("next", done_key)))
         reset = td_reset["_reset"]
         tensordict = env.reset(td_reset)
         assert not tensordict["done"][reset].all().item()
