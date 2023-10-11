@@ -341,12 +341,10 @@ class TestStorages:
                 {"a": torch.randn(3, device=device_data)}, [], device=device_data
             )
         elif data_type == "tc":
-            data = (
-                TC(
-                    a=torch.randn(3, device=device_data),
-                    batch_size=[],
-                    device=device_data,
-                ),
+            data = TC(
+                a=torch.randn(3, device=device_data),
+                batch_size=[],
+                device=device_data,
             )
         else:
             raise NotImplementedError
@@ -354,7 +352,7 @@ class TestStorages:
         if device_storage == "auto":
             device_storage = device_data
         if storage_type is LazyMemmapStorage and device_storage.type == "cuda":
-            with pytest.raises(
+            with pytest.warns(
                 DeprecationWarning, match="Support for Memmap device other than CPU"
             ):
                 storage.set(0, data)

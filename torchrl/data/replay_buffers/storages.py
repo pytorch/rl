@@ -576,17 +576,7 @@ class LazyMemmapStorage(LazyTensorStorage):
                 "Support for Memmap device other than CPU will be deprecated in v0.4.0.",
                 category=DeprecationWarning,
             )
-        if isinstance(data, torch.Tensor):
-            # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
-            out = MemmapTensor(
-                self.max_size, *data.shape, device=self.device, dtype=data.dtype
-            )
-            filesize = os.path.getsize(out.filename) / 1024 / 1024
-            if VERBOSE:
-                print(
-                    f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
-                )
-        elif is_tensor_collection(data):
+        if is_tensor_collection(data):
             out = data.clone().to(self.device)
             out = out.expand(self.max_size, *data.shape)
             out = out.memmap_like(prefix=self.scratch_dir)
@@ -599,6 +589,17 @@ class LazyMemmapStorage(LazyTensorStorage):
                     print(
                         f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
                     )
+        else:
+            # If not a tensorclass/tensordict, it must be a tensor(-like)
+            # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
+            out = MemmapTensor(
+                self.max_size, *data.shape, device=self.device, dtype=data.dtype
+            )
+            filesize = os.path.getsize(out.filename) / 1024 / 1024
+            if VERBOSE:
+                print(
+                    f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
+                )
         self._storage = out
         self.initialized = True
 
