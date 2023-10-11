@@ -312,6 +312,46 @@ class TestStorages:
             storage2.get(range(10))
         )
 
+    @pytest.mark.skipif(
+        not torch.cuda.device_count(),
+        reason="not cuda device found to test rb storage.",
+    )
+    @pytest.mark.parametrize(
+        "device_data,device_storage",
+        [
+            [torch.device("cuda"), torch.device("cpu")],
+            [torch.device("cpu"), torch.device("cuda")],
+            [torch.device("cpu"), "auto"],
+            [torch.device("cuda"), "auto"],
+        ],
+    )
+    @pytest.mark.parametrize(
+        "storage_type", [LazyMemmapStorage, LazyTensorStorage, ListStorage]
+    )
+    def test_storage_device(self, device_data, device_storage, storage_type):
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+
+        for data in (
+            torch.randn(3, device=device_data),
+            TensorDict(
+                {"a": torch.randn(3, device=device_data)}, [], device=device_data
+            ),
+            TC(a=torch.randn(3, device=device_data), batch_size=[], device=device_data),
+        ):
+            storage = storage_type(max_size=10, device=device_storage)
+            if device_storage == "auto":
+                device_storage = device_data
+            if storage_type is LazyMemmapStorage:
+                with pytest.raises(
+                    DeprecationWarning, match="Support for Memmap device other than CPU"
+                ):
+                    storage.set(0, data)
+            else:
+                storage.set(0, data)
+            assert storage.get(0).device == device_storage
+
 
 @pytest.mark.parametrize("max_size", [1000])
 @pytest.mark.parametrize("shape", [[3, 4]])

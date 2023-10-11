@@ -571,6 +571,11 @@ class LazyMemmapStorage(LazyTensorStorage):
             print("Creating a MemmapStorage...")
         if self.device == "auto":
             self.device = data.device
+        if self.device.type != "cpu":
+            warnings.warn(
+                "Support for Memmap device other than CPU will be deprecated in v0.4.0.",
+                category=DeprecationWarning,
+            )
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
             out = MemmapTensor(
@@ -582,18 +587,9 @@ class LazyMemmapStorage(LazyTensorStorage):
                     f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
                 )
         elif is_tensorclass(data):
-            if self.device.type == "cpu":
-                out = data.clone()
-                out = out.expand(self.max_size, *data.shape)
-                out = out.memmap_like(prefix=self.scratch_dir)
-            else:
-                warnings.warn(
-                    "Support for Memmap device other than CPU will be deprecated in v0.4.0.",
-                    category=DeprecationWarning,
-                )
-                out = data.clone().to(self.device)
-                out = out.expand(self.max_size, *data.shape)
-                out = out.memmap_like(prefix=self.scratch_dir)
+            out = data.clone().to(self.device)
+            out = out.expand(self.max_size, *data.shape)
+            out = out.memmap_like(prefix=self.scratch_dir)
 
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
@@ -606,18 +602,9 @@ class LazyMemmapStorage(LazyTensorStorage):
         else:
             if VERBOSE:
                 print("The storage is being created: ")
-            if self.device.type == "cpu":
-                out = data.clone()
-                out = out.expand(self.max_size, *data.shape)
-                out = out.memmap_like(prefix=self.scratch_dir)
-            else:
-                warnings.warn(
-                    "Support for Memmap device other than CPU will be deprecated in v0.4.0.",
-                    category=DeprecationWarning,
-                )
-                out = data.clone().to(self.device)
-                out = out.expand(self.max_size, *data.shape)
-                out = out.memmap_like(prefix=self.scratch_dir)
+            out = data.clone().to(self.device)
+            out = out.expand(self.max_size, *data.shape)
+            out = out.memmap_like(prefix=self.scratch_dir)
 
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
