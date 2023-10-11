@@ -586,34 +586,38 @@ class LazyMemmapStorage(LazyTensorStorage):
                 print(
                     f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
                 )
-        elif is_tensorclass(data):
+        elif is_tensor_collection(data):
             out = data.clone().to(self.device)
+            print("1", out)
             out = out.expand(self.max_size, *data.shape)
+            print("2", out)
             out = out.memmap_like(prefix=self.scratch_dir)
+            print("3", out)
 
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
+                print(type(tensor))
                 filesize = os.path.getsize(tensor.filename) / 1024 / 1024
                 if VERBOSE:
                     print(
                         f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
                     )
-        else:
-            if VERBOSE:
-                print("The storage is being created: ")
-            out = data.clone().to(self.device)
-            out = out.expand(self.max_size, *data.shape)
-            out = out.memmap_like(prefix=self.scratch_dir)
-
-            for key, tensor in sorted(
-                out.items(include_nested=True, leaves_only=True), key=str
-            ):
-                filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                if VERBOSE:
-                    print(
-                        f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
-                    )
+        # else:
+        #     if VERBOSE:
+        #         print("The storage is being created: ")
+        #     out = data.clone().to(self.device)
+        #     out = out.expand(self.max_size, *data.shape)
+        #     out = out.memmap_like(prefix=self.scratch_dir)
+        #
+        #     for key, tensor in sorted(
+        #         out.items(include_nested=True, leaves_only=True), key=str
+        #     ):
+        #         filesize = os.path.getsize(tensor.filename) / 1024 / 1024
+        #         if VERBOSE:
+        #             print(
+        #                 f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
+        #             )
         self._storage = out
         self.initialized = True
 
