@@ -148,7 +148,7 @@ class TensorDictMaxValueWriter(Writer):
     def add(self, data: Any) -> int:
 
         ret = None
-        rank_data = data.get("_data", self._rank_key)
+        rank_data = data.get("_data").get(self._rank_key)
 
         # Sum the rank key, in case it is a whole trajectory
         rank_data = rank_data.sum().item()
