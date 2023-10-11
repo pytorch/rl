@@ -76,6 +76,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # use end-of-life as done key
+    adv_module.set_keys(done="end-of-life", terminated="end-of-life")
     loss_module.set_keys(done="end-of-life", terminated="end-of-life")
 
     # Create optimizer

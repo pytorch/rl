@@ -169,7 +169,7 @@ def _main(argv):
     if is_nightly:
         tensordict_dep = "tensordict-nightly"
     else:
-        tensordict_dep = "tensordict>=0.1.1"
+        tensordict_dep = "tensordict>=0.2.0"
 
     if is_nightly:
         version = get_nightly_version()
@@ -189,6 +189,35 @@ def _main(argv):
     long_description = (this_directory / "README.md").read_text()
     sys.argv = [sys.argv[0]] + unknown
 
+    extra_requires = {
+        "atari": [
+            "gym",
+            "atari-py",
+            "ale-py",
+            "gym[accept-rom-license]",
+            "pygame",
+        ],
+        "dm_control": ["dm_control"],
+        "gym_continuous": ["gymnasium", "mujoco"],
+        "rendering": ["moviepy"],
+        "tests": ["pytest", "pyyaml", "pytest-instafail", "scipy"],
+        "utils": [
+            "tensorboard",
+            "wandb",
+            "tqdm",
+            "hydra-core>=1.1",
+            "hydra-submitit-launcher",
+            "git",
+        ],
+        "checkpointing": [
+            "torchsnapshot",
+        ],
+        "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1"],
+    }
+    extra_requires["all"] = set()
+    for key in list(extra_requires.keys()):
+        extra_requires["all"] = extra_requires["all"].union(extra_requires[key])
+    extra_requires["all"] = sorted(extra_requires["all"])
     setup(
         # Metadata
         name=name,
@@ -213,31 +242,7 @@ def _main(argv):
             "cloudpickle",
             tensordict_dep,
         ],
-        extras_require={
-            "atari": [
-                "gym<=0.24",
-                "atari-py",
-                "ale-py",
-                "gym[accept-rom-license]",
-                "pygame",
-            ],
-            "dm_control": ["dm_control"],
-            "gym_continuous": ["mujoco-py", "mujoco"],
-            "rendering": ["moviepy"],
-            "tests": ["pytest", "pyyaml", "pytest-instafail", "scipy"],
-            "utils": [
-                "tensorboard",
-                "wandb",
-                "tqdm",
-                "hydra-core>=1.1",
-                "hydra-submitit-launcher",
-                "git",
-            ],
-            "checkpointing": [
-                "torchsnapshot",
-            ],
-            "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1"],
-        },
+        extras_require=extra_requires,
         zip_safe=False,
         classifiers=[
             "Programming Language :: Python :: 3.8",

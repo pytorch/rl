@@ -1,4 +1,4 @@
-[![pytorch](https://circleci.com/gh/pytorch/rl.svg?style=shield)](https://circleci.com/gh/pytorch/rl)
+[![Unit-tests](https://github.com/pytorch/rl/actions/workflows/test-linux-gpu.yml/badge.svg)](https://github.com/pytorch/rl/actions/workflows/test-linux-gpu.yml)
 [![Documentation](https://img.shields.io/badge/Documentation-blue.svg)](https://pytorch.org/rl/)
 [![Benchmarks](https://img.shields.io/badge/Benchmarks-blue.svg)](https://pytorch.github.io/rl/dev/bench/)
 [![codecov](https://codecov.io/gh/pytorch/rl/branch/main/graph/badge.svg?token=HcpK1ILV6r)](https://codecov.io/gh/pytorch/rl)
@@ -50,7 +50,7 @@ We have some introductory videos for you to get to know the library better, chec
 RL algorithms are very heterogeneous, and it can be hard to recycle a codebase
 across settings (e.g. from online to offline, from state-based to pixel-based 
 learning).
-TorchRL solves this problem through [`TensorDict`](https://github.com/pytorch-labs/tensordict/),
+TorchRL solves this problem through [`TensorDict`](https://github.com/pytorch/tensordict/),
 a convenient data structure<sup>(1)</sup> that can be used to streamline one's
 RL codebase.
 With this tool, one can write a *complete PPO training script in less than 100
@@ -219,7 +219,7 @@ to be easily recycled across settings.
   ```
   </details>
 
-TensorDict comes with a dedicated [`tensordict.nn`](https://pytorch-labs.github.io/tensordict/reference/nn.html)
+TensorDict comes with a dedicated [`tensordict.nn`](https://pytorch.github.io/tensordict/reference/nn.html)
 module that contains everything you might need to write your model with it.
 And it is `functorch` and `torch.compile` compatible!
 
@@ -256,7 +256,7 @@ And it is `functorch` and `torch.compile` compatible!
   ```
   </details>
 
-  Check [TensorDict tutorials](https://pytorch-labs.github.io/tensordict/) to
+  Check [TensorDict tutorials](https://pytorch.github.io/tensordict/) to
   learn more!
 
 
@@ -384,7 +384,7 @@ And it is `functorch` and `torch.compile` compatible!
   ```
   </details>
 
-- various tools for distributed learning (e.g. [memory mapped tensors](https://github.com/pytorch-labs/tensordict/blob/main/tensordict/memmap.py))<sup>(2)</sup>;
+- various tools for distributed learning (e.g. [memory mapped tensors](https://github.com/pytorch/tensordict/blob/main/tensordict/memmap.py))<sup>(2)</sup>;
 - various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py))<sup>(1)</sup>:
   <details>
     <summary>Code</summary>
@@ -470,7 +470,7 @@ And it is `functorch` and `torch.compile` compatible!
   ### Advantage computation
   ```python
   from torchrl.objectives.value.functional import vec_td_lambda_return_estimate
-  advantage = vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done)
+  advantage = vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done, terminated)
   ```
 
   </details>
@@ -493,12 +493,15 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 - [DQN](examples/dqn)
 - [DDPG](examples/ddpg/ddpg.py)
 - [IQL](examples/iql/iql.py)
+- [CQL](examples/iql/cql.py)
 - [TD3](examples/td3/td3.py)
 - [A2C](examples/a2c_old/a2c.py)
 - [PPO](examples/ppo/ppo.py)
 - [SAC](examples/sac/sac.py)
 - [REDQ](examples/redq/redq.py)
 - [Dreamer](examples/dreamer/dreamer.py)
+- [Decision Transformers](examples/decision_transformer)
+- [RLHF](examples/rlhf)
 
 and many more to come!
 

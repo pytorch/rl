@@ -60,7 +60,7 @@ jobs:
         #pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
     - name: Install tensordict
       run: |
-        pip3 install git+https://github.com/pytorch-labs/tensordict.git --quiet --root-user-action=ignore
+        pip3 install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
     - name: Install TorchRL
       run: |
         python3 setup.py develop
@@ -88,7 +88,7 @@ jobs:
         apt-get update && apt-get install -y rsync
     - name: Pull TensorDict docs
       run: |
-        git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/_local_build/tensordict
+        git clone --branch gh-pages https://github.com/pytorch/tensordict.git docs/_local_build/tensordict
         rm -rf docs/_local_build/tensordict/.git
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
