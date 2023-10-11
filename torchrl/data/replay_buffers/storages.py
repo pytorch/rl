@@ -588,11 +588,8 @@ class LazyMemmapStorage(LazyTensorStorage):
                 )
         elif is_tensor_collection(data):
             out = data.clone().to(self.device)
-            print("1", out)
             out = out.expand(self.max_size, *data.shape)
-            print("2", out)
             out = out.memmap_like(prefix=self.scratch_dir)
-            print("3", out)
 
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
