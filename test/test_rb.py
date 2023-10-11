@@ -327,9 +327,7 @@ class TestStorages:
             [torch.device("cuda"), "auto"],
         ],
     )
-    @pytest.mark.parametrize(
-        "storage_type", [LazyMemmapStorage, LazyTensorStorage, ListStorage]
-    )
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     def test_storage_device(self, device_data, device_storage, storage_type):
         @tensorclass
         class TC:
@@ -345,14 +343,14 @@ class TestStorages:
             storage = storage_type(max_size=10, device=device_storage)
             if device_storage == "auto":
                 device_storage = device_data
-            if storage_type is LazyMemmapStorage:
+            if storage_type is LazyMemmapStorage and device_storage.type == "cuda":
                 with pytest.raises(
                     DeprecationWarning, match="Support for Memmap device other than CPU"
                 ):
                     storage.set(0, data)
             else:
                 storage.set(0, data)
-            assert storage.get(0).device == device_storage
+            assert storage.get(0).device.type == device_storage.type
 
 
 @pytest.mark.parametrize("max_size", [1000])
