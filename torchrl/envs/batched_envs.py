@@ -29,7 +29,7 @@ from torchrl.envs.utils import (
     _aggregate_resets,
     _set_single_key,
     _sort_keys,
-    clear_mpi_env_vars,
+    clear_mpi_env_vars, _update_during_reset,
 )
 
 # legacy
@@ -574,7 +574,6 @@ class SerialEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-
         if tensordict is not None:
             needs_resetting = _aggregate_resets(tensordict, reset_keys=self.reset_keys)
             if needs_resetting.ndim > 2:
@@ -589,13 +588,18 @@ class SerialEnv(_BatchedEnv):
             )
 
         for i, _env in enumerate(self._envs):
+            if not needs_resetting[i]:
+                continue
             if tensordict is not None:
                 tensordict_ = tensordict[i]
                 if tensordict_.is_empty():
                     tensordict_ = None
+                else:
+                    # reset will do modifications in-place. We want the original
+                    # tensorict to be unchaned, so we clone it
+                    tensordict_ = tensordict_.clone(False)
             else:
                 tensordict_ = None
-
             _td = _env.reset(tensordict=tensordict_, **kwargs)
             self.shared_tensordicts[i].update_(_td)
         selected_output_keys = self._selected_reset_keys_filt
@@ -615,6 +619,8 @@ class SerialEnv(_BatchedEnv):
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
         # since we call `reset` directly, all the postproc has been completed
+        if tensordict is not None:
+            return _update_during_reset(tensordict_reset, tensordict, self.reset_keys)
         return tensordict_reset
 
     @_check_start
