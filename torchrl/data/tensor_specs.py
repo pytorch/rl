@@ -3254,7 +3254,10 @@ class CompositeSpec(TensorSpec):
 
     def __getitem__(self, idx):
         """Indexes the current CompositeSpec based on the provided index."""
-        idx_unravel = unravel_key(idx)
+        if isinstance(idx, (str, tuple)):
+            idx_unravel = unravel_key(idx)
+        else:
+            idx_unravel = ()
         if idx_unravel:
             if isinstance(idx_unravel, tuple):
                 return self[idx[0]][idx[1:]]

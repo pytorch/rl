@@ -1018,6 +1018,7 @@ def test_env_base_reset_flag(batch_size, max_steps=3):
     assert (td["next", "observation"] == max_steps + 1).all()
 
     td_reset = TensorDict(rand_reset(env), batch_size=env.batch_size, device=env.device)
+    td_reset.update(td.get("next").exclude("reward"))
     reset = td_reset["_reset"]
     td_reset = env.reset(td_reset)
 

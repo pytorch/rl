@@ -29,7 +29,8 @@ from torchrl.envs.utils import (
     _aggregate_resets,
     _set_single_key,
     _sort_keys,
-    clear_mpi_env_vars, _update_during_reset,
+    _update_during_reset,
+    clear_mpi_env_vars,
 )
 
 # legacy
