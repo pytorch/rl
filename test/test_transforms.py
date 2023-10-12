@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import abc
 import argparse
+import importlib.util
 
 import itertools
 import pickle
@@ -112,6 +113,8 @@ from torchrl.envs.utils import _replace_last, check_env_specs, step_mdp
 from torchrl.modules import LSTMModule, MLP, ProbabilisticActor, TanhNormal
 
 TIMEOUT = 100.0
+
+_has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 
 
 class TransformBase:
@@ -8977,7 +8980,8 @@ class TestPermuteTransform(TransformBase):
 
 
 @pytest.mark.skipif(
-    not _has_gym, reason="EndOfLifeTransform can only be tested when Gym is present."
+    not _has_gymnasium,
+    reason="EndOfLifeTransform can only be tested when Gym is present.",
 )
 class TestEndOfLife(TransformBase):
     def test_trans_parallel_env_check(self):

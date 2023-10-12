@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import contextlib
 import importlib
 import pickle
 import sys
@@ -14,6 +15,7 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_default_devices, make_tc
+from packaging.version import parse
 from tensordict import is_tensorclass, tensorclass
 from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from torchrl.data import (
@@ -59,6 +61,7 @@ from torchrl.envs.transforms.transforms import (
     VecNorm,
 )
 
+OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
 _os_is_windows = sys.platform == "win32"
 
@@ -147,7 +150,12 @@ class TestComposableBuffers:
         writer = writer()
         writer.register_storage(storage)
         batch1 = self._get_data(rb_type, size=5)
-        writer.extend(batch1)
+        cond = OLD_TORCH and size < len(batch1) and isinstance(storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            writer.extend(batch1)
 
         # Added less data than storage max size
         if size > 5:
@@ -172,7 +180,12 @@ class TestComposableBuffers:
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
         )
         data = self._get_data(rb_type, size=5)
-        rb.extend(data)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data)
         length = len(rb)
         for d in data[-length:]:
             for b in rb._storage:
@@ -190,7 +203,14 @@ class TestComposableBuffers:
             else:
                 raise RuntimeError("did not find match")
         data2 = self._get_data(rb_type, size=2 * size + 2)
-        rb.extend(data2)
+        cond = (
+            OLD_TORCH and size < len(data2) and isinstance(rb._storage, TensorStorage)
+        )
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data2)
 
     def test_sample(self, rb_type, sampler, writer, storage, size):
         if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
@@ -202,7 +222,12 @@ class TestComposableBuffers:
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
         )
         data = self._get_data(rb_type, size=5)
-        rb.extend(data)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data)
         new_data = rb.sample()
         if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
             new_data = new_data[0]
@@ -233,7 +258,12 @@ class TestComposableBuffers:
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
         )
         data = self._get_data(rb_type, size=5)
-        rb.extend(data)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data)
         d1 = rb[2]
         d2 = rb._storage[2]
         if type(d1) is not type(d2):
@@ -341,12 +371,10 @@ class TestStorages:
                 {"a": torch.randn(3, device=device_data)}, [], device=device_data
             )
         elif data_type == "tc":
-            data = (
-                TC(
-                    a=torch.randn(3, device=device_data),
-                    batch_size=[],
-                    device=device_data,
-                ),
+            data = TC(
+                a=torch.randn(3, device=device_data),
+                batch_size=[],
+                device=device_data,
             )
         else:
             raise NotImplementedError
@@ -354,7 +382,7 @@ class TestStorages:
         if device_storage == "auto":
             device_storage = device_data
         if storage_type is LazyMemmapStorage and device_storage.type == "cuda":
-            with pytest.raises(
+            with pytest.warns(
                 DeprecationWarning, match="Support for Memmap device other than CPU"
             ):
                 storage.set(0, data)
@@ -630,7 +658,14 @@ class TestBuffers:
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         batch1 = self._get_data(rbtype, size=5)
-        rb.extend(batch1)
+        cond = (
+            OLD_TORCH and size < len(batch1) and isinstance(rb._storage, TensorStorage)
+        )
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(batch1)
 
         # Added less data than storage max size
         if size > 5 or storage is None:
@@ -683,7 +718,12 @@ class TestBuffers:
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
-        rb.extend(data)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data)
         length = len(rb)
         for d in data[-length:]:
             found_similar = False
@@ -706,7 +746,12 @@ class TestBuffers:
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
-        rb.extend(data)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data)
         new_data = rb.sample()
         if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
             new_data = new_data[0]
@@ -732,7 +777,12 @@ class TestBuffers:
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
-        rb.extend(data)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data)
         d1 = rb[2]
         d2 = rb._storage[2]
         if type(d1) is not type(d2):

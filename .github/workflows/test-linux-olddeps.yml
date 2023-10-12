@@ -13,8 +13,8 @@ jobs:
   unittests:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        python_version: ["3.8"]
+        cuda_arch_version: ["11.6"]
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
