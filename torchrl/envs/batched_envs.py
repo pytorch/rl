@@ -602,7 +602,7 @@ class SerialEnv(_BatchedEnv):
             else:
                 tensordict_ = None
             _td = _env.reset(tensordict=tensordict_, **kwargs)
-            self.shared_tensordicts[i].update_(_td)
+            self.shared_tensordicts[i].update_(_td.select(*self._selected_reset_keys_filt, strict=False))
         selected_output_keys = self._selected_reset_keys_filt
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
@@ -1098,7 +1098,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             cur_td = env.reset(tensordict=data)
-            shared_tensordict.update_(cur_td)
+            shared_tensordict.update_(cur_td.select(*_selected_reset_keys, strict=False))
             if event is not None:
                 event.record()
                 event.synchronize()
