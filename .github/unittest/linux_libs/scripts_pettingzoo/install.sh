@@ -32,7 +32,7 @@ if [ "${CU_VERSION:-}" == cpu ] ; then
 #    conda install -y pytorch cpuonly -c pytorch-nightly
     pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu --force-reinstall
 else
-    pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu116 --force-reinstall
+    pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu121 --force-reinstall
 fi
 
 # install tensordict
