@@ -847,6 +847,7 @@ def _terminated_or_truncated(
         data.exclude(*list_of_keys, inplace=True)
     return any_eot
 
+
 def terminated_or_truncated(
     data: TensorDictBase,
     full_done_spec: TensorSpec | None = None,
@@ -1057,7 +1058,7 @@ def _update_during_reset(
 
             # empty tensordicts won't be returned
             if reset.ndim > node.ndim:
-                reset = reset.flatten(node.ndim, reset.ndim-1)
+                reset = reset.flatten(node.ndim, reset.ndim - 1)
                 reset = reset.any(-1)
             reset = reset.reshape(node.shape)
             # node.update(node.where(~reset, other=node_reset, pad=0))

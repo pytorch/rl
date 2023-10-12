@@ -1554,7 +1554,7 @@ class TestStepCounter(TransformBase):
         td_reset = step_counter._reset(td, td_reset)
         assert not torch.all(td_reset.get("step_count"))
         i = 0
-        td_next = td.get('next')
+        td_next = td.get("next")
         td = td_reset
         while max_steps is None or i < max_steps:
             td_next = step_counter._step(td, td_next)
@@ -1578,8 +1578,12 @@ class TestStepCounter(TransformBase):
         if reset_workers:
             td.set("_reset", _reset)
             td_reset = step_counter._reset(td, td_reset)
-            assert torch.all(torch.masked_select(td_reset.get("step_count"), _reset) == 0)
-            assert torch.all(torch.masked_select(td_reset.get("step_count"), ~_reset) == i)
+            assert torch.all(
+                torch.masked_select(td_reset.get("step_count"), _reset) == 0
+            )
+            assert torch.all(
+                torch.masked_select(td_reset.get("step_count"), ~_reset) == i
+            )
         else:
             td_reset = step_counter._reset(td, td_reset)
             assert torch.all(td_reset.get("step_count") == 0)
@@ -1625,7 +1629,7 @@ class TestStepCounter(TransformBase):
         td_reset = step_counter._reset(td, td_reset)
         assert not torch.all(td_reset.get("step_count"))
         i = 0
-        td_next = td.get('next')
+        td_next = td.get("next")
         td = td_reset
         while max_steps is None or i < max_steps:
             td_next = step_counter._step(td, td_next)
@@ -1649,8 +1653,12 @@ class TestStepCounter(TransformBase):
         if reset_workers:
             td.set("_reset", _reset)
             td_reset = step_counter._reset(td, td_reset)
-            assert torch.all(torch.masked_select(td_reset.get("step_count"), _reset) == 0)
-            assert torch.all(torch.masked_select(td_reset.get("step_count"), ~_reset) == i)
+            assert torch.all(
+                torch.masked_select(td_reset.get("step_count"), _reset) == 0
+            )
+            assert torch.all(
+                torch.masked_select(td_reset.get("step_count"), ~_reset) == i
+            )
         else:
             td_reset = step_counter._reset(td, td_reset)
             assert torch.all(td_reset.get("step_count") == 0)
@@ -1748,11 +1756,7 @@ class TestCatTensors(TransformBase):
         td = TensorDict(
             {
                 key: torch.full(
-                    (
-                        1,
-                        4,
-                        32,
-                    ),
+                    (1, 4, 32),
                     value,
                     dtype=torch.float,
                     device=device,
@@ -3478,7 +3482,7 @@ class TestNoop(TransformBase):
             match="NoopResetEnv.parent not found. Make sure that the parent is set.",
         ):
             td = TensorDict({"next": {}}, [])
-            t._reset(td, td)
+            t._reset(td, td.empty())
         td = TensorDict({"next": {}}, [])
         t._step(td, td.get("next"))
 
@@ -3489,7 +3493,7 @@ class TestNoop(TransformBase):
             match="NoopResetEnv.parent not found. Make sure that the parent is set.",
         ):
             td = TensorDict({"next": {}}, [])
-            t.reset(td, td)
+            td = t._reset(td, td.empty())
         td = TensorDict({"next": {}}, [])
         t._step(td, td.get("next"))
 
@@ -4707,7 +4711,8 @@ class TestRewardSum(TransformBase):
         with pytest.raises(TypeError, match="reset_keys not provided but parent"):
             rs._reset(td, td)
         rs._reset_keys = ["_reset"]
-        rs._reset(td, td.empty())
+        td_reset = rs._reset(td, td.empty())
+        td = td_reset.set("next", td.get("next"))
 
         # apply a third time, episode_reward should be equal to reward again
         td_next = rs._step(td, td.get("next"))

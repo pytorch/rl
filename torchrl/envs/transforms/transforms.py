@@ -40,8 +40,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.common import _EnvPostInit, EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
-from torchrl.envs.utils import _replace_last, _sort_keys, step_mdp, \
-    _update_during_reset
+from torchrl.envs.utils import _replace_last, _sort_keys, _update_during_reset, step_mdp
 from torchrl.objectives.value.functional import reward2go
 
 try:
@@ -232,7 +231,9 @@ class Transform(nn.Module):
         warnings.warn("Transform.reset public method will be derpecated in v0.4.0.")
         return self._reset(tensordict, tensordict_reset=tensordict)
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         """Resets a transform if it is stateful."""
         return tensordict_reset
 
@@ -744,7 +745,9 @@ but got an object of type {type(transform)}."""
         # self._complete_done(self.full_done_spec, tensordict_reset)
         self._reset_check_done(tensordict, tensordict_reset)
         if tensordict is not None:
-            tensordict_reset = _update_during_reset(tensordict_reset, tensordict, self.reset_keys)
+            tensordict_reset = _update_during_reset(
+                tensordict_reset, tensordict, self.reset_keys
+            )
         # we need to call `_call` as some transforms don't do the work in reset
         # eg: CatTensor has only a _call method, no need for a reset since reset
         # doesn't do anything special
@@ -995,7 +998,9 @@ class Compose(Transform):
         for t in self:
             t.dump(**kwargs)
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         for t in self.transforms:
             tensordict_reset = t._reset(tensordict, tensordict_reset)
         return tensordict_reset
@@ -2527,7 +2532,9 @@ class CatFrames(ObservationTransform):
         self._just_reset = False
         self.as_inverse = as_inverse
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset:TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         """Resets _buffers."""
         _reset = tensordict.get("_reset", None)
         if _reset is None:
@@ -3458,10 +3465,11 @@ class CatTensors(Transform):
         return self._keys_to_exclude
 
     def _find_in_keys(self):
+        """Gathers all the entries from observation spec which shape is 1d."""
         parent = self.parent
         obs_spec = parent.observation_spec
         in_keys = []
-        for key, value in obs_spec.items():
+        for key, value in obs_spec.items(True, True):
             if len(value.shape) == 1:
                 in_keys.append(key)
         return sorted(in_keys, key=_sort_keys)
@@ -3500,6 +3508,10 @@ class CatTensors(Transform):
     forward = _call
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if not self._initialized:
+            self.in_keys = self._find_in_keys()
+            self._initialized = True
+
         # check that all keys are in observation_spec
         if len(self.in_keys) > 1 and not isinstance(observation_spec, CompositeSpec):
             raise ValueError(
@@ -3731,16 +3743,18 @@ class NoopResetEnv(Transform):
     def base_env(self):
         return self.parent
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         """Do no-op action for a number of steps in [1, noop_max]."""
-        # td_reset = tensordict.clone(False)
-        tensordict = self.parent._reset_proc_data(tensordict.clone(False), tensordict_reset)
-        # check that there is a single done state -- behaviour is undefined for multiple dones
         parent = self.parent
         if parent is None:
             raise RuntimeError(
                 "NoopResetEnv.parent not found. Make sure that the parent is set."
             )
+        # Merge the two tensordicts
+        tensordict = parent._reset_proc_data(tensordict.clone(False), tensordict_reset)
+        # check that there is a single done state -- behaviour is undefined for multiple dones
         done_keys = parent.done_keys
         reward_key = parent.reward_key
         if parent.batch_size.numel() > 1:
@@ -3958,7 +3972,9 @@ class TensorDictPrimer(Transform):
             next_tensordict.setdefault(key, tensordict.get(key, default=None))
         return next_tensordict
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         """Sets the default values in the input tensordict.
 
         If the parent is batch-locked, we assume that the specs have the appropriate leading
@@ -4474,7 +4490,9 @@ class RewardSum(Transform):
             value = [unravel_key(val) for val in value]
         self._reset_keys = value
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         """Resets episode rewards."""
         for in_key, reset_key, out_key in zip(
             self.in_keys, self.reset_keys, self.out_keys
@@ -4766,7 +4784,9 @@ class StepCounter(Transform):
     def full_done_spec(self):
         return self.parent.output_spec["full_done_spec"] if self.parent else None
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         # get reset signal
         for step_count_key, truncated_key, reset_key, done_key, done_list_sorted in zip(
             self.step_count_keys,
@@ -5016,7 +5036,9 @@ class ExcludeTransform(Transform):
 
     forward = _call
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         return tensordict_reset.exclude(*self.excluded_keys)
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
@@ -5114,7 +5136,9 @@ class SelectTransform(Transform):
 
     forward = _call
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         if self.parent is not None:
             input_keys = self.parent.input_spec.keys(True, True)
         else:
@@ -5219,7 +5243,9 @@ class TimeMaxPool(Transform):
                 ),
             )
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         # Non-batched environments
         if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
             for in_key in self.in_keys:
@@ -5475,7 +5501,9 @@ class InitTracker(Transform):
                 )
         return tensordict
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         device = tensordict.device
         if device is None:
             device = torch.device("cpu")
@@ -5985,7 +6013,9 @@ class ActionMask(Transform):
         action_spec.update_mask(mask)
         return tensordict
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         action_spec = self.container.action_spec
         if not isinstance(action_spec, self.ACCEPTED_SPECS):
             raise ValueError(
@@ -6070,7 +6100,9 @@ class VecGymEnvTransform(Transform):
             self._memo["saved_next"] = None
         return next_tensordict
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         done = self._memo.get("done", None)
         reset = tensordict.get("_reset", done)
         if done is not None:

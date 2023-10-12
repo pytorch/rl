@@ -67,12 +67,12 @@ from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
 from torchrl.envs.utils import (
+    _terminated_or_truncated,
     check_env_specs,
     check_marl_grouping,
     make_composite_from_td,
     MarlGroupMapType,
     step_mdp,
-    _terminated_or_truncated,
 )
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
@@ -462,7 +462,9 @@ class TestParallel:
         assert "observation_stand" not in td[:, 0][1].keys()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])  # 1226: faster execution
+    @pytest.mark.parametrize(
+        "env_name", [PENDULUM_VERSIONED, CARTPOLE_VERSIONED]
+    )  # 1226: faster execution
     @pytest.mark.parametrize("frame_skip", [4])  # 1226: faster execution
     @pytest.mark.parametrize(
         "transformed_in,transformed_out", [[True, True], [False, False]]
@@ -494,10 +496,9 @@ class TestParallel:
         td_reset = TensorDict(source=rand_reset(env_parallel), batch_size=[N])
         env_parallel.reset(tensordict=td_reset)
 
+        # check that interruption occured because of max_steps or done
         td = env_parallel.rollout(policy=None, max_steps=T)
-        assert (
-            td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
-        ), f"{td.shape}, {td.get('done').sum(1)}"
+        assert td.shape == torch.Size([N, T]) or td.get(("next", "done")).sum(1).any()
         env_parallel.close()
         # env_serial.close()  # never opened
         env0.close()
@@ -923,6 +924,7 @@ class TestParallel:
         td_reset = TensorDict(
             rand_reset(env), batch_size=env.batch_size, device=env.device
         )
+        td_reset.update(td.get("next").exclude("reward"))
         reset = td_reset["_reset"]
         td_reset = env.reset(td_reset)
         env.close()

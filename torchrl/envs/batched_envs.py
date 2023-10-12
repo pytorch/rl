@@ -557,31 +557,6 @@ class SerialEnv(_BatchedEnv):
         for idx, env in enumerate(self._envs):
             env.load_state_dict(state_dict[f"worker{idx}"])
 
-    @_check_start
-    def _step(
-        self,
-        tensordict: TensorDict,
-    ) -> TensorDict:
-        tensordict_in = tensordict.clone(False)
-        next_td = self.shared_tensordict_parent.get("next")
-        for i in range(self.num_workers):
-            # shared_tensordicts are locked, and we need to select the keys since we update in-place.
-            # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
-            out_td = self._envs[i]._step(tensordict_in[i])
-            next_td[i].update_(out_td.select(*self._env_output_keys, strict=False))
-        # We must pass a clone of the tensordict, as the values of this tensordict
-        # will be modified in-place at further steps
-        if self._single_task:
-            out = TensorDict(
-                {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
-            )
-            for key in self._selected_step_keys:
-                _set_single_key(next_td, out, key, clone=True)
-        else:
-            # strict=False ensures that non-homogeneous keys are still there
-            out = next_td.select(*self._selected_step_keys, strict=False).clone()
-        return out
-
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
             for env in self._envs:
@@ -621,27 +596,8 @@ class SerialEnv(_BatchedEnv):
             else:
                 tensordict_ = None
 
-            if not needs_resetting[i]:
-                # We update the stored tensordict with the value of the "next"
-                # key as one may be surprised to receive data that is not up-to-date
-                # If we don't do this, the result of calling reset and skipping one env
-                # will be that the env will have the data from the previous
-                # step at the root (since the shared_tensordict did not go through
-                # step_mdp).
-                self.shared_tensordicts[i].update_(
-                    self.shared_tensordicts[i]
-                    .get("next")
-                    .select(*self._selected_reset_keys, strict=False)
-                )
-                if tensordict_ is not None:
-                    self.shared_tensordicts[i].update_(
-                        tensordict_.select(*self._selected_reset_keys, strict=False)
-                    )
-                continue
-            _td = _env._reset(tensordict=tensordict_, **kwargs)
-            self.shared_tensordicts[i].update_(
-                _td.select(*self._selected_reset_keys, strict=False)
-            )
+            _td = _env.reset(tensordict=tensordict_, **kwargs)
+            self.shared_tensordicts[i].update_(_td)
         selected_output_keys = self._selected_reset_keys_filt
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
@@ -656,6 +612,35 @@ class SerialEnv(_BatchedEnv):
                 *selected_output_keys,
                 strict=False,
             ).clone()
+
+    def _reset_proc_data(self, tensordict, tensordict_reset):
+        # since we call `reset` directly, all the postproc has been completed
+        return tensordict_reset
+
+    @_check_start
+    def _step(
+        self,
+        tensordict: TensorDict,
+    ) -> TensorDict:
+        tensordict_in = tensordict.clone(False)
+        next_td = self.shared_tensordict_parent.get("next")
+        for i in range(self.num_workers):
+            # shared_tensordicts are locked, and we need to select the keys since we update in-place.
+            # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
+            out_td = self._envs[i]._step(tensordict_in[i])
+            next_td[i].update_(out_td.select(*self._env_output_keys, strict=False))
+        # We must pass a clone of the tensordict, as the values of this tensordict
+        # will be modified in-place at further steps
+        if self._single_task:
+            out = TensorDict(
+                {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
+            )
+            for key in self._selected_step_keys:
+                _set_single_key(next_td, out, key, clone=True)
+        else:
+            # strict=False ensures that non-homogeneous keys are still there
+            out = next_td.select(*self._selected_step_keys, strict=False).clone()
+        return out
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
@@ -1105,7 +1090,7 @@ def _run_worker_pipe_shared_mem(
                 print(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
-            cur_td = env._reset(tensordict=data)
+            cur_td = env.reset(tensordict=data)
             shared_tensordict.update_(cur_td)
             if event is not None:
                 event.record()

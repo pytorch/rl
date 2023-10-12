@@ -873,7 +873,9 @@ class SyncDataCollector(DataCollectorBase):
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
                 raise RuntimeError("resetting unique env with index is not permitted.")
-            for reset_key, done_keys in zip(self.env.reset_keys, self.env.done_keys_groups):
+            for reset_key, done_keys in zip(
+                self.env.reset_keys, self.env.done_keys_groups
+            ):
                 _reset = torch.zeros(
                     self.env.full_done_spec[done_keys[0]].shape,
                     dtype=torch.bool,

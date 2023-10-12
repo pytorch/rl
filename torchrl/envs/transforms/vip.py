@@ -349,7 +349,9 @@ class VIPRewardTransform(VIPTransform):
     This class will update the reward computation
     """
 
-    def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         if "goal_embedding" not in tensordict.keys():
             tensordict = self._embed_goal(tensordict)
         return super()._reset(tensordict, tensordict_reset)

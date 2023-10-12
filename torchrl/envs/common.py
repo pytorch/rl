@@ -27,10 +27,10 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
     _replace_last,
+    _terminated_or_truncated,
     _update_during_reset,
     get_available_libraries,
     step_mdp,
-    _terminated_or_truncated,
 )
 
 LIBRARIES = get_available_libraries()
