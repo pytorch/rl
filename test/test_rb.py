@@ -151,12 +151,11 @@ class TestComposableBuffers:
         writer.register_storage(storage)
         batch1 = self._get_data(rb_type, size=5)
         cond = OLD_TORCH and size < len(batch1) and isinstance(storage, TensorStorage)
-        with pytest.raises(
-            RuntimeError, match="More than one example of some indices"
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
         ) if cond else contextlib.nullcontext():
             writer.extend(batch1)
-        if cond:
-            return
 
         # Added less data than storage max size
         if size > 5:
@@ -182,13 +181,11 @@ class TestComposableBuffers:
         )
         data = self._get_data(rb_type, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.raises(
-            RuntimeError,
-            match="More than one example of some indices have been provided",
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
         ) if cond else contextlib.nullcontext():
             rb.extend(data)
-        if cond:
-            return
         length = len(rb)
         for d in data[-length:]:
             for b in rb._storage:
@@ -209,9 +206,9 @@ class TestComposableBuffers:
         cond = (
             OLD_TORCH and size < len(data2) and isinstance(rb._storage, TensorStorage)
         )
-        with pytest.raises(
-            RuntimeError,
-            match="More than one example of some indices have been provided",
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
         ) if cond else contextlib.nullcontext():
             rb.extend(data2)
 
@@ -226,13 +223,11 @@ class TestComposableBuffers:
         )
         data = self._get_data(rb_type, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.raises(
-            RuntimeError,
-            match="More than one example of some indices have been provided",
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
         ) if cond else contextlib.nullcontext():
             rb.extend(data)
-        if cond:
-            return
         new_data = rb.sample()
         if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
             new_data = new_data[0]
@@ -264,13 +259,11 @@ class TestComposableBuffers:
         )
         data = self._get_data(rb_type, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.raises(
-            RuntimeError,
-            match="More than one example of some indices have been provided",
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
         ) if cond else contextlib.nullcontext():
             rb.extend(data)
-        if cond:
-            return
         d1 = rb[2]
         d2 = rb._storage[2]
         if type(d1) is not type(d2):
@@ -668,13 +661,11 @@ class TestBuffers:
         cond = (
             OLD_TORCH and size < len(batch1) and isinstance(rb._storage, TensorStorage)
         )
-        with pytest.raises(
-            RuntimeError,
-            match="More than one example of some indices have been provided",
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
         ) if cond else contextlib.nullcontext():
             rb.extend(batch1)
-        if cond:
-            return
 
         # Added less data than storage max size
         if size > 5 or storage is None:
@@ -728,13 +719,11 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.raises(
-            RuntimeError,
-            match="More than one example of some indices have been provided",
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
         ) if cond else contextlib.nullcontext():
             rb.extend(data)
-        if cond:
-            return
         length = len(rb)
         for d in data[-length:]:
             found_similar = False
@@ -758,13 +747,11 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.raises(
-            RuntimeError,
-            match="More than one example of some indices have been provided",
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
         ) if cond else contextlib.nullcontext():
             rb.extend(data)
-        if cond:
-            return
         new_data = rb.sample()
         if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
             new_data = new_data[0]
@@ -791,13 +778,11 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.raises(
-            RuntimeError,
-            match="More than one example of some indices have been provided",
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
         ) if cond else contextlib.nullcontext():
             rb.extend(data)
-        if cond:
-            return
         d1 = rb[2]
         d2 = rb._storage[2]
         if type(d1) is not type(d2):
