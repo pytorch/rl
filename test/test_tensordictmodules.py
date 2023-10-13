@@ -1776,6 +1776,7 @@ class TestLSTMModule:
     def test_lstm_parallel_env(self):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
+        device = "cuda" if torch.cuda.device_count() else "cpu"
         # tests that hidden states are carried over with parallel envs
         lstm_module = LSTMModule(
             input_size=7,
@@ -1783,11 +1784,12 @@ class TestLSTMModule:
             num_layers=2,
             in_key="observation",
             out_key="features",
+            device=device,
         )
 
         def create_transformed_env():
             primer = lstm_module.make_tensordict_primer()
-            env = DiscreteActionVecMockEnv(categorical_action_encoding=True)
+            env = DiscreteActionVecMockEnv(categorical_action_encoding=True, device=device)
             env = TransformedEnv(env)
             env.append_transform(InitTracker())
             env.append_transform(primer)
@@ -1803,6 +1805,7 @@ class TestLSTMModule:
                 in_features=12,
                 out_features=7,
                 num_cells=[],
+                device=device,
             ),
             in_keys=["features"],
             out_keys=["logits"],

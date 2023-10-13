@@ -17,7 +17,7 @@ from warnings import warn
 import torch
 
 from tensordict import TensorDict
-from tensordict._tensordict import _unravel_key_to_tuple, unravel_keys
+from tensordict._tensordict import _unravel_key_to_tuple, unravel_key
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, VERBOSE
@@ -400,7 +400,7 @@ class _BatchedEnv(EnvBase):
         }
         # output keys after reset, filtered
         self._selected_reset_keys_filt = {
-            unravel_keys(key) for key in self._env_obs_keys + self.done_keys
+            unravel_key(key) for key in self._env_obs_keys + self.done_keys
         }
         # output keys after step
         self._selected_step_keys = {
@@ -410,16 +410,18 @@ class _BatchedEnv(EnvBase):
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
                 *self._selected_keys,
-                "next",
+                *(unravel_key(("next", key)) for key in self._env_output_keys),
                 strict=False,
             )
             self.shared_tensordict_parent = shared_tensordict_parent.to(self.device)
         else:
             # Multi-task: we share tensordict that *may* have different keys
             shared_tensordict_parent = [
-                tensordict.select(*self._selected_keys, "next", strict=False).to(
-                    self.device
-                )
+                tensordict.select(
+                    *self._selected_keys,
+                    *(unravel_key(("next", key)) for key in self._env_output_keys),
+                    strict=False,
+                ).to(self.device)
                 for tensordict in shared_tensordict_parent
             ]
             shared_tensordict_parent = torch.stack(
@@ -455,6 +457,9 @@ class _BatchedEnv(EnvBase):
                 if not self.shared_tensordict_parent.is_memmap():
                     raise RuntimeError("memmap_() failed")
             self.shared_tensordicts = self.shared_tensordict_parent.unbind(0)
+        # we cache all the keys of the shared parent td for future use. This is
+        # safe since the td is locked.
+        self._cache_shared_keys = set(self.shared_tensordict_parent.keys(True, True))
 
     def _start_workers(self) -> None:
         """Starts the various envs."""
@@ -602,7 +607,9 @@ class SerialEnv(_BatchedEnv):
             else:
                 tensordict_ = None
             _td = _env.reset(tensordict=tensordict_, **kwargs)
-            self.shared_tensordicts[i].update_(_td.select(*self._selected_reset_keys_filt, strict=False))
+            self.shared_tensordicts[i].update_(
+                _td.select(*self._selected_reset_keys_filt, strict=False)
+            )
         selected_output_keys = self._selected_reset_keys_filt
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
@@ -793,14 +800,16 @@ class ParallelEnv(_BatchedEnv):
     ) -> Tuple[TensorDictBase, TensorDictBase]:
         if self._single_task and not self.has_lazy_inputs:
             # this is faster than update_ but won't work for lazy stacks
-            for key in self._env_input_keys:
-                key = _unravel_key_to_tuple(key)
-                val = tensordict._get_tuple(key, None)
-                if val is not None:
-                    self.shared_tensordict_parent.get(key).copy_(val, non_blocking=True)
+            # we go through the keys of tensordict because the in-keys may
+            # be incomplete when one just expects a key to be copied across the
+            # step
+            for key in tensordict.keys(True, True):
+                if key in self._cache_shared_keys:
+                    val = tensordict.get(key)
+                    self.shared_tensordict_parent.set_(key, val)
         else:
             self.shared_tensordict_parent.update_(
-                tensordict.select(*self._env_input_keys, strict=False)
+                tensordict.select(*self._cache_shared_keys, strict=False)
             )
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step_and_maybe_reset", None))
@@ -1084,7 +1093,6 @@ def _run_worker_pipe_shared_mem(
             i = 0
             next_shared_tensordict = shared_tensordict.get("next")
             shared_tensordict = shared_tensordict.clone(False)
-            del shared_tensordict["next"]
 
             if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
                 raise RuntimeError(
@@ -1098,7 +1106,9 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             cur_td = env.reset(tensordict=data)
-            shared_tensordict.update_(cur_td.select(*_selected_reset_keys, strict=False))
+            shared_tensordict.update_(
+                cur_td.select(*_selected_reset_keys, strict=False)
+            )
             if event is not None:
                 event.record()
                 event.synchronize()
@@ -1120,11 +1130,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             td, root_next_td = env.step_and_maybe_reset(shared_tensordict.clone(False))
-            # for key, val in td.get("next").items(True, True):
-            #     next_shared_tensordict.get(key).copy_(val, non_blocking=True)
             next_shared_tensordict.update_(td.get("next"))
-            # for key, val in root_next_td.items(True, True):
-            #     shared_tensordict.get(key).copy_(val, non_blocking=True)
             shared_tensordict.update_(root_next_td)
             if event is not None:
                 event.record()
