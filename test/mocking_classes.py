@@ -93,6 +93,13 @@ class _MockEnv(EnvBase):
                 action=cls._input_spec["full_action_spec"],
                 shape=cls._input_spec["full_action_spec"].shape[:-1],
             )
+        dtype = kwargs.pop("dtype", torch.get_default_dtype())
+        for spec in (cls._output_spec, cls._input_spec):
+            if dtype != torch.get_default_dtype():
+                for key, val in list(spec.items(True, True)):
+                    if val.dtype == torch.get_default_dtype():
+                        val = val.to(dtype)
+                        spec[key] = val
         return super().__new__(cls, *args, **kwargs)
 
     def __init__(

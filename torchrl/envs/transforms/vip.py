@@ -26,6 +26,7 @@ from torchrl.envs.transforms.transforms import (
     Transform,
     UnsqueezeTransform,
 )
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 try:
     from torchvision import models
@@ -80,6 +81,14 @@ class _VIPNet(Transform):
         return tensordict
 
     forward = _call
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        # TODO: Check this makes sense
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
     @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:

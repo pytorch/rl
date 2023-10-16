@@ -1333,7 +1333,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         next_tensordict = self._step_proc_data(next_tensordict)
         if next_preset is not None:
             # tensordict could already have a "next" key
-            next_tensordict.update(next_preset)
+            # this could be done more efficiently by not excluding but just passing
+            # the necessary keys
+            next_tensordict.update(
+                next_preset.exclude(*next_tensordict.keys(True, True))
+            )
         tensordict.set("next", next_tensordict)
         return tensordict
 

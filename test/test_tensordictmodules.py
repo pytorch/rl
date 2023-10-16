@@ -1789,7 +1789,9 @@ class TestLSTMModule:
 
         def create_transformed_env():
             primer = lstm_module.make_tensordict_primer()
-            env = DiscreteActionVecMockEnv(categorical_action_encoding=True, device=device)
+            env = DiscreteActionVecMockEnv(
+                categorical_action_encoding=True, device=device
+            )
             env = TransformedEnv(env)
             env.append_transform(InitTracker())
             env.append_transform(primer)
@@ -1822,8 +1824,8 @@ class TestLSTMModule:
         )
         for break_when_any_done in [False, True]:
             data = env.rollout(10, actor, break_when_any_done=break_when_any_done)
-            assert (data.get("recurrent_state_c") != 0.0).any()
             assert (data.get(("next", "recurrent_state_c")) != 0.0).all()
+            assert (data.get("recurrent_state_c") != 0.0).any()
 
 
 class TestGRUModule:
@@ -2036,6 +2038,7 @@ class TestGRUModule:
     def test_gru_parallel_env(self):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
+        device = "cuda" if torch.cuda.device_count() else "cpu"
         # tests that hidden states are carried over with parallel envs
         gru_module = GRUModule(
             input_size=7,
@@ -2043,11 +2046,14 @@ class TestGRUModule:
             num_layers=2,
             in_key="observation",
             out_key="features",
+            device=device,
         )
 
         def create_transformed_env():
             primer = gru_module.make_tensordict_primer()
-            env = DiscreteActionVecMockEnv(categorical_action_encoding=True)
+            env = DiscreteActionVecMockEnv(
+                categorical_action_encoding=True, device=device
+            )
             env = TransformedEnv(env)
             env.append_transform(InitTracker())
             env.append_transform(primer)
@@ -2063,6 +2069,7 @@ class TestGRUModule:
                 in_features=12,
                 out_features=7,
                 num_cells=[],
+                device=device,
             ),
             in_keys=["features"],
             out_keys=["logits"],

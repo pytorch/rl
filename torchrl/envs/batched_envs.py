@@ -799,17 +799,26 @@ class ParallelEnv(_BatchedEnv):
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
         if self._single_task and not self.has_lazy_inputs:
-            # this is faster than update_ but won't work for lazy stacks
-            # we go through the keys of tensordict because the in-keys may
-            # be incomplete when one just expects a key to be copied across the
-            # step
+            # We must use the in_keys and nothing else for the following reasons:
+            # - efficiency: copying all the keys will in practice mean doing a lot
+            #   of writing operations since the input tensordict may (and often will)
+            #   contain all the previous output data.
+            # - value mismatch: if the batched env is placed within a transform
+            #   and this transform overrides an observation key (eg, CatFrames)
+            #   the shape, dtype or device may not necessarily match and writing
+            #   the value in-place will fail.
             for key in tensordict.keys(True, True):
-                if key in self._cache_shared_keys:
+                # we copy the input keys as well as the keys in the 'next' td, if any
+                # as this mechanism can be used by a policy to set anticipatively the
+                # keys of the next call (eg, with recurrent nets)
+                if key in self._env_input_keys or (
+                    isinstance(key, tuple) and key[0] == "next"
+                ):
                     val = tensordict.get(key)
                     self.shared_tensordict_parent.set_(key, val)
         else:
             self.shared_tensordict_parent.update_(
-                tensordict.select(*self._cache_shared_keys, strict=False)
+                tensordict.select(*self._env_input_keys, "next", strict=False)
             )
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step_and_maybe_reset", None))
@@ -830,18 +839,26 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self._single_task and not self.has_lazy_inputs:
-            # this is faster than update_ but won't work for lazy stacks
-            for key in self._env_input_keys:
-                key = _unravel_key_to_tuple(key)
-                self.shared_tensordict_parent._set_tuple(
-                    key,
-                    tensordict._get_tuple(key, None),
-                    inplace=True,
-                    validated=True,
-                )
+            # We must use the in_keys and nothing else for the following reasons:
+            # - efficiency: copying all the keys will in practice mean doing a lot
+            #   of writing operations since the input tensordict may (and often will)
+            #   contain all the previous output data.
+            # - value mismatch: if the batched env is placed within a transform
+            #   and this transform overrides an observation key (eg, CatFrames)
+            #   the shape, dtype or device may not necessarily match and writing
+            #   the value in-place will fail.
+            for key in tensordict.keys(True, True):
+                # we copy the input keys as well as the keys in the 'next' td, if any
+                # as this mechanism can be used by a policy to set anticipatively the
+                # keys of the next call (eg, with recurrent nets)
+                if key in self._env_input_keys or (
+                    isinstance(key, tuple) and key[0] == "next"
+                ):
+                    val = tensordict.get(key)
+                    self.shared_tensordict_parent.set_(key, val)
         else:
             self.shared_tensordict_parent.update_(
-                tensordict.select(*self._env_input_keys, strict=False)
+                tensordict.select(*self._env_input_keys, "next", strict=False)
             )
         if self.event is not None:
             self.event.record()
@@ -1092,6 +1109,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("worker already initialized")
             i = 0
             next_shared_tensordict = shared_tensordict.get("next")
+            root_shared_tensordict = shared_tensordict.exclude("next")
             shared_tensordict = shared_tensordict.clone(False)
 
             if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
@@ -1131,7 +1149,7 @@ def _run_worker_pipe_shared_mem(
             i += 1
             td, root_next_td = env.step_and_maybe_reset(shared_tensordict.clone(False))
             next_shared_tensordict.update_(td.get("next"))
-            shared_tensordict.update_(root_next_td)
+            root_shared_tensordict.update_(root_next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
