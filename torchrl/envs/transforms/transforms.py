@@ -2411,8 +2411,9 @@ class CatFrames(ObservationTransform):
             to be concatenated. Defaults to ["pixels"].
         out_keys (sequence of NestedKey, optional): keys pointing to where the output
             has to be written. Defaults to the value of `in_keys`.
-        padding (str, optional): the padding method. One of ``"same"`` or ``"zeros"``.
-            Defaults to ``"same"``, ie. the first value is uesd for padding.
+        padding (str, optional): the padding method. One of ``"same"`` or ``"constant"``.
+            Defaults to ``"same"``, ie. the first value is used for padding.
+        padding_value (float, optional): the value to use for padding if ``padding="constant"``.
         as_inverse (bool, optional): if ``True``, the transform is applied as an inverse transform. Defaults to ``False``.
 
     Examples:
@@ -2482,7 +2483,7 @@ class CatFrames(ObservationTransform):
         "dim must be < 0 to accomodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
     )
-    ACCEPTED_PADDING = {"same", "zeros"}
+    ACCEPTED_PADDING = {"same", "constant"}
 
     def __init__(
         self,
@@ -2491,6 +2492,7 @@ class CatFrames(ObservationTransform):
         in_keys: Optional[Sequence[NestedKey]] = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
         padding="same",
+        padding_value=0,
         as_inverse=False,
     ):
         if in_keys is None:
@@ -2505,6 +2507,7 @@ class CatFrames(ObservationTransform):
         if padding not in self.ACCEPTED_PADDING:
             raise ValueError(f"padding must be one of {self.ACCEPTED_PADDING}")
         self.padding = padding
+        self.padding_value = padding_value
         for in_key in self.in_keys:
             buffer_name = f"_cat_buffers_{in_key}"
             self.register_buffer(
@@ -2590,8 +2593,8 @@ class CatFrames(ObservationTransform):
                     buffer[_reset] = buffer[_reset].copy_(
                         data[_reset].repeat(shape).clone()
                     )
-                elif self.padding == "zeros":
-                    buffer[_reset] = 0
+                elif self.padding == "constant":
+                    buffer[_reset] = self.padding_value
                 else:
                     # make linter happy. An exception has already been raised
                     raise NotImplementedError
@@ -2685,8 +2688,10 @@ class CatFrames(ObservationTransform):
                 )
                 first_val = prev_val[tuple(idx)].unsqueeze(tensordict.ndim - 1)
                 data0 = [first_val] * (self.N - 1)
-                if self.padding == "zeros":
-                    data0 = [torch.zeros_like(elt) for elt in data0[:-1]] + data0[-1:]
+                if self.padding == "constant":
+                    data0 = [
+                        torch.ones_like(elt) * self.padding_value for elt in data0[:-1]
+                    ] + data0[-1:]
                 elif self.padding == "same":
                     pass
                 else:
@@ -2695,10 +2700,11 @@ class CatFrames(ObservationTransform):
             elif self.padding == "same":
                 idx = [slice(None)] * (tensordict.ndim - 1) + [0]
                 data0 = [data[tuple(idx)].unsqueeze(tensordict.ndim - 1)] * (self.N - 1)
-            elif self.padding == "zeros":
+            elif self.padding == "constant":
                 idx = [slice(None)] * (tensordict.ndim - 1) + [0]
                 data0 = [
-                    torch.zeros_like(data[tuple(idx)]).unsqueeze(tensordict.ndim - 1)
+                    torch.ones_like(data[tuple(idx)]).unsqueeze(tensordict.ndim - 1)
+                    * self.padding_value
                 ] * (self.N - 1)
             else:
                 # make linter happy. An exception has already been raised

@@ -702,7 +702,7 @@ class TestCatFrames(TransformBase):
 
     @pytest.mark.parametrize("dim", [-2, -1])
     @pytest.mark.parametrize("N", [3, 4])
-    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    @pytest.mark.parametrize("padding", ["same", "constant"])
     def test_transform_model(self, dim, N, padding):
         # test equivalence between transforms within an env and within a rb
         key1 = "observation"
@@ -756,7 +756,7 @@ class TestCatFrames(TransformBase):
 
     @pytest.mark.parametrize("dim", [-2, -1])
     @pytest.mark.parametrize("N", [3, 4])
-    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    @pytest.mark.parametrize("padding", ["same", "constant"])
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(self, dim, N, padding, rbclass):
         # test equivalence between transforms within an env and within a rb
@@ -793,7 +793,7 @@ class TestCatFrames(TransformBase):
 
     @pytest.mark.parametrize("dim", [-1])
     @pytest.mark.parametrize("N", [3, 4])
-    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    @pytest.mark.parametrize("padding", ["same", "constant"])
     def test_transform_as_inverse(self, dim, N, padding):
         # test equivalence between transforms within an env and within a rb
         in_keys = ["observation", ("next", "observation")]
