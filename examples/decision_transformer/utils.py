@@ -118,7 +118,7 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
             in_keys=["observation", "action", "return_to_go"],
             N=env_cfg.stacked_frames,
             dim=-2,
-            padding="zeros",
+            padding="constant",
         )
     )
 
