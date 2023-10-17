@@ -2558,7 +2558,12 @@ class CatFrames(ObservationTransform):
         shape[self.dim] = d * self.N
         shape = torch.Size(shape)
         getattr(self, buffer_name).materialize(shape)
-        buffer = getattr(self, buffer_name).to(data.dtype).to(data.device).zero_()
+        buffer = (
+            getattr(self, buffer_name)
+            .to(data.dtype)
+            .to(data.device)
+            .fill_(self.padding_value)
+        )
         setattr(self, buffer_name, buffer)
         return buffer
 
