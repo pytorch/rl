@@ -1112,8 +1112,8 @@ class TestStateDict:
         assert (s.exclude("index") == 1).all()
 
 
-@pytest.mark.parametrize("size", [1, 10, 20])
-@pytest.mark.parametrize("batch_size", [1, 10, 20])
+@pytest.mark.parametrize("size", [20, 25, 30])
+@pytest.mark.parametrize("batch_size", [1, 10, 15])
 @pytest.mark.parametrize("reward_ranges", [(0.25, 0.5, 1.0)])
 def test_max_value_writer(size, batch_size, reward_ranges):
     rb = TensorDictReplayBuffer(
@@ -1136,6 +1136,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
     sample = rb.sample()
     assert (sample.get("key") <= max_reward1).all()
     assert (0 <= sample.get("key")).all()
+    assert len(sample.get("index").unique()) == len(sample.get("index"))
 
     td = TensorDict(
         {
@@ -1148,6 +1149,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
     sample = rb.sample()
     assert (sample.get("key") <= max_reward2).all()
     assert (max_reward1 <= sample.get("key")).all()
+    assert len(sample.get("index").unique()) == len(sample.get("index"))
 
     td = TensorDict(
         {
@@ -1160,6 +1162,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
     sample = rb.sample()
     assert (sample.get("key") <= max_reward3).all()
     assert (max_reward2 <= sample.get("key")).all()
+    assert len(sample.get("index").unique()) == len(sample.get("index"))
 
 
 if __name__ == "__main__":
