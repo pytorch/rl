@@ -145,8 +145,8 @@ class TensorDictMaxValueWriter(Writer):
         if self._rank_key is None:
             self._rank_key = ("next", "reward")
 
-    def add(self, data: Any) -> int:
-
+    def get_insert_index(self, data: Any) -> int:
+        """Returns the index where the data should be inserted, or None if it should not be inserted."""
         ret = None
         rank_data = data.get("_data").get(self._rank_key)
 
@@ -157,11 +157,9 @@ class TensorDictMaxValueWriter(Writer):
             raise ValueError(f"Rank key {self._rank_key} not found in data.")
 
         # If the buffer is not full, add the data
-        if len(self._storage) < self._storage.max_size:
+        if len(self._current_top_values) < self._storage.max_size:
 
             ret = self._cursor
-            data.set("index", ret)
-            self._storage[self._cursor] = data
             self._cursor = (self._cursor + 1) % self._storage.max_size
 
             # Add new reward to the heap
@@ -172,25 +170,35 @@ class TensorDictMaxValueWriter(Writer):
 
             # retrieve position of the smallest value
             min_sample = heapq.heappop(self._current_top_values)
-            min_sample_value = min_sample[1]
-
-            # replace the smallest value with the new value
-            self._storage[min_sample_value] = data
-
-            # set new data index
-            data.set("index", min_sample_value)
-
-            # set return value
-            ret = min_sample_value
+            ret = min_sample[1]
 
             # Add new reward to the heap
             heapq.heappush(self._current_top_values, (rank_data, ret))
 
         return ret
 
+    def add(self, data: Any) -> int:
+        """Inserts a single element of data at an appropriate index, and returns that index."""
+        index = self.get_insert_index(data)
+        if index is not None:
+            data.set("index", index)
+            self._storage[index] = data
+        return index
+
     def extend(self, data: Sequence) -> None:
-        for sample in data:
-            self.add(sample)
+        """Inserts a series of data points at appropriate indices."""
+        data_to_replace = {}
+        for i, sample in enumerate(data):
+            index = self.get_insert_index(sample)
+            if index is not None:
+                data_to_replace[index] = i
+
+        # Replace the data in the storage all at once
+        keys = list(data_to_replace.keys())
+        if len(keys) > 0:
+            values = list(data_to_replace.values())
+            data["index"][values].copy_(torch.tensor(keys))
+            self._storage[keys] = data[values]
 
     def _empty(self) -> None:
         self._cursor = 0
