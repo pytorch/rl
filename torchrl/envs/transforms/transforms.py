@@ -4133,6 +4133,7 @@ class TensorDictPrimer(Transform):
     def to(self, dtype_or_device):
         if not isinstance(dtype_or_device, torch.dtype):
             self.device = dtype_or_device
+            self.empty_cache()
         return super().to(dtype_or_device)
 
     def transform_observation_spec(
@@ -4264,6 +4265,7 @@ class gSDENoise(TensorDictPrimer):
         state_dim=None,
         action_dim=None,
         shape=None,
+        **kwargs,
     ) -> None:
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -4275,7 +4277,7 @@ class gSDENoise(TensorDictPrimer):
         random = state_dim is not None and action_dim is not None
         shape = tuple(shape) + tail_dim
         primers = {"_eps_gSDE": UnboundedContinuousTensorSpec(shape=shape)}
-        super().__init__(primers=primers, random=random)
+        super().__init__(primers=primers, random=random, **kwargs)
 
 
 class VecNorm(Transform):

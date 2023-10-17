@@ -926,7 +926,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             if reset is None:
                 return super()._reset(tensordict)
             elif reset is not None:
-                return tensordict.clone(False)
+                return tensordict.exclude("_reset")
         return super()._reset(tensordict, **kwargs)
 
 
