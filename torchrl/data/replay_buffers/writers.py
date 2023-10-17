@@ -197,7 +197,7 @@ class TensorDictMaxValueWriter(Writer):
         keys = list(data_to_replace.keys())
         if len(keys) > 0:
             values = list(data_to_replace.values())
-            data["index"][values].copy_(torch.tensor(keys))
+            data.get("index")[values].copy_(torch.tensor(keys))
             self._storage[keys] = data[values]
 
     def _empty(self) -> None:
