@@ -36,7 +36,10 @@ from torchrl.data.replay_buffers.storages import (
     ListStorage,
     TensorStorage,
 )
-from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from torchrl.data.replay_buffers.writers import (
+    RoundRobinWriter,
+    TensorDictMaxValueWriter,
+)
 from torchrl.envs.transforms.transforms import (
     BinarizeReward,
     CatFrames,
@@ -1107,6 +1110,57 @@ class TestStateDict:
         new_replay_buffer.load_state_dict(state_dict)
         s = new_replay_buffer.sample()
         assert (s.exclude("index") == 1).all()
+
+
+@pytest.mark.parametrize("size", [1, 10, 20])
+@pytest.mark.parametrize("batch_size", [1, 10, 20])
+def test_max_value_writer(size, batch_size):
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(size),
+        sampler=SamplerWithoutReplacement(),
+        batch_size=batch_size,
+        writer=TensorDictMaxValueWriter(rank_key="key"),
+    )
+
+    max_reward1 = 0.25
+    max_reward2 = 0.5
+    max_reward3 = 1.0
+
+    td = TensorDict(
+        {
+            "key": torch.clamp_max(torch.rand(size), max=max_reward1),
+            "obs": torch.tensor(torch.rand(size)),
+        },
+        batch_size=size,
+    )
+    rb.extend(td)
+    sample = rb.sample()
+    assert (sample.get("key") < max_reward1).all()
+    assert (0 > sample.get("key")).all()
+
+    td = TensorDict(
+        {
+            "key": torch.clamp(torch.rand(size), min=max_reward1, max=max_reward2),
+            "obs": torch.tensor(torch.rand(size)),
+        },
+        batch_size=size,
+    )
+    rb.extend(td)
+    sample = rb.sample()
+    assert (sample.get("key") < max_reward2).all()
+    assert (max_reward1 > sample.get("key")).all()
+
+    td = TensorDict(
+        {
+            "key": torch.clamp(torch.rand(size), min=max_reward1, max=max_reward3),
+            "obs": torch.tensor(torch.rand(size)),
+        },
+        batch_size=size,
+    )
+    rb.extend(td)
+    sample = rb.sample()
+    assert (sample.get("key") < max_reward3).all()
+    assert (max_reward2 > sample.get("key")).all()
 
 
 if __name__ == "__main__":
