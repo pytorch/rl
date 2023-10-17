@@ -1114,7 +1114,8 @@ class TestStateDict:
 
 @pytest.mark.parametrize("size", [1, 10, 20])
 @pytest.mark.parametrize("batch_size", [1, 10, 20])
-def test_max_value_writer(size, batch_size):
+@pytest.mark.parametrize("reward_ranges", [(0.25, 0.5, 1.0)])
+def test_max_value_writer(size, batch_size, reward_ranges):
     rb = TensorDictReplayBuffer(
         storage=LazyTensorStorage(size),
         sampler=SamplerWithoutReplacement(),
@@ -1122,9 +1123,7 @@ def test_max_value_writer(size, batch_size):
         writer=TensorDictMaxValueWriter(rank_key="key"),
     )
 
-    max_reward1 = 0.25
-    max_reward2 = 0.5
-    max_reward3 = 1.0
+    max_reward1, max_reward2, max_reward3 = reward_ranges
 
     td = TensorDict(
         {
@@ -1135,8 +1134,8 @@ def test_max_value_writer(size, batch_size):
     )
     rb.extend(td)
     sample = rb.sample()
-    assert (sample.get("key") < max_reward1).all()
-    assert (0 > sample.get("key")).all()
+    assert (sample.get("key") <= max_reward1).all()
+    assert (0 <= sample.get("key")).all()
 
     td = TensorDict(
         {
@@ -1147,20 +1146,20 @@ def test_max_value_writer(size, batch_size):
     )
     rb.extend(td)
     sample = rb.sample()
-    assert (sample.get("key") < max_reward2).all()
-    assert (max_reward1 > sample.get("key")).all()
+    assert (sample.get("key") <= max_reward2).all()
+    assert (max_reward1 <= sample.get("key")).all()
 
     td = TensorDict(
         {
-            "key": torch.clamp(torch.rand(size), min=max_reward1, max=max_reward3),
+            "key": torch.clamp(torch.rand(size), min=max_reward2, max=max_reward3),
             "obs": torch.tensor(torch.rand(size)),
         },
         batch_size=size,
     )
     rb.extend(td)
     sample = rb.sample()
-    assert (sample.get("key") < max_reward3).all()
-    assert (max_reward2 > sample.get("key")).all()
+    assert (sample.get("key") <= max_reward3).all()
+    assert (max_reward2 <= sample.get("key")).all()
 
 
 if __name__ == "__main__":
