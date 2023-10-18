@@ -28,7 +28,7 @@ from torchrl.envs import (
     TargetReturn,
     TensorDictPrimer,
     TransformedEnv,
-    UnsqueezeTransform,
+    UnsqueezeTransform, ParallelEnv,
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.gym import set_gym_backend
@@ -96,12 +96,7 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
 
     transformed_env.append_transform(TensorDictPrimer(action=base_env.action_spec))
 
-    transformed_env.append_transform(
-        DoubleToFloat(
-            in_keys=["observation"],
-            in_keys_inv=[],
-        )
-    )
+    transformed_env.append_transform(DoubleToFloat())
     obsnorm = ObservationNorm(
         loc=obs_loc, scale=obs_std, in_keys="observation", standard_normal=True
     )
@@ -139,7 +134,7 @@ def make_parallel_env(env_cfg, obs_loc, obs_std, train=False):
             return make_base_env(env_cfg)
 
     env = make_transformed_env(
-        SerialEnv(num_envs, EnvCreator(make_env)),
+        ParallelEnv(num_envs, EnvCreator(make_env)),
         env_cfg,
         obs_loc,
         obs_std,
@@ -201,10 +196,7 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
     )
     crop_seq = RandomCropTensorDict(sub_seq_len=rb_cfg.stacked_frames, sample_dim=-1)
 
-    d2f = DoubleToFloat(
-        in_keys=["observation", ("next", "observation")],
-        in_keys_inv=[],
-    )
+    d2f = DoubleToFloat()
     exclude = ExcludeTransform(
         "next_observations",
         # "timeout",

@@ -1782,7 +1782,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
 
         dtype, device = _default_dtype_and_device(dtype, device)
         box = (
-            ContinuousBox(torch.tensor(-np.inf), torch.tensor(np.inf))
+            ContinuousBox(torch.tensor(-np.inf).expand(shape), torch.tensor(np.inf).expand(shape))
             if shape == _DEFAULT_SHAPE
             else None
         )

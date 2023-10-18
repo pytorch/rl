@@ -77,14 +77,14 @@ def _apply_to_composite(function):
     @wraps(function)
     def new_fun(self, observation_spec):
         if isinstance(observation_spec, CompositeSpec):
-            d = observation_spec._specs
+            _specs = observation_spec._specs
             in_keys = self.in_keys
             out_keys = self.out_keys
             for in_key, out_key in zip(in_keys, out_keys):
                 if in_key in observation_spec.keys(True, True):
-                    d[out_key] = function(self, observation_spec[in_key].clone())
+                    _specs[out_key] = function(self, observation_spec[in_key].clone())
             return CompositeSpec(
-                d, shape=observation_spec.shape, device=observation_spec.device
+                _specs, shape=observation_spec.shape, device=observation_spec.device
             )
         else:
             return function(self, observation_spec)
