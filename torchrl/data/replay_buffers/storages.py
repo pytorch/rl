@@ -615,8 +615,8 @@ class LazyMemmapStorage(LazyTensorStorage):
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
-                filesize = os.path.getsize(tensor.filename) / 1024 / 1024
                 if VERBOSE:
+                    filesize = os.path.getsize(tensor.filename) / 1024 / 1024
                     print(
                         f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
                     )
@@ -626,8 +626,8 @@ class LazyMemmapStorage(LazyTensorStorage):
             out = MemmapTensor(
                 self.max_size, *data.shape, device=self.device, dtype=data.dtype
             )
-            filesize = os.path.getsize(out.filename) / 1024 / 1024
             if VERBOSE:
+                filesize = os.path.getsize(out.filename) / 1024 / 1024
                 print(
                     f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
                 )

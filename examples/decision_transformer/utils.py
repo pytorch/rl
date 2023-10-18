@@ -81,7 +81,7 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
         transformed_env.append_transform(
             TargetReturn(
                 env_cfg.collect_target_return * env_cfg.reward_scaling,
-                out_keys=["return_to_go_single"],
+                out_keys=["return_to_go"],
                 mode=env_cfg.target_return_mode,
             )
         )
@@ -89,7 +89,7 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
         transformed_env.append_transform(
             TargetReturn(
                 env_cfg.eval_target_return * env_cfg.reward_scaling,
-                out_keys=["return_to_go_single"],
+                out_keys=["return_to_go"],
                 mode=env_cfg.target_return_mode,
             )
         )
@@ -104,13 +104,13 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
     transformed_env.append_transform(
         UnsqueezeTransform(
             -2,
-            in_keys=["observation", "action", "return_to_go_single"],
-            out_keys=["observation", "action", "return_to_go"],
+            in_keys=["observation", "action", "return_to_go"],
+            out_keys=["observation_cat", "action_cat", "return_to_go_cat"],
         )
     )
     transformed_env.append_transform(
         CatFrames(
-            in_keys=["observation", "action", "return_to_go"],
+            in_keys=["observation_cat", "action_cat", "return_to_go_cat"],
             N=env_cfg.stacked_frames,
             dim=-2,
             padding="zeros",
@@ -164,7 +164,9 @@ def make_collector(cfg, policy):
         "scale",
         "loc",
     )
-    cat = CatFrames(in_keys=["action"], N=20, dim=-2, padding="zeros")
+    cat = CatFrames(
+        in_keys=["action"], out_keys=["action_cat"], N=20, dim=-2, padding="zeros"
+    )
     transforms = Compose(
         exclude_target_return,
         cat,
@@ -184,13 +186,11 @@ def make_collector(cfg, policy):
 
 
 def make_offline_replay_buffer(rb_cfg, reward_scaling):
-    r2g = Reward2GoTransform(
-        gamma=1.0, in_keys=["reward"], out_keys=["return_to_go_single"]
-    )
+    r2g = Reward2GoTransform(gamma=1.0, in_keys=["reward"], out_keys=["return_to_go"])
     reward_scale = RewardScaling(
         loc=0,
         scale=reward_scaling,
-        in_keys="return_to_go_single",
+        in_keys="return_to_go",
         out_keys=["return_to_go"],
         standard_normal=False,
     )
@@ -222,10 +222,10 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         sampler=RandomSampler(),  # SamplerWithoutReplacement(drop_last=False),
         transform=transforms,
         use_truncated_as_done=True,
+        direct_download=True,
     )
-    full_data = data._get_dataset_from_env(rb_cfg.dataset, {})
-    loc = full_data["observation"].mean(axis=0).float()
-    std = full_data["observation"].std(axis=0).float()
+    loc = data._storage._storage["_data", "observation"].mean(axis=0).float()
+    std = data._storage._storage["_data", "observation"].std(axis=0).float()
     obsnorm = ObservationNorm(
         loc=loc, scale=std, in_keys="observation", standard_normal=True
     )
@@ -234,17 +234,17 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
 
 
 def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
-    r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go_single"])
+    r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
     reward_scale = RewardScaling(
         loc=0,
         scale=reward_scaling,
-        in_keys=["return_to_go_single"],
+        in_keys=["return_to_go"],
         out_keys=["return_to_go"],
         standard_normal=False,
     )
     catframes = CatFrames(
-        in_keys=["return_to_go_single"],
-        out_keys=["return_to_go"],
+        in_keys=["return_to_go"],
+        out_keys=["return_to_go_cat"],
         N=rb_cfg.stacked_frames,
         dim=-2,
         padding="zeros",
@@ -253,7 +253,7 @@ def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
     transforms = Compose(
         r2g,
         reward_scale,
-        catframes,  # TODO: cat frames is not an inverse transform doesnt get triggered!
+        catframes,
     )
     storage = LazyMemmapStorage(
         rb_cfg.capacity, rb_cfg.buffer_scratch_dir, device=rb_cfg.device
@@ -291,9 +291,9 @@ def make_odt_model(cfg):
         if key == "observation":
             state_dim = value.shape[-1]
     in_keys = [
-        "observation",
-        "action",
-        "return_to_go",
+        "observation_cat",
+        "action_cat",
+        "return_to_go_cat",
     ]
 
     actor_net = OnlineDTActor(
@@ -345,9 +345,9 @@ def make_dt_model(cfg):
         if key == "observation":
             state_dim = value.shape[-1]
     in_keys = [
-        "observation",
-        "action",
-        "return_to_go",
+        "observation_cat",
+        "action_cat",
+        "return_to_go_cat",
     ]
 
     actor_net = DTActor(

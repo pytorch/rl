@@ -69,7 +69,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
             .. note::
 
-              Using ``from_env=False`` will provide less data than ``from_env=True``.
+              Using ``from_env=False`` will provide fewer data than ``from_env=True``.
               For instance, the info keys will be left out.
               Usually, ``from_env=False`` with ``terminate_on_end=True`` will
               lead to the same result as ``from_env=True``, with the latter
@@ -136,17 +136,6 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         terminate_on_end: bool = None,
         **env_kwargs,
     ):
-        if from_env is None:
-            warnings.warn(
-                "from_env will soon default to ``False``, ie the data will be "
-                "downloaded without relying on d4rl by default. "
-                "For now, ``True`` will still be the default. "
-                "To disable this warning, explicitly pass the ``from_env`` argument "
-                "during construction of the dataset.",
-                category=DeprecationWarning,
-            )
-            from_env = True
-        self.from_env = from_env
         self.use_truncated_as_done = use_truncated_as_done
 
         if not from_env and direct_download is None:
@@ -154,6 +143,17 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             direct_download = not self._has_d4rl
 
         if not direct_download:
+            if from_env is None:
+                warnings.warn(
+                    "from_env will soon default to ``False``, ie the data will be "
+                    "downloaded without relying on d4rl by default. "
+                    "For now, ``True`` will still be the default. "
+                    "To disable this warning, explicitly pass the ``from_env`` argument "
+                    "during construction of the dataset.",
+                    category=DeprecationWarning,
+                )
+                from_env = True
+            self.from_env = from_env
             if terminate_on_end is None:
                 # we use the default of d4rl
                 terminate_on_end = False
@@ -175,6 +175,9 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
                 env_kwargs.update({"terminate_on_end": terminate_on_end})
                 dataset = self._get_dataset_direct(name, env_kwargs)
         else:
+            if from_env is None:
+                from_env = False
+            self.from_env = from_env
             if terminate_on_end is False:
                 raise ValueError(
                     "Using terminate_on_end=False is not compatible with direct_download=True."
