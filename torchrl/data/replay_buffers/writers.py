@@ -143,7 +143,7 @@ class TensorDictMaxValueWriter(Writer):
             self._rank_key = ("next", "reward")
 
     def get_insert_index(self, data: Any) -> int:
-        """Returns the index where the data should be inserted, or None if it should not be inserted."""
+        """Returns the index where the data should be inserted, or ``None`` if it should not be inserted."""
         if data.batch_dims > 1:
             raise RuntimeError(
                 "Expected input tensordict to have no more than 1 dimension, got"
