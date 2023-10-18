@@ -1158,7 +1158,9 @@ def test_max_value_writer(size, batch_size, reward_ranges):
         },
         batch_size=size,
     )
-    rb.extend(td)
+
+    for sample in td:
+        rb.add(sample)
     sample = rb.sample()
     assert (sample.get("key") <= max_reward3).all()
     assert (max_reward2 <= sample.get("key")).all()

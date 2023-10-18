@@ -144,11 +144,17 @@ class TensorDictMaxValueWriter(Writer):
 
     def get_insert_index(self, data: Any) -> int:
         """Returns the index where the data should be inserted, or None if it should not be inserted."""
+        if data.batch_dims > 1:
+            raise RuntimeError(
+                "Expected input tensordict to have no more than 1 dimension, got"
+                f"tensordict.batch_size = {data.batch_size}"
+            )
+
         ret = None
         rank_data = data.get(("_data", self._rank_key))
 
         # Sum the rank key, in case it is a whole trajectory
-        rank_data = rank_data.sum().item()
+        rank_data = rank_data.sum(-1).item()
 
         if rank_data is None:
             raise KeyError(f"Rank key {self._rank_key} not found in data.")
@@ -175,7 +181,12 @@ class TensorDictMaxValueWriter(Writer):
         return ret
 
     def add(self, data: Any) -> int:
-        """Inserts a single element of data at an appropriate index, and returns that index."""
+        """Inserts a single element of data at an appropriate index, and returns that index.
+
+        The data passed to this module should be structured as :obj:`[]` or :obj:`[T]` where
+        :obj:`T` the time dimension. If the data is a trajectory, the rank key will be summed
+        over the time dimension.
+        """
         index = self.get_insert_index(data)
         if index is not None:
             data.set("index", index)
@@ -183,7 +194,12 @@ class TensorDictMaxValueWriter(Writer):
         return index
 
     def extend(self, data: Sequence) -> None:
-        """Inserts a series of data points at appropriate indices."""
+        """Inserts a series of data points at appropriate indices.
+
+        The data passed to this module should be structured as :obj:`[B]` or :obj:`[B, T]` where :obj:`B` is
+        the batch size, :obj:`T` the time dimension. If the data is a trajectory, the rank key will be summed over the
+        time dimension.
+        """
         data_to_replace = {}
         for i, sample in enumerate(data):
             index = self.get_insert_index(sample)
