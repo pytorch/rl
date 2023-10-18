@@ -98,14 +98,13 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
 class TensorDictMaxValueWriter(Writer):
     """A Writer class for composable replay buffers that keeps the top elements based on some ranking key.
 
-    If rank_key is not provided, the key will be ("next", "reward").
+    If rank_key is not provided, the key will be ``("next", "reward")``.
 
     Examples:
     >>> import torch
     >>> from tensordict import TensorDict
     >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer, TensorDictMaxValueWriter
     >>> from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-
     >>> rb = TensorDictReplayBuffer(
     ...     storage=LazyTensorStorage(1),
     ...     sampler=SamplerWithoutReplacement(),
@@ -119,7 +118,6 @@ class TensorDictMaxValueWriter(Writer):
     >>> rb.extend(td)
     >>> print(rb.sample().get("obs").item())
     9
-
     >>> td = TensorDict({
     ...     "key": torch.tensor(range(10, 20)),
     ...     "obs": torch.tensor(range(10, 20))
@@ -127,7 +125,6 @@ class TensorDictMaxValueWriter(Writer):
     >>> rb.extend(td)
     >>> print(rb.sample().get("obs").item())
     19
-
     >>> td = TensorDict({
     ...     "key": torch.tensor(range(10)),
     ...     "obs": torch.tensor(range(10))
@@ -137,8 +134,8 @@ class TensorDictMaxValueWriter(Writer):
     19
     """
 
-    def __init__(self, rank_key=None, **kw) -> None:
-        super().__init__(**kw)
+    def __init__(self, rank_key=None, **kwargs) -> None:
+        super().__init__(**kwargs)
         self._cursor = 0
         self._current_top_values = []
         self._rank_key = rank_key
@@ -148,13 +145,13 @@ class TensorDictMaxValueWriter(Writer):
     def get_insert_index(self, data: Any) -> int:
         """Returns the index where the data should be inserted, or None if it should not be inserted."""
         ret = None
-        rank_data = data.get("_data").get(self._rank_key)
+        rank_data = data.get(("_data", self._rank_key))
 
         # Sum the rank key, in case it is a whole trajectory
         rank_data = rank_data.sum().item()
 
         if rank_data is None:
-            raise ValueError(f"Rank key {self._rank_key} not found in data.")
+            raise KeyError(f"Rank key {self._rank_key} not found in data.")
 
         # If the buffer is not full, add the data
         if len(self._current_top_values) < self._storage.max_size:
@@ -194,11 +191,12 @@ class TensorDictMaxValueWriter(Writer):
                 data_to_replace[index] = i
 
         # Replace the data in the storage all at once
-        keys = list(data_to_replace.keys())
+        keys, values = zip(*data_to_replace.items())
         if len(keys) > 0:
-            values = list(data_to_replace.values())
-            data.get("index")[values].copy_(torch.tensor(keys))
-            self._storage[keys] = data[values]
+            index = data.get("index")
+            index[values] = torch.tensor(keys)
+            data.set("index", index)
+            self._storage[list(keys)] = data[values]
 
     def _empty(self) -> None:
         self._cursor = 0
