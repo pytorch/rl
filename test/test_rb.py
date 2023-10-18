@@ -38,7 +38,10 @@ from torchrl.data.replay_buffers.storages import (
     ListStorage,
     TensorStorage,
 )
-from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from torchrl.data.replay_buffers.writers import (
+    RoundRobinWriter,
+    TensorDictMaxValueWriter,
+)
 from torchrl.envs.transforms.transforms import (
     BinarizeReward,
     CatFrames,
@@ -1207,6 +1210,65 @@ class TestStateDict:
         new_replay_buffer.load_state_dict(state_dict)
         s = new_replay_buffer.sample()
         assert (s.exclude("index") == 1).all()
+
+
+@pytest.mark.parametrize("size", [20, 25, 30])
+@pytest.mark.parametrize("batch_size", [1, 10, 15])
+@pytest.mark.parametrize("reward_ranges", [(0.25, 0.5, 1.0)])
+def test_max_value_writer(size, batch_size, reward_ranges):
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(size),
+        sampler=SamplerWithoutReplacement(),
+        batch_size=batch_size,
+        writer=TensorDictMaxValueWriter(rank_key="key"),
+    )
+
+    max_reward1, max_reward2, max_reward3 = reward_ranges
+
+    td = TensorDict(
+        {
+            "key": torch.clamp_max(torch.rand(size), max=max_reward1),
+            "obs": torch.tensor(torch.rand(size)),
+        },
+        batch_size=size,
+        device="cpu",
+    )
+    rb.extend(td)
+    sample = rb.sample()
+    assert (sample.get("key") <= max_reward1).all()
+    assert (0 <= sample.get("key")).all()
+    assert len(sample.get("index").unique()) == len(sample.get("index"))
+
+    td = TensorDict(
+        {
+            "key": torch.clamp(torch.rand(size), min=max_reward1, max=max_reward2),
+            "obs": torch.tensor(torch.rand(size)),
+        },
+        batch_size=size,
+        device="cpu",
+    )
+    rb.extend(td)
+    sample = rb.sample()
+    assert (sample.get("key") <= max_reward2).all()
+    assert (max_reward1 <= sample.get("key")).all()
+    assert len(sample.get("index").unique()) == len(sample.get("index"))
+
+    td = TensorDict(
+        {
+            "key": torch.clamp(torch.rand(size), min=max_reward2, max=max_reward3),
+            "obs": torch.tensor(torch.rand(size)),
+        },
+        batch_size=size,
+        device="cpu",
+    )
+
+    for sample in td:
+        rb.add(sample)
+
+    sample = rb.sample()
+    assert (sample.get("key") <= max_reward3).all()
+    assert (max_reward2 <= sample.get("key")).all()
+    assert len(sample.get("index").unique()) == len(sample.get("index"))
 
 
 if __name__ == "__main__":
