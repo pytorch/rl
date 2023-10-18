@@ -363,6 +363,7 @@ class VIPRewardTransform(VIPTransform):
     ) -> TensorDictBase:
         if "goal_embedding" not in tensordict.keys():
             tensordict = self._embed_goal(tensordict)
+        tensordict_reset.set("goal_embedding", tensordict.pop("goal_embedding"))
         return super()._reset(tensordict, tensordict_reset)
 
     def _embed_goal(self, tensordict):
