@@ -20,15 +20,15 @@ from torchrl.envs import (
     EnvCreator,
     ExcludeTransform,
     ObservationNorm,
+    ParallelEnv,
     RandomCropTensorDict,
     Reward2GoTransform,
     RewardScaling,
     RewardSum,
-    SerialEnv,
     TargetReturn,
     TensorDictPrimer,
     TransformedEnv,
-    UnsqueezeTransform, ParallelEnv,
+    UnsqueezeTransform,
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.gym import set_gym_backend

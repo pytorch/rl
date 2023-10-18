@@ -29,7 +29,6 @@ from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     ContinuousBox,
-    DEVICE_TYPING,
     DiscreteTensorSpec,
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
@@ -642,7 +641,7 @@ but got an object of type {type(transform)}."""
             prev_transform.__dict__["_container"] = None
         transform.set_container(self)
         transform.eval()
-        self._transform = transform
+        self._transform = transform.to(self.device)
 
     @property
     def device(self) -> bool:
@@ -951,8 +950,9 @@ class Compose(Transform):
     def to(self, *args, **kwargs):
         # because Module.to(...) does not call to(...) on sub-modules, we have
         # manually call it:
-        for t in self.transforms:
-            t.to(*args, **kwargs)
+        self.transforms = nn.ModuleList(
+            [t.to(*args, **kwargs) for t in self.transforms]
+        )
         return super().to(*args, **kwargs)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
