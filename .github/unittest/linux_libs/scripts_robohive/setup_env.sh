@@ -40,20 +40,6 @@ if [ ! -d "${env_dir}" ]; then
 fi
 conda activate "${env_dir}"
 
-#git clone https://github.com/vmoens/mujoco-py.git
-#cd mujoco-py
-#git checkout aws_fix2
-#mkdir -p mujoco_py/binaries/linux \
-#    && wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz -O mujoco.tar.gz \
-#    && tar -xf mujoco.tar.gz -C mujoco_py/binaries/linux \
-#    && rm mujoco.tar.gz
-#wget https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/mjkey.txt
-#cp mjkey.txt mujoco_py/binaries/
-#pip install -e .
-#cd ..
-
-#cd $this_dir
-
 # 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"

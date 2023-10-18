@@ -22,6 +22,7 @@ dependencies:
     - hydra-core
     - imageio==2.26.0
     - dm_control
+    - mujoco<3.0.0
     - mlflow
     - av
     - coverage
