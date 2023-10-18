@@ -1905,6 +1905,24 @@ class TestNestedSpecs:
             nested_dim,
         )
 
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
+    @pytest.mark.parametrize(
+        "nest_done,has_root_done", [[False, False], [True, False], [True, True]]
+    )
+    def test_nested_reset(self, nest_done, has_root_done, batch_size):
+        env = NestedCountingEnv(
+            nest_done=nest_done, has_root_done=has_root_done, batch_size=batch_size
+        )
+        for reset_key, done_keys in zip(env.reset_keys, env.done_keys_groups):
+            if isinstance(reset_key, str):
+                for done_key in done_keys:
+                    assert isinstance(done_key, str)
+            else:
+                for done_key in done_keys:
+                    assert done_key[:-1] == reset_key[:-1]
+        env.rollout(100)
+        env.rollout(100, break_when_any_done=False)
+
 
 class TestHeteroEnvs:
     @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])

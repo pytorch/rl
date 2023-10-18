@@ -27,6 +27,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
     _replace_last,
+    _repr_by_depth,
     _terminated_or_truncated,
     _update_during_reset,
     get_available_libraries,
@@ -245,9 +246,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     ):
         if device is None:
             device = torch.device("cpu")
-        self.__dict__.setdefault("_done_keys", None)
-        self.__dict__.setdefault("_reward_keys", None)
-        self.__dict__.setdefault("_action_keys", None)
         self.__dict__.setdefault("_batch_size", None)
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
@@ -487,25 +485,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def output_spec(self, value: TensorSpec) -> None:
         raise RuntimeError("output_spec is protected.")
 
-    # Action spec
-    def _get_action_keys(self):
-        keys = self.input_spec["full_action_spec"].keys(True, True)
-        if not len(keys):
-            raise AttributeError("Could not find action spec")
-        keys = list(keys)
-        self.__dict__["_action_keys"] = keys
-        return keys
-
     @property
     def action_keys(self) -> List[NestedKey]:
         """The action keys of an environment.
 
         By default, there will only be one key named "action".
+
+        Keys are sorted by depth in the data tree.
         """
-        out = self._action_keys
-        if out is None:
-            out = self._get_action_keys()
-        return out
+        keys = self.input_spec["full_action_spec"].keys(True, True)
+        if not len(keys):
+            raise AttributeError("Could not find action spec")
+        keys = sorted(keys, key=_repr_by_depth)
+        return keys
 
     @property
     def action_key(self) -> NestedKey:
@@ -650,7 +642,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 )
 
             self.input_spec["full_action_spec"] = value.to(device)
-            self._get_action_keys()
         finally:
             self.input_spec.lock_()
 
@@ -685,21 +676,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self.action_spec = spec
 
     # Reward spec
-    def _get_reward_keys(self):
-        keys = self.output_spec["full_reward_spec"].keys(True, True)
-        if not len(keys):
-            raise AttributeError("Could not find reward spec")
-        keys = list(keys)
-        self.__dict__["_reward_keys"] = keys
-        return keys
-
     @property
     def reward_keys(self) -> List[NestedKey]:
         """The reward keys of an environment.
 
         By default, there will only be one key named "reward".
+
+        Keys are sorted by depth in the data tree.
         """
-        result = list(self.full_reward_spec.keys(True, True))
+        result = sorted(self.full_reward_spec.keys(True, True), key=_repr_by_depth)
         return result
 
     @property
@@ -847,7 +832,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                         " spec instead, for instance with a singleton dimension at the tail)."
                     )
             self.output_spec["full_reward_spec"] = value.to(device)
-            self._get_reward_keys()
         finally:
             self.output_spec.lock_()
 
@@ -883,30 +867,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self.reward_spec = spec
 
     # done spec
-    def _get_done_keys(self):
-        if "full_done_spec" not in self.output_spec.keys():
-            # populate the "done" entry
-            # this will be raised if there is not full_done_spec (unlikely) or no done_key
-            # Since output_spec is lazily populated with an empty composite spec for
-            # done_spec, the second case is much more likely to occur.
-            self.done_spec = DiscreteTensorSpec(
-                n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
-            )
-
-        keys = self.output_spec["full_done_spec"].keys(True, True)
-        if not len(keys):
-            raise AttributeError("Could not find done spec")
-        keys = list(keys)
-        self.__dict__["_done_keys"] = keys
-        return keys
-
     @property
     def done_keys(self) -> List[NestedKey]:
         """The done keys of an environment.
 
         By default, there will only be one key named "done".
+
+        Keys are sorted by depth in the data tree.
         """
-        result = list(self.full_done_spec.keys(True, True))
+        result = sorted(self.full_done_spec.keys(True, True), key=_repr_by_depth)
         return result
 
     @property
@@ -1141,7 +1110,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     )
             self.output_spec["full_done_spec"] = value.to(device)
             self._create_done_specs()
-            self._get_done_keys()
         finally:
             self.output_spec.lock_()
 
@@ -1983,32 +1951,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         a (possibly empty) tuple of strings pointing to a tensordict location
         where a done state can be found.
 
-        The value of reset_keys is cached.
+        Keys are sorted by depth in the data tree.
         """
-        reset_keys = self.__dict__.get("_reset_keys", None)
-        if reset_keys is not None:
-            return reset_keys
-        prefixes = set()
-        reset_keys = []
-
-        def prefix(key: NestedKey):
-            if isinstance(key, str):
-                return None
-            return key[:-1]
-
-        def combine(prefix_key: tuple | None, key: str):
-            if prefix_key is None:
-                return key
-            return (*prefix_key, key)
-
-        for done_key in self.done_keys:
-            prefix_key = prefix(done_key)
-            if prefix_key in prefixes:
-                continue
-            prefixes.add(prefix_key)
-            reset_keys.append(combine(prefix_key, "_reset"))
-        self.__dict__["_reset_keys"] = reset_keys
-        return reset_keys
+        return sorted(
+            (
+                _replace_last(done_key, "_reset")
+                for (done_key, *_) in self.done_keys_groups
+            ),
+            key=_repr_by_depth,
+        )
 
     @property
     def done_keys_groups(self):
@@ -2017,33 +1968,24 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         This is a list of lists. The outer list has the length of reset keys, the
         inner lists contain the done keys (eg, done and truncated) that can
         be read to determine a reset when it is absent.
-
-        The value of ``done_keys_groups`` is cached.
-
         """
-        done_keys_sorted = self.__dict__.get("_done_keys_groups", None)
-        if done_keys_sorted is not None:
-            return done_keys_sorted
         # done keys, sorted as reset keys
-        reset_keys = self.reset_keys
-        done_keys = [[] for _ in range(len(reset_keys))]
-        reset_keys_iter = iter(reset_keys)
-        done_keys_iter = iter(done_keys)
-        try:
-            curr_reset_key = next(reset_keys_iter)
-            curr_done_key = next(done_keys_iter)
-        except StopIteration:
-            return done_keys
-
+        out = []
+        roots = set()
+        fds = self.full_done_spec
         for done_key in self.done_keys:
-            while type(done_key) != type(curr_reset_key) or (
-                isinstance(done_key, tuple) and done_key[:-1] != curr_reset_key[:-1]
-            ):  # if they are string, they are at the same level
-                curr_reset_key = next(reset_keys_iter)
-                curr_done_key = next(done_keys_iter)
-            curr_done_key.append(done_key)
-        self.__dict__["_done_keys_groups"] = done_keys
-        return done_keys
+            root_name = done_key[:-1] if isinstance(done_key, tuple) else ()
+            root = fds[root_name] if root_name else fds
+            n = len(roots)
+            roots.add(root_name)
+            if len(roots) - n:
+                out.append(
+                    [
+                        unravel_key(root_name + (key,))
+                        for key in root.keys(include_nested=False, leaves_only=True)
+                    ]
+                )
+        return out
 
     def _select_observation_keys(self, tensordict: TensorDictBase) -> Iterator[str]:
         for key in tensordict.keys():

@@ -1029,6 +1029,7 @@ def _update_during_reset(
     reset_keys: List[NestedKey],
 ):
     """Updates the input tensordict with the reset data, based on the reset keys."""
+    roots = set()
     for reset_key in reset_keys:
         # get the node of the reset key
         if isinstance(reset_key, tuple):
@@ -1037,13 +1038,22 @@ def _update_during_reset(
             node_key = reset_key[:-1]
             node_reset = tensordict_reset.get(node_key)
             node = tensordict.get(node_key)
+            reset_key_tuple = reset_key
         else:
             node_reset = tensordict_reset
             node = tensordict
+            reset_key_tuple = (reset_key,)
         # get the reset signal
         reset = tensordict.pop(reset_key, None)
-        if reset_key in tensordict_reset.keys(True):
-            raise ValueError((reset_key, tensordict_reset))
+
+        # check if this reset should be ignored -- this happens whenever the a
+        # root node has already been updated
+        root = () if isinstance(reset_key, str) else reset_key[:-1]
+        processed = any(reset_key_tuple[: len(x)] == x for x in roots)
+        roots.add(root)
+        if processed:
+            continue
+
         if reset is None or reset.all():
             # perform simple update, at a single level.
             # by contract, a reset signal at one level cannot
@@ -1064,3 +1074,12 @@ def _update_during_reset(
             # node.update(node.where(~reset, other=node_reset, pad=0))
             node.where(~reset, other=node_reset, out=node, pad=0)
     return tensordict
+
+
+def _repr_by_depth(key):
+    """Used to sort keys based on nesting level."""
+    key = unravel_key(key)
+    if isinstance(key, str):
+        return (0, key)
+    else:
+        return (len(key) - 1, ".".join(key))

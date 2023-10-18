@@ -187,36 +187,94 @@ one can simply call:
         9.81
 
 TorchRL uses a private ``"_reset"`` key to indicate to the environment which
-sub-environments should be reset.
-This allows to reset some but not all of the environments.
-Keep in mind that this is a private key, and it should only be used when coding
-specific environment features that are internal facing.
-The way an environment deals with the ``"_reset"`` keys is proper to it and
-designing an environment that behaves according to ``"_reset"`` inputs is the
-developer's responsibility. The following assumptions are made:
+component (sub-environments or agents) should be reset.
+This allows to reset some but not all of the components.
 
-- Each ``"_reset"`` is paired with a ``"done"`` (and/or ``"terminated"``,
-  ``"truncated"`` etc.). This means that the following structure is not
-  allowed: ``TensorDict({"done": done, "nested": {"_reset": reset}}, [])``.
-- A reset at one level precludes the presence of a ``"_reset"`` at lower
-  levels below it. For instance, this is not allowed:
-  ``TensorDict({"_reset": reset_main, "nested": {"_reset": reset_leaf}}, [])``
+The ``"_reset"`` key has two distinct functionalities:
+1. During a call to :meth:`~.EnvBase._reset`, the ``"_reset"`` key may or may
+   not be present in the input tensordict. TorchRL's convention is that the
+   absence of the ``"_reset"`` key at a given ``"done"`` level indicates
+   a total reset of that level (unless a ``"_reset"`` key was found at a level
+   above, see details below).
+   If it is present, it is expected that those entries and only those components
+   where the ``"_reset"`` entry is ``True`` (along key and shape dimension) will be reset.
+
+   The way an environment deals with the ``"_reset"`` keys in its :meth:`~.EnvBase._reset`
+   method is proper to its class.
+   Designing an environment that behaves according to ``"_reset"`` inputs is the
+   developer's responsibility, as TorchRL has no control over the inner logic
+   of :meth:`~.EnvBase._reset`. Nevertheless, the following point should be
+   kept in mind when desiging that method.
+
+2. After a call to :meth:`~.EnvBase._reset`, the output will be masked with the
+   ``"_reset"`` entries and the output of the previous :meth:`~.EnvBase.step`
+   will be written wherever the ``"_reset"`` was ``False``. In practice, this
+   means that if a ``"_reset"`` modifies data that isn't exposed by it, this
+   modification will be lost. After this masking operation, the ``"_reset"``
+   entries will be erased from the :meth:`~.EnvBase.reset` outputs.
+
+It must be pointed that ``"_reset"`` is a private key, and it should only be
+used when coding specific environment features that are internal facing.
+In other words, this should NOT be used outside of the library, and developers
+will keep the right to modify the logic of partial resets through ``"_reset"``
+setting without preliminary warranty, as long as they don't affect TorchRL
+internal tests.
+
+Finally, the following assumptions are made and should be kept in mind when
+designing reset functionalities:
+
+- Each ``"_reset"`` is paired with a ``"done"`` entry (+ ``"terminated"`` and,
+  possibly, ``"truncated"``). This means that the following structure is not
+  allowed: ``TensorDict({"done": done, "nested": {"_reset": reset}}, [])``, as
+  the ``"_reset"`` lives at a different nesting level than the ``"done"``.
+- A reset at one level does not preclude the presence of a ``"_reset"`` at lower
+  levels, but it annihilates its effects. The reason is simply that
+  whether the ``"_reset"`` at the root level corresponds to an ``all()``, ``any()``
+  or custom call to the nested ``"done"`` entries cannot be known in advance,
+  and it is explicitly assumed that the ``"_reset"`` at the root was placed
+  there to superseed the nested values (for an example, have a look at
+  :class:`~.PettingZooWrapper` implementation where each group has one or more
+  ``"done"`` entries associated which is aggregated at the root level with a
+  ``any`` or ``all`` logic depending on the task).
 - When calling :meth:`env.reset(tensordict)` with a partial ``"_reset"`` entry
   that will reset some but not all the done sub-environments, the input data
   should contain the data of the sub-environemtns that are __not__ being reset.
-  The reason for this constrain is that the output of the ``env._reset(data)``
-  can only be predicted for the entries that are reset. For the others, we
-  cannot know in advance if they will be meaningful or not. For instance,
-  one could perfectly just pad the values of the non-reset environments, in
-  which case the data will be meaningless and should be discarded.
-  :meth:`~torchrl.envs.EnvBase.reset` will merge the input tensordict with
-  the one resulting from reset and pad missing values with 0 (except for
-  ``done`` signals).
-  The other reason why this constrain is enforced is that usually,
-  setting ``"_reset"`` is achieved by internal methods that have access to
-  the data at the previous step, and use that data to call ``reset`` (after
-  passing it through :func:`~torchrl.envs.utils.step_mdp`). We can safely
-  assume that the data presented to ``reset`` is therefore complete.
+  The reason for this constrain lies in the fact that the output of the
+  ``env._reset(data)`` can only be predicted for the entries that are reset.
+  For the others, TorchRL cannot know in advance if they will be meaningful or
+  not. For instance, one could perfectly just pad the values of the non-reset
+  components, in which case the non-reset data will be meaningless and should
+  be discarded.
+
+Below, we give some examples of the expected effect that ``"_reset"`` keys will
+have on an environment returning zeros after reset:
+
+    >>> # single reset at the root
+    >>> data = TensorDict({"val": [1, 1], "_reset": [False, True]}, [])
+    >>> env.reset(data)
+    >>> print(data.get("val"))  # only the second value is 0
+    tensor([1, 0])
+    >>> # nested resets
+    >>> data = TensorDict({
+    ...     ("agent0", "val"): [1, 1], ("agent0", "_reset"): [False, True],
+    ...     ("agent1", "val"): [2, 2], ("agent1", "_reset"): [True, False],
+    ... }, [])
+    >>> env.reset(data)
+    >>> print(data.get(("agent0", "val")))  # only the second value is 0
+    tensor([1, 0])
+    >>> print(data.get(("agent1", "val")))  # only the second value is 0
+    tensor([0, 2])
+    >>> # nested resets are overridden by a "_reset" at the root
+    >>> data = TensorDict({
+    ...     "_reset": [True, True],
+    ...     ("agent0", "val"): [1, 1], ("agent0", "_reset"): [False, True],
+    ...     ("agent1", "val"): [2, 2], ("agent1", "_reset"): [True, False],
+    ... }, [])
+    >>> env.reset(data)
+    >>> print(data.get(("agent0", "val")))  # reset at the root overrides nested
+    tensor([0, 0])
+    >>> print(data.get(("agent1", "val")))  # reset at the root overrides nested
+    tensor([0, 0])
 
 .. code-block::
    :caption: Parallel environment reset

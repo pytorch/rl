@@ -1106,11 +1106,13 @@ class NestedCountingEnv(CountingEnv):
         nest_done: bool = True,
         nest_reward: bool = True,
         nested_dim: int = 3,
+        has_root_done: bool = False,
         **kwargs,
     ):
         super().__init__(max_steps=max_steps, start_val=start_val, **kwargs)
 
         self.nested_dim = nested_dim
+        self.has_root_done = has_root_done
 
         self.nested_obs_action = nest_obs_action
         self.nested_done = nest_done
@@ -1172,81 +1174,105 @@ class NestedCountingEnv(CountingEnv):
             done_spec = self.full_done_spec.unsqueeze(-1).expand(
                 *self.batch_size, self.nested_dim
             )
-            self.done_spec = CompositeSpec(
+            done_spec = CompositeSpec(
                 {"data": done_spec},
                 shape=self.batch_size,
             )
+            if self.has_root_done:
+                done_spec["done"] = DiscreteTensorSpec(
+                    2,
+                    shape=(
+                        *self.batch_size,
+                        1,
+                    ),
+                    dtype=torch.bool,
+                )
+            self.done_spec = done_spec
 
     def _reset(self, tensordict):
-        if (
-            self.nested_done
-            and tensordict is not None
-            and "_reset" in tensordict.keys()
-        ):
-            tensordict = tensordict.clone()
-            tensordict["_reset"] = tensordict["_reset"].sum(-2, dtype=torch.bool)
-        td = super()._reset(tensordict)
-        if self.nested_done:
-            for done_key in self.done_keys:
-                if isinstance(done_key, str):
-                    done_key = (done_key,)
-                td[done_key] = (
-                    td[done_key[-1]]
-                    .unsqueeze(-1)
-                    .expand(*self.batch_size, self.nested_dim, 1)
-                )
-                del td[done_key[-1]]
-        if self.nested_obs_action:
-            td["data", "states"] = (
-                td["observation"]
-                .unsqueeze(-1)
-                .expand(*self.batch_size, self.nested_dim, 1)
-            )
-            del td["observation"]
-        if "data" in td.keys():
-            td["data"].batch_size = (*self.batch_size, self.nested_dim)
-        return td
 
-    def _step(self, td):
-        if self.nested_obs_action:
-            td = td.clone()
-            td["data"].batch_size = self.batch_size
-            td[self.action_key] = td[self.action_key].max(-2)[0]
-        next_td = super()._step(td)
-        if self.nested_obs_action:
-            td[self.action_key] = (
-                td[self.action_key]
-                .unsqueeze(-1)
-                .expand(*self.batch_size, self.nested_dim, 1)
-            )
-        if "data" in td.keys():
-            td["data"].batch_size = (*self.batch_size, self.nested_dim)
-        td = next_td
+        # check that reset works as expected
+        if tensordict is not None:
+            if self.nested_done:
+                if not self.has_root_done:
+                    assert "_reset" not in tensordict.keys()
+            else:
+                assert ("data", "_reset") not in tensordict.keys(True)
+
+        tensordict_reset = super()._reset(tensordict)
+
         if self.nested_done:
             for done_key in self.done_keys:
                 if isinstance(done_key, str):
-                    done_key = (done_key,)
-                td[done_key] = (
-                    td[done_key[-1]]
-                    .unsqueeze(-1)
-                    .expand(*self.batch_size, self.nested_dim, 1)
+                    continue
+                if self.has_root_done:
+                    done = tensordict_reset.get(done_key[-1])
+                else:
+                    done = tensordict_reset.pop(done_key[-1])
+                tensordict_reset.set(
+                    done_key,
+                    (done.unsqueeze(-2).expand(*self.batch_size, self.nested_dim, 1)),
                 )
-                del td[done_key[-1]]
         if self.nested_obs_action:
-            td["data", "states"] = (
-                td["observation"]
+            obs = tensordict_reset.pop("observation")
+            tensordict_reset.set(
+                ("data", "states"),
+                (obs.unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)),
+            )
+        if "data" in tensordict_reset.keys():
+            tensordict_reset.get("data").batch_size = (
+                *self.batch_size,
+                self.nested_dim,
+            )
+        return tensordict_reset
+
+    def _step(self, tensordict):
+        if self.nested_obs_action:
+            tensordict = tensordict.clone()
+            tensordict["data"].batch_size = self.batch_size
+            tensordict[self.action_key] = tensordict[self.action_key].max(-2)[0]
+        next_tensordict = super()._step(tensordict)
+        if self.nested_obs_action:
+            tensordict[self.action_key] = (
+                tensordict[self.action_key]
                 .unsqueeze(-1)
                 .expand(*self.batch_size, self.nested_dim, 1)
             )
-            del td["observation"]
-        if self.nested_reward:
-            td[self.reward_key] = (
-                td["reward"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
+        if "data" in tensordict.keys():
+            tensordict["data"].batch_size = (*self.batch_size, self.nested_dim)
+        if self.nested_done:
+            for done_key in self.done_keys:
+                if isinstance(done_key, str):
+                    continue
+                if self.has_root_done:
+                    done = next_tensordict.get(done_key[-1])
+                else:
+                    done = next_tensordict.pop(done_key[-1])
+                next_tensordict.set(
+                    done_key,
+                    (done.unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)),
+                )
+        if self.nested_obs_action:
+            next_tensordict.set(
+                ("data", "states"),
+                (
+                    next_tensordict.pop("observation")
+                    .unsqueeze(-1)
+                    .expand(*self.batch_size, self.nested_dim, 1)
+                ),
             )
-            del td["reward"]
-        if "data" in td.keys():
-            td["data"].batch_size = (*self.batch_size, self.nested_dim)
-        return td
+        if self.nested_reward:
+            next_tensordict.set(
+                self.reward_key,
+                (
+                    next_tensordict.pop("reward")
+                    .unsqueeze(-1)
+                    .expand(*self.batch_size, self.nested_dim, 1)
+                ),
+            )
+        if "data" in next_tensordict.keys():
+            next_tensordict.get("data").batch_size = (*self.batch_size, self.nested_dim)
+        return next_tensordict
 
 
 class CountingBatchedEnv(EnvBase):

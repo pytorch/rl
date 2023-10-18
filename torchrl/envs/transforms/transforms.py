@@ -5032,7 +5032,6 @@ class StepCounter(Transform):
             self.done_keys,
             self.done_keys_groups,
         ):
-            step_count = tensordict.get(step_count_key, default=None)
             reset = tensordict.get(reset_key, default=None)
             if reset is None:
                 # get done status, just to inform the reset shape, dtype and device
@@ -5045,6 +5044,8 @@ class StepCounter(Transform):
                     # we fall back on the spec
                     done = self.parent.output_spec["full_done_spec", entry_name].zero()
                 reset = torch.ones_like(done)
+
+            step_count = tensordict.get(step_count_key, default=None)
             if step_count is None:
                 step_count = self.container.observation_spec[step_count_key].zero()
 
