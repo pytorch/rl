@@ -871,14 +871,18 @@ but got an object of type {type(transform)}."""
             self.__dict__["_output_spec"] = None
             self.__dict__["_cache_in_keys"] = None
 
-    def to(self, device: DEVICE_TYPING) -> TransformedEnv:
-        self.base_env.to(device)
-        self.transform = self.transform.to(device)
+    def to(self, *args, **kwargs) -> TransformedEnv:
+        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
+            *args, **kwargs
+        )
+        if device is not None:
+            self.base_env.to(device)
+            self.transform = self.transform.to(device)
 
-        if self.cache_specs:
-            self.__dict__["_input_spec"] = None
-            self.__dict__["_output_spec"] = None
-        return self
+            if self.cache_specs:
+                self.__dict__["_input_spec"] = None
+                self.__dict__["_output_spec"] = None
+        return super().to(*args, **kwargs)
 
     def __setattr__(self, key, value):
         propobj = getattr(self.__class__, key, None)
@@ -4085,7 +4089,7 @@ class TensorDictPrimer(Transform):
                     "as kwargs."
                 )
             kwargs = primers
-        self.primers = kwargs
+        self.primers = CompositeSpec(kwargs)
         self.random = random
         self.default_value = default_value
         self.reset_key = reset_key
@@ -4130,11 +4134,15 @@ class TensorDictPrimer(Transform):
             return
         self._device = torch.device(value)
 
-    def to(self, dtype_or_device):
-        if not isinstance(dtype_or_device, torch.dtype):
-            self.device = dtype_or_device
+    def to(self, *args, **kwargs):
+        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
+            *args, **kwargs
+        )
+        if device is not None:
+            self.device = device
             self.empty_cache()
-        return super().to(dtype_or_device)
+            self.primers = self.primers.to(device)
+        return super().to(*args, **kwargs)
 
     def transform_observation_spec(
         self, observation_spec: CompositeSpec
