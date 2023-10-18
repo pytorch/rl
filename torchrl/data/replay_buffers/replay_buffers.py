@@ -718,12 +718,13 @@ class TensorDictReplayBuffer(ReplayBuffer):
             data_add = data
 
         index = super()._add(data_add)
-        if index and is_tensor_collection(data_add):
-            data_add.set("index", index)
+        if index is not None:
+            if is_tensor_collection(data_add):
+                data_add.set("index", index)
 
-        # priority = self._get_priority(data)
-        # if priority:
-        self.update_tensordict_priority(data_add)
+            # priority = self._get_priority(data)
+            # if priority:
+            self.update_tensordict_priority(data_add)
         return index
 
     def extend(self, tensordicts: TensorDictBase) -> torch.Tensor:
