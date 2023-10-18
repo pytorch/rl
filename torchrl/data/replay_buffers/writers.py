@@ -192,11 +192,12 @@ class TensorDictMaxValueWriter(Writer):
 
         # Replace the data in the storage all at once
         keys, values = zip(*data_to_replace.items())
+        keys, values = list(keys), list(values)
         if len(keys) > 0:
             index = data.get("index")
-            index[values] = torch.tensor(keys)
+            index[values] = torch.tensor(keys, dtype=index.dtype)
             data.set("index", index)
-            self._storage[list(keys)] = data[values]
+            self._storage[keys] = data[values]
 
     def _empty(self) -> None:
         self._cursor = 0
