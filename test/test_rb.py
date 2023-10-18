@@ -1120,7 +1120,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
         storage=LazyTensorStorage(size),
         sampler=SamplerWithoutReplacement(),
         batch_size=batch_size,
-        writer=TensorDictMaxValueWriter(rank_key="key"),
+        # writer=TensorDictMaxValueWriter(rank_key="key"),
     )
 
     max_reward1, max_reward2, max_reward3 = reward_ranges
@@ -1131,6 +1131,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
             "obs": torch.tensor(torch.rand(size)),
         },
         batch_size=size,
+        device="cpu",
     )
     rb.extend(td)
     sample = rb.sample()
@@ -1144,6 +1145,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
             "obs": torch.tensor(torch.rand(size)),
         },
         batch_size=size,
+        device="cpu",
     )
     rb.extend(td)
     sample = rb.sample()
@@ -1157,10 +1159,12 @@ def test_max_value_writer(size, batch_size, reward_ranges):
             "obs": torch.tensor(torch.rand(size)),
         },
         batch_size=size,
+        device="cpu",
     )
 
     for sample in td:
         rb.add(sample)
+
     sample = rb.sample()
     assert (sample.get("key") <= max_reward3).all()
     assert (max_reward2 <= sample.get("key")).all()

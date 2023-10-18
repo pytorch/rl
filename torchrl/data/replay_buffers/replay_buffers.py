@@ -718,7 +718,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
             data_add = data
 
         index = super()._add(data_add)
-        if is_tensor_collection(data_add):
+        if index and is_tensor_collection(data_add):
             data_add.set("index", index)
 
         # priority = self._get_priority(data)
