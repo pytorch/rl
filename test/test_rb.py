@@ -1120,7 +1120,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
         storage=LazyTensorStorage(size),
         sampler=SamplerWithoutReplacement(),
         batch_size=batch_size,
-        # writer=TensorDictMaxValueWriter(rank_key="key"),
+        writer=TensorDictMaxValueWriter(rank_key="key"),
     )
 
     max_reward1, max_reward2, max_reward3 = reward_ranges

@@ -153,7 +153,7 @@ class TensorDictMaxValueWriter(Writer):
         ret = None
         rank_data = data.get(("_data", self._rank_key))
 
-        # Sum the rank key, in case it is a whole trajectory
+        # If time dimension, sum along it.
         rank_data = rank_data.sum(-1).item()
 
         if rank_data is None:
