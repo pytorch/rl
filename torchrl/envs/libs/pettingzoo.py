@@ -607,30 +607,52 @@ class PettingZooWrapper(_EnvWrapper):
                     )
 
         # set done values
-        done = self._aggregate_done(tensordict_out, use_any=self.parallel)
+        done, terminated, truncated = self._aggregate_done(
+            tensordict_out, use_any=self.parallel
+        )
 
         tensordict_out.set("done", done)
-        tensordict_out.set("terminated", done)
-        tensordict_out.set("truncated", torch.zeros_like(done))
+        tensordict_out.set("terminated", terminated)
+        tensordict_out.set("truncated", truncated)
         return tensordict_out
 
     def _aggregate_done(self, tensordict_out, use_any):
         done = False
-        for done_key in self.full_done_spec.keys(True, True):
-            if isinstance(done_key, tuple):
+        truncated = False
+        terminated = False
+        for key in self.full_done_spec.keys(True, True):
+            if isinstance(key, tuple):
                 if use_any:
-                    done = done | tensordict_out.get(done_key).any()
+                    if key[-1] == "done":
+                        done = done | tensordict_out.get(key).any()
+                    if key[-1] == "terminated":
+                        terminated = (
+                            terminated | tensordict_out.get(key).any()
+                        )
+                    if key[-1] == "truncated":
+                        truncated = truncated | tensordict_out.get(key).any()
                     if done:
                         break
                 else:
-                    done = done & tensordict_out.get(done_key).all()
+                    if key[-1] == "done":
+                        done = done & tensordict_out.get(key).all()
+                    if key[-1] == "terminated":
+                        terminated = (
+                            terminated & tensordict_out.get(key).all()
+                        )
+                    if key[-1] == "truncated":
+                        truncated = truncated & tensordict_out.get(key).all()
                     if not done:
                         break
         else:
             raise RuntimeError(
                 f"Could not find done values in tensordict {tensordict_out}."
             )
-        return torch.tensor([done], device=self.device)
+        return (
+            torch.tensor([done], device=self.device),
+            torch.tensor([terminated], device=self.device),
+            torch.tensor([truncated], device=self.device),
+        )
 
     def _step_parallel(
         self,

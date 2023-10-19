@@ -22,13 +22,14 @@ from torchrl.envs import (
     ObservationNorm,
     ParallelEnv,
     RandomCropTensorDict,
+    RenameTransform,
     Reward2GoTransform,
     RewardScaling,
     RewardSum,
     TargetReturn,
     TensorDictPrimer,
     TransformedEnv,
-    UnsqueezeTransform, RenameTransform,
+    UnsqueezeTransform,
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.gym import set_gym_backend
@@ -205,12 +206,22 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         ("next", "info"),
     )
     rename = RenameTransform(
-        in_keys=["return_to_go", "action", "observation",
-                 ("next", "return_to_go"), ("next", "action"),
-                 ("next", "observation")],
-        out_keys=["return_to_go_cat", "action_cat", "observation_cat",
-                 ("next", "return_to_go_cat"), ("next", "action_cat"),
-                 ("next", "observation_cat")],
+        in_keys=[
+            "return_to_go",
+            "action",
+            "observation",
+            ("next", "return_to_go"),
+            ("next", "action"),
+            ("next", "observation"),
+        ],
+        out_keys=[
+            "return_to_go_cat",
+            "action_cat",
+            "observation_cat",
+            ("next", "return_to_go_cat"),
+            ("next", "action_cat"),
+            ("next", "observation_cat"),
+        ],
     )
 
     transforms = Compose(

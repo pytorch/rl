@@ -1528,11 +1528,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                         # we set the done val to tensordict, to make sure that
                         # _update_during_reset does not pad the value
                         tensordict.set(done_key, done_val)
-            elif self._allow_done_after_reset:
+            elif not self._allow_done_after_reset:
                 for done_key in done_key_group:
                     if tensordict_reset.get(done_key).any():
                         raise RuntimeError(
-                            f"Env done entry '{done_key}' was (partially) True after a call to reset(). This is not allowed."
+                            f"The done entry '{done_key}' was (partially) True after a call to reset() in env {self}."
                         )
 
     def numel(self) -> int:
@@ -1868,7 +1868,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 tensordict_ = tensordict_.to(policy_device, non_blocking=True)
             tensordict_ = policy(tensordict_)
             if auto_cast_to_device:
-                tensordict_ = tensordict.to(env_device, non_blocking=True)
+                tensordict_ = tensordict_.to(env_device, non_blocking=True)
             tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
             tensordicts.append(tensordict)
             if i == max_steps - 1:

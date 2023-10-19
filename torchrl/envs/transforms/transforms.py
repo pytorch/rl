@@ -565,7 +565,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         cache_specs: bool = True,
         **kwargs,
     ):
-        self._transform=None
+        self._transform = None
         device = kwargs.pop("device", None)
         if device is not None:
             env = env.to(device)
@@ -626,7 +626,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
 
     @property
     def transform(self) -> Transform:
-        return getattr(self, '_transform', None)
+        return getattr(self, "_transform", None)
 
     @transform.setter
     def transform(self, transform: Transform):
@@ -635,12 +635,14 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
                 f"""Expected a transform of type torchrl.envs.transforms.Transform,
 but got an object of type {type(transform)}."""
             )
-        prev_transform = getattr(self, '_transform', None)
+        prev_transform = getattr(self, "_transform", None)
         if prev_transform is not None:
             prev_transform.empty_cache()
             prev_transform.reset_parent()
         if not isinstance(transform, Transform):
-            raise ValueError(f"Transforms passed to {type(self)} must be instances of a `torch.envs.Transform` subclass. Got {type(transform)}.")
+            raise ValueError(
+                f"Transforms passed to {type(self)} must be instances of a `torch.envs.Transform` subclass. Got {type(transform)}."
+            )
         transform = transform.to(self.device)
         transform.set_container(self)
         transform.eval()

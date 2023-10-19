@@ -2258,6 +2258,36 @@ def test_run_type_checks():
         check_env_specs(env)
 
 
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device found.")
+@pytest.mark.parametrize("break_when_any_done", [True, False])
+def test_auto_cast_to_device(break_when_any_done):
+    env = ContinuousActionVecMockEnv(device="cpu")
+    policy = Actor(
+        nn.Linear(
+            env.observation_spec["observation"].shape[-1],
+            env.action_spec.shape[-1],
+            device="cuda:0",
+        ),
+        in_keys=["observation"],
+    )
+    with pytest.raises(RuntimeError):
+        env.rollout(10, policy)
+    torch.manual_seed(0)
+    env.seed(0)
+    rollout0 = env.rollout(
+        100, policy, auto_cast_to_device=True, break_when_any_done=break_when_any_done
+    )
+    torch.manual_seed(0)
+    env.seed(0)
+    rollout1 = env.rollout(
+        100,
+        policy.cpu(),
+        auto_cast_to_device=True,
+        break_when_any_done=break_when_any_done,
+    )
+    assert_allclose_td(rollout0, rollout1)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
