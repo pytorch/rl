@@ -300,8 +300,8 @@ class TQCLoss(LossModule):
         # Q-loss
         with torch.no_grad():
             # get policy action
-            td_next = self.actor(td_next, params=self.actor_params)
-            td_next = self.critic(td_next, params=self.target_critic_params)
+            self.actor(td_next, params=self.actor_params)
+            self.critic(td_next, params=self.target_critic_params)
 
             next_log_pi = td_next.get("sample_log_prob")
             next_log_pi = torch.unsqueeze(next_log_pi, dim=-1)
@@ -314,18 +314,16 @@ class TQCLoss(LossModule):
             # compute target
             target = reward + not_done * self.gamma * (sorted_z_part - alpha * next_log_pi)
 
-        td_cur = tensordict
-        td_cur = self.critic(td_cur, params=self.critic_params)
-        cur_z = td_cur.get("state_action_value")
+        self.critic(tensordict, params=self.critic_params)
+        cur_z = tensordict.get("state_action_value")
         critic_loss = quantile_huber_loss_f(cur_z, target)
 
         # --- Policy and alpha loss ---
-        td_new = tensordict
-        td_new = self.actor(td_new, params=self.actor_params)
-        td_new = self.critic(td_new, params=self.critic_params)
-        new_log_pi = td_new.get("sample_log_prob")
+        self.actor(tensordict, params=self.actor_params)
+        self.critic(tensordict, params=self.critic_params)
+        new_log_pi = tensordict.get("sample_log_prob")
         alpha_loss = -self.log_alpha * (new_log_pi + self.target_entropy).detach().mean()
-        actor_loss = (alpha * new_log_pi - td_new.get("state_action_value").mean(-1).mean(-1, keepdim=True)).mean()
+        actor_loss = (alpha * new_log_pi - tensordict.get("state_action_value").mean(-1).mean(-1, keepdim=True)).mean()
 
         # --- Entropy ---
         with set_exploration_type(ExplorationType.RANDOM):
