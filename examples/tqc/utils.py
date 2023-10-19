@@ -325,7 +325,7 @@ class TQCLoss(LossModule):
         td_new = self.critic(td_new, params=self.critic_params)
         new_log_pi = td_new.get("sample_log_prob")
         alpha_loss = -self.log_alpha * (new_log_pi + self.target_entropy).detach().mean()
-        actor_loss = (alpha * new_log_pi - td_new.get("state_action_value").mean(2).mean(1, keepdim=True)).mean()
+        actor_loss = (alpha * new_log_pi - td_new.get("state_action_value").mean(-1).mean(-1, keepdim=True)).mean()
 
         # --- Entropy ---
         with set_exploration_type(ExplorationType.RANDOM):
