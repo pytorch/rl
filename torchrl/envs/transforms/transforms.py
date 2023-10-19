@@ -5757,7 +5757,7 @@ class InitTracker(Transform):
             if isinstance(done_key, str):
                 init_key = self.init_key
             else:
-                init_key = unravel_key((*done_key[:-1], self.init_key))
+                init_key = unravel_key((done_key[:-1], self.init_key))
             init_keys.append(init_key)
         self._init_keys = init_keys
         return self._init_keys
@@ -5802,7 +5802,12 @@ class InitTracker(Transform):
                     ),
                 )
             else:
-                tensordict_reset.set(init_key, _reset.clone())
+                init_val = _reset.clone()
+                parent_td = tensordict_reset if isinstance(init_key, str) else tensordict_reset.get(init_key[:-1])
+                if init_val.ndim == parent_td.ndim:
+                    # unsqueeze, to match the done shape
+                    init_val = init_val.unsqueeze(-1)
+                tensordict_reset.set(init_key, init_val)
         return tensordict_reset
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
