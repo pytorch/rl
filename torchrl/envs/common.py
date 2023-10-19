@@ -1962,6 +1962,28 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         )
 
     @property
+    def _filtered_reset_keys(self):
+        """Returns the only the effective reset keys, discarding nested resets if they're not being used."""
+        reset_keys = self.reset_keys
+        result = []
+
+        def _root(key):
+            if isinstance(key, str):
+                return ()
+            return key[:-1]
+
+        roots = []
+        for reset_key in reset_keys:
+            cur_root = _root(reset_key)
+            for root in roots:
+                if cur_root[: len(root)] == root:
+                    break
+            else:
+                roots.append(cur_root)
+                result.append(reset_key)
+        return result
+
+    @property
     def done_keys_groups(self):
         """A list of done keys, grouped as the reset keys.
 

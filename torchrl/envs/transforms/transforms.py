@@ -4935,11 +4935,11 @@ class StepCounter(Transform):
         if truncated_keys is None:
             # make the default truncated keys
             truncated_keys = []
-            for (done_key, *_) in self.parent.done_keys_groups:
-                if isinstance(done_key, str):
+            for reset_key in self.parent._filtered_reset_keys:
+                if isinstance(reset_key, str):
                     key = self.truncated_key
                 else:
-                    key = (*done_key[:-1], self.truncated_key)
+                    key = (*reset_key[:-1], self.truncated_key)
                 truncated_keys.append(key)
         self._truncated_keys = truncated_keys
         return truncated_keys
@@ -4950,11 +4950,11 @@ class StepCounter(Transform):
         if done_keys is None:
             # make the default done keys
             done_keys = []
-            for (done_key, *_) in self.parent.done_keys_groups:
-                if isinstance(done_key, str):
+            for reset_key in self.parent._filtered_reset_keys:
+                if isinstance(reset_key, str):
                     key = "done"
                 else:
-                    key = (*done_key[:-1], "done")
+                    key = (*reset_key[:-1], "done")
                 done_keys.append(key)
         self.__dict__["_done_keys"] = done_keys
         return done_keys
@@ -4965,11 +4965,11 @@ class StepCounter(Transform):
         if done_keys is None:
             # make the default done keys
             done_keys = []
-            for (done_key, *_) in self.parent.done_keys_groups:
-                if isinstance(done_key, str):
+            for reset_key in self.parent._filtered_reset_keys:
+                if isinstance(reset_key, str):
                     key = "done"
                 else:
-                    key = (*done_key[:-1], "done")
+                    key = (*reset_key[:-1], "done")
                 done_keys.append(key)
         self.__dict__["_done_keys"] = done_keys
         return done_keys
@@ -4980,11 +4980,11 @@ class StepCounter(Transform):
         if terminated_keys is None:
             # make the default terminated keys
             terminated_keys = []
-            for (terminated_key, *_) in self.parent.done_keys_groups:
-                if isinstance(terminated_key, str):
+            for reset_key in self.parent._filtered_reset_keys:
+                if isinstance(reset_key, str):
                     key = "terminated"
                 else:
-                    key = (*terminated_key[:-1], "terminated")
+                    key = (*reset_key[:-1], "terminated")
                 terminated_keys.append(key)
         self.__dict__["_terminated_keys"] = terminated_keys
         return terminated_keys
@@ -4995,11 +4995,11 @@ class StepCounter(Transform):
         if step_count_keys is None:
             # make the default step_count keys
             step_count_keys = []
-            for (done_key, *_) in self.parent.done_keys_groups:
-                if isinstance(done_key, str):
+            for reset_key in self.parent._filtered_reset_keys:
+                if isinstance(reset_key, str):
                     key = self.step_count_key
                 else:
-                    key = (*done_key[:-1], self.step_count_key)
+                    key = (*reset_key[:-1], self.step_count_key)
                 step_count_keys.append(key)
         self.__dict__["_step_count_keys"] = step_count_keys
         return step_count_keys
@@ -5007,15 +5007,9 @@ class StepCounter(Transform):
     @property
     def reset_keys(self):
         if self.parent is not None:
-            return self.parent.reset_keys
+            return self.parent._filtered_reset_keys
         # fallback on default "_reset"
         return ["_reset"]
-
-    @property
-    def done_keys_groups(self):
-        if self.parent is not None:
-            return self.parent.done_keys_groups
-        return [["done", "truncated"]]
 
     @property
     def full_done_spec(self):
@@ -5025,17 +5019,17 @@ class StepCounter(Transform):
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         # get reset signal
-        for step_count_key, truncated_key, reset_key, done_key, done_list_sorted in zip(
+        for step_count_key, truncated_key, terminated_key, reset_key, done_key in zip(
             self.step_count_keys,
             self.truncated_keys,
+            self.terminated_keys,
             self.reset_keys,
             self.done_keys,
-            self.done_keys_groups,
         ):
             reset = tensordict.get(reset_key, default=None)
             if reset is None:
                 # get done status, just to inform the reset shape, dtype and device
-                for entry_name in done_list_sorted:
+                for entry_name in (terminated_key, truncated_key, done_key):
                     done = tensordict.get(entry_name, default=None)
                     if done is not None:
                         break
@@ -5753,23 +5747,22 @@ class InitTracker(Transform):
             raise NotImplementedError(
                 FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
             )
-        for done_key, *_ in self.parent.done_keys_groups:
-            if isinstance(done_key, str):
+        for reset_key in self.parent._filtered_reset_keys:
+            if isinstance(reset_key, str):
                 init_key = self.init_key
             else:
-                init_key = unravel_key((done_key[:-1], self.init_key))
+                init_key = unravel_key((reset_key[:-1], self.init_key))
             init_keys.append(init_key)
         self._init_keys = init_keys
         return self._init_keys
 
     @property
     def reset_keys(self):
-        return self.parent.reset_keys
+        return self.parent._filtered_reset_keys
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for init_key, (done_key, *_) in zip(
-            self.init_keys, self.parent.done_keys_groups
-        ):
+        for init_key in self.init_keys:
+            done_key = _replace_last(init_key, "done")
             if init_key not in tensordict.keys(True, True):
                 device = tensordict.device
                 if device is None:
@@ -5787,11 +5780,10 @@ class InitTracker(Transform):
         device = tensordict.device
         if device is None:
             device = torch.device("cpu")
-        for reset_key, init_key, (done_key, *_) in zip(
-            self.reset_keys, self.init_keys, self.parent.done_keys_groups
-        ):
+        for reset_key, init_key in zip(self.reset_keys, self.init_keys):
             _reset = tensordict.get(reset_key, None)
             if _reset is None:
+                done_key = _replace_last(init_key, "done")
                 shape = self.parent.full_done_spec[done_key].shape
                 tensordict_reset.set(
                     init_key,
@@ -5803,7 +5795,11 @@ class InitTracker(Transform):
                 )
             else:
                 init_val = _reset.clone()
-                parent_td = tensordict_reset if isinstance(init_key, str) else tensordict_reset.get(init_key[:-1])
+                parent_td = (
+                    tensordict_reset
+                    if isinstance(init_key, str)
+                    else tensordict_reset.get(init_key[:-1])
+                )
                 if init_val.ndim == parent_td.ndim:
                     # unsqueeze, to match the done shape
                     init_val = init_val.unsqueeze(-1)

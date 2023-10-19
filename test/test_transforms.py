@@ -1732,6 +1732,20 @@ class TestStepCounter(TransformBase):
         check_env_specs(transformed_env)
         transformed_env.close()
 
+    def test_stepcounter_ignore(self):
+        # checks that step_count_keys respect the convention that nested dones should
+        # be ignored if there is a done in a root td
+        env = TransformedEnv(
+            NestedCountingEnv(has_root_done=True, nest_done=True), StepCounter()
+        )
+        assert len(env.transform.step_count_keys) == 1
+        assert env.transform.step_count_keys[0] == "step_count"
+        env = TransformedEnv(
+            NestedCountingEnv(has_root_done=False, nest_done=True), StepCounter()
+        )
+        assert len(env.transform.step_count_keys) == 1
+        assert env.transform.step_count_keys[0] == ("data", "step_count")
+
 
 class TestCatTensors(TransformBase):
     @pytest.mark.parametrize("append", [True, False])
@@ -8582,6 +8596,20 @@ class TestInitTracker(TransformBase):
 
         td_reset = transformed_env.reset(td_reset)
         assert (td_reset[init_key] == reset).all()
+
+    def test_inittracker_ignore(self):
+        # checks that init keys respect the convention that nested dones should
+        # be ignored if there is a done in a root td
+        env = TransformedEnv(
+            NestedCountingEnv(has_root_done=True, nest_done=True), InitTracker()
+        )
+        assert len(env.transform.init_keys) == 1
+        assert env.transform.init_keys[0] == "is_init"
+        env = TransformedEnv(
+            NestedCountingEnv(has_root_done=False, nest_done=True), InitTracker()
+        )
+        assert len(env.transform.init_keys) == 1
+        assert env.transform.init_keys[0] == ("data", "is_init")
 
 
 class TestKLRewardTransform(TransformBase):
