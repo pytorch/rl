@@ -28,7 +28,7 @@ from torchrl.envs import (
     TargetReturn,
     TensorDictPrimer,
     TransformedEnv,
-    UnsqueezeTransform,
+    UnsqueezeTransform, RenameTransform,
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.gym import set_gym_backend
@@ -193,7 +193,6 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         standard_normal=False,
     )
     crop_seq = RandomCropTensorDict(sub_seq_len=rb_cfg.stacked_frames, sample_dim=-1)
-
     d2f = DoubleToFloat()
     exclude = ExcludeTransform(
         "next_observations",
@@ -205,6 +204,14 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         ("next", "observation"),
         ("next", "info"),
     )
+    rename = RenameTransform(
+        in_keys=["return_to_go", "action", "observation",
+                 ("next", "return_to_go"), ("next", "action"),
+                 ("next", "observation")],
+        out_keys=["return_to_go_cat", "action_cat", "observation_cat",
+                 ("next", "return_to_go_cat"), ("next", "action_cat"),
+                 ("next", "observation_cat")],
+    )
 
     transforms = Compose(
         r2g,
@@ -212,6 +219,7 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         reward_scale,
         d2f,
         exclude,
+        rename,
     )
     data = D4RLExperienceReplay(
         rb_cfg.dataset,

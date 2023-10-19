@@ -2082,7 +2082,7 @@ class TestTerminatedOrTruncated:
     def test_terminated_or_truncated_nospec(self):
         data = TensorDict({"done": torch.zeros(2, 1, dtype=torch.bool)}, [2])
         assert not _terminated_or_truncated(data, write_full_false=True)
-        assert data["_reset"].shape == (2, 1)
+        assert data["_reset"].shape == (2,)
         assert not _terminated_or_truncated(data, write_full_false=False)
         assert data.get("_reset", None) is None
 
@@ -2094,8 +2094,8 @@ class TestTerminatedOrTruncated:
             [2],
         )
         assert _terminated_or_truncated(data)
-        assert data["_reset"].shape == (2, 1)
-        assert data["nested", "_reset"].shape == (2, 1)
+        assert data["_reset"].shape == (2,)
+        assert data["nested", "_reset"].shape == (2,)
 
         data = TensorDict(
             {
@@ -2108,8 +2108,8 @@ class TestTerminatedOrTruncated:
         assert data.get("_reset", None) is None
         assert data.get(("nested", "_reset"), None) is None
         assert not _terminated_or_truncated(data, write_full_false=True)
-        assert data["_reset"].shape == (2, 1)
-        assert data["nested", "_reset"].shape == (2, 1)
+        assert data["_reset"].shape == (2,)
+        assert data["nested", "_reset"].shape == (2,)
 
         data = TensorDict(
             {
@@ -2120,8 +2120,8 @@ class TestTerminatedOrTruncated:
             [2],
         )
         assert _terminated_or_truncated(data, write_full_false=False)
-        assert data["_reset"].shape == (2, 1)
-        assert data["nested", "_reset"].shape == (2, 1)
+        assert data["_reset"].shape == (2,)
+        assert data["nested", "_reset"].shape == (2,)
         assert data["_reset"].all()
         assert not data["nested", "_reset"].any()
 
@@ -2136,7 +2136,7 @@ class TestTerminatedOrTruncated:
         assert not _terminated_or_truncated(
             data, write_full_false=True, full_done_spec=spec
         )
-        assert data["_reset"].shape == (2, 1)
+        assert data["_reset"].shape == (2,)
         assert not _terminated_or_truncated(
             data, write_full_false=False, full_done_spec=spec
         )
@@ -2161,8 +2161,8 @@ class TestTerminatedOrTruncated:
             [2],
         )
         assert _terminated_or_truncated(data, full_done_spec=spec)
-        assert data["_reset"].shape == (2, 1)
-        assert data["nested", "_reset"].shape == (2, 1)
+        assert data["_reset"].shape == (2,)
+        assert data["nested", "_reset"].shape == (2,)
 
         data = TensorDict(
             {
@@ -2179,8 +2179,8 @@ class TestTerminatedOrTruncated:
         assert not _terminated_or_truncated(
             data, write_full_false=True, full_done_spec=spec
         )
-        assert data["_reset"].shape == (2, 1)
-        assert data["nested", "_reset"].shape == (2, 1)
+        assert data["_reset"].shape == (2,)
+        assert data["nested", "_reset"].shape == (2,)
 
         spec = CompositeSpec(
             {
@@ -2203,8 +2203,8 @@ class TestTerminatedOrTruncated:
         assert _terminated_or_truncated(
             data, write_full_false=False, full_done_spec=spec
         )
-        assert data["_reset"].shape == (2, 1)
-        assert data["nested", "_reset"].shape == (2, 1)
+        assert data["_reset"].shape == (2,)
+        assert data["nested", "_reset"].shape == (2,)
         assert data["_reset"].all()
         assert not data["nested", "_reset"].any()
 

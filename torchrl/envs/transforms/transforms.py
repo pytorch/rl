@@ -522,6 +522,7 @@ class Transform(nn.Module):
         return self._missing_tolerance
 
     def to(self, *args, **kwargs):
+        # remove the parent, because it could have the wrong device associated
         self.empty_cache()
         return super().to(*args, **kwargs)
 
@@ -556,6 +557,8 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
 
     """
 
+    _transform: Transform
+
     def __init__(
         self,
         env: EnvBase,
@@ -563,7 +566,6 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         cache_specs: bool = True,
         **kwargs,
     ):
-        self._transform = None
         device = kwargs.pop("device", None)
         if device is not None:
             env = env.to(device)
@@ -594,8 +596,6 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             self._set_env(env, device)
             if transform is None:
                 transform = Compose()
-            else:
-                transform = transform.to(device)
         self.transform = transform
 
         self._last_obs = None
@@ -635,13 +635,14 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
                 f"""Expected a transform of type torchrl.envs.transforms.Transform,
 but got an object of type {type(transform)}."""
             )
-        prev_transform = self.transform
+        prev_transform = self.__dict__.get('_transform', None)
         if prev_transform is not None:
             prev_transform.empty_cache()
-            prev_transform.__dict__["_container"] = None
+            prev_transform.reset_parent()
+        transform = transform.to(self.device)
         transform.set_container(self)
         transform.eval()
-        self._transform = transform.to(self.device)
+        self._transform = transform
 
     @property
     def device(self) -> bool:
@@ -808,7 +809,6 @@ but got an object of type {type(transform)}."""
     def empty_cache(self):
         self.__dict__["_output_spec"] = None
         self.__dict__["_input_spec"] = None
-        self.__dict__["_cache_in_keys"] = None
 
     def append_transform(self, transform: Transform) -> None:
         self._erase_metadata()
@@ -868,19 +868,15 @@ but got an object of type {type(transform)}."""
         if self.cache_specs:
             self.__dict__["_input_spec"] = None
             self.__dict__["_output_spec"] = None
-            self.__dict__["_cache_in_keys"] = None
 
     def to(self, *args, **kwargs) -> TransformedEnv:
         device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
             *args, **kwargs
         )
         if device is not None:
-            self.base_env.to(device)
-            self.transform = self.transform.to(device)
-
-            if self.cache_specs:
-                self.__dict__["_input_spec"] = None
-                self.__dict__["_output_spec"] = None
+            self.base_env = self.base_env.to(device)
+            self._transform = self._transform.to(device)
+            self._erase_metadata()
         return super().to(*args, **kwargs)
 
     def __setattr__(self, key, value):
