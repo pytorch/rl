@@ -157,8 +157,6 @@ def make_collector(cfg, policy):
     exclude_target_return = ExcludeTransform(
         "return_to_go",
         ("next", "return_to_go"),
-        "return_to_go_single",
-        ("next", "return_to_go_single"),
         ("next", "action"),
         ("next", "observation"),
         "scale",
