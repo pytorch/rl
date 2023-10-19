@@ -43,7 +43,7 @@ network:
   activation: relu
   default_policy_scale: 1.0
   scale_lb: 0.1
-  device: cuda
+  device: cpu  # TO-DO: change back to CUDA
 
 # logging
 logger:
