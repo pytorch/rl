@@ -1715,6 +1715,7 @@ class MultiKeyCountingEnv(EnvBase):
                 ),
                 shape=(self.nested_dim_2,),
             ),
+            # done at the root always prevail
             done=DiscreteTensorSpec(
                 n=2,
                 shape=(1,),
@@ -1736,17 +1737,10 @@ class MultiKeyCountingEnv(EnvBase):
         if tensordict is not None:
             _reset = tensordict.get("_reset", None)
             if _reset is not None:
-                self.count[_reset.squeeze(-1)] = self.start_val
-
-            _reset_nested_1 = tensordict.get(("nested_1", "_reset"), None)
-            if _reset_nested_1 is not None:
-                self.count_nested_1[_reset_nested_1.squeeze(-1)] = self.start_val
-
-            _reset_nested_2 = tensordict.get(("nested_2", "_reset"), None)
-            if _reset_nested_2 is not None:
-                self.count_nested_2[_reset_nested_2.squeeze(-1)] = self.start_val
-
-            if _reset is None and _reset_nested_1 is None and _reset_nested_2 is None:
+                self.count[_reset] = self.start_val
+                self.count_nested_1[_reset] = self.start_val
+                self.count_nested_2[_reset] = self.start_val
+            else:
                 reset_all = True
 
         if tensordict is None or reset_all:
