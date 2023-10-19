@@ -2273,16 +2273,16 @@ def test_auto_cast_to_device(break_when_any_done):
     with pytest.raises(RuntimeError):
         env.rollout(10, policy)
     torch.manual_seed(0)
-    env.seed(0)
+    env.set_seed(0)
     rollout0 = env.rollout(
         100, policy, auto_cast_to_device=True, break_when_any_done=break_when_any_done
     )
     torch.manual_seed(0)
-    env.seed(0)
+    env.set_seed(0)
     rollout1 = env.rollout(
         100,
         policy.cpu(),
-        auto_cast_to_device=True,
+        auto_cast_to_device=False,
         break_when_any_done=break_when_any_done,
     )
     assert_allclose_td(rollout0, rollout1)

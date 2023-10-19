@@ -626,9 +626,7 @@ class PettingZooWrapper(_EnvWrapper):
                     if key[-1] == "done":
                         done = done | tensordict_out.get(key).any()
                     if key[-1] == "terminated":
-                        terminated = (
-                            terminated | tensordict_out.get(key).any()
-                        )
+                        terminated = terminated | tensordict_out.get(key).any()
                     if key[-1] == "truncated":
                         truncated = truncated | tensordict_out.get(key).any()
                     if done:
@@ -637,9 +635,7 @@ class PettingZooWrapper(_EnvWrapper):
                     if key[-1] == "done":
                         done = done & tensordict_out.get(key).all()
                     if key[-1] == "terminated":
-                        terminated = (
-                            terminated & tensordict_out.get(key).all()
-                        )
+                        terminated = terminated & tensordict_out.get(key).all()
                     if key[-1] == "truncated":
                         truncated = truncated & tensordict_out.get(key).all()
                     if not done:

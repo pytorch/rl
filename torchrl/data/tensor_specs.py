@@ -1565,7 +1565,9 @@ class BoundedTensorSpec(TensorSpec):
                 raise RuntimeError(shape_err_msg)
         self.shape = shape
 
-        super().__init__(shape, ContinuousBox(low, high), device, dtype, "continuous")
+        super().__init__(
+            shape, ContinuousBox(low, high, device=device), device, dtype, "continuous"
+        )
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
@@ -1783,7 +1785,8 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         dtype, device = _default_dtype_and_device(dtype, device)
         box = (
             ContinuousBox(
-                torch.tensor(-np.inf).expand(shape), torch.tensor(np.inf).expand(shape)
+                torch.tensor(-np.inf, device=device).expand(shape),
+                torch.tensor(np.inf, device=device).expand(shape),
             )
             if shape == _DEFAULT_SHAPE
             else None
