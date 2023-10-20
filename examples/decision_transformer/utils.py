@@ -186,12 +186,14 @@ def make_collector(cfg, policy):
 
 def make_offline_replay_buffer(rb_cfg, reward_scaling):
     r2g = Reward2GoTransform(
-        gamma=1.0, in_keys=[("next", "reward")], out_keys=[("next", "return_to_go")]
+        gamma=1.0,
+        in_keys=[("next", "reward"), "reward"],
+        out_keys=[("next", "return_to_go"), "return_to_go"],
     )
     reward_scale = RewardScaling(
         loc=0,
         scale=reward_scaling,
-        in_keys=[("next", "return_to_go")],
+        in_keys=[("next", "return_to_go"), "return_to_go"],
         standard_normal=False,
     )
     crop_seq = RandomCropTensorDict(sub_seq_len=rb_cfg.stacked_frames, sample_dim=-1)
@@ -200,12 +202,14 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         in_keys=[
             "action",
             "observation",
+            "return_to_go",
             ("next", "return_to_go"),
             ("next", "observation"),
         ],
         out_keys=[
             "action_cat",
             "observation_cat",
+            "return_to_go_cat",
             ("next", "return_to_go_cat"),
             ("next", "observation_cat"),
         ],
@@ -249,7 +253,10 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         .float()
     )
     obsnorm = ObservationNorm(
-        loc=loc, scale=std, in_keys=["observation_cat", ("next", "observation_cat")], standard_normal=True
+        loc=loc,
+        scale=std,
+        in_keys=["observation_cat", ("next", "observation_cat")],
+        standard_normal=True,
     )
     data.append_transform(obsnorm)
     return data, loc, std
