@@ -133,7 +133,7 @@ def make_parallel_env(env_cfg, obs_loc, obs_std, train=False):
         num_envs = env_cfg.num_eval_envs
 
     def make_env():
-        with set_gym_backend(cfg.env.backend):
+        with set_gym_backend(env_cfg.backend):
             return make_base_env(env_cfg)
 
     env = make_transformed_env(
