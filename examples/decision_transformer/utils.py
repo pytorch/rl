@@ -184,12 +184,7 @@ def make_collector(cfg, policy):
     return collector
 
 
-def make_offline_replay_buffer(
-    stacked_frames=20,
-    dataset="halfcheetah-medium-v2",
-    batch_size=10,
-    reward_scaling=1.0,
-):
+def make_offline_replay_buffer(rb_cfg, reward_scaling):
     r2g = Reward2GoTransform(
         gamma=1.0, in_keys=[("next", "reward")], out_keys=[("next", "return_to_go")]
     )
@@ -199,7 +194,7 @@ def make_offline_replay_buffer(
         in_keys=[("next", "return_to_go")],
         standard_normal=False,
     )
-    crop_seq = RandomCropTensorDict(sub_seq_len=stacked_frames, sample_dim=-1)
+    crop_seq = RandomCropTensorDict(sub_seq_len=rb_cfg.stacked_frames, sample_dim=-1)
     d2f = DoubleToFloat()
     rename = RenameTransform(
         in_keys=[
@@ -233,9 +228,9 @@ def make_offline_replay_buffer(
         exclude,
     )
     data = D4RLExperienceReplay(
-        dataset,
+        rb_cfg.dataset,
         split_trajs=True,
-        batch_size=batch_size,
+        batch_size=rb_cfg.batch_size,
         sampler=RandomSampler(),  # SamplerWithoutReplacement(drop_last=False),
         transform=transforms,
         use_truncated_as_done=True,
@@ -254,7 +249,7 @@ def make_offline_replay_buffer(
         .float()
     )
     obsnorm = ObservationNorm(
-        loc=loc, scale=std, in_keys="observation_cat", standard_normal=True
+        loc=loc, scale=std, in_keys=["observation_cat", ("next", "observation_cat")], standard_normal=True
     )
     data.append_transform(obsnorm)
     return data, loc, std
