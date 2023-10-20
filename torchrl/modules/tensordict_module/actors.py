@@ -1746,6 +1746,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         """
         observation_key = unravel_key(kwargs.pop("observation", self.observation_key))
         action_key = unravel_key(kwargs.pop("action", self.action_key))
+        out_action_key = unravel_key(kwargs.pop("out_action", self.out_action_key))
         return_to_go_key = unravel_key(
             kwargs.pop("return_to_go", self.return_to_go_key)
         )
@@ -1756,6 +1757,10 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         self.observation_key = observation_key
         self.action_key = action_key
         self.return_to_go_key = return_to_go_key
+        if out_action_key not in self.td_module.out_keys:
+            raise ValueError(f"The value of out_action_key ({out_action_key}) must be "
+                             f"within the actor output keys ({self.td_module.out_keys}).")
+        self.out_action_key = out_action_key
 
     def step(self, frames: int = 1) -> None:
         pass
@@ -1810,8 +1815,8 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         tensordict = self.mask_context(tensordict)
         # forward pass
         tensordict = self.td_module.forward(tensordict)
-        # get last action predicton
-        out_action = tensordict.get(self.action_key)
+        # get last action prediction
+        out_action = tensordict.get(self.out_action_key)
         if tensordict.ndim == out_action.ndim - 1:
             # then time dimension is in the TD's dimensions, and we must get rid of it
             tensordict.batch_size = tensordict.batch_size[:-1]
