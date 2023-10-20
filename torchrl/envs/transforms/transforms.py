@@ -4729,7 +4729,24 @@ class RewardSum(Transform):
                     "Make sure that the reset_keys are provided during "
                     "construction if the transform does not have a container env."
                 )
-            reset_keys = copy(parent.reset_keys)
+            # let's try to match the reset keys with the in_keys.
+            # We take the filtered reset keys, which are the only keys that really
+            # matter when calling reset, and check that they match the in_keys root.
+            reset_keys = parent._filtered_reset_keys
+            def _check_match(reset_keys, in_keys):
+                # if this is called, the length of reset_keys and in_keys must match
+                for reset_key, in_key in zip(reset_keys, in_keys):
+                    if isinstance(reset_key, str) ^ isinstance(in_key, str):
+                        return False
+                    if isinstance(reset_key, tuple) and isinstance(in_key, tuple) and reset_key[:-1] != in_key[:-1]:
+                        return False
+                return True
+            if len(reset_keys) != len(self.in_keys) or not _check_match(reset_keys, self.in_keys):
+                raise ValueError(f"Could not match the env reset_keys with the {type(self)} in_keys. "
+                                 f"Please provide the reset_keys manually. Reset entries can be "
+                                 f"non-unique and must be right-expandable to the shape of "
+                                 f"the input entries.")
+            reset_keys = copy(reset_keys)
             self._reset_keys = reset_keys
         return reset_keys
 
