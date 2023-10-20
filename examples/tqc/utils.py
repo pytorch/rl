@@ -297,7 +297,7 @@ class TQCLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         td_next = tensordict.get("next")
         reward = td_next.get("reward")
-        not_done = tensordict["done"].logical_not()
+        not_done = tensordict.get("done").logical_not()
 
         alpha = torch.exp(self.log_alpha)
 
