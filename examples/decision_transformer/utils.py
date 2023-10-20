@@ -51,8 +51,9 @@ from torchrl.trainers.helpers.envs import LIBS
 # -----------------
 
 
-@set_gym_backend("gym")  # D4RL uses gym so we make sure gymnasium is hidden
 def make_base_env(env_cfg):
+    set_gym_backend(env_cfg.backend).set()
+
     env_library = LIBS[env_cfg.library]
     env_name = env_cfg.name
     frame_skip = env_cfg.frame_skip
@@ -132,7 +133,7 @@ def make_parallel_env(env_cfg, obs_loc, obs_std, train=False):
         num_envs = env_cfg.num_eval_envs
 
     def make_env():
-        with set_gym_backend("gym"):
+        with set_gym_backend(cfg.env.backend):
             return make_base_env(env_cfg)
 
     env = make_transformed_env(
@@ -481,6 +482,8 @@ def make_dt_optimizer(optim_cfg, loss_module):
 
 
 def make_logger(cfg):
+    from omegaconf import OmegaConf
+
     if not cfg.logger.backend:
         return None
     exp_name = generate_exp_name(cfg.logger.model_name, cfg.logger.exp_name)
@@ -489,7 +492,7 @@ def make_logger(cfg):
         cfg.logger.backend,
         logger_name=cfg.logger.model_name,
         experiment_name=exp_name,
-        wandb_kwargs={"config": cfg},
+        wandb_kwargs={"config": OmegaConf.to_container(cfg)},
     )
     return logger
 
