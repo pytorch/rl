@@ -4751,7 +4751,7 @@ class RewardSum(Transform):
                 reset_keys, self.in_keys
             ):
                 raise ValueError(
-                    f"Could not match the env reset_keys with the {type(self)} in_keys. "
+                    f"Could not match the env reset_keys {reset_keys} with the {type(self)} in_keys {self.in_keys}. "
                     f"Please provide the reset_keys manually. Reset entries can be "
                     f"non-unique and must be right-expandable to the shape of "
                     f"the input entries."

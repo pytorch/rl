@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import abc
 import argparse
+import contextlib
 import importlib.util
 
 import itertools
@@ -4638,16 +4639,19 @@ class TestRewardSum(TransformBase):
         assert r["next", "episode_reward"].unique().numel() > 1
 
     @pytest.mark.parametrize("has_in_keys,", [True, False])
+    @pytest.mark.parametrize("reset_keys,", [None, ["_reset"] * 3])
     def test_trans_multi_key(
-        self, has_in_keys, n_workers=2, batch_size=(3, 2), max_steps=5
+        self, has_in_keys, reset_keys, n_workers=2, batch_size=(3, 2), max_steps=5
     ):
         torch.manual_seed(0)
         env_fun = lambda: MultiKeyCountingEnv(batch_size=batch_size)
         base_env = SerialEnv(n_workers, env_fun)
-        if has_in_keys:
-            t = RewardSum(in_keys=base_env.reward_keys, reset_keys=base_env.reset_keys)
-        else:
-            t = RewardSum()
+        kwargs = (
+            {}
+            if not has_in_keys
+            else {"in_keys": ["reward", ("nested_1", "gift"), ("nested_2", "reward")]}
+        )
+        t = RewardSum(reset_keys=reset_keys, **kwargs)
         env = TransformedEnv(
             base_env,
             Compose(t),
@@ -4655,17 +4659,20 @@ class TestRewardSum(TransformBase):
         policy = MultiKeyCountingEnvPolicy(
             full_action_spec=env.action_spec, deterministic=True
         )
-
-        check_env_specs(env)
-        td = env.rollout(max_steps, policy=policy)
-        for reward_key in env.reward_keys:
-            reward_key = _unravel_key_to_tuple(reward_key)
-            assert (
-                td.get(
-                    ("next", _replace_last(reward_key, f"episode_{reward_key[-1]}"))
-                )[(0,) * (len(batch_size) + 1)][-1]
-                == max_steps
-            ).all()
+        with pytest.raises(
+            ValueError, match="Could not match the env reset_keys"
+        ) if reset_keys is None else contextlib.nullcontext():
+            check_env_specs(env)
+        if reset_keys is not None:
+            td = env.rollout(max_steps, policy=policy)
+            for reward_key in env.reward_keys:
+                reward_key = _unravel_key_to_tuple(reward_key)
+                assert (
+                    td.get(
+                        ("next", _replace_last(reward_key, f"episode_{reward_key[-1]}"))
+                    )[(0,) * (len(batch_size) + 1)][-1]
+                    == max_steps
+                ).all()
 
     @pytest.mark.parametrize("in_key", ["reward", ("some", "nested")])
     def test_transform_no_env(self, in_key):
