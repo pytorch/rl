@@ -15,6 +15,7 @@ env:
   target_return_mode: reduce
   eval_target_return: 6000 
   collect_target_return: 12000
+  backend: gym  # D4RL uses gym so we make sure gymnasium is hidden
 
 # logger
 logger:

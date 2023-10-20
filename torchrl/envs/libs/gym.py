@@ -128,6 +128,10 @@ class set_gym_backend(_DecoratorContextManager):
                 f"Check that the gym versions match!"
             )
 
+    def set(self):
+        """Irreversibly sets the gym backend in the script."""
+        self._call()
+
     def __enter__(self):
         # we save a complete list of setters as well as whether they should be set.
         # we want the full list becasue we want to be able to nest the calls to set_gym_backend.

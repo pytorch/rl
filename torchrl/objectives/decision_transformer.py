@@ -53,12 +53,18 @@ class OnlineDTLoss(LossModule):
         default values.
 
         Attributes:
-            action (NestedKey): The input tensordict key where the action is expected.
+            action_target (NestedKey): The input tensordict key where the action is expected.
+                Defaults to ``"action"``.
+            action_pred (NestedKey): The tensordict key where the output action (from the model) is expected.
+                Used to compute the target entropy.
                 Defaults to ``"action"``.
 
         """
 
-        action: NestedKey = "action"
+        # the "action" contained in the dataset
+        action_target: NestedKey = "action"
+        # the "action" output from the model
+        action_pred: NestedKey = "action"
 
     default_keys = _AcceptedKeys()
 
@@ -125,17 +131,14 @@ class OnlineDTLoss(LossModule):
                     "the target entropy explicitely or provide the spec of the "
                     "action tensor in the actor network."
                 )
-            if (
-                isinstance(self.tensor_keys.action, tuple)
-                and len(self.tensor_keys.action) > 1
-            ):
+            if isinstance(self.tensor_keys.action_pred, tuple):
                 action_container_shape = actor_network.spec[
-                    self.tensor_keys.action[:-1]
+                    self.tensor_keys.action_pred[:-1]
                 ].shape
             else:
                 action_container_shape = actor_network.spec.shape
             target_entropy = -float(
-                actor_network.spec[self.tensor_keys.action]
+                actor_network.spec[self.tensor_keys.action_pred]
                 .shape[len(action_container_shape) :]
                 .numel()
             )
@@ -149,7 +152,7 @@ class OnlineDTLoss(LossModule):
     def _set_in_keys(self):
         keys = self.actor_network.in_keys
         keys = set(keys)
-        keys.add(self.tensor_keys.action)
+        keys.add(self.tensor_keys.action_target)
         self._in_keys = sorted(keys, key=str)
 
     def _forward_value_estimator_keys(self, **kwargs):
@@ -200,7 +203,8 @@ class OnlineDTLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Compute the loss for the Online Decision Transformer."""
         # extract action targets
-        target_actions = tensordict.get(self.tensor_keys.action).detach()
+        tensordict = tensordict.clone(False)
+        target_actions = tensordict.get(self.tensor_keys.action_target).detach()
 
         action_dist = self.actor_network.get_dist(
             tensordict, params=self.actor_network_params
@@ -243,11 +247,16 @@ class DTLoss(LossModule):
         default values.
 
         Attributes:
-            action (NestedKey): The input tensordict key where the action is expected.
+            action_target (NestedKey): The input tensordict key where the action is expected.
+                Defaults to ``"action"``.
+            action_pred (NestedKey): The tensordict key where the output action (from the model) is expected.
                 Defaults to ``"action"``.
         """
 
-        action: NestedKey = "action"
+        # the "action" contained in the dataset
+        action_target: NestedKey = "action"
+        # the "action" output from the model
+        action_pred: NestedKey = "action"
 
     default_keys = _AcceptedKeys()
 
@@ -273,7 +282,8 @@ class DTLoss(LossModule):
     def _set_in_keys(self):
         keys = self.actor_network.in_keys
         keys = set(keys)
-        keys.add(self.tensor_keys.action)
+        keys.add(self.tensor_keys.action_pred)
+        keys.add(self.tensor_keys.action_target)
         self._in_keys = sorted(keys, key=str)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
@@ -304,11 +314,12 @@ class DTLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Compute the loss for the Online Decision Transformer."""
         # extract action targets
-        target_actions = tensordict.get(self.tensor_keys.action).detach()
+        tensordict = tensordict.clone(False)
+        target_actions = tensordict.get(self.tensor_keys.action_target).detach()
 
         pred_actions = self.actor_network(
             tensordict, params=self.actor_network_params
-        ).get(self.tensor_keys.action)
+        ).get(self.tensor_keys.action_pred)
         loss = distance_loss(
             pred_actions,
             target_actions,

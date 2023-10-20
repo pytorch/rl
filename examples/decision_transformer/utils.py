@@ -95,6 +95,7 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
             )
         )
 
+    # copy action from the input tensordict to the output
     transformed_env.append_transform(TensorDictPrimer(action=base_env.action_spec))
 
     transformed_env.append_transform(DoubleToFloat())
@@ -392,8 +393,8 @@ def make_dt_model(cfg):
     )
     dist_class = TanhDelta
     dist_kwargs = {
-        "min": action_spec.space.minimum,
-        "max": action_spec.space.maximum,
+        "min": action_spec.space.low,
+        "max": action_spec.space.high,
     }
 
     actor = ProbabilisticActor(
@@ -428,7 +429,6 @@ def make_odt_loss(loss_cfg, actor_network):
         alpha_init=loss_cfg.alpha_init,
         target_entropy=loss_cfg.target_entropy,
     )
-    loss.set_keys(action="action_cat")
     return loss
 
 
@@ -437,7 +437,7 @@ def make_dt_loss(loss_cfg, actor_network):
         actor_network,
         loss_function=loss_cfg.loss_function,
     )
-    loss.set_keys(action="action_cat")
+    loss.set_keys(action_target="action_cat")
     return loss
 
 

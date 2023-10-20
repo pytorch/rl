@@ -1702,6 +1702,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         super().__init__(policy)
         self.observation_key = "observation"
         self.action_key = "action"
+        self.out_action_key = "action"
         self.return_to_go_key = "return_to_go"
         self.inference_context = inference_context
         if spec is not None:
@@ -1738,8 +1739,9 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
 
         Keyword Args:
             observation (NestedKey, optional): The observation key.
-            action (NestedKey, optional): The action key.
+            action (NestedKey, optional): The action key (input to the network).
             return_to_go (NestedKey, optional): The return_to_go key.
+            out_action (NestedKey, optional): The action key (output of the network).
 
         """
         observation_key = unravel_key(kwargs.pop("observation", self.observation_key))
@@ -1750,10 +1752,6 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         if kwargs:
             raise TypeError(
                 f"Got unknown input(s) {kwargs.keys()}. Accepted keys are 'action', 'return_to_go' and 'observation'."
-            )
-        if action_key not in self.td_module.out_keys:
-            raise ValueError(
-                f"The action key {action_key} was not found in the policy out_keys {self.td_module.out_keys}."
             )
         self.observation_key = observation_key
         self.action_key = action_key
@@ -1818,11 +1816,12 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
             # then time dimension is in the TD's dimensions, and we must get rid of it
             tensordict.batch_size = tensordict.batch_size[:-1]
         out_action = out_action[..., -1, :]
-        tensordict.set(self.action_key, out_action)
-        # out_rtg = tensordict.get(self.return_to_go_key)[:, -1]
+        tensordict.set(self.out_action_key, out_action)
+
         out_rtg = tensordict.get(self.return_to_go_key)
         out_rtg = out_rtg[..., -1, :]
         tensordict.set(self.return_to_go_key, out_rtg)
+
         # set unmasked observation
         tensordict.set(self.observation_key, obs)
         return tensordict
