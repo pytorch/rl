@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import importlib
 import os
 import urllib
 import warnings
@@ -111,13 +112,14 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
     @classmethod
     def _import_d4rl(cls):
+        cls._has_d4rl = importlib.util.find_spec("d4rl") is not None
         try:
             import d4rl  # noqa
 
-            cls._has_d4rl = True
         except ModuleNotFoundError as err:
-            cls._has_d4rl = False
             cls.D4RL_ERR = err
+        except Exception:
+            pass
 
     def __init__(
         self,

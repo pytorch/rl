@@ -332,6 +332,8 @@ def make_odt_model(cfg):
         action_dim=action_spec.shape[-1],
         transformer_config=cfg.transformer,
     )
+    if cfg.transformer.compile:
+        actor_net = torch.compile(actor_net)
 
     actor_module = TensorDictModule(
         actor_net,
@@ -386,6 +388,8 @@ def make_dt_model(cfg):
         action_dim=action_spec.shape[-1],
         transformer_config=cfg.transformer,
     )
+    if cfg.transformer.compile:
+        actor_net = torch.compile(actor_net)
 
     actor_module = TensorDictModule(
         actor_net,

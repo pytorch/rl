@@ -204,7 +204,9 @@ class OnlineDTLoss(LossModule):
         """Compute the loss for the Online Decision Transformer."""
         # extract action targets
         tensordict = tensordict.clone(False)
-        target_actions = tensordict.get(self.tensor_keys.action_target).detach()
+        target_actions = tensordict.get(self.tensor_keys.action_target)
+        if target_actions.requires_grad:
+            raise RuntimeError("target action cannot be part of a graph.")
 
         action_dist = self.actor_network.get_dist(
             tensordict, params=self.actor_network_params

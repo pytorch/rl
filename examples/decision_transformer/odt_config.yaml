@@ -64,3 +64,4 @@ transformer:
   n_positions: 1024
   resid_pdrop: 0.1
   attn_pdrop: 0.1
+  compile: False

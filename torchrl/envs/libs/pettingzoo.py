@@ -480,6 +480,10 @@ class PettingZooWrapper(_EnvWrapper):
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
 
+        _reset = tensordict.get("_reset", None)
+        if _reset is not None and not _reset.all():
+            raise RuntimeError(f"An attempt to call {type(self)}._reset was made when no reset signal could be found. "
+                               f"Expected '_reset' entry to be `tensor(True)` or `None` but got `{_reset}`.")
         if self.parallel:
             # This resets when any is done
             observation_dict, info_dict = self._reset_parallel(**kwargs)
@@ -617,10 +621,10 @@ class PettingZooWrapper(_EnvWrapper):
         return tensordict_out
 
     def _aggregate_done(self, tensordict_out, use_any):
-        done = False
-        truncated = False
-        terminated = False
-        for key in self.full_done_spec.keys(True, True):
+        done = False if use_any else True
+        truncated = False if use_any else True
+        terminated = False if use_any else True
+        for key in self.done_keys:
             if isinstance(key, tuple):
                 if use_any:
                     if key[-1] == "done":
@@ -629,7 +633,8 @@ class PettingZooWrapper(_EnvWrapper):
                         terminated = terminated | tensordict_out.get(key).any()
                     if key[-1] == "truncated":
                         truncated = truncated | tensordict_out.get(key).any()
-                    if done:
+                    if done and terminated and truncated:
+                        # no need to proceed further, all values are flipped
                         break
                 else:
                     if key[-1] == "done":
@@ -638,12 +643,9 @@ class PettingZooWrapper(_EnvWrapper):
                         terminated = terminated & tensordict_out.get(key).all()
                     if key[-1] == "truncated":
                         truncated = truncated & tensordict_out.get(key).all()
-                    if not done:
+                    if not done and not terminated and not truncated:
+                        # no need to proceed further, all values are flipped
                         break
-        else:
-            raise RuntimeError(
-                f"Could not find done values in tensordict {tensordict_out}."
-            )
         return (
             torch.tensor([done], device=self.device),
             torch.tensor([terminated], device=self.device),
