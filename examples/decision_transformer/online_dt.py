@@ -85,7 +85,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Pretraining
     start_time = time.time()
     for i in range(pretrain_gradient_steps):
-        pbar.update(i)
+        pbar.update(1)
         # Sample data
         data = offline_buffer.sample()
         # Compute loss
