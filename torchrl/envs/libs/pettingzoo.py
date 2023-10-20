@@ -482,8 +482,10 @@ class PettingZooWrapper(_EnvWrapper):
 
         _reset = tensordict.get("_reset", None)
         if _reset is not None and not _reset.all():
-            raise RuntimeError(f"An attempt to call {type(self)}._reset was made when no reset signal could be found. "
-                               f"Expected '_reset' entry to be `tensor(True)` or `None` but got `{_reset}`.")
+            raise RuntimeError(
+                f"An attempt to call {type(self)}._reset was made when no reset signal could be found. "
+                f"Expected '_reset' entry to be `tensor(True)` or `None` but got `{_reset}`."
+            )
         if self.parallel:
             # This resets when any is done
             observation_dict, info_dict = self._reset_parallel(**kwargs)

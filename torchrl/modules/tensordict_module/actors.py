@@ -1758,8 +1758,10 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         self.action_key = action_key
         self.return_to_go_key = return_to_go_key
         if out_action_key not in self.td_module.out_keys:
-            raise ValueError(f"The value of out_action_key ({out_action_key}) must be "
-                             f"within the actor output keys ({self.td_module.out_keys}).")
+            raise ValueError(
+                f"The value of out_action_key ({out_action_key}) must be "
+                f"within the actor output keys ({self.td_module.out_keys})."
+            )
         self.out_action_key = out_action_key
 
     def step(self, frames: int = 1) -> None:
