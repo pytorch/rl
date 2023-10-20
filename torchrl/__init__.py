@@ -23,15 +23,23 @@ except ImportError:
 
 _init_extension()
 
+DEFAULT_START_METHOD = os.environ.get("DEFAULT_START_METHOD", None)
+if DEFAULT_START_METHOD is None:
+    if torch.cuda.device_count() == 0:
+        DEFAULT_START_METHOD = "fork"
+    else:
+        DEFAULT_START_METHOD = "spawn"
 try:
-    mp.set_start_method("spawn")
+    mp.set_start_method(DEFAULT_START_METHOD)
 except RuntimeError as err:
     if str(err).startswith("context has already been set"):
         mp_start_method = mp.get_start_method()
-        if mp_start_method != "spawn":
+        if mp_start_method != DEFAULT_START_METHOD:
             warn(
-                f"failed to set start method to spawn, "
-                f"and current start method for mp is {mp_start_method}."
+                f"failed to set start method to {DEFAULT_START_METHOD}, which is the default on this node. "
+                f"The current start method for mp is {mp_start_method}. "
+                f"To change the default mp start method, set the 'DEFAULT_START_METHOD' environment variable to "
+                f"'fork' or 'spawn'. If the mp start method is set before importing torchrl, it cannot be changed. "
             )
 
 

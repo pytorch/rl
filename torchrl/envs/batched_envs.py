@@ -32,6 +32,8 @@ from torchrl.envs.utils import (
     clear_mpi_env_vars,
 )
 
+from .. import DEFAULT_START_METHOD
+
 # legacy
 from .libs.envpool import MultiThreadedEnv, MultiThreadedEnvWrapper  # noqa: F401
 
@@ -715,7 +717,7 @@ class ParallelEnv(_BatchedEnv):
 
         torch.set_num_threads(self.num_threads)
 
-        ctx = mp.get_context("spawn")
+        ctx = mp.get_context(DEFAULT_START_METHOD)
 
         _num_workers = self.num_workers
 
