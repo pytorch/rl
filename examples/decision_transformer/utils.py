@@ -430,6 +430,7 @@ def make_odt_loss(loss_cfg, actor_network):
         alpha_init=loss_cfg.alpha_init,
         target_entropy=loss_cfg.target_entropy,
     )
+    loss.set_keys(action_target="action_cat")
     return loss
 
 
