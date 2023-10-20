@@ -294,11 +294,10 @@ class TQCLoss(LossModule):
         action_container_len = len(action_spec.shape)
         self.target_entropy = -float(action_spec["action"].shape[action_container_len:].numel())
 
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def value_loss(self, tensordict):
         td_next = tensordict.get("next")
         reward = td_next.get("reward")
         not_done = tensordict.get("done").logical_not()
-
         alpha = torch.exp(self.log_alpha)
 
         # Q-loss
@@ -321,15 +320,21 @@ class TQCLoss(LossModule):
         self.critic(tensordict, params=self.critic_params)
         cur_z = tensordict.get("state_action_value")
         critic_loss = quantile_huber_loss_f(cur_z, target)
+        return critic_loss
 
-        # --- Policy and alpha loss ---
+    def actor_loss(self, tensordict):
+        alpha = torch.exp(self.log_alpha)
         self.actor(tensordict, params=self.actor_params)
         self.critic(tensordict, params=self.critic_params)
         new_log_pi = tensordict.get("sample_log_prob")
-        alpha_loss = -self.log_alpha * (new_log_pi + self.target_entropy).detach().mean()
         actor_loss = (alpha * new_log_pi - tensordict.get("state_action_value").mean(-1).mean(-1, keepdim=True)).mean()
+        return actor_loss, new_log_pi
 
-        # --- Entropy ---
+    def alpha_loss(self, log_prob):
+        alpha_loss = -self.log_alpha * (log_prob + self.target_entropy).detach().mean()
+        return alpha_loss
+
+    def entropy(self, tensordict):
         with set_exploration_type(ExplorationType.RANDOM):
             dist = self.actor.get_dist(
                 tensordict,
@@ -338,6 +343,14 @@ class TQCLoss(LossModule):
             a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm).detach()
         entropy = -log_prob.mean()
+        return entropy
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        alpha = torch.exp(self.log_alpha)
+        critic_loss = self.value_loss(tensordict)
+        actor_loss, log_prob = self.actor_loss(tensordict)  # Compute actor loss AFTER critic loss
+        alpha_loss = self.alpha_loss(log_prob)
+        entropy = self.entropy(tensordict)
 
         return TensorDict(
             {
