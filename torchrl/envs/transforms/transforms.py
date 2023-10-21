@@ -4737,12 +4737,14 @@ class RewardSum(Transform):
             def _check_match(reset_keys, in_keys):
                 # if this is called, the length of reset_keys and in_keys must match
                 for reset_key, in_key in zip(reset_keys, in_keys):
-                    if isinstance(reset_key, str) ^ isinstance(in_key, str):
+                    # having _reset at the root and the reward_key ("agent", "reward") is allowed
+                    # but having ("agent", "_reset") and "reward" isn't
+                    if isinstance(reset_key, tuple) and isinstance(in_key, str):
                         return False
                     if (
                         isinstance(reset_key, tuple)
                         and isinstance(in_key, tuple)
-                        and reset_key[:-1] != in_key[:-1]
+                        and in_key[:(len(reset_key)-1)] != reset_key[:-1]
                     ):
                         return False
                 return True
