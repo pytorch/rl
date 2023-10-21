@@ -2191,10 +2191,10 @@ class TestDecisionTransformerInferenceWrapper:
         )
         with pytest.raises(
             ValueError,
-            match="The action key action was not found in the policy out_keys",
+            match="The value of out_action_key",
         ):
             result = inference_actor(td)
-        inference_actor.set_tensor_keys(action=action_key)
+        inference_actor.set_tensor_keys(action=action_key, out_action=action_key)
         result = inference_actor(td)
         # checks that the seq length has disappeared
         assert result.get(action_key).shape == torch.Size([1, 2])

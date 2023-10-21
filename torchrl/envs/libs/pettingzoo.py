@@ -2,10 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import copy
 import importlib
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import torch
 from tensordict.tensordict import TensorDictBase
@@ -154,11 +155,11 @@ class PettingZooWrapper(_EnvWrapper):
             "pettingzoo.utils.env.ParallelEnv",  # noqa: F821
             "pettingzoo.utils.env.AECEnv",  # noqa: F821
         ] = None,
-        return_state: Optional[bool] = False,
-        group_map: Optional[Union[MarlGroupMapType, Dict[str, List[str]]]] = None,
+        return_state: bool = False,
+        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
         use_mask: bool = False,
         categorical_actions: bool = True,
-        seed: Optional[int] = None,
+        seed: int | None = None,
         **kwargs,
     ):
         if env is not None:
@@ -401,7 +402,7 @@ class PettingZooWrapper(_EnvWrapper):
         ):
             raise TypeError("env is not of type expected.")
 
-    def _init_env(self) -> Optional[int]:
+    def _init_env(self):
         # Add info
         if self.parallel:
             _, info_dict = self._reset_parallel(seed=self.seed)
@@ -477,15 +478,16 @@ class PettingZooWrapper(_EnvWrapper):
         self.reset(seed=self.seed)
 
     def _reset(
-        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+        self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
-
-        _reset = tensordict.get("_reset", None)
-        if _reset is not None and not _reset.all():
-            raise RuntimeError(
-                f"An attempt to call {type(self)}._reset was made when no reset signal could be found. "
-                f"Expected '_reset' entry to be `tensor(True)` or `None` but got `{_reset}`."
-            )
+        if tensordict is not None:
+            _reset = tensordict.get("_reset", None)
+            if _reset is not None and not _reset.all():
+                raise RuntimeError(
+                    f"An attempt to call {type(self)}._reset was made when no "
+                    f"reset signal could be found. Expected '_reset' entry to "
+                    f"be `tensor(True)` or `None` but got `{_reset}`."
+                )
         if self.parallel:
             # This resets when any is done
             observation_dict, info_dict = self._reset_parallel(**kwargs)
@@ -878,11 +880,11 @@ class PettingZooEnv(PettingZooWrapper):
         self,
         task: str,
         parallel: bool,
-        return_state: Optional[bool] = False,
-        group_map: Optional[Union[MarlGroupMapType, Dict[str, List[str]]]] = None,
+        return_state: bool = False,
+        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
         use_mask: bool = False,
         categorical_actions: bool = True,
-        seed: Optional[int] = None,
+        seed: int | None = None,
         **kwargs,
     ):
         if not _has_pettingzoo:
