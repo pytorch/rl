@@ -14,14 +14,7 @@ import time
 
 import pytest
 
-try:
-    import ray
-
-    _has_ray = True
-    RAY_ERR = None
-except ModuleNotFoundError as err:
-    _has_ray = False
-    RAY_ERR = err
+from torch import multiprocessing as mp
 
 import torch
 
@@ -42,11 +35,27 @@ from torchrl.collectors.distributed import (
 )
 from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 
+try:
+    import ray
+
+    _has_ray = True
+    RAY_ERR = None
+except ModuleNotFoundError as err:
+    _has_ray = False
+    RAY_ERR = err
+
 TIMEOUT = 200
+
+IS_FORK = mp.get_start_method() == "fork"
+FORK_ERROR = "Running test_distributed.py with the 'fork' start method is not allowed."
+
+@pytest.fixture(scope='module', autouse=True)
+def fork_fixture():
+    if IS_FORK:
+        raise RuntimeError(FORK_ERROR)
 
 if sys.platform.startswith("win"):
     pytest.skip("skipping windows tests in windows", allow_module_level=True)
-
 
 class CountingPolicy(nn.Module):
     """A policy for counting env.
@@ -65,7 +74,6 @@ class CountingPolicy(nn.Module):
     def forward(self, tensordict):
         tensordict.set("action", self.weight.expand(tensordict.shape).clone())
         return tensordict
-
 
 class DistributedCollectorBase:
     @classmethod
