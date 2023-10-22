@@ -5,7 +5,6 @@
 
 
 import torch
-import numpy as np
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
@@ -19,15 +18,13 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
 from torchrl.modules.distributions import TanhNormal
 from torchrl.objectives import SoftUpdate
-from torchrl.data import CompositeSpec
-from torchrl.objectives.common import LossModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from typing import Tuple
 
 
 # ====================================================================
 # Environment utils
 # -----------------
+from torchrl.objectives.tcq import TQCLoss
 
 
 def env_maker(task, device="cpu"):
@@ -253,115 +250,6 @@ def quantile_huber_loss_f(quantiles, samples):
 # ====================================================================
 # TQC Loss
 # --------
-
-class TQCLoss(LossModule):
-    def __init__(
-            self,
-            actor_network,
-            qvalue_network,
-            gamma,
-            top_quantiles_to_drop,
-            alpha_init,
-            device
-    ):
-        super(type(self), self).__init__()
-        super().__init__()
-
-        self.convert_to_functional(
-            actor_network,
-            "actor",
-            create_target_params=False,
-            funs_to_decorate=["forward", "get_dist"],
-        )
-
-        self.convert_to_functional(
-            qvalue_network,
-            "critic",
-            create_target_params=True  # Create a target critic network
-        )
-
-        self.device = device
-        self.log_alpha = torch.tensor([np.log(alpha_init)], requires_grad=True, device=self.device)
-        self.gamma = gamma
-        self.top_quantiles_to_drop = top_quantiles_to_drop
-
-        # Compute target entropy
-        action_spec = getattr(self.actor, "spec", None)
-        if action_spec is None:
-            print("Could not deduce action spec from actor network.")
-        if not isinstance(action_spec, CompositeSpec):
-            action_spec = CompositeSpec({"action": action_spec})
-        action_container_len = len(action_spec.shape)
-        self.target_entropy = -float(action_spec["action"].shape[action_container_len:].numel())
-
-    def value_loss(self, tensordict):
-        td_next = tensordict.get("next")
-        reward = td_next.get("reward")
-        not_done = tensordict.get("done").logical_not()
-        alpha = torch.exp(self.log_alpha)
-
-        # Q-loss
-        with torch.no_grad():
-            # get policy action
-            self.actor(td_next, params=self.actor_params)
-            self.critic(td_next, params=self.target_critic_params)
-
-            next_log_pi = td_next.get("sample_log_prob")
-            next_log_pi = torch.unsqueeze(next_log_pi, dim=-1)
-
-            # compute and cut quantiles at the next state
-            next_z = td_next.get("state_action_value")
-            sorted_z, _ = torch.sort(next_z.reshape(*tensordict.batch_size, -1))
-            sorted_z_part = sorted_z[..., :-self.top_quantiles_to_drop]
-
-            # compute target
-            target = reward + not_done * self.gamma * (sorted_z_part - alpha * next_log_pi)
-
-        self.critic(tensordict, params=self.critic_params)
-        cur_z = tensordict.get("state_action_value")
-        critic_loss = quantile_huber_loss_f(cur_z, target)
-        return critic_loss
-
-    def actor_loss(self, tensordict):
-        alpha = torch.exp(self.log_alpha)
-        self.actor(tensordict, params=self.actor_params)
-        self.critic(tensordict, params=self.critic_params)
-        new_log_pi = tensordict.get("sample_log_prob")
-        actor_loss = (alpha * new_log_pi - tensordict.get("state_action_value").mean(-1).mean(-1, keepdim=True)).mean()
-        return actor_loss, new_log_pi
-
-    def alpha_loss(self, log_prob):
-        alpha_loss = -self.log_alpha * (log_prob + self.target_entropy).detach().mean()
-        return alpha_loss
-
-    def entropy(self, tensordict):
-        with set_exploration_type(ExplorationType.RANDOM):
-            dist = self.actor.get_dist(
-                tensordict,
-                params=self.actor_params,
-            )
-            a_reparm = dist.rsample()
-        log_prob = dist.log_prob(a_reparm).detach()
-        entropy = -log_prob.mean()
-        return entropy
-
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        alpha = torch.exp(self.log_alpha)
-        critic_loss = self.value_loss(tensordict)
-        actor_loss, log_prob = self.actor_loss(tensordict)  # Compute actor loss AFTER critic loss
-        alpha_loss = self.alpha_loss(log_prob)
-        entropy = self.entropy(tensordict)
-
-        return TensorDict(
-            {
-                "loss_critic": critic_loss,
-                "loss_actor": actor_loss,
-                "loss_alpha": alpha_loss,
-                "alpha": alpha,
-                "entropy": entropy,
-            },
-            batch_size=[]
-        )
 
 
 def make_loss_module(cfg, model):
