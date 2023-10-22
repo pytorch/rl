@@ -4744,7 +4744,7 @@ class RewardSum(Transform):
                     if (
                         isinstance(reset_key, tuple)
                         and isinstance(in_key, tuple)
-                        and in_key[:(len(reset_key)-1)] != reset_key[:-1]
+                        and in_key[: (len(reset_key) - 1)] != reset_key[:-1]
                     ):
                         return False
                 return True
