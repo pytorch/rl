@@ -688,8 +688,8 @@ but got an object of type {type(transform)}."""
         if not self.cache_specs or self.__dict__.get("_output_spec", None) is None:
             output_spec = self.base_env.output_spec.clone()
 
-            # remove cached key values
-            self.empty_cache()
+            # remove cached key values, but not _input_spec
+            super().empty_cache()
 
             output_spec = output_spec.unlock_()
             output_spec = self.transform.transform_output_spec(output_spec)
@@ -706,8 +706,8 @@ but got an object of type {type(transform)}."""
         if self.__dict__.get("_input_spec", None) is None or not self.cache_specs:
             input_spec = self.base_env.input_spec.clone()
 
-            # remove cached key values
-            self.empty_cache()
+            # remove cached key values but not _output_spec
+            super().empty_cache()
 
             input_spec.unlock_()
             input_spec = self.transform.transform_input_spec(input_spec)
