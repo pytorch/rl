@@ -689,9 +689,7 @@ but got an object of type {type(transform)}."""
             output_spec = self.base_env.output_spec.clone()
 
             # remove cached key values
-            self.__dict__["_done_keys"] = None
-            self.__dict__["_reward_keys"] = None
-            self.__dict__["_reset_keys"] = None
+            self.empty_cache()
 
             output_spec = output_spec.unlock_()
             output_spec = self.transform.transform_output_spec(output_spec)
@@ -707,6 +705,10 @@ but got an object of type {type(transform)}."""
         """Action spec of the transformed environment."""
         if self.__dict__.get("_input_spec", None) is None or not self.cache_specs:
             input_spec = self.base_env.input_spec.clone()
+
+            # remove cached key values
+            self.empty_cache()
+
             input_spec.unlock_()
             input_spec = self.transform.transform_input_spec(input_spec)
             input_spec.lock_()
@@ -813,9 +815,10 @@ but got an object of type {type(transform)}."""
     def empty_cache(self):
         self.__dict__["_output_spec"] = None
         self.__dict__["_input_spec"] = None
+        super().empty_cache()
 
     def append_transform(self, transform: Transform) -> None:
-        self._erase_metadata()
+        self.empty_cache()
         if not isinstance(transform, Transform):
             raise ValueError(
                 "TransformedEnv.append_transform expected a transform but received an object of "
@@ -831,6 +834,7 @@ but got an object of type {type(transform)}."""
         self.transform.append(transform)
 
     def insert_transform(self, index: int, transform: Transform) -> None:
+        self.empty_cache()
         if not isinstance(transform, Transform):
             raise ValueError(
                 "TransformedEnv.insert_transform expected a transform but received an object of "
@@ -842,7 +846,6 @@ but got an object of type {type(transform)}."""
             self.transform = compose  # parent set automatically
 
         self.transform.insert(index, transform)
-        self._erase_metadata()
 
     def __getattr__(self, attr: str) -> Any:
         try:
@@ -868,11 +871,6 @@ but got an object of type {type(transform)}."""
         t_str = indent(f"transform={self.transform}", 4 * " ")
         return f"TransformedEnv(\n{env_str},\n{t_str})"
 
-    def _erase_metadata(self):
-        if self.cache_specs:
-            self.__dict__["_input_spec"] = None
-            self.__dict__["_output_spec"] = None
-
     def to(self, *args, **kwargs) -> TransformedEnv:
         device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
             *args, **kwargs
@@ -880,7 +878,7 @@ but got an object of type {type(transform)}."""
         if device is not None:
             self.base_env = self.base_env.to(device)
             self._transform = self._transform.to(device)
-            self._erase_metadata()
+            self.empty_cache()
         return super().to(*args, **kwargs)
 
     def __setattr__(self, key, value):

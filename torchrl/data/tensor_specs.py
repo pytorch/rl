@@ -3424,9 +3424,7 @@ class CompositeSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         _dict = {
-            key: self[key].rand(shape)
-            for key in self.keys(True)
-            if isinstance(key, str) and self[key] is not None
+            key: self[key].rand(shape) for key in self.keys() if self[key] is not None
         }
         return TensorDict(
             _dict,

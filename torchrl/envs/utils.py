@@ -732,7 +732,7 @@ def check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str])
 def _terminated_or_truncated(
     data: TensorDictBase,
     full_done_spec: TensorSpec | None = None,
-    key: str = "_reset",
+    key: str | None = "_reset",
     write_full_false: bool = False,
 ) -> bool:
     """Reads the done / terminated / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
@@ -826,14 +826,14 @@ def _terminated_or_truncated(
                         curr_done_key=curr_done_key + (eot_key,),
                     )
                 else:
-                    sop = data.get(eot_key, None)
-                    if sop is None:
-                        sop = torch.zeros(
+                    stop = data.get(eot_key, None)
+                    if stop is None:
+                        stop = torch.zeros(
                             (*data.shape, 1), dtype=torch.bool, device=data.device
                         )
                     if aggregate is None:
-                        aggregate = torch.tensor(False, device=sop.device)
-                    aggregate = aggregate | sop
+                        aggregate = False
+                    aggregate = aggregate | stop
         if aggregate is not None:
             if key is not None:
                 if aggregate.ndim > data.ndim:

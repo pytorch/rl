@@ -493,10 +493,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
+        action_keys = self.__dict__.get("_action_keys", None)
+        if action_keys is not None:
+            return action_keys
         keys = self.input_spec["full_action_spec"].keys(True, True)
         if not len(keys):
             raise AttributeError("Could not find action spec")
         keys = sorted(keys, key=_repr_by_depth)
+        self.__dict__["_action_keys"] = keys
         return keys
 
     @property
@@ -684,8 +688,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        result = sorted(self.full_reward_spec.keys(True, True), key=_repr_by_depth)
-        return result
+        reward_keys = self.__dict__.get("_reward_keys", None)
+        if reward_keys is not None:
+            return reward_keys
+
+        reward_keys = sorted(self.full_reward_spec.keys(True, True), key=_repr_by_depth)
+        self.__dict__["_reward_keys"] = reward_keys
+        return reward_keys
 
     @property
     def reward_key(self):
@@ -875,8 +884,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        result = sorted(self.full_done_spec.keys(True, True), key=_repr_by_depth)
-        return result
+        done_keys = self.__dict__.get("_done_keys", None)
+        if done_keys is not None:
+            return done_keys
+        done_keys = sorted(self.full_done_spec.keys(True, True), key=_repr_by_depth)
+        self.__dict__["_done_keys"] = done_keys
+        return done_keys
 
     @property
     def done_key(self):
@@ -1589,17 +1602,22 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         """
         shape = torch.Size([])
-        if not self.batch_locked and not self.batch_size and tensordict is not None:
-            shape = tensordict.shape
-        elif not self.batch_locked and not self.batch_size:
-            shape = torch.Size([])
-        elif not self.batch_locked and tensordict.shape != self.batch_size:
-            raise RuntimeError(
-                "The input tensordict and the env have a different batch size: "
-                f"env.batch_size={self.batch_size} and tensordict.batch_size={tensordict.shape}. "
-                f"Non batch-locked environment require the env batch-size to be either empty or to"
-                f" match the tensordict one."
-            )
+        if not self.batch_locked:
+            if not self.batch_size and tensordict is not None:
+                # if we can't infer the batch-size from the env, take it from tensordict
+                shape = tensordict.shape
+            elif not self.batch_size:
+                # if tensordict wasn't provided, we assume empty batch size
+                shape = torch.Size([])
+            elif tensordict.shape != self.batch_size:
+                # if tensordict is not None and the env has a batch size, their shape must match
+                raise RuntimeError(
+                    "The input tensordict and the env have a different batch size: "
+                    f"env.batch_size={self.batch_size} and tensordict.batch_size={tensordict.shape}. "
+                    f"Non batch-locked environment require the env batch-size to be either empty or to"
+                    f" match the tensordict one."
+                )
+        # We generate the action from the full_action_spec
         r = self.input_spec["full_action_spec"].rand(shape)
         if tensordict is None:
             return r
@@ -1942,6 +1960,18 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict_ = self.reset(tensordict_)
         return tensordict, tensordict_
 
+    def empty_cache(self):
+        """Erases all the cached values.
+
+        For regular envs, the key lists (reward, done etc) are cached, but in some cases
+        they may change during the execution of the code (eg, when adding a transform).
+
+        """
+        self.__dict__["_reward_keys"] = None
+        self.__dict__["_done_keys"] = None
+        self.__dict__["_action_keys"] = None
+        self.__dict__["_done_keys_group"] = None
+
     @property
     def reset_keys(self) -> List[NestedKey]:
         """Returns a list of reset keys.
@@ -1953,13 +1983,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        return sorted(
+        reset_keys = self.__dict__.get("_reset_keys", None)
+        if reset_keys is not None:
+            return reset_keys
+
+        reset_keys = sorted(
             (
                 _replace_last(done_key, "_reset")
                 for (done_key, *_) in self.done_keys_groups
             ),
             key=_repr_by_depth,
         )
+        self.__dict__["_reset_keys"] = reset_keys
+        return reset_keys
 
     @property
     def _filtered_reset_keys(self):
@@ -1991,8 +2027,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         inner lists contain the done keys (eg, done and truncated) that can
         be read to determine a reset when it is absent.
         """
+        done_keys_group = self.__dict__.get("_done_keys_group", None)
+        if done_keys_group is not None:
+            return done_keys_group
+
         # done keys, sorted as reset keys
-        out = []
+        done_keys_group = []
         roots = set()
         fds = self.full_done_spec
         for done_key in self.done_keys:
@@ -2001,13 +2041,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             n = len(roots)
             roots.add(root_name)
             if len(roots) - n:
-                out.append(
+                done_keys_group.append(
                     [
                         unravel_key(root_name + (key,))
                         for key in root.keys(include_nested=False, leaves_only=True)
                     ]
                 )
-        return out
+        self.__dict__["_done_keys_group"] = done_keys_group
+        return done_keys_group
 
     def _select_observation_keys(self, tensordict: TensorDictBase) -> Iterator[str]:
         for key in tensordict.keys():
