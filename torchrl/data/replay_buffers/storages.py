@@ -340,7 +340,9 @@ class TensorStorage(Storage):
                 self._init(data)
         if not isinstance(cursor, (*INT_CLASSES, slice)):
             if not isinstance(cursor, torch.Tensor):
-                cursor = torch.tensor(cursor)
+                cursor = torch.tensor(cursor, dtype=torch.long)
+            elif cursor.dtype != torch.long:
+                cursor = cursor.to(dtype=torch.long)
             if len(cursor) > len(self._storage):
                 warnings.warn(
                     "A cursor of length superior to the storage capacity was provided. "
