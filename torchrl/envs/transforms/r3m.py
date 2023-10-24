@@ -302,7 +302,7 @@ class R3MTransform(Compose):
         transforms.append(resize)
 
         # R3M
-        if out_keys is None:
+        if out_keys in (None, []):
             if stack_images:
                 out_keys = ["r3m_vec"]
             else:

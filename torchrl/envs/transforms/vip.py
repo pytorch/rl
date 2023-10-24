@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 from typing import List, Optional, Union
 
 import torch
@@ -277,7 +276,7 @@ class VIPTransform(Compose):
         transforms.append(resize)
 
         # VIP
-        if out_keys is None:
+        if out_keys in (None, []):
             if stack_images:
                 out_keys = ["vip_vec"]
             else:
