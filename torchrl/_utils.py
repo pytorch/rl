@@ -277,7 +277,7 @@ class implement_for:
         return out
 
     @classmethod
-    def func_name(cls, fn):
+    def get_func_name(cls, fn):
         # produces a name like torchrl.module.Class.method or torchrl.module.function
         first = str(fn).split(".")[0][len("<function ") :]
         last = str(fn).split(".")[1:]
@@ -300,10 +300,10 @@ class implement_for:
 
     def module_set(self):
         """Sets the function in its module, if it exists already."""
-        prev_setter = type(self)._implementations.get(self.func_name(self.fn), None)
+        prev_setter = type(self)._implementations.get(self.get_func_name(self.fn), None)
         if prev_setter is not None:
             prev_setter.do_set = False
-        type(self)._implementations[self.func_name(self.fn)] = self
+        type(self)._implementations[self.get_func_name(self.fn)] = self
         cls = self.get_class_that_defined_method(self.fn)
         if cls is not None:
             if cls.__class__.__name__ == "function":
@@ -329,11 +329,31 @@ class implement_for:
             module = module_name()
         return module.__version__
 
+    _lazy_impl = collections.defaultdict(list)
+
+    def _delazify(self, func_name):
+        for local_call in implement_for._lazy_impl[func_name]:
+            out = local_call()
+        return out
+
     def __call__(self, fn):
+        # function names are unique
+        self.func_name = self.get_func_name(fn)
         self.fn = fn
+        implement_for._lazy_impl[self.func_name].append(self._call)
+
+        @wraps(fn)
+        def _lazy_call_fn(*args, **kwargs):
+            # first time we call the function, we also do the replacement.
+            # This will cause the imports to occur only during the first call to fn
+            return self._delazify(self.func_name)(*args, **kwargs)
+        return _lazy_call_fn
+
+    def _call(self):
 
         # If the module is missing replace the function with the mock.
-        func_name = self.func_name(self.fn)
+        fn = self.fn
+        func_name = self.func_name
         implementations = implement_for._implementations
 
         @wraps(fn)
