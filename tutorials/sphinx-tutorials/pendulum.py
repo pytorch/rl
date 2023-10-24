@@ -652,6 +652,12 @@ class SinTransform(Transform):
     def _apply_transform(self, obs: torch.Tensor) -> None:
         return obs.sin()
 
+    # The transform must also modify the data at reset time
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._call(tensordict_reset)
+
     # _apply_to_composite will execute the observation spec transform across all
     # in_keys/out_keys pairs and write the result in the observation_spec which
     # is of type ``Composite``
@@ -669,6 +675,12 @@ class SinTransform(Transform):
 class CosTransform(Transform):
     def _apply_transform(self, obs: torch.Tensor) -> None:
         return obs.cos()
+
+    # The transform must also modify the data at reset time
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._call(tensordict_reset)
 
     # _apply_to_composite will execute the observation spec transform across all
     # in_keys/out_keys pairs and write the result in the observation_spec which
