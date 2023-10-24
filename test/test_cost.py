@@ -7412,7 +7412,8 @@ class TestOnlineDT(LossModuleTestBase):
         loss_fn = OnlineDTLoss(actor)
 
         default_keys = {
-            "action": "action",
+            "action_pred": "action",
+            "action_target": "action",
         }
 
         self.tensordict_keys_test(
@@ -7511,7 +7512,8 @@ class TestDT(LossModuleTestBase):
         loss_fn = DTLoss(actor)
 
         default_keys = {
-            "action": "action",
+            "action_target": "action",
+            "action_pred": "action",
         }
 
         self.tensordict_keys_test(

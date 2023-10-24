@@ -44,12 +44,10 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
-    _aggregate_resets,
+    _aggregate_end_of_traj,
     _convert_exploration_type,
     ExplorationType,
     set_exploration_type,
-    step_mdp,
-    terminated_or_truncated,
 )
 
 _TIMEOUT = 1.0
@@ -760,8 +758,18 @@ class SyncDataCollector(DataCollectorBase):
                 if self.postproc is not None:
                     tensordict_out = self.postproc(tensordict_out)
                 if self._exclude_private_keys:
+
+                    def is_private(key):
+                        if isinstance(key, str) and key.startswith("_"):
+                            return True
+                        if isinstance(key, tuple) and any(
+                            _key.startswith("_") for _key in key
+                        ):
+                            return True
+                        return False
+
                     excluded_keys = [
-                        key for key in tensordict_out.keys() if key.startswith("_")
+                        key for key in tensordict_out.keys(True) if is_private(key)
                     ]
                     tensordict_out = tensordict_out.exclude(
                         *excluded_keys, inplace=True
@@ -786,38 +794,14 @@ class SyncDataCollector(DataCollectorBase):
                     # >>> assert data0["done"] is not data1["done"]
                     yield tensordict_out.clone()
 
-    def _step_and_maybe_reset(self) -> None:
-
-        self._tensordict = step_mdp(
-            self._tensordict,
-            reward_keys=self.env.reward_keys,
-            done_keys=self.env.done_keys,
-            action_keys=self.env.action_keys,
+    def _update_traj_ids(self, tensordict) -> None:
+        # we can't use the reset keys because they're gone
+        traj_sop = _aggregate_end_of_traj(
+            tensordict.get("next"), done_keys=self.env.done_keys
         )
-        if not self.reset_when_done:
-            return
-        td_reset = self._tensordict.clone(False)
-        any_done = terminated_or_truncated(
-            td_reset,
-            full_done_spec=self.env.output_spec["full_done_spec"],
-            key="_reset",
-        )
-
-        if any_done:
+        if traj_sop.any():
             traj_ids = self._tensordict.get(("collector", "traj_ids"))
             traj_ids = traj_ids.clone()
-            # collectors do not support passing other tensors than `"_reset"`
-            # to `reset()`.
-            traj_sop = _aggregate_resets(td_reset, reset_keys=self.env.reset_keys)
-            td_reset = self.env.reset(td_reset)
-
-            if td_reset.batch_dims:
-                # better cloning here than when passing the td for stacking
-                # cloning is necessary to avoid modifying entries in-place
-                self._tensordict = torch.where(traj_sop, td_reset, self._tensordict)
-            else:
-                self._tensordict.update(td_reset)
-
             traj_ids[traj_sop] = traj_ids.max() + torch.arange(
                 1, traj_sop.sum() + 1, device=traj_ids.device
             )
@@ -843,14 +827,20 @@ class SyncDataCollector(DataCollectorBase):
                     self.init_random_frames is not None
                     and self._frames < self.init_random_frames
                 ):
-                    self.env.rand_step(self._tensordict)
+                    self.env.rand_action(self._tensordict)
                 else:
                     self.policy(self._tensordict)
-                    self.env.step(self._tensordict)
-                # we must clone all the values, since the step / traj_id updates are done in-place
-                tensordicts.append(self._tensordict.to(self.storing_device))
+                tensordict, tensordict_ = self.env.step_and_maybe_reset(
+                    self._tensordict
+                )
+                self._tensordict = tensordict_.set(
+                    "collector", tensordict.get("collector").clone(False)
+                )
+                tensordicts.append(
+                    tensordict.to(self.storing_device, non_blocking=True)
+                )
 
-                self._step_and_maybe_reset()
+                self._update_traj_ids(tensordict)
                 if (
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
@@ -893,14 +883,16 @@ class SyncDataCollector(DataCollectorBase):
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
                 raise RuntimeError("resetting unique env with index is not permitted.")
-            _reset = torch.zeros(
-                self.env.done_spec.shape,
-                dtype=torch.bool,
-                device=self.env.device,
-            )
-            _reset[index] = 1
-            self._tensordict[index].zero_()
-            self._tensordict.set("_reset", _reset)
+            for reset_key, done_keys in zip(
+                self.env.reset_keys, self.env.done_keys_groups
+            ):
+                _reset = torch.zeros(
+                    self.env.full_done_spec[done_keys[0]].shape,
+                    dtype=torch.bool,
+                    device=self.env.device,
+                )
+                _reset[index] = 1
+                self._tensordict.set(reset_key, _reset)
         else:
             _reset = None
             self._tensordict.zero_()
