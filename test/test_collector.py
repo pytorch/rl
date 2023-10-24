@@ -34,7 +34,7 @@ from mocking_classes import (
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.tensordict import assert_allclose_td, TensorDict
 
 from torch import nn
@@ -927,17 +927,22 @@ def test_update_weights(use_async):
     [MultiSyncDataCollector, MultiaSyncDataCollector, SyncDataCollector],
 )
 @pytest.mark.parametrize("exclude", [True, False])
-def test_excluded_keys(collector_class, exclude):
+@pytest.mark.parametrize("out_key", ["_dummy", ("out", "_dummy"), ("_out", "dummy")])
+def test_excluded_keys(collector_class, exclude, out_key):
     if not exclude and collector_class is not SyncDataCollector:
         pytest.skip("defining _exclude_private_keys is not possible")
 
     def make_env():
-        return ContinuousActionVecMockEnv()
+        return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
 
     dummy_env = make_env()
     obs_spec = dummy_env.observation_spec["observation"]
     policy_module = nn.Linear(obs_spec.shape[-1], dummy_env.action_spec.shape[-1])
-    policy = Actor(policy_module, spec=dummy_env.action_spec)
+    policy = TensorDictModule(
+        policy_module, in_keys=["observation"], out_keys=["action"]
+    )
+    copier = TensorDictModule(lambda x: x, in_keys=["observation"], out_keys=[out_key])
+    policy = TensorDictSequential(policy, copier)
     policy_explore = OrnsteinUhlenbeckProcessWrapper(policy)
 
     collector_kwargs = {
@@ -954,11 +959,13 @@ def test_excluded_keys(collector_class, exclude):
     collector = collector_class(**collector_kwargs)
     collector._exclude_private_keys = exclude
     for b in collector:
-        keys = b.keys()
+        keys = set(b.keys())
         if exclude:
             assert not any(key.startswith("_") for key in keys)
+            assert out_key not in b.keys(True, True)
         else:
             assert any(key.startswith("_") for key in keys)
+            assert out_key in b.keys(True, True)
         break
     collector.shutdown()
     dummy_env.close()
