@@ -258,6 +258,7 @@ def make_trainer(
     )
 
     if recorder is not None:
+        # create recorder object
         recorder_obj = Recorder(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
@@ -266,11 +267,14 @@ def make_trainer(
             record_interval=cfg.record_interval,
             log_keys=cfg.recorder_log_keys,
         )
+        # register recorder
         trainer.register_op(
             "post_steps_log",
             recorder_obj,
         )
+        # call recorder - could be removed
         recorder_obj(None)
+        # create explorative recorder - could be optional
         recorder_obj_explore = Recorder(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
@@ -281,10 +285,12 @@ def make_trainer(
             suffix="exploration",
             out_keys={("next", "reward"): "r_evaluation_exploration"},
         )
+        # register recorder
         trainer.register_op(
             "post_steps_log",
             recorder_obj_explore,
         )
+        # call recorder - could be removed
         recorder_obj_explore(None)
 
     trainer.register_op(

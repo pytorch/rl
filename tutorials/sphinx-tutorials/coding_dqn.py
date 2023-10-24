@@ -390,7 +390,7 @@ def get_replay_buffer(buffer_size, n_optim, batch_size):
 
 
 def get_collector(
-    obs_norm_sd,
+    stats,
     num_collectors,
     actor_explore,
     frames_per_batch,
@@ -399,7 +399,7 @@ def get_collector(
 ):
     data_collector = MultiaSyncDataCollector(
         [
-            make_env(parallel=True, obs_norm_sd=obs_norm_sd),
+            make_env(parallel=True, obs_norm_sd=stats),
         ]
         * num_collectors,
         policy=actor_explore,
@@ -566,7 +566,12 @@ actor, actor_explore = make_model(test_env)
 loss_module, target_net_updater = get_loss_module(actor, gamma)
 
 collector = get_collector(
-    stats, num_collectors, actor_explore, frames_per_batch, total_frames, device
+    stats=stats,
+    num_collectors=num_collectors,
+    actor_explore=actor_explore,
+    frames_per_batch=frames_per_batch,
+    total_frames=total_frames,
+    device=device,
 )
 optimizer = torch.optim.Adam(
     loss_module.parameters(), lr=lr, weight_decay=wd, betas=betas
