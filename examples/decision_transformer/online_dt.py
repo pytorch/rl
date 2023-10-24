@@ -29,9 +29,10 @@ from utils import (
 )
 
 
-@set_gym_backend("gym")  # D4RL uses gym so we make sure gymnasium is hidden
-@hydra.main(config_path=".", config_name="odt_config")
+@hydra.main(config_path=".", config_name="odt_config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
+    set_gym_backend(cfg.env.backend).set()
+
     model_device = cfg.optim.device
 
     # Set seeds
@@ -66,6 +67,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         policy=policy,
         inference_context=cfg.env.inference_context,
     ).to(model_device)
+    inference_policy.set_tensor_keys(
+        observation="observation_cat",
+        action="action_cat",
+        return_to_go="return_to_go_cat",
+    )
 
     pbar = tqdm.tqdm(total=cfg.optim.pretrain_gradient_steps)
 
@@ -79,7 +85,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Pretraining
     start_time = time.time()
     for i in range(pretrain_gradient_steps):
-        pbar.update(i)
+        pbar.update(1)
         # Sample data
         data = offline_buffer.sample()
         # Compute loss

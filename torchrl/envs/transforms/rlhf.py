@@ -16,6 +16,7 @@ from tensordict.utils import is_seq_of_nested_key
 from torch import nn
 from torchrl.data.tensor_specs import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.transforms.transforms import Transform
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 
 class KLRewardTransform(Transform):
@@ -153,6 +154,13 @@ class KLRewardTransform(Transform):
         if not isinstance(coef, torch.Tensor):
             coef = torch.tensor(coef)
         self.register_buffer("coef", coef)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # run the actor on the tensordict
