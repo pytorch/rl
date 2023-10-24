@@ -20,9 +20,10 @@ from torchrl.data import (
 )
 
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs import EnvCreator, ParallelEnv, DMControlEnv, TransformedEnv, \
+    CatTensors
 
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, SafeModule
 from torchrl.modules.distributions import OneHotCategorical
@@ -33,10 +34,19 @@ from torchrl.objectives import DiscreteSACLoss, SoftUpdate
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 
-def env_maker(env_name, frame_skip=1, device="cpu", from_pixels=False):
-    return GymEnv(
-        env_name, device=device, frame_skip=frame_skip, from_pixels=from_pixels
-    )
+def env_maker(cfg, device="cpu"):
+    lib = cfg.env.library
+    if lib in ("gym", "gymnasium"):
+        with set_gym_backend(lib):
+            return GymEnv(
+                cfg.env.name,
+                device=device,
+            )
+    elif lib == "dm_control":
+        env = DMControlEnv(cfg.env.name, cfg.env.task)
+        return TransformedEnv(env, CatTensors(in_keys=env.observation_spec.keys(), out_key='observation'))
+    else:
+        raise NotImplementedError(f"Unknown lib {lib}.")
 
 
 def make_replay_buffer(
@@ -101,7 +111,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # 1.2 Create env vector
         vec_env = ParallelEnv(
-            create_env_fn=EnvCreator(lambda: env_maker(env_name=cfg.env_name)),
+            create_env_fn=EnvCreator(lambda cfg=cfg: env_maker(cfg)),
             num_workers=num_workers,
         )
 

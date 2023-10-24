@@ -16,7 +16,7 @@ from torchrl.envs import (
     ParallelEnv,
     RewardSum,
     StepCounter,
-    TransformedEnv,
+    TransformedEnv, DMControlEnv, CatTensors,
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -39,13 +39,19 @@ from torchrl.objectives.ddpg import DDPGLoss
 # -----------------
 
 
-def env_maker(task, device="cpu", from_pixels=False):
-    with set_gym_backend("gym"):
-        return GymEnv(
-            task,
-            device=device,
-            from_pixels=from_pixels,
-        )
+def env_maker(cfg, device="cpu"):
+    lib = cfg.env.library
+    if lib in ("gym", "gymnasium"):
+        with set_gym_backend(lib):
+            return GymEnv(
+                cfg.env.name,
+                device=device,
+            )
+    elif lib == "dm_control":
+        env = DMControlEnv(cfg.env.name, cfg.env.task)
+        return TransformedEnv(env, CatTensors(in_keys=env.observation_spec.keys(), out_key='observation'))
+    else:
+        raise NotImplementedError(f"Unknown lib {lib}.")
 
 
 def apply_env_transforms(env, max_episode_steps=1000):
@@ -65,7 +71,7 @@ def make_environment(cfg):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         cfg.collector.env_per_collector,
-        EnvCreator(lambda: env_maker(task=cfg.env.name)),
+        EnvCreator(lambda cfg=cfg: env_maker(cfg)),
     )
     parallel_env.set_seed(cfg.env.seed)
 
@@ -76,7 +82,7 @@ def make_environment(cfg):
     eval_env = TransformedEnv(
         ParallelEnv(
             cfg.collector.env_per_collector,
-            EnvCreator(lambda: env_maker(task=cfg.env.name)),
+            EnvCreator(lambda cfg=cfg: env_maker(cfg)),
         ),
         train_env.transform.clone(),
     )
