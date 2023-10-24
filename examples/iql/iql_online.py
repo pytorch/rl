@@ -110,7 +110,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # 1.2 Create env vector
         vec_env = ParallelEnv(
-            create_env_fn=EnvCreator(lambda cfg=cfg: env_maker()),
+            create_env_fn=EnvCreator(lambda cfg=cfg: env_maker(cfg=cfg)),
             num_workers=num_workers,
         )
 
