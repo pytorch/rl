@@ -347,6 +347,7 @@ class implement_for:
             # first time we call the function, we also do the replacement.
             # This will cause the imports to occur only during the first call to fn
             return self._delazify(self.func_name)(*args, **kwargs)
+
         return _lazy_call_fn
 
     def _call(self):

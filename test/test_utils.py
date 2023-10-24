@@ -151,7 +151,9 @@ def test_implement_for_missing_version():
 def test_implement_for_reset():
     assert implement_for_test_functions.select_correct_version() == "0.3+"
     _impl = copy(implement_for._implementations)
-    name = implement_for.get_func_name(implement_for_test_functions.select_correct_version)
+    name = implement_for.get_func_name(
+        implement_for_test_functions.select_correct_version
+    )
     for setter in implement_for._setters:
         if implement_for.get_func_name(setter.fn) == name and setter.fn() != "0.3+":
             setter.module_set()
