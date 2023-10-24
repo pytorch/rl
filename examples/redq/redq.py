@@ -161,7 +161,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # ],
     )
 
-    replay_buffer = make_replay_buffer(device, cfg)
+    replay_buffer = make_replay_buffer("cpu", cfg)
 
     recorder = transformed_env_constructor(
         cfg,
