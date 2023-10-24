@@ -218,7 +218,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Make Replay Buffer
     replay_buffer = make_replay_buffer(
-        buffer_size=cfg.buffer_size, device=device, batch_size=cfg.batch_size
+        buffer_size=cfg.buffer_size, device="cpu", batch_size=cfg.batch_size
     )
 
     # Optimizers

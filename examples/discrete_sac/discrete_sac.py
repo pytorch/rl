@@ -201,7 +201,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         prb=cfg.prb,
         buffer_size=cfg.buffer_size,
         batch_size=cfg.batch_size,
-        device=device,
+        device="cpu",
     )
 
     # Optimizers
@@ -255,7 +255,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
             ) = ([], [], [], [], [], [])
             for _ in range(cfg.frames_per_batch * int(cfg.utd_ratio)):
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample().clone()
+                sampled_tensordict = replay_buffer.sample()
+                if sampled_tensordict.device != device:
+                    sampled_tensordict = sampled_tensordict.to(
+                        device, non_blocking=True
+                    )
+                else:
+                    sampled_tensordict = sampled_tensordict.clone()
 
                 loss_td = loss_module(sampled_tensordict)
 
