@@ -10,8 +10,15 @@ from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.envs import Compose, DoubleToFloat, EnvCreator, ParallelEnv, \
-    TransformedEnv, DMControlEnv, CatTensors
+from torchrl.envs import (
+    CatTensors,
+    Compose,
+    DMControlEnv,
+    DoubleToFloat,
+    EnvCreator,
+    ParallelEnv,
+    TransformedEnv,
+)
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.transforms import InitTracker, RewardSum, StepCounter
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -36,9 +43,12 @@ def env_maker(cfg, device="cpu"):
             )
     elif lib == "dm_control":
         env = DMControlEnv(cfg.env.name, cfg.env.task)
-        return TransformedEnv(env, CatTensors(in_keys=env.observation_spec.keys(), out_key='observation'))
+        return TransformedEnv(
+            env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
+        )
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
+
 
 def apply_env_transforms(env, max_episode_steps=1000):
     transformed_env = TransformedEnv(

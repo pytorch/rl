@@ -18,8 +18,13 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.envs import EnvCreator, ParallelEnv, DMControlEnv, TransformedEnv, \
-    CatTensors
+from torchrl.envs import (
+    CatTensors,
+    DMControlEnv,
+    EnvCreator,
+    ParallelEnv,
+    TransformedEnv,
+)
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
@@ -40,7 +45,9 @@ def env_maker(cfg, device="cpu"):
             )
     elif lib == "dm_control":
         env = DMControlEnv(cfg.env.name, cfg.env.task)
-        return TransformedEnv(env, CatTensors(in_keys=env.observation_spec.keys(), out_key='observation'))
+        return TransformedEnv(
+            env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
+        )
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
 

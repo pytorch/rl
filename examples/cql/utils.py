@@ -12,12 +12,14 @@ from torchrl.data import (
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
+    CatTensors,
     Compose,
+    DMControlEnv,
     DoubleToFloat,
     EnvCreator,
     ParallelEnv,
     RewardScaling,
-    TransformedEnv, DMControlEnv, CatTensors,
+    TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -31,6 +33,7 @@ from torchrl.trainers.helpers.models import ACTIVATIONS
 # Environment utils
 # -----------------
 
+
 def env_maker(cfg, device="cpu"):
     lib = cfg.env.library
     if lib in ("gym", "gymnasium"):
@@ -41,7 +44,9 @@ def env_maker(cfg, device="cpu"):
             )
     elif lib == "dm_control":
         env = DMControlEnv(cfg.env.name, cfg.env.task)
-        return TransformedEnv(env, CatTensors(in_keys=env.observation_spec.keys(), out_key='observation'))
+        return TransformedEnv(
+            env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
+        )
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
 
