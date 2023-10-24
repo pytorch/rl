@@ -758,8 +758,18 @@ class SyncDataCollector(DataCollectorBase):
                 if self.postproc is not None:
                     tensordict_out = self.postproc(tensordict_out)
                 if self._exclude_private_keys:
+
+                    def is_private(key):
+                        if isinstance(key, str) and key.startswith("_"):
+                            return True
+                        if isinstance(key, tuple) and any(
+                            _key.startswith("_") for _key in key
+                        ):
+                            return True
+                        return False
+
                     excluded_keys = [
-                        key for key in tensordict_out.keys() if key.startswith("_")
+                        key for key in tensordict_out.keys(True) if is_private(key)
                     ]
                     tensordict_out = tensordict_out.exclude(
                         *excluded_keys, inplace=True
