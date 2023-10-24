@@ -22,6 +22,14 @@ from torchrl.modules.distributions import TanhNormal
 from torchrl.objectives import SoftUpdate
 from torchrl.data import CompositeSpec
 from torchrl.objectives.common import LossModule
+from torchrl.objectives.utils import (
+    _cache_values,
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+    ValueEstimators,
+)
+from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 from tensordict.tensordict import TensorDict, TensorDictBase
 from typing import Tuple
 
@@ -92,17 +100,17 @@ def make_collector(cfg, train_env, actor_model_explore):
 
 
 def make_replay_buffer(
-    batch_size,
-    prb=False,
-    buffer_size=1_000_000,
-    buffer_scratch_dir=None,
-    device="cpu",
-    prefetch=3,
+        batch_size,
+        prb=False,
+        buffer_size=1_000_000,
+        buffer_scratch_dir=None,
+        device="cpu",
+        prefetch=3,
 ):
     with (
-        tempfile.TemporaryDirectory()
-        if buffer_scratch_dir is None
-        else nullcontext(buffer_scratch_dir)
+            tempfile.TemporaryDirectory()
+            if buffer_scratch_dir is None
+            else nullcontext(buffer_scratch_dir)
     ) as scratch_dir:
         if prb:
             replay_buffer = TensorDictPrioritizedReplayBuffer(
@@ -291,6 +299,12 @@ class TQCLoss(LossModule):
         self.gamma = gamma
         self.top_quantiles_to_drop = top_quantiles_to_drop
 
+        # --- This code serves to demonstrate the issue with value estimators ---
+        actor_critic = ActorCriticWrapper(actor_network, qvalue_network)
+        self.actor_critic = actor_critic
+        self.make_value_estimator()
+        # ----------------------------------------------------------------------
+
         # Compute target entropy
         action_spec = getattr(self.actor, "spec", None)
         if action_spec is None:
@@ -317,11 +331,36 @@ class TQCLoss(LossModule):
 
             # compute and cut quantiles at the next state
             next_z = td_next.get("state_action_value")
+            print(f'next_z.shape {next_z.shape}')
+            print(f'reward.shape {reward.shape}')
             sorted_z, _ = torch.sort(next_z.reshape(*tensordict.batch_size, -1))
             sorted_z_part = sorted_z[..., :-self.top_quantiles_to_drop]
 
             # compute target
             target = reward + not_done * self.gamma * (sorted_z_part - alpha * next_log_pi)
+
+        # target_params = TensorDict(
+        # {
+        #    "module": {
+        #        "0": self.actor_params,
+        #        "1": self.target_critic_params,
+        #    }
+        # },
+        # batch_size=self.actor_params.batch_size,
+        # device=self.actor_params.device,
+        # )
+
+        # --- This code serves to demonstrate the issue with value estimators ---
+        # Add an entry called "test_key", which is then read by the value estimator
+        tensordict.set(("next", "test_key"), sorted_z_part - alpha * next_log_pi)
+        # This should compute reward + (1-done) * gamma * "test_key"... however the shape is wrong!
+        target2 = self.value_estimator.value_estimate(
+            tensordict  # , target_params=target_params
+        )
+        print('Targets :')
+        print(f'target.shape {target.shape}')
+        print(f'target2.shape {target2.shape}')
+        # ----------------------------------------------------------------------
 
         self.critic(tensordict, params=self.critic_params)
         cur_z = tensordict.get("state_action_value")
@@ -368,6 +407,33 @@ class TQCLoss(LossModule):
             },
             batch_size=[]
         )
+
+    # --- This code serves to demonstrate the issue with value estimators ---
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        value_type = ValueEstimators.TD0
+        self.value_type = value_type
+        hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
+        hp.update(hyperparams)
+        self._value_estimator = TD0Estimator(value_network=self.actor_critic, value_key="test_key", **hp)
+        tensor_keys = {
+            "value": "state_action_value",
+            "reward": "reward",
+            "done": "done",
+            "terminated": "terminated",
+        }
+        # This will throw an error 'All input tensors (value, reward and done states) must share a unique shape.' ...
+        # To get around this error (Note this is obvs a HACK) do the following instead:
+        # self._value_estimator = TD0Estimator(value_network=None, value_key="test_key", **hp)
+        # tensor_keys = {
+        #    "value": "episode_reward",
+        #    "reward": "reward",
+        #    "done": "done",
+        #    "terminated": "terminated",
+        # }
+
+        self._value_estimator.set_keys(**tensor_keys)
 
 
 def make_loss_module(cfg, model):
