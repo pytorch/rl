@@ -126,7 +126,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # Sample from replay buffer
                 sampled_tensordict = replay_buffer.sample()
                 if sampled_tensordict.device != device:
-                    sampled_tensordict = sampled_tensordict.to(device, non_blocking=True)
+                    sampled_tensordict = sampled_tensordict.to(
+                        device, non_blocking=True
+                    )
                 else:
                     sampled_tensordict = sampled_tensordict.clone()
 
