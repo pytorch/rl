@@ -26,7 +26,7 @@ from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
 from torchrl.envs.utils import (
-    _aggregate_resets,
+    _aggregate_end_of_traj,
     _set_single_key,
     _sort_keys,
     _update_during_reset,
@@ -581,7 +581,9 @@ class SerialEnv(_BatchedEnv):
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         if tensordict is not None:
-            needs_resetting = _aggregate_resets(tensordict, reset_keys=self.reset_keys)
+            needs_resetting = _aggregate_end_of_traj(
+                tensordict, reset_keys=self.reset_keys
+            )
             if needs_resetting.ndim > 2:
                 needs_resetting = needs_resetting.flatten(1, needs_resetting.ndim - 1)
             if needs_resetting.ndim > 1:
@@ -888,7 +890,9 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         if tensordict is not None:
-            needs_resetting = _aggregate_resets(tensordict, reset_keys=self.reset_keys)
+            needs_resetting = _aggregate_end_of_traj(
+                tensordict, reset_keys=self.reset_keys
+            )
             if needs_resetting.ndim > 2:
                 needs_resetting = needs_resetting.flatten(1, needs_resetting.ndim - 1)
             if needs_resetting.ndim > 1:

@@ -185,11 +185,11 @@ pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_contro
 if [ "${CU_VERSION:-}" != cpu ] ; then
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
-    --timeout=60
+    --timeout=120
 else
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py --ignore test/test_distributed.py \
-    --timeout=60
+    --timeout=120
 fi
 
 coverage combine

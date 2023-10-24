@@ -59,7 +59,7 @@ from torchrl.envs import (
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.envs.utils import (
-    _aggregate_resets,
+    _aggregate_end_of_traj,
     _replace_last,
     check_env_specs,
     PARTIAL_MISSING_ERR,
@@ -1816,12 +1816,12 @@ class TestAggregateReset:
     def test_aggregate_reset_to_root(self):
         # simple
         td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [])
-        assert _aggregate_resets(td).shape == ()
+        assert _aggregate_end_of_traj(td).shape == ()
         # td with batch size
         td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [1])
-        assert _aggregate_resets(td).shape == (1,)
+        assert _aggregate_end_of_traj(td).shape == (1,)
         td = TensorDict({"_reset": torch.zeros((1, 2), dtype=torch.bool)}, [1])
-        assert _aggregate_resets(td).shape == (1,)
+        assert _aggregate_end_of_traj(td).shape == (1,)
         # nested td
         td = TensorDict(
             {
@@ -1830,7 +1830,7 @@ class TestAggregateReset:
             },
             [1],
         )
-        assert _aggregate_resets(td).shape == (1,)
+        assert _aggregate_end_of_traj(td).shape == (1,)
         # nested td with greater number of dims
         td = TensorDict(
             {
@@ -1843,7 +1843,7 @@ class TestAggregateReset:
             [1, 2],
         )
         # test reduction
-        assert _aggregate_resets(td).shape == (1, 2)
+        assert _aggregate_end_of_traj(td).shape == (1, 2)
         td = TensorDict(
             {
                 "_reset": torch.zeros(
@@ -1855,7 +1855,7 @@ class TestAggregateReset:
             [1, 2],
         )
         # test reduction, partial
-        assert _aggregate_resets(td).shape == (1, 2)
+        assert _aggregate_end_of_traj(td).shape == (1, 2)
         td = TensorDict(
             {
                 "_reset": torch.tensor([True, False]).view(1, 2),
@@ -1863,7 +1863,9 @@ class TestAggregateReset:
             },
             [1, 2],
         )
-        assert (_aggregate_resets(td) == torch.tensor([True, False]).view(1, 2)).all()
+        assert (
+            _aggregate_end_of_traj(td) == torch.tensor([True, False]).view(1, 2)
+        ).all()
         # with a stack
         td0 = TensorDict(
             {
@@ -1888,17 +1890,17 @@ class TestAggregateReset:
             [1, 2],
         )
         td = torch.stack([td0, td1], 0)
-        assert _aggregate_resets(td).all()
+        assert _aggregate_end_of_traj(td).all()
 
     def test_aggregate_reset_to_root_keys(self):
         # simple
         td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [])
-        assert _aggregate_resets(td, reset_keys=["_reset"]).shape == ()
+        assert _aggregate_end_of_traj(td, reset_keys=["_reset"]).shape == ()
         # td with batch size
         td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [1])
-        assert _aggregate_resets(td, reset_keys=["_reset"]).shape == (1,)
+        assert _aggregate_end_of_traj(td, reset_keys=["_reset"]).shape == (1,)
         td = TensorDict({"_reset": torch.zeros((1, 2), dtype=torch.bool)}, [1])
-        assert _aggregate_resets(td, reset_keys=["_reset"]).shape == (1,)
+        assert _aggregate_end_of_traj(td, reset_keys=["_reset"]).shape == (1,)
         # nested td
         td = TensorDict(
             {
@@ -1907,9 +1909,9 @@ class TestAggregateReset:
             },
             [1],
         )
-        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).shape == (
-            1,
-        )
+        assert _aggregate_end_of_traj(
+            td, reset_keys=["_reset", ("a", "_reset")]
+        ).shape == (1,)
         # nested td with greater number of dims
         td = TensorDict(
             {
@@ -1922,7 +1924,9 @@ class TestAggregateReset:
             [1, 2],
         )
         # test reduction
-        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).shape == (
+        assert _aggregate_end_of_traj(
+            td, reset_keys=["_reset", ("a", "_reset")]
+        ).shape == (
             1,
             2,
         )
@@ -1936,9 +1940,11 @@ class TestAggregateReset:
             },
             [1, 2],
         )
-        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).all()
+        assert _aggregate_end_of_traj(td, reset_keys=["_reset", ("a", "_reset")]).all()
         # test reduction, partial
-        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).shape == (
+        assert _aggregate_end_of_traj(
+            td, reset_keys=["_reset", ("a", "_reset")]
+        ).shape == (
             1,
             2,
         )
@@ -1952,7 +1958,7 @@ class TestAggregateReset:
             [1, 2],
         )
         assert (
-            _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")])
+            _aggregate_end_of_traj(td, reset_keys=["_reset", ("a", "_reset")])
             == torch.tensor([True, False]).view(1, 2)
         ).all()
         # with a stack
@@ -1979,17 +1985,17 @@ class TestAggregateReset:
             [1, 2],
         )
         td = torch.stack([td0, td1], 0)
-        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).all()
+        assert _aggregate_end_of_traj(td, reset_keys=["_reset", ("a", "_reset")]).all()
 
     def test_aggregate_reset_to_root_errors(self):
         # the order matters: if the first or another key is missing, the ValueError is raised at a different line
         with pytest.raises(ValueError, match=PARTIAL_MISSING_ERR):
-            _aggregate_resets(
+            _aggregate_end_of_traj(
                 TensorDict({"_reset": False}, []),
                 reset_keys=["_reset", ("another", "_reset")],
             )
         with pytest.raises(ValueError, match=PARTIAL_MISSING_ERR):
-            _aggregate_resets(
+            _aggregate_end_of_traj(
                 TensorDict({"_reset": False}, []),
                 reset_keys=[("another", "_reset"), "_reset"],
             )

@@ -44,7 +44,7 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
-    _aggregate_resets,
+    _aggregate_end_of_traj,
     _convert_exploration_type,
     ExplorationType,
     set_exploration_type,
@@ -786,7 +786,7 @@ class SyncDataCollector(DataCollectorBase):
 
     def _update_traj_ids(self, tensordict) -> None:
         # we can't use the reset keys because they're gone
-        traj_sop = _aggregate_resets(
+        traj_sop = _aggregate_end_of_traj(
             tensordict.get("next"), done_keys=self.env.done_keys
         )
         if traj_sop.any():

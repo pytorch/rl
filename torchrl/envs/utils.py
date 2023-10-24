@@ -790,42 +790,36 @@ def _terminated_or_truncated(
         any_eot = False
         aggregate = None
         if full_done_spec is None:
+            tds = {}
+            found_leaf = 0
             for eot_key, item in data.items():
-                if eot_key == "done":
-                    done = data.get(eot_key, None)
-                    if done is None:
-                        done = torch.zeros(
-                            (*data.shape, 1), dtype=torch.bool, device=data.device
-                        )
+                if eot_key in ("terminated", "truncated", "done"):
+                    done = item
                     if aggregate is None:
-                        aggregate = torch.tensor(False, device=done.device)
+                        aggregate = False
                     aggregate = aggregate | done
-                elif eot_key in ("terminated", "truncated"):
-                    done = data.get(eot_key, None)
-                    if done is None:
-                        done = torch.zeros(
-                            (*data.shape, 1), dtype=torch.bool, device=data.device
-                        )
-                    if aggregate is None:
-                        aggregate = torch.tensor(False, device=done.device)
-                    aggregate = aggregate | done
+                    found_leaf += 1
                 elif isinstance(item, TensorDictBase):
-                    any_eot = any_eot | inner_terminated_or_truncated(
+                    tds[eot_key] = item
+            # The done signals in a root td prevail over done in the leaves
+            if tds:
+                for eot_key, item in tds.items():
+                    any_eot_td = inner_terminated_or_truncated(
                         data=item,
                         full_done_spec=None,
                         key=key,
                         curr_done_key=curr_done_key + (eot_key,),
                     )
+                    if not found_leaf:
+                        any_eot = any_eot | any_eot_td
         else:
+            composite_spec = {}
+            found_leaf = 0
             for eot_key, item in full_done_spec.items():
                 if isinstance(item, CompositeSpec):
-                    any_eot = any_eot | inner_terminated_or_truncated(
-                        data=data.get(eot_key),
-                        full_done_spec=item,
-                        key=key,
-                        curr_done_key=curr_done_key + (eot_key,),
-                    )
+                    composite_spec[eot_key] = item
                 else:
+                    found_leaf += 1
                     stop = data.get(eot_key, None)
                     if stop is None:
                         stop = torch.zeros(
@@ -834,6 +828,18 @@ def _terminated_or_truncated(
                     if aggregate is None:
                         aggregate = False
                     aggregate = aggregate | stop
+            # The done signals in a root td prevail over done in the leaves
+            if composite_spec:
+                for eot_key, item in composite_spec.items():
+                    any_eot_td = inner_terminated_or_truncated(
+                        data=data.get(eot_key),
+                        full_done_spec=item,
+                        key=key,
+                        curr_done_key=curr_done_key + (eot_key,),
+                    )
+                    if not found_leaf:
+                        any_eot = any_eot_td | any_eot
+
         if aggregate is not None:
             if key is not None:
                 if aggregate.ndim > data.ndim:
@@ -974,7 +980,7 @@ def terminated_or_truncated(
 PARTIAL_MISSING_ERR = "Some reset keys were present but not all. Either all the `'_reset'` entries must be present, or none."
 
 
-def _aggregate_resets(
+def _aggregate_end_of_traj(
     data: TensorDictBase, reset_keys=None, done_keys=None
 ) -> torch.Tensor:
     # goes through the tensordict and brings the _reset information to
