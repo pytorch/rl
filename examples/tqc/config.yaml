@@ -20,7 +20,7 @@ collector:
 replay_buffer:
   size: 1_000_000
   prb: False # use prioritized experience replay
-  scratch_dir: ${env.exp_name}_${env.seed}
+  scratch_dir:
 
 # optim
 optim:

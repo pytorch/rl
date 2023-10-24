@@ -3,7 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-
+import tempfile
+from contextlib import nullcontext
 import torch
 import numpy as np
 from tensordict.nn import InteractionType, TensorDictModule
@@ -16,7 +17,7 @@ from torchrl.envs import Compose, DoubleToFloat, EnvCreator, ParallelEnv, Transf
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.transforms import InitTracker, RewardSum, StepCounter
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
+from torchrl.modules import MLP, ProbabilisticActor, ValueOperator, ActorCriticWrapper
 from torchrl.modules.distributions import TanhNormal
 from torchrl.objectives import SoftUpdate
 from torchrl.data import CompositeSpec
@@ -91,38 +92,43 @@ def make_collector(cfg, train_env, actor_model_explore):
 
 
 def make_replay_buffer(
-        batch_size,
-        prb=False,
-        buffer_size=1_000_000,
-        buffer_scratch_dir="/tmp/",
-        device="cpu",
-        prefetch=3,
+    batch_size,
+    prb=False,
+    buffer_size=1_000_000,
+    buffer_scratch_dir=None,
+    device="cpu",
+    prefetch=3,
 ):
-    if prb:
-        replay_buffer = TensorDictPrioritizedReplayBuffer(
-            alpha=0.7,
-            beta=0.5,
-            pin_memory=False,
-            prefetch=prefetch,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=buffer_scratch_dir,
-                device=device,
-            ),
-            batch_size=batch_size,
-        )
-    else:
-        replay_buffer = TensorDictReplayBuffer(
-            pin_memory=False,
-            prefetch=prefetch,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=buffer_scratch_dir,
-                device=device,
-            ),
-            batch_size=batch_size,
-        )
-    return replay_buffer
+    with (
+        tempfile.TemporaryDirectory()
+        if buffer_scratch_dir is None
+        else nullcontext(buffer_scratch_dir)
+    ) as scratch_dir:
+        if prb:
+            replay_buffer = TensorDictPrioritizedReplayBuffer(
+                alpha=0.7,
+                beta=0.5,
+                pin_memory=False,
+                prefetch=prefetch,
+                storage=LazyMemmapStorage(
+                    buffer_size,
+                    scratch_dir=scratch_dir,
+                    device=device,
+                ),
+                batch_size=batch_size,
+            )
+        else:
+            replay_buffer = TensorDictReplayBuffer(
+                pin_memory=False,
+                prefetch=prefetch,
+                storage=LazyMemmapStorage(
+                    buffer_size,
+                    scratch_dir=scratch_dir,
+                    device=device,
+                ),
+                batch_size=batch_size,
+            )
+        return replay_buffer
 
 
 # ====================================================================

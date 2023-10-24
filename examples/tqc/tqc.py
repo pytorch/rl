@@ -85,7 +85,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         batch_size=cfg.optim.batch_size,
         prb=cfg.replay_buffer.prb,
         buffer_size=cfg.replay_buffer.size,
-        buffer_scratch_dir="/tmp/" + cfg.replay_buffer.scratch_dir,
+        buffer_scratch_dir=cfg.replay_buffer.scratch_dir,
         device=device,
     )
 
