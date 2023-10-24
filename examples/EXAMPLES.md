@@ -48,7 +48,7 @@ python redq/redq.py env.name="HalfCheetah-v4" env.library="gymnasium"
 To reproduce a single run:
 
 ```
-python sac/sac.py env.name="cheetah" env.task="run" env.library="dm_control" network.device=cpu
+python sac/sac.py env.name="cheetah" env.task="run" env.library="dm_control"
 ```
 
 ``` 
