@@ -66,7 +66,7 @@ pip install pip --upgrade
 conda env update --file "${this_dir}/environment.yml" --prune
 
 #conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightly -y
-conda install habitat-sim headless -c conda-forge -c aihabitat
+conda install habitat-sim withbullet headless -c conda-forge -c aihabitat -y
 
 conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
 
