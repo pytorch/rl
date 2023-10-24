@@ -15,7 +15,6 @@ from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
 
-# from torchrl._torchrl import safeatanh, safetanh
 from torchrl.modules.distributions.utils import (
     _cast_device,
     FasterTransformedDistribution,

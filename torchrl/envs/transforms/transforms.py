@@ -29,7 +29,6 @@ from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     ContinuousBox,
-    DEVICE_TYPING,
     DiscreteTensorSpec,
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
@@ -39,8 +38,12 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.envs.common import _EnvPostInit, EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
-from torchrl.envs.transforms.utils import check_finite
-from torchrl.envs.utils import _replace_last, _sort_keys, step_mdp
+from torchrl.envs.transforms.utils import (
+    _get_reset,
+    _set_missing_tolerance,
+    check_finite,
+)
+from torchrl.envs.utils import _replace_last, _sort_keys, _update_during_reset, step_mdp
 from torchrl.objectives.value.functional import reward2go
 
 try:
@@ -73,14 +76,14 @@ def _apply_to_composite(function):
     @wraps(function)
     def new_fun(self, observation_spec):
         if isinstance(observation_spec, CompositeSpec):
-            d = observation_spec._specs
+            _specs = observation_spec._specs
             in_keys = self.in_keys
             out_keys = self.out_keys
             for in_key, out_key in zip(in_keys, out_keys):
                 if in_key in observation_spec.keys(True, True):
-                    d[out_key] = function(self, observation_spec[in_key].clone())
+                    _specs[out_key] = function(self, observation_spec[in_key].clone())
             return CompositeSpec(
-                d, shape=observation_spec.shape, device=observation_spec.device
+                _specs, shape=observation_spec.shape, device=observation_spec.device
             )
         else:
             return function(self, observation_spec)
@@ -154,9 +157,9 @@ class Transform(nn.Module):
     def __init__(
         self,
         in_keys: Sequence[NestedKey] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
-        in_keys_inv: Optional[Sequence[NestedKey]] = None,
-        out_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        in_keys_inv: Sequence[NestedKey] | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
     ):
         super().__init__()
         self.in_keys = in_keys
@@ -164,6 +167,7 @@ class Transform(nn.Module):
         self.in_keys_inv = in_keys_inv
         self.out_keys_inv = out_keys_inv
         self._missing_tolerance = False
+        # we use __dict__ to avoid having nn.Module placing these objects in the module list
         self.__dict__["_container"] = None
         self.__dict__["_parent"] = None
 
@@ -227,9 +231,15 @@ class Transform(nn.Module):
             value = [unravel_key(val) for val in value]
         self._out_keys_inv = value
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def reset(self, tensordict):
+        warnings.warn("Transform.reset public method will be derpecated in v0.4.0.")
+        return self._reset(tensordict, tensordict_reset=tensordict)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         """Resets a transform if it is stateful."""
-        return tensordict
+        return tensordict_reset
 
     def init(self, tensordict) -> None:
         pass
@@ -424,6 +434,7 @@ class Transform(nn.Module):
                 "Call `transform.clone()` to get a similar transform with no parent set."
             )
         self.__dict__["_container"] = container
+        self.__dict__["_parent"] = None
 
     def reset_parent(self) -> None:
         self.__dict__["_container"] = None
@@ -512,6 +523,7 @@ class Transform(nn.Module):
         return self._missing_tolerance
 
     def to(self, *args, **kwargs):
+        # remove the parent, because it could have the wrong device associated
         self.empty_cache()
         return super().to(*args, **kwargs)
 
@@ -584,8 +596,6 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             self._set_env(env, device)
             if transform is None:
                 transform = Compose()
-            else:
-                transform = transform.to(device)
         self.transform = transform
 
         self._last_obs = None
@@ -616,7 +626,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
 
     @property
     def transform(self) -> Transform:
-        return self._transform
+        return getattr(self, "_transform", None)
 
     @transform.setter
     def transform(self, transform: Transform):
@@ -625,10 +635,15 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
                 f"""Expected a transform of type torchrl.envs.transforms.Transform,
 but got an object of type {type(transform)}."""
             )
-        prev_transform = self.transform
+        prev_transform = getattr(self, "_transform", None)
         if prev_transform is not None:
             prev_transform.empty_cache()
-            prev_transform.__dict__["_container"] = None
+            prev_transform.reset_parent()
+        if not isinstance(transform, Transform):
+            raise ValueError(
+                f"Transforms passed to {type(self)} must be instances of a `torch.envs.Transform` subclass. Got {type(transform)}."
+            )
+        transform = transform.to(self.device)
         transform.set_container(self)
         transform.eval()
         self._transform = transform
@@ -673,12 +688,10 @@ but got an object of type {type(transform)}."""
         if not self.cache_specs or self.__dict__.get("_output_spec", None) is None:
             output_spec = self.base_env.output_spec.clone()
 
-            # remove cached key values
-            self.__dict__["_done_keys"] = None
-            self.__dict__["_reward_keys"] = None
-            self.__dict__["_reset_keys"] = None
+            # remove cached key values, but not _input_spec
+            super().empty_cache()
 
-            output_spec.unlock_()
+            output_spec = output_spec.unlock_()
             output_spec = self.transform.transform_output_spec(output_spec)
             output_spec.lock_()
             if self.cache_specs:
@@ -692,6 +705,10 @@ but got an object of type {type(transform)}."""
         """Action spec of the transformed environment."""
         if self.__dict__.get("_input_spec", None) is None or not self.cache_specs:
             input_spec = self.base_env.input_spec.clone()
+
+            # remove cached key values but not _output_spec
+            super().empty_cache()
+
             input_spec.unlock_()
             input_spec = self.transform.transform_input_spec(input_spec)
             input_spec.lock_()
@@ -703,8 +720,16 @@ but got an object of type {type(transform)}."""
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
+        next_preset = tensordict.get("next", None)
         tensordict_in = self.transform.inv(tensordict)
         next_tensordict = self.base_env._step(tensordict_in)
+        if next_preset is not None:
+            # tensordict could already have a "next" key
+            # this could be done more efficiently by not excluding but just passing
+            # the necessary keys
+            next_tensordict.update(
+                next_preset.exclude(*next_tensordict.keys(True, True))
+            )
         self.base_env._complete_done(self.base_env.full_done_spec, next_tensordict)
         # we want the input entries to remain unchanged
         next_tensordict = self.transform._step(tensordict, next_tensordict)
@@ -727,21 +752,29 @@ but got an object of type {type(transform)}."""
             tensordict = tensordict.select(
                 *self.reset_keys, *self.state_spec.keys(True, True), strict=False
             )
-        out_tensordict = self.base_env._reset(tensordict=tensordict, **kwargs)
-        self.base_env._complete_done(self.base_env.full_done_spec, out_tensordict)
-        if tensordict is not None:
-            # the transform may need to read previous info during reset.
-            # For instance, we may need to pass the step_count for partial resets.
-            # We update the copy of tensordict with the new data, instead of
-            # the contrary because newer data prevails.
-            out_tensordict = tensordict.update(out_tensordict)
-        out_tensordict = self.transform.reset(out_tensordict)
+        tensordict_reset = self.base_env._reset(tensordict=tensordict, **kwargs)
+        if tensordict is None:
+            # make sure all transforms see a source tensordict
+            tensordict = tensordict_reset.empty()
+        self.base_env._complete_done(self.base_env.full_done_spec, tensordict_reset)
+        tensordict_reset = self.transform._reset(tensordict, tensordict_reset)
+        return tensordict_reset
 
-        mt_mode = self.transform.missing_tolerance
-        self.set_missing_tolerance(True)
-        out_tensordict = self.transform._call(out_tensordict)
-        self.set_missing_tolerance(mt_mode)
-        return out_tensordict
+    def _reset_proc_data(self, tensordict, tensordict_reset):
+        # self._complete_done(self.full_done_spec, tensordict_reset)
+        self._reset_check_done(tensordict, tensordict_reset)
+        if tensordict is not None:
+            tensordict_reset = _update_during_reset(
+                tensordict_reset, tensordict, self.reset_keys
+            )
+        # # we need to call `_call` as some transforms don't do the work in reset
+        # # eg: CatTensor has only a _call method, no need for a reset since reset
+        # # doesn't do anything special
+        # mt_mode = self.transform.missing_tolerance
+        # self.set_missing_tolerance(True)
+        # tensordict_reset = self.transform._call(tensordict_reset)
+        # self.set_missing_tolerance(mt_mode)
+        return tensordict_reset
 
     def _complete_done(
         cls, done_spec: CompositeSpec, data: TensorDictBase
@@ -782,10 +815,10 @@ but got an object of type {type(transform)}."""
     def empty_cache(self):
         self.__dict__["_output_spec"] = None
         self.__dict__["_input_spec"] = None
-        self.__dict__["_cache_in_keys"] = None
+        super().empty_cache()
 
     def append_transform(self, transform: Transform) -> None:
-        self._erase_metadata()
+        self.empty_cache()
         if not isinstance(transform, Transform):
             raise ValueError(
                 "TransformedEnv.append_transform expected a transform but received an object of "
@@ -801,6 +834,7 @@ but got an object of type {type(transform)}."""
         self.transform.append(transform)
 
     def insert_transform(self, index: int, transform: Transform) -> None:
+        self.empty_cache()
         if not isinstance(transform, Transform):
             raise ValueError(
                 "TransformedEnv.insert_transform expected a transform but received an object of "
@@ -812,7 +846,6 @@ but got an object of type {type(transform)}."""
             self.transform = compose  # parent set automatically
 
         self.transform.insert(index, transform)
-        self._erase_metadata()
 
     def __getattr__(self, attr: str) -> Any:
         try:
@@ -838,20 +871,15 @@ but got an object of type {type(transform)}."""
         t_str = indent(f"transform={self.transform}", 4 * " ")
         return f"TransformedEnv(\n{env_str},\n{t_str})"
 
-    def _erase_metadata(self):
-        if self.cache_specs:
-            self.__dict__["_input_spec"] = None
-            self.__dict__["_output_spec"] = None
-            self.__dict__["_cache_in_keys"] = None
-
-    def to(self, device: DEVICE_TYPING) -> TransformedEnv:
-        self.base_env.to(device)
-        self.transform = self.transform.to(device)
-
-        if self.cache_specs:
-            self.__dict__["_input_spec"] = None
-            self.__dict__["_output_spec"] = None
-        return self
+    def to(self, *args, **kwargs) -> TransformedEnv:
+        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
+            *args, **kwargs
+        )
+        if device is not None:
+            self.base_env = self.base_env.to(device)
+            self._transform = self._transform.to(device)
+            self.empty_cache()
+        return super().to(*args, **kwargs)
 
     def __setattr__(self, key, value):
         propobj = getattr(self.__class__, key, None)
@@ -882,10 +910,10 @@ class ObservationTransform(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
-        in_keys_inv: Optional[Sequence[NestedKey]] = None,
-        out_keys_inv: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        in_keys_inv: Sequence[NestedKey] | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
     ):
         if in_keys is None:
             in_keys = [
@@ -920,8 +948,9 @@ class Compose(Transform):
     def to(self, *args, **kwargs):
         # because Module.to(...) does not call to(...) on sub-modules, we have
         # manually call it:
-        for t in self.transforms:
-            t.to(*args, **kwargs)
+        self.transforms = nn.ModuleList(
+            [t.to(*args, **kwargs) for t in self.transforms]
+        )
         return super().to(*args, **kwargs)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -984,10 +1013,12 @@ class Compose(Transform):
         for t in self:
             t.dump(**kwargs)
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         for t in self.transforms:
-            tensordict = t.reset(tensordict)
-        return tensordict
+            tensordict_reset = t._reset(tensordict, tensordict_reset)
+        return tensordict_reset
 
     def init(self, tensordict: TensorDictBase) -> None:
         for t in self.transforms:
@@ -1001,8 +1032,18 @@ class Compose(Transform):
                 f"type {type(transform)} instead."
             )
         transform.eval()
-        self.transforms.append(transform)
+        if type(self) == type(transform) == Compose:
+            for t in transform:
+                self.append(t)
+        else:
+            self.transforms.append(transform)
         transform.set_container(self)
+
+    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+        self.reset_parent()
+        super().set_container(container)
+        for t in self.transforms:
+            t.set_container(self)
 
     def insert(self, index: int, transform: Transform) -> None:
         if not isinstance(transform, Transform):
@@ -1127,8 +1168,8 @@ class ToTensorImage(ObservationTransform):
         from_int: Optional[bool] = None,
         unsqueeze: bool = False,
         dtype: Optional[torch.device] = None,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
@@ -1138,6 +1179,13 @@ class ToTensorImage(ObservationTransform):
         self.from_int = from_int
         self.unsqueeze = unsqueeze
         self.dtype = dtype if dtype is not None else torch.get_default_dtype()
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
     def _apply_transform(self, observation: torch.FloatTensor) -> torch.Tensor:
         observation = observation.permute(
@@ -1301,6 +1349,13 @@ class ClipTransform(Transform):
                 )
         return self.parent.output_spec["full_reward_spec"]
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
     # No need to transform the input spec since the outside world won't see the difference
     # def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
     #     ...
@@ -1317,55 +1372,34 @@ class TargetReturn(Transform):
     However, as it is used as input to the policy module, it should be scaled
     accordingly.
     With the :class:`~.TargetReturn` transform, the tensordict can be updated
-    to include the
-    user-specified target return. The mode parameter can be used to specify
+    to include the user-specified target return.
+    The ``mode`` parameter can be used to specify
     whether the target return gets updated at every step by subtracting the
     reward achieved at each step or remains constant.
-    :class:`~.TargetReturn` should be only used during inference when
-    interacting with the environment as the actual
-    return received by the environment might be different from the target
-    return. Therefore, to have the correct
-    return labels for training the policy, the :class:`~.TargetReturn`
-    transform should be used in conjunction with
-    for example hindsight return relabeling like the
-    :class:`~.Reward2GoTransform` to update the return label for the
-    actually achieved return.
 
     Args:
         target_return (float): target return to be achieved by the agent.
         mode (str): mode to be used to update the target return. Can be either "reduce" or "constant". Default: "reduce".
+        in_keys (sequence of NestedKey, optional): keys pointing to the reward
+            entries. Defaults to the reward keys of the parent env.
+        out_keys (sequence of NestedKey, optional): keys pointing to the
+            target keys. Defaults to a copy of in_keys where the last element
+            has been substituted by ``"target_return"``, and raises an exception
+            if these keys aren't unique.
+        reset_key (NestedKey, optional): the reset key to be used as partial
+            reset indicator. Must be unique. If not provided, defaults to the
+            only reset key of the parent environment (if it has only one)
+            and raises an exception otherwise.
 
     Examples:
-        >>> transform = TargetReturn(10.0, mode="reduce")
-        >>> td = TensorDict({}, [10])
-        >>> td = transform.reset(td)
-        >>> td["target_return"]
-        tensor([[10.],
-                [10.],
-                [10.],
-                [10.],
-                [10.],
-                [10.],
-                [10.],
-                [10.],
-                [10.],
-                [10.]])
-        >>> # take a step with mode "reduce"
-        >>> # target return is updated by subtracting the reward
-        >>> reward = torch.ones((10,1))
-        >>> td.set(("next", "reward"), reward)
-        >>> td = transform._step(td)
-        >>> td["next", "target_return"]
-        tensor([[9.],
-                [9.],
-                [9.],
-                [9.],
-                [9.],
-                [9.],
-                [9.],
-                [9.],
-                [9.],
-                [9.]])
+        >>> from torchrl.envs import GymEnv
+        >>> env = TransformedEnv(
+        ...     GymEnv("CartPole-v1"),
+        ...     TargetReturn(10.0, mode="reduce"))
+        >>> env.set_seed(0)
+        >>> torch.manual_seed(0)
+        >>> env.rollout(20)['target_return'].squeeze()
+        tensor([10.,  9.,  8.,  7.,  6.,  5.,  4.,  3.,  2.,  1.,  0., -1., -2., -3.])
 
     """
 
@@ -1376,45 +1410,95 @@ class TargetReturn(Transform):
         self,
         target_return: float,
         mode: str = "reduce",
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        reset_key: NestedKey | None = None,
     ):
-        if in_keys is None:
-            in_keys = ["reward"]
-        if out_keys is None:
-            out_keys = ["target_return"]
         if mode not in self.MODES:
             raise ValueError(self.MODE_ERR)
 
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.target_return = target_return
         self.mode = mode
+        self.reset_key = reset_key
 
-    def reset(self, tensordict: TensorDict):
+    @property
+    def reset_key(self):
+        reset_key = self.__dict__.get("_reset_key", None)
+        if reset_key is None:
+            reset_keys = self.parent.reset_keys
+            if len(reset_keys) > 1:
+                raise RuntimeError(
+                    f"Got more than one reset key in env {self.container}, cannot infer which one to use. Consider providing the reset key in the {type(self)} constructor."
+                )
+            reset_key = self._reset_key = reset_keys[0]
+        return reset_key
 
+    @reset_key.setter
+    def reset_key(self, value):
+        self._reset_key = value
+
+    @property
+    def in_keys(self):
+        in_keys = self.__dict__.get("_in_keys", None)
+        if in_keys is None:
+            in_keys = self.parent.reward_keys
+            self._in_keys = in_keys
+        return in_keys
+
+    @in_keys.setter
+    def in_keys(self, value):
+        self._in_keys = value
+
+    @property
+    def out_keys(self):
+        out_keys = self.__dict__.get("_out_keys", None)
+        if out_keys is None:
+            out_keys = [
+                _replace_last(in_key, "target_return") for in_key in self.in_keys
+            ]
+            if len(set(out_keys)) < len(out_keys):
+                raise ValueError(
+                    "Could not infer the target_return because multiple rewards are located at the same level."
+                )
+            self._out_keys = out_keys
+        return out_keys
+
+    @out_keys.setter
+    def out_keys(self, value):
+        self._out_keys = value
+
+    def _reset(self, tensordict: TensorDict, tensordict_reset: TensorDictBase):
+        _reset = _get_reset(self.reset_key, tensordict)
         for out_key in self.out_keys:
-            target_return = tensordict.get(out_key, default=None)
-
+            target_return = tensordict.get(out_key, None)
             if target_return is None:
-                init_target_return = torch.full(
+                target_return = torch.full(
                     size=(*tensordict.batch_size, 1),
                     fill_value=self.target_return,
                     dtype=torch.float32,
                     device=tensordict.device,
                 )
-                target_return = init_target_return
-
-            tensordict.set(
+            else:
+                target_return = torch.where(
+                    expand_as_right(~_reset, target_return),
+                    target_return,
+                    self.target_return,
+                )
+            tensordict_reset.set(
                 out_key,
                 target_return,
             )
-        return tensordict
+        return tensordict_reset
 
     def _call(self, tensordict: TensorDict) -> TensorDict:
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict.keys(include_nested=True):
+            val_in = tensordict.get(in_key, None)
+            val_out = tensordict.get(out_key, None)
+            if val_in is not None:
                 target_return = self._apply_transform(
-                    tensordict.get(in_key), tensordict.get(out_key)
+                    val_in,
+                    val_out,
                 )
                 tensordict.set(out_key, target_return)
             elif not self.missing_tolerance:
@@ -1449,24 +1533,33 @@ class TargetReturn(Transform):
             FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
         )
 
-    def transform_observation_spec(
-        self, observation_spec: CompositeSpec
-    ) -> CompositeSpec:
-        if not isinstance(observation_spec, CompositeSpec):
-            raise ValueError(
-                f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            if in_key in self.parent.full_observation_spec.keys(True):
+                target = self.parent.full_observation_spec[in_key]
+            elif in_key in self.parent.full_reward_spec.keys(True):
+                target = self.parent.full_reward_spec[in_key]
+            elif in_key in self.parent.full_done_spec.keys(True):
+                # we account for this for completeness but it should never be the case
+                target = self.parent.full_done_spec[in_key]
+            else:
+                raise RuntimeError(f"in_key {in_key} not found in output_spec.")
+            target_return_spec = UnboundedContinuousTensorSpec(
+                shape=target.shape,
+                dtype=target.dtype,
+                device=target.device,
             )
-        for key in self.out_keys:
-            target_return_spec = BoundedTensorSpec(
-                low=-float("inf"),
-                high=self.target_return,
-                shape=self.parent.reward_spec.shape,
-                dtype=self.parent.reward_spec.dtype,
-                device=self.parent.reward_spec.device,
-            )
-            observation_spec[key] = target_return_spec
-
+            # because all reward keys are discarded from the data during calls
+            # to step_mdp, we must put this in observation_spec
+            observation_spec[out_key] = target_return_spec
         return observation_spec
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        # we must add the target return to the input spec
+        input_spec["full_state_spec"] = self.transform_observation_spec(
+            input_spec["full_state_spec"]
+        )
+        return input_spec
 
 
 class RewardClipping(Transform):
@@ -1482,8 +1575,8 @@ class RewardClipping(Transform):
         self,
         clamp_min: float = None,
         clamp_max: float = None,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
     ):
         if in_keys is None:
             in_keys = ["reward"]
@@ -1538,8 +1631,8 @@ class BinarizeReward(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
     ):
         if in_keys is None:
             in_keys = ["reward"]
@@ -1575,8 +1668,8 @@ class Resize(ObservationTransform):
         w: int,
         h: int,
         interpolation: str = "bilinear",
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
     ):
         if not _has_tv:
             raise ImportError(
@@ -1633,6 +1726,13 @@ class Resize(ObservationTransform):
             f"interpolation={self.interpolation}, keys={self.in_keys})"
         )
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
 
 class CenterCrop(ObservationTransform):
     """Crops the center of an image.
@@ -1651,8 +1751,8 @@ class CenterCrop(ObservationTransform):
         self,
         w: int,
         h: int = None,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
@@ -1665,6 +1765,13 @@ class CenterCrop(ObservationTransform):
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = center_crop(observation, [self.w, self.h])
         return observation
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -1706,8 +1813,8 @@ class FlattenObservation(ObservationTransform):
         self,
         first_dim: int,
         last_dim: int,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
         allow_positive_dim: bool = False,
     ):
         if in_keys is None:
@@ -1760,6 +1867,12 @@ class FlattenObservation(ObservationTransform):
             ).shape
         return observation_spec
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            return self._call(tensordict_reset)
+
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
@@ -1793,10 +1906,10 @@ class UnsqueezeTransform(Transform):
         self,
         unsqueeze_dim: int,
         allow_positive_dim: bool = False,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
-        in_keys_inv: Optional[Sequence[NestedKey]] = None,
-        out_keys_inv: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        in_keys_inv: Sequence[NestedKey] | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
     ):
         if in_keys is None:
             in_keys = []  # default
@@ -1869,6 +1982,13 @@ class UnsqueezeTransform(Transform):
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         return self._transform_spec(observation_spec)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
     def __repr__(self) -> str:
         s = (
@@ -2070,14 +2190,21 @@ class PermuteTransform(Transform):
             spec.space.low = self._inv_apply_transform(spec.space.low)
         return spec
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
 
 class GrayScale(ObservationTransform):
     """Turns a pixel observation to grayscale."""
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
@@ -2101,6 +2228,13 @@ class GrayScale(ObservationTransform):
                 torch.zeros(observation_spec.shape)
             ).shape
         return observation_spec
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
 
 class ObservationNorm(ObservationTransform):
@@ -2167,10 +2301,10 @@ class ObservationNorm(ObservationTransform):
         self,
         loc: Optional[float, torch.Tensor] = None,
         scale: Optional[float, torch.Tensor] = None,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
-        in_keys_inv: Optional[Sequence[NestedKey]] = None,
-        out_keys_inv: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        in_keys_inv: Sequence[NestedKey] | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
         standard_normal: bool = False,
     ):
         if in_keys is None:
@@ -2389,6 +2523,13 @@ class ObservationNorm(ObservationTransform):
         else:
             return super().__repr__()
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
 
 class CatFrames(ObservationTransform):
     """Concatenates successive observation frames into a single tensor.
@@ -2414,6 +2555,10 @@ class CatFrames(ObservationTransform):
         padding (str, optional): the padding method. One of ``"same"`` or ``"zeros"``.
             Defaults to ``"same"``, ie. the first value is uesd for padding.
         as_inverse (bool, optional): if ``True``, the transform is applied as an inverse transform. Defaults to ``False``.
+        reset_key (NestedKey, optional): the reset key to be used as partial
+            reset indicator. Must be unique. If not provided, defaults to the
+            only reset key of the parent environment (if it has only one)
+            and raises an exception otherwise.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -2488,10 +2633,11 @@ class CatFrames(ObservationTransform):
         self,
         N: int,
         dim: int,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
         padding="same",
         as_inverse=False,
+        reset_key: NestedKey | None = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
@@ -2514,40 +2660,40 @@ class CatFrames(ObservationTransform):
                 ),
             )
         # keeps track of calls to _reset since it's only _call that will populate the buffer
-        self._just_reset = False
         self.as_inverse = as_inverse
+        self.reset_key = reset_key
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    @property
+    def reset_key(self):
+        reset_key = self.__dict__.get("_reset_key", None)
+        if reset_key is None:
+            reset_keys = self.parent.reset_keys
+            if len(reset_keys) > 1:
+                raise RuntimeError(
+                    f"Got more than one reset key in env {self.container}, cannot infer which one to use. "
+                    f"Consider providing the reset key in the {type(self)} constructor."
+                )
+            reset_key = self._reset_key = reset_keys[0]
+        return reset_key
+
+    @reset_key.setter
+    def reset_key(self, value):
+        self._reset_key = value
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         """Resets _buffers."""
-        _reset = tensordict.get("_reset", None)
-        if _reset is None:
-            parent = self.parent
-            if parent is not None:
-                parent_device = parent.device
-                if self.as_inverse:
-                    raise Exception(
-                        "CatFrames as inverse is not supported as a transform for environments, only for replay buffers."
-                    )
-            else:
-                parent_device = None
-            _reset = torch.ones(
-                self.parent.done_spec.shape if self.parent else tensordict.batch_size,
-                dtype=torch.bool,
-                device=parent_device,
+        _reset = _get_reset(self.reset_key, tensordict)
+        if self.as_inverse and self.parent is not None:
+            raise Exception(
+                "CatFrames as inverse is not supported as a transform for environments, only for replay buffers."
             )
-        _reset = _reset.sum(
-            tuple(range(tensordict.batch_dims, _reset.ndim)), dtype=torch.bool
-        )
 
-        for in_key in self.in_keys:
-            buffer_name = f"_cat_buffers_{in_key}"
-            buffer = getattr(self, buffer_name)
-            if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
-                continue
-            buffer[_reset] = 0
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset, _reset=_reset)
 
-        self._just_reset = True
-        return tensordict
+        return tensordict_reset
 
     def _make_missing_buffer(self, data, buffer_name):
         shape = list(data.shape)
@@ -2565,14 +2711,9 @@ class CatFrames(ObservationTransform):
         else:
             return tensordict
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _call(self, tensordict: TensorDictBase, _reset=None) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
-        _reset = tensordict.get("_reset", None)
-        if _reset is not None:
-            _reset = _reset.sum(
-                tuple(range(tensordict.batch_dims, _reset.ndim)), dtype=torch.bool
-            )
-
+        _just_reset = _reset is not None
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             # Lazy init of buffers
             buffer_name = f"_cat_buffers_{in_key}"
@@ -2582,31 +2723,67 @@ class CatFrames(ObservationTransform):
             if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
                 buffer = self._make_missing_buffer(data, buffer_name)
             # shift obs 1 position to the right
-            if self._just_reset or (_reset is not None and _reset.any()):
-                data_in = buffer[_reset]
-                shape = [1 for _ in data_in.shape]
-                shape[self.dim] = self.N
+            if _just_reset:
+                if _reset.all():
+                    _all = True
+                    data_reset = data
+                    buffer_reset = buffer
+                    dim = self.dim
+                else:
+                    _all = False
+                    data_reset = data[_reset]
+                    buffer_reset = buffer[_reset]
+                    dim = self.dim - _reset.ndim + 1
+                shape = [1 for _ in buffer_reset.shape]
+                if _all:
+                    shape[dim] = self.N
+                else:
+                    shape[dim] = self.N
+
                 if self.padding == "same":
-                    buffer[_reset] = buffer[_reset].copy_(
-                        data[_reset].repeat(shape).clone()
-                    )
+                    if _all:
+                        buffer.copy_(data_reset.repeat(shape).clone())
+                    else:
+                        buffer[_reset] = data_reset.repeat(shape).clone()
                 elif self.padding == "zeros":
-                    buffer[_reset] = 0
+                    if _all:
+                        buffer.fill_(0.0)
+                    else:
+                        buffer[_reset] = 0.0
                 else:
                     # make linter happy. An exception has already been raised
                     raise NotImplementedError
-            buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.dim))
-            # add new obs
-            idx = self.dim
-            if idx < 0:
-                idx = buffer.ndimension() + idx
+
+                # # this duplicates the code below, but only for _reset values
+                # if _all:
+                #     buffer.copy_(torch.roll(buffer_reset, shifts=-d, dims=dim))
+                #     buffer_reset = buffer
+                # else:
+                #     buffer_reset = buffer[_reset] = torch.roll(
+                #         buffer_reset, shifts=-d, dims=dim
+                #     )
+                # add new obs
+                if self.dim < 0:
+                    n = buffer_reset.ndimension() + self.dim
+                else:
+                    raise ValueError(self._CAT_DIM_ERR)
+                idx = [slice(None, None) for _ in range(n)] + [slice(-d, None)]
+                if not _all:
+                    buffer_reset = buffer[_reset]
+                buffer_reset[idx] = data_reset
+                if not _all:
+                    buffer[_reset] = buffer_reset
             else:
-                raise ValueError(self._CAT_DIM_ERR)
-            idx = [slice(None, None) for _ in range(idx)] + [slice(-d, None)]
-            buffer[idx].copy_(data)
+                buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.dim))
+                # add new obs
+                if self.dim < 0:
+                    n = buffer.ndimension() + self.dim
+                else:
+                    raise ValueError(self._CAT_DIM_ERR)
+                idx = [slice(None, None) for _ in range(n)] + [slice(-d, None)]
+                buffer[idx] = buffer[idx].copy_(data)
             # add to tensordict
             tensordict.set(out_key, buffer.clone())
-        self._just_reset = False
         return tensordict
 
     @_apply_to_composite
@@ -2745,8 +2922,8 @@ class RewardScaling(Transform):
         self,
         loc: Union[float, torch.Tensor],
         scale: Union[float, torch.Tensor],
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
         standard_normal: bool = False,
     ):
         if in_keys is None:
@@ -2807,6 +2984,12 @@ class FiniteTensorDictCheck(Transform):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict.apply(check_finite)
         return tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
     forward = _call
 
@@ -2926,10 +3109,10 @@ class DTypeCastTransform(Transform):
         self,
         dtype_in: torch.dtype,
         dtype_out: torch.dtype,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
-        in_keys_inv: Optional[Sequence[NestedKey]] = None,
-        out_keys_inv: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        in_keys_inv: Sequence[NestedKey] | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
     ):
         self.dtype_in = dtype_in
         self.dtype_out = dtype_out
@@ -3071,6 +3254,13 @@ class DTypeCastTransform(Transform):
         else:
             return super()._inv_call(tensordict)
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         return obs.to(self.dtype_out)
 
@@ -3129,6 +3319,7 @@ class DTypeCastTransform(Transform):
                 f"Calling transform_reward_spec without a parent environment isn't supported yet for {type(self)}."
             )
         full_reward_spec = output_spec["full_reward_spec"]
+        full_observation_spec = output_spec["full_observation_spec"]
         for reward_key, reward_spec in list(full_reward_spec.items(True, True)):
             # find out_key that match the in_key
             for in_key, out_key in zip(self.in_keys, self.out_keys):
@@ -3137,7 +3328,7 @@ class DTypeCastTransform(Transform):
                         raise TypeError(f"reward_spec.dtype is not {self.dtype_in}")
                     full_reward_spec[out_key] = self._transform_spec(reward_spec)
         output_spec["full_observation_spec"] = self.transform_observation_spec(
-            output_spec["full_observation_spec"]
+            full_observation_spec
         )
         return output_spec
 
@@ -3277,10 +3468,10 @@ class DoubleToFloat(DTypeCastTransform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
-        in_keys_inv: Optional[Sequence[NestedKey]] = None,
-        out_keys_inv: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        in_keys_inv: Sequence[NestedKey] | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
     ):
         super().__init__(
             dtype_in=torch.double,
@@ -3345,6 +3536,12 @@ class DeviceCastTransform(Transform):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         return tensordict.to(self.device, non_blocking=True)
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         parent = self.parent
         if parent is None:
@@ -3395,7 +3592,7 @@ class CatTensors(Transform):
         unsqueeze_if_oor (bool, optional): if ``True``, CatTensor will check that
             the dimension indicated exist for the tensors to concatenate. If not,
             the tensors will be unsqueezed along that dimension.
-            Default is False.
+            Default is ``False``.
 
     Examples:
         >>> transform = CatTensors(in_keys=["key1", "key2"])
@@ -3417,7 +3614,7 @@ class CatTensors(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
         out_key: NestedKey = "observation_vector",
         dim: int = -1,
         del_keys: bool = True,
@@ -3448,10 +3645,11 @@ class CatTensors(Transform):
         return self._keys_to_exclude
 
     def _find_in_keys(self):
+        """Gathers all the entries from observation spec which shape is 1d."""
         parent = self.parent
         obs_spec = parent.observation_spec
         in_keys = []
-        for key, value in obs_spec.items():
+        for key, value in obs_spec.items(True, True):
             if len(value.shape) == 1:
                 in_keys.append(key)
         return sorted(in_keys, key=_sort_keys)
@@ -3489,7 +3687,18 @@ class CatTensors(Transform):
 
     forward = _call
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if not self._initialized:
+            self.in_keys = self._find_in_keys()
+            self._initialized = True
+
         # check that all keys are in observation_spec
         if len(self.in_keys) > 1 and not isinstance(observation_spec, CompositeSpec):
             raise ValueError(
@@ -3721,16 +3930,18 @@ class NoopResetEnv(Transform):
     def base_env(self):
         return self.parent
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         """Do no-op action for a number of steps in [1, noop_max]."""
-        td_reset = tensordict.clone(False)
-        tensordict = tensordict.clone(False)
-        # check that there is a single done state -- behaviour is undefined for multiple dones
         parent = self.parent
         if parent is None:
             raise RuntimeError(
                 "NoopResetEnv.parent not found. Make sure that the parent is set."
             )
+        # Merge the two tensordicts
+        tensordict = parent._reset_proc_data(tensordict.clone(False), tensordict_reset)
+        # check that there is a single done state -- behaviour is undefined for multiple dones
         done_keys = parent.done_keys
         reward_key = parent.reward_key
         if parent.batch_size.numel() > 1:
@@ -3755,11 +3966,10 @@ class NoopResetEnv(Transform):
             while i < noops:
                 i += 1
                 tensordict = parent.rand_step(tensordict)
-                tensordict = step_mdp(tensordict, exclude_done=False)
                 reset = False
                 # if any of the done_keys is True, we break
                 for done_key in done_keys:
-                    done = tensordict.get(done_key)
+                    done = tensordict.get(("next", done_key))
                     if done.numel() > 1:
                         raise ValueError(
                             f"{type(self)} only supports scalar done states."
@@ -3767,8 +3977,9 @@ class NoopResetEnv(Transform):
                     if done:
                         reset = True
                         break
+                tensordict = step_mdp(tensordict, exclude_done=False)
                 if reset:
-                    tensordict = parent.reset(td_reset.clone(False))
+                    tensordict = parent.reset(tensordict.clone(False))
                     break
             else:
                 break
@@ -3780,8 +3991,8 @@ class NoopResetEnv(Transform):
                 f"Parent env was repeatedly done or truncated"
                 f" before the sampled number of noops (={noops}) could be applied. "
             )
-
-        return tensordict.exclude(reward_key, inplace=True)
+        tensordict_reset = tensordict
+        return tensordict_reset.exclude(reward_key, inplace=True)
 
     def __repr__(self) -> str:
         random = self.random
@@ -3807,6 +4018,10 @@ class TensorDictPrimer(Transform):
             Defaults to `False`.
         default_value (float, optional): if non-random filling is chosen, this
             value will be used to populate the tensors. Defaults to `0.0`.
+        reset_key (NestedKey, optional): the reset key to be used as partial
+            reset indicator. Must be unique. If not provided, defaults to the
+            only reset key of the parent environment (if it has only one)
+            and raises an exception otherwise.
         **kwargs: each keyword argument corresponds to a key in the tensordict.
             The corresponding value has to be a TensorSpec instance indicating
             what the value must be.
@@ -3856,7 +4071,14 @@ class TensorDictPrimer(Transform):
 
     """
 
-    def __init__(self, primers: dict = None, random=False, default_value=0.0, **kwargs):
+    def __init__(
+        self,
+        primers: dict = None,
+        random: bool = False,
+        default_value: float = 0.0,
+        reset_key: NestedKey | None = None,
+        **kwargs,
+    ):
         self.device = kwargs.pop("device", None)
         if primers is not None:
             if kwargs:
@@ -3865,9 +4087,10 @@ class TensorDictPrimer(Transform):
                     "as kwargs."
                 )
             kwargs = primers
-        self.primers = kwargs
+        self.primers = CompositeSpec(kwargs)
         self.random = random
         self.default_value = default_value
+        self.reset_key = reset_key
 
         # sanity check
         for spec in self.primers.values():
@@ -3877,6 +4100,22 @@ class TensorDictPrimer(Transform):
                     f"Got {type(spec)} instead."
                 )
         super().__init__()
+
+    @property
+    def reset_key(self):
+        reset_key = self.__dict__.get("_reset_key", None)
+        if reset_key is None:
+            reset_keys = self.parent.reset_keys
+            if len(reset_keys) > 1:
+                raise RuntimeError(
+                    f"Got more than one reset key in env {self.container}, cannot infer which one to use. Consider providing the reset key in the {type(self)} constructor."
+                )
+            reset_key = self._reset_key = reset_keys[0]
+        return reset_key
+
+    @reset_key.setter
+    def reset_key(self, value):
+        self._reset_key = value
 
     @property
     def device(self):
@@ -3893,10 +4132,15 @@ class TensorDictPrimer(Transform):
             return
         self._device = torch.device(value)
 
-    def to(self, dtype_or_device):
-        if not isinstance(dtype_or_device, torch.dtype):
-            self.device = dtype_or_device
-        return super().to(dtype_or_device)
+    def to(self, *args, **kwargs):
+        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
+            *args, **kwargs
+        )
+        if device is not None:
+            self.device = device
+            self.empty_cache()
+            self.primers = self.primers.to(device)
+        return super().to(*args, **kwargs)
 
     def transform_observation_spec(
         self, observation_spec: CompositeSpec
@@ -3917,6 +4161,12 @@ class TensorDictPrimer(Transform):
                 device = self.device
             observation_spec[key] = spec.to(device)
         return observation_spec
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        input_spec["full_state_spec"] = self.transform_observation_spec(
+            input_spec["full_state_spec"]
+        )
+        return input_spec
 
     @property
     def _batch_size(self):
@@ -3945,10 +4195,14 @@ class TensorDictPrimer(Transform):
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         for key in self.primers.keys():
-            next_tensordict.setdefault(key, tensordict.get(key, default=None))
+            if key not in next_tensordict.keys(True):
+                prev_val = tensordict.get(key)
+                next_tensordict.set(key, prev_val)
         return next_tensordict
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         """Sets the default values in the input tensordict.
 
         If the parent is batch-locked, we assume that the specs have the appropriate leading
@@ -3961,16 +4215,20 @@ class TensorDictPrimer(Transform):
             if (not self.parent or self.parent.batch_locked)
             else tensordict.batch_size
         )
-        for key, spec in self.primers.items():
-            if self.random:
-                value = spec.rand(shape)
-            else:
-                value = torch.full_like(
-                    spec.zero(shape),
-                    self.default_value,
-                )
-            tensordict.set(key, value)
-        return tensordict
+        _reset = _get_reset(self.reset_key, tensordict)
+        if _reset.any():
+            for key, spec in self.primers.items():
+                if self.random:
+                    value = spec.rand(shape)
+                else:
+                    value = torch.full_like(
+                        spec.zero(shape),
+                        self.default_value,
+                    )
+                prev_val = tensordict.get(key, 0.0)
+                value = torch.where(expand_as_right(_reset, value), value, prev_val)
+                tensordict_reset.set(key, value)
+        return tensordict_reset
 
     def __repr__(self) -> str:
         class_name = self.__class__.__name__
@@ -3987,6 +4245,13 @@ class PinMemoryTransform(Transform):
         return tensordict.pin_memory()
 
     forward = _call
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
 
 def _sum_left(val, dest):
@@ -4006,6 +4271,7 @@ class gSDENoise(TensorDictPrimer):
         state_dim=None,
         action_dim=None,
         shape=None,
+        **kwargs,
     ) -> None:
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -4017,7 +4283,7 @@ class gSDENoise(TensorDictPrimer):
         random = state_dim is not None and action_dim is not None
         shape = tuple(shape) + tail_dim
         primers = {"_eps_gSDE": UnboundedContinuousTensorSpec(shape=shape)}
-        super().__init__(primers=primers, random=random)
+        super().__init__(primers=primers, random=random, **kwargs)
 
 
 class VecNorm(Transform):
@@ -4075,8 +4341,8 @@ class VecNorm(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
         shared_td: Optional[TensorDictBase] = None,
         lock: mp.Lock = None,
         decay: float = 0.9999,
@@ -4118,6 +4384,13 @@ class VecNorm(Transform):
         if not isinstance(key, str):
             key = "_".join(key)
         return key
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.lock is not None:
@@ -4374,22 +4647,24 @@ class RewardSum(Transform):
     Examples:
         >>> from torchrl.envs.transforms import RewardSum, TransformedEnv
         >>> from torchrl.envs.libs.gym import GymEnv
-        >>> env = TransformedEnv(GymEnv("Pendulum-v1"), RewardSum())
+        >>> env = TransformedEnv(GymEnv("CartPole-v1"), RewardSum())
+        >>> env.set_seed(0)
+        >>> torch.manual_seed(0)
         >>> td = env.reset()
         >>> print(td["episode_reward"])
         tensor([0.])
         >>> td = env.rollout(3)
         >>> print(td["next", "episode_reward"])
-        tensor([[-0.5926],
-                [-1.4578],
-                [-2.7885]])
+        tensor([[1.],
+                [2.],
+                [3.]])
     """
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
-        reset_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        reset_keys: Sequence[NestedKey] | None = None,
     ):
         """Initialises the transform. Filters out non-reward input keys and defines output keys."""
         super().__init__(in_keys=in_keys, out_keys=out_keys)
@@ -4452,7 +4727,36 @@ class RewardSum(Transform):
                     "Make sure that the reset_keys are provided during "
                     "construction if the transform does not have a container env."
                 )
-            reset_keys = copy(parent.reset_keys)
+            # let's try to match the reset keys with the in_keys.
+            # We take the filtered reset keys, which are the only keys that really
+            # matter when calling reset, and check that they match the in_keys root.
+            reset_keys = parent._filtered_reset_keys
+
+            def _check_match(reset_keys, in_keys):
+                # if this is called, the length of reset_keys and in_keys must match
+                for reset_key, in_key in zip(reset_keys, in_keys):
+                    # having _reset at the root and the reward_key ("agent", "reward") is allowed
+                    # but having ("agent", "_reset") and "reward" isn't
+                    if isinstance(reset_key, tuple) and isinstance(in_key, str):
+                        return False
+                    if (
+                        isinstance(reset_key, tuple)
+                        and isinstance(in_key, tuple)
+                        and in_key[: (len(reset_key) - 1)] != reset_key[:-1]
+                    ):
+                        return False
+                return True
+
+            if len(reset_keys) != len(self.in_keys) or not _check_match(
+                reset_keys, self.in_keys
+            ):
+                raise ValueError(
+                    f"Could not match the env reset_keys {reset_keys} with the {type(self)} in_keys {self.in_keys}. "
+                    f"Please provide the reset_keys manually. Reset entries can be "
+                    f"non-unique and must be right-expandable to the shape of "
+                    f"the input entries."
+                )
+            reset_keys = copy(reset_keys)
             self._reset_keys = reset_keys
         return reset_keys
 
@@ -4464,33 +4768,21 @@ class RewardSum(Transform):
             value = [unravel_key(val) for val in value]
         self._reset_keys = value
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         """Resets episode rewards."""
         for in_key, reset_key, out_key in zip(
             self.in_keys, self.reset_keys, self.out_keys
         ):
-            _reset = tensordict.get(reset_key, None)
-
-            if _reset is None or _reset.any():
-                value = tensordict.get(out_key, default=None)
-                if value is not None:
-                    if _reset is None:
-                        tensordict.set(out_key, torch.zeros_like(value))
-                    else:
-                        tensordict.set(
-                            out_key,
-                            value.masked_fill(
-                                expand_as_right(_reset.squeeze(-1), value), 0.0
-                            ),
-                        )
-                else:
-                    # Since the episode reward is not in the tensordict, we need to allocate it
-                    # with zeros entirely (regardless of the _reset mask)
-                    tensordict.set(
-                        out_key,
-                        self.parent.full_reward_spec[in_key].zero(),
-                    )
-        return tensordict
+            _reset = _get_reset(reset_key, tensordict)
+            value = tensordict.get(out_key, default=None)
+            if value is None:
+                value = self.parent.full_reward_spec[in_key].zero()
+            else:
+                value = torch.where(expand_as_right(~_reset, value), value, 0.0)
+            tensordict_reset.set(out_key, value)
+        return tensordict_reset
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
@@ -4670,11 +4962,11 @@ class StepCounter(Transform):
         if truncated_keys is None:
             # make the default truncated keys
             truncated_keys = []
-            for (done_key, *_) in self.parent.done_keys_groups:
-                if isinstance(done_key, str):
+            for reset_key in self.parent._filtered_reset_keys:
+                if isinstance(reset_key, str):
                     key = self.truncated_key
                 else:
-                    key = (*done_key[:-1], self.truncated_key)
+                    key = (*reset_key[:-1], self.truncated_key)
                 truncated_keys.append(key)
         self._truncated_keys = truncated_keys
         return truncated_keys
@@ -4685,11 +4977,11 @@ class StepCounter(Transform):
         if done_keys is None:
             # make the default done keys
             done_keys = []
-            for (done_key, *_) in self.parent.done_keys_groups:
-                if isinstance(done_key, str):
+            for reset_key in self.parent._filtered_reset_keys:
+                if isinstance(reset_key, str):
                     key = "done"
                 else:
-                    key = (*done_key[:-1], "done")
+                    key = (*reset_key[:-1], "done")
                 done_keys.append(key)
         self.__dict__["_done_keys"] = done_keys
         return done_keys
@@ -4700,11 +4992,11 @@ class StepCounter(Transform):
         if done_keys is None:
             # make the default done keys
             done_keys = []
-            for (done_key, *_) in self.parent.done_keys_groups:
-                if isinstance(done_key, str):
+            for reset_key in self.parent._filtered_reset_keys:
+                if isinstance(reset_key, str):
                     key = "done"
                 else:
-                    key = (*done_key[:-1], "done")
+                    key = (*reset_key[:-1], "done")
                 done_keys.append(key)
         self.__dict__["_done_keys"] = done_keys
         return done_keys
@@ -4715,11 +5007,11 @@ class StepCounter(Transform):
         if terminated_keys is None:
             # make the default terminated keys
             terminated_keys = []
-            for (terminated_key, *_) in self.parent.done_keys_groups:
-                if isinstance(terminated_key, str):
+            for reset_key in self.parent._filtered_reset_keys:
+                if isinstance(reset_key, str):
                     key = "terminated"
                 else:
-                    key = (*terminated_key[:-1], "terminated")
+                    key = (*reset_key[:-1], "terminated")
                 terminated_keys.append(key)
         self.__dict__["_terminated_keys"] = terminated_keys
         return terminated_keys
@@ -4730,11 +5022,11 @@ class StepCounter(Transform):
         if step_count_keys is None:
             # make the default step_count keys
             step_count_keys = []
-            for (done_key, *_) in self.parent.done_keys_groups:
-                if isinstance(done_key, str):
+            for reset_key in self.parent._filtered_reset_keys:
+                if isinstance(reset_key, str):
                     key = self.step_count_key
                 else:
-                    key = (*done_key[:-1], self.step_count_key)
+                    key = (*reset_key[:-1], self.step_count_key)
                 step_count_keys.append(key)
         self.__dict__["_step_count_keys"] = step_count_keys
         return step_count_keys
@@ -4742,34 +5034,29 @@ class StepCounter(Transform):
     @property
     def reset_keys(self):
         if self.parent is not None:
-            return self.parent.reset_keys
+            return self.parent._filtered_reset_keys
         # fallback on default "_reset"
         return ["_reset"]
-
-    @property
-    def done_keys_groups(self):
-        if self.parent is not None:
-            return self.parent.done_keys_groups
-        return [["done", "truncated"]]
 
     @property
     def full_done_spec(self):
         return self.parent.output_spec["full_done_spec"] if self.parent else None
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         # get reset signal
-        for step_count_key, truncated_key, reset_key, done_key, done_list_sorted in zip(
+        for step_count_key, truncated_key, terminated_key, reset_key, done_key in zip(
             self.step_count_keys,
             self.truncated_keys,
+            self.terminated_keys,
             self.reset_keys,
             self.done_keys,
-            self.done_keys_groups,
         ):
-            step_count = tensordict.get(step_count_key, default=None)
             reset = tensordict.get(reset_key, default=None)
             if reset is None:
                 # get done status, just to inform the reset shape, dtype and device
-                for entry_name in done_list_sorted:
+                for entry_name in (terminated_key, truncated_key, done_key):
                     done = tensordict.get(entry_name, default=None)
                     if done is not None:
                         break
@@ -4778,19 +5065,21 @@ class StepCounter(Transform):
                     # we fall back on the spec
                     done = self.parent.output_spec["full_done_spec", entry_name].zero()
                 reset = torch.ones_like(done)
+
+            step_count = tensordict.get(step_count_key, default=None)
             if step_count is None:
                 step_count = self.container.observation_spec[step_count_key].zero()
 
             # zero the step count if reset is needed
             step_count = torch.where(~expand_as_right(reset, step_count), step_count, 0)
-            tensordict.set(step_count_key, step_count)
+            tensordict_reset.set(step_count_key, step_count)
             if self.max_steps is not None:
                 truncated = step_count >= self.max_steps
                 if self.update_done:
                     # we assume no done after reset
-                    tensordict.set(done_key, truncated)
-                tensordict.set(truncated_key, truncated)
-        return tensordict
+                    tensordict_reset.set(done_key, truncated)
+                tensordict_reset.set(truncated_key, truncated)
+        return tensordict_reset
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
@@ -5006,8 +5295,10 @@ class ExcludeTransform(Transform):
 
     forward = _call
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return tensordict.exclude(*self.excluded_keys)
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset.exclude(*self.excluded_keys)
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
         full_done_spec = output_spec["full_done_spec"]
@@ -5104,7 +5395,9 @@ class SelectTransform(Transform):
 
     forward = _call
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         if self.parent is not None:
             input_keys = self.parent.input_spec.keys(True, True)
         else:
@@ -5117,7 +5410,7 @@ class SelectTransform(Transform):
             done_keys = self.parent.done_keys if self.parent else ["done"]
         else:
             done_keys = []
-        return tensordict.select(
+        return tensordict_reset.select(
             *self.selected_keys, *reward_keys, *done_keys, *input_keys, strict=False
         )
 
@@ -5151,6 +5444,10 @@ class TimeMaxPool(Transform):
         in_keys (sequence of NestedKey, optional): input keys on which the max pool will be applied. Defaults to "observation" if left empty.
         out_keys (sequence of NestedKey, optional): output keys where the output will be written. Defaults to `in_keys` if left empty.
         T (int, optional): Number of time steps over which to apply max pooling.
+        reset_key (NestedKey, optional): the reset key to be used as partial
+            reset indicator. Must be unique. If not provided, defaults to the
+            only reset key of the parent environment (if it has only one)
+            and raises an exception otherwise.
 
     Examples:
         >>> from torchrl.envs import GymEnv
@@ -5181,9 +5478,10 @@ class TimeMaxPool(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
         T: int = 1,
+        reset_key: NestedKey | None = None,
     ):
         if in_keys is None:
             in_keys = ["observation"]
@@ -5200,7 +5498,7 @@ class TimeMaxPool(Transform):
             )
         self.buffer_size = T
         for in_key in self.in_keys:
-            buffer_name = f"_maxpool_buffer_{in_key}"
+            buffer_name = self._buffer_name(in_key)
             setattr(
                 self,
                 buffer_name,
@@ -5208,60 +5506,92 @@ class TimeMaxPool(Transform):
                     device=torch.device("cpu"), dtype=torch.get_default_dtype()
                 ),
             )
+        self.reset_key = reset_key
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # Non-batched environments
-        if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
-            for in_key in self.in_keys:
-                buffer_name = f"_maxpool_buffer_{in_key}"
-                buffer = getattr(self, buffer_name)
-                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
-                    continue
-                buffer.fill_(0.0)
+    @staticmethod
+    def _buffer_name(in_key):
+        in_key_str = "_".join(in_key) if isinstance(in_key, tuple) else in_key
+        buffer_name = f"_maxpool_buffer_{in_key_str}"
+        return buffer_name
 
-        # Batched environments
-        else:
-            _reset = tensordict.get(
-                "_reset",
-                torch.ones(
-                    self.parent.done_spec.shape
-                    if self.parent
-                    else tensordict.batch_size,
-                    dtype=torch.bool,
-                    device=tensordict.device,
-                ),
-            )
-            for in_key in self.in_keys:
-                buffer_name = f"_maxpool_buffer_{in_key}"
-                buffer = getattr(self, buffer_name)
-                if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
-                    continue
-                _reset = _reset.sum(
-                    tuple(range(tensordict.batch_dims, _reset.ndim)), dtype=torch.bool
+    @property
+    def reset_key(self):
+        reset_key = self.__dict__.get("_reset_key", None)
+        if reset_key is None:
+            reset_keys = self.parent.reset_keys
+            if len(reset_keys) > 1:
+                raise RuntimeError(
+                    f"Got more than one reset key in env {self.container}, cannot infer which one to use. Consider providing the reset key in the {type(self)} constructor."
                 )
-                buffer[:, _reset] = 0.0
+            reset_key = self._reset_key = reset_keys[0]
+        return reset_key
 
-        return tensordict
+    @reset_key.setter
+    def reset_key(self, value):
+        self._reset_key = value
 
-    def _make_missing_buffer(self, data, buffer_name):
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+
+        _reset = _get_reset(self.reset_key, tensordict)
+        for in_key in self.in_keys:
+            buffer_name = self._buffer_name(in_key)
+            buffer = getattr(self, buffer_name)
+            if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                continue
+            if not _reset.all():
+                _reset_exp = _reset.expand(buffer.shape[0], *_reset.shape)
+                buffer[_reset_exp] = 0.0
+            else:
+                buffer.fill_(0.0)
+        with _set_missing_tolerance(self, True):
+            for in_key in self.in_keys:
+                val_reset = tensordict_reset.get(in_key, None)
+                val_prev = tensordict.get(in_key, None)
+                # if an in_key is missing, we try to copy it from the previous step
+                if val_reset is None and val_prev is not None:
+                    tensordict_reset.set(in_key, val_prev)
+                elif val_prev is None and val_reset is None:
+                    raise KeyError(f"Could not find {in_key} in the reset data.")
+            return self._call(tensordict_reset, _reset=_reset)
+
+    def _make_missing_buffer(self, tensordict, in_key, buffer_name):
         buffer = getattr(self, buffer_name)
-        buffer.materialize((self.buffer_size,) + data.shape)
-        buffer = buffer.to(data.dtype).to(data.device).zero_()
+        data = tensordict.get(in_key)
+        size = list(data.shape)
+        size.insert(0, self.buffer_size)
+        buffer.materialize(size)
+        buffer = buffer.to(dtype=data.dtype, device=data.device).zero_()
         setattr(self, buffer_name, buffer)
+        return buffer
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _call(self, tensordict: TensorDictBase, _reset=None) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             # Lazy init of buffers
-            buffer_name = f"_maxpool_buffer_{in_key}"
+            buffer_name = self._buffer_name(in_key)
             buffer = getattr(self, buffer_name)
             if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
-                data = tensordict[in_key]
-                self._make_missing_buffer(data, buffer_name)
+                buffer = self._make_missing_buffer(tensordict, in_key, buffer_name)
+            if _reset is not None:
+                # we must use only the reset data
+                buffer[:, _reset] = torch.roll(buffer[:, _reset], shifts=1, dims=0)
+                # add new obs
+                data = tensordict.get(in_key)
+                buffer[0, _reset] = data[_reset]
+                # apply max pooling
+                pooled_tensor, _ = buffer[:, _reset].max(dim=0)
+                pooled_tensor = torch.zeros_like(data).masked_scatter_(
+                    expand_as_right(_reset, data), pooled_tensor
+                )
+                # add to tensordict
+                tensordict.set(out_key, pooled_tensor)
+                continue
             # shift obs 1 position to the right
             buffer.copy_(torch.roll(buffer, shifts=1, dims=0))
             # add new obs
-            buffer[0].copy_(tensordict[in_key])
+            buffer[0].copy_(tensordict.get(in_key))
             # apply max pooling
             pooled_tensor, _ = buffer.max(dim=0)
             # add to tensordict
@@ -5382,6 +5712,13 @@ class RandomCropTensorDict(Transform):
         idx = idx_0 + arange
         return tensordict.gather(dim=self.sample_dim, index=idx)
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self.forward(tensordict_reset)
+        return tensordict_reset
+
 
 class InitTracker(Transform):
     """Reset tracker.
@@ -5437,23 +5774,22 @@ class InitTracker(Transform):
             raise NotImplementedError(
                 FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
             )
-        for done_key, *_ in self.parent.done_keys_groups:
-            if isinstance(done_key, str):
+        for reset_key in self.parent._filtered_reset_keys:
+            if isinstance(reset_key, str):
                 init_key = self.init_key
             else:
-                init_key = unravel_key((*done_key[:-1], self.init_key))
+                init_key = unravel_key((reset_key[:-1], self.init_key))
             init_keys.append(init_key)
         self._init_keys = init_keys
         return self._init_keys
 
     @property
     def reset_keys(self):
-        return self.parent.reset_keys
+        return self.parent._filtered_reset_keys
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for init_key, (done_key, *_) in zip(
-            self.init_keys, self.parent.done_keys_groups
-        ):
+        for init_key in self.init_keys:
+            done_key = _replace_last(init_key, "done")
             if init_key not in tensordict.keys(True, True):
                 device = tensordict.device
                 if device is None:
@@ -5465,17 +5801,18 @@ class InitTracker(Transform):
                 )
         return tensordict
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         device = tensordict.device
         if device is None:
             device = torch.device("cpu")
-        for reset_key, init_key, (done_key, *_) in zip(
-            self.reset_keys, self.init_keys, self.parent.done_keys_groups
-        ):
+        for reset_key, init_key in zip(self.reset_keys, self.init_keys):
             _reset = tensordict.get(reset_key, None)
             if _reset is None:
+                done_key = _replace_last(init_key, "done")
                 shape = self.parent.full_done_spec[done_key].shape
-                tensordict.set(
+                tensordict_reset.set(
                     init_key,
                     torch.ones(
                         shape,
@@ -5484,8 +5821,17 @@ class InitTracker(Transform):
                     ),
                 )
             else:
-                tensordict.set(init_key, _reset.clone())
-        return tensordict
+                init_val = _reset.clone()
+                parent_td = (
+                    tensordict_reset
+                    if isinstance(init_key, str)
+                    else tensordict_reset.get(init_key[:-1])
+                )
+                if init_val.ndim == parent_td.ndim:
+                    # unsqueeze, to match the done shape
+                    init_val = init_val.unsqueeze(-1)
+                tensordict_reset.set(init_key, init_val)
+        return tensordict_reset
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         full_done_spec = self.parent.output_spec["full_done_spec"]
@@ -5614,6 +5960,12 @@ class RenameTransform(Transform):
         return tensordict
 
     forward = _call
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            return self._call(tensordict_reset)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # no in-place modif
@@ -5820,8 +6172,8 @@ class Reward2GoTransform(Transform):
     def __init__(
         self,
         gamma: Optional[Union[float, torch.Tensor]] = 1.0,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
         done_key: Optional[NestedKey] = "done",
     ):
         if in_keys is None:
@@ -5842,6 +6194,8 @@ class Reward2GoTransform(Transform):
         self.register_buffer("gamma", gamma)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.parent is not None:
+            raise ValueError(self.ENV_ERR)
         done = tensordict.get(("next", self.done_key))
 
         if not done.any(-2).all():
@@ -5975,14 +6329,20 @@ class ActionMask(Transform):
         action_spec.update_mask(mask)
         return tensordict
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         action_spec = self.container.action_spec
         if not isinstance(action_spec, self.ACCEPTED_SPECS):
             raise ValueError(
                 self.SPEC_TYPE_ERROR.format(self.ACCEPTED_SPECS, type(action_spec))
             )
         action_spec.update_mask(tensordict.get(self.in_keys[1], None))
-        return tensordict
+
+        # TODO: Check that this makes sense
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
 
 class VecGymEnvTransform(Transform):
@@ -6060,7 +6420,9 @@ class VecGymEnvTransform(Transform):
             self._memo["saved_next"] = None
         return next_tensordict
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         done = self._memo.get("done", None)
         reset = tensordict.get("_reset", done)
         if done is not None:
@@ -6088,7 +6450,7 @@ class VecGymEnvTransform(Transform):
             # are properly set.
             # collectors even take care of doing an extra masking so it's even
             # safer.
-            tensordict.update(saved_next)
+            tensordict_reset.update(saved_next)
             for done_key in self.done_keys:
                 # Make sure that all done are False
                 done = tensordict.get(done_key, None)
@@ -6101,8 +6463,8 @@ class VecGymEnvTransform(Transform):
                         dtype=torch.bool,
                     )
                 tensordict.set(done_key, done)
-        tensordict.pop(self.final_name, None)
-        return tensordict
+        tensordict_reset.pop(self.final_name, None)
+        return tensordict_reset
 
     @property
     def done_keys(self) -> List[NestedKey]:

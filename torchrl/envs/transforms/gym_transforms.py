@@ -162,20 +162,20 @@ class EndOfLifeTransform(Transform):
         next_tensordict.set(self.lives_key, lives)
         return next_tensordict
 
-    def reset(self, tensordict):
+    def _reset(self, tensordict, tensordict_reset):
         parent = self.parent
         if parent is None:
             raise RuntimeError(self.NO_PARENT_ERR.format(type(self)))
         lives = self._get_lives()
         end_of_life = False
-        tensordict.set(
+        tensordict_reset.set(
             self.eol_key,
             torch.tensor(end_of_life).expand(
                 parent.full_done_spec[self.done_key].shape
             ),
         )
-        tensordict.set(self.lives_key, lives)
-        return tensordict
+        tensordict_reset.set(self.lives_key, lives)
+        return tensordict_reset
 
     def transform_observation_spec(self, observation_spec):
         full_done_spec = self.parent.output_spec["full_done_spec"]

@@ -34,7 +34,7 @@ from mocking_classes import (
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.tensordict import assert_allclose_td, TensorDict
 
 from torch import nn
@@ -59,7 +59,7 @@ from torchrl.envs import (
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.envs.utils import (
-    _aggregate_resets,
+    _aggregate_end_of_traj,
     _replace_last,
     check_env_specs,
     PARTIAL_MISSING_ERR,
@@ -337,7 +337,8 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
 
 
 @pytest.mark.skipif(not _has_gym, reason="gym library is not installed")
-def test_collector_env_reset():
+@pytest.mark.parametrize("parallel", [False, True])
+def test_collector_env_reset(parallel):
     torch.manual_seed(0)
 
     def make_env():
@@ -346,27 +347,38 @@ def test_collector_env_reset():
         with set_gym_backend(gym_backend()):
             return TransformedEnv(GymEnv(PONG_VERSIONED, frame_skip=4), StepCounter())
 
-    env = SerialEnv(2, make_env)
-    # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
-    env.set_seed(0)
-    collector = SyncDataCollector(
-        env, policy=None, total_frames=10000, frames_per_batch=10000, split_trajs=False
-    )
-    for _data in collector:
-        continue
-    steps = _data["next", "step_count"][..., 1:, :]
-    done = _data["next", "done"][..., :-1, :]
-    # we don't want just one done
-    assert done.sum() > 3
-    # check that after a done, the next step count is always 1
-    assert (steps[done] == 1).all()
-    # check that if the env is not done, the next step count is > 1
-    assert (steps[~done] > 1).all()
-    # check that if step is 1, then the env was done before
-    assert (steps == 1)[done].all()
-    # check that split traj has a minimum total reward of -21 (for pong only)
-    _data = split_trajectories(_data, prefix="collector")
-    assert _data["next", "reward"].sum(-2).min() == -21
+    if parallel:
+        env = ParallelEnv(2, make_env)
+    else:
+        env = SerialEnv(2, make_env)
+    try:
+        # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
+        env.set_seed(0)
+        collector = SyncDataCollector(
+            env,
+            policy=None,
+            total_frames=10001,
+            frames_per_batch=10000,
+            split_trajs=False,
+        )
+        for _data in collector:
+            break
+        steps = _data["next", "step_count"][..., 1:, :]
+        done = _data["next", "done"][..., :-1, :]
+        # we don't want just one done
+        assert done.sum() > 3
+        # check that after a done, the next step count is always 1
+        assert (steps[done] == 1).all()
+        # check that if the env is not done, the next step count is > 1
+        assert (steps[~done] > 1).all()
+        # check that if step is 1, then the env was done before
+        assert (steps == 1)[done].all()
+        # check that split traj has a minimum total reward of -21 (for pong only)
+        _data = split_trajectories(_data, prefix="collector")
+        assert _data["next", "reward"].sum(-2).min() == -21
+    finally:
+        env.close()
+        del env
 
 
 # Deprecated reset_when_done
@@ -927,17 +939,22 @@ def test_update_weights(use_async):
     [MultiSyncDataCollector, MultiaSyncDataCollector, SyncDataCollector],
 )
 @pytest.mark.parametrize("exclude", [True, False])
-def test_excluded_keys(collector_class, exclude):
+@pytest.mark.parametrize("out_key", ["_dummy", ("out", "_dummy"), ("_out", "dummy")])
+def test_excluded_keys(collector_class, exclude, out_key):
     if not exclude and collector_class is not SyncDataCollector:
         pytest.skip("defining _exclude_private_keys is not possible")
 
     def make_env():
-        return ContinuousActionVecMockEnv()
+        return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
 
     dummy_env = make_env()
     obs_spec = dummy_env.observation_spec["observation"]
     policy_module = nn.Linear(obs_spec.shape[-1], dummy_env.action_spec.shape[-1])
-    policy = Actor(policy_module, spec=dummy_env.action_spec)
+    policy = TensorDictModule(
+        policy_module, in_keys=["observation"], out_keys=["action"]
+    )
+    copier = TensorDictModule(lambda x: x, in_keys=["observation"], out_keys=[out_key])
+    policy = TensorDictSequential(policy, copier)
     policy_explore = OrnsteinUhlenbeckProcessWrapper(policy)
 
     collector_kwargs = {
@@ -954,11 +971,13 @@ def test_excluded_keys(collector_class, exclude):
     collector = collector_class(**collector_kwargs)
     collector._exclude_private_keys = exclude
     for b in collector:
-        keys = b.keys()
+        keys = set(b.keys())
         if exclude:
             assert not any(key.startswith("_") for key in keys)
+            assert out_key not in b.keys(True, True)
         else:
             assert any(key.startswith("_") for key in keys)
+            assert out_key in b.keys(True, True)
         break
     collector.shutdown()
     dummy_env.close()
@@ -1383,18 +1402,20 @@ def test_reset_heterogeneous_envs():
     collector = SyncDataCollector(
         env, RandomPolicy(env.action_spec), total_frames=10_000, frames_per_batch=1000
     )
-    for data in collector:  # noqa: B007
-        break
-    collector.shutdown()
-    del collector
-    assert (
-        data[0]["next", "truncated"].squeeze()
-        == torch.tensor([False, True]).repeat(250)[:500]
-    ).all()
-    assert (
-        data[1]["next", "truncated"].squeeze()
-        == torch.tensor([False, False, True]).repeat(168)[:500]
-    ).all()
+    try:
+        for data in collector:  # noqa: B007
+            break
+        assert (
+            data[0]["next", "truncated"].squeeze()
+            == torch.tensor([False, True]).repeat(250)[:500]
+        ).all(), data[0]["next", "truncated"][:10]
+        assert (
+            data[1]["next", "truncated"].squeeze()
+            == torch.tensor([False, False, True]).repeat(168)[:500]
+        ).all(), data[1]["next", "truncated"][:10]
+    finally:
+        collector.shutdown()
+        del collector
 
 
 def test_policy_with_mask():
@@ -1802,12 +1823,12 @@ class TestAggregateReset:
     def test_aggregate_reset_to_root(self):
         # simple
         td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [])
-        assert _aggregate_resets(td).shape == ()
+        assert _aggregate_end_of_traj(td).shape == ()
         # td with batch size
         td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [1])
-        assert _aggregate_resets(td).shape == (1,)
+        assert _aggregate_end_of_traj(td).shape == (1,)
         td = TensorDict({"_reset": torch.zeros((1, 2), dtype=torch.bool)}, [1])
-        assert _aggregate_resets(td).shape == (1,)
+        assert _aggregate_end_of_traj(td).shape == (1,)
         # nested td
         td = TensorDict(
             {
@@ -1816,7 +1837,7 @@ class TestAggregateReset:
             },
             [1],
         )
-        assert _aggregate_resets(td).shape == (1,)
+        assert _aggregate_end_of_traj(td).shape == (1,)
         # nested td with greater number of dims
         td = TensorDict(
             {
@@ -1829,7 +1850,7 @@ class TestAggregateReset:
             [1, 2],
         )
         # test reduction
-        assert _aggregate_resets(td).shape == (1, 2)
+        assert _aggregate_end_of_traj(td).shape == (1, 2)
         td = TensorDict(
             {
                 "_reset": torch.zeros(
@@ -1841,7 +1862,7 @@ class TestAggregateReset:
             [1, 2],
         )
         # test reduction, partial
-        assert _aggregate_resets(td).shape == (1, 2)
+        assert _aggregate_end_of_traj(td).shape == (1, 2)
         td = TensorDict(
             {
                 "_reset": torch.tensor([True, False]).view(1, 2),
@@ -1849,7 +1870,9 @@ class TestAggregateReset:
             },
             [1, 2],
         )
-        assert (_aggregate_resets(td) == torch.tensor([True, False]).view(1, 2)).all()
+        assert (
+            _aggregate_end_of_traj(td) == torch.tensor([True, False]).view(1, 2)
+        ).all()
         # with a stack
         td0 = TensorDict(
             {
@@ -1874,17 +1897,17 @@ class TestAggregateReset:
             [1, 2],
         )
         td = torch.stack([td0, td1], 0)
-        assert _aggregate_resets(td).all()
+        assert _aggregate_end_of_traj(td).all()
 
     def test_aggregate_reset_to_root_keys(self):
         # simple
         td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [])
-        assert _aggregate_resets(td, reset_keys=["_reset"]).shape == ()
+        assert _aggregate_end_of_traj(td, reset_keys=["_reset"]).shape == ()
         # td with batch size
         td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [1])
-        assert _aggregate_resets(td, reset_keys=["_reset"]).shape == (1,)
+        assert _aggregate_end_of_traj(td, reset_keys=["_reset"]).shape == (1,)
         td = TensorDict({"_reset": torch.zeros((1, 2), dtype=torch.bool)}, [1])
-        assert _aggregate_resets(td, reset_keys=["_reset"]).shape == (1,)
+        assert _aggregate_end_of_traj(td, reset_keys=["_reset"]).shape == (1,)
         # nested td
         td = TensorDict(
             {
@@ -1893,9 +1916,9 @@ class TestAggregateReset:
             },
             [1],
         )
-        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).shape == (
-            1,
-        )
+        assert _aggregate_end_of_traj(
+            td, reset_keys=["_reset", ("a", "_reset")]
+        ).shape == (1,)
         # nested td with greater number of dims
         td = TensorDict(
             {
@@ -1908,7 +1931,9 @@ class TestAggregateReset:
             [1, 2],
         )
         # test reduction
-        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).shape == (
+        assert _aggregate_end_of_traj(
+            td, reset_keys=["_reset", ("a", "_reset")]
+        ).shape == (
             1,
             2,
         )
@@ -1922,9 +1947,11 @@ class TestAggregateReset:
             },
             [1, 2],
         )
-        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).all()
+        assert _aggregate_end_of_traj(td, reset_keys=["_reset", ("a", "_reset")]).all()
         # test reduction, partial
-        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).shape == (
+        assert _aggregate_end_of_traj(
+            td, reset_keys=["_reset", ("a", "_reset")]
+        ).shape == (
             1,
             2,
         )
@@ -1938,7 +1965,7 @@ class TestAggregateReset:
             [1, 2],
         )
         assert (
-            _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")])
+            _aggregate_end_of_traj(td, reset_keys=["_reset", ("a", "_reset")])
             == torch.tensor([True, False]).view(1, 2)
         ).all()
         # with a stack
@@ -1965,17 +1992,17 @@ class TestAggregateReset:
             [1, 2],
         )
         td = torch.stack([td0, td1], 0)
-        assert _aggregate_resets(td, reset_keys=["_reset", ("a", "_reset")]).all()
+        assert _aggregate_end_of_traj(td, reset_keys=["_reset", ("a", "_reset")]).all()
 
     def test_aggregate_reset_to_root_errors(self):
         # the order matters: if the first or another key is missing, the ValueError is raised at a different line
         with pytest.raises(ValueError, match=PARTIAL_MISSING_ERR):
-            _aggregate_resets(
+            _aggregate_end_of_traj(
                 TensorDict({"_reset": False}, []),
                 reset_keys=["_reset", ("another", "_reset")],
             )
         with pytest.raises(ValueError, match=PARTIAL_MISSING_ERR):
-            _aggregate_resets(
+            _aggregate_end_of_traj(
                 TensorDict({"_reset": False}, []),
                 reset_keys=[("another", "_reset"), "_reset"],
             )

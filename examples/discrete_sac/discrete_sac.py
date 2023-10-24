@@ -43,7 +43,7 @@ def make_replay_buffer(
     prb=False,
     buffer_size=1000000,
     batch_size=256,
-    buffer_scratch_dir="/tmp/",
+    buffer_scratch_dir=None,
     device="cpu",
     prefetch=3,
 ):
