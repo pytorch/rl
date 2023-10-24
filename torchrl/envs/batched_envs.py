@@ -814,7 +814,9 @@ class ParallelEnv(_BatchedEnv):
                 # as this mechanism can be used by a policy to set anticipatively the
                 # keys of the next call (eg, with recurrent nets)
                 if key in self._env_input_keys or (
-                    isinstance(key, tuple) and key[0] == "next"
+                    isinstance(key, tuple)
+                    and key[0] == "next"
+                    and key in self.shared_tensordict_parent.keys(True, True)
                 ):
                     val = tensordict.get(key)
                     self.shared_tensordict_parent.set_(key, val)
@@ -854,7 +856,9 @@ class ParallelEnv(_BatchedEnv):
                 # as this mechanism can be used by a policy to set anticipatively the
                 # keys of the next call (eg, with recurrent nets)
                 if key in self._env_input_keys or (
-                    isinstance(key, tuple) and key[0] == "next"
+                    isinstance(key, tuple)
+                    and key[0] == "next"
+                    and key in self.shared_tensordict_parent.keys(True, True)
                 ):
                     val = tensordict.get(key)
                     self.shared_tensordict_parent.set_(key, val)

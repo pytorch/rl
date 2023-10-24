@@ -4011,8 +4011,9 @@ class TensorDictPrimer(Transform):
     tensordict with the desired features.
 
     Args:
-        primers (dict, optional): a dictionary containing key-spec pairs which will
-            be used to populate the input tensordict.
+        primers (dict or CompositeSpec, optional): a dictionary containing
+            key-spec pairs which will be used to populate the input tensordict.
+            :class:`~torchrl.data.CompositeSpec` instances are supported too.
         random (bool, optional): if ``True``, the values will be drawn randomly from
             the TensorSpec domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
             Defaults to `False`.
@@ -4073,7 +4074,7 @@ class TensorDictPrimer(Transform):
 
     def __init__(
         self,
-        primers: dict = None,
+        primers: dict | CompositeSpec = None,
         random: bool = False,
         default_value: float = 0.0,
         reset_key: NestedKey | None = None,
@@ -4087,7 +4088,9 @@ class TensorDictPrimer(Transform):
                     "as kwargs."
                 )
             kwargs = primers
-        self.primers = CompositeSpec(kwargs)
+        if not isinstance(kwargs, CompositeSpec):
+            kwargs = CompositeSpec(kwargs)
+        self.primers = kwargs
         self.random = random
         self.default_value = default_value
         self.reset_key = reset_key
