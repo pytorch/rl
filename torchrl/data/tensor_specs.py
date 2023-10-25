@@ -353,16 +353,16 @@ class ContinuousBox(Box):
 
     _low: torch.Tensor
     _high: torch.Tensor
-    device: torch.device
+    device: torch.device = None
 
     # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
     @property
     def low(self):
-        return self._low.to(self.device)
+        return self._low.to(self.device, non_blocking=True)
 
     @property
     def high(self):
-        return self._high.to(self.device)
+        return self._high.to(self.device, non_blocking=True)
 
     @classmethod
     def _replace_inf(cls, val):
@@ -386,7 +386,7 @@ class ContinuousBox(Box):
             f"{type(self)}.minimum is going to be deprecated in favour of {type(self)}.low",
             category=DeprecationWarning,
         )
-        return self._low.to(self.device)
+        return self._low.to(self.device, non_blocking=True)
 
     @property
     def maximum(self):
@@ -394,7 +394,7 @@ class ContinuousBox(Box):
             f"{type(self)}.maximum is going to be deprecated in favour of {type(self)}.low",
             category=DeprecationWarning,
         )
-        return self._high.to(self.device)
+        return self._high.to(self.device, non_blocking=True)
 
     @low.setter
     def low(self, value):
@@ -417,7 +417,9 @@ class ContinuousBox(Box):
         yield self.high
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> ContinuousBox:
-        return self.__class__(self.low.to(dest), self.high.to(dest))
+        return self.__class__(
+            self.low.to(dest, non_blocking=True), self.high.to(dest, non_blocking=True)
+        )
 
     def clone(self) -> ContinuousBox:
         return self.__class__(self.low.clone(), self.high.clone())
