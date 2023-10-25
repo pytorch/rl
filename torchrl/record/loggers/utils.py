@@ -31,7 +31,8 @@ def get_logger(
     """Get a logger instance of the provided `logger_type`.
 
     Args:
-        logger_type (str): One of tensorboard / csv / wandb / mlflow
+        logger_type (str): One of tensorboard / csv / wandb / mlflow.
+            If empty, ``None`` is returned.
         logger_name (str): Name to be used as a log_dir
         experiment_name (str): Name of the experiment
         kwargs (dict[str]): might contain either `wandb_kwargs` or `mlflow_kwargs`
@@ -60,6 +61,8 @@ def get_logger(
             exp_name=experiment_name,
             **mlflow_kwargs,
         )
+    elif logger_type in ("", None):
+        return None
     else:
-        raise NotImplementedError(f"Unsupported logger_type: {logger_type}")
+        raise NotImplementedError(f"Unsupported logger_type: '{logger_type}'")
     return logger

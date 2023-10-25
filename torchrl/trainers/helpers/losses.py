@@ -42,6 +42,7 @@ def make_redq_loss(
     model, cfg
 ) -> Tuple[REDQLoss_deprecated, Optional[TargetNetUpdater]]:
     """Builds the REDQ loss module."""
+    warnings.warn("This helper function will be deprecated in v0.4. Consider using the local helper in the REDQ example.", category=DeprecationWarning)
     loss_kwargs = {}
     if hasattr(cfg, "distributional") and cfg.distributional:
         raise NotImplementedError

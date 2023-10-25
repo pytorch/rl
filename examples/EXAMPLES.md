@@ -32,7 +32,7 @@ We average the results over 5 different seeds and plot the standard error.
 To reproduce a single run:
 
 ```
-python sac/sac.py env_name="HalfCheetah-v4" env_task="" env_library="gym"
+python sac/sac.py env.name="HalfCheetah-v4" env.task="" env.library="gym"
 ```
 
 ``` 
@@ -52,7 +52,7 @@ python sac/sac.py env.name="cheetah" env.task="run" env.library="dm_control"
 ```
 
 ``` 
-python redq/redq.py env_name="cheetah" env_task="run" env_library="dm_control"
+python redq/redq.py env.name="cheetah" env.task="run" env.library="dm_control"
 ```
 
 [//]: # (TODO: adapt these scripts)

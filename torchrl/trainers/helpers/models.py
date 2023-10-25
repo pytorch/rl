@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import warnings
 
 import itertools
 from dataclasses import dataclass
@@ -290,6 +291,7 @@ def make_redq_model(
             is_shared=False)
 
     """
+    warnings.warn("This helper function will be deprecated in v0.4. Consider using the local helper in the REDQ example.", category=DeprecationWarning)
     tanh_loc = cfg.tanh_loc
     default_policy_scale = cfg.default_policy_scale
     gSDE = cfg.gSDE
