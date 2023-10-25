@@ -102,8 +102,6 @@ def make_env_transforms(
             obs_stats = stats
         obs_stats["standard_normal"] = True
         obs_norm = ObservationNorm(**obs_stats, in_keys=["pixels"])
-        # if obs_norm_state_dict:
-        #     obs_norm.load_state_dict(obs_norm_state_dict)
         env.append_transform(obs_norm)
     if norm_rewards:
         reward_scaling = 1.0
@@ -132,7 +130,6 @@ def make_env_transforms(
     env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
     )
-
     return env
 
 

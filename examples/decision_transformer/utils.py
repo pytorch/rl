@@ -179,7 +179,7 @@ def make_collector(cfg, policy):
         policy,
         frames_per_batch=collector_cfg.frames_per_batch,
         total_frames=collector_cfg.total_frames,
-        device=collector_cfg.collector_devices,
+        device=collector_cfg.devices,
         max_frames_per_traj=collector_cfg.max_frames_per_traj,
         postproc=transforms,
     )

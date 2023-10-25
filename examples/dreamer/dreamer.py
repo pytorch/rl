@@ -186,7 +186,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     print("collector:", collector)
 
-    replay_buffer = make_replay_buffer(device, cfg)
+    replay_buffer = make_replay_buffer("cpu", cfg)
 
     record = Recorder(
         record_frames=cfg.record_frames,
