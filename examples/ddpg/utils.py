@@ -107,7 +107,7 @@ def make_collector(cfg, train_env, actor_model_explore):
         init_random_frames=cfg.collector.init_random_frames,
         reset_at_each_iter=cfg.collector.reset_at_each_iter,
         total_frames=cfg.collector.total_frames,
-        device=cfg.collector.collector_device,
+        device=cfg.collector.device,
     )
     collector.set_seed(cfg.env.seed)
     return collector
