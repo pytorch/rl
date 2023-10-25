@@ -51,6 +51,17 @@ def test_bounded(dtype):
         assert (ts.encode(ts.to_numpy(r)) == r).all()
 
 
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
+@pytest.mark.parametrize("low", [-float("inf"), 10, float("inf")])
+@pytest.mark.parametrize("high", [-float("inf"), 10, float("inf")])
+@pytest.mark.parametrize("shape", [(), (3,), (3, 4)])
+def test_bounded_inf(dtype, low, high, shape):
+    spec = BoundedTensorSpec(
+        torch.tensor(low, dtype=dtype), torch.tensor(high, dtype=dtype), shape=shape
+    )
+    assert torch.isfinite(spec.rand()).all()
+
+
 @pytest.mark.parametrize("cls", [OneHotDiscreteTensorSpec, DiscreteTensorSpec])
 def test_discrete(cls):
     torch.manual_seed(0)

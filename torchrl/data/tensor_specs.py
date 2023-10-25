@@ -330,6 +330,7 @@ class invertible_dict(dict):
         return self.inv_dict
 
 
+@dataclass
 class Box:
     """A box of values."""
 
@@ -352,7 +353,7 @@ class ContinuousBox(Box):
 
     _low: torch.Tensor
     _high: torch.Tensor
-    device: torch.device = None
+    device: torch.device
 
     # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
     @property
@@ -363,15 +364,21 @@ class ContinuousBox(Box):
     def high(self):
         return self._high.to(self.device)
 
-    @low.setter
-    def low(self, value):
-        self.device = value.device
-        self._low = value.cpu()
-
-    @high.setter
-    def high(self, value):
-        self.device = value.device
-        self._high = value.cpu()
+    @classmethod
+    def _replace_inf(cls, val):
+        dtype = val.dtype
+        if dtype.is_floating_point:
+            finfo = torch.finfo(dtype)
+        else:
+            # no infinity for int
+            return val
+        inf_vals = ~torch.isfinite(val) & (val > 0)
+        maxval = finfo.max
+        val = torch.where(~inf_vals, val, maxval)
+        inf_vals = ~torch.isfinite(val)
+        minval = finfo.min
+        val = torch.where(~inf_vals, val, minval)
+        return val
 
     @property
     def minimum(self):
@@ -392,11 +399,13 @@ class ContinuousBox(Box):
     @low.setter
     def low(self, value):
         self.device = value.device
+        value = self._replace_inf(value)
         self._low = value.cpu()
 
     @high.setter
     def high(self, value):
         self.device = value.device
+        value = self._replace_inf(value)
         self._high = value.cpu()
 
     def __post_init__(self):
