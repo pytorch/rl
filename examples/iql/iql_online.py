@@ -236,12 +236,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Make Replay Buffer
     replay_buffer = make_replay_buffer(
-        buffer_size=cfg.buffer.size, device="cpu", batch_size=cfg.buffer.batch_size, prefetch=cfg.buffer.prefetch, prb=cfg.buffer.prb,
+        buffer_size=cfg.buffer.size,
+        device="cpu",
+        batch_size=cfg.buffer.batch_size,
+        prefetch=cfg.buffer.prefetch,
+        prb=cfg.buffer.prb,
     )
 
     # Optimizers
     params = list(loss_module.parameters())
-    optimizer = optim.Adam(params, lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay, eps=cfg.optim.eps)
+    optimizer = optim.Adam(
+        params, lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay, eps=cfg.optim.eps
+    )
 
     rewards = []
     rewards_eval = []

@@ -5,30 +5,25 @@
 from __future__ import annotations
 
 from copy import copy
-from typing import Callable, Dict, Optional, Union
-from typing import Sequence
-from typing import Tuple
-from torchrl.trainers.helpers import sync_async_collector, sync_sync_collector
-from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Dict, Optional, Sequence, Tuple, Union
 
 import torch
-
-from torchrl.data import ReplayBuffer, TensorDictReplayBuffer
-from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.data.utils import DEVICE_TYPING
-
-import torch
-from tensordict.nn import InteractionType
-from tensordict.nn import ProbabilisticTensorDictSequential
-from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
-from torch import distributions as d, nn
+from omegaconf import OmegaConf
+from tensordict.nn import (
+    InteractionType,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+    TensorDictModuleWrapper,
+)
+from torch import distributions as d, nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchrl._utils import VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
-from torchrl.data import ReplayBuffer
+
+from torchrl.data import ReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.postprocs import MultiStep
+from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
@@ -50,42 +45,33 @@ from torchrl.envs.transforms import (
     TransformedEnv,
     VecNorm,
 )
-from torch import optim
-from omegaconf import OmegaConf
 from torchrl.envs.transforms.transforms import (
     FlattenObservation,
     gSDENoise,
     InitTracker,
     StepCounter,
 )
-from torchrl.envs.utils import ExplorationType
-from torchrl.envs.utils import set_exploration_type
-from torchrl.modules import ActorCriticOperator, ActorValueOperator
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
+    ActorCriticOperator,
+    ActorValueOperator,
     NoisyLinear,
     NormalParamWrapper,
     SafeModule,
     SafeSequential,
 )
-from torchrl.modules.distributions import (
-    TanhNormal,
-)
+from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import SafeTanhTransform
 from torchrl.modules.models.exploration import LazygSDEModule
-from torchrl.modules.models.models import (
-    DdpgCnnActor,
-    DdpgCnnQNet,
-    MLP,
-)
-from torchrl.modules.tensordict_module.actors import ProbabilisticActor, \
-    ValueOperator
+from torchrl.modules.models.models import DdpgCnnActor, DdpgCnnQNet, MLP
+from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
 from torchrl.objectives import HardUpdate, SoftUpdate
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.deprecated import REDQLoss_deprecated
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
 from torchrl.record.recorder import VideoRecorder
-from torchrl.trainers.helpers import transformed_env_constructor
+from torchrl.trainers.helpers import sync_async_collector, sync_sync_collector
 from torchrl.trainers.trainers import (
     BatchSubSampler,
     ClearCudaCache,
@@ -246,7 +232,9 @@ def make_trainer(
         optim_scheduler = CosineAnnealingLR(
             optimizer,
             T_max=int(
-                cfg.collector.total_frames / cfg.collector.frames_per_batch * cfg.optim.steps_per_batch
+                cfg.collector.total_frames
+                / cfg.collector.frames_per_batch
+                * cfg.optim.steps_per_batch
             ),
         )
     elif cfg.optim.lr_scheduler == "":
@@ -306,14 +294,10 @@ def make_trainer(
         trainer.register_op(
             "process_optim_batch",
             BatchSubSampler(
-                batch_size=cfg.buffer.batch_size,
-                sub_traj_len=cfg.buffer.sub_traj_len
+                batch_size=cfg.buffer.batch_size, sub_traj_len=cfg.buffer.sub_traj_len
             ),
         )
-        trainer.register_op(
-            "process_optim_batch",
-            lambda batch: batch.to(device)
-        )
+        trainer.register_op("process_optim_batch", lambda batch: batch.to(device))
 
     if optim_scheduler is not None:
         trainer.register_op("post_optim", optim_scheduler.step)
@@ -328,20 +312,12 @@ def make_trainer(
             scale=cfg.env.normalize_rewards_online_scale,
             decay=cfg.env.normalize_rewards_online_decay,
         )
-        trainer.register_op(
-            "batch_process",
-            reward_normalizer.update_reward_stats
-        )
-        trainer.register_op(
-            "process_optim_batch",
-            reward_normalizer.normalize_reward
-        )
+        trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
+        trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 
     if policy_exploration is not None and hasattr(policy_exploration, "step"):
         trainer.register_op(
-            "post_steps",
-            policy_exploration.step,
-            frames=cfg.collector.frames_per_batch
+            "post_steps", policy_exploration.step, frames=cfg.collector.frames_per_batch
         )
 
     trainer.register_op(
@@ -389,10 +365,7 @@ def make_trainer(
     )
 
     trainer.register_op("pre_steps_log", LogReward())
-    trainer.register_op(
-        "pre_steps_log",
-        CountFramesLog(frame_skip=cfg.env.frame_skip)
-    )
+    trainer.register_op("pre_steps_log", CountFramesLog(frame_skip=cfg.env.frame_skip))
 
     return trainer
 
@@ -453,13 +426,11 @@ def make_redq_model(
                 "activation_class": ACTIVATIONS[cfg.network.activation],
             },
             "conv_net_kwargs": {
-                "activation_class": ACTIVATIONS[cfg.network.activation]},
+                "activation_class": ACTIVATIONS[cfg.network.activation]
+            },
         }
         actor_net_kwargs_default.update(actor_net_kwargs)
-        actor_net = DdpgCnnActor(
-            out_features_actor,
-            **actor_net_kwargs_default
-        )
+        actor_net = DdpgCnnActor(out_features_actor, **actor_net_kwargs_default)
         gSDE_state_key = "hidden"
         out_keys_actor = ["param", "hidden"]
 
@@ -469,7 +440,8 @@ def make_redq_model(
                 "activation_class": ACTIVATIONS[cfg.network.activation],
             },
             "conv_net_kwargs": {
-                "activation_class": ACTIVATIONS[cfg.network.activation]},
+                "activation_class": ACTIVATIONS[cfg.network.activation]
+            },
         }
         value_net_default_kwargs.update(qvalue_net_kwargs)
 
@@ -535,10 +507,7 @@ def make_redq_model(
             if (min != -1).any() or (max != 1).any():
                 transform = d.ComposeTransform(
                     transform,
-                    d.AffineTransform(
-                        loc=(max + min) / 2,
-                        scale=(max - min) / 2
-                    ),
+                    d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
                 )
         else:
             raise RuntimeError("cannot use gSDE with discrete actions")
@@ -651,8 +620,7 @@ def transformed_env_constructor(
             }
             if env_library is GymEnv:
                 env_kwargs.update(
-                    {
-                        "categorical_action_encoding": categorical_action_encoding}
+                    {"categorical_action_encoding": categorical_action_encoding}
                 )
             elif categorical_action_encoding:
                 raise NotImplementedError(
@@ -667,9 +635,7 @@ def transformed_env_constructor(
         elif custom_env_maker is None and custom_env is not None:
             env = custom_env
         else:
-            raise RuntimeError(
-                "cannot provive both custom_env and custom_env_maker"
-            )
+            raise RuntimeError("cannot provive both custom_env and custom_env_maker")
 
         if cfg.env.noops and custom_env is None:
             # this is a bit hacky: if custom_env is not None, it is probably a ParallelEnv
@@ -737,9 +703,7 @@ def initialize_observation_norm_transforms(
         return
 
     if key is None:
-        keys = list(
-            proof_environment.base_env.observation_spec.keys(True, True)
-        )
+        keys = list(proof_environment.base_env.observation_spec.keys(True, True))
         key = keys.pop()
         if len(keys):
             raise RuntimeError(
@@ -749,10 +713,7 @@ def initialize_observation_norm_transforms(
 
     if isinstance(proof_environment.transform, Compose):
         for transform in proof_environment.transform:
-            if isinstance(
-                transform,
-                ObservationNorm
-            ) and not transform.initialized:
+            if isinstance(transform, ObservationNorm) and not transform.initialized:
                 transform.init_stats(num_iter=num_iter, key=key)
     elif not proof_environment.transform.initialized:
         proof_environment.transform.init_stats(num_iter=num_iter, key=key)
@@ -819,9 +780,7 @@ def retrieve_observation_norms_state_dict(proof_environment: TransformedEnv):
                 obs_norm_state_dicts.append((idx, transform.state_dict()))
 
     if isinstance(proof_environment.transform, ObservationNorm):
-        obs_norm_state_dicts.append(
-            (0, proof_environment.transform.state_dict())
-        )
+        obs_norm_state_dicts.append((0, proof_environment.transform.state_dict()))
 
     return obs_norm_state_dicts
 
@@ -874,12 +833,8 @@ def make_env_transforms(
         env.append_transform(Resize(cfg.env.image_size, cfg.env.image_size))
         if cfg.env.grayscale:
             env.append_transform(GrayScale())
-        env.append_transform(
-            FlattenObservation(0, -3, allow_positive_dim=True)
-        )
-        env.append_transform(
-            CatFrames(N=cfg.env.catframes, in_keys=["pixels"], dim=-3)
-        )
+        env.append_transform(FlattenObservation(0, -3, allow_positive_dim=True))
+        env.append_transform(CatFrames(N=cfg.env.catframes, in_keys=["pixels"], dim=-3))
         if stats is None and obs_norm_state_dict is None:
             obs_stats = {}
         elif stats is None:
@@ -902,15 +857,12 @@ def make_env_transforms(
         selected_keys = [
             key
             for key in env.observation_spec.keys(True, True)
-            if ("pixels" not in key) and (
-                key not in env.state_spec.keys(True, True))
+            if ("pixels" not in key) and (key not in env.state_spec.keys(True, True))
         ]
 
         # even if there is a single tensor, it'll be renamed in "observation_vector"
         out_key = "observation_vector"
-        env.append_transform(
-            CatTensors(in_keys=selected_keys, out_key=out_key)
-        )
+        env.append_transform(CatTensors(in_keys=selected_keys, out_key=out_key))
 
         if not vecnorm:
             if stats is None and obs_norm_state_dict is None:
@@ -928,8 +880,7 @@ def make_env_transforms(
         else:
             env.append_transform(
                 VecNorm(
-                    in_keys=[out_key, "reward"] if not _norm_obs_only else [
-                        out_key],
+                    in_keys=[out_key, "reward"] if not _norm_obs_only else [out_key],
                     decay=0.9999,
                 )
             )
@@ -1066,14 +1017,13 @@ def make_collector_offpolicy(
         "init_random_frames": cfg.collector.init_random_frames,
         "split_trajs": True,
         # trajectories must be separated if multi-step is used
-        "exploration_type": ExplorationType.from_str(
-            cfg.collector.exploration_mode
-            ),
+        "exploration_type": ExplorationType.from_str(cfg.collector.exploration_mode),
     }
 
     collector = collector_helper(**collector_helper_kwargs)
     collector.set_seed(cfg.seed)
     return collector
+
 
 def make_replay_buffer(
     device: DEVICE_TYPING, cfg: "DictConfig"  # noqa: F821

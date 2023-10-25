@@ -3,20 +3,31 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import dataclasses
 import uuid
 from datetime import datetime
-from omegaconf import OmegaConf
+
 import hydra
 import torch.cuda
-from hydra.core.config_store import ConfigStore
+from omegaconf import OmegaConf
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 from torchrl.record import VideoRecorder
-from torchrl.record.loggers import generate_exp_name, get_logger
-from utils import correct_for_frame_skip, make_trainer, make_redq_model, get_norm_state_dict, initialize_observation_norm_transforms, parallel_env_constructor, retrieve_observation_norms_state_dict, transformed_env_constructor, make_redq_loss, make_collector_offpolicy, make_replay_buffer
+from torchrl.record.loggers import get_logger
+from utils import (
+    correct_for_frame_skip,
+    get_norm_state_dict,
+    initialize_observation_norm_transforms,
+    make_collector_offpolicy,
+    make_redq_loss,
+    make_redq_model,
+    make_replay_buffer,
+    make_trainer,
+    parallel_env_constructor,
+    retrieve_observation_norms_state_dict,
+    transformed_env_constructor,
+)
 
 DEFAULT_REWARD_SCALING = {
     "Hopper-v1": 5,
@@ -54,13 +65,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     logger = get_logger(
-        logger_type=cfg.logger.backend, logger_name="redq_logging", experiment_name=exp_name, **OmegaConf.to_container(cfg.logger.kwargs)
+        logger_type=cfg.logger.backend,
+        logger_name="redq_logging",
+        experiment_name=exp_name,
+        **OmegaConf.to_container(cfg.logger.kwargs),
     )
     video_tag = exp_name if cfg.logger.record_video else ""
 
     key, init_env_steps, stats = None, None, None
     if not cfg.env.vecnorm and cfg.env.norm_stats:
-        key = ("next", "pixels") if cfg.env.from_pixels else ("next", "observation_vector")
+        key = (
+            ("next", "pixels")
+            if cfg.env.from_pixels
+            else ("next", "observation_vector")
+        )
         init_env_steps = cfg.env.init_env_steps
         stats = {"loc": None, "scale": None}
     elif cfg.env.from_pixels:
