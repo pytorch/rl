@@ -27,7 +27,7 @@ from utils import (
 )
 
 
-@hydra.main(config_path=".", config_name="online_config")
+@hydra.main(version_base="1.1", config_path=".", config_name="online_config")
 def main(cfg: "DictConfig"):  # noqa: F821
     exp_name = generate_exp_name("CQL-online", cfg.env.exp_name)
     logger = None
