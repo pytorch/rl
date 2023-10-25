@@ -539,7 +539,7 @@ conda activate torch_rl
 Depending on the use of functorch that you want to make, you may want to 
 install the latest (nightly) PyTorch release or the latest stable version of PyTorch.
 See [here](https://pytorch.org/get-started/locally/) for a detailed list of commands, 
-including `pip3` or windows/OSX compatible installation commands.
+including `pip3` or other special installation instructions.
 
 **Torchrl**
 
@@ -547,14 +547,14 @@ You can install the **latest stable release** by using
 ```
 pip3 install torchrl
 ```
-This should work on linux and OsX (Intel or Silicon chips). For Windows machines, one
-should install the library locally (see below).
+This should work on linux, Windows 10 and OsX (Intel or Silicon chips).
+On certain Windows machines (Windows 11), one should install the library locally (see below).
 
 The **nightly build** can be installed via
 ```
 pip install torchrl-nightly
 ```
-which we currently only ship for Linus and OsX (Intel) machines.
+which we currently only ship for Linux and OsX (Intel) machines.
 Importantly, the nightly builds require the nightly builds of PyTorch too.
 
 To install extra dependencies, call
@@ -564,7 +564,7 @@ pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils,marl
 or a subset of these.
 
 One may also desire to install the library locally. Three main reasons can motivate this:
-- the nightly/stable release isn't available for one's platform (eg, Windows, nightly for Apple Silicon etc.);
+- the nightly/stable release isn't available for one's platform (eg, Windows 11, nightlies for Apple Silicon etc.);
 - contributing to the code;
 - install torchrl with a previous version of PyTorch (note that this should also be doable via a regular install followed
   by a downgrade to a previous pytorch version -- but the C++ binaries will not be available.)
