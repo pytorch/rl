@@ -372,7 +372,9 @@ class TensorStorage(Storage):
                 self._init(data)
         if not isinstance(cursor, (*INT_CLASSES, slice)):
             if not isinstance(cursor, torch.Tensor):
-                cursor = torch.tensor(cursor)
+                cursor = torch.tensor(cursor, dtype=torch.long, device=self.device)
+            elif cursor.dtype != torch.long:
+                cursor = cursor.to(dtype=torch.long, device=self.device)
             if len(cursor) > len(self._storage):
                 warnings.warn(
                     "A cursor of length superior to the storage capacity was provided. "
@@ -740,7 +742,7 @@ def _collate_contiguous(x):
 
 
 def _collate_as_tensor(x):
-    return x.contiguous()
+    return x.as_tensor()
 
 
 def _get_default_collate(storage, _is_tensordict=False):
