@@ -4,7 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import contextlib
 import importlib
+import pickle
 import sys
 from functools import partial
 from unittest import mock
@@ -12,8 +14,9 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices
-from tensordict.prototype import is_tensorclass, tensorclass
+from _utils_internal import get_default_devices, make_tc
+from packaging.version import parse
+from tensordict import is_tensorclass, tensorclass
 from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from torchrl.data import (
     PrioritizedReplayBuffer,
@@ -33,8 +36,12 @@ from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
+    TensorStorage,
 )
-from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from torchrl.data.replay_buffers.writers import (
+    RoundRobinWriter,
+    TensorDictMaxValueWriter,
+)
 from torchrl.envs.transforms.transforms import (
     BinarizeReward,
     CatFrames,
@@ -57,6 +64,7 @@ from torchrl.envs.transforms.transforms import (
     VecNorm,
 )
 
+OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
 _os_is_windows = sys.platform == "win32"
 
@@ -129,9 +137,14 @@ class TestComposableBuffers:
         )
         data = self._get_datum(rb_type)
         rb.add(data)
-        s = rb._storage[0]
+        s = rb.sample(1)
+        assert s.ndim, s
+        s = s[0]
         if isinstance(s, TensorDictBase):
-            assert (s == data.select(*s.keys())).all()
+            s = s.select(*data.keys(True), strict=False)
+            data = data.select(*s.keys(True), strict=False)
+            assert (s == data).all()
+            assert list(s.keys(True, True))
         else:
             assert (s == data).all()
 
@@ -140,7 +153,12 @@ class TestComposableBuffers:
         writer = writer()
         writer.register_storage(storage)
         batch1 = self._get_data(rb_type, size=5)
-        writer.extend(batch1)
+        cond = OLD_TORCH and size < len(batch1) and isinstance(storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            writer.extend(batch1)
 
         # Added less data than storage max size
         if size > 5:
@@ -165,7 +183,12 @@ class TestComposableBuffers:
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
         )
         data = self._get_data(rb_type, size=5)
-        rb.extend(data)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data)
         length = len(rb)
         for d in data[-length:]:
             for b in rb._storage:
@@ -182,6 +205,15 @@ class TestComposableBuffers:
                     break
             else:
                 raise RuntimeError("did not find match")
+        data2 = self._get_data(rb_type, size=2 * size + 2)
+        cond = (
+            OLD_TORCH and size < len(data2) and isinstance(rb._storage, TensorStorage)
+        )
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data2)
 
     def test_sample(self, rb_type, sampler, writer, storage, size):
         if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
@@ -193,7 +225,12 @@ class TestComposableBuffers:
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
         )
         data = self._get_data(rb_type, size=5)
-        rb.extend(data)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data)
         new_data = rb.sample()
         if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
             new_data = new_data[0]
@@ -224,7 +261,12 @@ class TestComposableBuffers:
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
         )
         data = self._get_data(rb_type, size=5)
-        rb.extend(data)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data)
         d1 = rb[2]
         d2 = rb._storage[2]
         if type(d1) is not type(d2):
@@ -234,11 +276,128 @@ class TestComposableBuffers:
             b = b.all()
         assert b
 
+    def test_pickable(self, rb_type, sampler, writer, storage, size):
+
+        rb = self._get_rb(
+            rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
+        )
+        serialized = pickle.dumps(rb)
+        rb2 = pickle.loads(serialized)
+        assert rb.__dict__.keys() == rb2.__dict__.keys()
+        for key in sorted(rb.__dict__.keys()):
+            assert isinstance(rb.__dict__[key], type(rb2.__dict__[key]))
+
+
+class TestStorages:
+    def _get_tensor(self):
+        return torch.randn(10, 11)
+
+    def _get_tensordict(self):
+        return TensorDict(
+            {"data": torch.randn(10, 11), ("nested", "data"): torch.randn(10, 11, 3)},
+            [10, 11],
+        )
+
+    def _get_tensorclass(self):
+        data = self._get_tensordict()
+        return make_tc(data)(**data, batch_size=data.shape)
+
+    @pytest.mark.parametrize("storage_type", [TensorStorage])
+    def test_errors(self, storage_type):
+        with pytest.raises(ValueError, match="Expected storage to be non-null"):
+            storage_type(None)
+        data = torch.randn(3)
+        with pytest.raises(
+            ValueError, match="The max-size and the storage shape mismatch"
+        ):
+            storage_type(data, max_size=4)
+
+    @pytest.mark.parametrize("data_type", ["tensor", "tensordict", "tensorclass"])
+    @pytest.mark.parametrize("storage_type", [TensorStorage])
+    def test_get_set(self, storage_type, data_type):
+        if data_type == "tensor":
+            data = self._get_tensor()
+        elif data_type == "tensorclass":
+            data = self._get_tensorclass()
+        elif data_type == "tensordict":
+            data = self._get_tensordict()
+        else:
+            raise NotImplementedError
+        storage = storage_type(data)
+        storage.set(range(10), torch.zeros_like(data))
+        assert (storage.get(range(10)) == 0).all()
+
+    @pytest.mark.parametrize("data_type", ["tensor", "tensordict", "tensorclass"])
+    @pytest.mark.parametrize("storage_type", [TensorStorage])
+    def test_state_dict(self, storage_type, data_type):
+        if data_type == "tensor":
+            data = self._get_tensor()
+        elif data_type == "tensorclass":
+            data = self._get_tensorclass()
+        elif data_type == "tensordict":
+            data = self._get_tensordict()
+        else:
+            raise NotImplementedError
+        storage = storage_type(data)
+        sd = storage.state_dict()
+        storage2 = storage_type(torch.zeros_like(data))
+        storage2.load_state_dict(sd)
+        assert (storage.get(range(10)) == storage2.get(range(10))).all()
+        assert type(storage.get(range(10))) is type(  # noqa: E721
+            storage2.get(range(10))
+        )
+
+    @pytest.mark.skipif(
+        not torch.cuda.device_count(),
+        reason="not cuda device found to test rb storage.",
+    )
+    @pytest.mark.parametrize(
+        "device_data,device_storage",
+        [
+            [torch.device("cuda"), torch.device("cpu")],
+            [torch.device("cpu"), torch.device("cuda")],
+            [torch.device("cpu"), "auto"],
+            [torch.device("cuda"), "auto"],
+        ],
+    )
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    @pytest.mark.parametrize("data_type", ["tensor", "tc", "td"])
+    def test_storage_device(self, device_data, device_storage, storage_type, data_type):
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+
+        if data_type == "tensor":
+            data = torch.randn(3, device=device_data)
+        elif data_type == "td":
+            data = TensorDict(
+                {"a": torch.randn(3, device=device_data)}, [], device=device_data
+            )
+        elif data_type == "tc":
+            data = TC(
+                a=torch.randn(3, device=device_data),
+                batch_size=[],
+                device=device_data,
+            )
+        else:
+            raise NotImplementedError
+        storage = storage_type(max_size=10, device=device_storage)
+        if device_storage == "auto":
+            device_storage = device_data
+        if storage_type is LazyMemmapStorage and device_storage.type == "cuda":
+            with pytest.warns(
+                DeprecationWarning, match="Support for Memmap device other than CPU"
+            ):
+                storage.set(0, data)
+        else:
+            storage.set(0, data)
+        assert storage.get(0).device.type == device_storage.type
+
 
 @pytest.mark.parametrize("max_size", [1000])
 @pytest.mark.parametrize("shape", [[3, 4]])
 @pytest.mark.parametrize("storage", [LazyTensorStorage, LazyMemmapStorage])
-class TestStorages:
+class TestLazyStorages:
     def _get_nested_tensorclass(self, shape):
         @tensorclass
         class NestedTensorClass:
@@ -311,7 +470,7 @@ class TestStorages:
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_prototype_prb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)
@@ -373,14 +532,22 @@ def test_prototype_prb(priority_key, contiguous, device):
 
 
 @pytest.mark.parametrize("stack", [False, True])
+@pytest.mark.parametrize("datatype", ["tc", "tb"])
 @pytest.mark.parametrize("reduction", ["min", "max", "median", "mean"])
-def test_replay_buffer_trajectories(stack, reduction):
+def test_replay_buffer_trajectories(stack, reduction, datatype):
     traj_td = TensorDict(
         {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
         batch_size=[3, 4],
     )
+    if datatype == "tc":
+        c = make_tc(traj_td)
+        traj_td = c(**traj_td, batch_size=traj_td.batch_size)
+        assert is_tensorclass(traj_td)
+    elif datatype != "tb":
+        raise NotImplementedError
+
     if stack:
-        traj_td = torch.stack([td.to_tensordict() for td in traj_td], 0)
+        traj_td = torch.stack(list(traj_td), 0)
 
     rb = TensorDictReplayBuffer(
         sampler=samplers.PrioritizedSampler(
@@ -394,6 +561,10 @@ def test_replay_buffer_trajectories(stack, reduction):
     )
     rb.extend(traj_td)
     sampled_td = rb.sample()
+    if datatype == "tc":
+        assert is_tensorclass(traj_td)
+        return
+
     sampled_td.set("td_error", torch.rand(sampled_td.shape))
     rb.update_tensordict_priority(sampled_td)
     sampled_td = rb.sample(include_info=True)
@@ -490,7 +661,14 @@ class TestBuffers:
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         batch1 = self._get_data(rbtype, size=5)
-        rb.extend(batch1)
+        cond = (
+            OLD_TORCH and size < len(batch1) and isinstance(rb._storage, TensorStorage)
+        )
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(batch1)
 
         # Added less data than storage max size
         if size > 5 or storage is None:
@@ -510,17 +688,45 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_datum(rbtype)
         rb.add(data)
-        s = rb._storage[0]
+        s = rb.sample(1)[0]
         if isinstance(s, TensorDictBase):
-            assert (s == data.select(*s.keys())).all()
+            s = s.select(*data.keys(True), strict=False)
+            data = data.select(*s.keys(True), strict=False)
+            assert (s == data).all()
+            assert list(s.keys(True, True))
         else:
             assert (s == data).all()
+
+    def test_empty(self, rbtype, storage, size, prefetch):
+        torch.manual_seed(0)
+        rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
+        data = self._get_datum(rbtype)
+        for _ in range(2):
+            rb.add(data)
+            s = rb.sample(1)[0]
+            if isinstance(s, TensorDictBase):
+                s = s.select(*data.keys(True), strict=False)
+                data = data.select(*s.keys(True), strict=False)
+                assert (s == data).all()
+                assert list(s.keys(True, True))
+            else:
+                assert (s == data).all()
+            rb.empty()
+            with pytest.raises(
+                RuntimeError, match="Cannot sample from an empty storage"
+            ):
+                rb.sample()
 
     def test_extend(self, rbtype, storage, size, prefetch):
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
-        rb.extend(data)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data)
         length = len(rb)
         for d in data[-length:]:
             found_similar = False
@@ -543,7 +749,12 @@ class TestBuffers:
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
-        rb.extend(data)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data)
         new_data = rb.sample()
         if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
             new_data = new_data[0]
@@ -569,7 +780,12 @@ class TestBuffers:
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
-        rb.extend(data)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        with pytest.warns(
+            UserWarning,
+            match="A cursor of length superior to the storage capacity was provided",
+        ) if cond else contextlib.nullcontext():
+            rb.extend(data)
         d1 = rb[2]
         d2 = rb._storage[2]
         if type(d1) is not type(d2):
@@ -630,7 +846,7 @@ def test_batch_errors():
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_prb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)
@@ -649,6 +865,7 @@ def test_prb(priority_key, contiguous, device):
         },
         batch_size=[3],
     ).to(device)
+
     rb.extend(td1)
     s = rb.sample()
     assert s.batch_size == torch.Size([5])
@@ -838,25 +1055,33 @@ transforms = [
 
 @pytest.mark.parametrize("transform", transforms)
 def test_smoke_replay_buffer_transform(transform):
-    rb = ReplayBuffer(transform=transform(in_keys="observation"), batch_size=1)
+    rb = TensorDictReplayBuffer(
+        transform=transform(in_keys=["observation"]), batch_size=1
+    )
 
-    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
+    # td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1), "action": torch.randn(3)}, [])
+    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 3)}, [])
     rb.add(td)
-    if not isinstance(rb._transform[0], (CatFrames,)):
-        rb.sample()
-    else:
-        with pytest.raises(NotImplementedError):
-            rb.sample()
-        return
 
-    rb._transform = mock.MagicMock()
-    rb._transform.__len__ = lambda *args: 3
+    m = mock.Mock()
+    m.side_effect = [td.unsqueeze(0)]
+    rb._transform.forward = m
+    # rb._transform.__len__ = lambda *args: 3
     rb.sample()
-    assert rb._transform.called
+    assert rb._transform.forward.called
+
+    # was_called = [False]
+    # forward = rb._transform.forward
+    # def new_forward(*args, **kwargs):
+    #     was_called[0] = True
+    #     return forward(*args, **kwargs)
+    # rb._transform.forward = new_forward
+    # rb.sample()
+    # assert was_called[0]
 
 
 transforms = [
-    partial(DiscreteActionProjection, num_actions_effective=1, max_actions=1),
+    partial(DiscreteActionProjection, num_actions_effective=1, max_actions=3),
     FiniteTensorDictCheck,
     gSDENoise,
     PinMemoryTransform,
@@ -865,13 +1090,15 @@ transforms = [
 
 @pytest.mark.parametrize("transform", transforms)
 def test_smoke_replay_buffer_transform_no_inkeys(transform):
-    if PinMemoryTransform is PinMemoryTransform and not torch.cuda.is_available():
+    if transform == PinMemoryTransform and not torch.cuda.is_available():
         raise pytest.skip("No CUDA device detected, skipping PinMemory")
     rb = ReplayBuffer(
         collate_fn=lambda x: torch.stack(x, 0), transform=transform(), batch_size=1
     )
 
-    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
+    action = torch.zeros(3)
+    action[..., 0] = 1
+    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1), "action": action}, [])
     rb.add(td)
     rb.sample()
 
@@ -983,6 +1210,65 @@ class TestStateDict:
         new_replay_buffer.load_state_dict(state_dict)
         s = new_replay_buffer.sample()
         assert (s.exclude("index") == 1).all()
+
+
+@pytest.mark.parametrize("size", [20, 25, 30])
+@pytest.mark.parametrize("batch_size", [1, 10, 15])
+@pytest.mark.parametrize("reward_ranges", [(0.25, 0.5, 1.0)])
+def test_max_value_writer(size, batch_size, reward_ranges):
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(size),
+        sampler=SamplerWithoutReplacement(),
+        batch_size=batch_size,
+        writer=TensorDictMaxValueWriter(rank_key="key"),
+    )
+
+    max_reward1, max_reward2, max_reward3 = reward_ranges
+
+    td = TensorDict(
+        {
+            "key": torch.clamp_max(torch.rand(size), max=max_reward1),
+            "obs": torch.tensor(torch.rand(size)),
+        },
+        batch_size=size,
+        device="cpu",
+    )
+    rb.extend(td)
+    sample = rb.sample()
+    assert (sample.get("key") <= max_reward1).all()
+    assert (0 <= sample.get("key")).all()
+    assert len(sample.get("index").unique()) == len(sample.get("index"))
+
+    td = TensorDict(
+        {
+            "key": torch.clamp(torch.rand(size), min=max_reward1, max=max_reward2),
+            "obs": torch.tensor(torch.rand(size)),
+        },
+        batch_size=size,
+        device="cpu",
+    )
+    rb.extend(td)
+    sample = rb.sample()
+    assert (sample.get("key") <= max_reward2).all()
+    assert (max_reward1 <= sample.get("key")).all()
+    assert len(sample.get("index").unique()) == len(sample.get("index"))
+
+    td = TensorDict(
+        {
+            "key": torch.clamp(torch.rand(size), min=max_reward2, max=max_reward3),
+            "obs": torch.tensor(torch.rand(size)),
+        },
+        batch_size=size,
+        device="cpu",
+    )
+
+    for sample in td:
+        rb.add(sample)
+
+    sample = rb.sample()
+    assert (sample.get("key") <= max_reward3).all()
+    assert (max_reward2 <= sample.get("key")).all()
+    assert len(sample.get("index").unique()) == len(sample.get("index"))
 
 
 if __name__ == "__main__":

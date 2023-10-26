@@ -96,7 +96,13 @@ import torch
 from torch import nn
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import LazyMemmapStorage, MultiStep, TensorDictReplayBuffer
-from torchrl.envs import EnvCreator, ParallelEnv, RewardScaling, StepCounter
+from torchrl.envs import (
+    EnvCreator,
+    ExplorationType,
+    ParallelEnv,
+    RewardScaling,
+    StepCounter,
+)
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     CatFrames,
@@ -384,7 +390,7 @@ def get_replay_buffer(buffer_size, n_optim, batch_size):
 
 
 def get_collector(
-    obs_norm_sd,
+    stats,
     num_collectors,
     actor_explore,
     frames_per_batch,
@@ -393,14 +399,14 @@ def get_collector(
 ):
     data_collector = MultiaSyncDataCollector(
         [
-            make_env(parallel=True, obs_norm_sd=obs_norm_sd),
+            make_env(parallel=True, obs_norm_sd=stats),
         ]
         * num_collectors,
         policy=actor_explore,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
         # this is the default behaviour: the collector runs in ``"random"`` (or explorative) mode
-        exploration_mode="random",
+        exploration_type=ExplorationType.RANDOM,
         # We set the all the devices to be identical. Below is an example of
         # heterogeneous devices
         device=device,
@@ -432,8 +438,9 @@ def get_collector(
 
 
 def get_loss_module(actor, gamma):
-    loss_module = DQNLoss(actor, gamma=gamma, delay_value=True)
-    target_updater = SoftUpdate(loss_module)
+    loss_module = DQNLoss(actor, delay_value=True)
+    loss_module.make_value_estimator(gamma=gamma)
+    target_updater = SoftUpdate(loss_module, eps=0.995)
     return loss_module, target_updater
 
 
@@ -557,10 +564,14 @@ test_env = make_env(parallel=False, obs_norm_sd=stats)
 # Get model
 actor, actor_explore = make_model(test_env)
 loss_module, target_net_updater = get_loss_module(actor, gamma)
-target_net_updater.init_()
 
 collector = get_collector(
-    stats, num_collectors, actor_explore, frames_per_batch, total_frames, device
+    stats=stats,
+    num_collectors=num_collectors,
+    actor_explore=actor_explore,
+    frames_per_batch=frames_per_batch,
+    total_frames=total_frames,
+    device=device,
 )
 optimizer = torch.optim.Adam(
     loss_module.parameters(), lr=lr, weight_decay=wd, betas=betas
@@ -612,7 +623,7 @@ recorder = Recorder(
     frame_skip=1,
     policy_exploration=actor_explore,
     environment=test_env,
-    exploration_mode="mode",
+    exploration_type=ExplorationType.MODE,
     log_keys=[("next", "reward")],
     out_keys={("next", "reward"): "rewards"},
     log_pbar=True,

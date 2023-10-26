@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 # import tree
 import typing
-from typing import Union
+from typing import Any, Callable, Union
 
 import numpy as np
 import torch
@@ -37,3 +37,29 @@ def _to_torch(
         data = data.to(device, non_blocking=non_blocking)
 
     return data
+
+
+def pin_memory_output(fun) -> Callable:
+    """Calls pin_memory on outputs of decorated function if they have such method."""
+
+    def decorated_fun(self, *args, **kwargs):
+        output = fun(self, *args, **kwargs)
+        if self._pin_memory:
+            _tuple_out = True
+            if not isinstance(output, tuple):
+                _tuple_out = False
+                output = (output,)
+            output = tuple(_pin_memory(_output) for _output in output)
+            if _tuple_out:
+                return output
+            return output[0]
+        return output
+
+    return decorated_fun
+
+
+def _pin_memory(output: Any) -> Any:
+    if hasattr(output, "pin_memory") and output.device == torch.device("cpu"):
+        return output.pin_memory()
+    else:
+        return output

@@ -18,7 +18,7 @@ TorchRL objectives: Coding a DDPG loss
 #
 # To this aim, we will be focusing on DDPG, which is a relatively straightforward
 # algorithm to code.
-# DDPG (`Deep Deterministic Policy Gradient <https://arxiv.org/abs/1509.02971>_`_)
+# DDPG (`Deep Deterministic Policy Gradient <https://arxiv.org/abs/1509.02971>`_)
 # is a simple continuous control algorithm. It consists in learning a
 # parametric value function for an action-observation pair, and
 # then learning a policy that outputs actions that maximise this value
@@ -71,7 +71,7 @@ device = (
 
 ###############################################################################
 # torchrl :class:`~torchrl.objectives.LossModule`
-# ----------------------------------------------
+# -----------------------------------------------
 #
 # TorchRL provides a series of losses to use in your training scripts.
 # The aim is to have losses that are easily reusable/swappable and that have
@@ -184,7 +184,7 @@ def _init(
     # we put them together in a single actor-critic container.
     actor_critic = ActorCriticWrapper(actor_network, value_network)
     self.actor_critic = actor_critic
-    self.loss_funtion = "l2"
+    self.loss_function = "l2"
 
 
 ###############################################################################
@@ -268,10 +268,8 @@ def _loss_actor(
     tensordict,
 ) -> torch.Tensor:
     td_copy = tensordict.select(*self.actor_in_keys)
-    # Get an action from the actor network
-    td_copy = self.actor_network(
-        td_copy,
-    )
+    # Get an action from the actor network: since we made it functional, we need to pass the params
+    td_copy = self.actor_network(td_copy, params=self.actor_network_params)
     # get the value associated with that action
     td_copy = self.value_network(
         td_copy,
@@ -318,7 +316,7 @@ def _loss_value(
     ).squeeze(-1)
 
     # Computes the value loss: L2, L1 or smooth L1 depending on self.loss_funtion
-    loss_value = distance_loss(pred_val, target_value, loss_function=self.loss_funtion)
+    loss_value = distance_loss(pred_val, target_value, loss_function=self.loss_function)
     td_error = (pred_val - target_value).pow(2)
 
     return loss_value, td_error, pred_val, target_value
@@ -482,6 +480,7 @@ from torchrl.envs import (
     CatTensors,
     DoubleToFloat,
     EnvCreator,
+    InitTracker,
     ObservationNorm,
     ParallelEnv,
     RewardScaling,
@@ -535,6 +534,9 @@ def make_transformed_env(
     )
 
     env.append_transform(StepCounter(max_frames_per_traj))
+
+    # We need a marker for the start of trajectories for our OU exploration:
+    env.append_transform(InitTracker())
 
     return env
 
@@ -612,8 +614,6 @@ backend = "gym"
 #   training script when dealing with frame skipping as this may lead to
 #   biased comparisons between training strategies.
 #
-
-###############################################################################
 # Scaling the reward helps us control the signal magnitude for a more
 # efficient learning.
 reward_scaling = 5.0
@@ -724,8 +724,7 @@ def make_ddpg_actor(
     proof_environment.transform[2].init_stats(3)
     proof_environment.transform[2].load_state_dict(transform_state_dict)
 
-    env_specs = proof_environment.specs
-    out_features = env_specs["input_spec"]["action"].shape[-1]
+    out_features = proof_environment.action_spec.shape[-1]
 
     actor_net = DdpgMlpActor(
         action_dim=out_features,
@@ -744,7 +743,7 @@ def make_ddpg_actor(
         actor,
         distribution_class=TanhDelta,
         in_keys=["param"],
-        spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
+        spec=CompositeSpec(action=proof_environment.action_spec),
     ).to(device)
 
     q_net = DdpgMlpQNet()
@@ -841,6 +840,7 @@ init_random_frames = 5000
 num_collectors = 2
 
 from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.envs import ExplorationType
 
 collector = MultiaSyncDataCollector(
     create_env_fn=[
@@ -859,7 +859,7 @@ collector = MultiaSyncDataCollector(
     storing_device=device,
     # device where data will be stored and passed
     update_at_each_batch=False,
-    exploration_mode="random",
+    exploration_type=ExplorationType.RANDOM,
 )
 
 ###############################################################################
@@ -888,7 +888,7 @@ def make_recorder(actor_model_explore, transform_state_dict, record_interval):
         record_frames=1000,
         policy_exploration=actor_model_explore,
         environment=environment,
-        exploration_mode="mode",
+        exploration_type=ExplorationType.MEAN,
         record_interval=record_interval,
     )
     return recorder_obj
@@ -960,7 +960,7 @@ buffer_scratch_dir = tmpdir.name
 
 ###############################################################################
 # Replay buffer storage and batch size
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # TorchRL replay buffer counts the number of elements along the first dimension.
 # Since we'll be feeding trajectories to our buffer, we need to adapt the buffer
@@ -1048,7 +1048,7 @@ loss_module.make_value_estimator(ValueEstimators.TDLambda, gamma=gamma, lmbda=lm
 #   estimates.
 #
 # Target network updater
-# ^^^^^^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~~~~~~
 #
 # Target networks are a crucial part of off-policy RL algorithms.
 # Updating the target network parameters is made easy thanks to the
@@ -1060,8 +1060,6 @@ loss_module.make_value_estimator(ValueEstimators.TDLambda, gamma=gamma, lmbda=lm
 from torchrl.objectives.utils import SoftUpdate
 
 target_net_updater = SoftUpdate(loss_module, eps=1 - tau)
-# This class will raise an error if `init_` is not called first.
-target_net_updater.init_()
 
 ###############################################################################
 # Optimizer

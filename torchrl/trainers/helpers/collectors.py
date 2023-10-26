@@ -15,9 +15,10 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     SyncDataCollector,
 )
-from torchrl.data import MultiStep
-from torchrl.envs import ParallelEnv
+from torchrl.data.postprocs import MultiStep
+from torchrl.envs.batched_envs import ParallelEnv
 from torchrl.envs.common import EnvBase
+from torchrl.envs.utils import ExplorationType
 
 
 def sync_async_collector(
@@ -281,10 +282,10 @@ def make_collector_offpolicy(
         env_kwargs.update(make_env_kwargs)
     elif make_env_kwargs is not None:
         env_kwargs = make_env_kwargs
-    cfg.collector_devices = (
-        cfg.collector_devices
-        if len(cfg.collector_devices) > 1
-        else cfg.collector_devices[0]
+    cfg.collector_device = (
+        cfg.collector_device
+        if len(cfg.collector_device) > 1
+        else cfg.collector_device[0]
     )
     collector_helper_kwargs = {
         "env_fns": make_env,
@@ -297,12 +298,12 @@ def make_collector_offpolicy(
         "num_env_per_collector": 1,
         # we already took care of building the make_parallel_env function
         "num_collectors": -cfg.num_workers // -cfg.env_per_collector,
-        "device": cfg.collector_devices,
-        "storing_device": cfg.collector_devices,
+        "device": cfg.collector_device,
+        "storing_device": cfg.collector_device,
         "init_random_frames": cfg.init_random_frames,
         "split_trajs": True,
         # trajectories must be separated if multi-step is used
-        "exploration_mode": cfg.exploration_mode,
+        "exploration_type": ExplorationType.from_str(cfg.exploration_mode),
     }
 
     collector = collector_helper(**collector_helper_kwargs)
@@ -336,10 +337,10 @@ def make_collector_onpolicy(
         env_kwargs.update(make_env_kwargs)
     elif make_env_kwargs is not None:
         env_kwargs = make_env_kwargs
-    cfg.collector_devices = (
-        cfg.collector_devices
-        if len(cfg.collector_devices) > 1
-        else cfg.collector_devices[0]
+    cfg.collector_device = (
+        cfg.collector_device
+        if len(cfg.collector_device) > 1
+        else cfg.collector_device[0]
     )
     collector_helper_kwargs = {
         "env_fns": make_env,
@@ -352,8 +353,8 @@ def make_collector_onpolicy(
         "num_env_per_collector": 1,
         # we already took care of building the make_parallel_env function
         "num_collectors": -cfg.num_workers // -cfg.env_per_collector,
-        "device": cfg.collector_devices,
-        "storing_device": cfg.collector_devices,
+        "device": cfg.collector_device,
+        "storing_device": cfg.collector_device,
         "split_trajs": True,
         # trajectories must be separated in online settings
         "exploration_mode": cfg.exploration_mode,
@@ -368,7 +369,7 @@ def make_collector_onpolicy(
 class OnPolicyCollectorConfig:
     """On-policy collector config struct."""
 
-    collector_devices: Any = field(default_factory=lambda: ["cpu"])
+    collector_device: Any = field(default_factory=lambda: ["cpu"])
     # device on which the data collector should store the trajectories to be passed to this script.
     # If the collector device differs from the policy device (cuda:0 if available), then the
     # weights of the collector policy are synchronized with collector.update_policy_weights_().
@@ -396,7 +397,7 @@ class OnPolicyCollectorConfig:
     # for each of these parallel wrappers. If env_per_collector=num_workers, no parallel wrapper is created
     seed: int = 42
     # seed used for the environment, pytorch and numpy.
-    exploration_mode: str = ""
+    exploration_mode: str = "random"
     # exploration mode of the data collector.
     async_collection: bool = False
     # whether data collection should be done asynchrously. Asynchrounous data collection means

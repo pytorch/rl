@@ -7,16 +7,8 @@ import argparse
 import tempfile
 
 import pytest
-from _utils_internal import PONG_VERSIONED
-from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
-from torchrl.envs.libs.gym import _has_gym, GymEnv
 
-try:
-    from torch.utils.tensorboard import SummaryWriter
-
-    _has_tb = True
-except ImportError:
-    _has_tb = False
+from torchrl.envs.libs.gym import gym_backend
 
 
 def test_dm_control():
@@ -24,6 +16,7 @@ def test_dm_control():
     import dm_env  # noqa: F401
     from dm_control import suite  # noqa: F401
     from dm_control.suite.wrappers import pixels  # noqa: F401
+    from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv  # noqa
 
     assert _has_dmc
     env = DMControlEnv("cheetah", "run")
@@ -32,6 +25,8 @@ def test_dm_control():
 
 @pytest.mark.skip(reason="Not implemented yet")
 def test_dm_control_pixels():
+    from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv  # noqa
+
     env = DMControlEnv("cheetah", "run", from_pixels=True)
     env.reset()
 
@@ -48,12 +43,20 @@ def test_gym():
                 f"gym and gymnasium load failed. Gym got error {err}."
             ) from ERROR
 
+    from torchrl.envs.libs.gym import _has_gym, GymEnv  # noqa
+
     assert _has_gym
+    from _utils_internal import PONG_VERSIONED
+
     env = GymEnv(PONG_VERSIONED)
     env.reset()
 
 
 def test_tb():
+    from torch.utils.tensorboard import SummaryWriter
+
+    _has_tb = True
+
     assert _has_tb
     test_rounds = 100
     while test_rounds > 0:

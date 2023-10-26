@@ -6,7 +6,7 @@
 from typing import List, Optional, Union
 
 import torch
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
 from torch.hub import load_state_dict_from_url
 from torch.nn import Identity
 
@@ -26,6 +26,7 @@ from torchrl.envs.transforms.transforms import (
     Transform,
     UnsqueezeTransform,
 )
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 try:
     from torchvision import models
@@ -92,6 +93,14 @@ class _R3MNet(Transform):
 
     forward = _call
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        # TODO: Check this makes sense
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
     @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:
         shape = None
@@ -111,7 +120,7 @@ class _R3MNet(Transform):
         device = observation_spec[keys[0]].device
         dim = observation_spec[keys[0]].shape[:-3]
 
-        observation_spec = CompositeSpec(observation_spec, shape=observation_spec.shape)
+        observation_spec = observation_spec.clone()
         if self.del_keys:
             for in_key in keys:
                 del observation_spec[in_key]
@@ -171,15 +180,6 @@ class _R3MNet(Transform):
             self._load_weights(model_name, self, dir_prefix)
 
 
-def _init_first(fun):
-    def new_fun(self, *args, **kwargs):
-        if not self.initialized:
-            self._init()
-        return fun(self, *args, **kwargs)
-
-    return new_fun
-
-
 class R3MTransform(Compose):
     """R3M Transform class.
 
@@ -213,7 +213,7 @@ class R3MTransform(Compose):
             Defaults to 244.
         stack_images (bool, optional): if False, the images given in the :obj:`in_keys`
              argument will be treaded separetely and each will be given a single,
-             separated entry in the output tensordict. Defaults to :obj:`True`.
+             separated entry in the output tensordict. Defaults to ``True``.
         download (bool, torchvision Weights config or corresponding string):
             if ``True``, the weights will be downloaded using the torch.hub download
             API (i.e. weights will be cached for future use).
@@ -302,7 +302,7 @@ class R3MTransform(Compose):
         transforms.append(resize)
 
         # R3M
-        if out_keys is None:
+        if out_keys in (None, []):
             if stack_images:
                 out_keys = ["r3m_vec"]
             else:

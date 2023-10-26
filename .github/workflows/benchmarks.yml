@@ -3,11 +3,20 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - "*"
   workflow_dispatch:
 
 permissions:
   deployments: write
   contents: write
+
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
 
 jobs:
 
@@ -22,8 +31,8 @@ jobs:
       - name: Setup Environment
         run: |
           python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu 
-          python -m pip install git+https://github.com/pytorch-labs/tensordict 
-          python -m pip install -e .
+          python -m pip install git+https://github.com/pytorch/tensordict 
+          python setup.py develop
           python -m pip install pytest pytest-benchmark
           python -m pip install dm_control
       - name: Run benchmarks
@@ -31,6 +40,7 @@ jobs:
           cd benchmarks/
           python -m pytest --benchmark-json output.json
       - name: Store benchmark results
+        if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: CPU Benchmark Results
@@ -56,10 +66,12 @@ jobs:
     defaults:
       run:
         shell: bash -l {0}
-    container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu18.04
+    container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
     steps:
     - name: Install deps
       run: |
+        export TZ=Europe/London
+        export DEBIAN_FRONTEND=noninteractive  # tzdata bug
         apt-get update -y
         apt-get install software-properties-common -y
         add-apt-repository ppa:git-core/candidate -y
@@ -74,20 +86,6 @@ jobs:
       run: |
         apt-get install python3.8 python3-pip -y
         pip3 install --upgrade pip
-    - name: Setup conda
-      run: |
-        rm -rf $HOME/miniconda
-        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
-        bash ~/miniconda.sh -b -p $HOME/miniconda
-    - name: setup Path
-      run: |
-        echo "$HOME/miniconda/bin" >> $GITHUB_PATH
-        echo "CONDA=$HOME/miniconda" >> $GITHUB_PATH
-    - name: create and activate conda env
-      run: |
-        $HOME/miniconda/bin/conda create --name build_binary python=${{ matrix.python-version }}
-        $HOME/miniconda/bin/conda info
-        $HOME/miniconda/bin/activate build_binary
     - name: Setup git
       run: git config --global --add safe.directory /__w/rl/rl
     - name: setup Path
@@ -95,17 +93,18 @@ jobs:
         echo /usr/local/bin >> $GITHUB_PATH
     - name: Setup Environment
       run: |
-        python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118 
-        python -m pip install git+https://github.com/pytorch-labs/tensordict 
-        python -m pip install -e .
-        python -m pip install pytest pytest-benchmark
-        python -m pip install dm_control
+        python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118 
+        python3 -m pip install git+https://github.com/pytorch/tensordict 
+        python3 setup.py develop
+        python3 -m pip install pytest pytest-benchmark
+        python3 -m pip install dm_control
     - name: Run benchmarks
       run: |
         cd benchmarks/
-        python -m pytest --benchmark-json output.json
+        python3 -m pytest --benchmark-json output.json
     - name: Store benchmark results
       uses: benchmark-action/github-action-benchmark@v1
+      if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       with:
         name: GPU Benchmark Results
         tool: 'pytest'

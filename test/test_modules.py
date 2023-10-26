@@ -5,28 +5,34 @@
 import argparse
 from numbers import Number
 
+import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from _utils_internal import get_default_devices
 from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
 from torch import nn
-from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-    DiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
-)
+from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec
 from torchrl.modules import (
-    ActorValueOperator,
     CEMPlanner,
+    DTActor,
     LSTMNet,
-    ProbabilisticActor,
-    QValueActor,
+    MultiAgentConvNet,
+    MultiAgentMLP,
+    OnlineDTActor,
+    QMixer,
     SafeModule,
+    TanhModule,
     ValueOperator,
+    VDNMixer,
 )
-from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
+from torchrl.modules.distributions.utils import safeatanh, safetanh
+from torchrl.modules.models import Conv3dNet, ConvNet, MLP, NoisyLazyLinear, NoisyLinear
+from torchrl.modules.models.decision_transformer import (
+    _has_transformers,
+    DecisionTransformer,
+)
 from torchrl.modules.models.model_based import (
     DreamerActor,
     ObsDecoder,
@@ -67,7 +73,7 @@ def double_prec_fixture():
 @pytest.mark.parametrize("bias_last_layer", [True, False])
 @pytest.mark.parametrize("single_bias_last_layer", [True, False])
 @pytest.mark.parametrize("layer_class", [nn.Linear, NoisyLinear])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_mlp(
     in_features,
     out_features,
@@ -128,7 +134,7 @@ def test_mlp(
     [(SquashDims, {})],
 )
 @pytest.mark.parametrize("squeeze_output", [False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("batch", [(2,), (2, 2)])
 def test_convnet(
     batch,
@@ -176,6 +182,113 @@ def test_convnet(
     assert y.shape == torch.Size([*batch, expected_features])
 
 
+class TestConv3d:
+    @pytest.mark.parametrize("in_features", [3, 10, None])
+    @pytest.mark.parametrize(
+        "input_size, depth, num_cells, kernel_sizes, strides, paddings, expected_features",
+        [
+            (10, None, None, 3, 1, 0, 32 * 4 * 4 * 4),
+            (10, 3, 32, 3, 1, 1, 32 * 10 * 10 * 10),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "activation_class, activation_kwargs",
+        [(nn.ReLU, {"inplace": True}), (nn.ReLU, {}), (nn.PReLU, {})],
+    )
+    @pytest.mark.parametrize(
+        "norm_class, norm_kwargs",
+        [
+            (None, None),
+            (nn.LazyBatchNorm3d, {}),
+            (nn.BatchNorm3d, {"num_features": 32}),
+        ],
+    )
+    @pytest.mark.parametrize("bias_last_layer", [True, False])
+    @pytest.mark.parametrize(
+        "aggregator_class, aggregator_kwargs",
+        [(SquashDims, None)],
+    )
+    @pytest.mark.parametrize("squeeze_output", [False])
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("batch", [(2,), (2, 2)])
+    def test_conv3dnet(
+        self,
+        batch,
+        in_features,
+        depth,
+        num_cells,
+        kernel_sizes,
+        strides,
+        paddings,
+        activation_class,
+        activation_kwargs,
+        norm_class,
+        norm_kwargs,
+        bias_last_layer,
+        aggregator_class,
+        aggregator_kwargs,
+        squeeze_output,
+        device,
+        input_size,
+        expected_features,
+        seed=0,
+    ):
+        torch.manual_seed(seed)
+        conv3dnet = Conv3dNet(
+            in_features=in_features,
+            depth=depth,
+            num_cells=num_cells,
+            kernel_sizes=kernel_sizes,
+            strides=strides,
+            paddings=paddings,
+            activation_class=activation_class,
+            activation_kwargs=activation_kwargs,
+            norm_class=norm_class,
+            norm_kwargs=norm_kwargs,
+            bias_last_layer=bias_last_layer,
+            aggregator_class=aggregator_class,
+            aggregator_kwargs=aggregator_kwargs,
+            squeeze_output=squeeze_output,
+            device=device,
+        )
+        if in_features is None:
+            in_features = 5
+        x = torch.randn(
+            *batch, in_features, input_size, input_size, input_size, device=device
+        )
+        y = conv3dnet(x)
+        assert y.shape == torch.Size([*batch, expected_features])
+        with pytest.raises(ValueError, match="must have at least 4 dimensions"):
+            conv3dnet(torch.randn(3, 16, 16))
+
+    def test_errors(self):
+        with pytest.raises(
+            ValueError, match="Null depth is not permitted with Conv3dNet"
+        ):
+            conv3dnet = Conv3dNet(
+                in_features=5,
+                num_cells=32,
+                depth=0,
+            )
+        with pytest.raises(
+            ValueError, match="depth=None requires one of the input args"
+        ):
+            conv3dnet = Conv3dNet(
+                in_features=5,
+                num_cells=32,
+                depth=None,
+            )
+        with pytest.raises(
+            ValueError, match="consider matching or specifying a constant num_cells"
+        ):
+            conv3dnet = Conv3dNet(
+                in_features=5,
+                num_cells=[32],
+                depth=None,
+                kernel_sizes=[3, 3],
+            )
+
+
 @pytest.mark.parametrize(
     "layer_class",
     [
@@ -183,7 +296,7 @@ def test_convnet(
         NoisyLazyLinear,
     ],
 )
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_noisy(layer_class, device, seed=0):
     torch.manual_seed(seed)
     layer = layer_class(3, 4, device=device)
@@ -197,121 +310,7 @@ def test_noisy(layer_class, device, seed=0):
         torch.testing.assert_close(y1, y2)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
-def test_value_based_policy(device):
-    torch.manual_seed(0)
-    obs_dim = 4
-    action_dim = 5
-    action_spec = OneHotDiscreteTensorSpec(action_dim)
-
-    def make_net():
-        net = MLP(in_features=obs_dim, out_features=action_dim, depth=2, device=device)
-        for mod in net.modules():
-            if hasattr(mod, "bias") and mod.bias is not None:
-                mod.bias.data.zero_()
-        return net
-
-    actor = QValueActor(spec=action_spec, module=make_net(), safe=True)
-    obs = torch.zeros(2, obs_dim, device=device)
-    td = TensorDict(batch_size=[2], source={"observation": obs})
-    action = actor(td).get("action")
-    assert (action.sum(-1) == 1).all()
-
-    actor = QValueActor(spec=action_spec, module=make_net(), safe=False)
-    obs = torch.randn(2, obs_dim, device=device)
-    td = TensorDict(batch_size=[2], source={"observation": obs})
-    action = actor(td).get("action")
-    assert (action.sum(-1) == 1).all()
-
-    actor = QValueActor(spec=action_spec, module=make_net(), safe=False)
-    obs = torch.zeros(2, obs_dim, device=device)
-    td = TensorDict(batch_size=[2], source={"observation": obs})
-    action = actor(td).get("action")
-    with pytest.raises(AssertionError):
-        assert (action.sum(-1) == 1).all()
-
-
-@pytest.mark.parametrize("device", get_available_devices())
-def test_value_based_policy_categorical(device):
-    torch.manual_seed(0)
-    obs_dim = 4
-    action_dim = 5
-    action_spec = DiscreteTensorSpec(action_dim)
-
-    def make_net():
-        net = MLP(in_features=obs_dim, out_features=action_dim, depth=2, device=device)
-        for mod in net.modules():
-            if hasattr(mod, "bias") and mod.bias is not None:
-                mod.bias.data.zero_()
-        return net
-
-    actor = QValueActor(
-        spec=action_spec, module=make_net(), safe=True, action_space="categorical"
-    )
-    obs = torch.zeros(2, obs_dim, device=device)
-    td = TensorDict(batch_size=[2], source={"observation": obs})
-    action = actor(td).get("action")
-    assert (0 <= action).all() and (action < action_dim).all()
-
-    actor = QValueActor(
-        spec=action_spec, module=make_net(), safe=False, action_space="categorical"
-    )
-    obs = torch.randn(2, obs_dim, device=device)
-    td = TensorDict(batch_size=[2], source={"observation": obs})
-    action = actor(td).get("action")
-    assert (0 <= action).all() and (action < action_dim).all()
-
-
-@pytest.mark.parametrize("device", get_available_devices())
-def test_actorcritic(device):
-    common_module = SafeModule(
-        module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"], spec=None
-    ).to(device)
-    module = SafeModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
-    policy_operator = ProbabilisticActor(
-        module=module, in_keys=["param"], spec=None, return_log_prob=True
-    ).to(device)
-    value_operator = ValueOperator(nn.Linear(4, 1), in_keys=["hidden"]).to(device)
-    op = ActorValueOperator(
-        common_operator=common_module,
-        policy_operator=policy_operator,
-        value_operator=value_operator,
-    ).to(device)
-    td = TensorDict(
-        source={"obs": torch.randn(4, 3)},
-        batch_size=[
-            4,
-        ],
-    ).to(device)
-    td_total = op(td.clone())
-    policy_op = op.get_policy_operator()
-    td_policy = policy_op(td.clone())
-    value_op = op.get_value_operator()
-    td_value = value_op(td)
-    torch.testing.assert_close(td_total.get("action"), td_policy.get("action"))
-    torch.testing.assert_close(
-        td_total.get("sample_log_prob"), td_policy.get("sample_log_prob")
-    )
-    torch.testing.assert_close(td_total.get("state_value"), td_value.get("state_value"))
-
-    value_params = set(
-        list(op.get_value_operator().parameters()) + list(op.module[0].parameters())
-    )
-    value_params2 = set(value_op.parameters())
-    assert len(value_params.difference(value_params2)) == 0 and len(
-        value_params.intersection(value_params2)
-    ) == len(value_params)
-
-    policy_params = set(
-        list(op.get_policy_operator().parameters()) + list(op.module[0].parameters())
-    )
-    policy_params2 = set(policy_op.parameters())
-    assert len(policy_params.difference(policy_params2)) == 0 and len(
-        policy_params.intersection(policy_params2)
-    ) == len(policy_params)
-
-
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("out_features", [3, 4])
 @pytest.mark.parametrize("hidden_size", [8, 9])
 @pytest.mark.parametrize("num_layers", [1, 2])
@@ -324,7 +323,6 @@ def test_lstm_net(
     has_precond_hidden,
     double_prec_fixture,
 ):
-
     torch.manual_seed(0)
     batch = 5
     time_steps = 6
@@ -394,7 +392,7 @@ def test_lstm_net(
     )
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("out_features", [3, 5])
 @pytest.mark.parametrize("hidden_size", [3, 5])
 def test_lstm_net_nobatch(device, out_features, hidden_size):
@@ -446,7 +444,7 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
     torch.testing.assert_close(tds_vec["hidden1_out"][-1], tds_loop["hidden1_out"][-1])
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("batch_size", [3, 5])
 class TestPlanner:
     def test_CEM_model_free_env(self, device, batch_size, seed=1):
@@ -506,7 +504,7 @@ class TestPlanner:
                 assert torch.allclose(td[key], td_copy[key])
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("batch_size", [[], [3], [5]])
 @pytest.mark.skipif(
     version.parse(torch.__version__) < version.parse("1.11.0"),
@@ -531,7 +529,7 @@ class TestDreamerComponents:
     @pytest.mark.parametrize("depth", [32, 64])
     @pytest.mark.parametrize("temporal_size", [[], [2], [4]])
     def test_dreamer_encoder(self, device, temporal_size, batch_size, depth):
-        encoder = ObsEncoder(depth=depth).to(device)
+        encoder = ObsEncoder(channels=depth).to(device)
         obs = torch.randn(*batch_size, *temporal_size, 3, 64, 64, device=device)
         emb = encoder(obs)
         assert emb.shape == (*batch_size, *temporal_size, depth * 8 * 4)
@@ -543,7 +541,7 @@ class TestDreamerComponents:
     def test_dreamer_decoder(
         self, device, batch_size, temporal_size, depth, stoch_size, deter_size
     ):
-        decoder = ObsDecoder(depth=depth).to(device)
+        decoder = ObsDecoder(channels=depth).to(device)
         stoch_state = torch.randn(
             *batch_size, *temporal_size, stoch_size, device=device
         )
@@ -556,7 +554,7 @@ class TestDreamerComponents:
     @pytest.mark.parametrize("action_size", [3, 6])
     def test_rssm_prior(self, device, batch_size, stoch_size, deter_size, action_size):
         action_spec = BoundedTensorSpec(
-            shape=(action_size,), dtype=torch.float32, minimum=-1, maximum=1
+            shape=(action_size,), dtype=torch.float32, low=-1, high=1
         )
         rssm_prior = RSSMPrior(
             action_spec,
@@ -611,7 +609,7 @@ class TestDreamerComponents:
         self, device, batch_size, temporal_size, stoch_size, deter_size, action_size
     ):
         action_spec = BoundedTensorSpec(
-            shape=(action_size,), dtype=torch.float32, minimum=-1, maximum=1
+            shape=(action_size,), dtype=torch.float32, low=-1, high=1
         )
         rssm_prior = RSSMPrior(
             action_spec,
@@ -730,6 +728,462 @@ class TestDreamerComponents:
         assert torch.allclose(
             rollout["next", "posterior_std"], rollout_bis["next", "posterior_std"]
         )
+
+
+class TestTanh:
+    def test_errors(self):
+        with pytest.raises(
+            ValueError, match="in_keys and out_keys should have the same length"
+        ):
+            TanhModule(in_keys=["a", "b"], out_keys=["a"])
+        with pytest.raises(ValueError, match=r"The minimum value \(-2\) provided"):
+            spec = BoundedTensorSpec(-1, 1, shape=())
+            TanhModule(in_keys=["act"], low=-2, spec=spec)
+        with pytest.raises(ValueError, match=r"The maximum value \(-2\) provided to"):
+            spec = BoundedTensorSpec(-1, 1, shape=())
+            TanhModule(in_keys=["act"], high=-2, spec=spec)
+        with pytest.raises(ValueError, match="Got high < low"):
+            TanhModule(in_keys=["act"], high=-2, low=-1)
+
+    def test_minmax(self):
+        mod = TanhModule(
+            in_keys=["act"],
+            high=2,
+        )
+        assert isinstance(mod.act_high, torch.Tensor)
+        mod = TanhModule(
+            in_keys=["act"],
+            low=-2,
+        )
+        assert isinstance(mod.act_low, torch.Tensor)
+        mod = TanhModule(
+            in_keys=["act"],
+            high=np.ones((1,)),
+        )
+        assert isinstance(mod.act_high, torch.Tensor)
+        mod = TanhModule(
+            in_keys=["act"],
+            low=-np.ones((1,)),
+        )
+        assert isinstance(mod.act_low, torch.Tensor)
+
+    @pytest.mark.parametrize("clamp", [True, False])
+    def test_boundaries(self, clamp):
+        torch.manual_seed(0)
+        eps = torch.finfo(torch.float).resolution
+        for _ in range(10):
+            min, max = (5 * torch.randn(2)).sort()[0]
+            mod = TanhModule(in_keys=["act"], low=min, high=max, clamp=clamp)
+            assert mod.non_trivial
+            td = TensorDict({"act": (2 * torch.rand(100) - 1) * 10}, [])
+            mod(td)
+            # we should have a good proportion of samples close to the boundaries
+            assert torch.isclose(td["act"], max).any()
+            assert torch.isclose(td["act"], min).any()
+            if not clamp:
+                assert (td["act"] <= max + eps).all()
+                assert (td["act"] >= min - eps).all()
+            else:
+                assert (td["act"] < max + eps).all()
+                assert (td["act"] > min - eps).all()
+
+    @pytest.mark.parametrize("out_keys", [[("a", "c"), "b"], None])
+    @pytest.mark.parametrize("has_spec", [[True, True], [True, False], [False, False]])
+    def test_multi_inputs(self, out_keys, has_spec):
+        in_keys = [("x", "z"), "y"]
+        real_out_keys = out_keys if out_keys is not None else in_keys
+
+        if any(has_spec):
+            spec = {}
+            if has_spec[0]:
+                spec.update({real_out_keys[0]: BoundedTensorSpec(-2.0, 2.0, shape=())})
+                low, high = -2.0, 2.0
+            if has_spec[1]:
+                spec.update({real_out_keys[1]: BoundedTensorSpec(-3.0, 3.0, shape=())})
+                low, high = None, None
+            spec = CompositeSpec(spec)
+        else:
+            spec = None
+            low, high = -2.0, 2.0
+
+        mod = TanhModule(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            low=low,
+            high=high,
+            spec=spec,
+            clamp=False,
+        )
+        data = TensorDict({in_key: torch.randn(100) * 100 for in_key in in_keys}, [])
+        mod(data)
+        assert all(out_key in data.keys(True, True) for out_key in real_out_keys)
+        eps = torch.finfo(torch.float).resolution
+
+        for out_key in real_out_keys:
+            key = out_key if isinstance(out_key, str) else "_".join(out_key)
+            low_key = f"{key}_low"
+            high_key = f"{key}_high"
+            min, max = getattr(mod, low_key), getattr(mod, high_key)
+            assert torch.isclose(data[out_key], max).any()
+            assert torch.isclose(data[out_key], min).any()
+            assert (data[out_key] <= max + eps).all()
+            assert (data[out_key] >= min - eps).all()
+
+
+class TestMultiAgent:
+    def _get_mock_input_td(
+        self, n_agents, n_agents_inputs, state_shape=(64, 64, 3), T=None, batch=(2,)
+    ):
+        if T is not None:
+            batch = batch + (T,)
+        obs = torch.randn(*batch, n_agents, n_agents_inputs)
+        state = torch.randn(*batch, *state_shape)
+
+        td = TensorDict(
+            {
+                "agents": TensorDict(
+                    {"observation": obs},
+                    [*batch, n_agents],
+                ),
+                "state": state,
+            },
+            batch_size=batch,
+        )
+        return td
+
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize("share_params", [True, False])
+    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize(
+        "batch",
+        [
+            (10,),
+            (
+                10,
+                3,
+            ),
+            (),
+        ],
+    )
+    def test_mlp(
+        self,
+        n_agents,
+        centralised,
+        share_params,
+        batch,
+        n_agent_inputs=6,
+        n_agent_outputs=2,
+    ):
+        torch.manual_seed(0)
+        mlp = MultiAgentMLP(
+            n_agent_inputs=n_agent_inputs,
+            n_agent_outputs=n_agent_outputs,
+            n_agents=n_agents,
+            centralised=centralised,
+            share_params=share_params,
+            depth=2,
+        )
+        td = self._get_mock_input_td(n_agents, n_agent_inputs, batch=batch)
+        obs = td.get(("agents", "observation"))
+
+        out = mlp(obs)
+        assert out.shape == (*batch, n_agents, n_agent_outputs)
+        for i in range(n_agents):
+            if centralised and share_params:
+                assert torch.allclose(out[..., i, :], out[..., 0, :])
+            else:
+                for j in range(i + 1, n_agents):
+                    assert not torch.allclose(out[..., i, :], out[..., j, :])
+
+        obs[..., 0, 0] += 1
+        out2 = mlp(obs)
+        for i in range(n_agents):
+            if centralised:
+                # a modification to the input of agent 0 will impact all agents
+                assert not torch.allclose(out[..., i, :], out2[..., i, :])
+            elif i > 0:
+                assert torch.allclose(out[..., i, :], out2[..., i, :])
+
+        obs = torch.randn(*batch, 1, n_agent_inputs).expand(
+            *batch, n_agents, n_agent_inputs
+        )
+        out = mlp(obs)
+        for i in range(n_agents):
+            if share_params:
+                # same input same output
+                assert torch.allclose(out[..., i, :], out[..., 0, :])
+            else:
+                for j in range(i + 1, n_agents):
+                    # same input different output
+                    assert not torch.allclose(out[..., i, :], out[..., j, :])
+
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize("share_params", [True, False])
+    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
+    def test_cnn(
+        self, n_agents, centralised, share_params, batch, x=50, y=50, channels=3
+    ):
+        torch.manual_seed(0)
+        cnn = MultiAgentConvNet(
+            n_agents=n_agents, centralised=centralised, share_params=share_params
+        )
+        td = TensorDict(
+            {
+                "agents": TensorDict(
+                    {"observation": torch.randn(*batch, n_agents, channels, x, y)},
+                    [*batch, n_agents],
+                )
+            },
+            batch_size=batch,
+        )
+        obs = td[("agents", "observation")]
+        out = cnn(obs)
+        assert out.shape[:-1] == (*batch, n_agents)
+        for i in range(n_agents):
+            if centralised and share_params:
+                assert torch.allclose(out[..., i, :], out[..., 0, :])
+            else:
+                for j in range(i + 1, n_agents):
+                    assert not torch.allclose(out[..., i, :], out[..., j, :])
+
+        obs[..., 0, 0, 0, 0] += 1
+        out2 = cnn(obs)
+        for i in range(n_agents):
+            if centralised:
+                # a modification to the input of agent 0 will impact all agents
+                assert not torch.allclose(out[..., i, :], out2[..., i, :])
+            elif i > 0:
+                assert torch.allclose(out[..., i, :], out2[..., i, :])
+
+        obs = torch.randn(*batch, 1, channels, x, y).expand(
+            *batch, n_agents, channels, x, y
+        )
+        out = cnn(obs)
+        for i in range(n_agents):
+            if share_params:
+                # same input same output
+                assert torch.allclose(out[..., i, :], out[..., 0, :])
+            else:
+                for j in range(i + 1, n_agents):
+                    # same input different output
+                    assert not torch.allclose(out[..., i, :], out[..., j, :])
+
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize(
+        "batch",
+        [
+            (10,),
+            (
+                10,
+                3,
+            ),
+            (),
+        ],
+    )
+    def test_vdn(self, n_agents, batch):
+        torch.manual_seed(0)
+        mixer = VDNMixer(n_agents=n_agents, device="cpu")
+
+        td = self._get_mock_input_td(n_agents, batch=batch, n_agents_inputs=1)
+        obs = td.get(("agents", "observation"))
+        assert obs.shape == (*batch, n_agents, 1)
+        out = mixer(obs)
+        assert out.shape == (*batch, 1)
+        assert torch.equal(obs.sum(-2), out)
+
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize(
+        "batch",
+        [
+            (10,),
+            (
+                10,
+                3,
+            ),
+            (),
+        ],
+    )
+    @pytest.mark.parametrize("state_shape", [(64, 64, 3), (10,)])
+    def test_qmix(self, n_agents, batch, state_shape):
+        torch.manual_seed(0)
+        mixer = QMixer(
+            n_agents=n_agents,
+            state_shape=state_shape,
+            mixing_embed_dim=32,
+            device="cpu",
+        )
+
+        td = self._get_mock_input_td(
+            n_agents, batch=batch, n_agents_inputs=1, state_shape=state_shape
+        )
+        obs = td.get(("agents", "observation"))
+        state = td.get("state")
+        assert obs.shape == (*batch, n_agents, 1)
+        assert state.shape == (*batch, *state_shape)
+        out = mixer(obs, state)
+        assert out.shape == (*batch, 1)
+
+    @pytest.mark.parametrize("mixer", ["qmix", "vdn"])
+    def test_mixer_malformed_input(
+        self, mixer, n_agents=3, batch=(32,), state_shape=(64, 64, 3)
+    ):
+        td = self._get_mock_input_td(
+            n_agents, batch=batch, n_agents_inputs=3, state_shape=state_shape
+        )
+        if mixer == "qmix":
+            mixer = QMixer(
+                n_agents=n_agents,
+                state_shape=state_shape,
+                mixing_embed_dim=32,
+                device="cpu",
+            )
+        else:
+            mixer = VDNMixer(n_agents=n_agents, device="cpu")
+        obs = td.get(("agents", "observation"))
+        state = td.get("state")
+
+        if mixer.needs_state:
+            with pytest.raises(
+                ValueError,
+                match="Mixer that needs state was passed more than 2 inputs",
+            ):
+                mixer(obs)
+        else:
+            with pytest.raises(
+                ValueError,
+                match="Mixer that doesn't need state was passed more than 1 input",
+            ):
+                mixer(obs, state)
+
+        in_put = [obs, state] if mixer.needs_state else [obs]
+        with pytest.raises(
+            ValueError,
+            match="Mixer network expected chosen_action_value with last 2 dimensions",
+        ):
+            mixer(*in_put)
+        if mixer.needs_state:
+            state_diff = state.unsqueeze(-1)
+            with pytest.raises(
+                ValueError,
+                match="Mixer network expected state with ending shape",
+            ):
+                mixer(obs, state_diff)
+
+        td = self._get_mock_input_td(
+            n_agents, batch=batch, n_agents_inputs=1, state_shape=state_shape
+        )
+        obs = td.get(("agents", "observation"))
+        state = td.get("state")
+        obs = obs.sum(-2)
+        in_put = [obs, state] if mixer.needs_state else [obs]
+        with pytest.raises(
+            ValueError,
+            match="Mixer network expected chosen_action_value with last 2 dimensions",
+        ):
+            mixer(*in_put)
+
+        obs = td.get(("agents", "observation"))
+        state = td.get("state")
+        in_put = [obs, state] if mixer.needs_state else [obs]
+        mixer(*in_put)
+
+
+@pytest.mark.skipif(torch.__version__ < "2.0", reason="torch 2.0 is required")
+@pytest.mark.parametrize("use_vmap", [False, True])
+@pytest.mark.parametrize("scale", range(10))
+def test_tanh_atanh(use_vmap, scale):
+    if use_vmap:
+        try:
+            from torch import vmap
+        except ImportError:
+            try:
+                from functorch import vmap
+            except ImportError:
+                raise pytest.skip("functorch not found")
+
+    torch.manual_seed(0)
+    x = (torch.randn(10, dtype=torch.double) * scale).requires_grad_(True)
+    if not use_vmap:
+        y = safetanh(x, 1e-6)
+    else:
+        y = vmap(safetanh, (0, None))(x, 1e-6)
+
+    if not use_vmap:
+        xp = safeatanh(y, 1e-6)
+    else:
+        xp = vmap(safeatanh, (0, None))(y, 1e-6)
+
+    xp.sum().backward()
+    torch.testing.assert_close(x.grad, torch.ones_like(x))
+
+
+@pytest.mark.skipif(
+    not _has_transformers, reason="transformers needed for TestDecisionTransformer"
+)
+class TestDecisionTransformer:
+    def test_init(self):
+        DecisionTransformer(
+            3,
+            4,
+        )
+        with pytest.raises(TypeError):
+            DecisionTransformer(3, 4, config="some_str")
+        DecisionTransformer(
+            3,
+            4,
+            config=DecisionTransformer.DTConfig(
+                n_layer=2, n_embd=16, n_positions=16, n_inner=16, n_head=2
+            ),
+        )
+
+    @pytest.mark.parametrize("batch_dims", [[], [3], [3, 4]])
+    def test_exec(self, batch_dims, T=5):
+        observations = torch.randn(*batch_dims, T, 3)
+        actions = torch.randn(*batch_dims, T, 4)
+        r2go = torch.randn(*batch_dims, T, 1)
+        model = DecisionTransformer(
+            3,
+            4,
+            config=DecisionTransformer.DTConfig(
+                n_layer=2, n_embd=16, n_positions=16, n_inner=16, n_head=2
+            ),
+        )
+        out = model(observations, actions, r2go)
+        assert out.shape == torch.Size([*batch_dims, T, 16])
+
+    @pytest.mark.parametrize("batch_dims", [[], [3], [3, 4]])
+    def test_dtactor(self, batch_dims, T=5):
+        dtactor = DTActor(
+            3,
+            4,
+            transformer_config=DecisionTransformer.DTConfig(
+                n_layer=2, n_embd=16, n_positions=16, n_inner=16, n_head=2
+            ),
+        )
+        observations = torch.randn(*batch_dims, T, 3)
+        actions = torch.randn(*batch_dims, T, 4)
+        r2go = torch.randn(*batch_dims, T, 1)
+        out = dtactor(observations, actions, r2go)
+        assert out.shape == torch.Size([*batch_dims, T, 4])
+
+    @pytest.mark.parametrize("batch_dims", [[], [3], [3, 4]])
+    def test_onlinedtactor(self, batch_dims, T=5):
+        dtactor = OnlineDTActor(
+            3,
+            4,
+            transformer_config=DecisionTransformer.DTConfig(
+                n_layer=2, n_embd=16, n_positions=16, n_inner=16, n_head=2
+            ),
+        )
+        observations = torch.randn(*batch_dims, T, 3)
+        actions = torch.randn(*batch_dims, T, 4)
+        r2go = torch.randn(*batch_dims, T, 1)
+        mu, sig = dtactor(observations, actions, r2go)
+        assert mu.shape == torch.Size([*batch_dims, T, 4])
+        assert sig.shape == torch.Size([*batch_dims, T, 4])
+        assert (dtactor.log_std_min < sig.log()).all()
+        assert (dtactor.log_std_max > sig.log()).all()
 
 
 if __name__ == "__main__":

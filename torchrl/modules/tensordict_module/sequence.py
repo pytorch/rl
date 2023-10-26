@@ -25,7 +25,7 @@ class SafeSequential(TensorDictSequential, SafeModule):
          partial_tolerant (bool, optional): if ``True``, the input tensordict can miss some of the input keys.
             If so, the only module that will be executed are those who can be executed given the keys that
             are present.
-            Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is :obj:`True` AND if the
+            Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is ``True`` AND if the
             stack does not have the required keys, then SafeSequential will scan through the sub-tensordicts
             looking for those that have the required keys, if any.
 
@@ -75,15 +75,15 @@ class SafeSequential(TensorDictSequential, SafeModule):
         >>> # The module spec aggregates all the input specs:
         >>> print(td_module.spec)
         CompositeSpec(
-            hidden: NdUnboundedContinuousTensorSpec(
+            hidden: UnboundedContinuousTensorSpec(
                 shape=torch.Size([4]), space=None, device=cpu, dtype=torch.float32, domain=continuous),
             loc: None,
             scale: None,
-            output: NdUnboundedContinuousTensorSpec(
+            output: UnboundedContinuousTensorSpec(
                 shape=torch.Size([8]), space=None, device=cpu, dtype=torch.float32, domain=continuous))
 
     In the vmap case:
-        >>> from functorch import vmap
+        >>> from torch import vmap
         >>> params = params.expand(4, *params.shape)
         >>> td_vmap = vmap(td_module, (None, 0))(td, params)
         >>> print(td_vmap)

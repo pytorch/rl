@@ -5,6 +5,8 @@
 
 # Copied from gym > 0.19 release
 
+# this file should only be accessed when gym is installed
+
 import collections
 import copy
 from collections.abc import MutableMapping
@@ -12,20 +14,15 @@ from collections.abc import MutableMapping
 import numpy as np
 
 IMPORT_ERROR = None
-_has_gym = False
 try:
     # rule of thumbs: gym precedes
     from gym import ObservationWrapper, spaces
-
-    _has_gym = True
 except ImportError as err:
     IMPORT_ERROR = err
     try:
         from gymnasium import ObservationWrapper, spaces
-
-        _has_gym = True
-    except ImportError as err:
-        IMPORT_ERROR = err
+    except ImportError as err2:
+        raise err from err2
 
 STATE_KEY = "observation"
 
@@ -35,7 +32,7 @@ class GymPixelObservationWrapper(ObservationWrapper):
 
     Args:
         env: The environment to wrap.
-        pixels_only: If :obj:`True` (default), the original observation returned
+        pixels_only: If ``True`` (default), the original observation returned
             by the wrapped environment will be discarded, and a dictionary
             observation will only include pixels. If ``False``, the
             observation dictionary will contain both the original
@@ -57,8 +54,6 @@ class GymPixelObservationWrapper(ObservationWrapper):
     def __init__(
         self, env, pixels_only=True, render_kwargs=None, pixel_keys=("pixels",)
     ):
-        if not _has_gym:
-            raise IMPORT_ERROR
         env.reset()
         super().__init__(env)
 
@@ -69,7 +64,10 @@ class GymPixelObservationWrapper(ObservationWrapper):
             render_kwargs.setdefault(key, {})
 
             render_mode = render_kwargs[key].pop("mode", "rgb_array")
-            assert render_mode == "rgb_array", render_mode
+            if render_mode != "rgb_array":
+                raise ValueError(
+                    f"Expected render_mode to be 'rgb_array', git {render_mode}"
+                )
             render_kwargs[key]["mode"] = "rgb_array"
 
         wrapped_observation_space = env.observation_space

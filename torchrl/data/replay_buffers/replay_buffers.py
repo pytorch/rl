@@ -10,81 +10,47 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
-from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+
+from tensordict import is_tensorclass
+from tensordict.tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.utils import expand_as_right
 
+from torchrl._utils import accept_remote_rref_udf_invocation
+
+from torchrl.data.replay_buffers.samplers import (
+    PrioritizedSampler,
+    RandomSampler,
+    Sampler,
+)
+from torchrl.data.replay_buffers.storages import (
+    _get_default_collate,
+    ListStorage,
+    Storage,
+)
+from torchrl.data.replay_buffers.utils import (
+    _to_numpy,
+    _to_torch,
+    INT_CLASSES,
+    pin_memory_output,
+)
+from torchrl.data.replay_buffers.writers import (
+    RoundRobinWriter,
+    TensorDictRoundRobinWriter,
+    Writer,
+)
+
 from torchrl.data.utils import DEVICE_TYPING
-
-from ..._utils import accept_remote_rref_udf_invocation
-
-from .samplers import PrioritizedSampler, RandomSampler, Sampler
-from .storages import _get_default_collate, ListStorage, Storage
-from .utils import _to_numpy, INT_CLASSES
-from .writers import RoundRobinWriter, Writer
-
-
-def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
-    """Zips a list of iterables containing tensor-like objects and stacks the resulting lists of tensors together.
-
-    Args:
-        list_of_tensor_iterators (list): Sequence containing similar iterators,
-            where each element of the nested iterator is a tensor whose
-            shape match the tensor of other iterators that have the same index.
-
-    Returns:
-         Tuple of stacked tensors.
-
-    Examples:
-         >>> list_of_tensor_iterators = [[torch.ones(3), torch.zeros(1,2)]
-         ...     for _ in range(4)]
-         >>> stack_tensors(list_of_tensor_iterators)
-         (tensor([[1., 1., 1.],
-                 [1., 1., 1.],
-                 [1., 1., 1.],
-                 [1., 1., 1.]]), tensor([[[0., 0.]],
-         <BLANKLINE>
-                 [[0., 0.]],
-         <BLANKLINE>
-                 [[0., 0.]],
-         <BLANKLINE>
-                 [[0., 0.]]]))
-
-    """
-    return tuple(torch.stack(tensors, 0) for tensors in zip(*list_of_tensor_iterators))
-
-
-def _pin_memory(output: Any) -> Any:
-    if hasattr(output, "pin_memory") and output.device == torch.device("cpu"):
-        return output.pin_memory()
-    else:
-        return output
-
-
-def pin_memory_output(fun) -> Callable:
-    """Calls pin_memory on outputs of decorated function if they have such method."""
-
-    def decorated_fun(self, *args, **kwargs):
-        output = fun(self, *args, **kwargs)
-        if self._pin_memory:
-            _tuple_out = True
-            if not isinstance(output, tuple):
-                _tuple_out = False
-                output = (output,)
-            output = tuple(_pin_memory(_output) for _output in output)
-            if _tuple_out:
-                return output
-            return output[0]
-        return output
-
-    return decorated_fun
 
 
 class ReplayBuffer:
     """A generic, composable replay buffer class.
 
-    All arguments are keyword-only arguments.
-
-    Args:
+    Keyword Args:
         storage (Storage, optional): the storage to be used. If none is provided
             a default :class:`~torchrl.data.replay_buffers.ListStorage` with
             ``max_size`` of ``1_000`` will be created.
@@ -131,9 +97,9 @@ class ReplayBuffer:
         ...     storage=ListStorage(max_size=1000),
         ...     batch_size=5,
         ... )
-        >>> # populate the replay buffer
+        >>> # populate the replay buffer and get the item indices
         >>> data = range(10)
-        >>> rb.extend(data)
+        >>> indices = rb.extend(data)
         >>> # sample will return as many elements as specified in the constructor
         >>> sample = rb.sample()
         >>> print(sample)
@@ -151,6 +117,17 @@ class ReplayBuffer:
         1 tensor([9, 8, 6, 6, 8])
         2 tensor([4, 3, 6, 9, 1])
         3 tensor([4, 4, 1, 9, 9])
+
+    Replay buffers accept *any* kind of data. Not all storage types
+    will work, as some expect numerical data only, but the default
+    :class:`torchrl.data.ListStorage` will:
+
+    Examples:
+        >>> torch.manual_seed(0)
+        >>> buffer = ReplayBuffer(storage=ListStorage(100), collate_fn=lambda x: x)
+        >>> indices = buffer.extend(["a", 1, None])
+        >>> buffer.sample(3)
+        [None, 'a', None]
     """
 
     def __init__(
@@ -174,7 +151,9 @@ class ReplayBuffer:
         self._collate_fn = (
             collate_fn
             if collate_fn is not None
-            else _get_default_collate(self._storage)
+            else _get_default_collate(
+                self._storage, _is_tensordict=isinstance(self, TensorDictReplayBuffer)
+            )
         )
         self._pin_memory = pin_memory
 
@@ -237,7 +216,7 @@ class ReplayBuffer:
 
         if self._transform is not None and len(self._transform):
             is_td = True
-            if not isinstance(data, TensorDictBase):
+            if not is_tensor_collection(data):
                 data = TensorDict({"data": data}, [])
                 is_td = False
             data = self._transform(data)
@@ -269,30 +248,41 @@ class ReplayBuffer:
         Returns:
             index where the data lives in the replay buffer.
         """
+        if self._transform is not None and (
+            is_tensor_collection(data) or len(self._transform)
+        ):
+            data = self._transform.inv(data)
+        return self._add(data)
+
+    def _add(self, data):
         with self._replay_lock:
             index = self._writer.add(data)
             self._sampler.add(index)
         return index
 
+    def _extend(self, data: Sequence) -> torch.Tensor:
+        with self._replay_lock:
+            index = self._writer.extend(data)
+            self._sampler.extend(index)
+        return index
+
     def extend(self, data: Sequence) -> torch.Tensor:
         """Extends the replay buffer with one or more elements contained in an iterable.
+
+        If present, the inverse transforms will be called.`
 
         Args:
             data (iterable): collection of data to be added to the replay
                 buffer.
 
         Returns:
-            Indices of the data aded to the replay buffer.
+            Indices of the data added to the replay buffer.
         """
-        if self._transform is not None and isinstance(data, TensorDictBase):
+        if self._transform is not None and (
+            is_tensor_collection(data) or len(self._transform)
+        ):
             data = self._transform.inv(data)
-        elif self._transform is not None and len(self._transform):
-            # Accepts transforms that act on "data" key
-            data = self._transform.inv(TensorDict({"data": data}, [])).get("data")
-        with self._replay_lock:
-            index = self._writer.extend(data)
-            self._sampler.extend(index)
-        return index
+        return self._extend(data)
 
     def update_priority(
         self,
@@ -312,14 +302,25 @@ class ReplayBuffer:
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
             is_td = True
-            if not isinstance(data, TensorDictBase):
+            if not is_tensor_collection(data):
                 data = TensorDict({"data": data}, [])
                 is_td = False
+            is_locked = data.is_locked
+            if is_locked:
+                data.unlock_()
             data = self._transform(data)
+            if is_locked:
+                data.lock_()
             if not is_td:
                 data = data["data"]
 
         return data, info
+
+    def empty(self):
+        """Empties the replay buffer and reset cursor to 0."""
+        self._writer._empty()
+        self._sampler._empty()
+        self._storage._empty()
 
     def sample(
         self, batch_size: Optional[int] = None, return_info: bool = False
@@ -415,6 +416,27 @@ class ReplayBuffer:
         while not self._sampler.ran_out:
             data = self.sample()
             yield data
+
+    def __getstate__(self) -> Dict[str, Any]:
+        state = self.__dict__.copy()
+        _replay_lock = state.pop("_replay_lock", None)
+        _futures_lock = state.pop("_futures_lock", None)
+        if _replay_lock is not None:
+            state["_replay_lock_placeholder"] = None
+        if _futures_lock is not None:
+            state["_futures_lock_placeholder"] = None
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]):
+        if "_replay_lock_placeholder" in state:
+            state.pop("_replay_lock_placeholder")
+            _replay_lock = threading.RLock()
+            state["_replay_lock"] = _replay_lock
+        if "_futures_lock_placeholder" in state:
+            state.pop("_futures_lock_placeholder")
+            _futures_lock = threading.RLock()
+            state["_futures_lock"] = _futures_lock
+        self.__dict__.update(state)
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
@@ -530,9 +552,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 class TensorDictReplayBuffer(ReplayBuffer):
     """TensorDict-specific wrapper around the :class:`~torchrl.data.ReplayBuffer` class.
 
-    All arguments are keyword-only arguments.
-
-    Args:
+    Keyword Args:
         storage (Storage, optional): the storage to be used. If none is provided
             a default :class:`~torchrl.data.replay_buffers.ListStorage` with
             ``max_size`` of ``1_000`` will be created.
@@ -635,17 +655,21 @@ class TensorDictReplayBuffer(ReplayBuffer):
     """
 
     def __init__(self, *, priority_key: str = "td_error", **kw) -> None:
+        writer = kw.get("writer", None)
+        if writer is None:
+            kw["writer"] = TensorDictRoundRobinWriter()
+
         super().__init__(**kw)
         self.priority_key = priority_key
 
-    def _get_priority(self, tensordict: TensorDictBase) -> Optional[torch.Tensor]:
-        if self.priority_key not in tensordict.keys():
+    def _get_priority_item(self, tensordict: TensorDictBase) -> float:
+        if "_data" in tensordict.keys():
+            tensordict = tensordict.get("_data")
+
+        priority = tensordict.get(self.priority_key, None)
+        if priority is None:
             return self._sampler.default_priority
-        if tensordict.batch_dims:
-            tensordict = tensordict.clone(recurse=False)
-            tensordict.batch_size = []
         try:
-            priority = tensordict.get(self.priority_key)
             if priority.numel() > 1:
                 priority = _reduce(priority, self._sampler.reduction)
             else:
@@ -658,65 +682,95 @@ class TensorDictReplayBuffer(ReplayBuffer):
             )
         return priority
 
-    def add(self, data: TensorDictBase) -> int:
-        index = super().add(data)
-        data.set("index", index)
+    def _get_priority_vector(self, tensordict: TensorDictBase) -> torch.Tensor:
+        if "_data" in tensordict.keys():
+            tensordict = tensordict.get("_data")
 
-        priority = self._get_priority(data)
-        if priority:
-            self.update_priority(index, priority)
+        priority = tensordict.get(self.priority_key, None)
+        if priority is None:
+            return torch.tensor(
+                self._sampler.default_priority,
+                dtype=torch.float,
+                device=tensordict.device,
+            ).expand(tensordict.shape[0])
+
+        priority = priority.reshape(priority.shape[0], -1)
+        priority = _reduce(priority, self._sampler.reduction, dim=1)
+
+        return priority
+
+    def add(self, data: TensorDictBase) -> int:
+        if self._transform is not None:
+            data = self._transform.inv(data)
+
+        if is_tensor_collection(data):
+            data_add = TensorDict(
+                {
+                    "_data": data,
+                },
+                batch_size=[],
+                device=data.device,
+            )
+            if data.batch_size:
+                data_add["_rb_batch_size"] = torch.tensor(data.batch_size)
+
+        else:
+            data_add = data
+
+        index = super()._add(data_add)
+        if index is not None:
+            if is_tensor_collection(data_add):
+                data_add.set("index", index)
+
+            # priority = self._get_priority(data)
+            # if priority:
+            self.update_tensordict_priority(data_add)
         return index
 
-    def extend(self, tensordicts: Union[List, TensorDictBase]) -> torch.Tensor:
-        if isinstance(tensordicts, TensorDictBase):
-            if tensordicts.batch_dims > 1:
-                # we want the tensordict to have one dimension only. The batch size
-                # of the sampled tensordicts can be changed thereafter
-                if not isinstance(tensordicts, LazyStackedTensorDict):
-                    tensordicts = tensordicts.clone(recurse=False)
-                else:
-                    tensordicts = tensordicts.contiguous()
-                # we keep track of the batch size to reinstantiate it when sampling
-                if "_batch_size" in tensordicts.keys():
-                    raise KeyError(
-                        "conflicting key '_batch_size'. Consider removing from data."
-                    )
-                shape = torch.tensor(tensordicts.batch_size[1:]).expand(
-                    tensordicts.batch_size[0], tensordicts.batch_dims - 1
-                )
-                tensordicts.batch_size = tensordicts.batch_size[:1]
-                tensordicts.set("_batch_size", shape)
-            tensordicts.set(
-                "index",
-                torch.zeros(
-                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
-                ),
-            )
+    def extend(self, tensordicts: TensorDictBase) -> torch.Tensor:
 
-        if not isinstance(tensordicts, TensorDictBase):
-            stacked_td = torch.stack(tensordicts, 0)
-        else:
-            stacked_td = tensordicts
-
-        index = super().extend(stacked_td)
-        stacked_td.set(
-            "index",
-            torch.tensor(index, dtype=torch.int, device=stacked_td.device),
-            inplace=True,
+        tensordicts = TensorDict(
+            {"_data": tensordicts},
+            batch_size=tensordicts.batch_size[:1],
         )
-        self.update_tensordict_priority(stacked_td)
+        if tensordicts.batch_dims > 1:
+            # we want the tensordict to have one dimension only. The batch size
+            # of the sampled tensordicts can be changed thereafter
+            if not isinstance(tensordicts, LazyStackedTensorDict):
+                tensordicts = tensordicts.clone(recurse=False)
+            else:
+                tensordicts = tensordicts.contiguous()
+            # we keep track of the batch size to reinstantiate it when sampling
+            if "_rb_batch_size" in tensordicts.keys():
+                raise KeyError(
+                    "conflicting key '_rb_batch_size'. Consider removing from data."
+                )
+            shape = torch.tensor(tensordicts.batch_size[1:]).expand(
+                tensordicts.batch_size[0], tensordicts.batch_dims - 1
+            )
+            tensordicts.set("_rb_batch_size", shape)
+        tensordicts.set(
+            "index",
+            torch.zeros(tensordicts.shape, device=tensordicts.device, dtype=torch.int),
+        )
+
+        if self._transform is not None:
+            data = self._transform.inv(tensordicts.get("_data"))
+            tensordicts.set("_data", data)
+            if data.device is not None:
+                tensordicts = tensordicts.to(data.device)
+
+        index = super()._extend(tensordicts)
+        self.update_tensordict_priority(tensordicts)
         return index
 
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
         if not isinstance(self._sampler, PrioritizedSampler):
             return
-        priority = torch.tensor(
-            [self._get_priority(td) for td in data],
-            dtype=torch.float,
-            device=data.device,
-        )
-        # if the index shape does not match the priority shape, we have expanded it.
-        # we just take the first value
+        if data.ndim:
+            priority = self._get_priority_vector(data)
+        else:
+            priority = self._get_priority_item(data)
         index = data.get("index")
         while index.shape != priority.shape:
             # reduce index
@@ -753,9 +807,14 @@ class TensorDictReplayBuffer(ReplayBuffer):
             )
 
         data, info = super().sample(batch_size, return_info=True)
-        if include_info in (True, None):
+        if not is_tensorclass(data) and include_info in (True, None):
+            is_locked = data.is_locked
+            if is_locked:
+                data.unlock_()
             for k, v in info.items():
-                data.set(k, expand_as_right(torch.tensor(v, device=data.device), data))
+                data.set(k, expand_as_right(_to_torch(v, data.device), data))
+            if is_locked:
+                data.lock_()
         if return_info:
             return data, info
         return data
@@ -764,14 +823,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
 class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
     """TensorDict-specific wrapper around the :class:`~torchrl.data.PrioritizedReplayBuffer` class.
 
-    All arguments are keyword-only arguments.
-
     This class returns tensordicts with a new key ``"index"`` that represents
     the index of each element in the replay buffer. It also provides the
     :meth:`~.update_tensordict_priority` method that only requires for the
     tensordict to be passed to it with its new priority value.
 
-    Args:
+    Keyword Args:
         alpha (float): exponent α determines how much prioritization is used,
             with α = 0 corresponding to the uniform case.
         beta (float): importance sampling negative exponent.
@@ -960,14 +1017,50 @@ class InPlaceSampler:
         return self.out
 
 
-def _reduce(tensor: torch.Tensor, reduction: str):
+def _reduce(
+    tensor: torch.Tensor, reduction: str, dim: Optional[int] = None
+) -> Union[float, torch.Tensor]:
     """Reduces a tensor given the reduction method."""
     if reduction == "max":
-        return tensor.max().item()
+        result = tensor.max(dim=dim)
     elif reduction == "min":
-        return tensor.min().item()
+        result = tensor.min(dim=dim)
     elif reduction == "mean":
-        return tensor.mean().item()
+        result = tensor.mean(dim=dim)
     elif reduction == "median":
-        return tensor.median().item()
-    raise NotImplementedError(f"Unknown reduction method {reduction}")
+        result = tensor.median(dim=dim)
+    else:
+        raise NotImplementedError(f"Unknown reduction method {reduction}")
+    if isinstance(result, tuple):
+        result = result[0]
+    return result.item() if dim is None else result
+
+
+def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
+    """Zips a list of iterables containing tensor-like objects and stacks the resulting lists of tensors together.
+
+    Args:
+        list_of_tensor_iterators (list): Sequence containing similar iterators,
+            where each element of the nested iterator is a tensor whose
+            shape match the tensor of other iterators that have the same index.
+
+    Returns:
+         Tuple of stacked tensors.
+
+    Examples:
+         >>> list_of_tensor_iterators = [[torch.ones(3), torch.zeros(1,2)]
+         ...     for _ in range(4)]
+         >>> stack_tensors(list_of_tensor_iterators)
+         (tensor([[1., 1., 1.],
+                 [1., 1., 1.],
+                 [1., 1., 1.],
+                 [1., 1., 1.]]), tensor([[[0., 0.]],
+         <BLANKLINE>
+                 [[0., 0.]],
+         <BLANKLINE>
+                 [[0., 0.]],
+         <BLANKLINE>
+                 [[0., 0.]]]))
+
+    """
+    return tuple(torch.stack(tensors, 0) for tensors in zip(*list_of_tensor_iterators))

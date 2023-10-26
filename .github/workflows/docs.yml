@@ -8,6 +8,13 @@ on:
     branches:
       - "*"
   workflow_dispatch:
+
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
 jobs:
   build_docs_job:
     runs-on: linux.g5.4xlarge.nvidia.gpu
@@ -53,10 +60,10 @@ jobs:
         #pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
     - name: Install tensordict
       run: |
-        pip3 install git+https://github.com/pytorch-labs/tensordict.git --quiet --root-user-action=ignore
+        pip3 install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
     - name: Install TorchRL
       run: |
-        pip3 install -e . --quiet --root-user-action=ignore
+        python3 setup.py develop
     - name: Install requirements
       run: |
         pip3 install -r docs/requirements.txt --quiet --root-user-action=ignore
@@ -72,18 +79,24 @@ jobs:
       id: build_doc
       run: |
         cd ./docs
-        #timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
-        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
+        # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        # PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
         cd ..
     - name: Install rsync 📚
       run: |
         apt-get update && apt-get install -y rsync
     - name: Pull TensorDict docs
       run: |
-        git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/_local_build/tensordict
+        git clone --branch gh-pages https://github.com/pytorch/tensordict.git docs/_local_build/tensordict
         rm -rf docs/_local_build/tensordict/.git
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
+    - name: Upload wheel for download
+      uses: actions/upload-artifact@v2
+      with:
+        name: build
+        path: docs/_local_build/
     - name: Deploy
       if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       uses: JamesIves/github-pages-deploy-action@releases/v4
@@ -91,3 +104,4 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: gh-pages # The branch the action should deploy to.
           folder: docs/_local_build/ # The folder the action should deploy.
+          CLEAN: false

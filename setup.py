@@ -67,10 +67,12 @@ def write_version_file(version):
         f.write("git_version = {}\n".format(repr(sha)))
 
 
-def _get_pytorch_version():
+def _get_pytorch_version(is_nightly):
     # if "PYTORCH_VERSION" in os.environ:
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
-    return "torch"
+    if is_nightly:
+        return "torch>=2.2.0.dev"
+    return "torch>=2.1.0"
 
 
 def _get_packages():
@@ -120,7 +122,7 @@ def get_extensions():
     extra_compile_args = {
         "cxx": [
             "-O3",
-            "-std=c++14",
+            "-std=c++17",
             "-fdiagnostics-color=always",
         ]
     }
@@ -132,7 +134,7 @@ def get_extensions():
                 "-O0",
                 "-fno-inline",
                 "-g",
-                "-std=c++14",
+                "-std=c++17",
                 "-fdiagnostics-color=always",
             ]
         }
@@ -164,16 +166,21 @@ def _main(argv):
     args, unknown = parse_args(argv)
     name = args.package_name
     is_nightly = "nightly" in name
+    if is_nightly:
+        tensordict_dep = "tensordict-nightly"
+    else:
+        tensordict_dep = "tensordict>=0.2.0"
 
     if is_nightly:
         version = get_nightly_version()
         write_version_file(version)
-        print("Building wheel {}-{}".format(package_name, version))
-        print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
     else:
         version = get_version()
+        write_version_file(version)
+    print("Building wheel {}-{}".format(package_name, version))
+    print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
 
-    pytorch_package_dep = _get_pytorch_version()
+    pytorch_package_dep = _get_pytorch_version(is_nightly)
     print("-- PyTorch dependency:", pytorch_package_dep)
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
@@ -182,6 +189,35 @@ def _main(argv):
     long_description = (this_directory / "README.md").read_text()
     sys.argv = [sys.argv[0]] + unknown
 
+    extra_requires = {
+        "atari": [
+            "gym",
+            "atari-py",
+            "ale-py",
+            "gym[accept-rom-license]",
+            "pygame",
+        ],
+        "dm_control": ["dm_control"],
+        "gym_continuous": ["gymnasium", "mujoco"],
+        "rendering": ["moviepy"],
+        "tests": ["pytest", "pyyaml", "pytest-instafail", "scipy"],
+        "utils": [
+            "tensorboard",
+            "wandb",
+            "tqdm",
+            "hydra-core>=1.1",
+            "hydra-submitit-launcher",
+            "git",
+        ],
+        "checkpointing": [
+            "torchsnapshot",
+        ],
+        "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1"],
+    }
+    extra_requires["all"] = set()
+    for key in list(extra_requires.keys()):
+        extra_requires["all"] = extra_requires["all"].union(extra_requires[key])
+    extra_requires["all"] = sorted(extra_requires["all"])
     setup(
         # Metadata
         name=name,
@@ -204,37 +240,15 @@ def _main(argv):
             "numpy",
             "packaging",
             "cloudpickle",
-            "tensordict>=0.1.0",
+            tensordict_dep,
         ],
-        extras_require={
-            "atari": [
-                "gym<=0.24",
-                "atari-py",
-                "ale-py",
-                "gym[accept-rom-license]",
-                "pygame",
-            ],
-            "dm_control": ["dm_control"],
-            "gym_continuous": ["mujoco-py", "mujoco"],
-            "rendering": ["moviepy"],
-            "tests": ["pytest", "pyyaml", "pytest-instafail", "scipy"],
-            "utils": [
-                "tensorboard",
-                "wandb",
-                "tqdm",
-                "hydra-core>=1.1",
-                "hydra-submitit-launcher",
-            ],
-            "checkpointing": [
-                "torchsnapshot",
-            ],
-        },
+        extras_require=extra_requires,
         zip_safe=False,
         classifiers=[
-            "Programming Language :: Python :: 3.7",
             "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
+            "Programming Language :: Python :: 3.11",
             "License :: OSI Approved :: MIT License",
             "Operating System :: OS Independent",
             "Development Status :: 4 - Beta",
@@ -247,5 +261,4 @@ def _main(argv):
 
 
 if __name__ == "__main__":
-
     _main(sys.argv[1:])

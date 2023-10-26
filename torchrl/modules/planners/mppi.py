@@ -7,7 +7,7 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn
 
-from torchrl.envs import EnvBase
+from torchrl.envs.common import EnvBase
 from torchrl.modules.planners.common import MPCPlannerBase
 
 
@@ -43,21 +43,22 @@ class MPPIPlanner(MPCPlannerBase):
 
     Examples:
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec
+        >>> from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
         >>> from torchrl.envs.model_based import ModelBasedEnvBase
-        >>> from torchrl.modules import TensorDictModule, ValueOperator
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.modules import ValueOperator
         >>> from torchrl.objectives.value import TDLambdaEstimator
         >>> class MyMBEnv(ModelBasedEnvBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
         ...         self.observation_spec = CompositeSpec(
-        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,))
+        ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
         ...         )
         ...         self.input_spec = CompositeSpec(
-        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
-        ...             action=NdUnboundedContinuousTensorSpec((1,)),
+        ...             hidden_observation=UnboundedContinuousTensorSpec((4,)),
+        ...             action=UnboundedContinuousTensorSpec((1,)),
         ...         )
-        ...         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+        ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
         ...         tensordict = TensorDict(
@@ -88,9 +89,9 @@ class MPPIPlanner(MPCPlannerBase):
         >>> value_net = nn.Linear(4, 1)
         >>> value_net = ValueOperator(value_net, in_keys=["hidden_observation"])
         >>> adv = TDLambdaEstimator(
-        ...     0.99,
-        ...     0.95,
-        ...     value_net,
+        ...     gamma=0.99,
+        ...     lmbda=0.95,
+        ...     value_network=value_net,
         ... )
         >>> # Build a planner and use it as actor
         >>> planner = MPPIPlanner(
@@ -104,16 +105,17 @@ class MPPIPlanner(MPCPlannerBase):
         >>> env.rollout(5, planner)
         TensorDict(
             fields={
-                action: Tensor(torch.Size([5, 1]), dtype=torch.float32),
-                done: Tensor(torch.Size([5, 1]), dtype=torch.bool),
-                hidden_observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
-                next: LazyStackedTensorDict(
+                action: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                hidden_observation: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                next: TensorDict(
                     fields={
-                        hidden_observation: Tensor(torch.Size([5, 4]), dtype=torch.float32)},
+                        done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        hidden_observation: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([5]),
                     device=cpu,
-                    is_shared=False),
-                reward: Tensor(torch.Size([5, 1]), dtype=torch.float32)},
+                    is_shared=False)},
             batch_size=torch.Size([5]),
             device=cpu,
             is_shared=False)
@@ -128,7 +130,7 @@ class MPPIPlanner(MPCPlannerBase):
         optim_steps: int,
         num_candidates: int,
         top_k: int,
-        reward_key: str = "reward",
+        reward_key: str = ("next", "reward"),
         action_key: str = "action",
     ):
         super().__init__(env=env, action_key=action_key)

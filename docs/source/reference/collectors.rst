@@ -54,7 +54,7 @@ Besides those compute parameters, users may choose to configure the following pa
 - reset_at_each_iter: if :obj:`True`, the environment(s) will be reset after each batch collection
 - split_trajs: if :obj:`True`, the trajectories will be split and delivered in a padded tensordict
   along with a :obj:`"mask"` key that will point to a boolean mask representing the valid values.
-- exploration_mode: the exploration strategy to be used with the policy.
+- exploration_type: the exploration strategy to be used with the policy.
 - reset_when_done: whether environments should be reset when reaching a done state.
 
 
@@ -105,6 +105,11 @@ node or across multiple nodes.
   building a parallel environment or collector can result in a slower collection
   than using ``device="cuda"`` when available.
 
+.. note::
+  Given the library's many optional dependencies (eg, Gym, Gymnasium, and many others)
+  warnings can quickly become quite annoying in multiprocessed / distributed settings.
+  By default, TorchRL filters out these warnings in sub-processes. If one still wishes to
+  see these warnings, they can be displayed by setting ``torchrl.filter_warnings_subprocess=False``.
 
 .. currentmodule:: torchrl.collectors.distributed
 

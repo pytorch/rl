@@ -3,11 +3,11 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to the TorchRL Documentation!
-=====================================
+TorchRL
+=======
 
-.. note::
-   The TensorDict class has been moved out of TorchRL into a dedicated library. Take a look at `the documentation <./tensordict>`_ or find the source code `on GitHub <https://github.com/pytorch-labs/tensordict>`_.
+.. figure:: /_static/img/logo.png
+   :width: 600
 
 TorchRL is an open-source Reinforcement Learning (RL) library for PyTorch.
 
@@ -27,6 +27,9 @@ for :doc:`cost functions <reference/objectives>`, :ref:`returns <reference/objec
 
 TorchRL aims at a high modularity and good runtime performance.
 
+To read more about TorchRL philosophy and capabilities beyond this API reference,
+check the `TorchRL paper <https://arxiv.org/abs/2306.00577>`__.
+
 Tutorials
 =========
 
@@ -38,8 +41,6 @@ Basics
 
    tutorials/coding_ppo
    tutorials/pendulum
-   tutorials/tensordict_tutorial
-   tutorials/tensordict_module
    tutorials/torchrl_demo
 
 Intermediate
@@ -48,8 +49,11 @@ Intermediate
 .. toctree::
    :maxdepth: 1
 
-   tutorials/torch_envs
+   tutorials/multiagent_ppo
+   tutorials/torchrl_envs
    tutorials/pretrained_models
+   tutorials/dqn_with_rnn
+   tutorials/rb_tutorial
 
 Advanced
 --------

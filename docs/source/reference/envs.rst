@@ -26,19 +26,23 @@ Each env will have the following attributes:
   This is especially useful for transforms (see below). For parametric environments (e.g.
   model-based environments), the device does represent the hardware that will be used to
   compute the operations.
-- :obj:`env.input_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
-  all the input keys (:obj:`"action"` and others).
-- :obj:`env.output_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
-  all the output keys (:obj:`"observation"`, :obj:`"reward"` and :obj:`"done"`).
 - :obj:`env.observation_spec`: a :class:`~torchrl.data.CompositeSpec` object
   containing all the observation key-spec pairs.
-  This is a pointer to ``env.output_spec["observation"]``.
+- :obj:`env.state_spec`: a :class:`~torchrl.data.CompositeSpec` object
+  containing all the input key-spec pairs (except action). For most stateful
+  environments, this container will be empty.
 - :obj:`env.action_spec`: a :class:`~torchrl.data.TensorSpec` object
-  representing the action spec. This is a pointer to ``env.input_spec["action"]``.
+  representing the action spec.
 - :obj:`env.reward_spec`: a :class:`~torchrl.data.TensorSpec` object representing
-  the reward spec. This is a pointer to ``env.output_spec["reward"]``.
+  the reward spec.
 - :obj:`env.done_spec`: a :class:`~torchrl.data.TensorSpec` object representing
-  the done-flag spec. This is a pointer to ``env.output_spec["done"]``.
+  the done-flag spec. See the section on trajectory termination below.
+- :obj:`env.input_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
+  all the input keys (:obj:`"full_action_spec"` and :obj:`"full_state_spec"`).
+  It is locked and should not be modified directly.
+- :obj:`env.output_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
+  all the output keys (:obj:`"full_observation_spec"`, :obj:`"full_reward_spec"` and :obj:`"full_done_spec"`).
+  It is locked and should not be modified directly.
 
 Importantly, the environment spec shapes should contain the batch size, e.g.
 an environment with :obj:`env.batch_size == torch.Size([4])` should have
@@ -54,6 +58,23 @@ With these, the following methods are implemented:
 - :meth:`env.step`: a step method that takes a :class:`tensordict.TensorDict` input
   containing an input action as well as other inputs (for model-based or stateless
   environments, for instance).
+- :meth:`env.step_and_maybe_reset`: executes a step, and (partially) resets the
+  environments if it needs to. It returns the updated input with a ``"next"``
+  key containing the data of the next step, as well as a tensordict containing
+  the input data for the next step (ie, reset or result or
+  :func:`~torchrl.envs.utils.step_mdp`)
+  This is done by reading the ``done_keys`` and
+  assigning a ``"_reset"`` signal to each done state. This method allows
+  to code non-stopping rollout functions with little effort:
+
+    >>> data_ = env.reset()
+    >>> result = []
+    >>> for i in range(N):
+    ...     data, data_ = env.step_and_maybe_reset(data_)
+    ...     result.append(data)
+    ...
+    >>> result = torch.stack(result)
+
 - :meth:`env.set_seed`: a seeding method that will return the next seed
   to be used in a multi-env setting. This next seed is deterministically computed
   from the preceding one, such that one can seed multiple environments with a different
@@ -63,6 +84,9 @@ With these, the following methods are implemented:
   a maximum number of steps (``max_steps=N``) and using a policy (``policy=model``).
   The policy should be coded using a :class:`tensordict.nn.TensorDictModule`
   (or any other :class:`tensordict.TensorDict`-compatible module).
+  The resulting :class:`tensordict.TensorDict` instance will be marked with
+  a trailing ``"time"`` named dimension that can be used by other modules
+  to treat this batched dimension as it should.
 
 The following figure summarizes how a rollout is executed in torchrl.
 
@@ -72,22 +96,25 @@ The following figure summarizes how a rollout is executed in torchrl.
 
 In brief, a TensorDict is created by the :meth:`~.EnvBase.reset` method,
 then populated with an action by the policy before being passed to the
-:meth:`~.EnvBase.step` method which writes the observations, done flag and
+:meth:`~.EnvBase.step` method which writes the observations, done flag(s) and
 reward under the ``"next"`` entry. The result of this call is stored for
 delivery and the ``"next"`` entry is gathered by the :func:`~.utils.step_mdp`
 function.
 
 .. note::
-
-  The Gym(nasium) API recently shifted to a splitting of the ``"done"`` state
-  into a ``terminated`` (the env is done and results should not be trusted)
-  and ``truncated`` (the maximum number of steps is reached) flags.
-  In TorchRL, ``"done"`` usually refers to ``"terminated"``. Truncation is
-  achieved via the :class:`~.StepCounter` transform class, and the output
-  key will be ``"truncated"`` if not chosen to be something else (e.g.
-  ``StepCounter(max_steps=100, truncated_key="done")``).
-  TorchRL's collectors and rollout methods will be looking for one of these
-  keys when assessing if the env should be reset.
+  In general, all TorchRL environment have a ``"done"`` and ``"terminated"``
+  entry in their output tensordict. If they are not present by design,
+  the :class:`~.EnvBase` metaclass will ensure that every done or terminated
+  is flanked with its dual.
+  In TorchRL, ``"done"`` strictly refers to the union of all the end-of-trajectory
+  signals and should be interpreted as "the last step of a trajectory" or
+  equivalently "a signal indicating the need to reset".
+  If the environment provides it (eg, Gymnasium), the truncation entry is also
+  written in the :meth:`EnvBase.step` output under a ``"truncated"`` entry.
+  If the environment carries a single value, it will interpreted as a ``"terminated"``
+  signal by default.
+  By default, TorchRL's collectors and rollout methods will be looking for the ``"done"``
+  entry to assess if the environment should be reset.
 
 .. note::
 
@@ -129,6 +156,12 @@ environments in parallel.
 As this class inherits from :class:`SerialEnv`, it enjoys the exact same API as other environment.
 Of course, a :class:`ParallelEnv` will have a batch size that corresponds to its environment count:
 
+.. note::
+  Given the library's many optional dependencies (eg, Gym, Gymnasium, and many others)
+  warnings can quickly become quite annoying in multiprocessed / distributed settings.
+  By default, TorchRL filters out these warnings in sub-processes. If one still wishes to
+  see these warnings, they can be displayed by setting ``torchrl.filter_warnings_subprocess=False``.
+
 It is important that your environment specs match the input and output that it sends and receives, as
 :class:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
 Check the :func:`~torchrl.envs.utils.check_env_specs` method for a sanity check.
@@ -153,18 +186,107 @@ one can simply call:
         >>> print(a)
         9.81
 
-It is also possible to reset some but not all of the environments:
+TorchRL uses a private ``"_reset"`` key to indicate to the environment which
+component (sub-environments or agents) should be reset.
+This allows to reset some but not all of the components.
+
+The ``"_reset"`` key has two distinct functionalities:
+1. During a call to :meth:`~.EnvBase._reset`, the ``"_reset"`` key may or may
+   not be present in the input tensordict. TorchRL's convention is that the
+   absence of the ``"_reset"`` key at a given ``"done"`` level indicates
+   a total reset of that level (unless a ``"_reset"`` key was found at a level
+   above, see details below).
+   If it is present, it is expected that those entries and only those components
+   where the ``"_reset"`` entry is ``True`` (along key and shape dimension) will be reset.
+
+   The way an environment deals with the ``"_reset"`` keys in its :meth:`~.EnvBase._reset`
+   method is proper to its class.
+   Designing an environment that behaves according to ``"_reset"`` inputs is the
+   developer's responsibility, as TorchRL has no control over the inner logic
+   of :meth:`~.EnvBase._reset`. Nevertheless, the following point should be
+   kept in mind when desiging that method.
+
+2. After a call to :meth:`~.EnvBase._reset`, the output will be masked with the
+   ``"_reset"`` entries and the output of the previous :meth:`~.EnvBase.step`
+   will be written wherever the ``"_reset"`` was ``False``. In practice, this
+   means that if a ``"_reset"`` modifies data that isn't exposed by it, this
+   modification will be lost. After this masking operation, the ``"_reset"``
+   entries will be erased from the :meth:`~.EnvBase.reset` outputs.
+
+It must be pointed that ``"_reset"`` is a private key, and it should only be
+used when coding specific environment features that are internal facing.
+In other words, this should NOT be used outside of the library, and developers
+will keep the right to modify the logic of partial resets through ``"_reset"``
+setting without preliminary warranty, as long as they don't affect TorchRL
+internal tests.
+
+Finally, the following assumptions are made and should be kept in mind when
+designing reset functionalities:
+
+- Each ``"_reset"`` is paired with a ``"done"`` entry (+ ``"terminated"`` and,
+  possibly, ``"truncated"``). This means that the following structure is not
+  allowed: ``TensorDict({"done": done, "nested": {"_reset": reset}}, [])``, as
+  the ``"_reset"`` lives at a different nesting level than the ``"done"``.
+- A reset at one level does not preclude the presence of a ``"_reset"`` at lower
+  levels, but it annihilates its effects. The reason is simply that
+  whether the ``"_reset"`` at the root level corresponds to an ``all()``, ``any()``
+  or custom call to the nested ``"done"`` entries cannot be known in advance,
+  and it is explicitly assumed that the ``"_reset"`` at the root was placed
+  there to superseed the nested values (for an example, have a look at
+  :class:`~.PettingZooWrapper` implementation where each group has one or more
+  ``"done"`` entries associated which is aggregated at the root level with a
+  ``any`` or ``all`` logic depending on the task).
+- When calling :meth:`env.reset(tensordict)` with a partial ``"_reset"`` entry
+  that will reset some but not all the done sub-environments, the input data
+  should contain the data of the sub-environemtns that are __not__ being reset.
+  The reason for this constrain lies in the fact that the output of the
+  ``env._reset(data)`` can only be predicted for the entries that are reset.
+  For the others, TorchRL cannot know in advance if they will be meaningful or
+  not. For instance, one could perfectly just pad the values of the non-reset
+  components, in which case the non-reset data will be meaningless and should
+  be discarded.
+
+Below, we give some examples of the expected effect that ``"_reset"`` keys will
+have on an environment returning zeros after reset:
+
+    >>> # single reset at the root
+    >>> data = TensorDict({"val": [1, 1], "_reset": [False, True]}, [])
+    >>> env.reset(data)
+    >>> print(data.get("val"))  # only the second value is 0
+    tensor([1, 0])
+    >>> # nested resets
+    >>> data = TensorDict({
+    ...     ("agent0", "val"): [1, 1], ("agent0", "_reset"): [False, True],
+    ...     ("agent1", "val"): [2, 2], ("agent1", "_reset"): [True, False],
+    ... }, [])
+    >>> env.reset(data)
+    >>> print(data.get(("agent0", "val")))  # only the second value is 0
+    tensor([1, 0])
+    >>> print(data.get(("agent1", "val")))  # only the second value is 0
+    tensor([0, 2])
+    >>> # nested resets are overridden by a "_reset" at the root
+    >>> data = TensorDict({
+    ...     "_reset": [True, True],
+    ...     ("agent0", "val"): [1, 1], ("agent0", "_reset"): [False, True],
+    ...     ("agent1", "val"): [2, 2], ("agent1", "_reset"): [True, False],
+    ... }, [])
+    >>> env.reset(data)
+    >>> print(data.get(("agent0", "val")))  # reset at the root overrides nested
+    tensor([0, 0])
+    >>> print(data.get(("agent1", "val")))  # reset at the root overrides nested
+    tensor([0, 0])
 
 .. code-block::
    :caption: Parallel environment reset
 
-        >>> tensordict = TensorDict({"reset_workers": [True, False, True, True]}, [4])
-        >>> env.reset(tensordict)
+        >>> tensordict = TensorDict({"_reset": [[True], [False], [True], [True]]}, [4])
+        >>> env.reset(tensordict)  # eliminates the "_reset" entry
         TensorDict(
             fields={
+                terminated: Tensor(torch.Size([4, 1]), dtype=torch.bool),
                 done: Tensor(torch.Size([4, 1]), dtype=torch.bool),
                 pixels: Tensor(torch.Size([4, 500, 500, 3]), dtype=torch.uint8),
-                reset_workers: Tensor(torch.Size([4]), dtype=torch.bool)},
+                truncated: Tensor(torch.Size([4, 1]), dtype=torch.bool),
             batch_size=torch.Size([4]),
             device=None,
             is_shared=True)
@@ -206,8 +328,145 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
 
     SerialEnv
     ParallelEnv
-    MultiThreadedEnv
     EnvCreator
+
+Multi-agent environments
+------------------------
+
+.. currentmodule:: torchrl.envs
+
+TorchRL supports multi-agent learning out-of-the-box.
+*The same classes used in a single-agent learning pipeline can be seamlessly used in multi-agent contexts,
+without any modification or dedicated multi-agent infrastructure.*
+
+In this view, environments play a core role for multi-agent. In multi-agent environments,
+many decision-making agents act in a shared world.
+Agents can observe different things, act in different ways and also be rewarded differently.
+Therefore, many paradigms exist to model multi-agent environments (DecPODPs, Markov Games).
+Some of the main differences between these paradigms include:
+
+- **observation** can be per-agent and also have some shared components
+- **reward** can be per-agent or shared
+- **done** (and ``"truncated"`` or ``"terminated"``) can be per-agent or shared.
+
+TorchRL accommodates all these possible paradigms thanks to its :class:`tensordict.TensorDict` data carrier.
+In particular, in multi-agent environments, per-agent keys will be carried in a nested "agents" TensorDict.
+This TensorDict will have the additional agent dimension and thus group data that is different for each agent.
+The shared keys, on the other hand, will be kept in the first level, as in single-agent cases.
+
+Let's look at an example to understand this better. For this example we are going to use
+`VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`_, a multi-robot task simulator also
+based on PyTorch, which runs parallel batched simulation on device.
+
+We can create a VMAS environment and look at what the output from a random step looks like:
+
+.. code-block::
+   :caption: Example of multi-agent step tensordict
+
+        >>> from torchrl.envs.libs.vmas import VmasEnv
+        >>> env = VmasEnv("balance", num_envs=3, n_agents=5)
+        >>> td = env.rand_step()
+        >>> td
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([3, 5, 2]))},
+                    batch_size=torch.Size([3, 5])),
+                next: TensorDict(
+                    fields={
+                        agents: TensorDict(
+                            fields={
+                                info: TensorDict(
+                                    fields={
+                                        ground_rew: Tensor(shape=torch.Size([3, 5, 1])),
+                                        pos_rew: Tensor(shape=torch.Size([3, 5, 1]))},
+                                    batch_size=torch.Size([3, 5])),
+                                observation: Tensor(shape=torch.Size([3, 5, 16])),
+                                reward: Tensor(shape=torch.Size([3, 5, 1]))},
+                            batch_size=torch.Size([3, 5])),
+                        done: Tensor(shape=torch.Size([3, 1]))},
+                    batch_size=torch.Size([3]))},
+            batch_size=torch.Size([3]))
+
+We can observe that *keys that are shared by all agents*, such as **done** are present in the root tensordict with
+batch size `(num_envs,)`, which represents the number of environments simulated.
+
+On the other hand, *keys that are different between agents*, such as **action**, **reward**, **observation**,
+and **info** are present in the nested "agents" tensordict with batch size `(num_envs, n_agents)`,
+which represents the additional agent dimension.
+
+Multi-agent tensor specs will follow the same style as in tensordicts.
+Specs relating to values that vary between agents will need to be nested in the "agents" entry.
+
+Here is an example of how specs can be created in a multi-agent environment where
+only the done flag is shared across agents (as in VMAS):
+
+.. code-block::
+   :caption: Example of multi-agent spec creation
+
+        >>> action_specs = []
+        >>> observation_specs = []
+        >>> reward_specs = []
+        >>> info_specs = []
+        >>> for i in range(env.n_agents):
+        ...    action_specs.append(agent_i_action_spec)
+        ...    reward_specs.append(agent_i_reward_spec)
+        ...    observation_specs.append(agent_i_observation_spec)
+        >>> env.action_spec = CompositeSpec(
+        ...    {
+        ...        "agents": CompositeSpec(
+        ...            {"action": torch.stack(action_specs)}, shape=(env.n_agents,)
+        ...        )
+        ...    }
+        ...)
+        >>> env.reward_spec = CompositeSpec(
+        ...    {
+        ...        "agents": CompositeSpec(
+        ...            {"reward": torch.stack(reward_specs)}, shape=(env.n_agents,)
+        ...        )
+        ...    }
+        ...)
+        >>> env.observation_spec = CompositeSpec(
+        ...    {
+        ...        "agents": CompositeSpec(
+        ...            {"observation": torch.stack(observation_specs)}, shape=(env.n_agents,)
+        ...        )
+        ...    }
+        ...)
+        >>> env.done_spec = DiscreteTensorSpec(
+        ...    n=2,
+        ...    shape=torch.Size((1,)),
+        ...    dtype=torch.bool,
+        ... )
+
+As you can see, it is very simple! Per-agent keys will have the nested composite spec and shared keys will follow
+single agent standards.
+
+.. note::
+  Since reward, done and action keys may have the additional "agent" prefix (e.g., `("agents","action")`),
+  the default keys used in the arguments of other TorchRL components (e.g. "action") will not match exactly.
+  Therefore, TorchRL provides the `env.action_key`, `env.reward_key`, and `env.done_key` attributes,
+  which will automatically point to the right key to use. Make sure you pass these attributes to the various
+  components in TorchRL to inform them of the right key (e.g., the `loss.set_keys()` function).
+
+.. note::
+  TorchRL abstracts these nested specs away for ease of use.
+  This means that accessing `env.reward_spec` will always return the leaf
+  spec if the accessed spec is Composite. Therefore, if in the example above
+  we run `env.reward_spec` after env creation, we would get the same output as `torch.stack(reward_specs)}`.
+  To get the full composite spec with the "agents" key, you can run
+  `env.output_spec["full_reward_spec"]`. The same is valid for action and done specs.
+  Note that `env.reward_spec == env.output_spec["full_reward_spec"][env.reward_key]`.
+
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    MarlGroupMapType
+    check_marl_grouping
+
 
 
 Transforms
@@ -237,7 +496,7 @@ It is now apparent that this can bring a significant speedup depending on the ki
 operations that is to be computed.
 
 A great advantage of environment wrappers is that one can consult the environment up to that wrapper.
-The same can be achieved with TorchRL transformed environments: the :doc:`parent` attribute will
+The same can be achieved with TorchRL transformed environments: the ``parent`` attribute will
 return a new :class:`TransformedEnv` with all the transforms up to the transform of interest.
 Re-using the example above:
 
@@ -248,15 +507,15 @@ Re-using the example above:
 
 
 Transformed environment can be used with vectorized environments.
-Since each transform uses a :doc:`"in_keys"`/:doc:`"out_keys"` set of keyword argument, it is
+Since each transform uses a ``"in_keys"``/``"out_keys"`` set of keyword argument, it is
 also easy to root the transform graph to each component of the observation data (e.g.
 pixels or states etc).
 
-Transforms also have an :doc:`inv` method that is called before
+Transforms also have an ``inv`` method that is called before
 the action is applied in reverse order over the composed transform chain:
 this allows to apply transforms to data in the environment before the action is taken
 in the environment. The keys to be included in this inverse transform are passed through the
-:doc:`"in_keys_inv"` keyword argument:
+``"in_keys_inv"`` keyword argument:
 
 .. code-block::
    :caption: Inverse transform
@@ -311,13 +570,18 @@ to be able to create this other composition:
 
     Transform
     TransformedEnv
+    ActionMask
     BinarizeReward
     CatFrames
     CatTensors
     CenterCrop
+    ClipTransform
     Compose
+    DeviceCastTransform
     DiscreteActionProjection
     DoubleToFloat
+    DTypeCastTransform
+    EndOfLifeTransform
     ExcludeTransform
     FiniteTensorDictCheck
     FlattenObservation
@@ -325,9 +589,11 @@ to be able to create this other composition:
     GrayScale
     gSDENoise
     InitTracker
+    KLRewardTransform
     NoopResetEnv
     ObservationNorm
     ObservationTransform
+    PermuteTransform
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict
@@ -336,16 +602,68 @@ to be able to create this other composition:
     RewardClipping
     RewardScaling
     RewardSum
+    Reward2GoTransform
     SelectTransform
     SqueezeTransform
     StepCounter
+    TargetReturn
     TensorDictPrimer
     TimeMaxPool
     ToTensorImage
     UnsqueezeTransform
+    VecGymEnvTransform
     VecNorm
+    VC1Transform
     VIPRewardTransform
     VIPTransform
+
+Environments with masked actions
+--------------------------------
+
+In some environments with discrete actions, the actions available to the agent might change throughout execution.
+In such cases the environments will output an action mask (under the ``"action_mask"`` key by default).
+This mask needs to be used to filter out unavailable actions for that step.
+
+If you are using a custom policy you can pass this mask to your probability distribution like so:
+
+.. code-block::
+   :caption: Categorical policy with action mask
+
+        >>> from tensordict.nn import TensorDictModule, ProbabilisticTensorDictModule, TensorDictSequential
+        >>> import torch.nn as nn
+        >>> from torchrl.modules import MaskedCategorical
+        >>> module = TensorDictModule(
+        >>>     nn.Linear(in_feats, out_feats),
+        >>>     in_keys=["observation"],
+        >>>     out_keys=["logits"],
+        >>> )
+        >>> dist = ProbabilisticTensorDictModule(
+        >>>     in_keys={"logits": "logits", "mask": "action_mask"},
+        >>>     out_keys=["action"],
+        >>>     distribution_class=MaskedCategorical,
+        >>> )
+        >>> actor = TensorDictSequential(module, dist)
+
+If you want to use a default policy, you will need to wrap your environment in the :class:`~torchrl.envs.transforms.ActionMask`
+transform. This transform can take care of updating the action mask in the action spec in order for the default policy
+to always know what the latest available actions are. You can do this like so:
+
+.. code-block::
+   :caption: How to use the action mask transform
+
+        >>> from tensordict.nn import TensorDictModule, ProbabilisticTensorDictModule, TensorDictSequential
+        >>> import torch.nn as nn
+        >>> from torchrl.envs.transforms import TransformedEnv, ActionMask
+        >>> env = TransformedEnv(
+        >>>     your_base_env
+        >>>     ActionMask(action_key="action", mask_key="action_mask"),
+        >>> )
+
+.. note::
+  In case you are using a parallel environment it is important to add the transform to the parallel enviornment itself
+  and not to its sub-environments.
+
+
 
 Recorders
 ---------
@@ -372,10 +690,13 @@ Helpers
 
     step_mdp
     get_available_libraries
-    set_exploration_mode
-    exploration_mode
+    set_exploration_mode #deprecated
+    set_exploration_type
+    exploration_mode #deprecated
+    exploration_type
     check_env_specs
     make_composite_from_td
+    terminated_or_truncated
 
 Domain-specific
 ---------------
@@ -391,21 +712,105 @@ Domain-specific
 
 Libraries
 ---------
-.. currentmodule:: torchrl.envs.libs
+
+.. currentmodule:: torchrl.envs
+
+TorchRL's mission is to make the training of control and decision algorithm as
+easy as it gets, irrespective of the simulator being used (if any).
+Multiple wrappers are available for DMControl, Habitat, Jumanji and, naturally,
+for Gym.
+
+This last library has a special status in the RL community as being the mostly
+used framework for coding simulators. Its successful API has been foundational
+and inspired many other frameworks, among which TorchRL.
+However, Gym has gone through multiple design changes and it is sometimes hard
+to accommodate these as an external adoption library: users usually have their
+"preferred" version of the library. Moreover, gym is now being maintained
+by another group under the "gymnasium" name, which does not facilitate code
+compatibility. In practice, we must consider that users may have a version of
+gym *and* gymnasium installed in the same virtual environment, and we must
+allow both to work concomittantly.
+Fortunately, TorchRL provides a solution for this problem: a special decorator
+:class:`~.gym.set_gym_backend` allows to control which library will be used
+in the relevant functions:
+
+    >>> from torchrl.envs.libs.gym import GymEnv, set_gym_backend, gym_backend
+    >>> import gymnasium, gym
+    >>> with set_gym_backend(gymnasium):
+    ...     print(gym_backend())
+    ...     env1 = GymEnv("Pendulum-v1")
+    <module 'gymnasium' from '/path/to/venv/python3.9/site-packages/gymnasium/__init__.py'>
+    >>> with set_gym_backend(gym):
+    ...     print(gym_backend())
+    ...     env2 = GymEnv("Pendulum-v1")
+    <module 'gym' from '/path/to/venv/python3.9/site-packages/gym/__init__.py'>
+    >>> print(env1._env.env.env)
+    <gymnasium.envs.classic_control.pendulum.PendulumEnv at 0x15147e190>
+    >>> print(env2._env.env.env)
+    <gym.envs.classic_control.pendulum.PendulumEnv at 0x1629916a0>
+
+We can see that the two libraries modify the value returned by :func:`~.gym.gym_backend()`
+which can be further used to indicate which library needs to be used for
+the current computation. :class:`~.gym.set_gym_backend` is also a decorator:
+we can use it to tell to a specific function what gym backend needs to be used
+during its execution.
+The :func:`torchrl.envs.libs.gym.gym_backend` function allows you to gather
+the current gym backend or any of its modules:
+
+        >>> import mo_gymnasium
+        >>> with set_gym_backend("gym"):
+        ...     wrappers = gym_backend('wrappers')
+        ...     print(wrappers)
+        <module 'gym.wrappers' from '/path/to/venv/python3.9/site-packages/gym/wrappers/__init__.py'>
+        >>> with set_gym_backend("gymnasium"):
+        ...     wrappers = gym_backend('wrappers')
+        ...     print(wrappers)
+        <module 'gymnasium.wrappers' from '/path/to/venv/python3.9/site-packages/gymnasium/wrappers/__init__.py'>
+
+Another tool that comes in handy with gym and other external dependencies is
+the :class:`torchrl._utils.implement_for` class. Decorating a function
+with ``@implement_for`` will tell torchrl that, depending on the version
+indicated, a specific behaviour is to be expected. This allows us to easily
+support multiple versions of gym without requiring any effort from the user side.
+For example, considering that our virtual environment has the v0.26.2 installed,
+the following function will return ``1`` when queried:
+
+    >>> from torchrl._utils import implement_for
+    >>> @implement_for("gym", None, "0.26.0")
+    ... def fun():
+    ...     return 0
+    >>> @implement_for("gym", "0.26.0", None)
+    ... def fun():
+    ...     return 1
+    >>> fun()
+    1
 
 .. autosummary::
     :toctree: generated/
     :template: rl_template_fun.rst
 
-    brax.BraxEnv
-    brax.BraxWrapper
-    dm_control.DMControlEnv
-    dm_control.DMControlWrapper
-    gym.GymEnv
-    gym.GymWrapper
-    habitat.HabitatEnv
-    jumanji.JumanjiEnv
-    jumanji.JumanjiWrapper
-    openml.OpenMLEnv
-    vmas.VmasEnv
-    vmas.VmasWrapper
+    BraxEnv
+    BraxWrapper
+    DMControlEnv
+    DMControlWrapper
+    GymEnv
+    GymWrapper
+    HabitatEnv
+    IsaacGymEnv
+    IsaacGymWrapper
+    JumanjiEnv
+    JumanjiWrapper
+    MOGymEnv
+    MOGymWrapper
+    MultiThreadedEnv
+    MultiThreadedEnvWrapper
+    OpenMLEnv
+    PettingZooEnv
+    PettingZooWrapper
+    RoboHiveEnv
+    SMACv2Env
+    SMACv2Wrapper
+    VmasEnv
+    VmasWrapper
+    gym_backend
+    set_gym_backend

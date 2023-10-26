@@ -20,6 +20,7 @@ from torchrl.collectors.distributed.default_configs import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
+from torchrl.envs.utils import _convert_exploration_type
 
 SUBMITIT_ERR = None
 try:
@@ -31,18 +32,20 @@ except ModuleNotFoundError as err:
     SUBMITIT_ERR = err
 import torch.cuda
 from tensordict import TensorDict
-from torch import multiprocessing as mp, nn
+from torch import nn
 
 from torch.distributed import rpc
+from torchrl._utils import _ProcessNoWarn, VERBOSE
 
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
-    DEFAULT_EXPLORATION_MODE,
+    DEFAULT_EXPLORATION_TYPE,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
-from torchrl.envs import EnvBase, EnvCreator
+from torchrl.envs.common import EnvBase
+from torchrl.envs.env_creator import EnvCreator
 
 
 def _rpc_init_collection_node(
@@ -52,7 +55,7 @@ def _rpc_init_collection_node(
     world_size,
     visible_device,
     tensorpipe_options,
-    verbose=False,
+    verbose=VERBOSE,
 ):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = str(tcp_port)
@@ -129,10 +132,11 @@ class RPCDataCollector(DataCollectorBase):
             See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
-        exploration_mode (str, optional): interaction mode to be used when
-            collecting data. Must be one of ``"random"``, ``"mode"`` or
-            ``"mean"``.
-            Defaults to ``"random"``
+        exploration_type (str, optional): interaction mode to be used when
+            collecting data. Must be one of ``ExplorationType.RANDOM``,
+            ``ExplorationType.MODE`` or
+            ``ExplorationType.MEAN``.
+            Defaults to ``ExplorationType.RANDOM``
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
@@ -205,7 +209,7 @@ class RPCDataCollector(DataCollectorBase):
 
     """
 
-    _VERBOSE = False  # for debugging
+    _VERBOSE = VERBOSE  # for debugging
 
     def __init__(
         self,
@@ -219,7 +223,8 @@ class RPCDataCollector(DataCollectorBase):
         reset_at_each_iter=False,
         postproc=None,
         split_trajs=False,
-        exploration_mode=DEFAULT_EXPLORATION_MODE,
+        exploration_type=DEFAULT_EXPLORATION_TYPE,
+        exploration_mode=None,
         reset_when_done=True,
         collector_class=SyncDataCollector,
         collector_kwargs=None,
@@ -234,6 +239,9 @@ class RPCDataCollector(DataCollectorBase):
         visible_devices=None,
         tensorpipe_options=None,
     ):
+        exploration_type = _convert_exploration_type(
+            exploration_mode=exploration_mode, exploration_type=exploration_type
+        )
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
         elif collector_class == "sync":
@@ -305,7 +313,7 @@ class RPCDataCollector(DataCollectorBase):
                     "torchrl's repo."
                 )
             collector_kwarg["reset_at_each_iter"] = reset_at_each_iter
-            collector_kwarg["exploration_mode"] = exploration_mode
+            collector_kwarg["exploration_type"] = exploration_type
             collector_kwarg["reset_when_done"] = reset_when_done
 
         if postproc is not None and hasattr(postproc, "to"):
@@ -439,7 +447,7 @@ class RPCDataCollector(DataCollectorBase):
                 print("job id", job.job_id)  # ID of your job
             return job
         elif self.launcher == "mp":
-            job = mp.Process(
+            job = _ProcessNoWarn(
                 target=_rpc_init_collection_node,
                 args=(
                     i + 1,

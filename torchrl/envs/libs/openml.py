@@ -14,7 +14,8 @@ from torchrl.data import (
 )
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
-from torchrl.envs import Compose, DoubleToFloat, EnvBase, RenameTransform
+from torchrl.envs.common import EnvBase
+from torchrl.envs.transforms import Compose, DoubleToFloat, RenameTransform
 
 
 def _make_composite_from_td(td):
@@ -127,7 +128,7 @@ class OpenMLEnv(EnvBase):
             self.batch_size,
             device=self.device,
         )
-        return td.select().set("next", td)
+        return td
 
     def _set_seed(self, seed):
         self.rng = torch.random.manual_seed(seed)

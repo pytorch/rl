@@ -13,12 +13,13 @@ from typing import OrderedDict
 
 import torch.cuda
 from tensordict import TensorDict
-from torch import multiprocessing as mp, nn
+from torch import nn
+from torchrl._utils import _ProcessNoWarn, VERBOSE
 
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
-    DEFAULT_EXPLORATION_MODE,
+    DEFAULT_EXPLORATION_TYPE,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
@@ -28,7 +29,9 @@ from torchrl.collectors.distributed.default_configs import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
-from torchrl.envs import EnvBase, EnvCreator
+from torchrl.envs.common import EnvBase
+from torchrl.envs.env_creator import EnvCreator
+from torchrl.envs.utils import _convert_exploration_type
 
 SUBMITIT_ERR = None
 try:
@@ -54,7 +57,7 @@ def _distributed_init_collection_node(
     collector_kwargs,
     update_interval,
     total_frames,
-    verbose=False,
+    verbose=VERBOSE,
 ):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = str(tcpport)
@@ -168,7 +171,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
             See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
-        exploration_mode (str, optional): interaction mode to be used when
+        exploration_type (str, optional): interaction mode to be used when
             collecting data. Must be one of ``"random"``, ``"mode"`` or
             ``"mean"``.
             Defaults to ``"random"``
@@ -226,7 +229,8 @@ class DistributedSyncDataCollector(DataCollectorBase):
         reset_at_each_iter=False,
         postproc=None,
         split_trajs=False,
-        exploration_mode=DEFAULT_EXPLORATION_MODE,
+        exploration_type=DEFAULT_EXPLORATION_TYPE,
+        exploration_mode=None,
         reset_when_done=True,
         collector_class=SyncDataCollector,
         collector_kwargs=None,
@@ -239,6 +243,10 @@ class DistributedSyncDataCollector(DataCollectorBase):
         launcher="submitit",
         tcp_port=None,
     ):
+        exploration_type = _convert_exploration_type(
+            exploration_mode=exploration_mode, exploration_type=exploration_type
+        )
+
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
         elif collector_class == "sync":
@@ -299,7 +307,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
                 init_random_frames // self.num_workers
             )
             collector_kwarg["reset_at_each_iter"] = reset_at_each_iter
-            collector_kwarg["exploration_mode"] = exploration_mode
+            collector_kwarg["exploration_type"] = exploration_type
             collector_kwarg["reset_when_done"] = reset_when_done
 
         if postproc is not None and hasattr(postproc, "to"):
@@ -389,7 +397,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
         env_make = self.env_constructors[i]
         if not isinstance(env_make, (EnvBase, EnvCreator)):
             env_make = CloudpickleWrapper(env_make)
-        job = mp.Process(
+        job = _ProcessNoWarn(
             target=_distributed_init_collection_node,
             args=(
                 i + 1,

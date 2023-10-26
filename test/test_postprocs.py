@@ -6,14 +6,14 @@ import argparse
 
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from _utils_internal import get_default_devices
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.postprocs.postprocs import MultiStep
 
 
 @pytest.mark.parametrize("n", range(13))
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("key", ["observation", "pixels", "observation_whatever"])
 def test_multistep(n, key, device, T=11):
     torch.manual_seed(0)
@@ -100,7 +100,7 @@ def test_multistep(n, key, device, T=11):
         )
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize(
     "batch_size",
     [

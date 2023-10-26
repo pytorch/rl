@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
+from tensordict.nn import InteractionType, TensorDictModule
 
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
@@ -19,30 +20,47 @@ from torchrl.data import (
 )
 
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs import (
+    CatTensors,
+    DMControlEnv,
+    EnvCreator,
+    ParallelEnv,
+    TransformedEnv,
+)
 
-from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, SafeModule
 from torchrl.modules.distributions import OneHotCategorical
 
-from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+from torchrl.modules.tensordict_module.actors import ProbabilisticActor
 
 from torchrl.objectives import DiscreteSACLoss, SoftUpdate
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 
-def env_maker(env_name, frame_skip=1, device="cpu", from_pixels=False):
-    return GymEnv(
-        env_name, "run", device=device, frame_skip=frame_skip, from_pixels=from_pixels
-    )
+def env_maker(cfg, device="cpu"):
+    lib = cfg.env.library
+    if lib in ("gym", "gymnasium"):
+        with set_gym_backend(lib):
+            return GymEnv(
+                cfg.env.name,
+                device=device,
+            )
+    elif lib == "dm_control":
+        env = DMControlEnv(cfg.env.name, cfg.env.task)
+        return TransformedEnv(
+            env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
+        )
+    else:
+        raise NotImplementedError(f"Unknown lib {lib}.")
 
 
 def make_replay_buffer(
     prb=False,
     buffer_size=1000000,
     batch_size=256,
-    buffer_scratch_dir="/tmp/",
+    buffer_scratch_dir=None,
     device="cpu",
     prefetch=3,
 ):
@@ -73,7 +91,7 @@ def make_replay_buffer(
     return replay_buffer
 
 
-@hydra.main(version_base=None, config_path=".", config_name="config")
+@hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     device = (
@@ -100,7 +118,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # 1.2 Create env vector
         vec_env = ParallelEnv(
-            create_env_fn=EnvCreator(lambda: env_maker(env_name=cfg.env_name)),
+            create_env_fn=EnvCreator(lambda cfg=cfg: env_maker(cfg)),
             num_workers=num_workers,
         )
 
@@ -134,7 +152,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         out_keys=["action"],
         distribution_class=OneHotCategorical,
         distribution_kwargs={},
-        default_interaction_mode="random",
+        default_interaction_type=InteractionType.RANDOM,
         return_log_prob=False,
     ).to(device)
 
@@ -149,8 +167,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         **qvalue_net_kwargs,
     )
 
-    qvalue = ValueOperator(
+    qvalue = TensorDictModule(
         in_keys=in_keys,
+        out_keys=["action_value"],
         module=qvalue_net,
     ).to(device)
 
@@ -170,16 +189,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create SAC loss
     loss_module = DiscreteSACLoss(
         actor_network=model[0],
+        action_space=test_env.action_spec,
         qvalue_network=model[1],
         num_actions=num_actions,
         num_qvalue_nets=2,
-        gamma=cfg.gamma,
         target_entropy_weight=cfg.target_entropy_weight,
         loss_function="smooth_l1",
     )
+    loss_module.make_value_estimator(gamma=cfg.gamma)
 
     # Define Target Network Updater
-    target_net_updater = SoftUpdate(loss_module, cfg.target_update_polyak)
+    target_net_updater = SoftUpdate(loss_module, eps=cfg.target_update_polyak)
 
     # Make Off-Policy Collector
     collector = SyncDataCollector(
@@ -198,7 +218,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         prb=cfg.prb,
         buffer_size=cfg.buffer_size,
         batch_size=cfg.batch_size,
-        device=device,
+        device="cpu",
     )
 
     # Optimizers
@@ -209,8 +229,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     rewards_eval = []
 
     # Main loop
-    target_net_updater.init_()
-
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.total_frames)
     r0 = None
@@ -224,7 +242,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         new_collected_epochs = len(np.unique(tensordict["collector"]["traj_ids"]))
         if r0 is None:
             r0 = (
-                tensordict["reward"].sum().item()
+                tensordict["next", "reward"].sum().item()
                 / new_collected_epochs
                 / cfg.env_per_collector
             )
@@ -254,7 +272,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
             ) = ([], [], [], [], [], [])
             for _ in range(cfg.frames_per_batch * int(cfg.utd_ratio)):
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample().clone()
+                sampled_tensordict = replay_buffer.sample()
+                if sampled_tensordict.device != device:
+                    sampled_tensordict = sampled_tensordict.to(
+                        device, non_blocking=True
+                    )
+                else:
+                    sampled_tensordict = sampled_tensordict.clone()
 
                 loss_td = loss_module(sampled_tensordict)
 
@@ -284,7 +308,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         rewards.append(
             (
                 i,
-                tensordict["reward"].sum().item()
+                tensordict["next", "reward"].sum().item()
                 / cfg.env_per_collector
                 / new_collected_epochs,
             )
@@ -307,8 +331,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 }
             )
 
-        with set_exploration_mode(
-            "random"
+        with set_exploration_type(
+            ExplorationType.RANDOM
         ), torch.no_grad():  # TODO: exploration mode to mean causes nans
 
             eval_rollout = test_env.rollout(
@@ -316,7 +340,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 policy=actor,
                 auto_cast_to_device=True,
             ).clone()
-            eval_reward = eval_rollout["reward"].sum(-2).mean().item()
+            eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
             rewards_eval.append((i, eval_reward))
             eval_str = f"eval cumulative reward: {rewards_eval[-1][1]: 4.4f} (init: {rewards_eval[0][1]: 4.4f})"
             metrics.update({"test_reward": rewards_eval[-1][1]})

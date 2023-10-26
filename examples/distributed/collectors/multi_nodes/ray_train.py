@@ -58,9 +58,7 @@ if __name__ == "__main__":
         Compose(
             # normalize observations
             ObservationNorm(in_keys=["observation"]),
-            DoubleToFloat(
-                in_keys=["observation"],
-            ),
+            DoubleToFloat(),
             StepCounter(),
         ),
     )
@@ -154,9 +152,9 @@ if __name__ == "__main__":
         entropy_coef=entropy_eps,  # these keys match by default but we set this for completeness
         value_target_key=advantage_module.value_target_key,
         critic_coef=1.0,
-        gamma=0.99,
         loss_critic_type="smooth_l1",
     )
+    loss_module.make_value_estimator(gamma=0.99)
 
     # 7. Define optimizer
     optim = torch.optim.Adam(loss_module.parameters(), lr)
@@ -196,7 +194,7 @@ if __name__ == "__main__":
                 optim.step()
                 optim.zero_grad()
 
-        logs["reward"].append(tensordict_data["reward"].mean().item())
+        logs["reward"].append(tensordict_data["next", "reward"].mean().item())
         pbar.update(tensordict_data.numel() * frame_skip)
         cum_reward_str = f"average reward={logs['reward'][-1]: 4.4f} (init={logs['reward'][0]: 4.4f})"
         logs["step_count"].append(tensordict_data["step_count"].max().item())
@@ -206,8 +204,10 @@ if __name__ == "__main__":
         with set_exploration_mode("mean"), torch.no_grad():
             # execute a rollout with the trained policy
             eval_rollout = env.rollout(1000, policy_module)
-            logs["eval reward"].append(eval_rollout["reward"].mean().item())
-            logs["eval reward (sum)"].append(eval_rollout["reward"].sum().item())
+            logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())
+            logs["eval reward (sum)"].append(
+                eval_rollout["next", "reward"].sum().item()
+            )
             logs["eval step_count"].append(eval_rollout["step_count"].max().item())
             eval_str = f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} (init: {logs['eval reward (sum)'][0]: 4.4f}), eval step-count: {logs['eval step_count'][-1]}"
             del eval_rollout

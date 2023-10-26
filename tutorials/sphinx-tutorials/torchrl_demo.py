@@ -474,10 +474,10 @@ sequence(tensordict, params)
 
 ###############################################################################
 
-import functorch
+from torch import vmap
 
 params_expand = params.expand(4)
-tensordict_exp = functorch.vmap(sequence, (None, 0))(tensordict, params_expand)
+tensordict_exp = vmap(sequence, (None, 0))(tensordict, params_expand)
 print(tensordict_exp)
 
 ###############################################################################
@@ -554,20 +554,20 @@ print(td)
 ###############################################################################
 
 # Sampling vs mode / mean
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 td = TensorDict({"input": torch.randn(3, 5)}, [3])
 
 torch.manual_seed(0)
-with set_exploration_mode("random"):
+with set_exploration_type(ExplorationType.RANDOM):
     td_module(td)
     print("random:", td["action"])
 
-with set_exploration_mode("mode"):
+with set_exploration_type(ExplorationType.MODE):
     td_module(td)
     print("mode:", td["action"])
 
-with set_exploration_mode("mean"):
+with set_exploration_type(ExplorationType.MODE):
     td_module(td)
     print("mean:", td["action"])
 
@@ -732,10 +732,12 @@ loss_fn = DDPGLoss(actor, value, gamma=0.99)
 tensordict = TensorDict(
     {
         "observation": torch.randn(10, 3),
-        "next": {"observation": torch.randn(10, 3)},
-        "reward": torch.randn(10, 1),
+        "next": {
+            "observation": torch.randn(10, 3),
+            "reward": torch.randn(10, 1),
+            "done": torch.zeros(10, 1, dtype=torch.bool),
+        },
         "action": torch.randn(10, 1),
-        "done": torch.zeros(10, 1, dtype=torch.bool),
     },
     batch_size=[10],
     device="cpu",

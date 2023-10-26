@@ -16,5 +16,16 @@ from .samplers import (
     Sampler,
     SamplerWithoutReplacement,
 )
-from .storages import LazyMemmapStorage, LazyTensorStorage, ListStorage, Storage
-from .writers import RoundRobinWriter, Writer
+from .storages import (
+    LazyMemmapStorage,
+    LazyTensorStorage,
+    ListStorage,
+    Storage,
+    TensorStorage,
+)
+from .writers import (
+    RoundRobinWriter,
+    TensorDictMaxValueWriter,
+    TensorDictRoundRobinWriter,
+    Writer,
+)

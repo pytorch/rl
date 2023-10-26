@@ -10,7 +10,7 @@ import tqdm
 from torch import nn
 
 from torchrl.envs.libs.openml import OpenMLEnv
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import DistributionalQValueActor, EGreedyWrapper, MLP, QValueActor
 from torchrl.objectives import DistributionalDQNLoss, DQNLoss
 
@@ -75,17 +75,22 @@ if __name__ == "__main__":
         actor(env.reset())
         loss = DistributionalDQNLoss(
             actor,
-            gamma=0.0,
         )
+        loss.make_value_estimator(gamma=0.9)
     else:
         model = MLP(
             out_features=n_actions, depth=3, num_cells=n_cells, activation_class=nn.Tanh
         )
         actor = QValueActor(model, action_space="categorical")
         actor(env.reset())
-        loss = DQNLoss(actor, gamma=0.0, loss_function="smooth_l1")
+        loss = DQNLoss(actor, loss_function="smooth_l1", action_space=env.action_spec)
+        loss.make_value_estimator(gamma=0.0)
     policy = EGreedyWrapper(
-        actor, eps_greedy, 0.0, annealing_num_steps=n_steps, spec=env.action_spec
+        actor,
+        eps_init=eps_greedy,
+        eps_end=0.0,
+        annealing_num_steps=n_steps,
+        spec=env.action_spec,
     )
     optim = torch.optim.Adam(loss.parameters(), lr, weight_decay=wd)
 
@@ -94,7 +99,7 @@ if __name__ == "__main__":
     init_r = None
     init_loss = None
     for i in pbar:
-        with set_exploration_mode("random"):
+        with set_exploration_type(ExplorationType.RANDOM):
             data = env.step(policy(env.reset()))
         loss_vals = loss(data)
         loss_val = sum(
