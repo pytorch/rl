@@ -54,10 +54,7 @@ class CEMPlanner(MPCPlannerBase):
         ...         self.observation_spec = CompositeSpec(
         ...             next_hidden_observation=UnboundedContinuousTensorSpec((4,))
         ...         )
-        ...         self.input_spec = CompositeSpec(
-        ...             hidden_observation=UnboundedContinuousTensorSpec((4,)),
-        ...             action=UnboundedContinuousTensorSpec((1,)),
-        ...         )
+        ...         self.action_spec = UnboundedContinuousTensorSpec((1,))
         ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
