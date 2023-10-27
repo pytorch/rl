@@ -1554,11 +1554,11 @@ class TestVmas:
             num_envs=num_envs,
             n_agents=n_agents,
         )
-        env.close()
         assert str(env) == (
             f"{VmasEnv.__name__}(num_envs={num_envs}, n_agents={env.n_agents},"
             f" batch_size={torch.Size((num_envs,))}, device={env.device}) (scenario={scenario_name})"
         )
+        env.close()
 
     @pytest.mark.parametrize("num_envs", [1, 10])
     @pytest.mark.parametrize("n_workers", [1, 3])
@@ -1665,7 +1665,7 @@ class TestVmas:
             )
             return env
 
-        env = ParallelEnv(2, make_vmas)
+        env = make_vmas()
 
         assert env.rollout(max_steps=3).device == devices[first]
 
@@ -1774,6 +1774,17 @@ class TestVmas:
 
         assert env.reward_key not in _td.keys(True, True)
         assert env.action_key not in _td["next"].keys(True, True)
+
+    @pytest.mark.parametrize("categorical", [True])
+    def test_multi_discrete(self, categorical):
+        env = VmasEnv(
+            scenario="simple_reference",
+            continuous_actions=False,
+            categorical_actions=categorical,
+            num_envs=2,
+        )
+        env.rollout(2)
+
 
 
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
