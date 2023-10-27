@@ -1480,6 +1480,7 @@ class TestVmas:
             scenario=scenario_name,
             num_envs=num_envs,
             n_agents=n_agents,
+            group_map=MarlGroupMapType.ALL_IN_ONE_GROUP,
         )
         env.set_seed(0)
         tdreset = env.reset()
@@ -1743,6 +1744,7 @@ class TestVmas:
         env = VmasEnv(
             scenario="simple_tag",
             num_envs=n_envs,
+            group_map=MarlGroupMapType.ALL_IN_ONE_GROUP,
         )
         torch.manual_seed(1)
 
@@ -1775,8 +1777,15 @@ class TestVmas:
         assert env.reward_key not in _td.keys(True, True)
         assert env.action_key not in _td["next"].keys(True, True)
 
-
-
+    @pytest.mark.parametrize("categorical", [True])
+    def test_multi_discrete(self, categorical):
+        env = VmasEnv(
+            scenario="simple_reference",
+            continuous_actions=False,
+            categorical_actions=categorical,
+            num_envs=2,
+        )
+        env.rollout(2)
 
 
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
