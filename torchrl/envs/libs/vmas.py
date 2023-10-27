@@ -14,10 +14,12 @@ from torchrl.data import (
     DEVICE_TYPING,
     DiscreteTensorSpec,
     LazyStackedCompositeSpec,
-    UnboundedContinuousTensorSpec,
+    UnboundedContinuousTensorSpec, TensorSpec, OneHotDiscreteTensorSpec, MultiDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec, BoundedTensorSpec,
 )
+from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs.common import _EnvWrapper, EnvBase
-from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
+from torchrl.envs.libs.gym import set_gym_backend, gym_backend
 from torchrl.envs.utils import _classproperty, _selective_unsqueeze
 
 _has_vmas = importlib.util.find_spec("vmas") is not None
@@ -48,6 +50,63 @@ def _get_envs():
         for scenario in all_scenarios
         if scenario not in heterogenous_spaces_scenarios
     ]
+
+@set_gym_backend("gym")
+def _vmas_to_torchrl_spec_transform(
+    spec,
+    device,
+    categorical_action_encoding,
+) -> TensorSpec:
+    gym_spaces = gym_backend("spaces")
+    if isinstance(spec, gym_spaces.discrete.Discrete):
+        action_space_cls = (
+            DiscreteTensorSpec
+            if categorical_action_encoding
+            else OneHotDiscreteTensorSpec
+        )
+        dtype = (
+            numpy_to_torch_dtype_dict[spec.dtype]
+            if categorical_action_encoding
+            else torch.long
+        )
+        return action_space_cls(spec.n, device=device, dtype=dtype)
+    elif isinstance(spec, gym_spaces.multi_discrete.MultiDiscrete):
+        dtype = (
+            numpy_to_torch_dtype_dict[spec.dtype]
+            if categorical_action_encoding
+            else torch.long
+        )
+        return (
+            MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+            if categorical_action_encoding
+            else MultiOneHotDiscreteTensorSpec(
+                spec.nvec, device=device, dtype=dtype
+            )
+        )
+    elif isinstance(spec, gym_spaces.Box):
+        shape = spec.shape
+        if not len(shape):
+            shape = torch.Size([1])
+        dtype = numpy_to_torch_dtype_dict[spec.dtype]
+        low = torch.tensor(spec.low, device=device, dtype=dtype)
+        high = torch.tensor(spec.high, device=device, dtype=dtype)
+        is_unbounded = low.isinf().all() and high.isinf().all()
+        return (
+            UnboundedContinuousTensorSpec(shape, device=device, dtype=dtype)
+            if is_unbounded
+            else BoundedTensorSpec(
+                low,
+                high,
+                shape,
+                dtype=dtype,
+                device=device,
+            )
+        )
+    else:
+        raise NotImplementedError(
+            f"spec of type {type(spec).__name__} is currently unaccounted for vmas"
+        )
+
 
 
 class VmasWrapper(_EnvWrapper):
@@ -170,7 +229,7 @@ class VmasWrapper(_EnvWrapper):
 
         return env
 
-    @set_gym_backend("gym")
+
     def _make_specs(
         self, env: "vmas.simulator.environment.environment.Environment"  # noqa
     ) -> None:
@@ -185,11 +244,10 @@ class VmasWrapper(_EnvWrapper):
             action_specs.append(
                 CompositeSpec(
                     {
-                        "action": _gym_to_torchrl_spec_transform(
+                        "action": _vmas_to_torchrl_spec_transform(
                             self.action_space[agent_index],
                             categorical_action_encoding=self.categorical_actions,
                             device=self.device,
-                            remap_state_to_observation=False,
                         )  # shape = (n_actions_per_agent,)
                     },
                 )
@@ -197,10 +255,10 @@ class VmasWrapper(_EnvWrapper):
             observation_specs.append(
                 CompositeSpec(
                     {
-                        "observation": _gym_to_torchrl_spec_transform(
+                        "observation": _vmas_to_torchrl_spec_transform(
                             self.observation_space[agent_index],
                             device=self.device,
-                            remap_state_to_observation=False,
+                            categorical_action_encoding=self.categorical_actions
                         )  # shape = (n_obs_per_agent,)
                     },
                 )
