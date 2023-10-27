@@ -1589,11 +1589,11 @@ class TestVmas:
 
         env = ParallelEnv(n_workers, make_vmas)
         tensordict = env.rollout(max_steps=n_rollout_samples)
-        env.close()
 
         assert tensordict.shape == torch.Size(
             [n_workers, list(env.num_envs)[0], n_rollout_samples]
         )
+        env.close()
 
     @pytest.mark.parametrize("num_envs", [1, 2])
     @pytest.mark.parametrize("n_workers", [1, 3])
