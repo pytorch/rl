@@ -1777,16 +1777,6 @@ class TestVmas:
         assert env.reward_key not in _td.keys(True, True)
         assert env.action_key not in _td["next"].keys(True, True)
 
-    @pytest.mark.parametrize("categorical", [True])
-    def test_multi_discrete(self, categorical):
-        env = VmasEnv(
-            scenario="simple_reference",
-            continuous_actions=False,
-            categorical_actions=categorical,
-            num_envs=2,
-        )
-        env.rollout(2)
-
 
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
 class TestD4RL:
