@@ -6,23 +6,32 @@ from __future__ import annotations
 
 import importlib.util
 
-from typing import Dict, Optional, Union, List
+from typing import Dict, List, Optional, Union
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
     DEVICE_TYPING,
     DiscreteTensorSpec,
     LazyStackedCompositeSpec,
-    UnboundedContinuousTensorSpec, TensorSpec, OneHotDiscreteTensorSpec, MultiDiscreteTensorSpec,
-    MultiOneHotDiscreteTensorSpec, BoundedTensorSpec,
+    MultiDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
+    OneHotDiscreteTensorSpec,
+    TensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs.common import _EnvWrapper, EnvBase
-from torchrl.envs.libs.gym import set_gym_backend, gym_backend
-from torchrl.envs.utils import _classproperty, _selective_unsqueeze, MarlGroupMapType, check_marl_grouping
+from torchrl.envs.libs.gym import gym_backend, set_gym_backend
+from torchrl.envs.utils import (
+    _classproperty,
+    _selective_unsqueeze,
+    check_marl_grouping,
+    MarlGroupMapType,
+)
 
 _has_vmas = importlib.util.find_spec("vmas") is not None
 
@@ -53,6 +62,7 @@ def _get_envs():
         if scenario not in heterogenous_spaces_scenarios
     ]
 
+
 @set_gym_backend("gym")
 def _vmas_to_torchrl_spec_transform(
     spec,
@@ -81,9 +91,7 @@ def _vmas_to_torchrl_spec_transform(
         return (
             MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
             if categorical_action_encoding
-            else MultiOneHotDiscreteTensorSpec(
-                spec.nvec, device=device, dtype=dtype
-            )
+            else MultiOneHotDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
         )
     elif isinstance(spec, gym_spaces.Box):
         shape = spec.shape
@@ -108,7 +116,6 @@ def _vmas_to_torchrl_spec_transform(
         raise NotImplementedError(
             f"spec of type {type(spec).__name__} is currently unaccounted for vmas"
         )
-
 
 
 class VmasWrapper(_EnvWrapper):
@@ -281,7 +288,6 @@ class VmasWrapper(_EnvWrapper):
             del group_map["agent"]
         return group_map
 
-
     def _make_specs(
         self, env: "vmas.simulator.environment.environment.Environment"  # noqa
     ) -> None:
@@ -298,6 +304,7 @@ class VmasWrapper(_EnvWrapper):
         self.unbatched_reward_spec = CompositeSpec(device=self.device)
 
         self.het_specs = False
+        self.het_specs_map = {}
         for group in self.group_map.keys():
             (
                 group_observation_spec,
@@ -310,10 +317,11 @@ class VmasWrapper(_EnvWrapper):
             self.unbatched_reward_spec[group] = group_reward_spec
             if group_info_spec is not None:
                 self.unbatched_observation_spec[(group, "info")] = group_info_spec
-
-            self.het_specs += isinstance(
+            group_het_specs = isinstance(
                 group_observation_spec, LazyStackedCompositeSpec
             ) or isinstance(group_action_spec, LazyStackedCompositeSpec)
+            self.het_specs_map[group] = group_het_specs
+            self.het_specs += group_het_specs
 
         self.unbatched_done_spec = CompositeSpec(
             {
@@ -338,7 +346,8 @@ class VmasWrapper(_EnvWrapper):
         self.done_spec = self.unbatched_done_spec.expand(
             *self.batch_size, *self.unbatched_done_spec.shape
         )
-    def _make_unbatched_group_specs(self, group:str):
+
+    def _make_unbatched_group_specs(self, group: str):
         # Agent specs
         action_specs = []
         observation_specs = []
@@ -364,7 +373,7 @@ class VmasWrapper(_EnvWrapper):
                         "observation": _vmas_to_torchrl_spec_transform(
                             self.observation_space[agent_index],
                             device=self.device,
-                            categorical_action_encoding=self.categorical_actions
+                            categorical_action_encoding=self.categorical_actions,
                         )  # shape = (n_obs_per_agent,)
                     },
                 )
@@ -403,9 +412,7 @@ class VmasWrapper(_EnvWrapper):
         group_observation_spec = torch.stack(
             observation_specs, dim=0
         )  # shape = (n_agents, n_obs_per_agent)
-        group_reward_spec = torch.stack(
-            reward_specs, dim=0
-        )  # shape = (n_agents, 1)
+        group_reward_spec = torch.stack(reward_specs, dim=0)  # shape = (n_agents, 1)
         group_info_spec = None
         if len(info_specs):
             group_info_spec = torch.stack(info_specs, dim=0)
@@ -414,9 +421,8 @@ class VmasWrapper(_EnvWrapper):
             group_observation_spec,
             group_action_spec,
             group_reward_spec,
-            group_info_spec
+            group_info_spec,
         )
-
 
     def _check_kwargs(self, kwargs: Dict):
         vmas = self.lib
@@ -458,71 +464,93 @@ class VmasWrapper(_EnvWrapper):
         )
         dones = self.read_done(dones)
 
-        agent_tds = []
-        for i in range(self.n_agents):
-            agent_obs = self.read_obs(obs[i])
-            agent_info = self.read_info(infos[i])
+        source = {"done": dones, "terminated": dones.clone()}
+        for group, agent_names in self.group_map.items():
+            agent_tds = []
+            for agent_name in agent_names:
+                i = self.agent_names.index(agent_name)
 
-            agent_td = TensorDict(
-                source={
-                    "observation": agent_obs,
-                },
-                batch_size=self.batch_size,
-                device=self.device,
-            )
-            if agent_info is not None:
-                agent_td.set("info", agent_info)
-            agent_tds.append(agent_td)
+                agent_obs = self.read_obs(obs[i])
+                agent_info = self.read_info(infos[i])
+                agent_td = TensorDict(
+                    source={
+                        "observation": agent_obs,
+                    },
+                    batch_size=self.batch_size,
+                    device=self.device,
+                )
+                if agent_info is not None:
+                    agent_td.set("info", agent_info)
+                agent_tds.append(agent_td)
 
-        agent_tds = torch.stack(agent_tds, dim=1)
-        if not self.het_specs:
-            agent_tds = agent_tds.to_tensordict()
+            agent_tds = torch.stack(agent_tds, dim=1)
+            if not self.het_specs_map[group]:
+                agent_tds = agent_tds.to_tensordict()
+            source.update({group: agent_tds})
+
         tensordict_out = TensorDict(
-            source={"agents": agent_tds, "done": dones, "terminated": dones.clone()},
+            source=source,
             batch_size=self.batch_size,
             device=self.device,
         )
-
         return tensordict_out
 
     def _step(
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
-        action = tensordict.get(("agents", "action"))
-        action = self.read_action(action)
+        agent_indices = {}
+        action_list = []
+        n_agents = 0
+        for group, agent_names in self.group_map.items():
+            group_action = tensordict.get((group, "action"))
+            group_action_list = list(self.read_action(group_action, group=group))
+            agent_indices.update(
+                {
+                    self.agent_names.index(agent_name): i + n_agents
+                    for i, agent_name in enumerate(agent_names)
+                }
+            )
+            n_agents += len(agent_names)
+            action_list += group_action_list
+        action = [action_list[agent_indices[i]] for i in range(self.n_agents)]
 
         obs, rews, dones, infos = self._env.step(action)
 
         dones = self.read_done(dones)
 
-        agent_tds = []
-        for i in range(self.n_agents):
-            agent_obs = self.read_obs(obs[i])
-            agent_rew = self.read_reward(rews[i])
-            agent_info = self.read_info(infos[i])
+        source = {"done": dones, "terminated": dones.clone()}
+        for group, agent_names in self.group_map.items():
+            agent_tds = []
+            for agent_name in agent_names:
+                i = self.agent_names.index(agent_name)
 
-            agent_td = TensorDict(
-                source={
-                    "observation": agent_obs,
-                    "reward": agent_rew,
-                },
-                batch_size=self.batch_size,
-                device=self.device,
-            )
-            if agent_info is not None:
-                agent_td.set("info", agent_info)
-            agent_tds.append(agent_td)
+                agent_obs = self.read_obs(obs[i])
+                agent_rew = self.read_reward(rews[i])
+                agent_info = self.read_info(infos[i])
 
-        agent_tds = torch.stack(agent_tds, dim=1)
-        if not self.het_specs:
-            agent_tds = agent_tds.to_tensordict()
+                agent_td = TensorDict(
+                    source={
+                        "observation": agent_obs,
+                        "reward": agent_rew,
+                    },
+                    batch_size=self.batch_size,
+                    device=self.device,
+                )
+                if agent_info is not None:
+                    agent_td.set("info", agent_info)
+                agent_tds.append(agent_td)
+
+            agent_tds = torch.stack(agent_tds, dim=1)
+            if not self.het_specs_map[group]:
+                agent_tds = agent_tds.to_tensordict()
+            source.update({group: agent_tds})
+
         tensordict_out = TensorDict(
-            source={"agents": agent_tds, "done": dones, "terminated": dones.clone()},
+            source=source,
             batch_size=self.batch_size,
             device=self.device,
         )
-
         return tensordict_out
 
     def read_obs(
@@ -559,14 +587,10 @@ class VmasWrapper(_EnvWrapper):
         rewards = _selective_unsqueeze(rewards, batch_size=self.batch_size)
         return rewards
 
-    def read_action(self, action):
+    def read_action(self, action, group: str):
         if not self.continuous_actions and not self.categorical_actions:
-            action = self.unbatched_action_spec["agents", "action"].to_categorical(
-                action
-            )
-        agent_actions = []
-        for i in range(self.n_agents):
-            agent_actions.append(action[:, i, ...])
+            action = self.unbatched_action_spec[group, "action"].to_categorical(action)
+        agent_actions = action.unbind(dim=1)
         return agent_actions
 
     def __repr__(self) -> str:
