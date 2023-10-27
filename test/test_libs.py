@@ -1406,6 +1406,7 @@ class TestVmas:
         env.set_seed(0)
         env.reset()
         env.rollout(10)
+        env.close()
 
     @pytest.mark.parametrize(
         "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
@@ -1458,12 +1459,13 @@ class TestVmas:
                     batch_size=batch_size,
                 )
         else:
-            _ = VmasEnv(
+            env = VmasEnv(
                 scenario=scenario_name,
                 num_envs=num_envs,
                 n_agents=n_agents,
                 batch_size=batch_size,
             )
+            env.close()
 
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
@@ -1538,6 +1540,7 @@ class TestVmas:
         for e in [env, wrapped]:
             e.set_seed(0)
             check_env_specs(e, return_contiguous=False if e.het_specs else True)
+            env.close()
             del e
 
     @pytest.mark.parametrize("num_envs", [1, 20])
@@ -1551,6 +1554,7 @@ class TestVmas:
             num_envs=num_envs,
             n_agents=n_agents,
         )
+        env.close()
         assert str(env) == (
             f"{VmasEnv.__name__}(num_envs={num_envs}, n_agents={env.n_agents},"
             f" batch_size={torch.Size((num_envs,))}, device={env.device}) (scenario={scenario_name})"
@@ -1585,6 +1589,7 @@ class TestVmas:
 
         env = ParallelEnv(n_workers, make_vmas)
         tensordict = env.rollout(max_steps=n_rollout_samples)
+        env.close()
 
         assert tensordict.shape == torch.Size(
             [n_workers, list(env.num_envs)[0], n_rollout_samples]
@@ -1636,10 +1641,10 @@ class TestVmas:
             td_reset.set(done_key, tensordict[..., -1].get(("next", done_key)))
         reset = td_reset["_reset"]
         tensordict = env.reset(td_reset)
-        assert not tensordict["done"][reset].all().item()
-        # vmas resets all the agent dimension if only one of the agents needs resetting
-        # thus, here we check that where we did not reset any agent, all agents are still done
-        assert tensordict["done"].all(dim=2)[~reset.any(dim=2)].all().item()
+
+        assert not tensordict["done"][reset].any().item()
+        assert tensordict["done"][~reset].all().item()
+        env.close()
 
     @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
     @pytest.mark.parametrize("first", [0, 1])
@@ -1667,6 +1672,7 @@ class TestVmas:
         env.to(devices[1 - first])
 
         assert env.rollout(max_steps=3).device == devices[1 - first]
+        env.close()
 
     @pytest.mark.parametrize("n_envs", [1, 4])
     @pytest.mark.parametrize("n_workers", [1, 2])
