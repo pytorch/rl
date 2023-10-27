@@ -293,6 +293,9 @@ class VmasWrapper(_EnvWrapper):
     ) -> None:
         # Create and check group map
         self.agent_names = [agent.name for agent in self.agents]
+        self.agent_names_to_indices_map = {
+            agent.name: i for i, agent in enumerate(self.agents)
+        }
         if self.group_map is None:
             self.group_map = self._get_default_group_map(self.agent_names)
         elif isinstance(self.group_map, MarlGroupMapType):
@@ -354,7 +357,7 @@ class VmasWrapper(_EnvWrapper):
         reward_specs = []
         info_specs = []
         for agent_name in self.group_map[group]:
-            agent_index = self.agent_names.index(agent_name)
+            agent_index = self.agent_names_to_indices_map[agent_name]
             agent = self.agents[agent_index]
             action_specs.append(
                 CompositeSpec(
@@ -468,7 +471,7 @@ class VmasWrapper(_EnvWrapper):
         for group, agent_names in self.group_map.items():
             agent_tds = []
             for agent_name in agent_names:
-                i = self.agent_names.index(agent_name)
+                i = self.agent_names_to_indices_map[agent_name]
 
                 agent_obs = self.read_obs(obs[i])
                 agent_info = self.read_info(infos[i])
@@ -507,7 +510,7 @@ class VmasWrapper(_EnvWrapper):
             group_action_list = list(self.read_action(group_action, group=group))
             agent_indices.update(
                 {
-                    self.agent_names.index(agent_name): i + n_agents
+                    self.agent_names_to_indices_map[agent_name]: i + n_agents
                     for i, agent_name in enumerate(agent_names)
                 }
             )
@@ -523,7 +526,7 @@ class VmasWrapper(_EnvWrapper):
         for group, agent_names in self.group_map.items():
             agent_tds = []
             for agent_name in agent_names:
-                i = self.agent_names.index(agent_name)
+                i = self.agent_names_to_indices_map[agent_name]
 
                 agent_obs = self.read_obs(obs[i])
                 agent_rew = self.read_reward(rews[i])
