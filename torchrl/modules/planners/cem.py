@@ -51,7 +51,7 @@ class CEMPlanner(MPCPlannerBase):
         >>> class MyMBEnv(ModelBasedEnvBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
-        ...         self.observation_spec = CompositeSpec(
+        ...         self.state_spec = CompositeSpec(
         ...             next_hidden_observation=UnboundedContinuousTensorSpec((4,))
         ...         )
         ...         self.action_spec = UnboundedContinuousTensorSpec((1,))
