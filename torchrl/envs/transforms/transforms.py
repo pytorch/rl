@@ -2715,8 +2715,7 @@ class CatFrames(ObservationTransform):
         getattr(self, buffer_name).materialize(shape)
         buffer = (
             getattr(self, buffer_name)
-            .to(data.dtype)
-            .to(data.device)
+            .to(dtype=data.dtype, device=data.device)
             .fill_(self.padding_value)
         )
         setattr(self, buffer_name, buffer)
