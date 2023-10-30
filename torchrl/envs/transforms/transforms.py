@@ -2880,7 +2880,7 @@ class CatFrames(ObservationTransform):
                 data0 = [first_val] * (self.N - 1)
                 if self.padding == "constant":
                     data0 = [
-                        torch.ones_like(elt) * self.padding_value for elt in data0[:-1]
+                        torch.full_like(elt, self.padding_value) for elt in data0[:-1]
                     ] + data0[-1:]
                 elif self.padding == "same":
                     pass
