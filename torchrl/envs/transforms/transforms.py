@@ -2628,7 +2628,7 @@ class CatFrames(ObservationTransform):
         "dim must be < 0 to accomodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
     )
-    ACCEPTED_PADDING = {"same", "constant"}
+    ACCEPTED_PADDING = {"same", "constant", "zeros"}
 
     def __init__(
         self,
@@ -2652,6 +2652,14 @@ class CatFrames(ObservationTransform):
         self.dim = dim
         if padding not in self.ACCEPTED_PADDING:
             raise ValueError(f"padding must be one of {self.ACCEPTED_PADDING}")
+        if padding == "zeros":
+            warnings.warn(
+                "Padding option 'zeros' will be deprecated in the future. "
+                "Please use 'constant' padding with padding_value 0 instead.",
+                category=DeprecationWarning,
+            )
+            padding = "constant"
+            padding_value = 0
         self.padding = padding
         self.padding_value = padding_value
         for in_key in self.in_keys:
