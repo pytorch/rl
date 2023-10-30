@@ -1228,7 +1228,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
     td = TensorDict(
         {
             "key": torch.clamp_max(torch.rand(size), max=max_reward1),
-            "obs": torch.tensor(torch.rand(size)),
+            "obs": torch.rand(size),
         },
         batch_size=size,
         device="cpu",
@@ -1242,7 +1242,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
     td = TensorDict(
         {
             "key": torch.clamp(torch.rand(size), min=max_reward1, max=max_reward2),
-            "obs": torch.tensor(torch.rand(size)),
+            "obs": torch.rand(size),
         },
         batch_size=size,
         device="cpu",
@@ -1256,7 +1256,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
     td = TensorDict(
         {
             "key": torch.clamp(torch.rand(size), min=max_reward2, max=max_reward3),
-            "obs": torch.tensor(torch.rand(size)),
+            "obs": torch.rand(size),
         },
         batch_size=size,
         device="cpu",
@@ -1274,7 +1274,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
     td = TensorDict(
         {
             "key": torch.zeros(size),
-            "obs": torch.tensor(torch.rand(size)),
+            "obs": torch.rand(size),
         },
         batch_size=size,
         device="cpu",
