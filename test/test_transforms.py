@@ -742,7 +742,7 @@ class TestCatFrames(TransformBase):
 
     @pytest.mark.parametrize("dim", [-2, -1])
     @pytest.mark.parametrize("N", [3, 4])
-    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    @pytest.mark.parametrize("padding", ["same", "constant"])
     def test_transform_model(self, dim, N, padding):
         # test equivalence between transforms within an env and within a rb
         key1 = "observation"
@@ -796,7 +796,7 @@ class TestCatFrames(TransformBase):
 
     @pytest.mark.parametrize("dim", [-2, -1])
     @pytest.mark.parametrize("N", [3, 4])
-    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    @pytest.mark.parametrize("padding", ["same", "constant"])
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(self, dim, N, padding, rbclass):
         # test equivalence between transforms within an env and within a rb
@@ -833,7 +833,7 @@ class TestCatFrames(TransformBase):
 
     @pytest.mark.parametrize("dim", [-1])
     @pytest.mark.parametrize("N", [3, 4])
-    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    @pytest.mark.parametrize("padding", ["same", "constant"])
     def test_transform_as_inverse(self, dim, N, padding):
         # test equivalence between transforms within an env and within a rb
         in_keys = ["observation", ("next", "observation")]
@@ -1020,6 +1020,30 @@ class TestCatFrames(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for CatFrames")
+
+    @pytest.mark.parametrize("padding_value", [2, 0.5, -1])
+    def test_constant_padding(self, padding_value):
+        key1 = "first_key"
+        N = 4
+        key1_tensor = torch.zeros((1, 1))
+        td = TensorDict({key1: key1_tensor}, [1])
+        cat_frames = CatFrames(
+            N=N,
+            in_keys=key1,
+            out_keys="cat_" + key1,
+            dim=-1,
+            padding="constant",
+            padding_value=padding_value,
+        )
+
+        cat_td = cat_frames._call(td.clone())
+        assert (cat_td.get("cat_first_key") == padding_value).sum() == N - 1
+        cat_td = cat_frames._call(cat_td)
+        assert (cat_td.get("cat_first_key") == padding_value).sum() == N - 2
+        cat_td = cat_frames._call(cat_td)
+        assert (cat_td.get("cat_first_key") == padding_value).sum() == N - 3
+        cat_td = cat_frames._call(cat_td)
+        assert (cat_td.get("cat_first_key") == padding_value).sum() == N - 4
 
 
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
