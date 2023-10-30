@@ -2555,6 +2555,7 @@ class CatFrames(ObservationTransform):
         padding (str, optional): the padding method. One of ``"same"`` or ``"constant"``.
             Defaults to ``"same"``, ie. the first value is used for padding.
         padding_value (float, optional): the value to use for padding if ``padding="constant"``.
+            Defaults to 0.
         as_inverse (bool, optional): if ``True``, the transform is applied as an inverse transform. Defaults to ``False``.
         reset_key (NestedKey, optional): the reset key to be used as partial
             reset indicator. Must be unique. If not provided, defaults to the
