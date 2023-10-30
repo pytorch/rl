@@ -43,7 +43,7 @@ except ImportError as err:
 
 
 class CQLLoss(LossModule):
-    """TorchRL implementation of the CQL loss.
+    """TorchRL implementation of the continuous CQL loss.
 
     Presented in "Conservative Q-Learning for Offline Reinforcement Learning" https://arxiv.org/abs/2006.04779
 
@@ -793,3 +793,128 @@ class CQLLoss(LossModule):
         with torch.no_grad():
             alpha = self.log_alpha.exp()
         return alpha
+
+
+class DiscreteCQLLoss(LossModule):
+    """TorchRL implementation of the discrete CQL loss.
+
+    Presented in "Conservative Q-Learning for Offline Reinforcement Learning" https://arxiv.org/abs/2006.04779
+    """
+
+    @dataclass
+    class _AcceptedKeys:
+        """Maintains default values for all configurable tensordict keys.
+
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values.
+
+        Attributes:
+            action (NestedKey): The input tensordict key where the action is expected.
+                Defaults to ``"advantage"``.
+            value (NestedKey): The input tensordict key where the state value is expected.
+                Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+            state_action_value (NestedKey): The input tensordict key where the
+                state action value is expected.  Defaults to ``"state_action_value"``.
+            priority (NestedKey): The input tensordict key where the target priority is written to.
+                Defaults to ``"td_error"``.
+        """
+
+        action: NestedKey = "action"
+        value: NestedKey = "state_value"
+        state_action_value: NestedKey = "state_action_value"
+        priority: NestedKey = "td_error"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
+
+    default_keys = _AcceptedKeys()
+    default_value_estimator = ValueEstimators.TD0
+
+    def __init__(self):
+        pass
+
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        if self._value_estimator is not None:
+            self._value_estimator.set_keys(
+                value=self._tensor_keys.value,
+                reward=self.tensor_keys.reward,
+                done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
+            )
+
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
+
+        # we will take care of computing the next value inside this module
+        value_net = None
+
+        hp = dict(default_value_kwargs(value_type))
+        hp.update(hyperparams)
+        if value_type is ValueEstimators.TD1:
+            self._value_estimator = TD1Estimator(
+                **hp,
+                value_network=value_net,
+            )
+        elif value_type is ValueEstimators.TD0:
+            self._value_estimator = TD0Estimator(
+                **hp,
+                value_network=value_net,
+            )
+        elif value_type is ValueEstimators.GAE:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type is ValueEstimators.TDLambda:
+            self._value_estimator = TDLambdaEstimator(
+                **hp,
+                value_network=value_net,
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")
+
+        tensor_keys = {
+            "value_target": "value_target",
+            "value": self.tensor_keys.value,
+            "reward": self.tensor_keys.reward,
+            "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
+        }
+        self._value_estimator.set_keys(**tensor_keys)
+
+    @property
+    def device(self) -> torch.device:
+        for p in self.parameters():
+            return p.device
+        raise RuntimeError(
+            "At least one of the networks of CQLLoss must have trainable " "parameters."
+        )
+
+    @property
+    def in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
+            *self.qvalue_network.in_keys,
+        ]
+
+        return list(set(keys))
+
+    @property
+    def out_keys(self):
+        if self._out_keys is None:
+            keys = [
+                "loss_qvalue",
+                "loss_cql",
+            ]
+            self._out_keys = keys
+        return self._out_keys
+
+    @out_keys.setter
+    def out_keys(self, values):
+        self._out_keys = values
