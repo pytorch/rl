@@ -1270,6 +1270,19 @@ def test_max_value_writer(size, batch_size, reward_ranges):
     assert (max_reward2 <= sample.get("key")).all()
     assert len(sample.get("index").unique()) == len(sample.get("index"))
 
+    # Finally, test the case when no obs should be added
+    td = TensorDict(
+        {
+            "key": torch.zeros(size),
+            "obs": torch.tensor(torch.rand(size)),
+        },
+        batch_size=size,
+        device="cpu",
+    )
+    rb.extend(td)
+    sample = rb.sample()
+    assert (sample.get("key") != 0).all()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
