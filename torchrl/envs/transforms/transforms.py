@@ -2894,8 +2894,7 @@ class CatFrames(ObservationTransform):
             elif self.padding == "constant":
                 idx = [slice(None)] * (tensordict.ndim - 1) + [0]
                 data0 = [
-                    torch.ones_like(data[tuple(idx)]).unsqueeze(tensordict.ndim - 1)
-                    * self.padding_value
+                    torch.full_like(data[tuple(idx)], self.padding_value).unsqueeze(tensordict.ndim - 1)
                 ] * (self.N - 1)
             else:
                 # make linter happy. An exception has already been raised
