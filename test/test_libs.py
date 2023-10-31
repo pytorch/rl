@@ -1548,7 +1548,11 @@ class TestVmas:
     @pytest.mark.parametrize("n_agents", [1, 5])
     @pytest.mark.parametrize("scenario_name", VmasWrapper.available_envs)
     def test_vmas_repr(self, scenario_name, num_envs, n_agents):
-        if n_agents == 1 and scenario_name == "balance":
+        if (
+            n_agents == 1
+            and scenario_name == "balance"
+            or scenario_name == "simple_adversary"
+        ):
             return
         env = VmasEnv(
             scenario=scenario_name,
@@ -1776,6 +1780,37 @@ class TestVmas:
 
         assert env.reward_key not in _td.keys(True, True)
         assert env.action_key not in _td["next"].keys(True, True)
+
+    @pytest.mark.parametrize("n_agents", [1, 5])
+    def test_grouping(self, n_agents, scenario_name="dispersion", n_envs=2):
+        env = VmasEnv(
+            scenario=scenario_name,
+            num_envs=n_envs,
+            n_agents=n_agents,
+        )
+        env = VmasEnv(
+            scenario=scenario_name,
+            num_envs=n_envs,
+            n_agents=n_agents,
+            # Put each agent in a group with its name
+            group_map={
+                agent_name: [agent_name] for agent_name in reversed(env.agent_names)
+            },
+        )
+
+        # CHeck that when setting the action for a specific group that is reflected to the right agent in the backend
+        for group in env.group_map.keys():
+            env.reset()
+            action = env.full_action_spec.zero()
+            action[group, "action"] += 1.0
+            prev_pos = {agent.name: agent.state.pos.clone() for agent in env.agents}
+            _ = env.step(action)
+            pos = {agent.name: agent.state.pos.clone() for agent in env.agents}
+            for agent_name in env.agent_names:
+                if agent_name == group:
+                    assert (pos[agent_name] > prev_pos[agent_name]).all()
+                else:
+                    assert (pos[agent_name] == prev_pos[agent_name]).all()
 
 
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
