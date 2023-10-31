@@ -369,7 +369,7 @@ And it is `functorch` and `torch.compile` compatible!
   tensordict = env.reset()
   assert tensordict.device == torch.device("cuda:0")
   ```
-  Other transforms include: reward scaling (`RewardScaling`), shape operations (concatenation of tensors, unsqueezing etc.), contatenation of
+  Other transforms include: reward scaling (`RewardScaling`), shape operations (concatenation of tensors, unsqueezing etc.), concatenation of
   successive operations (`CatFrames`), resizing (`Resize`) and many more.
 
   Unlike other libraries, the transforms are stacked as a list (and not wrapped in each other), which makes it
