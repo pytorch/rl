@@ -369,7 +369,7 @@ And it is `functorch` and `torch.compile` compatible!
   tensordict = env.reset()
   assert tensordict.device == torch.device("cuda:0")
   ```
-  Other transforms include: reward scaling (`RewardScaling`), shape operations (concatenation of tensors, unsqueezing etc.), contatenation of
+  Other transforms include: reward scaling (`RewardScaling`), shape operations (concatenation of tensors, unsqueezing etc.), concatenation of
   successive operations (`CatFrames`), resizing (`Resize`) and many more.
 
   Unlike other libraries, the transforms are stacked as a list (and not wrapped in each other), which makes it
@@ -680,7 +680,7 @@ Internal collaborations to torchrl are welcome! Feel free to fork, submit issues
 You can checkout the detailed contribution guide [here](CONTRIBUTING.md).
 As mentioned above, a list of open contributions can be found in [here](https://github.com/pytorch/rl/issues/509).
 
-Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is commited locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
+Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is committed locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
 
 
 ## Disclaimer
