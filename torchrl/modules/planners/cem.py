@@ -52,7 +52,10 @@ class CEMPlanner(MPCPlannerBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
         ...         self.state_spec = CompositeSpec(
-        ...             next_hidden_observation=UnboundedContinuousTensorSpec((4,))
+        ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
+        ...         )
+        ...         self.observation_spec = CompositeSpec(
+        ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
         ...         )
         ...         self.action_spec = UnboundedContinuousTensorSpec((1,))
         ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))

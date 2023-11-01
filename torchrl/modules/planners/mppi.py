@@ -54,6 +54,9 @@ class MPPIPlanner(MPCPlannerBase):
         ...         self.state_spec = CompositeSpec(
         ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
         ...         )
+        ...         self.observation_spec = CompositeSpec(
+        ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
+        ...         )
         ...         self.action_spec = UnboundedContinuousTensorSpec((1,))
         ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))
         ...
