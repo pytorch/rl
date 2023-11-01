@@ -462,7 +462,7 @@ class VmasWrapper(_EnvWrapper):
             get_rewards=False,
             get_dones=True,
         )
-        dones = self.read_done(dones)
+        dones = self._read_done(dones)
 
         source = {"done": dones, "terminated": dones.clone()}
         for group, agent_names in self.group_map.items():
@@ -470,8 +470,8 @@ class VmasWrapper(_EnvWrapper):
             for agent_name in agent_names:
                 i = self.agent_names_to_indices_map[agent_name]
 
-                agent_obs = self.read_obs(obs[i])
-                agent_info = self.read_info(infos[i])
+                agent_obs = self._read_obs(obs[i])
+                agent_info = self._read_info(infos[i])
                 agent_td = TensorDict(
                     source={
                         "observation": agent_obs,
@@ -504,7 +504,7 @@ class VmasWrapper(_EnvWrapper):
         n_agents = 0
         for group, agent_names in self.group_map.items():
             group_action = tensordict.get((group, "action"))
-            group_action_list = list(self.read_action(group_action, group=group))
+            group_action_list = list(self._read_action(group_action, group=group))
             agent_indices.update(
                 {
                     self.agent_names_to_indices_map[agent_name]: i + n_agents
@@ -517,7 +517,7 @@ class VmasWrapper(_EnvWrapper):
 
         obs, rews, dones, infos = self._env.step(action)
 
-        dones = self.read_done(dones)
+        dones = self._read_done(dones)
 
         source = {"done": dones, "terminated": dones.clone()}
         for group, agent_names in self.group_map.items():
@@ -525,9 +525,9 @@ class VmasWrapper(_EnvWrapper):
             for agent_name in agent_names:
                 i = self.agent_names_to_indices_map[agent_name]
 
-                agent_obs = self.read_obs(obs[i])
-                agent_rew = self.read_reward(rews[i])
-                agent_info = self.read_info(infos[i])
+                agent_obs = self._read_obs(obs[i])
+                agent_rew = self._read_reward(rews[i])
+                agent_info = self._read_info(infos[i])
 
                 agent_td = TensorDict(
                     source={
@@ -553,17 +553,17 @@ class VmasWrapper(_EnvWrapper):
         )
         return tensordict_out
 
-    def read_obs(
+    def _read_obs(
         self, observations: Union[Dict, torch.Tensor]
     ) -> Union[Dict, torch.Tensor]:
         if isinstance(observations, torch.Tensor):
             return _selective_unsqueeze(observations, batch_size=self.batch_size)
         return TensorDict(
-            source={key: self.read_obs(value) for key, value in observations.items()},
+            source={key: self._read_obs(value) for key, value in observations.items()},
             batch_size=self.batch_size,
         )
 
-    def read_info(self, infos: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def _read_info(self, infos: Dict[str, torch.Tensor]) -> torch.Tensor:
         if len(infos) == 0:
             return None
         infos = TensorDict(
@@ -579,15 +579,15 @@ class VmasWrapper(_EnvWrapper):
 
         return infos
 
-    def read_done(self, done):
+    def _read_done(self, done):
         done = _selective_unsqueeze(done, batch_size=self.batch_size)
         return done
 
-    def read_reward(self, rewards):
+    def _read_reward(self, rewards):
         rewards = _selective_unsqueeze(rewards, batch_size=self.batch_size)
         return rewards
 
-    def read_action(self, action, group: str):
+    def _read_action(self, action, group: str):
         if not self.continuous_actions and not self.categorical_actions:
             action = self.unbatched_action_spec[group, "action"].to_categorical(action)
         agent_actions = action.unbind(dim=1)
