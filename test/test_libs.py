@@ -1524,13 +1524,13 @@ class TestVmas:
     def test_vmas_spec_rollout(
         self, scenario_name, num_envs, n_agents, continuous_actions
     ):
-        env = VmasEnv(
+        vmas_env = VmasEnv(
             scenario=scenario_name,
             num_envs=num_envs,
             n_agents=n_agents,
             continuous_actions=continuous_actions,
         )
-        wrapped = VmasWrapper(
+        vmas_wrapped_env = VmasWrapper(
             vmas.make_env(
                 scenario=scenario_name,
                 num_envs=num_envs,
@@ -1538,11 +1538,10 @@ class TestVmas:
                 continuous_actions=continuous_actions,
             )
         )
-        for e in [env, wrapped]:
-            e.set_seed(0)
-            check_env_specs(e, return_contiguous=False if e.het_specs else True)
+        for env in [vmas_env, vmas_wrapped_env]:
+            env.set_seed(0)
+            check_env_specs(env, return_contiguous=False if env.het_specs else True)
             env.close()
-            del e
 
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
@@ -1802,7 +1801,7 @@ class TestVmas:
         for group in env.group_map.keys():
             env.reset()
             action = env.full_action_spec.zero()
-            action[group, "action"] += 1.0
+            action.set((group, "action"), action.get((group, "action")) + 1.0)
             prev_pos = {agent.name: agent.state.pos.clone() for agent in env.agents}
             env.step(action)
             pos = {agent.name: agent.state.pos.clone() for agent in env.agents}

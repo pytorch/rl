@@ -263,10 +263,7 @@ class VmasWrapper(_EnvWrapper):
             agent_name_split = agent_name.split("_")
             if len(agent_name_split) == 1:
                 follows_convention = False
-            try:
-                int(agent_name_split[-1])
-            except ValueError:
-                follows_convention = False
+            follows_convention = follows_convention and agent_name_split[-1].isdigit()
 
             if not follows_convention:
                 break
@@ -324,7 +321,7 @@ class VmasWrapper(_EnvWrapper):
                 group_observation_spec, LazyStackedCompositeSpec
             ) or isinstance(group_action_spec, LazyStackedCompositeSpec)
             self.het_specs_map[group] = group_het_specs
-            self.het_specs += group_het_specs
+            self.het_specs = self.het_specs or group_het_specs
 
         self.unbatched_done_spec = CompositeSpec(
             {
