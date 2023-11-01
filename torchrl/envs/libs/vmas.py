@@ -598,7 +598,7 @@ class VmasWrapper(_EnvWrapper):
         rewards = _selective_unsqueeze(rewards, batch_size=self.batch_size)
         return rewards
 
-    def _read_action(self, action, group: str):
+    def _read_action(self, action, group: str = "agents"):
         if not self.continuous_actions and not self.categorical_actions:
             action = self.unbatched_action_spec[group, "action"].to_categorical(action)
         agent_actions = action.unbind(dim=1)
