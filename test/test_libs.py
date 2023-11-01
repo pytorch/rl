@@ -1647,8 +1647,8 @@ class TestVmas:
         reset = td_reset["_reset"]
         tensordict = env.reset(td_reset)
 
-        assert not tensordict["done"][reset].any().item()
-        assert tensordict["done"][~reset].all().item()
+        assert not tensordict.get("done")[reset].any()
+        assert tensordict.get("done")[~reset].all()
         env.close()
 
     @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
@@ -1798,13 +1798,13 @@ class TestVmas:
             },
         )
 
-        # CHeck that when setting the action for a specific group that is reflected to the right agent in the backend
+        # Check that when setting the action for a specific group, it is reflected to the right agent in the backend
         for group in env.group_map.keys():
             env.reset()
             action = env.full_action_spec.zero()
             action[group, "action"] += 1.0
             prev_pos = {agent.name: agent.state.pos.clone() for agent in env.agents}
-            _ = env.step(action)
+            env.step(action)
             pos = {agent.name: agent.state.pos.clone() for agent in env.agents}
             for agent_name in env.agent_names:
                 if agent_name == group:

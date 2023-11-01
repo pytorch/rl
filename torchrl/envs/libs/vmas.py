@@ -123,14 +123,14 @@ class VmasWrapper(_EnvWrapper):
 
     Args:
         env (``vmas.simulator.environment.environment.Environment``): the vmas environment to wrap.
-        categorical_actions (bool, optional): if the enviornments actions are discrete, whether to transform
-            them to categorical or one-hot.`
+        categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
+            them to categorical or one-hot.
         group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to group agents in tensordicts for
-            input/output. By default, if agent names follow the "{name}_{int}"
-            convention, they will be grouped by "{name}", if they do not follow this convention, they will be all put
-            in one group named "agents".
+            input/output. By default, if the agent names follow the ``"<name>_<int>"``
+            convention, they will be grouped by ``"<name>"``. If they do not follow this convention, they will be all put
+            in one group named ``"agents"``.
             Otherwise, a group map can be specified or selected from some premade options.
-            See :class:`torchrl.envs.utils.MarlGroupMapType` for more info.
+            See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
 
     Examples:
         >>>  env = VmasWrapper(
@@ -252,14 +252,14 @@ class VmasWrapper(_EnvWrapper):
         return env
 
     def _get_default_group_map(self, agent_names: List[str]):
-        # This function performs the default grouping in vmas
-        # Agents with names "str_int" will be grouped in group name "str"
-        # If any of the agents to not follow the naming convention, we fall back
-        # to all agents in one group named "agents"
+        # This function performs the default grouping in vmas.
+        # Agents with names "<name>_<int>" will be grouped in group name "<name>".
+        # If any of the agents does not follow the naming convention, we fall back
+        # back on having all agents in one group named "agents".
         group_map = {}
         follows_convention = True
         for agent_name in agent_names:
-            # See if the agent follows the convention "name_int"
+            # See if the agent follows the convention "<name>_<int>"
             agent_name_split = agent_name.split("_")
             if len(agent_name_split) == 1:
                 follows_convention = False
