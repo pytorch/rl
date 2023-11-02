@@ -6,19 +6,22 @@ import math
 import warnings
 from dataclasses import dataclass
 
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
+import torch.nn as nn
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import NestedKey
+from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
 
 from torchrl.data import CompositeSpec
+from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
-from torchrl.modules import ProbabilisticActor
+from torchrl.modules import ProbabilisticActor, QValueActor
+from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -27,6 +30,7 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
+
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
@@ -795,6 +799,7 @@ class CQLLoss(LossModule):
         return alpha
 
 
+# DQNLoss
 class DiscreteCQLLoss(LossModule):
     """TorchRL implementation of the discrete CQL loss.
 
@@ -820,8 +825,7 @@ class DiscreteCQLLoss(LossModule):
         """
 
         action: NestedKey = "action"
-        value: NestedKey = "state_value"
-        state_action_value: NestedKey = "state_action_value"
+        action_value: NestedKey = "action_value"
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
@@ -829,18 +833,82 @@ class DiscreteCQLLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
+    out_keys = [
+        "loss",
+        "cql_loss",
+    ]
 
-    def __init__(self):
-        pass
+    def __init__(
+        self,
+        value_network: Union[QValueActor, nn.Module],
+        *,
+        loss_function: Optional[str] = "l2",
+        delay_value: bool = True,
+        gamma: float = None,
+        action_space=None,
+        priority_key: str = None,
+    ) -> None:
+        super().__init__()
+        self._in_keys = None
+        self._set_deprecated_ctor_keys(priority=priority_key)
+        self.delay_value = delay_value
+        value_network = ensure_tensordict_compatible(
+            module=value_network,
+            wrapper_type=QValueActor,
+            action_space=action_space,
+        )
+
+        self.convert_to_functional(
+            value_network,
+            "value_network",
+            create_target_params=self.delay_value,
+        )
+
+        self.value_network_in_keys = value_network.in_keys
+
+        self.loss_function = loss_function
+        if action_space is None:
+            # infer from value net
+            try:
+                action_space = value_network.spec
+            except AttributeError:
+                # let's try with action_space then
+                try:
+                    action_space = value_network.action_space
+                except AttributeError:
+                    raise ValueError(self.ACTION_SPEC_ERROR)
+        if action_space is None:
+            warnings.warn(
+                "action_space was not specified. DQNLoss will default to 'one-hot'."
+                "This behaviour will be deprecated soon and a space will have to be passed."
+                "Check the DQNLoss documentation to see how to pass the action space. "
+            )
+            action_space = "one-hot"
+        self.action_space = _find_action_space(action_space)
+
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
+            self.gamma = gamma
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                value=self._tensor_keys.value,
-                reward=self.tensor_keys.reward,
-                done=self.tensor_keys.done,
-                terminated=self.tensor_keys.terminated,
+                value=self._tensor_keys.action_value,
+                reward=self._tensor_keys.reward,
+                done=self._tensor_keys.done,
+                terminated=self._tensor_keys.terminated,
             )
+        self._set_in_keys()
+
+    def _set_in_keys(self):
+        in_keys = {
+            unravel_key(("next", self.tensor_keys.reward)),
+            unravel_key(("next", self.tensor_keys.done)),
+            unravel_key(("next", self.tensor_keys.terminated)),
+            *self.value_network.in_keys,
+            *[unravel_key(("next", key)) for key in self.value_network.in_keys],
+        }
+        self._in_keys = sorted(in_keys, key=str)
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
@@ -876,7 +944,7 @@ class DiscreteCQLLoss(LossModule):
 
         tensor_keys = {
             "value_target": "value_target",
-            "value": self.tensor_keys.value,
+            "value": self.tensor_keys.action_value,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
             "terminated": self.tensor_keys.terminated,
@@ -893,28 +961,89 @@ class DiscreteCQLLoss(LossModule):
 
     @property
     def in_keys(self):
-        keys = [
-            self.tensor_keys.action,
-            ("next", self.tensor_keys.reward),
-            ("next", self.tensor_keys.done),
-            ("next", self.tensor_keys.terminated),
-            *self.actor_network.in_keys,
-            *[("next", key) for key in self.actor_network.in_keys],
-            *self.qvalue_network.in_keys,
-        ]
+        if self._in_keys is None:
+            self._set_in_keys()
+        return self._in_keys
 
-        return list(set(keys))
+    @in_keys.setter
+    def in_keys(self, values):
+        self._in_keys = values
+
+    @dispatch
+    def forward(self, tensordict: TensorDictBase) -> TensorDict:
+        """Computes the DQN loss given a tensordict sampled from the replay buffer.
+
+        This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
+            a priority to items in the tensordict.
+
+        Args:
+            tensordict (TensorDictBase): a tensordict with keys ["action"] and the in_keys of
+                the value network (observations, "done", "terminated", "reward" in a "next" tensordict).
+
+        Returns:
+            a tensor containing the DQN loss.
+
+        """
+        td_copy = tensordict.clone(False)
+        self.value_network(
+            td_copy,
+            params=self.value_network_params,
+        )
+
+        action = tensordict.get(self.tensor_keys.action)
+        pred_val = td_copy.get(self.tensor_keys.action_value)
+
+        if self.action_space == "categorical":
+            if action.shape != pred_val.shape:
+                # unsqueeze the action if it lacks on trailing singleton dim
+                action = action.unsqueeze(-1)
+            pred_val_index = torch.gather(pred_val, -1, index=action).squeeze(-1)
+        else:
+            action = action.to(torch.float)
+            pred_val_index = (pred_val * action).sum(-1)
+
+        cql_loss = self.cql_loss(pred_val, action)
+
+        # missing state value key
+        next_td = tensordict.get("next")
+        self.value_network(
+            next_td,
+            params=self._cached_detached_value_params,
+        )
+        td_copy.set(
+            ("next", self.tensor_keys.action_value),
+            next_td["action_value"].max(1)[0].unsqueeze(-1),
+        )
+        target_value = self.value_estimator.value_estimate(
+            td_copy,
+        ).squeeze(-1)
+
+        with torch.no_grad():
+            priority_tensor = (pred_val_index - target_value).pow(2)
+            priority_tensor = priority_tensor.unsqueeze(-1)
+        if tensordict.device is not None:
+            priority_tensor = priority_tensor.to(tensordict.device)
+
+        tensordict.set(
+            self.tensor_keys.priority,
+            priority_tensor,
+            inplace=True,
+        )
+        loss = distance_loss(pred_val_index, target_value, self.loss_function)
+
+        # add cql loss
+        loss = loss.mean() * 0.5 + cql_loss
+
+        return TensorDict({"loss": loss, "cql_loss": cql_loss}, [])
 
     @property
-    def out_keys(self):
-        if self._out_keys is None:
-            keys = [
-                "loss_qvalue",
-                "loss_cql",
-            ]
-            self._out_keys = keys
-        return self._out_keys
+    @_cache_values
+    def _cached_detached_value_params(self):
+        return self.value_network_params.detach()
 
-    @out_keys.setter
-    def out_keys(self, values):
-        self._out_keys = values
+    def cql_loss(self, q_values, current_action):
+        """Computes the CQL loss for a batch of Q-values and one-hot encoded actions."""
+        logsumexp = torch.logsumexp(q_values, dim=1, keepdim=True)
+        q_a = (q_values * current_action).sum(dim=1, keepdim=True)
+
+        return (logsumexp - q_a).mean()

@@ -93,6 +93,10 @@ class EGreedyModule(TensorDictModuleBase):
         action_key: Optional[NestedKey] = "action",
         action_mask_key: Optional[NestedKey] = None,
     ):
+        if not isinstance(eps_init, float):
+            print("Warning: eps_init should be a float.")
+        if eps_end > eps_init:
+            print("Warning: eps should decrease over time or be constant.")
         self.action_key = action_key
         self.action_mask_key = action_mask_key
         in_keys = [self.action_key]
@@ -105,8 +109,6 @@ class EGreedyModule(TensorDictModuleBase):
 
         self.register_buffer("eps_init", torch.tensor([eps_init]))
         self.register_buffer("eps_end", torch.tensor([eps_end]))
-        if self.eps_end > self.eps_init:
-            raise RuntimeError("eps should decrease over time or be constant")
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
 
