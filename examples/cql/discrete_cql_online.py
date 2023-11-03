@@ -138,7 +138,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 q_loss.backward()
                 optimizer.step()
                 q_losses.append(q_loss.item())
-                cql_loss.append(loss_dict["cql_loss"].item())
+                cql_loss.append(loss_dict["loss_cql"].item())
 
                 # Update target params
                 target_net_updater.step()

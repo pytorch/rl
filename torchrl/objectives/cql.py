@@ -831,7 +831,9 @@ class DiscreteCQLLoss(LossModule):
         """
 
         action: NestedKey = "action"
-        value: NestedKey = "state_value"
+        value_target: NestedKey = "value_target"
+        value: NestedKey = "chosen_action_value"
+        action_value: NestedKey = "action_value"
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
@@ -841,7 +843,7 @@ class DiscreteCQLLoss(LossModule):
     default_value_estimator = ValueEstimators.TD0
     out_keys = [
         "loss",
-        "cql_loss",
+        "loss_cql",
     ]
 
     def __init__(
@@ -899,6 +901,7 @@ class DiscreteCQLLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
+                value_target=self.tensor_keys.value_target,
                 value=self._tensor_keys.value,
                 reward=self._tensor_keys.reward,
                 done=self._tensor_keys.done,
@@ -908,6 +911,7 @@ class DiscreteCQLLoss(LossModule):
 
     def _set_in_keys(self):
         in_keys = {
+            self.tensor_keys.action,
             unravel_key(("next", self.tensor_keys.reward)),
             unravel_key(("next", self.tensor_keys.done)),
             unravel_key(("next", self.tensor_keys.terminated)),
@@ -922,7 +926,7 @@ class DiscreteCQLLoss(LossModule):
         self.value_type = value_type
 
         # we will take care of computing the next value inside this module
-        value_net = None
+        value_net = self.value_network
 
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
@@ -997,7 +1001,7 @@ class DiscreteCQLLoss(LossModule):
         )
 
         action = tensordict.get(self.tensor_keys.action)
-        pred_val = td_copy.get(self.tensor_keys.value)
+        pred_val = td_copy.get(self.tensor_keys.action_value)
 
         if self.action_space == "categorical":
             if action.shape != pred_val.shape:
@@ -1011,18 +1015,11 @@ class DiscreteCQLLoss(LossModule):
         cql_loss = self.cql_loss(pred_val, action)
 
         # calculate target value
-        next_td = tensordict.get("next")
-        self.value_network(
-            next_td,
-            params=self._cached_detached_value_params,
-        )
-        td_copy.set(
-            ("next", self.tensor_keys.value),
-            next_td[self.tensor_keys.value].max(1)[0].unsqueeze(-1),
-        )
-        target_value = self.value_estimator.value_estimate(
-            td_copy,
-        ).squeeze(-1)
+        with torch.no_grad():
+            target_value = self.value_estimator.value_estimate(
+                td_copy,
+                target_params=self._cached_detached_target_value_params,
+            ).squeeze(-1)
 
         with torch.no_grad():
             priority_tensor = (pred_val_index - target_value).pow(2)
@@ -1035,21 +1032,21 @@ class DiscreteCQLLoss(LossModule):
             priority_tensor,
             inplace=True,
         )
-        loss = distance_loss(pred_val_index, target_value, self.loss_function)
+        loss = distance_loss(pred_val_index, target_value, self.loss_function).mean()
 
         # add cql loss
-        loss = loss.mean() * 0.5 + cql_loss
+        loss = loss * 0.5 + cql_loss
 
-        return TensorDict({"loss": loss, "cql_loss": cql_loss}, [])
+        return TensorDict({"loss": loss, "loss_cql": cql_loss.item()}, [])
 
     @property
     @_cache_values
-    def _cached_detached_value_params(self):
-        return self.value_network_params.detach()
+    def _cached_detached_target_value_params(self):
+        return self.target_value_network_params.detach()
 
     def cql_loss(self, q_values, current_action):
         """Computes the CQL loss for a batch of Q-values and one-hot encoded actions."""
-        logsumexp = torch.logsumexp(q_values, dim=1, keepdim=True)
-        q_a = (q_values * current_action).sum(dim=1, keepdim=True)
+        logsumexp = torch.logsumexp(q_values, dim=-1, keepdim=True)
+        q_a = (q_values * current_action).sum(dim=-1, keepdim=True)
 
         return (logsumexp - q_a).mean()
