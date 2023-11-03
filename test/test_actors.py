@@ -800,7 +800,7 @@ def test_actorcritic(device):
     ) == len(policy_params)
 
 
-def test_composite_actor():
+def test_compound_actor():
     class Module(nn.Module):
         def forward(self, x):
             return x[..., :3], x[..., 3:6], x[..., 6:]

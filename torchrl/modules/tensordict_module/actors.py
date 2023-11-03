@@ -214,7 +214,7 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
     :class:`tensordict.nn.CompositeDistribution` class. This distribution takes
     a tensordict as input (typically `"params"`) and reads it as a whole: the
     content of this tensordict is the input to the distributions contained in the
-    composite one.
+    compound one.
 
     Examples:
         >>> from tensordict import TensorDict
