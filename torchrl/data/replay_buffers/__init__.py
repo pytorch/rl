@@ -23,4 +23,9 @@ from .storages import (
     Storage,
     TensorStorage,
 )
-from .writers import RoundRobinWriter, TensorDictRoundRobinWriter, Writer
+from .writers import (
+    RoundRobinWriter,
+    TensorDictMaxValueWriter,
+    TensorDictRoundRobinWriter,
+    Writer,
+)

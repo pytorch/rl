@@ -17,3 +17,4 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
+    - cython<3

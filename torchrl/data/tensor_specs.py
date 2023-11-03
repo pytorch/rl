@@ -384,7 +384,7 @@ class ContinuousBox(Box):
     @property
     def maximum(self):
         warnings.warn(
-            f"{type(self)}.maximum is going to be deprecated in favour of {type(self)}.low",
+            f"{type(self)}.maximum is going to be deprecated in favour of {type(self)}.high",
             category=DeprecationWarning,
         )
         return self._high.to(self.device)
@@ -1565,7 +1565,9 @@ class BoundedTensorSpec(TensorSpec):
                 raise RuntimeError(shape_err_msg)
         self.shape = shape
 
-        super().__init__(shape, ContinuousBox(low, high), device, dtype, "continuous")
+        super().__init__(
+            shape, ContinuousBox(low, high, device=device), device, dtype, "continuous"
+        )
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
@@ -1782,7 +1784,10 @@ class UnboundedContinuousTensorSpec(TensorSpec):
 
         dtype, device = _default_dtype_and_device(dtype, device)
         box = (
-            ContinuousBox(torch.tensor(-np.inf), torch.tensor(np.inf))
+            ContinuousBox(
+                torch.tensor(-np.inf, device=device).expand(shape),
+                torch.tensor(np.inf, device=device).expand(shape),
+            )
             if shape == _DEFAULT_SHAPE
             else None
         )
@@ -3254,19 +3259,16 @@ class CompositeSpec(TensorSpec):
 
     def __getitem__(self, idx):
         """Indexes the current CompositeSpec based on the provided index."""
-        if (
-            isinstance(idx, str)
-            or isinstance(idx, tuple)
-            and all(isinstance(item, str) for item in idx)
-        ):
-            if isinstance(idx, tuple) and len(idx) > 1:
+        if isinstance(idx, (str, tuple)):
+            idx_unravel = unravel_key(idx)
+        else:
+            idx_unravel = ()
+        if idx_unravel:
+            if isinstance(idx_unravel, tuple):
                 return self[idx[0]][idx[1:]]
-            elif isinstance(idx, tuple):
-                return self[idx[0]]
-
-            if idx in {"shape", "device", "dtype", "space"}:
-                raise AttributeError(f"CompositeSpec has no key {idx}")
-            return self._specs[idx]
+            if idx_unravel in {"shape", "device", "dtype", "space"}:
+                raise AttributeError(f"CompositeSpec has no key {idx_unravel}")
+            return self._specs[idx_unravel]
 
         indexed_shape = _shape_indexing(self.shape, idx)
         indexed_specs = {}
@@ -3422,9 +3424,7 @@ class CompositeSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         _dict = {
-            key: self[key].rand(shape)
-            for key in self.keys(True)
-            if isinstance(key, str) and self[key] is not None
+            key: self[key].rand(shape) for key in self.keys() if self[key] is not None
         }
         return TensorDict(
             _dict,

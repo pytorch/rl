@@ -15,6 +15,7 @@ from_pixels: True
 env_per_collector: 8
 num_workers: 8
 collector_device: cuda:1
+model_device: cuda:0
 frames_per_batch: 800
 optim_steps_per_batch: 80
 record_interval: 30
