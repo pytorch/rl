@@ -94,9 +94,9 @@ class EGreedyModule(TensorDictModuleBase):
         action_mask_key: Optional[NestedKey] = None,
     ):
         if not isinstance(eps_init, float):
-            print("Warning: eps_init should be a float.")
+            warnings.warn("eps_init should be a float.")
         if eps_end > eps_init:
-            print("Warning: eps should decrease over time or be constant.")
+            raise RuntimeError("eps should decrease over time or be constant")
         self.action_key = action_key
         self.action_mask_key = action_mask_key
         in_keys = [self.action_key]
