@@ -818,14 +818,20 @@ class DiscreteCQLLoss(LossModule):
                 Defaults to ``"advantage"``.
             value (NestedKey): The input tensordict key where the state value is expected.
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
-            state_action_value (NestedKey): The input tensordict key where the
-                state action value is expected.  Defaults to ``"state_action_value"``.
             priority (NestedKey): The input tensordict key where the target priority is written to.
                 Defaults to ``"td_error"``.
+            reward (NestedKey): The input tensordict key where the reward is expected.
+                Will be used for the underlying value estimator. Defaults to ``"reward"``.
+            done (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done. Will be used for the underlying value estimator.
+                Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         action: NestedKey = "action"
-        action_value: NestedKey = "action_value"
+        value: NestedKey = "state_value"
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
@@ -879,9 +885,9 @@ class DiscreteCQLLoss(LossModule):
                     raise ValueError(self.ACTION_SPEC_ERROR)
         if action_space is None:
             warnings.warn(
-                "action_space was not specified. DQNLoss will default to 'one-hot'."
+                "action_space was not specified. DiscreteCQLLoss will default to 'one-hot'."
                 "This behaviour will be deprecated soon and a space will have to be passed."
-                "Check the DQNLoss documentation to see how to pass the action space. "
+                "Check the DiscreteCQLLoss documentation to see how to pass the action space. "
             )
             action_space = "one-hot"
         self.action_space = _find_action_space(action_space)
@@ -893,7 +899,7 @@ class DiscreteCQLLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                value=self._tensor_keys.action_value,
+                value=self._tensor_keys.value,
                 reward=self._tensor_keys.reward,
                 done=self._tensor_keys.done,
                 terminated=self._tensor_keys.terminated,
@@ -944,7 +950,7 @@ class DiscreteCQLLoss(LossModule):
 
         tensor_keys = {
             "value_target": "value_target",
-            "value": self.tensor_keys.action_value,
+            "value": self.tensor_keys.value,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
             "terminated": self.tensor_keys.terminated,
@@ -971,7 +977,7 @@ class DiscreteCQLLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
-        """Computes the DQN loss given a tensordict sampled from the replay buffer.
+        """Computes the (DQN) CQL loss given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
@@ -981,7 +987,7 @@ class DiscreteCQLLoss(LossModule):
                 the value network (observations, "done", "terminated", "reward" in a "next" tensordict).
 
         Returns:
-            a tensor containing the DQN loss.
+            a tensor containing the CQL loss.
 
         """
         td_copy = tensordict.clone(False)
@@ -991,7 +997,7 @@ class DiscreteCQLLoss(LossModule):
         )
 
         action = tensordict.get(self.tensor_keys.action)
-        pred_val = td_copy.get(self.tensor_keys.action_value)
+        pred_val = td_copy.get(self.tensor_keys.value)
 
         if self.action_space == "categorical":
             if action.shape != pred_val.shape:
@@ -1004,15 +1010,15 @@ class DiscreteCQLLoss(LossModule):
 
         cql_loss = self.cql_loss(pred_val, action)
 
-        # missing state value key
+        # calculate target value
         next_td = tensordict.get("next")
         self.value_network(
             next_td,
             params=self._cached_detached_value_params,
         )
         td_copy.set(
-            ("next", self.tensor_keys.action_value),
-            next_td["action_value"].max(1)[0].unsqueeze(-1),
+            ("next", self.tensor_keys.value),
+            next_td[self.tensor_keys.value].max(1)[0].unsqueeze(-1),
         )
         target_value = self.value_estimator.value_estimate(
             td_copy,

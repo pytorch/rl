@@ -91,7 +91,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_rollout_steps = cfg.env.max_episode_steps
     eval_iter = cfg.logger.eval_iter
     frames_per_batch = cfg.collector.frames_per_batch
-    update_counter = 0
 
     sampling_start = time.time()
     for tensordict in collector:
@@ -119,9 +118,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 cql_loss,
             ) = ([], [])
             for _ in range(num_updates):
-
-                # Update actor every delayed_updates
-                update_counter += 1
 
                 # Sample from replay buffer
                 sampled_tensordict = replay_buffer.sample()

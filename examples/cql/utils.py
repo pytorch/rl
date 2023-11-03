@@ -240,7 +240,6 @@ def make_discretecql_model(cfg, train_env, eval_env, device="cpu"):
         qvalue_module(td)
 
     del td
-    # eval_env.close()
     greedy_module = EGreedyModule(
         annealing_num_steps=cfg.collector.annealing_frames,
         eps_init=cfg.collector.eps_start,
