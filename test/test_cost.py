@@ -5183,12 +5183,8 @@ class TestDiscreteCQL(LossModuleTestBase):
             action_spec = OneHotDiscreteTensorSpec(action_dim)
         elif action_spec_type == "categorical":
             action_spec = DiscreteTensorSpec(action_dim)
-        # elif action_spec_type == "nd_bounded":
-        #     action_spec = BoundedTensorSpec(
-        #         -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
-        #     )
         else:
-            raise ValueError(f"Wrong {action_spec_type}")
+            raise ValueError(f"Wrong action spec type: {action_spec_type}")
 
         module = nn.Linear(obs_dim, action_dim)
         if is_nn_module:

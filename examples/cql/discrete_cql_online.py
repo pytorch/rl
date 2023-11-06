@@ -77,7 +77,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     optimizer = make_cql_optimizer(cfg, loss_module)
 
     # Main loop
-    start_time = time.time()
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
@@ -92,7 +91,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_iter = cfg.logger.eval_iter
     frames_per_batch = cfg.collector.frames_per_batch
 
-    sampling_start = time.time()
+    start_time = sampling_start = time.time()
     for tensordict in collector:
         sampling_time = time.time() - sampling_start
 
