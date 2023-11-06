@@ -5184,7 +5184,7 @@ class TestDiscreteCQL(LossModuleTestBase):
         elif action_spec_type == "categorical":
             action_spec = DiscreteTensorSpec(action_dim)
         else:
-            raise ValueError(f"Wrong {action_spec_type}")
+            raise ValueError(f"Wrong action spec type: {action_spec_type}")
 
         module = nn.Linear(obs_dim, action_dim)
         if is_nn_module:
