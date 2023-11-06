@@ -384,7 +384,7 @@ class ContinuousBox(Box):
     @property
     def maximum(self):
         warnings.warn(
-            f"{type(self)}.maximum is going to be deprecated in favour of {type(self)}.low",
+            f"{type(self)}.maximum is going to be deprecated in favour of {type(self)}.high",
             category=DeprecationWarning,
         )
         return self._high.to(self.device)

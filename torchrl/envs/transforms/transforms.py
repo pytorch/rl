@@ -2552,8 +2552,10 @@ class CatFrames(ObservationTransform):
             to be concatenated. Defaults to ["pixels"].
         out_keys (sequence of NestedKey, optional): keys pointing to where the output
             has to be written. Defaults to the value of `in_keys`.
-        padding (str, optional): the padding method. One of ``"same"`` or ``"zeros"``.
-            Defaults to ``"same"``, ie. the first value is uesd for padding.
+        padding (str, optional): the padding method. One of ``"same"`` or ``"constant"``.
+            Defaults to ``"same"``, ie. the first value is used for padding.
+        padding_value (float, optional): the value to use for padding if ``padding="constant"``.
+            Defaults to 0.
         as_inverse (bool, optional): if ``True``, the transform is applied as an inverse transform. Defaults to ``False``.
         reset_key (NestedKey, optional): the reset key to be used as partial
             reset indicator. Must be unique. If not provided, defaults to the
@@ -2627,7 +2629,7 @@ class CatFrames(ObservationTransform):
         "dim must be < 0 to accomodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
     )
-    ACCEPTED_PADDING = {"same", "zeros"}
+    ACCEPTED_PADDING = {"same", "constant", "zeros"}
 
     def __init__(
         self,
@@ -2636,6 +2638,7 @@ class CatFrames(ObservationTransform):
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
         padding="same",
+        padding_value=0,
         as_inverse=False,
         reset_key: NestedKey | None = None,
     ):
@@ -2650,7 +2653,16 @@ class CatFrames(ObservationTransform):
         self.dim = dim
         if padding not in self.ACCEPTED_PADDING:
             raise ValueError(f"padding must be one of {self.ACCEPTED_PADDING}")
+        if padding == "zeros":
+            warnings.warn(
+                "Padding option 'zeros' will be deprecated in the future. "
+                "Please use 'constant' padding with padding_value 0 instead.",
+                category=DeprecationWarning,
+            )
+            padding = "constant"
+            padding_value = 0
         self.padding = padding
+        self.padding_value = padding_value
         for in_key in self.in_keys:
             buffer_name = f"_cat_buffers_{in_key}"
             self.register_buffer(
@@ -2701,7 +2713,11 @@ class CatFrames(ObservationTransform):
         shape[self.dim] = d * self.N
         shape = torch.Size(shape)
         getattr(self, buffer_name).materialize(shape)
-        buffer = getattr(self, buffer_name).to(data.dtype).to(data.device).zero_()
+        buffer = (
+            getattr(self, buffer_name)
+            .to(dtype=data.dtype, device=data.device)
+            .fill_(self.padding_value)
+        )
         setattr(self, buffer_name, buffer)
         return buffer
 
@@ -2745,11 +2761,11 @@ class CatFrames(ObservationTransform):
                         buffer.copy_(data_reset.repeat(shape).clone())
                     else:
                         buffer[_reset] = data_reset.repeat(shape).clone()
-                elif self.padding == "zeros":
+                elif self.padding == "constant":
                     if _all:
-                        buffer.fill_(0.0)
+                        buffer.fill_(self.padding_value)
                     else:
-                        buffer[_reset] = 0.0
+                        buffer[_reset] = self.padding_value
                 else:
                     # make linter happy. An exception has already been raised
                     raise NotImplementedError
@@ -2862,8 +2878,10 @@ class CatFrames(ObservationTransform):
                 )
                 first_val = prev_val[tuple(idx)].unsqueeze(tensordict.ndim - 1)
                 data0 = [first_val] * (self.N - 1)
-                if self.padding == "zeros":
-                    data0 = [torch.zeros_like(elt) for elt in data0[:-1]] + data0[-1:]
+                if self.padding == "constant":
+                    data0 = [
+                        torch.full_like(elt, self.padding_value) for elt in data0[:-1]
+                    ] + data0[-1:]
                 elif self.padding == "same":
                     pass
                 else:
@@ -2872,10 +2890,12 @@ class CatFrames(ObservationTransform):
             elif self.padding == "same":
                 idx = [slice(None)] * (tensordict.ndim - 1) + [0]
                 data0 = [data[tuple(idx)].unsqueeze(tensordict.ndim - 1)] * (self.N - 1)
-            elif self.padding == "zeros":
+            elif self.padding == "constant":
                 idx = [slice(None)] * (tensordict.ndim - 1) + [0]
                 data0 = [
-                    torch.zeros_like(data[tuple(idx)]).unsqueeze(tensordict.ndim - 1)
+                    torch.full_like(data[tuple(idx)], self.padding_value).unsqueeze(
+                        tensordict.ndim - 1
+                    )
                 ] * (self.N - 1)
             else:
                 # make linter happy. An exception has already been raised
@@ -4011,8 +4031,9 @@ class TensorDictPrimer(Transform):
     tensordict with the desired features.
 
     Args:
-        primers (dict, optional): a dictionary containing key-spec pairs which will
-            be used to populate the input tensordict.
+        primers (dict or CompositeSpec, optional): a dictionary containing
+            key-spec pairs which will be used to populate the input tensordict.
+            :class:`~torchrl.data.CompositeSpec` instances are supported too.
         random (bool, optional): if ``True``, the values will be drawn randomly from
             the TensorSpec domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
             Defaults to `False`.
@@ -4073,7 +4094,7 @@ class TensorDictPrimer(Transform):
 
     def __init__(
         self,
-        primers: dict = None,
+        primers: dict | CompositeSpec = None,
         random: bool = False,
         default_value: float = 0.0,
         reset_key: NestedKey | None = None,
@@ -4087,7 +4108,9 @@ class TensorDictPrimer(Transform):
                     "as kwargs."
                 )
             kwargs = primers
-        self.primers = CompositeSpec(kwargs)
+        if not isinstance(kwargs, CompositeSpec):
+            kwargs = CompositeSpec(kwargs)
+        self.primers = kwargs
         self.random = random
         self.default_value = default_value
         self.reset_key = reset_key

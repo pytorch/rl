@@ -1228,7 +1228,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
     td = TensorDict(
         {
             "key": torch.clamp_max(torch.rand(size), max=max_reward1),
-            "obs": torch.tensor(torch.rand(size)),
+            "obs": torch.rand(size),
         },
         batch_size=size,
         device="cpu",
@@ -1242,7 +1242,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
     td = TensorDict(
         {
             "key": torch.clamp(torch.rand(size), min=max_reward1, max=max_reward2),
-            "obs": torch.tensor(torch.rand(size)),
+            "obs": torch.rand(size),
         },
         batch_size=size,
         device="cpu",
@@ -1256,7 +1256,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
     td = TensorDict(
         {
             "key": torch.clamp(torch.rand(size), min=max_reward2, max=max_reward3),
-            "obs": torch.tensor(torch.rand(size)),
+            "obs": torch.rand(size),
         },
         batch_size=size,
         device="cpu",
@@ -1269,6 +1269,19 @@ def test_max_value_writer(size, batch_size, reward_ranges):
     assert (sample.get("key") <= max_reward3).all()
     assert (max_reward2 <= sample.get("key")).all()
     assert len(sample.get("index").unique()) == len(sample.get("index"))
+
+    # Finally, test the case when no obs should be added
+    td = TensorDict(
+        {
+            "key": torch.zeros(size),
+            "obs": torch.rand(size),
+        },
+        batch_size=size,
+        device="cpu",
+    )
+    rb.extend(td)
+    sample = rb.sample()
+    assert (sample.get("key") != 0).all()
 
 
 if __name__ == "__main__":

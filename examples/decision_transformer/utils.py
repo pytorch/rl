@@ -116,7 +116,7 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
             in_keys=["observation_cat", "action_cat", "return_to_go_cat"],
             N=env_cfg.stacked_frames,
             dim=-2,
-            padding="zeros",
+            padding="constant",
         )
     )
 
@@ -166,7 +166,7 @@ def make_collector(cfg, policy):
         "loc",
     )
     cat = CatFrames(
-        in_keys=["action"], out_keys=["action_cat"], N=20, dim=-2, padding="zeros"
+        in_keys=["action"], out_keys=["action_cat"], N=20, dim=-2, padding="constant"
     )
     transforms = Compose(
         exclude_target_return,
@@ -179,7 +179,7 @@ def make_collector(cfg, policy):
         policy,
         frames_per_batch=collector_cfg.frames_per_batch,
         total_frames=collector_cfg.total_frames,
-        device=collector_cfg.collector_devices,
+        device=collector_cfg.devices,
         max_frames_per_traj=collector_cfg.max_frames_per_traj,
         postproc=transforms,
     )
@@ -278,7 +278,7 @@ def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
         out_keys=["return_to_go_cat"],
         N=rb_cfg.stacked_frames,
         dim=-2,
-        padding="zeros",
+        padding="constant",
         as_inverse=True,
     )
     transforms = Compose(
