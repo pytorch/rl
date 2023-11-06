@@ -799,7 +799,6 @@ class CQLLoss(LossModule):
         return alpha
 
 
-# DQNLoss
 class DiscreteCQLLoss(LossModule):
     """TorchRL implementation of the discrete CQL loss.
 
@@ -888,10 +887,14 @@ class DiscreteCQLLoss(LossModule):
         default values.
 
         Attributes:
+            value_target (NestedKey): The input tensordict key where the target state value is expected.
+                Will be used for the underlying value estimator Defaults to ``"value_target"``.
+            value (NestedKey): The input tensordict key where the chosen action value is expected.
+                Will be used for the underlying value estimator. Defaults to ``"chosen_action_value"``.
+            action_value (NestedKey): The input tensordict key where the action value is expected.
+                Defaults to ``"action_value"``.
             action (NestedKey): The input tensordict key where the action is expected.
-                Defaults to ``"advantage"``.
-            value (NestedKey): The input tensordict key where the state value is expected.
-                Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+                Defaults to ``"action"``.
             priority (NestedKey): The input tensordict key where the target priority is written to.
                 Defaults to ``"td_error"``.
             reward (NestedKey): The input tensordict key where the reward is expected.
@@ -904,10 +907,10 @@ class DiscreteCQLLoss(LossModule):
                 Defaults to ``"terminated"``.
         """
 
-        action: NestedKey = "action"
         value_target: NestedKey = "value_target"
         value: NestedKey = "chosen_action_value"
         action_value: NestedKey = "action_value"
+        action: NestedKey = "action"
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
@@ -916,7 +919,7 @@ class DiscreteCQLLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
     out_keys = [
-        "loss",
+        "loss_qvalue",
         "loss_cql",
     ]
 
@@ -1054,20 +1057,11 @@ class DiscreteCQLLoss(LossModule):
         self._in_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDict:
-        """Computes the (DQN) CQL loss given a tensordict sampled from the replay buffer.
-
-        This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
-            a priority to items in the tensordict.
-
-        Args:
-            tensordict (TensorDictBase): a tensordict with keys ["action"] and the in_keys of
-                the value network (observations, "done", "terminated", "reward" in a "next" tensordict).
-
-        Returns:
-            a tensor containing the CQL loss.
-
-        """
+    def value_loss(
+        self,
+        tensordict: TensorDictBase,
+    ) -> Tuple[torch.Tensor, dict]:
+        tensordict = tensordict.clone(False)
         td_copy = tensordict.clone(False)
         self.value_network(
             td_copy,
@@ -1096,22 +1090,53 @@ class DiscreteCQLLoss(LossModule):
             ).squeeze(-1)
 
         with torch.no_grad():
-            priority_tensor = (pred_val_index - target_value).pow(2)
-            priority_tensor = priority_tensor.unsqueeze(-1)
+            td_error = (pred_val_index - target_value).pow(2)
+            td_error = td_error.unsqueeze(-1)
         if tensordict.device is not None:
-            priority_tensor = priority_tensor.to(tensordict.device)
+            td_error = td_error.to(tensordict.device)
 
         tensordict.set(
             self.tensor_keys.priority,
-            priority_tensor,
+            td_error,
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function).mean()
 
-        # add cql loss
-        loss = loss * 0.5 + cql_loss
+        metadata = {
+            "td_error": td_error.mean(0).detach(),
+            "loss_cql": cql_loss.item(),
+            "pred_value": pred_val.mean().detach(),
+            "target_value": target_value.mean().detach(),
+        }
 
-        return TensorDict({"loss": loss, "loss_cql": cql_loss.item()}, [])
+        return loss, metadata
+
+    @dispatch
+    def forward(self, tensordict: TensorDictBase) -> TensorDict:
+        """Computes the (DQN) CQL loss given a tensordict sampled from the replay buffer.
+
+        This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
+            a priority to items in the tensordict.
+
+        Args:
+            tensordict (TensorDictBase): a tensordict with keys ["action"] and the in_keys of
+                the value network (observations, "done", "terminated", "reward" in a "next" tensordict).
+
+        Returns:
+            a tensor containing the CQL loss.
+
+        """
+        loss_qval, metadata = self.value_loss(tensordict)
+
+        td_out = TensorDict(
+            source={
+                "loss_qvalue": loss_qval,
+                **metadata,
+            },
+            batch_size=[],
+        )
+
+        return td_out
 
     @property
     @_cache_values

@@ -131,7 +131,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # Compute loss
                 loss_dict = loss_module(sampled_tensordict)
 
-                q_loss = loss_dict["loss"]
+                q_loss = loss_dict["loss_qvalue"]
 
                 # Update model
                 optimizer.zero_grad()
