@@ -1101,6 +1101,7 @@ class DiscreteCQLLoss(LossModule):
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function).mean()
+        loss = loss * 0.5 + cql_loss
 
         metadata = {
             "td_error": td_error.mean(0).detach(),
