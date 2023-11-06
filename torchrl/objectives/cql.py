@@ -905,6 +905,10 @@ class DiscreteCQLLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+            pred_val (NestedKey): The key where the predicted value will be written
+                in the input tensordict. This value is subsequently used by cql_loss.
+                Defaults to ``"pred_val"``.
+
         """
 
         value_target: NestedKey = "value_target"
@@ -915,6 +919,7 @@ class DiscreteCQLLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        pred_val: NestedKey = "pred_val"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -1061,7 +1066,6 @@ class DiscreteCQLLoss(LossModule):
         self,
         tensordict: TensorDictBase,
     ) -> Tuple[torch.Tensor, dict]:
-        tensordict = tensordict.clone(False)
         td_copy = tensordict.clone(False)
         self.value_network(
             td_copy,
@@ -1079,8 +1083,6 @@ class DiscreteCQLLoss(LossModule):
         else:
             action = action.to(torch.float)
             pred_val_index = (pred_val * action).sum(-1)
-
-        cql_loss = self.cql_loss(pred_val, action)
 
         # calculate target value
         with torch.no_grad():
@@ -1100,12 +1102,15 @@ class DiscreteCQLLoss(LossModule):
             td_error,
             inplace=True,
         )
-        loss = distance_loss(pred_val_index, target_value, self.loss_function).mean()
-        loss = loss * 0.5 + cql_loss
+        tensordict.set(
+            self.tensor_keys.pred_val,
+            pred_val,
+            inplace=True,
+        )
+        loss = 0.5 * distance_loss(pred_val_index, target_value, self.loss_function).mean()
 
         metadata = {
             "td_error": td_error.mean(0).detach(),
-            "loss_cql": cql_loss.item(),
             "pred_value": pred_val.mean().detach(),
             "target_value": target_value.mean().detach(),
         }
@@ -1128,12 +1133,14 @@ class DiscreteCQLLoss(LossModule):
 
         """
         loss_qval, metadata = self.value_loss(tensordict)
-
-        td_out = TensorDict(
-            source={
+        loss_cql, _ = self.cql_loss(tensordict)
+        source = {
                 "loss_qvalue": loss_qval,
-                **metadata,
-            },
+                "loss_cql": loss_cql,
+        }
+        source.update(metadata)
+        td_out = TensorDict(
+            source=source,
             batch_size=[],
         )
 
@@ -1144,9 +1151,16 @@ class DiscreteCQLLoss(LossModule):
     def _cached_detached_target_value_params(self):
         return self.target_value_network_params.detach()
 
-    def cql_loss(self, q_values, current_action):
+    def cql_loss(self, tensordict):
         """Computes the CQL loss for a batch of Q-values and one-hot encoded actions."""
-        logsumexp = torch.logsumexp(q_values, dim=-1, keepdim=True)
-        q_a = (q_values * current_action).sum(dim=-1, keepdim=True)
+        qvalues = tensordict.get(self.tensor_keys.pred_val, default=None)
+        if qvalues is None:
+            raise KeyError("Couldn't find the predicted qvalue with key {self.tensor_keys.pred_val} in the input tensordict. "
+                           "This could be caused by calling cql_loss method before value_loss.")
 
-        return (logsumexp - q_a).mean()
+        current_action = tensordict.get(self.tensor_keys.action)
+
+        logsumexp = torch.logsumexp(qvalues, dim=-1, keepdim=True)
+        q_a = (qvalues * current_action).sum(dim=-1, keepdim=True)
+
+        return (logsumexp - q_a).mean(), {}

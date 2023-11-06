@@ -5317,9 +5317,9 @@ class TestDiscreteCQL(LossModuleTestBase):
             else contextlib.nullcontext()
         ), _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.tensor_keys.priority in td.keys()
+        assert loss_fn.tensor_keys.priority in td.keys(True)
 
-        sum([item for _, item in loss.items()]).backward()
+        sum([item for key, item in loss.items() if key.startswith('loss')]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
         # Check param update effect on targets
@@ -5382,15 +5382,15 @@ class TestDiscreteCQL(LossModuleTestBase):
             loss = loss_fn(td)
         if n == 0:
             assert_allclose_td(td, ms_td.select(*td.keys(True, True)))
-            _loss = sum([item for _, item in loss.items()])
-            _loss_ms = sum([item for _, item in loss_ms.items()])
+            _loss = sum([item for key, item in loss.items() if key.startswith("loss_")])
+            _loss_ms = sum([item for key, item in loss_ms.items() if key.startswith("loss_")])
             assert (
                 abs(_loss - _loss_ms) < 1e-3
             ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
         else:
             with pytest.raises(AssertionError):
                 assert_allclose_td(loss, loss_ms)
-        sum([item for _, item in loss_ms.items()]).backward()
+        sum([item for key, item in loss_ms.items() if key.startswith('loss_')]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
         # Check param update effect on targets
