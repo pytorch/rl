@@ -110,15 +110,22 @@ frames_per_batch = args.frames_per_batch
     framework="rpc",
 )
 def main():
+    import gym
     from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
     from torchrl.collectors.collectors import RandomPolicy
     from torchrl.data import BoundedTensorSpec
-    from torchrl.envs.libs.gym import GymEnv
+    from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 
     collector_class = SyncDataCollector if num_workers == 1 else MultiSyncDataCollector
     device_str = "device" if num_workers == 1 else "devices"
+
+    def make_env():
+        # gymnasium breaks when using multiproc
+        with set_gym_backend(gym):
+            return GymEnv("ALE/Pong-v5")
+
     collector = RPCDataCollector(
-        [EnvCreator(lambda: GymEnv("ALE/Pong-v5"))] * num_jobs,
+        [EnvCreator(make_env)] * num_jobs,
         policy=RandomPolicy(BoundedTensorSpec(-1, 1, shape=(1,))),
         launcher="submitit_delayed",
         frames_per_batch=frames_per_batch,

@@ -141,6 +141,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreame
   num_workers=4 \
   env_per_collector=2 \
   collector_device=cuda:0 \
+  model_device=cuda:0 \
   optim_steps_per_batch=1 \
   record_video=True \
   record_frames=4 \
@@ -178,6 +179,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreame
   num_workers=2 \
   env_per_collector=1 \
   collector_device=cuda:0 \
+  model_device=cuda:0 \
   optim_steps_per_batch=1 \
   record_video=True \
   record_frames=4 \
@@ -255,6 +257,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   logger.mode=offline \
   optim.batch_size=10 \
   env.name=Pendulum-v1 \
+  network.device=cuda:0 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/multiagent/mappo_ippo.py \
   collector.n_iters=2 \

@@ -108,7 +108,8 @@ class submitit_delayed_launcher:
                     time.sleep(0.5)
                     continue
             print(f"node: {node}")
-            cmd = f"sinfo -n {node} -O nodeaddr | tail -1"
+            # by default, sinfo will truncate the node name at char 20, we increase this to 200
+            cmd = f"sinfo -n {node} -O nodeaddr:200 | tail -1"
             rank0_ip = subprocess.check_output(cmd, shell=True, text=True).strip()
             print(f"IP: {rank0_ip}")
             world_size = self.num_jobs + 1
