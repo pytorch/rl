@@ -37,6 +37,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     total_frames = cfg.collector.total_frames // frame_skip
     frames_per_batch = cfg.collector.frames_per_batch // frame_skip
     init_random_frames = cfg.collector.init_random_frames // frame_skip
+    test_interval = cfg.logger.test_interval // frame_skip
 
     # Make the components
     model = make_dqn_model(cfg.env.env_name, frame_skip)
@@ -112,10 +113,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     sampling_start = time.time()
     num_updates = cfg.loss.num_updates
     max_grad = cfg.optim.max_grad_norm
-    test_interval = cfg.logger.test_interval
     num_test_episodes = cfg.logger.num_test_episodes
     q_losses = torch.zeros(num_updates, device=device)
-    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    pbar = tqdm.tqdm(total=total_frames)
     for data in collector:
 
         log_info = {}
