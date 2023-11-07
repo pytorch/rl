@@ -54,7 +54,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create the replay buffer
     replay_buffer = TensorDictReplayBuffer(
         pin_memory=False,
-        prefetch=3,
+        prefetch=10,
         storage=LazyTensorStorage(
             max_size=cfg.buffer.buffer_size,
             device="cpu",
@@ -70,6 +70,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         delay_value=True,
     )
     loss_module.make_value_estimator()
+    loss_module = loss_module.to(device)
     target_net_updater = HardUpdate(
         loss_module, value_network_update_interval=cfg.loss.hard_update_freq
     )
@@ -86,7 +87,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     # Create the test environment
-    test_env = make_env(cfg.env.env_name, device)
+    test_env = make_env(cfg.env.env_name, "cpu")
 
     # Main loop
     collected_frames = 0
