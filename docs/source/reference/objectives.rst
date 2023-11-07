@@ -138,7 +138,7 @@ CQL
     CQLLoss
 
 DT
-----
+--
 
 .. autosummary::
     :toctree: generated/
@@ -148,13 +148,22 @@ DT
     OnlineDTLoss
 
 TD3
-----
+---
 
 .. autosummary::
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
     TD3Loss
+
+TQC
+---
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    TQCLoss
 
 PPO
 ---

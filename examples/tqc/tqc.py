@@ -29,6 +29,7 @@ The helper functions are coded in the utils.py associated with this script.
 """
 
 import time
+
 import hydra
 import numpy as np
 import torch
@@ -57,7 +58,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     exp_name = generate_exp_name("SAC", cfg.env.exp_name)
     logger = None
     # TO-DO: Add logging back in before pushing to git repo
-    #if cfg.logger.backend:
+    # if cfg.logger.backend:
     #    logger = get_logger(
     #        logger_type=cfg.logger.backend,
     #        logger_name="sac_logging/wandb",
@@ -190,7 +191,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 episode_length
             )
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/critic_loss"] = losses.get("loss_critic").mean().item()
+            metrics_to_log["train/critic_loss"] = (
+                losses.get("loss_critic").mean().item()
+            )
             metrics_to_log["train/actor_loss"] = losses.get("loss_actor").mean().item()
             metrics_to_log["train/alpha_loss"] = losses.get("loss_alpha").mean().item()
             metrics_to_log["train/alpha"] = loss_td["alpha"].item()
