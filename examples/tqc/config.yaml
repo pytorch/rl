@@ -20,7 +20,7 @@ collector:
 replay_buffer:
   size: 1_000_000
   prb: False # use prioritized experience replay
-  scratch_dir: ${env.exp_name}_${env.seed}
+  scratch_dir:
 
 # optim
 optim:
@@ -43,7 +43,7 @@ network:
   activation: relu
   default_policy_scale: 1.0
   scale_lb: 0.1
-  device: cpu  # TO-DO: change back to CUDA
+  device: cuda
 
 # logging
 logger:

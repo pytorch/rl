@@ -3,7 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-
+import tempfile
+from contextlib import nullcontext
 import torch
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
@@ -15,9 +16,20 @@ from torchrl.envs import Compose, DoubleToFloat, EnvCreator, ParallelEnv, Transf
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.transforms import InitTracker, RewardSum, StepCounter
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
+from torchrl.modules import MLP, ProbabilisticActor, ValueOperator, ActorCriticWrapper
 from torchrl.modules.distributions import TanhNormal
 from torchrl.objectives import SoftUpdate
+from torchrl.data import CompositeSpec
+from torchrl.objectives.common import LossModule
+from torchrl.objectives.utils import (
+    _cache_values,
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+    ValueEstimators,
+)
+from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from tensordict.tensordict import TensorDict, TensorDictBase
 from typing import Tuple
 
 
@@ -91,35 +103,40 @@ def make_replay_buffer(
         batch_size,
         prb=False,
         buffer_size=1_000_000,
-        buffer_scratch_dir="/tmp/",
+        buffer_scratch_dir=None,
         device="cpu",
         prefetch=3,
 ):
-    if prb:
-        replay_buffer = TensorDictPrioritizedReplayBuffer(
-            alpha=0.7,
-            beta=0.5,
-            pin_memory=False,
-            prefetch=prefetch,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=buffer_scratch_dir,
-                device=device,
-            ),
-            batch_size=batch_size,
-        )
-    else:
-        replay_buffer = TensorDictReplayBuffer(
-            pin_memory=False,
-            prefetch=prefetch,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=buffer_scratch_dir,
-                device=device,
-            ),
-            batch_size=batch_size,
-        )
-    return replay_buffer
+    with (
+            tempfile.TemporaryDirectory()
+            if buffer_scratch_dir is None
+            else nullcontext(buffer_scratch_dir)
+    ) as scratch_dir:
+        if prb:
+            replay_buffer = TensorDictPrioritizedReplayBuffer(
+                alpha=0.7,
+                beta=0.5,
+                pin_memory=False,
+                prefetch=prefetch,
+                storage=LazyMemmapStorage(
+                    buffer_size,
+                    scratch_dir=scratch_dir,
+                    device=device,
+                ),
+                batch_size=batch_size,
+            )
+        else:
+            replay_buffer = TensorDictReplayBuffer(
+                pin_memory=False,
+                prefetch=prefetch,
+                storage=LazyMemmapStorage(
+                    buffer_size,
+                    scratch_dir=scratch_dir,
+                    device=device,
+                ),
+                batch_size=batch_size,
+            )
+        return replay_buffer
 
 
 # ====================================================================
@@ -251,6 +268,130 @@ def quantile_huber_loss_f(quantiles, samples):
 # TQC Loss
 # --------
 
+class TQCLoss(LossModule):
+    def __init__(
+            self,
+            actor_network,
+            qvalue_network,
+            gamma,
+            top_quantiles_to_drop,
+            alpha_init,
+            device
+    ):
+        super().__init__()
+
+        self.convert_to_functional(
+            actor_network,
+            "actor",
+            create_target_params=False,
+            funs_to_decorate=["forward", "get_dist"],
+        )
+
+        self.convert_to_functional(
+            qvalue_network,
+            "critic",
+            create_target_params=True  # Create a target critic network
+        )
+
+        self.device = device
+        self.log_alpha = torch.tensor([np.log(alpha_init)], requires_grad=True, device=self.device)
+        self.gamma = gamma
+        self.top_quantiles_to_drop = top_quantiles_to_drop
+
+        # Compute target entropy
+        action_spec = getattr(self.actor, "spec", None)
+        if action_spec is None:
+            print("Could not deduce action spec from actor network.")
+        if not isinstance(action_spec, CompositeSpec):
+            action_spec = CompositeSpec({"action": action_spec})
+        action_container_len = len(action_spec.shape)
+        self.target_entropy = -float(action_spec["action"].shape[action_container_len:].numel())
+
+    def value_loss(self, tensordict):
+        td_next = tensordict.get("next")
+        reward = td_next.get("reward")
+        not_done = tensordict.get("done").logical_not()
+        alpha = torch.exp(self.log_alpha)
+
+        # Q-loss
+        with torch.no_grad():
+            # get policy action
+            self.actor(td_next, params=self.actor_params)
+            self.critic(td_next, params=self.target_critic_params)
+
+            next_log_pi = td_next.get("sample_log_prob")
+            next_log_pi = torch.unsqueeze(next_log_pi, dim=-1)
+
+            # compute and cut quantiles at the next state
+            next_z = td_next.get("state_action_value")
+            sorted_z, _ = torch.sort(next_z.reshape(*tensordict.batch_size, -1))
+            sorted_z_part = sorted_z[..., :-self.top_quantiles_to_drop]
+
+            # compute target
+            # --- Note ---
+            # This is computed manually here, since the built-in value estimators in the library
+            # currently do not support a critic of a shape different from the reward.
+            # ------------
+            target = reward + not_done * self.gamma * (sorted_z_part - alpha * next_log_pi)
+
+        self.critic(tensordict, params=self.critic_params)
+        cur_z = tensordict.get("state_action_value")
+        critic_loss = quantile_huber_loss_f(cur_z, target)
+        return critic_loss
+
+    def actor_loss(self, tensordict):
+        alpha = torch.exp(self.log_alpha)
+        self.actor(tensordict, params=self.actor_params)
+        self.critic(tensordict, params=self.critic_params)
+        new_log_pi = tensordict.get("sample_log_prob")
+        actor_loss = (alpha * new_log_pi - tensordict.get("state_action_value").mean(-1).mean(-1, keepdim=True)).mean()
+        return actor_loss, new_log_pi
+
+    def alpha_loss(self, log_prob):
+        alpha_loss = -self.log_alpha * (log_prob + self.target_entropy).detach().mean()
+        return alpha_loss
+
+    def entropy(self, tensordict):
+        with set_exploration_type(ExplorationType.RANDOM):
+            dist = self.actor.get_dist(
+                tensordict,
+                params=self.actor_params,
+            )
+            a_reparm = dist.rsample()
+        log_prob = dist.log_prob(a_reparm).detach()
+        entropy = -log_prob.mean()
+        return entropy
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        alpha = torch.exp(self.log_alpha)
+        critic_loss = self.value_loss(tensordict)
+        actor_loss, log_prob = self.actor_loss(tensordict)  # Compute actor loss AFTER critic loss
+        alpha_loss = self.alpha_loss(log_prob)
+        entropy = self.entropy(tensordict)
+
+        return TensorDict(
+            {
+                "loss_critic": critic_loss,
+                "loss_actor": actor_loss,
+                "loss_alpha": alpha_loss,
+                "alpha": alpha,
+                "entropy": entropy,
+            },
+            batch_size=[]
+        )
+
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        """
+        This is a dummy function, which simply checks if the value type is TD0 and raises
+        an error if the value type is different. As of writing of this, the value estimators
+        in the library do not support a critic shape different from the reward state, which
+        is however necessary by construction for TQC. Therefore, this function does not
+        actually construct a value estimator, and the value is estimated "by hand" in the
+        value_loss function above.
+        """
+        if value_type is not ValueEstimators.TD0:
+            raise NotImplementedError(f"Value type {value_type} is not currently implemented.")
+
 
 def make_loss_module(cfg, model):
     """Make loss module and target network updater."""
@@ -263,6 +404,7 @@ def make_loss_module(cfg, model):
         top_quantiles_to_drop=cfg.network.top_quantiles_to_drop_per_net * cfg.network.n_nets,
         alpha_init=cfg.optim.alpha_init
     )
+    loss_module.make_value_estimator(value_type=ValueEstimators.TD0)
 
     # Define Target Network Updater
     target_net_updater = SoftUpdate(loss_module, eps=cfg.optim.target_update_polyak)
