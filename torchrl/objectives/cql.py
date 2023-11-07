@@ -1147,6 +1147,9 @@ class DiscreteCQLLoss(LossModule):
     def cql_loss(self, q_values, current_action):
         """Computes the CQL loss for a batch of Q-values and one-hot encoded actions."""
         logsumexp = torch.logsumexp(q_values, dim=-1, keepdim=True)
-        q_a = (q_values * current_action).sum(dim=-1, keepdim=True)
+        if self.action_space == "categorical":
+            q_a = q_values.gather(-1, current_action)
+        else:
+            q_a = (q_values * current_action).sum(dim=-1, keepdim=True)
 
         return (logsumexp - q_a).mean()
