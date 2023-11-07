@@ -391,7 +391,7 @@ def _per_level_env_check(data0, data1, check_dtype):
             if _data0.shape != _data1.shape:
                 raise AssertionError(
                     f"The shapes of the real and fake tensordict don't match for key {key}. "
-                    f"Got fake={_data0.shape} and real={_data0.shape}."
+                    f"Got fake={_data0.shape} and real={_data1.shape}."
                 )
             if isinstance(_data0, TensorDictBase):
                 _per_level_env_check(_data0, _data1, check_dtype=check_dtype)
