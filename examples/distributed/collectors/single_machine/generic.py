@@ -20,6 +20,8 @@ The default task is `Pong-v5` but a different one can be picked through the
 import time
 from argparse import ArgumentParser
 
+import gym
+
 import torch
 import tqdm
 
@@ -31,7 +33,7 @@ from torchrl.collectors.collectors import (
 )
 from torchrl.collectors.distributed import DistributedDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -89,7 +91,11 @@ if __name__ == "__main__":
 
     device_count = torch.cuda.device_count()
 
-    make_env = EnvCreator(lambda: GymEnv(args.env))
+    def gym_make():
+        with set_gym_backend(gym):
+            return GymEnv(args.env)
+
+    make_env = EnvCreator(gym_make)
     if args.worker_parallelism == "collector" or num_workers == 1:
         action_spec = make_env().action_spec
     else:
