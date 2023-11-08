@@ -124,7 +124,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample().clone()
 
-                loss_td = loss_module(sampled_tensordict)
+                loss_td, _ = loss_module(sampled_tensordict)
 
                 actor_loss = loss_td["loss_actor"]
                 q_loss = loss_td["loss_qvalue"]
