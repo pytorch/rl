@@ -6,6 +6,7 @@ env:
   exp_name: cql_${replay_buffer.dataset}
   n_samples_stats: 1000
   seed: 0
+  backend: gym  # D4RL uses gym so we make sure gymnasium is hidden
 
 # logger
 logger:
