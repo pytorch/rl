@@ -22,7 +22,7 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
     log_metrics,
     make_cql_model,
-    make_cql_optimizer,
+    make_cql_optimizer_continuous,
     make_environment,
     make_loss,
     make_offline_replay_buffer,
@@ -60,9 +60,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module, target_net_updater = make_loss(cfg.loss, model)
 
     # Create Optimizer
-    policy_optim, critic_optim, alpha_optim, alpha_prime_optim = make_cql_optimizer(
-        cfg.optim, loss_module
-    )
+    (
+        policy_optim,
+        critic_optim,
+        alpha_optim,
+        alpha_prime_optim,
+    ) = make_cql_optimizer_continuous(cfg, loss_module)
 
     pbar = tqdm.tqdm(total=cfg.optim.gradient_steps)
 
@@ -78,13 +81,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # sample data
         data = replay_buffer.sample()
         # compute loss
-        loss_vals = loss_module(data.clone())
+        loss_vals, metadata = loss_module(data.clone().to(device))
 
         if i >= policy_eval_start:
             actor_loss = loss_vals["loss_actor"]
         else:
             actor_loss = loss_vals["loss_actor_bc"]
-        q_loss = loss_vals["loss_qvalue"]
+        q_loss = loss_vals["loss_qvalues"]
+        cql_loss = loss_vals["loss_cql"]
+
+        q_loss = q_loss + cql_loss
+
         alpha_loss = loss_vals["loss_alpha"]
         alpha_prime_loss = loss_vals["loss_alpha_prime"]
 
@@ -106,6 +113,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             alpha_prime_optim.step()
 
         critic_optim.zero_grad()
+        # TODO: we have the option to compute losses independently retain is not needed?
         q_loss.backward(retain_graph=False)
         critic_optim.step()
 
@@ -117,9 +125,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
             "loss_actor_bc": loss_vals["loss_actor_bc"].item(),
             "loss_actor": loss_vals["loss_actor"].item(),
             "loss_qvalue": q_loss.item(),
+            "loss_cql": cql_loss.item(),
             "loss_alpha": alpha_loss.item(),
             "loss_alpha_prime": alpha_prime_loss.item(),
         }
+
+        # update qnet_target params
+        target_net_updater.step()
 
         # evaluation
         if i % evaluation_interval == 0:

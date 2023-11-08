@@ -26,7 +26,7 @@ from utils import (
     log_metrics,
     make_collector,
     make_cql_model,
-    make_cql_optimizer,
+    make_cql_optimizer_continuous,
     make_environment,
     make_loss,
     make_replay_buffer,
@@ -76,9 +76,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module, target_net_updater = make_loss(cfg.loss, model)
 
     # Create optimizer
-    policy_optim, critic_optim, alpha_optim, alpha_prime_optim = make_cql_optimizer(
-        cfg.optim, loss_module
-    )
+    (
+        policy_optim,
+        critic_optim,
+        alpha_optim,
+        alpha_prime_optim,
+    ) = make_cql_optimizer_continuous(cfg, loss_module)
     # Main loop
     start_time = time.time()
     collected_frames = 0
@@ -125,6 +128,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 actor_loss = loss_td["loss_actor"]
                 q_loss = loss_td["loss_qvalue"]
+                cql_loss = loss_td["loss_cql"]
+                q_loss = q_loss + cql_loss
                 alpha_loss = loss_td["loss_alpha"]
                 alpha_prime_loss = loss_td["loss_alpha_prime"]
 

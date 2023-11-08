@@ -5,8 +5,6 @@ env:
   library: gym
   exp_name: cql_${replay_buffer.dataset}
   n_samples_stats: 1000
-  frame_skip: 1
-  reward_scaling: 1.0
   seed: 0
 
 # logger

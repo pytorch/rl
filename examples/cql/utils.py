@@ -20,7 +20,6 @@ from torchrl.envs import (
     DoubleToFloat,
     EnvCreator,
     ParallelEnv,
-    RewardScaling,
     RewardSum,
     TransformedEnv,
 )
@@ -37,19 +36,18 @@ from torchrl.trainers.helpers.models import ACTIVATIONS
 # -----------------
 
 
-def env_maker(task, frame_skip=1, device="cpu", from_pixels=False):
+def env_maker(task, device="cpu", from_pixels=False):
     with set_gym_backend("gym"):
-        return GymEnv(
-            task, device=device, frame_skip=frame_skip, from_pixels=from_pixels
-        )
+        return GymEnv(task, device=device, from_pixels=from_pixels)
 
 
-def apply_env_transforms(env, reward_scaling=1.0):
+def apply_env_transforms(
+    env,
+):
     transformed_env = TransformedEnv(
         env,
         Compose(
-            RewardScaling(loc=0.0, scale=reward_scaling),
-            DoubleToFloat("observation"),
+            DoubleToFloat(),
             RewardSum(),
         ),
     )
@@ -60,18 +58,16 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         train_num_envs,
-        EnvCreator(lambda: env_maker(task=cfg.env.name, frame_skip=cfg.env.frame_skip)),
+        EnvCreator(lambda: env_maker(task=cfg.env.name)),
     )
     parallel_env.set_seed(cfg.env.seed)
 
-    train_env = apply_env_transforms(parallel_env, cfg.env.reward_scaling)
+    train_env = apply_env_transforms(parallel_env)
 
     eval_env = TransformedEnv(
         ParallelEnv(
             eval_num_envs,
-            EnvCreator(
-                lambda: env_maker(task=cfg.env.name, frame_skip=cfg.env.frame_skip)
-            ),
+            EnvCreator(lambda: env_maker(task=cfg.env.name)),
         ),
         train_env.transform.clone(),
     )
@@ -255,28 +251,28 @@ def make_loss(loss_cfg, model):
     return loss_module, target_net_updater
 
 
-def make_cql_optimizer(optim_cfg, loss_module):
+def make_cql_optimizer_continuous(cfg, loss_module):
     critic_params = loss_module.qvalue_network_params.flatten_keys().values()
     actor_params = loss_module.actor_network_params.flatten_keys().values()
     actor_optim = torch.optim.Adam(
         actor_params,
-        lr=optim_cfg.actor_lr,
-        weight_decay=optim_cfg.weight_decay,
+        lr=cfg.optim.actor_lr,
+        weight_decay=cfg.optim.weight_decay,
     )
     critic_optim = torch.optim.Adam(
         critic_params,
-        lr=optim_cfg.critic_lr,
-        weight_decay=optim_cfg.weight_decay,
+        lr=cfg.optim.critic_lr,
+        weight_decay=cfg.optim.weight_decay,
     )
     alpha_optim = torch.optim.Adam(
         [loss_module.log_alpha],
-        lr=optim_cfg.actor_lr,
-        weight_decay=optim_cfg.weight_decay,
+        lr=cfg.optim.actor_lr,
+        weight_decay=cfg.optim.weight_decay,
     )
     if loss_module.with_lagrange:
         alpha_prime_optim = torch.optim.Adam(
             [loss_module.log_alpha_prime],
-            lr=optim_cfg.critic_lr,
+            lr=cfg.optim.critic_lr,
         )
     else:
         alpha_prime_optim = None
