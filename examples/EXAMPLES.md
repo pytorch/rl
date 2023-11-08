@@ -18,7 +18,7 @@ python sac.py
 ```
 or similar. Hyperparameters can be easily changed by providing the arguments to hydra:
 ```
-python sac.py frames_per_batch=63
+python sac.py collector.frames_per_batch=63
 ```
 # Results
 
@@ -32,11 +32,11 @@ We average the results over 5 different seeds and plot the standard error.
 To reproduce a single run:
 
 ```
-python sac/sac.py env_name="HalfCheetah-v4" env_task="" env_library="gym"
+python sac/sac.py env.name="HalfCheetah-v4" env.task="" env.library="gym"
 ```
 
 ``` 
-python redq/redq.py env_name="HalfCheetah-v4" env_task="" env_library="gym"
+python redq/redq.py env.name="HalfCheetah-v4" env.library="gymnasium"
 ```
 
 
@@ -48,39 +48,61 @@ python redq/redq.py env_name="HalfCheetah-v4" env_task="" env_library="gym"
 To reproduce a single run:
 
 ```
-python sac/sac.py env_name="cheetah" env_task="run" env_library="dm_control"
+python sac/sac.py env.name="cheetah" env.task="run" env.library="dm_control"
 ```
 
 ``` 
-python redq/redq.py env_name="cheetah" env_task="run" env_library="dm_control"
+python redq/redq.py env.name="cheetah" env.task="run" env.library="dm_control"
 ```
 
-## Gym's Ant-v4
+[//]: # (TODO: adapt these scripts)
+[//]: # (## Gym's Ant-v4)
 
-<p align="center">
-<img src="media/ant_chart.png" width="600px">
-</p>
-To reproduce a single run:
+[//]: # ()
+[//]: # (<p align="center">)
 
-```
-python sac/sac.py env_name="Ant-v4" env_task="" env_library="gym"
-```
+[//]: # (<img src="media/ant_chart.png" width="600px">)
 
-``` 
-python redq/redq.py env_name="Ant-v4" env_task="" env_library="gym"
-```
+[//]: # (</p>)
 
-## Gym's Walker2D-v4
+[//]: # (To reproduce a single run:)
 
-<p align="center">
-<img src="media/walker2d_chart.png" width="600px">
-</p>
-To reproduce a single run:
+[//]: # ()
+[//]: # (```)
 
-```
-python sac/sac.py env_name="Walker2D-v4" env_task="" env_library="gym"
-```
+[//]: # (python sac/sac.py env.name="Ant-v4" env.task="" env.library="gym")
 
-``` 
-python redq/redq.py env_name="Walker2D-v4" env_task="" env_library="gym"
-```
+[//]: # (```)
+
+[//]: # ()
+[//]: # (``` )
+
+[//]: # (python redq/redq.py env_name="Ant-v4" env_task="" env_library="gym")
+
+[//]: # (```)
+
+[//]: # ()
+[//]: # (## Gym's Walker2D-v4)
+
+[//]: # ()
+[//]: # (<p align="center">)
+
+[//]: # (<img src="media/walker2d_chart.png" width="600px">)
+
+[//]: # (</p>)
+
+[//]: # (To reproduce a single run:)
+
+[//]: # ()
+[//]: # (```)
+
+[//]: # (python sac/sac.py env_name="Walker2D-v4" env_task="" env_library="gym")
+
+[//]: # (```)
+
+[//]: # ()
+[//]: # (``` )
+
+[//]: # (python redq/redq.py env_name="Walker2D-v4" env_task="" env_library="gym")
+
+[//]: # (```)

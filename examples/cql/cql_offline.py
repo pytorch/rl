@@ -29,7 +29,7 @@ from utils import (
 )
 
 
-@hydra.main(config_path=".", config_name="offline_config")
+@hydra.main(config_path=".", config_name="offline_config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create logger

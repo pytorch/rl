@@ -16,7 +16,8 @@ The tests are executed with various number of cpus, and on different devices.
 """
 import time
 
-import myosuite  # noqa: F401
+# import myosuite  # noqa: F401
+import torch
 import tqdm
 from torchrl._utils import timeit
 from torchrl.collectors import (
@@ -29,18 +30,19 @@ from torchrl.envs import EnvCreator, GymEnv, ParallelEnv
 from torchrl.envs.libs.gym import gym_backend as gym_bc, set_gym_backend
 
 if __name__ == "__main__":
+    avail_devices = ("cpu",)
+    if torch.cuda.device_count():
+        avail_devices = avail_devices + ("cuda:0",)
+
     for envname in [
-        "HalfCheetah-v4",
         "CartPole-v1",
+        "HalfCheetah-v4",
         "myoHandReachRandom-v0",
         "ALE/Breakout-v5",
-        "CartPole-v1",
     ]:
         # the number of collectors won't affect the resources, just impacts how the envs are split in sub-sub-processes
-        for num_workers, num_collectors in zip((8, 16, 32, 64), (2, 4, 8, 8)):
-            with open(
-                f"atari_{envname}_{num_workers}.txt".replace("/", "-"), "w+"
-            ) as log:
+        for num_workers, num_collectors in zip((32, 64, 8, 16), (8, 8, 2, 4)):
+            with open(f"{envname}_{num_workers}.txt".replace("/", "-"), "w+") as log:
                 if "myo" in envname:
                     gym_backend = "gym"
                 else:
@@ -72,24 +74,25 @@ if __name__ == "__main__":
                 log.flush()
 
                 # regular parallel env
-                for device in (
-                    "cuda:0",
-                    "cpu",
-                ):
+                for device in avail_devices:
 
                     def make(envname=envname, gym_backend=gym_backend, device=device):
                         with set_gym_backend(gym_backend):
                             return GymEnv(envname, device=device)
 
-                    env_make = EnvCreator(make)
-                    penv = ParallelEnv(num_workers, env_make)
-                    # warmup
-                    penv.rollout(2)
-                    pbar = tqdm.tqdm(total=num_workers * 10_000)
-                    t0 = time.time()
-                    for _ in range(100):
-                        data = penv.rollout(100, break_when_any_done=False)
-                        pbar.update(100 * num_workers)
+                    # env_make = EnvCreator(make)
+                    penv = ParallelEnv(num_workers, EnvCreator(make))
+                    with torch.inference_mode():
+                        # warmup
+                        penv.rollout(2)
+                        pbar = tqdm.tqdm(total=num_workers * 10_000)
+                        t0 = time.time()
+                        data = None
+                        for _ in range(100):
+                            data = penv.rollout(
+                                100, break_when_any_done=False, out=data
+                            )
+                            pbar.update(100 * num_workers)
                     log.write(
                         f"penv {device}: {num_workers * 10_000 / (time.time() - t0): 4.4f} fps\n"
                     )
@@ -98,7 +101,7 @@ if __name__ == "__main__":
                     timeit.print()
                     del penv
 
-                for device in ("cuda:0", "cpu"):
+                for device in avail_devices:
 
                     def make(envname=envname, gym_backend=gym_backend, device=device):
                         with set_gym_backend(gym_backend):
@@ -112,18 +115,18 @@ if __name__ == "__main__":
                         RandomPolicy(penv.action_spec),
                         frames_per_batch=1024,
                         total_frames=num_workers * 10_000,
+                        device=device,
+                        storing_device=device,
                     )
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0
-                    for i, data in enumerate(collector):
-                        if i == num_collectors:
-                            t0 = time.time()
-                        if i >= num_collectors:
-                            total_frames += data.numel()
-                            pbar.update(data.numel())
-                            pbar.set_description(
-                                f"single collector + torchrl penv: {total_frames / (time.time() - t0): 4.4f} fps"
-                            )
+                    t0 = time.time()
+                    for data in collector:
+                        total_frames += data.numel()
+                        pbar.update(data.numel())
+                        pbar.set_description(
+                            f"single collector + torchrl penv: {total_frames / (time.time() - t0): 4.4f} fps"
+                        )
                     log.write(
                         f"single collector + torchrl penv {device}: {total_frames / (time.time() - t0): 4.4f} fps\n"
                     )
@@ -131,10 +134,7 @@ if __name__ == "__main__":
                     collector.shutdown()
                     del collector
 
-                for device in (
-                    "cuda:0",
-                    "cpu",
-                ):
+                for device in avail_devices:
                     # gym parallel env
                     def make_env(
                         envname=envname,
@@ -161,10 +161,7 @@ if __name__ == "__main__":
                     penv.close()
                     del penv
 
-                for device in (
-                    "cuda:0",
-                    "cpu",
-                ):
+                for device in avail_devices:
                     # async collector
                     # + torchrl parallel env
                     def make_env(
@@ -182,6 +179,7 @@ if __name__ == "__main__":
                         frames_per_batch=1024,
                         total_frames=num_workers * 10_000,
                         device=device,
+                        storing_device=device,
                     )
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0
@@ -201,10 +199,7 @@ if __name__ == "__main__":
                     collector.shutdown()
                     del collector
 
-                for device in (
-                    "cuda:0",
-                    "cpu",
-                ):
+                for device in avail_devices:
                     # async collector
                     # + gym async env
                     def make_env(
@@ -219,7 +214,7 @@ if __name__ == "__main__":
 
                     penv = EnvCreator(
                         lambda num_workers=num_workers // num_collectors: make_env(
-                            num_workers
+                            num_workers=num_workers
                         )
                     )
                     collector = MultiaSyncDataCollector(
@@ -229,6 +224,7 @@ if __name__ == "__main__":
                         total_frames=num_workers * 10_000,
                         num_sub_threads=num_workers // num_collectors,
                         device=device,
+                        storing_device=device,
                     )
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0
@@ -248,10 +244,7 @@ if __name__ == "__main__":
                     collector.shutdown()
                     del collector
 
-                for device in (
-                    "cuda:0",
-                    "cpu",
-                ):
+                for device in avail_devices:
                     # sync collector
                     # + torchrl parallel env
                     def make_env(
@@ -269,6 +262,7 @@ if __name__ == "__main__":
                         frames_per_batch=1024,
                         total_frames=num_workers * 10_000,
                         device=device,
+                        storing_device=device,
                     )
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0
@@ -288,10 +282,7 @@ if __name__ == "__main__":
                     collector.shutdown()
                     del collector
 
-                for device in (
-                    "cuda:0",
-                    "cpu",
-                ):
+                for device in avail_devices:
                     # sync collector
                     # + gym async env
                     def make_env(
@@ -306,7 +297,7 @@ if __name__ == "__main__":
 
                     penv = EnvCreator(
                         lambda num_workers=num_workers // num_collectors: make_env(
-                            num_workers
+                            num_workers=num_workers
                         )
                     )
                     collector = MultiSyncDataCollector(

@@ -1019,7 +1019,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             next_value = self._next_value(tensordict, target_params, kwargs=kwargs)
 
         done = tensordict.get(("next", self.tensor_keys.done))
-        terminated = tensordict.get(("next", self.tensor_keys.done), default=done)
+        terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         if self.vectorized:
             val = vec_td_lambda_return_estimate(
                 gamma,
@@ -1235,7 +1235,7 @@ class GAE(ValueEstimatorBase):
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
         done = tensordict.get(("next", self.tensor_keys.done))
-        terminated = tensordict.get(("next", self.tensor_keys.done), default=done)
+        terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         if self.vectorized:
             adv, value_target = vec_generalized_advantage_estimate(
                 gamma,
@@ -1244,7 +1244,7 @@ class GAE(ValueEstimatorBase):
                 next_value,
                 reward,
                 done=done,
-                terminated=done,
+                terminated=terminated,
                 time_dim=tensordict.ndim - 1,
             )
         else:

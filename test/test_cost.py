@@ -3260,6 +3260,49 @@ class TestSAC(LossModuleTestBase):
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_alpha == loss_val_td["loss_alpha"]
 
+    def test_state_dict(self, version):
+        if version == 1:
+            pytest.skip("Test not implemented for version 1.")
+        model = torch.nn.Linear(3, 4)
+        actor_module = TensorDictModule(model, in_keys=["obs"], out_keys=["logits"])
+        policy = ProbabilisticActor(
+            module=actor_module,
+            in_keys=["logits"],
+            out_keys=["action"],
+            distribution_class=TanhDelta,
+        )
+        value = ValueOperator(module=model, in_keys=["obs"], out_keys="value")
+
+        loss = SACLoss(
+            actor_network=policy,
+            qvalue_network=value,
+            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+        )
+        state = loss.state_dict()
+
+        loss = SACLoss(
+            actor_network=policy,
+            qvalue_network=value,
+            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+        )
+        loss.load_state_dict(state)
+
+        # with an access in between
+        loss = SACLoss(
+            actor_network=policy,
+            qvalue_network=value,
+            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+        )
+        loss.target_entropy
+        state = loss.state_dict()
+
+        loss = SACLoss(
+            actor_network=policy,
+            qvalue_network=value,
+            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+        )
+        loss.load_state_dict(state)
+
 
 @pytest.mark.skipif(
     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
@@ -7369,7 +7412,8 @@ class TestOnlineDT(LossModuleTestBase):
         loss_fn = OnlineDTLoss(actor)
 
         default_keys = {
-            "action": "action",
+            "action_pred": "action",
+            "action_target": "action",
         }
 
         self.tensordict_keys_test(
@@ -7468,7 +7512,8 @@ class TestDT(LossModuleTestBase):
         loss_fn = DTLoss(actor)
 
         default_keys = {
-            "action": "action",
+            "action_target": "action",
+            "action_pred": "action",
         }
 
         self.tensordict_keys_test(

@@ -136,6 +136,12 @@ class VideoRecorder(ObservationTransform):
         self.count = 0
         self.obs = []
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        self._call(tensordict_reset)
+        return tensordict_reset
+
 
 class TensorDictRecorder(Transform):
     """TensorDict recorder.
@@ -171,14 +177,14 @@ class TensorDictRecorder(Transform):
         self.skip = skip
         self.count = 0
 
-    def _call(self, td: TensorDictBase) -> TensorDictBase:
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         self.count += 1
         if self.count % self.skip == 0:
-            _td = td
+            _td = tensordict
             if self.in_keys:
-                _td = td.select(*self.in_keys).to_tensordict()
+                _td = tensordict.select(*self.in_keys).to_tensordict()
             self.td.append(_td)
-        return td
+        return tensordict
 
     def dump(self, suffix: Optional[str] = None) -> None:
         if suffix is None:
@@ -197,3 +203,9 @@ class TensorDictRecorder(Transform):
         self.count = 0
         del self.td
         self.td = []
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        self._call(tensordict_reset)
+        return tensordict_reset

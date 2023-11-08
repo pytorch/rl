@@ -16,7 +16,9 @@ from torchrl.data import (
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
+    CatTensors,
     Compose,
+    DMControlEnv,
     DoubleToFloat,
     EnvCreator,
     ParallelEnv,
@@ -30,15 +32,26 @@ from torchrl.objectives import CQLLoss, SoftUpdate
 
 from torchrl.trainers.helpers.models import ACTIVATIONS
 
-
 # ====================================================================
 # Environment utils
 # -----------------
 
 
-def env_maker(task, device="cpu", from_pixels=False):
-    with set_gym_backend("gym"):
-        return GymEnv(task, device=device, from_pixels=from_pixels)
+def env_maker(cfg, device="cpu"):
+    lib = cfg.env.backend
+    if lib in ("gym", "gymnasium"):
+        with set_gym_backend(lib):
+            return GymEnv(
+                cfg.env.name,
+                device=device,
+            )
+    elif lib == "dm_control":
+        env = DMControlEnv(cfg.env.name, cfg.env.task)
+        return TransformedEnv(
+            env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
+        )
+    else:
+        raise NotImplementedError(f"Unknown lib {lib}.")
 
 
 def apply_env_transforms(
@@ -58,7 +71,7 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         train_num_envs,
-        EnvCreator(lambda: env_maker(task=cfg.env.name)),
+        EnvCreator(lambda cfg=cfg: env_maker(cfg)),
     )
     parallel_env.set_seed(cfg.env.seed)
 
@@ -67,7 +80,7 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1):
     eval_env = TransformedEnv(
         ParallelEnv(
             eval_num_envs,
-            EnvCreator(lambda: env_maker(task=cfg.env.name)),
+            EnvCreator(lambda cfg=cfg: env_maker(cfg)),
         ),
         train_env.transform.clone(),
     )
@@ -88,7 +101,7 @@ def make_collector(cfg, train_env, actor_model_explore):
         frames_per_batch=cfg.collector.frames_per_batch,
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
-        device=cfg.collector.collector_device,
+        device=cfg.collector.device,
     )
     collector.set_seed(cfg.env.seed)
     return collector
@@ -98,7 +111,7 @@ def make_replay_buffer(
     batch_size,
     prb=False,
     buffer_size=1000000,
-    buffer_scratch_dir="/tmp/",
+    buffer_scratch_dir=None,
     device="cpu",
     prefetch=3,
 ):

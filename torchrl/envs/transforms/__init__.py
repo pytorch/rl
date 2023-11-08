@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from .gym_transforms import EndOfLifeTransform
 from .r3m import R3MTransform
 from .rlhf import KLRewardTransform
 from .transforms import (

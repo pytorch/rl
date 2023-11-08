@@ -2,14 +2,12 @@
 env:
   name: Pendulum-v1
   task: ""
-  library: gym
   exp_name: cql_${env.name}
   n_samples_stats: 1000
-  frame_skip: 1
-  reward_scaling: 1.0
   seed: 0
   train_num_envs: 1
   eval_num_envs: 1
+  backend: gym
 
 # Collector
 collector:
@@ -18,9 +16,10 @@ collector:
   multi_step: 0
   init_random_frames: 25_000
   env_per_collector: 1
-  collector_device: cpu
+  device: cpu
   max_frames_per_traj: 1000
   num_worker: 1
+
 
 # logger
 logger:

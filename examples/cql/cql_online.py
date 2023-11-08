@@ -33,7 +33,7 @@ from utils import (
 )
 
 
-@hydra.main(config_path=".", config_name="online_config")
+@hydra.main(version_base="1.1", config_path=".", config_name="online_config")
 def main(cfg: "DictConfig"):  # noqa: F821
     # Create logger
     exp_name = generate_exp_name("CQL-online", cfg.env.exp_name)
@@ -63,7 +63,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         batch_size=cfg.optim.batch_size,
         prb=cfg.replay_buffer.prb,
         buffer_size=cfg.replay_buffer.size,
-        device=device,
+        device="cpu",
     )
 
     # create agent
@@ -95,8 +95,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     prb = cfg.replay_buffer.prb
     eval_iter = cfg.logger.eval_iter
-    frames_per_batch, frame_skip = cfg.collector.frames_per_batch, cfg.env.frame_skip
-    eval_rollout_steps = cfg.collector.max_frames_per_traj // frame_skip
+    frames_per_batch = cfg.collector.frames_per_batch
+    eval_rollout_steps = cfg.collector.max_frames_per_traj
 
     sampling_start = time.time()
     for tensordict in collector:
@@ -122,7 +122,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
             for j in range(num_updates):
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample().clone()
+                sampled_tensordict = replay_buffer.sample()
+                if sampled_tensordict.device != device:
+                    sampled_tensordict = sampled_tensordict.to(
+                        device, non_blocking=True
+                    )
+                else:
+                    sampled_tensordict = sampled_tensordict.clone()
 
                 loss_td, _ = loss_module(sampled_tensordict)
 
@@ -185,7 +191,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/training_time"] = training_time
 
         # Evaluation
-        if abs(collected_frames % eval_iter) < frames_per_batch * frame_skip:
+        if abs(collected_frames % eval_iter) < frames_per_batch:
             with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 eval_start = time.time()
                 eval_rollout = eval_env.rollout(
