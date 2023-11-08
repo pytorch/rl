@@ -21,7 +21,6 @@ from torchrl.envs import (
     EnvCreator,
     InitTracker,
     ParallelEnv,
-    RewardScaling,
     RewardSum,
     TransformedEnv,
 )
@@ -43,12 +42,13 @@ def env_maker(task, device="cpu", from_pixels=False):
         return GymEnv(task, device=device, from_pixels=from_pixels)
 
 
-def apply_env_transforms(env, reward_scaling=1.0):
+def apply_env_transforms(
+    env,
+):
     transformed_env = TransformedEnv(
         env,
         Compose(
             InitTracker(),
-            RewardScaling(loc=0.0, scale=reward_scaling),
             DoubleToFloat(),
             RewardSum(),
         ),
@@ -64,7 +64,7 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1):
     )
     parallel_env.set_seed(cfg.env.seed)
 
-    train_env = apply_env_transforms(parallel_env, cfg.env.reward_scaling)
+    train_env = apply_env_transforms(parallel_env)
 
     eval_env = TransformedEnv(
         ParallelEnv(

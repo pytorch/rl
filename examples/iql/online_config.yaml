@@ -5,7 +5,6 @@ env:
   library: gym
   exp_name: iql_${env.name}
   n_samples_stats: 1000
-  reward_scaling: 1.0
   seed: 0
   train_num_envs: 1
   eval_num_envs: 1

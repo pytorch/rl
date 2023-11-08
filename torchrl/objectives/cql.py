@@ -474,7 +474,7 @@ class CQLLoss(LossModule):
             keys = [
                 "loss_actor",
                 "loss_actor_bc",
-                "loss_qvalues",
+                "loss_qvalue",
                 "loss_cql",
                 "loss_alpha",
                 "loss_alpha_prime",
@@ -519,7 +519,7 @@ class CQLLoss(LossModule):
         out = {
             "loss_actor": loss_actor.mean(),
             "loss_actor_bc": loss_actor_bc.mean(),
-            "loss_qvalues": q_loss.mean(),
+            "loss_qvalue": q_loss.mean(),
             "loss_cql": cql_loss.mean(),
             "loss_alpha": loss_alpha.mean(),
             "loss_alpha_prime": alpha_prime_loss.mean(),

@@ -361,11 +361,11 @@ class IQLLoss(LossModule):
         else:
             tensordict_reshape = tensordict
 
-        loss_actor = self._loss_actor(tensordict_reshape)
-        loss_qvalue, priority = self._loss_qvalue(tensordict_reshape)
-        loss_value = self._loss_value(tensordict_reshape)
+        loss_actor, metadata = self.actor_loss(tensordict_reshape)
+        loss_qvalue, metadata_qvalue = self.qvalue_loss(tensordict_reshape)
+        loss_value, metadata_value = self.value_loss(tensordict_reshape)
+        metadata.update(**metadata_qvalue, **metadata_value)
 
-        tensordict_reshape.set(self.tensor_keys.priority, priority)
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_value is not None and loss_actor.shape != loss_value.shape
         ):
@@ -388,7 +388,7 @@ class IQLLoss(LossModule):
             [],
         )
 
-    def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
+    def actor_loss(self, tensordict: TensorDictBase) -> Tensor:
         # KL loss
         dist = self.actor_network.get_dist(
             tensordict,
@@ -424,7 +424,7 @@ class IQLLoss(LossModule):
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         return -(exp_a * log_prob).mean(), {}
 
-    def _loss_value(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
@@ -437,9 +437,9 @@ class IQLLoss(LossModule):
         )
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_q - value, self.expectile).mean()
-        return value_loss
+        return value_loss, {}
 
-    def _loss_qvalue(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
         tensordict = tensordict.select("next", *obs_keys, self.tensor_keys.action)
 
@@ -463,7 +463,9 @@ class IQLLoss(LossModule):
             .sum(0)
             .mean()
         )
-        return loss_qval, td_error.detach().max(0)[0]
+        tensordict.set(self.tensor_keys.priority, td_error.mean(0).detach())
+        metadata = {"td_error": td_error.detach().mean(0)}
+        return loss_qval, metadata
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:

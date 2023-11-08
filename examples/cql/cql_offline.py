@@ -87,7 +87,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             actor_loss = loss_vals["loss_actor"]
         else:
             actor_loss = loss_vals["loss_actor_bc"]
-        q_loss = loss_vals["loss_qvalues"]
+        q_loss = loss_vals["loss_qvalue"]
         cql_loss = loss_vals["loss_cql"]
 
         q_loss = q_loss + cql_loss

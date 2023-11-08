@@ -78,7 +78,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # sample data
         data = replay_buffer.sample()
         # compute loss
-        loss_vals = loss_module(data.clone())
+        loss_vals = loss_module(data.clone().to(device))
 
         actor_loss = loss_vals["loss_actor"]
         q_loss = loss_vals["loss_qvalue"]
