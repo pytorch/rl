@@ -69,12 +69,14 @@ conda env update --file "${this_dir}/environment.yml" --prune
 #conda install habitat-sim withbullet headless -c conda-forge -c aihabitat -y
 git clone --branch stable https://github.com/facebookresearch/habitat-sim.git
 cd habitat-sim
-pip install -e .
+python setup.py develop
+cd ..
 
 #conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
 git clone --branch stable https://github.com/facebookresearch/habitat-lab.git
 cd habitat-lab
 pip install -e habitat-lab  # install habitat_lab
+cd ..
 
 #conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-baselines
 
