@@ -603,7 +603,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             if isinstance(self._storage, torch.Tensor):
                 _mem_map_tensor_as_tensor(self._storage).copy_(_storage)
             elif self._storage is None:
-                self._storage = MemmapTensor(_storage)
+                self._storage = make_memmap(_storage, path=self.scratch_dir + "/tensor.memmap" if self.scratch_dir is not None else None)
             else:
                 raise RuntimeError(
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}"
@@ -657,8 +657,8 @@ class LazyMemmapStorage(LazyTensorStorage):
         else:
             # If not a tensorclass/tensordict, it must be a tensor(-like)
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
-            out = MemmapTensor(
-                self.max_size, *data.shape, device=self.device, dtype=data.dtype
+            out = make_empty_memmap(
+                (self.max_size, *data.shape), dtype=data.dtype, path=self.scratch_dir + "/tensor.memmap" if self.scratch_dir is not None else None
             )
             if VERBOSE:
                 filesize = os.path.getsize(out.filename) / 1024 / 1024
@@ -759,3 +759,21 @@ def _get_default_collate(storage, _is_tensordict=False):
         raise NotImplementedError(
             f"Could not find a default collate_fn for storage {type(storage)}."
         )
+
+@implement_for("torch", None, "2.2.0")
+def make_memmap(tensor, path):
+    return MemmapTensor.from_tensor(tensor, filename=path)
+
+@implement_for("torch", "2.2.0")
+def make_memmap(tensor, path):
+    from tensordict._memory_map import from_tensor
+    return from_tensor(tensor, filename=path)
+
+@implement_for("torch", None, "2.2.0")
+def make_empty_memmap(shape, dtype, path):
+    return MemmapTensor(shape, dtype=dtype, filename=path)
+
+@implement_for("torch", "2.2.0")
+def make_empty_memmap(shape, dtype, path):
+    from tensordict._memory_map import empty_like
+    return empty_like(torch.zeros((), dtype=dtype).expand(shape), filename=path)
