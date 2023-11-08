@@ -11,7 +11,7 @@ set -v
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
 #apt-get update && apt-get install -y git wget gcc g++ unzip
-apt-get install -y libxrandr-dev libxinerama-dev
+apt-get install -y libxrandr-dev libxinerama-dev libxcursor-dev
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
