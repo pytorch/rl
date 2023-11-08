@@ -20,4 +20,3 @@ dependencies:
     - ninja
     - magnum
     - cmake
-    - libxrandr
