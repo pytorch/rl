@@ -48,7 +48,7 @@ jobs:
       run: |
         apt-get install python3.8 python3-pip -y
         pip3 install --upgrade pip
-        pip3 install setuptools packaging -U
+        pip3 install setuptools ninja packaging -U
     - name: check python version
       run: |
         python3 --version
