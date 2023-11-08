@@ -18,6 +18,7 @@ from torchrl.modules import (
     CEMPlanner,
     DTActor,
     LSTMNet,
+    MultiAgentConvNet,
     MultiAgentMLP,
     OnlineDTActor,
     QMixer,
@@ -907,6 +908,58 @@ class TestMultiAgent:
             *batch, n_agents, n_agent_inputs
         )
         out = mlp(obs)
+        for i in range(n_agents):
+            if share_params:
+                # same input same output
+                assert torch.allclose(out[..., i, :], out[..., 0, :])
+            else:
+                for j in range(i + 1, n_agents):
+                    # same input different output
+                    assert not torch.allclose(out[..., i, :], out[..., j, :])
+
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize("share_params", [True, False])
+    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
+    def test_cnn(
+        self, n_agents, centralised, share_params, batch, x=50, y=50, channels=3
+    ):
+        torch.manual_seed(0)
+        cnn = MultiAgentConvNet(
+            n_agents=n_agents, centralised=centralised, share_params=share_params
+        )
+        td = TensorDict(
+            {
+                "agents": TensorDict(
+                    {"observation": torch.randn(*batch, n_agents, channels, x, y)},
+                    [*batch, n_agents],
+                )
+            },
+            batch_size=batch,
+        )
+        obs = td[("agents", "observation")]
+        out = cnn(obs)
+        assert out.shape[:-1] == (*batch, n_agents)
+        for i in range(n_agents):
+            if centralised and share_params:
+                assert torch.allclose(out[..., i, :], out[..., 0, :])
+            else:
+                for j in range(i + 1, n_agents):
+                    assert not torch.allclose(out[..., i, :], out[..., j, :])
+
+        obs[..., 0, 0, 0, 0] += 1
+        out2 = cnn(obs)
+        for i in range(n_agents):
+            if centralised:
+                # a modification to the input of agent 0 will impact all agents
+                assert not torch.allclose(out[..., i, :], out2[..., i, :])
+            elif i > 0:
+                assert torch.allclose(out[..., i, :], out2[..., i, :])
+
+        obs = torch.randn(*batch, 1, channels, x, y).expand(
+            *batch, n_agents, channels, x, y
+        )
+        out = cnn(obs)
         for i in range(n_agents):
             if share_params:
                 # same input same output

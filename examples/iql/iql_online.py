@@ -109,12 +109,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # optimization steps
         training_start = time.time()
         if collected_frames >= init_random_frames:
-            log_loss_td = TensorDict(
-                {},
-                [
-                    num_updates,
-                ],
-            )
+            log_loss_td = TensorDict({}, [num_updates])
             for j in range(num_updates):
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample().clone()
@@ -156,10 +151,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 episode_length
             )
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/q_loss"] = log_loss_td.get("loss_qvalue").mean()
-            metrics_to_log["train/actor_loss"] = log_loss_td.get("loss_actor").mean()
-            metrics_to_log["train/value_loss"] = log_loss_td.get("loss_value").mean()
-            metrics_to_log["train/entropy"] = log_loss_td.get("entropy").mean()
+            metrics_to_log["train/q_loss"] = log_loss_td.get("loss_qvalue").detach()
+            metrics_to_log["train/actor_loss"] = log_loss_td.get("loss_actor").detach()
+            metrics_to_log["train/value_loss"] = log_loss_td.get("loss_value").detach()
+            metrics_to_log["train/entropy"] = log_loss_td.get("entropy").detach()
             metrics_to_log["train/sampling_time"] = sampling_time
             metrics_to_log["train/training_time"] = training_time
 
@@ -177,8 +172,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 metrics_to_log["eval/reward"] = eval_reward
                 metrics_to_log["eval/time"] = eval_time
-
-        log_metrics(logger, metrics_to_log, collected_frames)
+        if logger is not None:
+            log_metrics(logger, metrics_to_log, collected_frames)
         sampling_start = time.time()
 
     collector.shutdown()

@@ -266,7 +266,7 @@ class TestTokenizers:
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        tokenizer.pad_token = 100
+        tokenizer.pad_token = "-pad-"
         process = TensorDictTokenizer(
             tokenizer,
             max_length=max_length,
@@ -313,7 +313,7 @@ class TestTokenizers:
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        tokenizer.pad_token = 100
+        tokenizer.pad_token = "-pad-"
         process = PromptTensorDictTokenizer(
             tokenizer,
             max_length=max_length,

@@ -15,6 +15,8 @@ import hydra
 import numpy as np
 import torch
 import tqdm
+
+from torchrl.envs import set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
 
@@ -28,6 +30,7 @@ from utils import (
 )
 
 
+@set_gym_backend("gym")
 @hydra.main(config_path=".", config_name="offline_config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
@@ -103,8 +106,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
             eval_reward = eval_td["next", "reward"].sum(1).mean().item()
             to_log["evaluation_reward"] = eval_reward
-
-        log_metrics(logger, to_log, i)
+        if logger is not None:
+            log_metrics(logger, to_log, i)
 
     pbar.close()
     print(f"Training time: {time.time() - start_time}")
