@@ -9,7 +9,7 @@
 <a href="https://pypi.org/project/torchrl-nightly"><img src="https://img.shields.io/pypi/v/torchrl-nightly?label=nightly" alt="pypi nightly version"></a>
 [![Downloads](https://static.pepy.tech/personalized-badge/torchrl?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads)](https://pepy.tech/project/torchrl)
 [![Downloads](https://static.pepy.tech/personalized-badge/torchrl-nightly?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads%20(nightly))](https://pepy.tech/project/torchrl-nightly)
-[![Discord](https://img.shields.io/twitter/follow/torchrl1?style=social)](https://discord.gg/xSURYdvu)
+[![Discord Shield](https://discord.gg/xSURYdvu)](https://discord.gg/xSURYdvu)
 
 # TorchRL
 
