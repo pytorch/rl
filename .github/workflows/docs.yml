@@ -49,35 +49,24 @@ jobs:
         apt-get install python3.8 python3-pip -y
         python3 -m pip install --upgrade pip
         python3 -m pip install setuptools ninja packaging -U
-    - name: check python version
-      run: |
+        # check python version
         python3 --version
-    - name: Check git version
-      run: git version
-    - name: Install PyTorch
-      shell: bash
-      run: |
+        # Check git version
+        git version
+        # Install PyTorch
         python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
-    - name: Install tensordict
-      run: |
+        # Install tensordict
         python3 -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
-    - name: Install TorchRL
-      run: |
+        # Install TorchRL
         python3 setup.py develop
-    - name: Install requirements
-      run: |
+        # Install requirements
         python3 -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
-    - name: Test torchrl installation
-      shell: bash
-      run: |
+        # Test torchrl installation
         mkdir _tmp
         cd _tmp
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
         print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
         cd ..
-    - name: Build the docset
-      id: build_doc
-      run: |
         cd ./docs
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
