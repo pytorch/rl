@@ -114,7 +114,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if collected_frames >= init_random_frames:
             (
                 q_losses,
-                cql_loss,
+                cql_losses,
             ) = ([], [])
             for _ in range(num_updates):
 
@@ -131,13 +131,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 loss_dict = loss_module(sampled_tensordict)
 
                 q_loss = loss_dict["loss_qvalue"]
+                cql_loss = loss_dict["loss_cql"]
+                loss = q_loss + cql_loss
 
                 # Update model
                 optimizer.zero_grad()
-                q_loss.backward()
+                loss.backward()
                 optimizer.step()
                 q_losses.append(q_loss.item())
-                cql_loss.append(loss_dict["loss_cql"].item())
+                cql_losses.append(cql_loss.item())
 
                 # Update target params
                 target_net_updater.step()
@@ -165,7 +167,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         if collected_frames >= init_random_frames:
             metrics_to_log["train/q_loss"] = np.mean(q_losses)
-            metrics_to_log["train/cql_loss"] = np.mean(cql_loss)
+            metrics_to_log["train/cql_loss"] = np.mean(cql_losses)
             metrics_to_log["train/sampling_time"] = sampling_time
             metrics_to_log["train/training_time"] = training_time
 

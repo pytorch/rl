@@ -816,9 +816,6 @@ class DiscreteCQLLoss(LossModule):
         gamma (float, optional): Discount factor. Default is ``None``.
         action_space: The action space of the environment. If None, it is inferred from the value network.
             Defaults to None.
-        priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
-            Tensordict key where to write the
-            priority (for prioritized replay buffer usage). Defaults to ``"td_error"``.
 
 
     Examples:
@@ -936,11 +933,9 @@ class DiscreteCQLLoss(LossModule):
         delay_value: bool = True,
         gamma: float = None,
         action_space=None,
-        priority_key: str = None,
     ) -> None:
         super().__init__()
         self._in_keys = None
-        self._set_deprecated_ctor_keys(priority=priority_key)
         self.delay_value = delay_value
         value_network = ensure_tensordict_compatible(
             module=value_network,
@@ -1044,14 +1039,6 @@ class DiscreteCQLLoss(LossModule):
         self._value_estimator.set_keys(**tensor_keys)
 
     @property
-    def device(self) -> torch.device:
-        for p in self.parameters():
-            return p.device
-        raise RuntimeError(
-            "At least one of the networks of CQLLoss must have trainable " "parameters."
-        )
-
-    @property
     def in_keys(self):
         if self._in_keys is None:
             self._set_in_keys()
@@ -1107,7 +1094,9 @@ class DiscreteCQLLoss(LossModule):
             pred_val,
             inplace=True,
         )
-        loss = 0.5 * distance_loss(pred_val_index, target_value, self.loss_function).mean()
+        loss = (
+            0.5 * distance_loss(pred_val_index, target_value, self.loss_function).mean()
+        )
 
         metadata = {
             "td_error": td_error.mean(0).detach(),
@@ -1135,8 +1124,8 @@ class DiscreteCQLLoss(LossModule):
         loss_qval, metadata = self.value_loss(tensordict)
         loss_cql, _ = self.cql_loss(tensordict)
         source = {
-                "loss_qvalue": loss_qval,
-                "loss_cql": loss_cql,
+            "loss_qvalue": loss_qval,
+            "loss_cql": loss_cql,
         }
         source.update(metadata)
         td_out = TensorDict(
@@ -1152,19 +1141,19 @@ class DiscreteCQLLoss(LossModule):
         return self.target_value_network_params.detach()
 
     def cql_loss(self, tensordict):
-        """Computes the CQL loss for a batch of Q-values and one-hot encoded actions."""
-
         qvalues = tensordict.get(self.tensor_keys.pred_val, default=None)
         if qvalues is None:
-            raise KeyError("Couldn't find the predicted qvalue with key {self.tensor_keys.pred_val} in the input tensordict. "
-                           "This could be caused by calling cql_loss method before value_loss.")
+            raise KeyError(
+                "Couldn't find the predicted qvalue with key {self.tensor_keys.pred_val} in the input tensordict. "
+                "This could be caused by calling cql_loss method before value_loss."
+            )
 
         current_action = tensordict.get(self.tensor_keys.action)
 
         logsumexp = torch.logsumexp(qvalues, dim=-1, keepdim=True)
         if self.action_space == "categorical":
-            q_a = q_values.gather(-1, current_action)
+            q_a = qvalues.gather(-1, current_action)
         else:
-            q_a = (q_values * current_action).sum(dim=-1, keepdim=True)
+            q_a = (qvalues * current_action).sum(dim=-1, keepdim=True)
 
         return (logsumexp - q_a).mean(), {}
