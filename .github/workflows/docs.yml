@@ -47,8 +47,8 @@ jobs:
     - name: Update pip and setuptools
       run: |
         apt-get install python3.8 python3-pip -y
-        pip3 install --upgrade pip
-        pip3 install setuptools ninja packaging -U
+        python3 -m pip install --upgrade pip
+        python3 -m pip install setuptools ninja packaging -U
     - name: check python version
       run: |
         python3 --version
@@ -57,17 +57,16 @@ jobs:
     - name: Install PyTorch
       shell: bash
       run: |
-        pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
-        #pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
+        python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
     - name: Install tensordict
       run: |
-        pip3 install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
+        python3 -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
     - name: Install TorchRL
       run: |
         python3 setup.py develop
     - name: Install requirements
       run: |
-        pip3 install -r docs/requirements.txt --quiet --root-user-action=ignore
+        python3 -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
     - name: Test torchrl installation
       shell: bash
       run: |
