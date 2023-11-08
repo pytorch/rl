@@ -285,5 +285,6 @@ def make_iql_optimizer(optim_cfg, loss_module):
 
 
 def log_metrics(logger, metrics, step):
-    for metric_name, metric_value in metrics.items():
-        logger.log_scalar(metric_name, metric_value, step)
+    if logger is not None:
+        for metric_name, metric_value in metrics.items():
+            logger.log_scalar(metric_name, metric_value, step)
