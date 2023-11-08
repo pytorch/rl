@@ -1152,6 +1152,9 @@ class DiscreteCQLLoss(LossModule):
 
         logsumexp = torch.logsumexp(qvalues, dim=-1, keepdim=True)
         if self.action_space == "categorical":
+            if current_action.shape != qvalues.shape:
+                # unsqueeze the action if it lacks on trailing singleton dim
+                current_action = current_action.unsqueeze(-1)
             q_a = qvalues.gather(-1, current_action)
         else:
             q_a = (qvalues * current_action).sum(dim=-1, keepdim=True)
