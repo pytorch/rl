@@ -106,7 +106,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   record_video=True \
   record_frames=4 \
   buffer_size=120
-python .github/unittest/helpers/coverage_run_parallel.py examples/cql/discrete_dqn_online.py \
+python .github/unittest/helpers/coverage_run_parallel.py examples/cql/discrete_cql_online.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   optim.batch_size=10 \
@@ -114,7 +114,8 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/cql/discrete_d
   collector.env_per_collector=2 \
   collector.device=cuda:0 \
   optim.optim_steps_per_batch=1 \
-  replay_buffer.size=120
+  replay_buffer.size=120 \
+  logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py \
   num_workers=4 \
   collector.total_frames=48 \
