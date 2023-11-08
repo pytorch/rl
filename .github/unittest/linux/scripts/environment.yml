@@ -28,6 +28,6 @@ dependencies:
     - mlflow
     - av
     - coverage
-    - ray
+    - ray<2.8.0
     - transformers
     - ninja
