@@ -77,7 +77,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if not isinstance(cfg.reward_scaling, float):
         cfg.reward_scaling = 1.0
 
-    if torch.cuda.is_available() and not cfg.model_device != "":
+    if torch.cuda.is_available() and cfg.model_device == "":
         device = torch.device("cuda:0")
     elif cfg.model_device:
         device = torch.device(cfg.model_device)

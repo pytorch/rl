@@ -1153,6 +1153,7 @@ class DiscreteCQLLoss(LossModule):
 
     def cql_loss(self, tensordict):
         """Computes the CQL loss for a batch of Q-values and one-hot encoded actions."""
+
         qvalues = tensordict.get(self.tensor_keys.pred_val, default=None)
         if qvalues is None:
             raise KeyError("Couldn't find the predicted qvalue with key {self.tensor_keys.pred_val} in the input tensordict. "
@@ -1161,6 +1162,9 @@ class DiscreteCQLLoss(LossModule):
         current_action = tensordict.get(self.tensor_keys.action)
 
         logsumexp = torch.logsumexp(qvalues, dim=-1, keepdim=True)
-        q_a = (qvalues * current_action).sum(dim=-1, keepdim=True)
+        if self.action_space == "categorical":
+            q_a = q_values.gather(-1, current_action)
+        else:
+            q_a = (q_values * current_action).sum(dim=-1, keepdim=True)
 
         return (logsumexp - q_a).mean(), {}

@@ -726,6 +726,7 @@ class SyncDataCollector(DataCollectorBase):
             >>> from torchrl.envs import ParallelEnv
             >>> from torchrl.envs.libs.gym import GymEnv
             >>> from tensordict.nn import TensorDictModule
+            >>> from torch import nn
             >>> env_fn = lambda: GymEnv("Pendulum-v1")
             >>> env_fn_parallel = ParallelEnv(6, env_fn)
             >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
@@ -1421,6 +1422,7 @@ also that the state dict is synchronised across processes if needed."""
             >>> from torchrl.envs import ParallelEnv
             >>> from torchrl.envs.libs.gym import GymEnv
             >>> from tensordict.nn import TensorDictModule
+            >>> from torch import nn
             >>> env_fn = lambda: GymEnv("Pendulum-v1")
             >>> env_fn_parallel = lambda: ParallelEnv(6, env_fn)
             >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
