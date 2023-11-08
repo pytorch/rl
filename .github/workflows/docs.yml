@@ -107,6 +107,7 @@ jobs:
           CLEAN: false
 
   upload-docs:
+    needs: build_docs_job
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: linux.2xlarge
