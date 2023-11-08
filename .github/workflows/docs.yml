@@ -29,12 +29,13 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v3
     # Update references
-    - name: Setup conda
+    - name: Script
       run: |
         root_dir="$(pwd)"
         conda_dir="${root_dir}/conda"
         env_dir="${root_dir}/env"
         os=Linux
+        
         # 1. Install conda at ./conda
         printf "* Installing conda\n"
         wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
@@ -44,29 +45,38 @@ jobs:
         conda create --prefix "${env_dir}" -y python=3.8
         printf "* Activating\n"
         conda activate "${env_dir}"
-    - name: Update pip and setuptools
-      run: |
+        
+        # 2. upgrade pip, ninja and packaging
         apt-get install python3.8 python3-pip -y
         python3 -m pip install --upgrade pip
         python3 -m pip install setuptools ninja packaging -U
-        # check python version
+        
+        # 3. check python version
         python3 --version
-        # Check git version
+        
+        # 4. Check git version
         git version
-        # Install PyTorch
+        
+        # 5. Install PyTorch
         python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
-        # Install tensordict
+        
+        # 6. Install tensordict
         python3 -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
-        # Install TorchRL
+        
+        # 7. Install TorchRL
         python3 setup.py develop
-        # Install requirements
+        
+        # 8. Install requirements
         python3 -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
-        # Test torchrl installation
+        
+        # 9. Test torchrl installation
         mkdir _tmp
         cd _tmp
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
         print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
         cd ..
+        
+        # 10. Build doc
         cd ./docs
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
