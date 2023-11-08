@@ -63,7 +63,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         batch_size=cfg.optim.batch_size,
         prb=cfg.replay_buffer.prb,
         buffer_size=cfg.replay_buffer.size,
-        device=device,
+        device="cpu",
     )
 
     # Create model
@@ -112,7 +112,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
             for j in range(num_updates):
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample().clone()
-
+                if sampled_tensordict.device != device:
+                    sampled_tensordict = sampled_tensordict.to(
+                        device, non_blocking=True
+                    )
+                else:
+                    sampled_tensordict = sampled_tensordict.clone()
                 # compute loss
                 loss_td = loss_module(sampled_tensordict)
 
