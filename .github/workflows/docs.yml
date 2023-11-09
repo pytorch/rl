@@ -83,6 +83,7 @@ jobs:
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
         cd ..
         cp -r docs/_local_build "${RUNNER_ARTIFACT_DIR}"
+        cp -r docs/_local_build/* "${RUNNER_DOCS_DIR}"
 
   upload:
     needs: build-docs
@@ -138,11 +139,3 @@ jobs:
         git config http.postBuffer 524288000
         git commit -m "auto-generating sphinx docs" || true
         git push
-
-  upload-docs:
-    needs: build-docs
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
-    with:
-      runner: linux.2xlarge
-      script: |
-        cp -r docs/_local_build/* "${RUNNER_DOCS_DIR}"
