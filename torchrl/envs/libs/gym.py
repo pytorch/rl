@@ -539,7 +539,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     @implement_for("gym", None, "0.27")
     def _get_batch_size(self, env):
         if hasattr(env, "num_envs"):
-            batch_size = torch.Size([env.num_envs, *self.batch_size])
+            batch_size = torch.Size([_get_num_envs(env), *self.batch_size])
         else:
             batch_size = self.batch_size
         return batch_size
@@ -547,7 +547,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     @implement_for("gymnasium", "0.27", None)  # gymnasium wants the unwrapped env
     def _get_batch_size(self, env):  # noqa: F811
         if hasattr(env, "num_envs"):
-            batch_size = torch.Size([env.unwrapped.num_envs, *self.batch_size])
+            batch_size = torch.Size([_get_num_envs(env), *self.batch_size])
         else:
             batch_size = self.batch_size
         return batch_size
@@ -1204,3 +1204,15 @@ def _flip_info_tuple(info: Tuple[Dict]) -> Dict[str, tuple]:
     for key in info_example:
         result[key] = tuple(_info.get(key, None) for _info in info)
     return result
+
+@implement_for("gym")
+def _get_num_envs(env):
+    return env.num_envs
+
+@implement_for("gymnasium", None, "0.29")
+def _get_num_envs(env):
+    return env.num_envs
+
+@implement_for("gymnasium", "0.29", None)
+def _get_num_envs(env):
+    return env.unwrapped.num_envs

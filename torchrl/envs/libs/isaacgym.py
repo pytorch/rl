@@ -14,7 +14,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDictBase
-from torchrl.envs.libs.gym import GymWrapper
+from torchrl.envs.libs.gym import GymWrapper, _get_num_envs
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
@@ -49,7 +49,7 @@ class IsaacGymWrapper(GymWrapper):
         warnings.warn(
             "IsaacGym environment support is an experimental feature that may change in the future."
         )
-        num_envs = env.num_envs
+        num_envs = _get_num_envs(env)
         super().__init__(
             env, torch.device(env.device), batch_size=torch.Size([num_envs]), **kwargs
         )
