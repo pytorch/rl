@@ -31,9 +31,6 @@ jobs:
     # Update references
     - name: Script
       run: |
-#        mkdir docs/_local_build
-#        echo "Hello World" >> docs/_local_build/index.html
-
         root_dir="$(pwd)"
         conda_dir="${root_dir}/conda"
         env_dir="${root_dir}/env"
@@ -116,4 +113,5 @@ jobs:
       runner: linux.2xlarge
       download-artifact: build
       script: |
+        ls -l $RUNNER_ARTIFACT_DIR
         cp -r "${RUNNER_ARTIFACT_DIR}"/* "${RUNNER_DOCS_DIR}"
