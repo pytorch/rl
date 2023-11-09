@@ -29,12 +29,13 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v3
     # Update references
-    - name: Setup conda
+    - name: Script
       run: |
         root_dir="$(pwd)"
         conda_dir="${root_dir}/conda"
         env_dir="${root_dir}/env"
         os=Linux
+        
         # 1. Install conda at ./conda
         printf "* Installing conda\n"
         wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
@@ -44,40 +45,38 @@ jobs:
         conda create --prefix "${env_dir}" -y python=3.8
         printf "* Activating\n"
         conda activate "${env_dir}"
-    - name: Update pip
-      run: |
+        
+        # 2. upgrade pip, ninja and packaging
         apt-get install python3.8 python3-pip -y
-        pip3 install --upgrade pip
-    - name: check python version
-      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install setuptools ninja packaging -U
+        
+        # 3. check python version
         python3 --version
-    - name: Check git version
-      run: git version
-    - name: Install PyTorch
-      shell: bash
-      run: |
-        pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
-        #pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
-    - name: Install tensordict
-      run: |
-        pip3 install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
-    - name: Install TorchRL
-      run: |
+        
+        # 4. Check git version
+        git version
+        
+        # 5. Install PyTorch
+        python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
+        
+        # 6. Install tensordict
+        python3 -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
+        
+        # 7. Install TorchRL
         python3 setup.py develop
-    - name: Install requirements
-      run: |
-        pip3 install -r docs/requirements.txt --quiet --root-user-action=ignore
-    - name: Test torchrl installation
-      shell: bash
-      run: |
+        
+        # 8. Install requirements
+        python3 -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
+        
+        # 9. Test torchrl installation
         mkdir _tmp
         cd _tmp
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
         print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
         cd ..
-    - name: Build the docset
-      id: build_doc
-      run: |
+        
+        # 10. Build doc
         cd ./docs
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
@@ -95,7 +94,7 @@ jobs:
     - name: Upload wheel for download
       uses: actions/upload-artifact@v2
       with:
-        name: build
+        name: docs
         path: docs/_local_build/
     - name: Deploy
       if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
@@ -105,3 +104,13 @@ jobs:
           branch: gh-pages # The branch the action should deploy to.
           folder: docs/_local_build/ # The folder the action should deploy.
           CLEAN: false
+
+  upload-docs:
+    needs: build_docs_job
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: linux.2xlarge
+      download-artifact: docs
+      script: |
+        cp -r docs/* "${RUNNER_DOCS_DIR}"
