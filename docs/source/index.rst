@@ -39,31 +39,17 @@ Basics
 .. toctree::
    :maxdepth: 1
 
-   tutorials/coding_ppo
-   tutorials/pendulum
-   tutorials/torchrl_demo
-
 Intermediate
 ------------
 
 .. toctree::
    :maxdepth: 1
 
-   tutorials/multiagent_ppo
-   tutorials/torchrl_envs
-   tutorials/pretrained_models
-   tutorials/dqn_with_rnn
-   tutorials/rb_tutorial
-
 Advanced
 --------
 
 .. toctree::
    :maxdepth: 1
-
-   tutorials/multi_task
-   tutorials/coding_ddpg
-   tutorials/coding_dqn
 
 References
 ==========
