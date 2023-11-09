@@ -85,7 +85,7 @@ jobs:
         cp -r docs/_local_build "${RUNNER_ARTIFACT_DIR}"
 
         if [[ ${{ github.event_name == 'pull_request' }} ]]; then
-          cp -r build/html/* "${RUNNER_DOCS_DIR}"
+          cp -r docs/_local_build "${RUNNER_DOCS_DIR}"
         fi
 
   upload:
