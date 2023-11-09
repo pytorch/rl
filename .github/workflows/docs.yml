@@ -120,4 +120,3 @@ jobs:
         echo "${RUNNER_ARTIFACT_DIR}"
 
         cp -r "${RUNNER_ARTIFACT_DIR}" "${RUNNER_DOCS_DIR}"        
-        sleep 9000
