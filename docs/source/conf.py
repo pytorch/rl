@@ -69,7 +69,7 @@ extensions = [
     "sphinx_gallery.gen_gallery",
     "sphinxcontrib.aafig",
     "myst_parser",
-    'sphinx_design'
+    "sphinx_design",
 ]
 
 intersphinx_mapping = {

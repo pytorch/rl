@@ -2,7 +2,6 @@ matplotlib
 numpy
 sphinx-copybutton
 sphinx-gallery
-sphinx_design
 sphinx===5.0.0
 Jinja2==3.1.2
 sphinx-autodoc-typehints
@@ -12,6 +11,7 @@ sphinxcontrib-htmlhelp
 -e git+https://github.com/pytorch/pytorch_sphinx_theme.git#egg=pytorch_sphinx_theme
 myst-parser
 docutils
+sphinx_design
 
 torchvision
 dm_control
