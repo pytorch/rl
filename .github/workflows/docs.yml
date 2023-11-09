@@ -116,4 +116,8 @@ jobs:
       runner: linux.2xlarge
       download-artifact: build
       script: |
-        cp -r ${RUNNER_TEMP}/artifacts/build/* "${RUNNER_DOCS_DIR}"
+        echo "RUNNER_ARTIFACT_DIR:"
+        echo "${RUNNER_ARTIFACT_DIR}"
+
+        cp -r "${RUNNER_ARTIFACT_DIR}" "${RUNNER_DOCS_DIR}"        
+        sleep 9000
