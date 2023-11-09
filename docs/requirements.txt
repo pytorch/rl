@@ -11,6 +11,7 @@ sphinxcontrib-htmlhelp
 -e git+https://github.com/pytorch/pytorch_sphinx_theme.git#egg=pytorch_sphinx_theme
 myst-parser
 docutils
+sphinx_design
 
 torchvision
 dm_control
