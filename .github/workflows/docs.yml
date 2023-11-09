@@ -117,6 +117,8 @@ jobs:
       download-artifact: build
       script: |
         echo "RUNNER_ARTIFACT_DIR:"
-        echo "${RUNNER_ARTIFACT_DIR}"
+        echo $RUNNER_ARTIFACT_DIR
+        ls -l $RUNNER_ARTIFACT_DIR
 
-        cp -r "${RUNNER_ARTIFACT_DIR}" "${RUNNER_DOCS_DIR}"        
+        cp -r "${RUNNER_ARTIFACT_DIR}" "${RUNNER_DOCS_DIR}"
+        sleep 300
