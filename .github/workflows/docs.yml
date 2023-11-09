@@ -84,10 +84,6 @@ jobs:
         cd ..
         cp -r docs/_local_build "${RUNNER_ARTIFACT_DIR}"
 
-        if [[ ${{ github.event_name == 'pull_request' }} ]]; then
-          cp -r docs/_local_build "${RUNNER_DOCS_DIR}"
-        fi
-
   upload:
     needs: build-docs
     if: github.repository == 'pytorch/rl' && github.event_name == 'push' && 
@@ -142,3 +138,11 @@ jobs:
         git config http.postBuffer 524288000
         git commit -m "auto-generating sphinx docs" || true
         git push
+
+  upload-docs:
+    needs: build-docs
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      runner: linux.2xlarge
+      script: |
+        cp -r docs/_local_build/* "${RUNNER_DOCS_DIR}"
