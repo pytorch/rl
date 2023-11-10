@@ -119,7 +119,6 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/cql/discrete_c
   collector.frames_per_batch=16 \
   collector.env_per_collector=2 \
   collector.device=cuda:0 \
-  optim.optim_steps_per_batch=1 \
   replay_buffer.size=120 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py \
