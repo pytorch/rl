@@ -4,11 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 import torch.nn
 import torch.optim
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
+    CompositeSpec,
     LazyMemmapStorage,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
@@ -27,8 +28,15 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
-from torchrl.objectives import CQLLoss, SoftUpdate
+from torchrl.modules import (
+    EGreedyModule,
+    MLP,
+    ProbabilisticActor,
+    QValueActor,
+    TanhNormal,
+    ValueOperator,
+)
+from torchrl.objectives import CQLLoss, DiscreteCQLLoss, SoftUpdate
 
 from torchrl.trainers.helpers.models import ACTIVATIONS
 
@@ -214,6 +222,43 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
     return model
 
 
+def make_discretecql_model(cfg, train_env, eval_env, device="cpu"):
+    model_cfg = cfg.model
+
+    action_spec = train_env.action_spec
+
+    actor_net_kwargs = {
+        "num_cells": model_cfg.hidden_sizes,
+        "out_features": action_spec.shape[-1],
+        "activation_class": ACTIVATIONS[model_cfg.activation],
+    }
+    actor_net = MLP(**actor_net_kwargs)
+    qvalue_module = QValueActor(
+        module=actor_net,
+        spec=CompositeSpec(action=action_spec),
+        in_keys=["observation"],
+    )
+    qvalue_module = qvalue_module.to(device)
+    # init nets
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
+        td = eval_env.reset()
+        td = td.to(device)
+        qvalue_module(td)
+
+    del td
+    greedy_module = EGreedyModule(
+        annealing_num_steps=cfg.collector.annealing_frames,
+        eps_init=cfg.collector.eps_start,
+        eps_end=cfg.collector.eps_end,
+        spec=action_spec,
+    )
+    model_explore = TensorDictSequential(
+        qvalue_module,
+        greedy_module,
+    ).to(device)
+    return qvalue_module, model_explore
+
+
 def make_cql_modules_state(model_cfg, proof_environment):
     action_spec = proof_environment.action_spec
 
@@ -245,7 +290,7 @@ def make_cql_modules_state(model_cfg, proof_environment):
 # ---------
 
 
-def make_loss(loss_cfg, model):
+def make_continuous_loss(loss_cfg, model):
     loss_module = CQLLoss(
         model[0],
         model[1],
@@ -264,7 +309,29 @@ def make_loss(loss_cfg, model):
     return loss_module, target_net_updater
 
 
-def make_cql_optimizer_continuous(cfg, loss_module):
+def make_discrete_loss(loss_cfg, model):
+    loss_module = DiscreteCQLLoss(
+        model,
+        loss_function=loss_cfg.loss_function,
+        delay_value=True,
+        gamma=loss_cfg.gamma,
+    )
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
+    target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
+
+    return loss_module, target_net_updater
+
+
+def make_discrete_cql_optimizer(optim_cfg, loss_module):
+    optim = torch.optim.Adam(
+        loss_module.parameters(),
+        lr=optim_cfg.lr,
+        weight_decay=optim_cfg.weight_decay,
+    )
+    return optim
+
+
+def make_continuous_cql_optimizer(cfg, loss_module):
     critic_params = loss_module.qvalue_network_params.flatten_keys().values()
     actor_params = loss_module.actor_network_params.flatten_keys().values()
     actor_optim = torch.optim.Adam(

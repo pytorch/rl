@@ -211,7 +211,9 @@ class TensorDictMaxValueWriter(Writer):
             keys, values = zip(*data_to_replace.items())
             index = data.get("index")
             values = list(values)
-            keys = index[values] = torch.tensor(keys, dtype=index.dtype)
+            keys = index[values] = torch.tensor(
+                keys, dtype=index.dtype, device=index.device
+            )
             data.set("index", index)
             self._storage[keys] = data[values]
 
