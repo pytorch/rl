@@ -3883,6 +3883,7 @@ class DiscreteActionProjection(Transform):
             f"in_keys_inv={self.in_keys_inv})"
         )
 
+
 class FrameSkipTransform(Transform):
     """A frame-skip transform.
 
@@ -3905,7 +3906,8 @@ class FrameSkipTransform(Transform):
         self.action_interp_buffer = None
 
     def _step(
-        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase) -> TensorDictBase:
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
         parent = self.parent
         if parent is None:
             raise RuntimeError("parent not found for FrameSkipTransform")
@@ -3943,7 +3945,7 @@ class FrameSkipTransform(Transform):
             interpolated_action = start_action + alpha * (end_action - start_action)
             interpolation_steps.append(interpolated_action)
         return interpolation_steps
-    
+
     def forward(self, tensordict):
         raise RuntimeError(
             "FrameSkipTransform can only be used when appended to a transformed env."
