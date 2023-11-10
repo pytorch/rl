@@ -269,7 +269,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online
   env.train_num_envs=1 \
   logger.mode=offline \
   device=cuda:0 \
-  collector_device=cuda:0 \
+  collector.device=cuda:0 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/cql/cql_online.py \
   collector.total_frames=48 \
@@ -278,7 +278,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/cql/cql_online
   collector.env_per_collector=1 \
   logger.mode=offline \
   device=cuda:0 \
-  collector_device=cuda:0 \
+  collector.device=cuda:0 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.total_frames=48 \
