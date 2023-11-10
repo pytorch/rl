@@ -81,7 +81,7 @@ if __name__ == "__main__":
                             return GymEnv(envname, device="cpu")
 
                     # env_make = EnvCreator(make)
-                    penv = ParallelEnv(num_workers, (EnvCreator(make),)*num_workers, device=device)
+                    penv = ParallelEnv(num_workers, EnvCreator(make), device=device)
                     with torch.inference_mode():
                         # warmup
                         penv.rollout(2)

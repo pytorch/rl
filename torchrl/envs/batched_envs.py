@@ -1364,6 +1364,7 @@ def _run_worker_pipe_cuda(
         # we check if the devices mismatch. This tells us that the data need
         # to be cast onto the right device before any op
         device_mismatch = device != env_device
+        env_device_cpu = env_device.type == "cpu"
         i = -1
         initialized = False
 
@@ -1436,8 +1437,12 @@ def _run_worker_pipe_cuda(
                 else:
                     env_input = shared_tensordict
                 td, root_next_td = env.step_and_maybe_reset(env_input)
-                next_shared_tensordict.update_(td.get("next"))
-                shared_tensordict.update_(root_next_td)
+                if env_device_cpu:
+                    next_shared_tensordict.update_(td.get("next").pin_memory())
+                    shared_tensordict.update_(root_next_td.pin_memory())
+                else:
+                    next_shared_tensordict.update_(td.get("next"))
+                    shared_tensordict.update_(root_next_td)
                 stream.record_event(cuda_event)
                 stream.synchronize()
 
