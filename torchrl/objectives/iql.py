@@ -372,6 +372,9 @@ class IQLLoss(LossModule):
             raise RuntimeError(
                 f"Losses shape mismatch: {loss_actor.shape}, {loss_qvalue.shape} and {loss_value.shape}"
             )
+        tensordict_reshape.set(
+            self.tensor_keys.priority, metadata.pop("td_error").detach().max(0)[0]
+        )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
         out = {
@@ -453,7 +456,7 @@ class IQLLoss(LossModule):
         pred_val = tensordict_expand.get(self.tensor_keys.state_action_value).squeeze(
             -1
         )
-        td_error = abs(pred_val - target_value)
+        td_error = (pred_val - target_value).pow(2)
         loss_qval = (
             distance_loss(
                 pred_val,
@@ -463,8 +466,7 @@ class IQLLoss(LossModule):
             .sum(0)
             .mean()
         )
-        tensordict.set(self.tensor_keys.priority, td_error.mean(0).detach())
-        metadata = {"td_error": td_error.detach().mean(0)}
+        metadata = {"td_error": td_error.detach()}
         return loss_qval, metadata
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
