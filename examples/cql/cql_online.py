@@ -130,7 +130,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 else:
                     sampled_tensordict = sampled_tensordict.clone()
 
-                loss_td, _ = loss_module(sampled_tensordict)
+                loss_td = loss_module(sampled_tensordict)
 
                 actor_loss = loss_td["loss_actor"]
                 q_loss = loss_td["loss_qvalue"]

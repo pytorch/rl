@@ -2,7 +2,7 @@
 env:
   name: CartPole-v1
   task: ""
-  library: gym
+  backend: gym
   exp_name: cql_cartpole_gym
   n_samples_stats: 1000
   max_episode_steps: 200
@@ -20,7 +20,8 @@ collector:
   annealing_frames: 10000
   eps_start: 1.0
   eps_end: 0.01
-# logger
+
+# Logger
 logger:
   backend: wandb
   log_interval: 5000 # record interval in frames
@@ -42,8 +43,6 @@ optim:
   lr: 1e-3
   weight_decay: 0.0
   batch_size: 256
-  lr_scheduler: ""
-  optim_steps_per_batch: 200
 
 # Policy and model
 model:

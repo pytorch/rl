@@ -322,11 +322,11 @@ def make_discrete_loss(loss_cfg, model):
     return loss_module, target_net_updater
 
 
-def make_discrete_cql_optimizer(optim_cfg, loss_module):
+def make_discrete_cql_optimizer(cfg, loss_module):
     optim = torch.optim.Adam(
         loss_module.parameters(),
-        lr=optim_cfg.lr,
-        weight_decay=optim_cfg.weight_decay,
+        lr=cfg.optim.lr,
+        weight_decay=cfg.optim.weight_decay,
     )
     return optim
 

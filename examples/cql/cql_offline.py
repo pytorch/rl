@@ -21,10 +21,10 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 
 from utils import (
     log_metrics,
+    make_continuous_cql_optimizer,
+    make_continuous_loss,
     make_cql_model,
-    make_cql_optimizer_continuous,
     make_environment,
-    make_loss,
     make_offline_replay_buffer,
 )
 
@@ -57,7 +57,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model = make_cql_model(cfg, train_env, eval_env, device)
 
     # Create loss
-    loss_module, target_net_updater = make_loss(cfg.loss, model)
+    loss_module, target_net_updater = make_continuous_loss(cfg.loss, model)
 
     # Create Optimizer
     (
@@ -65,7 +65,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         critic_optim,
         alpha_optim,
         alpha_prime_optim,
-    ) = make_cql_optimizer_continuous(cfg, loss_module)
+    ) = make_continuous_cql_optimizer(cfg, loss_module)
 
     pbar = tqdm.tqdm(total=cfg.optim.gradient_steps)
 
@@ -81,7 +81,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # sample data
         data = replay_buffer.sample()
         # compute loss
-        loss_vals, metadata = loss_module(data.clone().to(device))
+        loss_vals = loss_module(data.clone().to(device))
 
         if i >= policy_eval_start:
             actor_loss = loss_vals["loss_actor"]
