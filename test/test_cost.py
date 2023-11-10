@@ -4853,7 +4853,7 @@ class TestCQL(LossModuleTestBase):
         return td
 
     @pytest.mark.parametrize("delay_actor", (True, False))
-    @pytest.mark.parametrize("delay_qvalue", (True, False))
+    @pytest.mark.parametrize("delay_qvalue", (True))
     @pytest.mark.parametrize("max_q_backup", [True, False])
     @pytest.mark.parametrize("deterministic_backup", [True, False])
     @pytest.mark.parametrize("with_lagrange", [True, False])
@@ -4869,20 +4869,12 @@ class TestCQL(LossModuleTestBase):
         device,
         td_est,
     ):
-        if delay_actor or delay_qvalue:
-            pytest.skip("incompatible config")
 
         torch.manual_seed(self.seed)
         td = self._create_mock_data_cql(device=device)
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
-
-        kwargs = {}
-        if delay_actor:
-            kwargs["delay_actor"] = True
-        if delay_qvalue:
-            kwargs["delay_qvalue"] = True
 
         loss_fn = CQLLoss(
             actor_network=actor,
@@ -4891,7 +4883,8 @@ class TestCQL(LossModuleTestBase):
             max_q_backup=max_q_backup,
             deterministic_backup=deterministic_backup,
             with_lagrange=with_lagrange,
-            **kwargs,
+            delay_actor=delay_actor,
+            delay_qvalue=delay_qvalue,
         )
 
         if td_est is ValueEstimators.GAE:
@@ -4928,6 +4921,19 @@ class TestCQL(LossModuleTestBase):
                         include_nested=True, leaves_only=True
                     )
                 )
+            elif k == "loss_actor_bc":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
             elif k == "loss_qvalue":
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
@@ -4936,6 +4942,19 @@ class TestCQL(LossModuleTestBase):
                     )
                 )
                 assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+            elif k == "loss_cql":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert not all(
                     (p.grad is None) or (p.grad == 0).all()
                     for p in loss_fn.qvalue_network_params.values(
                         include_nested=True, leaves_only=True

@@ -501,7 +501,9 @@ class CQLLoss(LossModule):
 
         q_loss, metadata = self.q_loss(td_device)
         cql_loss, cql_metadata = self.cql_loss(td_device)
-        alpha_prime_loss, alpha_prime_metadata = self.alpha_prime_loss(td_device)
+        if self.with_lagrange:
+            alpha_prime_loss, alpha_prime_metadata = self.alpha_prime_loss(td_device)
+            metadata.update(alpha_prime_metadata)
         loss_actor_bc, bc_metadata = self.actor_bc_loss(td_device)
         loss_actor, actor_metadata = self.actor_loss(td_device)
         loss_alpha, alpha_metadata = self.alpha_loss(td_device)
@@ -510,9 +512,11 @@ class CQLLoss(LossModule):
                 **bc_metadata,
                 **cql_metadata,
                 **actor_metadata,
-                **alpha_prime_metadata,
                 **alpha_metadata,
             }
+        )
+        tensordict_reshape.set(
+            self.tensor_keys.priority, metadata.pop("td_error").detach().max(0)[0]
         )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
@@ -522,12 +526,12 @@ class CQLLoss(LossModule):
             "loss_qvalue": q_loss.mean(),
             "loss_cql": cql_loss.mean(),
             "loss_alpha": loss_alpha.mean(),
-            "loss_alpha_prime": alpha_prime_loss.mean(),
             "alpha": self._alpha,
             "entropy": -td_device.get(self.tensor_keys.log_prob).mean().detach(),
         }
-
-        return TensorDict(out, []), metadata
+        if self.with_lagrange:
+            out["loss_alpha_prime"] = alpha_prime_loss.mean()
+        return TensorDict(out, [])
 
     @property
     @_cache_values
@@ -678,9 +682,8 @@ class CQLLoss(LossModule):
             target_value.expand_as(q_pred),
             loss_function=self.loss_function,
         )
-        td_error = abs(q_pred - target_value)
-        metadata = {"td_error": td_error.mean(0).detach()}
-        tensordict.set(self.tensor_keys.priority, td_error.mean(0).detach())
+        td_error = (q_pred - target_value).pow(2)
+        metadata = {"td_error": td_error.detach()}
 
         return loss_qval.sum(0).mean(), metadata
 
