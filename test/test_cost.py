@@ -4853,7 +4853,7 @@ class TestCQL(LossModuleTestBase):
         return td
 
     @pytest.mark.parametrize("delay_actor", (True, False))
-    @pytest.mark.parametrize("delay_qvalue", (True))
+    @pytest.mark.parametrize("delay_qvalue", (True, True))
     @pytest.mark.parametrize("max_q_backup", [True, False])
     @pytest.mark.parametrize("deterministic_backup", [True, False])
     @pytest.mark.parametrize("with_lagrange", [True, False])
