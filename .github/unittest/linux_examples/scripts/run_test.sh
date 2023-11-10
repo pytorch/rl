@@ -189,7 +189,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
   env.train_num_envs=2 \
-  collector_device=cuda:0 \
+  collector.device=cuda:0 \
   device=cuda:0 \
   logger.mode=offline \
   logger=
