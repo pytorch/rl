@@ -1438,8 +1438,12 @@ def _run_worker_pipe_cuda(
                     env_input = shared_tensordict
                 td, root_next_td = env.step_and_maybe_reset(env_input)
                 if env_device_cpu:
-                    next_shared_tensordict._fast_apply(_update_cuda, td.get("next"), default=None)
-                    shared_tensordict._fast_apply(_update_cuda, root_next_td, default=None)
+                    next_shared_tensordict._fast_apply(
+                        _update_cuda, td.get("next"), default=None
+                    )
+                    shared_tensordict._fast_apply(
+                        _update_cuda, root_next_td, default=None
+                    )
                 else:
                     next_shared_tensordict.update_(td.get("next"))
                     shared_tensordict.update_(root_next_td)
@@ -1493,6 +1497,7 @@ def _run_worker_pipe_cuda(
                 else:
                     # don't send env through pipe
                     child_pipe.send(("_".join([cmd, "done"]), None))
+
 
 def _update_cuda(t_dest, t_source):
     if t_source is None:
