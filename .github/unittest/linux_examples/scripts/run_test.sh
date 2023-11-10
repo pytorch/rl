@@ -183,7 +183,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online
   optim.device=cuda:0 \
   collector.device=cuda:0 \
   logger.mode=offline \
-  logger=
+  logger.backend=
   python .github/unittest/helpers/coverage_run_parallel.py examples/cql/cql_online.py \
   collector.total_frames=48 \
   optim.batch_size=10 \
@@ -192,7 +192,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online
   collector.device=cuda:0 \
   optim.device=cuda:0 \
   logger.mode=offline \
-  logger=
+  logger.backend=
 
 # With single envs
 python .github/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
