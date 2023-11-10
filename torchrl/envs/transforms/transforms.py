@@ -3932,11 +3932,6 @@ class FrameSkipTransform(Transform):
 
         return next_tensordict.set(reward_key, reward)
 
-    def forward(self, tensordict):
-        raise RuntimeError(
-            "FrameSkipTransform can only be used when appended to a transformed env."
-        )
-
     def _linear_interpolation(
         self, start_action: Tensor, end_action: Tensor, num_steps: int
     ) -> List[Tensor]:
