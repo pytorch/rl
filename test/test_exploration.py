@@ -609,7 +609,10 @@ def test_gsde(
         device=device,
     )
     if gSDE:
-        gSDENoise(shape=[batch]).reset(td)
+        td_reset = td.empty()
+        gsde = gSDENoise(shape=[batch], reset_key="_reset").to(device)
+        gsde._reset(td, td_reset)
+        td.update(td_reset)
         assert "_eps_gSDE" in td.keys()
         assert td.get("_eps_gSDE").device == device
     actor(td)

@@ -44,7 +44,7 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
-    _aggregate_resets,
+    _aggregate_end_of_traj,
     _convert_exploration_type,
     ExplorationType,
     set_exploration_type,
@@ -567,7 +567,9 @@ class SyncDataCollector(DataCollectorBase):
             self.policy_weights = TensorDict({}, [])
 
         self.env: EnvBase = self.env.to(self.device)
-        self.max_frames_per_traj = max_frames_per_traj
+        self.max_frames_per_traj = (
+            int(max_frames_per_traj) if max_frames_per_traj is not None else 0
+        )
         if self.max_frames_per_traj is not None and self.max_frames_per_traj > 0:
             # let's check that there is no StepCounter yet
             for key in self.env.output_spec.keys(True, True):
@@ -595,9 +597,13 @@ class SyncDataCollector(DataCollectorBase):
                     f"This means {frames_per_batch - remainder} additional frames will be collected."
                     "To silence this message, set the environment variable RL_WARNINGS to False."
                 )
-        self.total_frames = total_frames
+        self.total_frames = (
+            int(total_frames) if total_frames != float("inf") else total_frames
+        )
         self.reset_at_each_iter = reset_at_each_iter
-        self.init_random_frames = init_random_frames
+        self.init_random_frames = (
+            int(init_random_frames) if init_random_frames is not None else 0
+        )
         if (
             init_random_frames is not None
             and init_random_frames % frames_per_batch != 0
@@ -620,7 +626,7 @@ class SyncDataCollector(DataCollectorBase):
                 f" ({-(-frames_per_batch // self.n_env) * self.n_env})."
                 "To silence this message, set the environment variable RL_WARNINGS to False."
             )
-        self.requested_frames_per_batch = frames_per_batch
+        self.requested_frames_per_batch = int(frames_per_batch)
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.exploration_type = (
             exploration_type if exploration_type else DEFAULT_EXPLORATION_TYPE
@@ -720,6 +726,7 @@ class SyncDataCollector(DataCollectorBase):
             >>> from torchrl.envs import ParallelEnv
             >>> from torchrl.envs.libs.gym import GymEnv
             >>> from tensordict.nn import TensorDictModule
+            >>> from torch import nn
             >>> env_fn = lambda: GymEnv("Pendulum-v1")
             >>> env_fn_parallel = ParallelEnv(6, env_fn)
             >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
@@ -758,8 +765,18 @@ class SyncDataCollector(DataCollectorBase):
                 if self.postproc is not None:
                     tensordict_out = self.postproc(tensordict_out)
                 if self._exclude_private_keys:
+
+                    def is_private(key):
+                        if isinstance(key, str) and key.startswith("_"):
+                            return True
+                        if isinstance(key, tuple) and any(
+                            _key.startswith("_") for _key in key
+                        ):
+                            return True
+                        return False
+
                     excluded_keys = [
-                        key for key in tensordict_out.keys() if key.startswith("_")
+                        key for key in tensordict_out.keys(True) if is_private(key)
                     ]
                     tensordict_out = tensordict_out.exclude(
                         *excluded_keys, inplace=True
@@ -786,7 +803,7 @@ class SyncDataCollector(DataCollectorBase):
 
     def _update_traj_ids(self, tensordict) -> None:
         # we can't use the reset keys because they're gone
-        traj_sop = _aggregate_resets(
+        traj_sop = _aggregate_end_of_traj(
             tensordict.get("next"), done_keys=self.env.done_keys
         )
         if traj_sop.any():
@@ -873,14 +890,16 @@ class SyncDataCollector(DataCollectorBase):
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
                 raise RuntimeError("resetting unique env with index is not permitted.")
-            _reset = torch.zeros(
-                self.env.done_spec.shape,
-                dtype=torch.bool,
-                device=self.env.device,
-            )
-            _reset[index] = 1
-            self._tensordict[index].zero_()
-            self._tensordict.set("_reset", _reset)
+            for reset_key, done_keys in zip(
+                self.env.reset_keys, self.env.done_keys_groups
+            ):
+                _reset = torch.zeros(
+                    self.env.full_done_spec[done_keys[0]].shape,
+                    dtype=torch.bool,
+                    device=self.env.device,
+                )
+                _reset[index] = 1
+                self._tensordict.set(reset_key, _reset)
         else:
             _reset = None
             self._tensordict.zero_()
@@ -1222,11 +1241,15 @@ class _MultiDataCollector(DataCollectorBase):
                     f"This means {frames_per_batch - remainder} additional frames will be collected."
                     "To silence this message, set the environment variable RL_WARNINGS to False."
                 )
-        self.total_frames = total_frames
+        self.total_frames = (
+            int(total_frames) if total_frames != float("inf") else total_frames
+        )
         self.reset_at_each_iter = reset_at_each_iter
         self.postprocs = postproc
-        self.max_frames_per_traj = max_frames_per_traj
-        self.requested_frames_per_batch = frames_per_batch
+        self.max_frames_per_traj = (
+            int(max_frames_per_traj) if max_frames_per_traj is not None else 0
+        )
+        self.requested_frames_per_batch = int(frames_per_batch)
         self.reset_when_done = reset_when_done
         if split_trajs is None:
             split_trajs = False
@@ -1235,7 +1258,9 @@ class _MultiDataCollector(DataCollectorBase):
                 "Cannot split trajectories when reset_when_done is False."
             )
         self.split_trajs = split_trajs
-        self.init_random_frames = init_random_frames
+        self.init_random_frames = (
+            int(init_random_frames) if init_random_frames is not None else 0
+        )
         self.update_at_each_batch = update_at_each_batch
         self.exploration_type = exploration_type
         self.frames_per_worker = np.inf
@@ -1397,6 +1422,7 @@ also that the state dict is synchronised across processes if needed."""
             >>> from torchrl.envs import ParallelEnv
             >>> from torchrl.envs.libs.gym import GymEnv
             >>> from tensordict.nn import TensorDictModule
+            >>> from torch import nn
             >>> env_fn = lambda: GymEnv("Pendulum-v1")
             >>> env_fn_parallel = lambda: ParallelEnv(6, env_fn)
             >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])

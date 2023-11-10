@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 from typing import List, Optional, Union
 
 import torch
@@ -26,6 +25,7 @@ from torchrl.envs.transforms.transforms import (
     Transform,
     UnsqueezeTransform,
 )
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 try:
     from torchvision import models
@@ -80,6 +80,14 @@ class _VIPNet(Transform):
         return tensordict
 
     forward = _call
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        # TODO: Check this makes sense
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
     @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:
@@ -268,7 +276,7 @@ class VIPTransform(Compose):
         transforms.append(resize)
 
         # VIP
-        if out_keys is None:
+        if out_keys in (None, []):
             if stack_images:
                 out_keys = ["vip_vec"]
             else:
@@ -349,10 +357,13 @@ class VIPRewardTransform(VIPTransform):
     This class will update the reward computation
     """
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         if "goal_embedding" not in tensordict.keys():
             tensordict = self._embed_goal(tensordict)
-        return super().reset(tensordict)
+        tensordict_reset.set("goal_embedding", tensordict.pop("goal_embedding"))
+        return super()._reset(tensordict, tensordict_reset)
 
     def _embed_goal(self, tensordict):
         if "goal_image" not in tensordict.keys():

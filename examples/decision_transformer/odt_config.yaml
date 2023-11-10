@@ -14,6 +14,7 @@ env:
   target_return_mode: reduce
   eval_target_return: 6000
   collect_target_return: 12000
+  backend: gym  # D4RL uses gym so we make sure gymnasium is hidden
 
 
 # logger
@@ -33,7 +34,7 @@ replay_buffer:
   stacked_frames: 20
   buffer_prefetch: 64
   capacity: 1_000_000
-  buffer_scratch_dir: "/tmp/"
+  buffer_scratch_dir:
   device: cuda:0
   prefetch: 3
 

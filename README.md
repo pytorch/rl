@@ -9,6 +9,7 @@
 <a href="https://pypi.org/project/torchrl-nightly"><img src="https://img.shields.io/pypi/v/torchrl-nightly?label=nightly" alt="pypi nightly version"></a>
 [![Downloads](https://static.pepy.tech/personalized-badge/torchrl?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads)](https://pepy.tech/project/torchrl)
 [![Downloads](https://static.pepy.tech/personalized-badge/torchrl-nightly?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads%20(nightly))](https://pepy.tech/project/torchrl-nightly)
+[![Discord Shield](https://dcbadge.vercel.app/api/server/xSURYdvu)](https://discord.gg/xSURYdvu)
 
 # TorchRL
 
@@ -369,7 +370,7 @@ And it is `functorch` and `torch.compile` compatible!
   tensordict = env.reset()
   assert tensordict.device == torch.device("cuda:0")
   ```
-  Other transforms include: reward scaling (`RewardScaling`), shape operations (concatenation of tensors, unsqueezing etc.), contatenation of
+  Other transforms include: reward scaling (`RewardScaling`), shape operations (concatenation of tensors, unsqueezing etc.), concatenation of
   successive operations (`CatFrames`), resizing (`Resize`) and many more.
 
   Unlike other libraries, the transforms are stacked as a list (and not wrapped in each other), which makes it
@@ -539,7 +540,7 @@ conda activate torch_rl
 Depending on the use of functorch that you want to make, you may want to 
 install the latest (nightly) PyTorch release or the latest stable version of PyTorch.
 See [here](https://pytorch.org/get-started/locally/) for a detailed list of commands, 
-including `pip3` or windows/OSX compatible installation commands.
+including `pip3` or other special installation instructions.
 
 **Torchrl**
 
@@ -547,33 +548,42 @@ You can install the **latest stable release** by using
 ```
 pip3 install torchrl
 ```
-This should work on linux and MacOs (not M1). For Windows and M1/M2 machines, one
-should install the library locally (see below).
+This should work on linux, Windows 10 and OsX (Intel or Silicon chips).
+On certain Windows machines (Windows 11), one should install the library locally (see below).
 
 The **nightly build** can be installed via
 ```
 pip install torchrl-nightly
 ```
+which we currently only ship for Linux and OsX (Intel) machines.
+Importantly, the nightly builds require the nightly builds of PyTorch too.
 
 To install extra dependencies, call
 ```
-pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils]"
+pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils,marl,checkpointing]"
 ```
 or a subset of these.
 
-Alternatively, as the library is at an early stage, it may be wise to install
-it in develop mode as this will make it possible to pull the latest changes and
-benefit from them immediately.
-Start by cloning the repo:
+One may also desire to install the library locally. Three main reasons can motivate this:
+- the nightly/stable release isn't available for one's platform (eg, Windows 11, nightlies for Apple Silicon etc.);
+- contributing to the code;
+- install torchrl with a previous version of PyTorch (note that this should also be doable via a regular install followed
+  by a downgrade to a previous pytorch version -- but the C++ binaries will not be available.)
+
+To install the library locally, start by cloning the repo:
 ```
 git clone https://github.com/pytorch/rl
 ```
 
-Go to the directory where you have cloned the torchrl repo and install it
+Go to the directory where you have cloned the torchrl repo and install it (after
+installing `ninja`)
 ```
 cd /path/to/torchrl/
-pip install -e .
+pip install ninja -U
+python setup.py develop
 ```
+
+(unfortunately, `pip install -e .` will not work).
 
 On M1 machines, this should work out-of-the-box with the nightly build of PyTorch.
 If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message
@@ -619,36 +629,44 @@ pip3 install wandb
 
 **Troubleshooting**
 
-If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs,
+If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs (or
+a warning indicating that the C++ binaries could not be loaded),
 it means that the C++ extensions were not installed or not found.
-One common reason might be that you are trying to import torchrl from within the
-git repo location. Indeed the following code snippet should return an error if
-torchrl has not been installed in `develop` mode:
-```
-cd ~/path/to/rl/repo
-python -c 'from torchrl.envs.libs.gym import GymEnv'
-```
-If this is the case, consider executing torchrl from another location.
 
-On **MacOs**, we recommend installing XCode first.
-With Apple Silicon M1 chips, make sure you are using the arm64-built python
-(e.g. [here](https://betterprogramming.pub/how-to-install-pytorch-on-apple-m1-series-512b3ad9bc6)). Running the following lines of code
+- One common reason might be that you are trying to import torchrl from within the
+  git repo location. The following code snippet should return an error if
+  torchrl has not been installed in `develop` mode:
+  ```
+  cd ~/path/to/rl/repo
+  python -c 'from torchrl.envs.libs.gym import GymEnv'
+  ```
+  If this is the case, consider executing torchrl from another location.
+- If you're not importing torchrl from within its repo location, it could be
+  caused by a problem during the local installation. Check the log after the
+  `python setup.py develop`. One common cause is a g++/C++ version discrepancy
+  and/or a problem with the `ninja` library.
+- If the problem persists, feel free to open an issue on the topic in the repo,
+  we'll make our best to help!
+- On **MacOs**, we recommend installing XCode first. 
+  With Apple Silicon M1 chips, make sure you are using the arm64-built python
+  (e.g. [here](https://betterprogramming.pub/how-to-install-pytorch-on-apple-m1-series-512b3ad9bc6)).
+  Running the following lines of code
+  ```
+  wget https://raw.githubusercontent.com/pytorch/pytorch/master/torch/utils/collect_env.py
+  python collect_env.py
+  ```
+  should display
+  ```
+  OS: macOS *** (arm64)
+  ```
+  and not
+  ```
+  OS: macOS **** (x86_64)
+  ```
 
-```
-wget https://raw.githubusercontent.com/pytorch/pytorch/master/torch/utils/collect_env.py
-python collect_env.py
-```
-should display
-```
-OS: macOS *** (arm64)
-```
-and not
-```
-OS: macOS **** (x86_64)
-```
-
-Versioning issues can cause error message of the type ```undefined symbol``` and such. For these, refer to the [versioning issues document](knowledge_base/VERSIONING_ISSUES.md) for a complete explanation and proposed workarounds.
-
+Versioning issues can cause error message of the type ```undefined symbol```
+and such. For these, refer to the [versioning issues document](knowledge_base/VERSIONING_ISSUES.md)
+for a complete explanation and proposed workarounds.
 
 ## Asking a question
 
@@ -663,7 +681,7 @@ Internal collaborations to torchrl are welcome! Feel free to fork, submit issues
 You can checkout the detailed contribution guide [here](CONTRIBUTING.md).
 As mentioned above, a list of open contributions can be found in [here](https://github.com/pytorch/rl/issues/509).
 
-Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is commited locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
+Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is committed locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
 
 
 ## Disclaimer

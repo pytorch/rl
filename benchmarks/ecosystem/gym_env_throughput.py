@@ -16,7 +16,7 @@ The tests are executed with various number of cpus, and on different devices.
 """
 import time
 
-import myosuite  # noqa: F401
+# import myosuite  # noqa: F401
 import torch
 import tqdm
 from torchrl._utils import timeit
@@ -30,6 +30,10 @@ from torchrl.envs import EnvCreator, GymEnv, ParallelEnv
 from torchrl.envs.libs.gym import gym_backend as gym_bc, set_gym_backend
 
 if __name__ == "__main__":
+    avail_devices = ("cpu",)
+    if torch.cuda.device_count():
+        avail_devices = avail_devices + ("cuda:0",)
+
     for envname in [
         "CartPole-v1",
         "HalfCheetah-v4",
@@ -70,7 +74,7 @@ if __name__ == "__main__":
                 log.flush()
 
                 # regular parallel env
-                for device in ("cuda:0", "cpu"):
+                for device in avail_devices:
 
                     def make(envname=envname, gym_backend=gym_backend, device=device):
                         with set_gym_backend(gym_backend):
@@ -97,7 +101,7 @@ if __name__ == "__main__":
                     timeit.print()
                     del penv
 
-                for device in ("cpu", "cuda:0"):
+                for device in avail_devices:
 
                     def make(envname=envname, gym_backend=gym_backend, device=device):
                         with set_gym_backend(gym_backend):
@@ -117,7 +121,7 @@ if __name__ == "__main__":
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0
                     t0 = time.time()
-                    for i, data in enumerate(collector):
+                    for data in collector:
                         total_frames += data.numel()
                         pbar.update(data.numel())
                         pbar.set_description(
@@ -130,7 +134,7 @@ if __name__ == "__main__":
                     collector.shutdown()
                     del collector
 
-                for device in ("cpu", "cuda:0"):
+                for device in avail_devices:
                     # gym parallel env
                     def make_env(
                         envname=envname,
@@ -157,7 +161,7 @@ if __name__ == "__main__":
                     penv.close()
                     del penv
 
-                for device in ("cpu", "cuda:0"):
+                for device in avail_devices:
                     # async collector
                     # + torchrl parallel env
                     def make_env(
@@ -195,7 +199,7 @@ if __name__ == "__main__":
                     collector.shutdown()
                     del collector
 
-                for device in ("cpu", "cuda:0"):
+                for device in avail_devices:
                     # async collector
                     # + gym async env
                     def make_env(
@@ -240,7 +244,7 @@ if __name__ == "__main__":
                     collector.shutdown()
                     del collector
 
-                for device in ("cpu", "cuda:0"):
+                for device in avail_devices:
                     # sync collector
                     # + torchrl parallel env
                     def make_env(
@@ -278,7 +282,7 @@ if __name__ == "__main__":
                     collector.shutdown()
                     del collector
 
-                for device in ("cpu", "cuda:0"):
+                for device in avail_devices:
                     # sync collector
                     # + gym async env
                     def make_env(

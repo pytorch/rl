@@ -69,8 +69,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         batch_size=cfg.optim.batch_size,
         prb=cfg.replay_buffer.prb,
         buffer_size=cfg.replay_buffer.size,
-        buffer_scratch_dir="/tmp/" + cfg.replay_buffer.scratch_dir,
-        device=device,
+        buffer_scratch_dir=cfg.replay_buffer.scratch_dir,
+        device="cpu",
     )
 
     # Create optimizers
@@ -124,7 +124,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 update_actor = update_counter % delayed_updates == 0
 
                 # Sample from replay buffer
-                sampled_tensordict = replay_buffer.sample().clone()
+                sampled_tensordict = replay_buffer.sample()
+                if sampled_tensordict.device != device:
+                    sampled_tensordict = sampled_tensordict.to(
+                        device, non_blocking=True
+                    )
+                else:
+                    sampled_tensordict = sampled_tensordict.clone()
 
                 # Compute loss
                 q_loss, *_ = loss_module.value_loss(sampled_tensordict)
