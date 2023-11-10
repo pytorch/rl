@@ -19,7 +19,6 @@ collector:
   env_per_collector: 1
   collector_device: cpu
   max_frames_per_traj: 200
-  num_worker: 1
 
 # logger
 logger:
