@@ -3883,7 +3883,6 @@ class DiscreteActionProjection(Transform):
             f"in_keys_inv={self.in_keys_inv})"
         )
 
-
 class FrameSkipTransform(Transform):
     """A frame-skip transform.
 
@@ -3893,28 +3892,63 @@ class FrameSkipTransform(Transform):
     Args:
         frame_skip (int, optional): a positive integer representing the number
             of frames during which the same action must be applied.
+        action_interp (bool, optional): whether to perform action interpolation over frame_skip steps.
 
     """
 
-    def __init__(self, frame_skip: int = 1):
-        super().__init__()
+    def __init__(self, frame_skip: int = 1, action_interp: bool = False):
+        super().__init()
         if frame_skip < 1:
             raise ValueError("frame_skip should have a value greater or equal to one.")
         self.frame_skip = frame_skip
+        self.action_interp = action_interp
+        self.action_interp_buffer = None
 
     def _step(
-        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
-    ) -> TensorDictBase:
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase) -> TensorDictBase:
         parent = self.parent
         if parent is None:
             raise RuntimeError("parent not found for FrameSkipTransform")
+
+        if self.action_interp:
+            action_key = "_action"
+            current_action = tensordict.get(action_key)
+            next_action = next_tensordict.get(action_key)
+            if self.action_interp_buffer is not None:
+                interpolated_actions = self._linear_interpolation(
+                    self.action_interp_buffer, next_action, self.frame_skip
+                )
+                self.action_interp_buffer = next_action
+            else:
+                interpolated_actions = [current_action] * (self.frame_skip - 1)
+                self.action_interp_buffer = next_action
+            next_tensordict.set(action_key, interpolated_actions)
+
         reward_key = parent.reward_key
         reward = next_tensordict.get(reward_key)
         for _ in range(self.frame_skip - 1):
             next_tensordict = parent._step(tensordict)
             reward = reward + next_tensordict.get(reward_key)
+
         return next_tensordict.set(reward_key, reward)
 
+    def forward(self, tensordict):
+        raise RuntimeError(
+            "FrameSkipTransform can only be used when appended to a transformed env."
+        )
+
+    def _linear_interpolation(
+        self, start_action: Tensor, end_action: Tensor, num_steps: int
+    ) -> List[Tensor]:
+        if num_steps <= 0:
+            return [start_action]
+        interpolation_steps = [start_action]
+        for step in range(1, num_steps):
+            alpha = step / num_steps
+            interpolated_action = start_action + alpha * (end_action - start_action)
+            interpolation_steps.append(interpolated_action)
+        return interpolation_steps
+    
     def forward(self, tensordict):
         raise RuntimeError(
             "FrameSkipTransform can only be used when appended to a transformed env."
