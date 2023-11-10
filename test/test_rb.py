@@ -1215,9 +1215,10 @@ class TestStateDict:
 @pytest.mark.parametrize("size", [20, 25, 30])
 @pytest.mark.parametrize("batch_size", [1, 10, 15])
 @pytest.mark.parametrize("reward_ranges", [(0.25, 0.5, 1.0)])
-def test_max_value_writer(size, batch_size, reward_ranges):
+@pytest.mark.parametrize("device", get_default_devices())
+def test_max_value_writer(size, batch_size, reward_ranges, device):
     rb = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(size),
+        storage=LazyTensorStorage(size, device=device),
         sampler=SamplerWithoutReplacement(),
         batch_size=batch_size,
         writer=TensorDictMaxValueWriter(rank_key="key"),
@@ -1231,7 +1232,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
             "obs": torch.rand(size),
         },
         batch_size=size,
-        device="cpu",
+        device=device,
     )
     rb.extend(td)
     sample = rb.sample()
@@ -1245,7 +1246,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
             "obs": torch.rand(size),
         },
         batch_size=size,
-        device="cpu",
+        device=device,
     )
     rb.extend(td)
     sample = rb.sample()
@@ -1259,7 +1260,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
             "obs": torch.rand(size),
         },
         batch_size=size,
-        device="cpu",
+        device=device,
     )
 
     for sample in td:
@@ -1277,7 +1278,7 @@ def test_max_value_writer(size, batch_size, reward_ranges):
             "obs": torch.rand(size),
         },
         batch_size=size,
-        device="cpu",
+        device=device,
     )
     rb.extend(td)
     sample = rb.sample()
