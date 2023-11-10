@@ -216,7 +216,7 @@ class _BatchedEnv(EnvBase):
                 "memmap and shared memory are mutually exclusive features."
             )
         self._batch_size = None
-        self._device = torch.device(device)
+        self._device = torch.device(device) if device is not None else device
         self._dummy_env_str = None
         self._seeds = None
         self.__dict__["_input_spec"] = None
