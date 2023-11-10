@@ -76,12 +76,12 @@ if __name__ == "__main__":
                 # regular parallel env
                 for device in avail_devices:
 
-                    def make(envname=envname, gym_backend=gym_backend, device=device):
+                    def make(envname=envname, gym_backend=gym_backend):
                         with set_gym_backend(gym_backend):
-                            return GymEnv(envname, device=device)
+                            return GymEnv(envname, device="cpu")
 
                     # env_make = EnvCreator(make)
-                    penv = ParallelEnv(num_workers, EnvCreator(make))
+                    penv = ParallelEnv(num_workers, EnvCreator(make), device=device)
                     with torch.inference_mode():
                         # warmup
                         penv.rollout(2)
