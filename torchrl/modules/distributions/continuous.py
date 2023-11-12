@@ -497,8 +497,7 @@ class TanhDelta(FasterTransformedDistribution):
 
     Args:
         param (torch.Tensor): parameter of the delta distribution;
-                min (torch.Tensor or number): minimum value of the distribution. Default is -1.0;
-        min (torch.Tensor or number, optional): minimum value of the distribution. Default is 1.0;
+        min (torch.Tensor or number, optional): minimum value of the distribution. Default is -1.0;
         max (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
         event_dims (int, optional): number of dimensions describing the action.
             Default is 1;
