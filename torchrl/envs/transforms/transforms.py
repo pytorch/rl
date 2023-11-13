@@ -3908,12 +3908,13 @@ class FrameSkipTransform(Transform):
     """
     
 
-    def __init__(self, frame_skip: int = 1, action_interp: bool = False):
-        super().__init__()
+    def __init__(self, frame_skip: int = 1, action_interp: bool = False, action_key: str = "_action"):
+        super().__init()
         if frame_skip < 1:
             raise ValueError("frame_skip should have a value greater or equal to one.")
         self.frame_skip = frame_skip
         self.action_interp = action_interp
+        self.action_key = action_key
         self.action_interp_buffer = None
 
     def _step(
@@ -3924,9 +3925,8 @@ class FrameSkipTransform(Transform):
             raise RuntimeError("parent not found for FrameSkipTransform")
 
         if self.action_interp:
-            action_key = "_action"
-            current_action = tensordict.get(action_key)
-            next_action = next_tensordict.get(action_key)
+            current_action = tensordict.get(self.action_key)
+            next_action = next_tensordict.get(self.action_key)
             if self.action_interp_buffer is not None:
                 interpolated_actions = self._linear_interpolation(
                     self.action_interp_buffer, next_action, self.frame_skip
@@ -3935,7 +3935,7 @@ class FrameSkipTransform(Transform):
             else:
                 interpolated_actions = [current_action] * (self.frame_skip - 1)
                 self.action_interp_buffer = next_action
-            next_tensordict.set(action_key, interpolated_actions)
+            next_tensordict.set(self.action_key, interpolated_actions)
 
         reward_key = parent.reward_key
         reward = next_tensordict.get(reward_key)
@@ -3956,6 +3956,7 @@ class FrameSkipTransform(Transform):
             interpolated_action = start_action + alpha * (end_action - start_action)
             interpolation_steps.append(interpolated_action)
         return interpolation_steps
+
 
     def forward(self, tensordict):
         raise RuntimeError(
