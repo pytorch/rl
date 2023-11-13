@@ -3895,21 +3895,26 @@ class FrameSkipTransform(Transform):
             of frames during which the same action must be applied.
         action_interp (bool, optional): whether to perform action interpolation over frame_skip steps.
             Defaults to ``False``.
-        Examples:
-            >>> from torchrl.envs import GymEnv
-            >>> env = TransformedEnv(GymEnv("CartPole-v1"), FrameSkipTransform(3, action_interp=False))
-            >>> print(env.rollout)
-            # add print here
-            >>> env = TransformedEnv(GymEnv("CartPole-v1"), FrameSkipTransform(3, action_interp=True))
-            >>> print(env.rollout)
-            # add print here
-            
+
+    Examples:
+        >>> from torchrl.envs import GymEnv
+        >>> env = TransformedEnv(GymEnv("CartPole-v1"), FrameSkipTransform(3, action_interp=False))
+        >>> print(env.rollout)
+        # add print here
+        >>> env = TransformedEnv(GymEnv("CartPole-v1"), FrameSkipTransform(3, action_interp=True))
+        >>> print(env.rollout)
+        # add print here
+
 
     """
-    
 
-    def __init__(self, frame_skip: int = 1, action_interp: bool = False, action_key: str = "_action"):
-        super().__init()
+    def __init__(
+        self,
+        frame_skip: int = 1,
+        action_interp: bool = False,
+        action_key: str = "_action",
+    ):
+        super().__init__()
         if frame_skip < 1:
             raise ValueError("frame_skip should have a value greater or equal to one.")
         self.frame_skip = frame_skip
@@ -3956,7 +3961,6 @@ class FrameSkipTransform(Transform):
             interpolated_action = start_action + alpha * (end_action - start_action)
             interpolation_steps.append(interpolated_action)
         return interpolation_steps
-
 
     def forward(self, tensordict):
         raise RuntimeError(
