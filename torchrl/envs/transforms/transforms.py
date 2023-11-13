@@ -3935,7 +3935,7 @@ class FrameSkipTransform(Transform):
             else:
                 interpolated_actions = [current_action] * (self.frame_skip - 1)
                 self.action_interp_buffer = next_action
-            next_tensordict.set(self.action_key, interpolated_actions)
+            next_tensordict.set(self.action_key, torch.stack(interpolated_actions))
 
         reward_key = parent.reward_key
         reward = next_tensordict.get(reward_key)
