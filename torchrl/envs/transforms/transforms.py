@@ -3894,11 +3894,22 @@ class FrameSkipTransform(Transform):
         frame_skip (int, optional): a positive integer representing the number
             of frames during which the same action must be applied.
         action_interp (bool, optional): whether to perform action interpolation over frame_skip steps.
+            Defaults to ``False``.
+        Examples:
+            >>> from torchrl.envs import GymEnv
+            >>> env = TransformedEnv(GymEnv("CartPole-v1"), FrameSkipTransform(3, action_interp=False))
+            >>> print(env.rollout)
+            # add print here
+            >>> env = TransformedEnv(GymEnv("CartPole-v1"), FrameSkipTransform(3, action_interp=True))
+            >>> print(env.rollout)
+            # add print here
+            
 
     """
+    
 
     def __init__(self, frame_skip: int = 1, action_interp: bool = False):
-        super().__init()
+        super().__init__()
         if frame_skip < 1:
             raise ValueError("frame_skip should have a value greater or equal to one.")
         self.frame_skip = frame_skip
