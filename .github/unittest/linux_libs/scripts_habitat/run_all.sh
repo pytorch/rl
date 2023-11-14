@@ -8,7 +8,7 @@ yum update -y
 #apt-get install -y vim git wget
 
 #apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
-yum install glfw-devel mesa-libGL mesa-libOSMesa-devel glew-devel -y
+yum install glfw-devel mesa-libGL mesa-libEGL-devel mesa-libOSMesa-devel glew-devel -y
 #apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
 
 #apt-get install -y g++ gcc
