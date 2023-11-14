@@ -12,7 +12,7 @@ from typing import Any, Dict, Sequence, Union
 
 import torch
 from tensordict import is_tensorclass
-from tensordict.memmap import MemmapTensor
+from tensordict.memmap import MemoryMappedTensor
 from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.utils import expand_right
 
@@ -760,20 +760,7 @@ def _get_default_collate(storage, _is_tensordict=False):
             f"Could not find a default collate_fn for storage {type(storage)}."
         )
 
-@implement_for("torch", None, "2.2.0")
 def make_memmap(tensor, path):
-    return MemmapTensor.from_tensor(tensor, filename=path)
-
-@implement_for("torch", "2.2.0")
-def make_memmap(tensor, path):
-    from tensordict._memory_map import from_tensor
-    return from_tensor(tensor, filename=path)
-
-@implement_for("torch", None, "2.2.0")
+    return MemoryMappedTensor.from_tensor(tensor, filename=path)
 def make_empty_memmap(shape, dtype, path):
-    return MemmapTensor(shape, dtype=dtype, filename=path)
-
-@implement_for("torch", "2.2.0")
-def make_empty_memmap(shape, dtype, path):
-    from tensordict._memory_map import empty_like
-    return empty_like(torch.zeros((), dtype=dtype).expand(shape), filename=path)
+    return MemoryMappedTensor.from_tensor(tensor, filename=path)
