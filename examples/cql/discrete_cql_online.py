@@ -2,11 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""DDPG Example.
+"""Discrete (DQN) CQL Example.
 
-This is a simple self-contained example of a DDPG training script.
+This is a simple self-contained example of a discrete CQL training script.
 
-It supports state environments like MuJoCo.
+It supports state environments like gym and gymnasium.
 
 The helper functions are coded in the utils.py associated with this script.
 """
@@ -14,36 +14,36 @@ The helper functions are coded in the utils.py associated with this script.
 import time
 
 import hydra
-
 import numpy as np
 import torch
 import torch.cuda
 import tqdm
 
 from torchrl.envs.utils import ExplorationType, set_exploration_type
+
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
     log_metrics,
     make_collector,
-    make_ddpg_agent,
+    make_cql_optimizer,
+    make_discretecql_model,
+    make_discreteloss,
     make_environment,
-    make_loss_module,
-    make_optimizer,
     make_replay_buffer,
 )
 
 
-@hydra.main(version_base="1.1", config_path=".", config_name="config")
+@hydra.main(version_base="1.1", config_path=".", config_name="discrete_cql_config")
 def main(cfg: "DictConfig"):  # noqa: F821
-    device = torch.device(cfg.network.device)
+    device = torch.device(cfg.optim.device)
 
     # Create logger
-    exp_name = generate_exp_name("DDPG", cfg.env.exp_name)
+    exp_name = generate_exp_name("DiscreteCQL", cfg.env.exp_name)
     logger = None
     if cfg.logger.backend:
         logger = get_logger(
             logger_type=cfg.logger.backend,
-            logger_name="ddpg_logging",
+            logger_name="discretecql_logging",
             experiment_name=exp_name,
             wandb_kwargs={"mode": cfg.logger.mode, "config": cfg},
         )
@@ -56,13 +56,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
     train_env, eval_env = make_environment(cfg)
 
     # Create agent
-    model, exploration_policy = make_ddpg_agent(cfg, train_env, eval_env, device)
+    model, explore_policy = make_discretecql_model(cfg, train_env, eval_env, device)
 
-    # Create DDPG loss
-    loss_module, target_net_updater = make_loss_module(cfg, model)
+    # Create loss
+    loss_module, target_net_updater = make_discreteloss(cfg.loss, model)
 
     # Create off-policy collector
-    collector = make_collector(cfg, train_env, exploration_policy)
+    collector = make_collector(cfg, train_env, explore_policy)
 
     # Create replay buffer
     replay_buffer = make_replay_buffer(
@@ -74,10 +74,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create optimizers
-    optimizer_actor, optimizer_critic = make_optimizer(cfg, loss_module)
+    optimizer = make_cql_optimizer(cfg, loss_module)
 
     # Main loop
-    start_time = time.time()
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
@@ -88,15 +87,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
         * cfg.optim.utd_ratio
     )
     prb = cfg.replay_buffer.prb
-    frames_per_batch = cfg.collector.frames_per_batch
-    eval_iter = cfg.logger.eval_iter
     eval_rollout_steps = cfg.env.max_episode_steps
+    eval_iter = cfg.logger.eval_iter
+    frames_per_batch = cfg.collector.frames_per_batch
 
-    sampling_start = time.time()
-    for _, tensordict in enumerate(collector):
+    start_time = sampling_start = time.time()
+    for tensordict in collector:
         sampling_time = time.time() - sampling_start
+
         # Update exploration policy
-        exploration_policy.step(tensordict.numel())
+        explore_policy[1].step(tensordict.numel())
 
         # Update weights of the inference policy
         collector.update_policy_weights_()
@@ -113,10 +113,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         training_start = time.time()
         if collected_frames >= init_random_frames:
             (
-                actor_losses,
                 q_losses,
+                cql_losses,
             ) = ([], [])
             for _ in range(num_updates):
+
                 # Sample from replay buffer
                 sampled_tensordict = replay_buffer.sample()
                 if sampled_tensordict.device != device:
@@ -126,24 +127,22 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 else:
                     sampled_tensordict = sampled_tensordict.clone()
 
-                # Update critic
-                q_loss, *_ = loss_module.loss_value(sampled_tensordict)
-                optimizer_critic.zero_grad()
-                q_loss.backward()
-                optimizer_critic.step()
+                # Compute loss
+                loss_dict = loss_module(sampled_tensordict)
 
-                # Update actor
-                actor_loss, *_ = loss_module.loss_actor(sampled_tensordict)
-                optimizer_actor.zero_grad()
-                actor_loss.backward()
-                optimizer_actor.step()
+                q_loss = loss_dict["loss_qvalue"]
+                cql_loss = loss_dict["loss_cql"]
+                loss = q_loss + cql_loss
 
+                # Update model
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
                 q_losses.append(q_loss.item())
-                actor_losses.append(actor_loss.item())
+                cql_losses.append(cql_loss.item())
 
-                # Update qnet_target params
+                # Update target params
                 target_net_updater.step()
-
                 # Update priority
                 if prb:
                     replay_buffer.update_priority(sampled_tensordict)
@@ -164,10 +163,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
                 episode_length
             )
+            metrics_to_log["train/epsilon"] = explore_policy[1].eps
 
         if collected_frames >= init_random_frames:
             metrics_to_log["train/q_loss"] = np.mean(q_losses)
-            metrics_to_log["train/a_loss"] = np.mean(actor_losses)
+            metrics_to_log["train/cql_loss"] = np.mean(cql_losses)
             metrics_to_log["train/sampling_time"] = sampling_time
             metrics_to_log["train/training_time"] = training_time
 
@@ -177,7 +177,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 eval_start = time.time()
                 eval_rollout = eval_env.rollout(
                     eval_rollout_steps,
-                    exploration_policy,
+                    model,
                     auto_cast_to_device=True,
                     break_when_any_done=True,
                 )

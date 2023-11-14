@@ -25,7 +25,7 @@ jobs:
       script: |
         set -euxo pipefail
 
-        export PYTHON_VERSION="3.8"
+        export PYTHON_VERSION="3.9"
         export CU_VERSION="cpu"
 
         # TODO: Port this to pytorch/test-infra/.github/workflows/windows_job.yml

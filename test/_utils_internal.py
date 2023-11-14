@@ -401,7 +401,8 @@ def check_rollout_consistency_multikey_env(td: TensorDict, max_steps: int):
 
     # Check done and reset for nested_1
     observation_is_max = td["next", "nested_1", "observation"][..., 0] == max_steps + 1
-    next_is_done = td["next", "nested_1", "done"][index_batch_size][:-1].squeeze(-1)
+    # done at the root always prevail
+    next_is_done = td["next", "done"][index_batch_size][:-1].squeeze(-1)
     assert (td["next", "nested_1", "done"][observation_is_max]).all()
     assert (~td["next", "nested_1", "done"][~observation_is_max]).all()
     # Obs after done is 0
@@ -429,7 +430,8 @@ def check_rollout_consistency_multikey_env(td: TensorDict, max_steps: int):
 
     # Check done and reset for nested_2
     observation_is_max = td["next", "nested_2", "observation"][..., 0] == max_steps + 1
-    next_is_done = td["next", "nested_2", "done"][index_batch_size][:-1].squeeze(-1)
+    # done at the root always prevail
+    next_is_done = td["next", "done"][index_batch_size][:-1].squeeze(-1)
     assert (td["next", "nested_2", "done"][observation_is_max]).all()
     assert (~td["next", "nested_2", "done"][~observation_is_max]).all()
     # Obs after done is 0

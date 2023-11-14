@@ -5,6 +5,8 @@
 import time
 from argparse import ArgumentParser
 
+import gym
+
 import torch
 import tqdm
 
@@ -15,7 +17,7 @@ from torchrl.collectors.collectors import (
 )
 from torchrl.collectors.distributed import RPCDataCollector
 from torchrl.envs import EnvCreator
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -79,7 +81,11 @@ if __name__ == "__main__":
     else:
         collector_kwargs = {device_str: "cpu", "storing_{device_str}": "cpu"}
 
-    make_env = EnvCreator(lambda: GymEnv(args.env))
+    def gym_make():
+        with set_gym_backend(gym):
+            return GymEnv(args.env)
+
+    make_env = EnvCreator(gym_make)
     action_spec = make_env().action_spec
 
     collector = RPCDataCollector(

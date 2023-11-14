@@ -465,7 +465,10 @@ class Trainer:
         self.collector.shutdown()
 
     def __del__(self):
-        self.collector.shutdown()
+        try:
+            self.collector.shutdown()
+        except Exception:
+            pass
 
     def shutdown(self):
         if VERBOSE:

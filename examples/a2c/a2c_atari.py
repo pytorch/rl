@@ -76,6 +76,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # use end-of-life as done key
+    adv_module.set_keys(done="end-of-life", terminated="end-of-life")
     loss_module.set_keys(done="end-of-life", terminated="end-of-life")
 
     # Create optimizer
@@ -140,6 +141,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         for k, batch in enumerate(data_buffer):
 
+            # Get a data batch
             batch = batch.to(device)
 
             # Linearly decrease the learning rate and clip epsilon

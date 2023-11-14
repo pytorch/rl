@@ -407,7 +407,7 @@ def td0_return_estimate(
     gamma: float,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
-    terminated: torch.Tensor,
+    terminated: torch.Tensor | None = None,
     *,
     done: torch.Tensor | None = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -432,7 +432,8 @@ def td0_return_estimate(
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
-    if done is not None:
+    if done is not None and terminated is None:
+        terminated = done
         warnings.warn(
             "done for td0_return_estimate is deprecated. Pass ``terminated`` instead."
         )

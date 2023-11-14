@@ -1,26 +1,25 @@
 # Task and env
 env:
-  name: Pendulum-v1
+  name: CartPole-v1
   task: ""
   library: gym
-  exp_name: cql_pendulum_gym
-  record_video: 0
+  exp_name: cql_cartpole_gym
   n_samples_stats: 1000
-  frame_skip: 1
-  reward_scaling: 1.0
-  noop: 1
+  max_episode_steps: 200
   seed: 0
 
 # Collector
 collector:
   frames_per_batch: 200
-  total_frames: 1000000 
+  total_frames: 20000 
   multi_step: 0
   init_random_frames: 1000
   env_per_collector: 1
   device: cpu
   max_frames_per_traj: 200
-
+  annealing_frames: 10000
+  eps_start: 1.0
+  eps_end: 0.01
 # logger
 logger:
   backend: wandb
@@ -34,12 +33,13 @@ replay_buffer:
   prb: 0
   buffer_prefetch: 64
   size: 1_000_000
+  scratch_dir: ${env.exp_name}_${env.seed}
 
 # Optimization
 optim:
   utd_ratio: 1
   device: cuda:0
-  lr: 3e-4
+  lr: 1e-3
   weight_decay: 0.0
   batch_size: 256
   lr_scheduler: ""
@@ -49,19 +49,9 @@ optim:
 model:
   hidden_sizes: [256, 256]
   activation: relu
-  default_policy_scale: 1.0
-  scale_lb: 0.1
 
 # loss
 loss: 
-  loss_function: smooth_l1
+  loss_function: l2
   gamma: 0.99
   tau: 0.005
-  # CQL hyperparameter
-  temperature: 1.0
-  min_q_weight: 1.0
-  max_q_backup: False
-  deterministic_backup: False
-  num_random: 10
-  with_lagrange: True
-  lagrange_thresh: 10.0

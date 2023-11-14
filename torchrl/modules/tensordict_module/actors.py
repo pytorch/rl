@@ -210,6 +210,62 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
             device=None,
             is_shared=False)
 
+    Probabilistic actors also support compound actions through the
+    :class:`tensordict.nn.CompositeDistribution` class. This distribution takes
+    a tensordict as input (typically `"params"`) and reads it as a whole: the
+    content of this tensordict is the input to the distributions contained in the
+    compound one.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import CompositeDistribution, TensorDictModule
+        >>> from torchrl.modules import ProbabilisticActor
+        >>> from torch import nn, distributions as d
+        >>> import torch
+        >>>
+        >>> class Module(nn.Module):
+        ...     def forward(self, x):
+        ...         return x[..., :3], x[..., 3:6], x[..., 6:]
+        >>> module = TensorDictModule(Module(),
+        ...                           in_keys=["x"],
+        ...                           out_keys=[("params", "normal", "loc"),
+        ...                              ("params", "normal", "scale"),
+        ...                              ("params", "categ", "logits")])
+        >>> actor = ProbabilisticActor(module,
+        ...                            in_keys=["params"],
+        ...                            distribution_class=CompositeDistribution,
+        ...                            distribution_kwargs={"distribution_map": {
+        ...                                 "normal": d.Normal, "categ": d.Categorical}}
+        ...                           )
+        >>> data = TensorDict({"x": torch.rand(10)}, [])
+        >>> actor(data)
+        TensorDict(
+            fields={
+                categ: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                normal: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                params: TensorDict(
+                    fields={
+                        categ: TensorDict(
+                            fields={
+                                logits: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=None,
+                            is_shared=False),
+                        normal: TensorDict(
+                            fields={
+                                loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                                scale: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=None,
+                    is_shared=False),
+                x: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
     """
 
     def __init__(
@@ -1702,6 +1758,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         super().__init__(policy)
         self.observation_key = "observation"
         self.action_key = "action"
+        self.out_action_key = "action"
         self.return_to_go_key = "return_to_go"
         self.inference_context = inference_context
         if spec is not None:
@@ -1738,12 +1795,14 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
 
         Keyword Args:
             observation (NestedKey, optional): The observation key.
-            action (NestedKey, optional): The action key.
+            action (NestedKey, optional): The action key (input to the network).
             return_to_go (NestedKey, optional): The return_to_go key.
+            out_action (NestedKey, optional): The action key (output of the network).
 
         """
         observation_key = unravel_key(kwargs.pop("observation", self.observation_key))
         action_key = unravel_key(kwargs.pop("action", self.action_key))
+        out_action_key = unravel_key(kwargs.pop("out_action", self.out_action_key))
         return_to_go_key = unravel_key(
             kwargs.pop("return_to_go", self.return_to_go_key)
         )
@@ -1751,13 +1810,15 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
             raise TypeError(
                 f"Got unknown input(s) {kwargs.keys()}. Accepted keys are 'action', 'return_to_go' and 'observation'."
             )
-        if action_key not in self.td_module.out_keys:
-            raise ValueError(
-                f"The action key {action_key} was not found in the policy out_keys {self.td_module.out_keys}."
-            )
         self.observation_key = observation_key
         self.action_key = action_key
         self.return_to_go_key = return_to_go_key
+        if out_action_key not in self.td_module.out_keys:
+            raise ValueError(
+                f"The value of out_action_key ({out_action_key}) must be "
+                f"within the actor output keys ({self.td_module.out_keys})."
+            )
+        self.out_action_key = out_action_key
 
     def step(self, frames: int = 1) -> None:
         pass
@@ -1812,17 +1873,18 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         tensordict = self.mask_context(tensordict)
         # forward pass
         tensordict = self.td_module.forward(tensordict)
-        # get last action predicton
-        out_action = tensordict.get(self.action_key)
+        # get last action prediction
+        out_action = tensordict.get(self.out_action_key)
         if tensordict.ndim == out_action.ndim - 1:
             # then time dimension is in the TD's dimensions, and we must get rid of it
             tensordict.batch_size = tensordict.batch_size[:-1]
         out_action = out_action[..., -1, :]
-        tensordict.set(self.action_key, out_action)
-        # out_rtg = tensordict.get(self.return_to_go_key)[:, -1]
+        tensordict.set(self.out_action_key, out_action)
+
         out_rtg = tensordict.get(self.return_to_go_key)
         out_rtg = out_rtg[..., -1, :]
         tensordict.set(self.return_to_go_key, out_rtg)
+
         # set unmasked observation
         tensordict.set(self.observation_key, obs)
         return tensordict

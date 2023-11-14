@@ -10,7 +10,15 @@ from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.envs import Compose, DoubleToFloat, EnvCreator, ParallelEnv, TransformedEnv
+from torchrl.envs import (
+    CatTensors,
+    Compose,
+    DMControlEnv,
+    DoubleToFloat,
+    EnvCreator,
+    ParallelEnv,
+    TransformedEnv,
+)
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.transforms import InitTracker, RewardSum, StepCounter
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -25,12 +33,21 @@ from torchrl.objectives.sac import SACLoss
 # -----------------
 
 
-def env_maker(task, device="cpu"):
-    with set_gym_backend("gym"):
-        return GymEnv(
-            task,
-            device=device,
+def env_maker(cfg, device="cpu"):
+    lib = cfg.env.library
+    if lib in ("gym", "gymnasium"):
+        with set_gym_backend(lib):
+            return GymEnv(
+                cfg.env.name,
+                device=device,
+            )
+    elif lib == "dm_control":
+        env = DMControlEnv(cfg.env.name, cfg.env.task)
+        return TransformedEnv(
+            env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
         )
+    else:
+        raise NotImplementedError(f"Unknown lib {lib}.")
 
 
 def apply_env_transforms(env, max_episode_steps=1000):
@@ -50,7 +67,7 @@ def make_environment(cfg):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         cfg.collector.env_per_collector,
-        EnvCreator(lambda: env_maker(task=cfg.env.name)),
+        EnvCreator(lambda cfg=cfg: env_maker(cfg)),
     )
     parallel_env.set_seed(cfg.env.seed)
 
@@ -59,7 +76,7 @@ def make_environment(cfg):
     eval_env = TransformedEnv(
         ParallelEnv(
             cfg.collector.env_per_collector,
-            EnvCreator(lambda: env_maker(task=cfg.env.name)),
+            EnvCreator(lambda cfg=cfg: env_maker(cfg)),
         ),
         train_env.transform.clone(),
     )
@@ -79,7 +96,7 @@ def make_collector(cfg, train_env, actor_model_explore):
         init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
-        device=cfg.collector.collector_device,
+        device=cfg.collector.device,
     )
     collector.set_seed(cfg.env.seed)
     return collector
@@ -89,7 +106,7 @@ def make_replay_buffer(
     batch_size,
     prb=False,
     buffer_size=1000000,
-    buffer_scratch_dir="/tmp/",
+    buffer_scratch_dir=None,
     device="cpu",
     prefetch=3,
 ):
