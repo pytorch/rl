@@ -643,7 +643,8 @@ class LazyMemmapStorage(LazyTensorStorage):
             self.device = data.device
         if self.device.type != "cpu":
             warnings.warn(
-                "Support for Memmap device other than CPU will be deprecated in v0.4.0.",
+                "Support for Memmap device other than CPU will be deprecated in v0.4.0. "
+                "Using a 'cuda' device may be suboptimal.",
                 category=DeprecationWarning,
             )
         if is_tensor_collection(data):
@@ -676,6 +677,13 @@ class LazyMemmapStorage(LazyTensorStorage):
                 )
         self._storage = out
         self.initialized = True
+
+    def get(self, index: Union[int, Sequence[int], slice]) -> Any:
+        result = super().get(index)
+        # to be deprecated in v0.4
+        if result.device != self.device:
+            return result.to(self.device, non_blocking=True)
+        return result
 
 
 # Utils
