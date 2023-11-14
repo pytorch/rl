@@ -4,7 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import os
+
 import sys
+import tempfile
 import time
 
 import pytest
@@ -22,10 +24,10 @@ RETRY_BACKOFF = 3
 
 
 class ReplayBufferNode(RemoteTensorDictReplayBuffer):
-    def __init__(self, capacity: int):
+    def __init__(self, capacity: int, scratch_dir=None):
         super().__init__(
             storage=LazyMemmapStorage(
-                max_size=capacity, scratch_dir="/tmp/", device=torch.device("cpu")
+                max_size=capacity, scratch_dir=scratch_dir, device=torch.device("cpu")
             ),
             sampler=RandomSampler(),
             writer=RoundRobinWriter(),
