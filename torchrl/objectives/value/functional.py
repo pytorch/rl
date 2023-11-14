@@ -12,7 +12,7 @@ from typing import Optional, Tuple, Union
 
 import torch
 
-from tensordict import MemmapTensor
+from tensordict import MemmapTensor, MemoryMappedTensor
 
 __all__ = [
     "generalized_advantage_estimate",
