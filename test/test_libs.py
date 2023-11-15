@@ -1896,12 +1896,8 @@ class TestD4RL:
         keys = keys.intersection(data_d4rl._storage._storage.keys(True, True))
         assert len(keys)
         assert_allclose_td(
-            data_direct._storage._storage.select(*keys).apply(
-                lambda t: t.float()
-            ),
-            data_d4rl._storage._storage.select(*keys).apply(
-                lambda t: t.float()
-            ),
+            data_direct._storage._storage.select(*keys).apply(lambda t: t.float()),
+            data_d4rl._storage._storage.select(*keys).apply(lambda t: t.float()),
         )
 
     @pytest.mark.parametrize(
