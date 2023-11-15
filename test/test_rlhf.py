@@ -14,12 +14,7 @@ import torch
 import torch.nn.functional as F
 
 from _utils_internal import get_default_devices
-from tensordict import (
-    is_tensor_collection,
-    MemoryMappedTensor,
-    TensorDict,
-    TensorDictBase,
-)
+from tensordict import is_tensor_collection, MemmapTensor, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
 from torchrl.data.rlhf import TensorDictTokenizer
 from torchrl.data.rlhf.dataset import (
@@ -193,8 +188,8 @@ def test_dataset_to_tensordict(tmpdir, suffix):
     else:
         assert ("c", "d", "a") in td.keys(True)
         assert ("c", "d", "b") in td.keys(True)
-    assert isinstance(td.get((suffix, "a")), MemoryMappedTensor)
-    assert isinstance(td.get((suffix, "b")), MemoryMappedTensor)
+    assert isinstance(td.get((suffix, "a")), MemmapTensor)
+    assert isinstance(td.get((suffix, "b")), MemmapTensor)
 
 
 @pytest.mark.skipif(
