@@ -47,8 +47,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     max_grad_norm = cfg.optim.max_grad_norm
     num_test_episodes = cfg.logger.num_test_episodes
     total_network_updates = (
-        total_frames // (frames_per_batch * batch_size)
-    ) * cfg.loss.sgd_updates
+                                    total_frames // (frames_per_batch * batch_size)
+                            ) * cfg.loss.sgd_updates
 
     # Create models (check utils_atari.py)
     actor, critic = make_ppo_models(cfg.env.env_name)
@@ -88,7 +88,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         entropy_coef=cfg.loss.entropy_coef,
         critic_coef=cfg.loss.critic_coef,
     )
-    loss_module.set_keys(done="eol", terminated="eol")
 
     # Create optimizer
     optim = torch.optim.RMSprop(
@@ -136,7 +135,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 {
                     "train/reward": episode_rewards.mean().item(),
                     "train/episode_length": episode_length.sum().item()
-                    / len(episode_length),
+                                            / len(episode_length),
                 }
             )
 
@@ -156,11 +155,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
             stacked_data = stacked_data.to(device)
 
             # Compute advantage
-            stacked_data = adv_module(stacked_data)
+            with torch.no_grad():
+                stacked_data = adv_module(stacked_data)
 
             # Add to replay buffer
-            stacked_data_reshape = stacked_data.reshape(-1)
-            data_buffer.extend(stacked_data_reshape)
+            for stacked_d in stacked_data:
+                stacked_data_reshape = stacked_d.reshape(-1)
+                data_buffer.extend(stacked_data_reshape)
 
             for batch in data_buffer:
 
@@ -181,7 +182,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     "loss_critic", "loss_entropy", "loss_objective"
                 ).detach()
                 loss_sum = (
-                    loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+                        loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
                 )
 
                 # Backward pass
@@ -210,7 +211,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Get test rewards
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
             if ((i - 1) * frames_in_batch * frame_skip) // test_interval < (
-                i * frames_in_batch * frame_skip
+                    i * frames_in_batch * frame_skip
             ) // test_interval:
                 actor.eval()
                 eval_start = time.time()

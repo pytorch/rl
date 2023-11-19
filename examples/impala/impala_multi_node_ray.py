@@ -189,8 +189,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
             stacked_data = adv_module(stacked_data)
 
             # Add to replay buffer
-            stacked_data_reshape = stacked_data.reshape(-1)
-            data_buffer.extend(stacked_data_reshape)
+            for stacked_d in stacked_data:
+                stacked_data_reshape = stacked_d.reshape(-1)
+                data_buffer.extend(stacked_data_reshape)
 
             for batch in data_buffer:
 
