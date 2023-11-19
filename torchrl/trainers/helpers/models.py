@@ -58,7 +58,7 @@ from torchrl.modules.tensordict_module import (
     QValueActor,
 )
 from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
-from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
+from torchrl.modules.tensordict_module.world_models import WorldModelWrapper, DreamerlWrapper
 from torchrl.trainers.helpers import transformed_env_constructor
 
 DISTRIBUTIONS = {
@@ -76,7 +76,7 @@ ACTIVATIONS = {
 
 
 def make_dqn_actor(
-    proof_environment: EnvBase, cfg: "DictConfig", device: torch.device  # noqa: F821
+        proof_environment: EnvBase, cfg: "DictConfig", device: torch.device  # noqa: F821
 ) -> Actor:
     """DQN constructor helper function.
 
@@ -209,14 +209,14 @@ def make_dqn_actor(
 
 
 def make_redq_model(
-    proof_environment: EnvBase,
-    cfg: "DictConfig",  # noqa: F821
-    device: DEVICE_TYPING = "cpu",
-    in_keys: Optional[Sequence[str]] = None,
-    actor_net_kwargs=None,
-    qvalue_net_kwargs=None,
-    observation_key=None,
-    **kwargs,
+        proof_environment: EnvBase,
+        cfg: "DictConfig",  # noqa: F821
+        device: DEVICE_TYPING = "cpu",
+        in_keys: Optional[Sequence[str]] = None,
+        actor_net_kwargs=None,
+        qvalue_net_kwargs=None,
+        observation_key=None,
+        **kwargs,
 ) -> nn.ModuleList:
     """Actor and Q-value model constructor helper function for REDQ.
 
@@ -451,13 +451,13 @@ def make_redq_model(
 
 
 def make_dreamer(
-    cfg: "DictConfig",  # noqa: F821
-    proof_environment: EnvBase = None,
-    device: DEVICE_TYPING = "cpu",
-    action_key: str = "action",
-    value_key: str = "state_value",
-    use_decoder_in_env: bool = False,
-    obs_norm_state_dict=None,
+        cfg: "DictConfig",  # noqa: F821
+        proof_environment: EnvBase = None,
+        device: DEVICE_TYPING = "cpu",
+        action_key: str = "action",
+        value_key: str = "state_value",
+        use_decoder_in_env: bool = False,
+        obs_norm_state_dict=None,
 ) -> nn.ModuleList:
     """Create Dreamer components.
 
@@ -506,8 +506,15 @@ def make_dreamer(
         out_features=1, depth=2, num_cells=cfg.mlp_num_units, activation_class=nn.ELU
     )
 
+    if cfg.pred_continue:
+        continue_module = MLP(
+            out_features=1, depth=2, num_cells=cfg.mlp_num_units, activation_class=nn.ELU
+        )
+    else:
+        continue_module = None
+
     world_model = _dreamer_make_world_model(
-        obs_encoder, obs_decoder, rssm_prior, rssm_posterior, reward_module
+        obs_encoder, obs_decoder, rssm_prior, rssm_posterior, reward_module, continue_module
     ).to(device)
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         tensordict = proof_environment.fake_tensordict().unsqueeze(-1)
@@ -517,6 +524,7 @@ def make_dreamer(
 
     model_based_env = _dreamer_make_mbenv(
         reward_module,
+        continue_module,
         rssm_prior,
         obs_decoder,
         proof_environment,
@@ -555,7 +563,7 @@ def make_dreamer(
 
 
 def _dreamer_make_world_model(
-    obs_encoder, obs_decoder, rssm_prior, rssm_posterior, reward_module
+        obs_encoder, obs_decoder, rssm_prior, rssm_posterior, reward_module, continue_module
 ):
     # World Model and reward model
     rssm_rollout = RSSMRollout(
@@ -598,20 +606,29 @@ def _dreamer_make_world_model(
         in_keys=[("next", "state"), ("next", "belief")],
         out_keys=[("next", "reward")],
     )
-    world_model = WorldModelWrapper(
+    if continue_module is not None:
+        continue_model = SafeModule(
+            continue_module,
+            in_keys=[("next", "state"), ("next", "belief")],
+            out_keys=[("next", "pred_continue")],
+        )
+    else:
+        continue_model = None
+    world_model = DreamerlWrapper(
         transition_model,
         reward_model,
+        continue_model
     )
     return world_model
 
 
 def _dreamer_make_actors(
-    obs_encoder,
-    rssm_prior,
-    rssm_posterior,
-    mlp_num_units,
-    action_key,
-    proof_environment,
+        obs_encoder,
+        rssm_prior,
+        rssm_posterior,
+        mlp_num_units,
+        action_key,
+        proof_environment,
 ):
     actor_module = DreamerActor(
         out_features=proof_environment.action_spec.shape[0],
@@ -665,7 +682,7 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
 
 
 def _dreamer_make_actor_real(
-    obs_encoder, rssm_prior, rssm_posterior, actor_module, action_key, proof_environment
+        obs_encoder, rssm_prior, rssm_posterior, actor_module, action_key, proof_environment
 ):
     # actor for real world: interacts with states ~ posterior
     # Out actor differs from the original paper where first they compute prior and posterior and then act on it
@@ -742,13 +759,14 @@ def _dreamer_make_value_model(mlp_num_units, value_key):
 
 
 def _dreamer_make_mbenv(
-    reward_module,
-    rssm_prior,
-    obs_decoder,
-    proof_environment,
-    use_decoder_in_env,
-    state_dim,
-    rssm_hidden_dim,
+        reward_module,
+        continue_module,
+        rssm_prior,
+        obs_decoder,
+        proof_environment,
+        use_decoder_in_env,
+        state_dim,
+        rssm_hidden_dim,
 ):
     # MB environment
     if use_decoder_in_env:
@@ -777,10 +795,20 @@ def _dreamer_make_mbenv(
         in_keys=["state", "belief"],
         out_keys=["reward"],
     )
+    if continue_module is not None:
+        continue_model = SafeModule(
+            continue_module,
+            in_keys=["state", "belief"],
+            out_keys=["pred_continue"],
+        )
+    else:
+        continue_model = None
+
     model_based_env = DreamerEnv(
-        world_model=WorldModelWrapper(
+        world_model=DreamerlWrapper(
             transition_model,
             reward_model,
+            continue_model
         ),
         prior_shape=torch.Size([state_dim]),
         belief_shape=torch.Size([rssm_hidden_dim]),
@@ -816,6 +844,10 @@ class DreamerConfig:
     # Decay of the reward moving averaging
     exploration: str = "additive_gaussian"
     # One of "additive_gaussian", "ou_exploration" or ""
+    discount_loss: bool = False
+    # Whether to use the discount loss
+    pred_continue: bool = True
+    # Whether to predict the continue signal
 
 
 @dataclass

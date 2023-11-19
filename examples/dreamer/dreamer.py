@@ -4,6 +4,7 @@ from pathlib import Path
 import hydra
 import torch
 import torch.cuda
+import tensordict
 import tqdm
 from dreamer_utils import (
     call_record,
@@ -45,6 +46,9 @@ from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArg
 from torchrl.trainers.helpers.trainers import TrainerConfig
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
 
+import torchrl.frank
+
+
 config_fields = [
     (config_field.name, config_field.type, config_field)
     for config_cls in (
@@ -67,6 +71,20 @@ def retrieve_stats_from_state_dict(obs_norm_state_dict):
         "loc": obs_norm_state_dict["loc"],
         "scale": obs_norm_state_dict["scale"],
     }
+
+
+def match_length(batch_td: tensordict.TensorDict, length):
+    assert len(batch_td.shape) == 2, "batch_td must be 2D"
+
+    batch_size, seq_len = batch_td.shape
+    # min multiple of length that larger than or equal to seq_len
+    new_seq_len = (seq_len + length - 1) // length * length
+
+    # pad with zeros
+    matched_td = torch.stack(
+        [tensordict.pad(td, [0, new_seq_len - seq_len]) for td in batch_td], 0
+    ).contiguous()
+    return matched_td
 
 
 @hydra.main(version_base="1.1", config_path=".", config_name="config")
@@ -94,27 +112,29 @@ def main(cfg: "DictConfig"):  # noqa: F821
             "project": "torchrl",
             "group": f"Dreamer_{cfg.env_name}",
             "offline": cfg.offline_logging,
+            "config": dict(cfg),
         },
     )
     video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
-    key, init_env_steps, stats = None, None, None
-    if not cfg.vecnorm and cfg.norm_stats:
-        if not hasattr(cfg, "init_env_steps"):
-            raise AttributeError("init_env_steps missing from arguments.")
-        key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
-        init_env_steps = cfg.init_env_steps
-        stats = {"loc": None, "scale": None}
-    elif cfg.from_pixels:
-        stats = {"loc": 0.5, "scale": 0.5}
-    proof_env = transformed_env_constructor(
-        cfg=cfg, use_env_creator=False, stats=stats
-    )()
-    initialize_observation_norm_transforms(
-        proof_environment=proof_env, num_iter=init_env_steps, key=key
-    )
-    _, obs_norm_state_dict = retrieve_observation_norms_state_dict(proof_env)[0]
-    proof_env.close()
+    # key, init_env_steps, stats = None, None, None
+    # if not cfg.vecnorm and cfg.norm_stats:
+    #     if not hasattr(cfg, "init_env_steps"):
+    #         raise AttributeError("init_env_steps missing from arguments.")
+    #     key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
+    #     init_env_steps = cfg.init_env_steps
+    #     stats = {"loc": None, "scale": None}
+    # elif cfg.from_pixels:
+    #     stats = {"loc": 0.5, "scale": 0.5}
+    # proof_env = transformed_env_constructor(
+    #     cfg=cfg, use_env_creator=False, stats=stats
+    # )()
+    # initialize_observation_norm_transforms(
+    #     proof_environment=proof_env, num_iter=init_env_steps, key=key
+    # )
+    # _, obs_norm_state_dict = retrieve_observation_norms_state_dict(proof_env)[0]
+    # proof_env.close()
+    obs_norm_state_dict = {"loc": 0.5, "scale": 0.5}
 
     # Create the different components of dreamer
     world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
@@ -147,15 +167,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
         value_model,
         model_based_env,
         imagination_horizon=cfg.imagination_horizon,
+        discount_loss=cfg.discount_loss,
+        pred_continue=cfg.pred_continue,
     )
-    value_loss = DreamerValueLoss(value_model)
+    value_loss = DreamerValueLoss(
+        value_model,
+        discount_loss=cfg.discount_loss,
+    )
 
     # Exploration noise to be added to the actions
     if cfg.exploration == "additive_gaussian":
         exploration_policy = AdditiveGaussianWrapper(
             policy,
-            sigma_init=0.3,
-            sigma_end=0.3,
+            # sigma_init=0.3,
+            # sigma_end=0.3,
+            annealing_num_steps=cfg.total_frames,
         ).to(device)
     elif cfg.exploration == "ou_exploration":
         exploration_policy = OrnsteinUhlenbeckProcessWrapper(
@@ -224,8 +250,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cmpt = 0
         if reward_normalizer is not None:
             reward_normalizer.update_reward_stats(tensordict)
-        pbar.update(tensordict.numel())
-        current_frames = tensordict.numel()
+        current_frames = tensordict.get(("collector", "mask")).sum().item()
+        pbar.update(current_frames)
         collected_frames += current_frames
 
         # Compared to the original paper, the replay buffer is not temporally
@@ -233,11 +259,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # To be closer to the paper, we would need to fill it with trajectories
         # of length 1000 and then sample subsequences of length batch_length.
 
+        tensordict = match_length(tensordict, cfg.batch_length)
         tensordict = tensordict.reshape(-1, cfg.batch_length)
         replay_buffer.extend(tensordict.cpu())
+
+        mask = tensordict.get(("collector", "mask"))
         logger.log_scalar(
             "r_training",
-            tensordict["next", "reward"].mean().detach().item(),
+            tensordict["next", "reward"][mask].mean().detach().item(),
             step=collected_frames,
         )
 
@@ -265,14 +294,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         sampled_tensordict
                     )
                     loss_world_model = (
-                        model_loss_td["loss_model_kl"]
-                        + model_loss_td["loss_model_reco"]
-                        + model_loss_td["loss_model_reward"]
+                            model_loss_td["loss_model_kl"]
+                            + model_loss_td["loss_model_reco"]
+                            + model_loss_td["loss_model_reward"]
+                            + model_loss_td["loss_model_continue"]
                     )
                     # If we are logging videos, we keep some frames.
                     if (
-                        cfg.record_video
-                        and (record._count + 1) % cfg.record_interval == 0
+                            cfg.record_video
+                            and (record._count + 1) % cfg.record_interval == 0
                     ):
                         sampled_tensordict_save = (
                             sampled_tensordict.select(
@@ -313,6 +343,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         logger.log_scalar(
                             "loss_model_reward",
                             model_loss_td["loss_model_reward"].detach().item(),
+                            step=collected_frames,
+                        )
+                        logger.log_scalar(
+                            "loss_model_continue",
+                            model_loss_td["loss_model_continue"].detach().item(),
                             step=collected_frames,
                         )
                     world_model_opt.zero_grad()
