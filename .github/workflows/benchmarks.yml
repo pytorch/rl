@@ -57,16 +57,16 @@ jobs:
 
   benchmark_gpu:
     name: GPU Pytest benchmark
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         include:
-         - os: linux.4xlarge.nvidia.gpu
+         - os: linux.g5.4xlarge.nvidia.gpu
            python-version: 3.8
     defaults:
       run:
         shell: bash -l {0}
-    container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
+    container: nvidia/cuda:12.3.0-base-ubuntu22.04
     steps:
     - name: Install deps
       run: |
@@ -93,7 +93,7 @@ jobs:
         echo /usr/local/bin >> $GITHUB_PATH
     - name: Setup Environment
       run: |
-        python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118 
+        python3 -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
         python3 -m pip install git+https://github.com/pytorch/tensordict 
         python3 setup.py develop
         python3 -m pip install pytest pytest-benchmark
