@@ -34,7 +34,8 @@ jobs:
           python -m pip install git+https://github.com/pytorch/tensordict 
           python setup.py develop
           python -m pip install pytest pytest-benchmark
-          python -m pip install dm_control
+          python3 -m pip install "gymnasium[accept-rom-license,atari]"
+          python3 -m pip install dm_control
       - name: Run benchmarks
         run: |
           cd benchmarks/
@@ -79,10 +80,10 @@ jobs:
         run: ldd --version
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Update pip
-        run: |
-          apt-get install python3.8 python3-pip -y
-          pip3 install --upgrade pip
+      - name: Python Setup
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.8
       - name: Setup git
         run: git config --global --add safe.directory /__w/rl/rl
       - name: setup Path
