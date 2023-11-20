@@ -67,8 +67,9 @@ jobs:
     defaults:
       run:
         shell: bash -l {0}
-    container: nvidia/cuda:12.3.0-base-ubuntu22.04
-    options: --gpus all
+    container:
+      image: nvidia/cuda:12.3.0-base-ubuntu22.04
+      options: --gpus all
     steps:
     - name: Who triggered this?
       run: |
