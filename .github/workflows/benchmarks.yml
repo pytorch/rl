@@ -34,7 +34,7 @@ jobs:
           python -m pip install git+https://github.com/pytorch/tensordict 
           python setup.py develop
           python -m pip install pytest pytest-benchmark
-          python3 -m pip install "gymnasium[accept-rom-license,atari]"
+          python3 -m pip install "gym[accept-rom-license,atari]"
           python3 -m pip install dm_control
       - name: Run benchmarks
         run: |
@@ -95,7 +95,7 @@ jobs:
           python3 -m pip install git+https://github.com/pytorch/tensordict 
           python3 setup.py develop
           python3 -m pip install pytest pytest-benchmark
-          python3 -m pip install "gymnasium[accept-rom-license,atari]"
+          python3 -m pip install "gym[accept-rom-license,atari]"
           python3 -m pip install dm_control
       - name: check GPU presence
         run: |
