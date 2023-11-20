@@ -16,50 +16,50 @@ jobs:
     name: CPU Pytest benchmark
     runs-on: ubuntu-20.04
     steps:
-      - name: Who triggered this?
-        run: |
-          echo "Action triggered by ${{ github.event.pull_request.html_url }}"
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 50 # this is to make sure we obtain the target base commit
-      - name: Python Setup
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.8
-      - name: Setup Environment
-        run: |
-          python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu 
-          python -m pip install git+https://github.com/pytorch/tensordict 
-          python setup.py develop
-          python -m pip install pytest pytest-benchmark
-          python -m pip install dm_control
-      - name: Setup benchmarks
-        run: |
-          echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
-          echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
-          echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
-          echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
-          echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
-      - name: Run benchmarks
-        run: |
-          cd benchmarks/
-          RUN_BENCHMARK="pytest --rank 0 --benchmark-json "
-          git checkout ${{ github.event.pull_request.base.sha }}
-          $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
-          git checkout ${{ github.event.pull_request.head.sha }}
-          $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}
-      - name: Publish results
-        uses: apbard/pytest-benchmark-commenter@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          benchmark-file: ${{ env.CONTENDER_JSON }}
-          comparison-benchmark-file: ${{ env.BASELINE_JSON }}
-          benchmark-metrics: 'name,max,mean,ops'
-          comparison-benchmark-metric: 'ops'
-          comparison-higher-is-better: true
-          comparison-threshold: 5
-          benchmark-title: 'Result of CPU Benchmark Tests'
+    - name: Who triggered this?
+      run: |
+        echo "Action triggered by ${{ github.event.pull_request.html_url }}"
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 50 # this is to make sure we obtain the target base commit
+    - name: Python Setup
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.8
+    - name: Setup Environment
+      run: |
+        python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu 
+        python -m pip install git+https://github.com/pytorch/tensordict 
+        python setup.py develop
+        python -m pip install pytest pytest-benchmark
+        python -m pip install dm_control
+    - name: Setup benchmarks
+      run: |
+        echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
+        echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
+        echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
+        echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
+        echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
+    - name: Run benchmarks
+      run: |
+        cd benchmarks/
+        RUN_BENCHMARK="pytest --rank 0 --benchmark-json "
+        git checkout ${{ github.event.pull_request.base.sha }}
+        $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
+        git checkout ${{ github.event.pull_request.head.sha }}
+        $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}
+    - name: Publish results
+      uses: apbard/pytest-benchmark-commenter@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        benchmark-file: ${{ env.CONTENDER_JSON }}
+        comparison-benchmark-file: ${{ env.BASELINE_JSON }}
+        benchmark-metrics: 'name,max,mean,ops'
+        comparison-benchmark-metric: 'ops'
+        comparison-higher-is-better: true
+        comparison-threshold: 5
+        benchmark-title: 'Result of CPU Benchmark Tests'
 
   benchmark_gpu:
     name: GPU Pytest benchmark
@@ -90,10 +90,10 @@ jobs:
       uses: actions/checkout@v3
       with:
         fetch-depth: 50 # this is to make sure we obtain the target base commit
-    - name: Update pip
-      run: |
-        apt-get install python3.8 python3-pip -y
-        pip3 install --upgrade pip
+    - name: Python Setup
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.8
     - name: Setup git
       run: git config --global --add safe.directory /__w/rl/rl
     - name: setup Path

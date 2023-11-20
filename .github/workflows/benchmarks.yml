@@ -65,56 +65,56 @@ jobs:
       image: nvidia/cuda:12.3.0-base-ubuntu22.04
       options: --gpus all
     steps:
-    - name: Install deps
-      run: |
-        export TZ=Europe/London
-        export DEBIAN_FRONTEND=noninteractive  # tzdata bug
-        apt-get update -y
-        apt-get install software-properties-common -y
-        add-apt-repository ppa:git-core/candidate -y
-        apt-get update -y
-        apt-get upgrade -y
-        apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev
-    - name: Check ldd --version
-      run: ldd --version
-    - name: Checkout
-      uses: actions/checkout@v3
-    - name: Update pip
-      run: |
-        apt-get install python3.8 python3-pip -y
-        pip3 install --upgrade pip
-    - name: Setup git
-      run: git config --global --add safe.directory /__w/rl/rl
-    - name: setup Path
-      run: |
-        echo /usr/local/bin >> $GITHUB_PATH
-    - name: Setup Environment
-      run: |
-        python3 -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
-        python3 -m pip install git+https://github.com/pytorch/tensordict 
-        python3 setup.py develop
-        python3 -m pip install pytest pytest-benchmark
-        python3 -m pip install dm_control
-    - name: check GPU presence
-      run: |
-        python -c """import torch
-        assert torch.cuda.device_count()
-        """
-    - name: Run benchmarks
-      run: |
-        cd benchmarks/
-        python3 -m pytest --benchmark-json output.json
-    - name: Store benchmark results
-      uses: benchmark-action/github-action-benchmark@v1
-      if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-      with:
-        name: GPU Benchmark Results
-        tool: 'pytest'
-        output-file-path: benchmarks/output.json
-        fail-on-alert: true
-        alert-threshold: '200%'
-        alert-comment-cc-users: '@vmoens'
-        comment-on-alert: true
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        gh-pages-branch: gh-pages
-        auto-push: true
+      - name: Install deps
+        run: |
+          export TZ=Europe/London
+          export DEBIAN_FRONTEND=noninteractive  # tzdata bug
+          apt-get update -y
+          apt-get install software-properties-common -y
+          add-apt-repository ppa:git-core/candidate -y
+          apt-get update -y
+          apt-get upgrade -y
+          apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev
+      - name: Check ldd --version
+        run: ldd --version
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Update pip
+        run: |
+          apt-get install python3.8 python3-pip -y
+          pip3 install --upgrade pip
+      - name: Setup git
+        run: git config --global --add safe.directory /__w/rl/rl
+      - name: setup Path
+        run: |
+          echo /usr/local/bin >> $GITHUB_PATH
+      - name: Setup Environment
+        run: |
+          python3 -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
+          python3 -m pip install git+https://github.com/pytorch/tensordict 
+          python3 setup.py develop
+          python3 -m pip install pytest pytest-benchmark
+          python3 -m pip install dm_control
+      - name: check GPU presence
+        run: |
+          python -c """import torch
+          assert torch.cuda.device_count()
+          """
+      - name: Run benchmarks
+        run: |
+          cd benchmarks/
+          python3 -m pytest --benchmark-json output.json
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+        with:
+          name: GPU Benchmark Results
+          tool: 'pytest'
+          output-file-path: benchmarks/output.json
+          fail-on-alert: true
+          alert-threshold: '200%'
+          alert-comment-cc-users: '@vmoens'
+          comment-on-alert: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-pages-branch: gh-pages
+          auto-push: true
