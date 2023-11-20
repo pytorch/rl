@@ -63,16 +63,12 @@ jobs:
 
   benchmark_gpu:
     name: GPU Pytest benchmark
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        include:
-         - os: linux.g5.4xlarge.nvidia.gpu
-           python-version: 3.8
+    runs-on: linux.g5.4xlarge.nvidia.gpu
     defaults:
       run:
         shell: bash -l {0}
     container: nvidia/cuda:12.3.0-base-ubuntu22.04
+    options: --gpus all
     steps:
     - name: Who triggered this?
       run: |
