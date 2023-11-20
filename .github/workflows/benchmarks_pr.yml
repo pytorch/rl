@@ -105,6 +105,11 @@ jobs:
         python3 setup.py develop
         python3 -m pip install pytest pytest-benchmark
         python3 -m pip install dm_control
+    - name: check GPU presence
+      run: |
+        python -c """import torch
+        assert torch.cuda.device_count()
+        """
     - name: Setup benchmarks
       run: |
         echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
