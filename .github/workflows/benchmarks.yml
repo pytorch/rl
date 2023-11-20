@@ -94,6 +94,7 @@ jobs:
           python3 -m pip install git+https://github.com/pytorch/tensordict 
           python3 setup.py develop
           python3 -m pip install pytest pytest-benchmark
+          python3 -m pip install "gymnasium[accept-rom-license,atari]"
           python3 -m pip install dm_control
       - name: check GPU presence
         run: |
