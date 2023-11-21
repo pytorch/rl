@@ -12,7 +12,7 @@ from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import torch
 
-from tensordict.nn import dispatch, make_functional, TensorDictModule
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
@@ -385,7 +385,6 @@ class SACLoss(LossModule):
             self.actor_critic = ActorCriticWrapper(
                 self.actor_network, self.value_network
             )
-            make_functional(self.actor_critic)
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma

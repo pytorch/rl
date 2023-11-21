@@ -4965,6 +4965,18 @@ class TestCQL(LossModuleTestBase):
             else:
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
+            assert all(
+                (p.grad is None) or (p.grad == 0).all()
+                for p in loss_fn.actor_network_params.values(
+                    include_nested=True, leaves_only=True
+                )
+            )
+            assert all(
+                (p.grad is None) or (p.grad == 0).all()
+                for p in loss_fn.qvalue_network_params.values(
+                    include_nested=True, leaves_only=True
+                )
+            )
 
         sum([item for _, item in loss.items()]).backward()
         named_parameters = list(loss_fn.named_parameters())
@@ -6443,6 +6455,8 @@ class TestA2C(LossModuleTestBase):
                 assert ("critic" not in name) or ("target_" in name)
 
         value.zero_grad()
+        for n, p in loss_fn.named_parameters():
+            assert p.grad is None or p.grad.norm() == 0, n
         loss_objective.backward()
         named_parameters = loss_fn.named_parameters()
         for name, p in named_parameters:

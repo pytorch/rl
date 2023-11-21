@@ -314,8 +314,8 @@ class A2CLoss(LossModule):
                 f"tensordict stored {self.tensor_keys.action} require grad."
             )
         tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
-
-        dist = self.actor.get_dist(tensordict_clone, params=self.actor_params)
+        with self.actor_params.to_module(self.actor):
+            dist = self.actor.get_dist(tensordict_clone)
         log_prob = dist.log_prob(action)
         log_prob = log_prob.unsqueeze(-1)
         return log_prob, dist
@@ -326,10 +326,10 @@ class A2CLoss(LossModule):
             # overhead that we could easily reduce.
             target_return = tensordict.get(self.tensor_keys.value_target)
             tensordict_select = tensordict.select(*self.critic.in_keys)
-            state_value = self.critic(
-                tensordict_select,
-                params=self.critic_params,
-            ).get(self.tensor_keys.value)
+            with self.critic_params.to_module(self.critic):
+                state_value = self.critic(
+                    tensordict_select,
+                ).get(self.tensor_keys.value)
             loss_value = distance_loss(
                 target_return,
                 state_value,
@@ -361,6 +361,7 @@ class A2CLoss(LossModule):
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
+        assert not advantage.requires_grad
         log_probs, dist = self._log_probs(tensordict)
         loss = -(log_probs * advantage)
         td_out = TensorDict({"loss_objective": loss.mean()}, [])
@@ -379,6 +380,7 @@ class A2CLoss(LossModule):
         self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
+
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         if value_type == ValueEstimators.TD1:

@@ -208,7 +208,7 @@ class REDQLoss_deprecated(LossModule):
         self.target_entropy_buffer = None
         self.gSDE = gSDE
 
-        self._vmap_qvalue_networkN0 = vmap(self.qvalue_network, (None, 0))
+        self._vmap_qvalue_networkN0 = vmap_func(self.qvalue_network, (None, 0))
 
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
@@ -328,11 +328,10 @@ class REDQLoss_deprecated(LossModule):
     def _actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
         tensordict_clone = tensordict.select(*obs_keys)
-        with set_exploration_type(ExplorationType.RANDOM):
-            self.actor_network(
-                tensordict_clone,
-                params=self.actor_network_params,
-            )
+        with set_exploration_type(
+            ExplorationType.RANDOM
+        ), self.actor_network_params.to_module(self.actor_network):
+            self.actor_network(tensordict_clone)
 
         tensordict_expand = self._vmap_qvalue_networkN0(
             tensordict_clone.select(*self.qvalue_network.in_keys),
@@ -364,11 +363,10 @@ class REDQLoss_deprecated(LossModule):
             )  # next_observation ->
             # observation
             # select pseudo-action
-            with set_exploration_type(ExplorationType.RANDOM):
-                self.actor_network(
-                    next_td,
-                    params=self.target_actor_network_params,
-                )
+            with set_exploration_type(
+                ExplorationType.RANDOM
+            ), self.target_actor_network_params.to_module(self.actor_network):
+                self.actor_network(next_td)
             sample_log_prob = next_td.get("sample_log_prob")
             # get q-values
             next_td = self._vmap_qvalue_networkN0(

@@ -183,7 +183,7 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn import TensorDictModule, make_functional
+        >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.data import BoundedTensorSpec
         >>> from torchrl.modules import ProbabilisticActor, NormalParamWrapper, TanhNormal
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
@@ -197,8 +197,9 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
         ...    in_keys=["loc", "scale"],
         ...    distribution_class=TanhNormal,
         ...    )
-        >>> params = make_functional(td_module)
-        >>> td = td_module(td, params=params)
+        >>> params = TensorDict.from_module(td_module)
+        >>> with params.to_module(td_module):
+        ...     td = td_module(td)
         >>> td
         TensorDict(
             fields={
@@ -319,7 +320,6 @@ class ValueOperator(TensorDictModule):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn import make_functional
         >>> from torch import nn
         >>> from torchrl.data import UnboundedContinuousTensorSpec
         >>> from torchrl.modules import ValueOperator
@@ -334,8 +334,9 @@ class ValueOperator(TensorDictModule):
         >>> td_module = ValueOperator(
         ...    in_keys=["observation", "action"], module=module
         ... )
-        >>> params = make_functional(td_module)
-        >>> td = td_module(td, params=params)
+        >>> params = TensorDict.from_module(td_module)
+        >>> with params.to_module(td_module):
+        ...     td = td_module(td)
         >>> print(td)
         TensorDict(
             fields={
@@ -792,7 +793,6 @@ class QValueHook:
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch import nn
         >>> from torchrl.data import OneHotDiscreteTensorSpec
         >>> from torchrl.modules.tensordict_module.actors import QValueHook, Actor
@@ -878,7 +878,6 @@ class DistributionalQValueHook(QValueHook):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch import nn
         >>> from torchrl.data import OneHotDiscreteTensorSpec
         >>> from torchrl.modules.tensordict_module.actors import DistributionalQValueHook, Actor
@@ -893,12 +892,13 @@ class DistributionalQValueHook(QValueHook):
         ...         return self.linear(x).view(-1, nbins, 4).log_softmax(-2)
         ...
         >>> module = CustomDistributionalQval()
-        >>> params = make_functional(module)
+        >>> params = TensorDict.from_module(module)
         >>> action_spec = OneHotDiscreteTensorSpec(4)
         >>> hook = DistributionalQValueHook("one_hot", support = torch.arange(nbins))
         >>> module.register_forward_hook(hook)
         >>> qvalue_actor = Actor(module=module, spec=action_spec, out_keys=["action", "action_value"])
-        >>> qvalue_actor(td, params=params)
+        >>> with params.to_module(module):
+        ...     qvalue_actor(td)
         >>> print(td)
         TensorDict(
             fields={
@@ -992,7 +992,6 @@ class QValueActor(SafeSequential):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch import nn
         >>> from torchrl.data import OneHotDiscreteTensorSpec
         >>> from torchrl.modules.tensordict_module.actors import QValueActor

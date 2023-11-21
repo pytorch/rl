@@ -19,6 +19,7 @@ from torchrl.objectives.utils import (
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
+    vmap_func,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
@@ -262,7 +263,6 @@ class IQLLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=False,
-            funs_to_decorate=["forward", "get_dist"],
         )
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
@@ -299,7 +299,7 @@ class IQLLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
-        self._vmap_qvalue_networkN0 = vmap(self.qvalue_network, (None, 0))
+        self._vmap_qvalue_networkN0 = vmap_func(self.qvalue_network, (None, 0))
 
     @property
     def device(self) -> torch.device:
@@ -387,10 +387,8 @@ class IQLLoss(LossModule):
 
     def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
         # KL loss
-        dist = self.actor_network.get_dist(
-            tensordict,
-            params=self.actor_network_params,
-        )
+        with self.actor_network_params.to_module(self.actor_network):
+            dist = self.actor_network.get_dist(tensordict)
 
         log_prob = dist.log_prob(tensordict[self.tensor_keys.action])
 
@@ -406,10 +404,8 @@ class IQLLoss(LossModule):
         # state value
         with torch.no_grad():
             td_copy = tensordict.select(*self.value_network.in_keys).detach()
-            self.value_network(
-                td_copy,
-                params=self.value_network_params,
-            )
+            with self.value_network_params.to_module(self.value_network):
+                self.value_network(td_copy)
             value = td_copy.get(self.tensor_keys.value).squeeze(
                 -1
             )  # assert has no gradient
@@ -428,10 +424,8 @@ class IQLLoss(LossModule):
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys)
-        self.value_network(
-            td_copy,
-            params=self.value_network_params,
-        )
+        with self.value_network_params.to_module(self.value_network):
+            self.value_network(td_copy)
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_q - value, self.expectile).mean()
         return value_loss
