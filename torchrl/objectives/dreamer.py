@@ -323,7 +323,7 @@ class DreamerActorLoss(LossModule):
 
         if self.pred_continue:
             pcont = torch.sigmoid(fake_data.get(("next", self.tensor_keys.pred_continue)))
-            terminated = ~pcont.to(torch.bool)
+            terminated = pcont < 0.5
         else:
             terminated = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
         lambda_target = self.lambda_target(reward, next_value, terminated)

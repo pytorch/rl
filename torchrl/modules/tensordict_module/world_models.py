@@ -34,7 +34,7 @@ class WorldModelWrapper(TensorDictSequential):
         return self.module[1]
 
 
-class DreamerlWrapper(TensorDictSequential):
+class DreamerWrapper(TensorDictSequential):
     """World model wrapper.
 
     This module wraps together a transition model and a reward model.
@@ -61,7 +61,5 @@ class DreamerlWrapper(TensorDictSequential):
             self.pred_continue = True
         else:
             self.pred_continue = False
-
-        print("self.pred_continue", self.pred_continue)
 
         super().__init__(*models)

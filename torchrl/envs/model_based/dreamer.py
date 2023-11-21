@@ -14,7 +14,7 @@ from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based import ModelBasedEnvBase
-from torchrl.modules.tensordict_module.world_models import DreamerlWrapper
+from torchrl.modules.tensordict_module.world_models import DreamerWrapper
 
 
 class DreamerEnv(ModelBasedEnvBase):
@@ -22,7 +22,7 @@ class DreamerEnv(ModelBasedEnvBase):
 
     def __init__(
             self,
-            world_model: DreamerlWrapper,
+            world_model: DreamerWrapper,
             prior_shape: Tuple[int, ...],
             belief_shape: Tuple[int, ...],
             obs_decoder: TensorDictModule = None,

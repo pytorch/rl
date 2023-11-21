@@ -58,7 +58,7 @@ from torchrl.modules.tensordict_module import (
     QValueActor,
 )
 from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
-from torchrl.modules.tensordict_module.world_models import WorldModelWrapper, DreamerlWrapper
+from torchrl.modules.tensordict_module.world_models import WorldModelWrapper, DreamerWrapper
 from torchrl.trainers.helpers import transformed_env_constructor
 
 DISTRIBUTIONS = {
@@ -614,7 +614,7 @@ def _dreamer_make_world_model(
         )
     else:
         continue_model = None
-    world_model = DreamerlWrapper(
+    world_model = DreamerWrapper(
         transition_model,
         reward_model,
         continue_model
@@ -805,7 +805,7 @@ def _dreamer_make_mbenv(
         continue_model = None
 
     model_based_env = DreamerEnv(
-        world_model=DreamerlWrapper(
+        world_model=DreamerWrapper(
             transition_model,
             reward_model,
             continue_model
