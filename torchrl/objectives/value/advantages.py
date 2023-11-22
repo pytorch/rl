@@ -25,7 +25,7 @@ from torch import nn, Tensor
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
 
-from torchrl.objectives.utils import hold_out_net
+from torchrl.objectives.utils import hold_out_net, _vmap_func
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,
@@ -136,14 +136,8 @@ def _call_value_nets(
                 "params and next_params must be either both provided or not."
             )
         elif params is not None:
-            params_stack = torch.stack([params, next_params], 0)
-
-            def call_value_net(data_in, params_stack):
-                with params_stack.to_module(value_net):
-                    out = value_net(data_in)
-                return out
-
-            data_out = vmap(call_value_net, (0, 0))(data_in, params_stack)
+            params_stack = torch.stack([params, next_params], 0).contiguous()
+            data_out = _vmap_func(value_net, (0, 0))(data_in, params_stack)
         else:
             data_out = vmap(value_net, (0,))(data_in)
         value_est = data_out.get(value_key)
@@ -568,7 +562,9 @@ class TD0Estimator(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(self.value_network) if (
+                params is None and target_params is None
+            ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value = _call_value_nets(
@@ -769,7 +765,9 @@ class TD1Estimator(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(self.value_network) if (
+                params is None and target_params is None
+            ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value = _call_value_nets(
@@ -980,7 +978,9 @@ class TDLambdaEstimator(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(self.value_network) if (
+                params is None and target_params is None
+            ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value = _call_value_nets(
@@ -1308,7 +1308,9 @@ class GAE(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(self.value_network) if (
+                params is None and target_params is None
+            ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value = _call_value_nets(

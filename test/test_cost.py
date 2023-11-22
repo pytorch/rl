@@ -47,7 +47,7 @@ from _utils_internal import (  # noqa
     get_default_devices,
 )
 from mocking_classes import ContinuousActionConvMockEnv
-from tensordict.nn import get_functional, NormalParamExtractor, TensorDictModule
+from tensordict.nn import NormalParamExtractor, TensorDictModule
 from tensordict.nn.utils import Buffer
 
 # from torchrl.data.postprocs.utils import expand_as_right
@@ -6811,20 +6811,20 @@ class TestReinforce(LossModuleTestBase):
             advantage = GAE(
                 gamma=gamma,
                 lmbda=0.9,
-                value_network=get_functional(value_net),
+                value_network=value_net,
                 differentiable=gradient_mode,
             )
         elif advantage == "td":
             advantage = TD1Estimator(
                 gamma=gamma,
-                value_network=get_functional(value_net),
+                value_network=value_net,
                 differentiable=gradient_mode,
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimator(
                 gamma=0.9,
                 lmbda=0.9,
-                value_network=get_functional(value_net),
+                value_network=value_net,
                 differentiable=gradient_mode,
             )
         elif advantage is None:
@@ -9633,9 +9633,6 @@ class TestValues:
         next_state_value = torch.randn(*N, T, 1, device=device)
 
         gamma_tensor = torch.full((*N, T, 1), gamma, device=device)
-        # if len(N) == 2:
-        #     print(terminated[4, 0, -10:])
-        #     print(done[4, 0, -10:])
         v1 = vec_td_lambda_advantage_estimate(
             gamma,
             lmbda,

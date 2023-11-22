@@ -26,25 +26,14 @@ from torchrl.modules.tensordict_module.common import ensure_tensordict_compatibl
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,vmap_func,
+    _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
+    _vmap_func,
 )
 
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-try:
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap
-
-    _has_functorch = True
-    err = ""
-except ImportError as err:
-    _has_functorch = False
-    FUNCTORCH_ERROR = err
 
 
 class CQLLoss(LossModule):
@@ -267,8 +256,6 @@ class CQLLoss(LossModule):
         priority_key: str = None,
     ) -> None:
         self._out_keys = None
-        if not _has_functorch:
-            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
@@ -348,8 +335,8 @@ class CQLLoss(LossModule):
                 torch.nn.Parameter(torch.tensor(math.log(1.0), device=device)),
             )
 
-        self._vmap_qvalue_networkN0 = vmap_func(self.qvalue_network, (None, 0))
-        self._vmap_qvalue_network00 = vmap_func(self.qvalue_network)
+        self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
+        self._vmap_qvalue_network00 = _vmap_func(self.qvalue_network)
 
     @property
     def target_entropy(self):

@@ -14,26 +14,15 @@ from torch import Tensor
 
 from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
+
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
-    vmap_func,
+    _vmap_func,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-try:
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap
-
-    _has_functorch = True
-    err = ""
-except ImportError as err:
-    _has_functorch = False
-    FUNCTORCH_ERROR = err
 
 
 class IQLLoss(LossModule):
@@ -249,8 +238,6 @@ class IQLLoss(LossModule):
     ) -> None:
         self._in_keys = None
         self._out_keys = None
-        if not _has_functorch:
-            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
         self._set_deprecated_ctor_keys(priority=priority_key)
 
@@ -299,7 +286,7 @@ class IQLLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
-        self._vmap_qvalue_networkN0 = vmap_func(self.qvalue_network, (None, 0))
+        self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
 
     @property
     def device(self) -> torch.device:

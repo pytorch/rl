@@ -21,20 +21,12 @@ from torchrl.data import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives import default_value_kwargs, distance_loss, ValueEstimators
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _cache_values, _GAMMA_LMBDA_DEPREC_WARNING
+from torchrl.objectives.utils import (
+    _cache_values,
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    _vmap_func,
+)
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-try:
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap
-
-    FUNCTORCH_ERR = ""
-    _has_functorch = True
-except ImportError as err:
-    FUNCTORCH_ERR = str(err)
-    _has_functorch = False
 
 
 class REDQLoss_deprecated(LossModule):
@@ -149,8 +141,6 @@ class REDQLoss_deprecated(LossModule):
     ):
         self._in_keys = None
         self._out_keys = None
-        if not _has_functorch:
-            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
@@ -208,7 +198,7 @@ class REDQLoss_deprecated(LossModule):
         self.target_entropy_buffer = None
         self.gSDE = gSDE
 
-        self._vmap_qvalue_networkN0 = vmap_func(self.qvalue_network, (None, 0))
+        self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
 
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)

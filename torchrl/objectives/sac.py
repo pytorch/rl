@@ -22,26 +22,16 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
+
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
+    _vmap_func,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-try:
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap
-
-    _has_functorch = True
-    err = ""
-except ImportError as err:
-    _has_functorch = False
-    FUNCTORCH_ERROR = err
 
 
 def _delezify(func):
@@ -293,8 +283,6 @@ class SACLoss(LossModule):
     ) -> None:
         self._in_keys = None
         self._out_keys = None
-        if not _has_functorch:
-            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
@@ -388,9 +376,9 @@ class SACLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
-        self._vmap_qnetworkN0 = vmap(self.qvalue_network, (None, 0))
+        self._vmap_qnetworkN0 = _vmap_func(self.qvalue_network, (None, 0))
         if self._version == 1:
-            self._vmap_qnetwork00 = vmap(qvalue_network)
+            self._vmap_qnetwork00 = _vmap_func(qvalue_network)
 
     @property
     def target_entropy_buffer(self):
@@ -588,11 +576,10 @@ class SACLoss(LossModule):
     def _actor_loss(
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
-        with set_exploration_type(ExplorationType.RANDOM):
-            dist = self.actor_network.get_dist(
-                tensordict,
-                params=self.actor_network_params,
-            )
+        with set_exploration_type(
+            ExplorationType.RANDOM
+        ), self.actor_network_params.to_module(self.actor_network):
+            dist = self.actor_network.get_dist(tensordict)
             a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
 
@@ -679,11 +666,11 @@ class SACLoss(LossModule):
         tensordict = tensordict.clone(False)
         # get actions and log-probs
         with torch.no_grad():
-            with set_exploration_type(ExplorationType.RANDOM):
+            with set_exploration_type(
+                ExplorationType.RANDOM
+            ), self.actor_network_params.to_module(self.actor_network):
                 next_tensordict = tensordict.get("next").clone(False)
-                next_dist = self.actor_network.get_dist(
-                    next_tensordict, params=self.actor_network_params
-                )
+                next_dist = self.actor_network.get_dist(next_tensordict)
                 next_action = next_dist.rsample()
                 next_tensordict.set(self.tensor_keys.action, next_action)
                 next_sample_log_prob = next_dist.log_prob(next_action)
@@ -735,16 +722,11 @@ class SACLoss(LossModule):
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys).detach()
-        self.value_network(
-            td_copy,
-            params=self.value_network_params,
-        )
+        with self.value_network_params.to_module(self.value_network):
+            self.value_network(td_copy)
         pred_val = td_copy.get(self.tensor_keys.value).squeeze(-1)
-
-        action_dist = self.actor_network.get_dist(
-            td_copy,
-            params=self.target_actor_network_params,
-        )  # resample an action
+        with self.target_actor_network_params.to_module(self.actor_network):
+            action_dist = self.actor_network.get_dist(td_copy)  # resample an action
         action = action_dist.rsample()
 
         td_copy.set(self.tensor_keys.action, action, inplace=False)
@@ -990,8 +972,6 @@ class DiscreteSACLoss(LossModule):
         separate_losses: bool = False,
     ):
         self._in_keys = None
-        if not _has_functorch:
-            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
@@ -1069,7 +1049,7 @@ class DiscreteSACLoss(LossModule):
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
-        self._vmap_qnetworkN0 = vmap(self.qvalue_network, (None, 0))
+        self._vmap_qnetworkN0 = _vmap_func(self.qvalue_network, (None, 0))
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -1153,9 +1133,8 @@ class DiscreteSACLoss(LossModule):
             next_tensordict = tensordict.get("next").clone(False)
 
             # get probs and log probs for actions computed from "next"
-            next_dist = self.actor_network.get_dist(
-                next_tensordict, params=self.actor_network_params
-            )
+            with self.actor_network_params.to_module(self.actor_network):
+                next_dist = self.actor_network.get_dist(next_tensordict)
             next_prob = next_dist.probs
             next_log_prob = torch.log(torch.where(next_prob == 0, 1e-8, next_prob))
 
@@ -1220,10 +1199,8 @@ class DiscreteSACLoss(LossModule):
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # get probs and log probs for actions
-        dist = self.actor_network.get_dist(
-            tensordict,
-            params=self.actor_network_params,
-        )
+        with self.actor_network_params.to_module(self.actor_network):
+            dist = self.actor_network.get_dist(tensordict)
         prob = dist.probs
         log_prob = torch.log(torch.where(prob == 0, 1e-8, prob))
 

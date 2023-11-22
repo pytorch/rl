@@ -468,11 +468,14 @@ def _cache_values(fun):
     return new_fun
 
 
-def vmap_func(module, *args, **kwargs):
+def _vmap_func(module, *args, func=None, **kwargs):
     def decorated_module(*module_args_params):
         params = module_args_params[-1]
         module_args = module_args_params[:-1]
         with params.to_module(module):
-            return module(*module_args)
+            if func is None:
+                return module(*module_args)
+            else:
+                return getattr(module, func)(*module_args)
 
-    return vmap(decorated_module, *args, **kwargs)
+    return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
