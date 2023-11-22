@@ -25,7 +25,7 @@ from torch import nn, Tensor
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
 
-from torchrl.objectives.utils import hold_out_net, _vmap_func
+from torchrl.objectives.utils import _vmap_func, hold_out_net
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,

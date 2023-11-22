@@ -291,7 +291,7 @@ class LossModule(TensorDictModuleBase):
         p = TensorDict.from_module(module)
         with params.detach().to("meta").to_module(module):
             # avoid buffers and params being exposed
-            self.__dict__["module_name"] = deepcopy(module)
+            self.__dict__[module_name] = deepcopy(module)
         assert (p == TensorDict.from_module(module)).all()
 
         name_params_target = "target_" + module_name
