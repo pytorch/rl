@@ -29,7 +29,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.record.loggers import generate_exp_name, get_logger
     from utils import eval_model, make_env, make_ppo_models
 
-    device = "cpu" if not torch.cuda.device_count() else "cuda"
+    device = torch.device(cfg.local_device)
 
     # Correct for frame_skip
     frame_skip = 4

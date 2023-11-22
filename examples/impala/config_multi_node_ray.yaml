@@ -23,6 +23,9 @@ ray_init_config:
   runtime_env: null
   storage: null
 
+# Device for the forward and backward passes
+device: "cuda:0"
+
 # Resources assigned to each IMPALA rollout collection worker
 remote_worker_resources:
   num_cpus: 1

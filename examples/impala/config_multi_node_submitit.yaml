@@ -2,6 +2,9 @@
 env:
   env_name: PongNoFrameskip-v4
 
+# Device for the forward and backward passes
+local_device: "cuda:0"
+
 # SLURM config
 slurm_config:
   timeout_min: 10
