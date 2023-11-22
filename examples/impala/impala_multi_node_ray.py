@@ -182,7 +182,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
             # Create a single batch of trajectories
             stacked_data = torch.stack(accumulator, dim=0)
-            stacked_data = stacked_data.to(device)
+            stacked_data = stacked_data.to(device, non_blocking=True)
 
             # Compute advantage
             stacked_data = adv_module(stacked_data)
