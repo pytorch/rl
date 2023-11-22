@@ -152,8 +152,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for j in range(sgd_updates):
 
             # Create a single batch of trajectories
-            stacked_data = torch.stack(accumulator, dim=0)
-            stacked_data = stacked_data.to(device)
+            stacked_data = torch.stack(accumulator, dim=0).contiguous()
+            stacked_data = stacked_data.to(device, non_blocking=True)
 
             # Compute advantage
             with torch.no_grad():
