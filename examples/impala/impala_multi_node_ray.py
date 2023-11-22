@@ -146,10 +146,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Main loop
     collected_frames = 0
     num_network_updates = 0
-    start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
     accumulator = []
-    sampling_start = time.time()
+    start_time = sampling_start = time.time()
     for i, data in enumerate(collector):
 
         log_info = {}
