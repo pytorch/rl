@@ -123,7 +123,7 @@ def test_gae_speed(benchmark, gae_fn, gamma_tensor, batches, timesteps):
 
     gamma = 0.99
     if gamma_tensor:
-        gamma = torch.full(size, gamma)
+        gamma = torch.full(size, gamma, device=device)
     lmbda = 0.95
 
     benchmark(

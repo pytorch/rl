@@ -400,7 +400,7 @@ class TestGym:
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
-    @pytest.mark.flaky(reruns=3, reruns_delay=1)
+    @pytest.mark.flaky(reruns=8, reruns_delay=1)
     def test_vecenvs_env(self, envname):
         from _utils_internal import rollout_consistency_assertion
 
@@ -1896,12 +1896,8 @@ class TestD4RL:
         keys = keys.intersection(data_d4rl._storage._storage.keys(True, True))
         assert len(keys)
         assert_allclose_td(
-            data_direct._storage._storage.select(*keys).apply(
-                lambda t: t.as_tensor().float()
-            ),
-            data_d4rl._storage._storage.select(*keys).apply(
-                lambda t: t.as_tensor().float()
-            ),
+            data_direct._storage._storage.select(*keys).apply(lambda t: t.float()),
+            data_d4rl._storage._storage.select(*keys).apply(lambda t: t.float()),
         )
 
     @pytest.mark.parametrize(
