@@ -1412,9 +1412,9 @@ class VTrace(ValueEstimatorBase):
         average_adv: bool = False,
         differentiable: bool = False,
         skip_existing: Optional[bool] = None,
-        advantage_key: NestedKey = None,
-        value_target_key: NestedKey = None,
-        value_key: NestedKey = None,
+        advantage_key: Optional[NestedKey] = None,
+        value_target_key: Optional[NestedKey] = None,
+        value_key: Optional[NestedKey] = None,
         shifted: bool = False,
     ):
         super().__init__(
