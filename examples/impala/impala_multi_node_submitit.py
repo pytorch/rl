@@ -128,10 +128,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Main loop
     collected_frames = 0
     num_network_updates = 0
-    start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
     accumulator = []
-    sampling_start = time.time()
+    start_time = sampling_start = time.time()
     for i, data in enumerate(collector):
 
         log_info = {}
@@ -164,8 +163,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for j in range(sgd_updates):
 
             # Create a single batch of trajectories
-            stacked_data = torch.stack(accumulator, dim=0)
-            stacked_data = stacked_data.to(device)
+            stacked_data = torch.stack(accumulator, dim=0).contiguous()
+            stacked_data = stacked_data.to(device, non_blocking=True)
 
             # Compute advantage
             stacked_data = adv_module(stacked_data)
