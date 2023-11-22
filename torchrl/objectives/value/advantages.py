@@ -1363,6 +1363,7 @@ class VTrace(ValueEstimatorBase):
         rho_thresh (Union[float, Tensor]): rho clipping parameter for importance weights.
             Defaults to ``1.0``.
         c_thresh (Union[float, Tensor]): c clipping parameter for importance weights.
+            Defaults to ``1.0``.
         average_adv (bool): if ``True``, the resulting advantage values will be standardized.
             Default is ``False``.
         differentiable (bool, optional): if ``True``, gradients are propagated through
