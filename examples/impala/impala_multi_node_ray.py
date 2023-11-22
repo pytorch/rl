@@ -77,11 +77,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         "storage": cfg.ray_init_config.storage,
     }
     remote_config = {
-        "num_cpus": float(cfg.remote_worker_resources.num_cpus),
-        "num_gpus": float(cfg.remote_worker_resources.num_gpus)
+        "num_cpus": int(cfg.remote_worker_resources.num_cpus),
+        "num_gpus": int(cfg.remote_worker_resources.num_gpus)
         if torch.cuda.device_count()
         else 0,
-        "memory": float(cfg.remote_worker_resources.memory),
+        "memory": int(cfg.remote_worker_resources.memory),
     }
     collector = RayCollector(
         create_env_fn=[make_env(cfg.env.env_name, device)] * num_workers,
