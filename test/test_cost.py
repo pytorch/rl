@@ -10751,7 +10751,7 @@ class TestAdv:
         value_net = TensorDictModule(
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
         )
-        if adv == VTrace:
+        if adv is VTrace:
             actor_net = TensorDictModule(
                 nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
             )
@@ -10812,7 +10812,7 @@ class TestAdv:
         value_net = TensorDictModule(
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
         )
-        if adv == VTrace:
+        if adv is VTrace:
             actor_net = TensorDictModule(
                 nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
             )
@@ -10884,7 +10884,7 @@ class TestAdv:
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
         )
 
-        if adv == VTrace:
+        if adv is VTrace:
             actor_net = TensorDictModule(
                 nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
             )
@@ -10969,7 +10969,7 @@ class TestAdv:
         else:
             value_net = None
 
-        if adv == VTrace:
+        if adv is VTrace:
             actor_net = TensorDictModule(
                 nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
             )
@@ -11050,7 +11050,7 @@ class TestAdv:
     )
     def test_set_keys(self, value, adv, kwargs):
         value_net = TensorDictModule(nn.Linear(3, 1), in_keys=["obs"], out_keys=[value])
-        if adv == VTrace:
+        if adv is VTrace:
             actor_net = TensorDictModule(
                 nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
             )
@@ -11096,7 +11096,7 @@ class TestAdv:
 
         with pytest.warns(DeprecationWarning):
 
-            if adv == VTrace:
+            if adv is VTrace:
                 actor_net = TensorDictModule(
                     nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
                 )
