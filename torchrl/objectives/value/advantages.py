@@ -1361,6 +1361,7 @@ class VTrace(ValueEstimatorBase):
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
         actor_network (TensorDictModule): actor operator used to retrieve the log prob.
         rho_thresh (Union[float, Tensor]): rho clipping parameter for importance weights.
+            Defaults to ``1.0``.
         c_thresh (Union[float, Tensor]): c clipping parameter for importance weights.
         average_adv (bool): if ``True``, the resulting advantage values will be standardized.
             Default is ``False``.
