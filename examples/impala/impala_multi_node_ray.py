@@ -203,7 +203,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 num_network_updates += 1
 
                 # Get a data batch
-                batch = batch.to(device)
+                batch = batch.to(device, non_blocking=True)
 
                 # Forward pass loss
                 loss = loss_module(batch)
