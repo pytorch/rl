@@ -683,6 +683,12 @@ As mentioned above, a list of open contributions can be found in [here](https://
 
 Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is committed locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
 
+## Ecosystem
+
+Here are some libraries that are part of the TorchRL ecosystem:
+- [BenchMARL](https://github.com/facebookresearch/BenchMARL): a benchmarking library where you can train and compare MARL algorithms, tasks, and models using TorchRL!
+
+
 
 ## Disclaimer
 
