@@ -26,3 +26,8 @@ You can execute the multi-node IMPALA algorithm on Atari environments by running
 ```bash
 python impala_single_node_ray.py
 ``` 
+or 
+
+```bash
+python impala_single_node_submitit.py
+``` 
