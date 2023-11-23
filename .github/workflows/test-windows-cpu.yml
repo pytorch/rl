@@ -1,0 +1,50 @@
+name: Unit-tests on Windows CPU
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+  workflow_dispatch:
+
+env:
+  CHANNEL: "nightly"
+
+jobs:
+  tests:
+    strategy:
+      matrix:
+        python_version: ["3.8", "3.9", "3.10"]
+      fail-fast: false
+    uses: pytorch/test-infra/.github/workflows/windows_job.yml@main
+    with:
+      repository: pytorch/rl
+      timeout: 60
+      script: |
+        # Set env vars from matrix
+        export PYTHON_VERSION=${{ matrix.python_version }}
+        export CU_VERSION="cpu"
+
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
+
+        our_upload_channel=nightly
+        # On tags upload to test instead
+        if [[ ${GITHUB_REF} =~ refs/tags/* ]]; then
+          our_upload_channel=test
+        fi
+        export UPLOAD_CHANNEL=${our_upload_channel}
+
+        ## setup_env.sh
+        ./.circleci/unittest/windows_optdepts/scripts/setup_env.sh
+
+        ## install.sh
+        ./.circleci/unittest/windows_optdepts/scripts/install.sh
+
+        ## run_test.sh
+        ./.circleci/unittest/windows_optdepts/scripts/run_test.sh
+
+        ## post_process.sh
+        ./.circleci/unittest/windows_optdepts/scripts/post_process.sh
