@@ -1354,7 +1354,7 @@ class VTrace(ValueEstimatorBase):
     """A class wrapper around V-Trace estimate functional.
 
     Refer to "IMPALA: Scalable Distributed Deep-RL with Importance Weighted  Actor-Learner Architectures"
-    https://arxiv.org/abs/1802.01561 for more context.
+    :ref:`here <https://arxiv.org/abs/1802.01561>`_ for more context.
 
     Args:
         gamma (scalar): exponential mean discount.
