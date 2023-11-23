@@ -50,7 +50,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         total_frames // (frames_per_batch * batch_size)
     ) * cfg.loss.sgd_updates
 
-    # Create models (check utils_atari.py)
+    # Create models (check utils.py)
     actor, critic = make_ppo_models(cfg.env.env_name)
     actor, critic = actor.to(device), critic.to(device)
 
@@ -177,7 +177,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 num_network_updates += 1
 
                 # Get a data batch
-                batch = batch.to(device)
+                batch = batch.to(device, non_blocking=True)
 
                 # Forward pass loss
                 loss = loss_module(batch)
