@@ -52,6 +52,12 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/decision_trans
 # ==================================================================================== #
 # ================================ Gymnasium ========================================= #
 
+python .github/unittest/helpers/coverage_run_parallel.py examples/impala/impala_single_node.py \
+  collector.total_frames=80 \
+  collector.frames_per_batch=20 \
+  collector.num_workers=1 \
+  logger.backend= \
+  logger.test_interval=10
 python .github/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo_mujoco.py \
   env.env_name=HalfCheetah-v4 \
   collector.total_frames=40 \
