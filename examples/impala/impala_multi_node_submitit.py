@@ -73,7 +73,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         raise NotImplementedError(
             f"device assignment not implemented for backend {cfg.collector.backend}"
         )
-    import ipdb; ipdb.set_trace()
     collector = DistributedDataCollector(
         create_env_fn=[make_env(cfg.env.env_name, device)] * num_workers,
         policy=actor,
@@ -85,11 +84,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         slurm_kwargs=slurm_kwargs,
         storing_device="cuda:0" if cfg.collector.backend == "nccl" else "cpu",
         launcher="submitit",
-        update_after_each_batch=True,
+        # update_after_each_batch=True,
         backend=cfg.collector.backend,
-        )
-
-    import ipdb; ipdb.set_trace()
+    )
 
     # Create data buffer
     sampler = SamplerWithoutReplacement()
