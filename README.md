@@ -685,7 +685,7 @@ Contributors are recommended to install [pre-commit hooks](https://pre-commit.co
 
 ## Ecosystem
 
-Here are some libraries that are part of the TorchRL ecosystem:
+Here are some projects that are part of the TorchRL ecosystem:
 - [BenchMARL](https://github.com/facebookresearch/BenchMARL): a benchmarking library where you can train and compare MARL algorithms, tasks, and models using TorchRL!
 
 
