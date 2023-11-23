@@ -1159,7 +1159,7 @@ class GAE(ValueEstimatorBase):
     def forward(
         self,
         tensordict: TensorDictBase,
-        *unused_args,
+        *,
         params: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
     ) -> TensorDictBase:
@@ -1462,7 +1462,7 @@ class VTrace(ValueEstimatorBase):
     def forward(
         self,
         tensordict: TensorDictBase,
-        *unused_args,
+        *,
         params: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
     ) -> TensorDictBase:
