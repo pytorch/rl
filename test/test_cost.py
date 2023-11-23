@@ -5307,7 +5307,7 @@ class TestDiscreteCQL(LossModuleTestBase):
             action_spec_type=action_spec_type, device=device
         )
         loss_fn = DiscreteCQLLoss(actor, loss_function="l2", delay_value=delay_value)
-        if td_est is ValueEstimators.GAE:
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
