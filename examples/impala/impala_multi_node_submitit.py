@@ -118,7 +118,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             "IMPALA", f"{cfg.logger.exp_name}_{cfg.env.env_name}"
         )
         logger = get_logger(
-            cfg.logger.backend, logger_name="impala", experiment_name=exp_name
+            cfg.logger.backend,
+            logger_name="impala",
+            experiment_name=exp_name,
+            project="impala",
         )
 
     # Create test environment
@@ -167,7 +170,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             stacked_data = stacked_data.to(device, non_blocking=True)
 
             # Compute advantage
-            stacked_data = adv_module(stacked_data)
+            with torch.no_grad():
+                stacked_data = adv_module(stacked_data)
 
             # Add to replay buffer
             for stacked_d in stacked_data:

@@ -14,7 +14,7 @@ collector:
 # logger
 logger:
   backend: wandb
-  exp_name: Atari_Schulman17
+  exp_name: Atari_IMPALA
   test_interval: 200_000_000
   num_test_episodes: 3
 

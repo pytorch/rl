@@ -106,7 +106,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             "IMPALA", f"{cfg.logger.exp_name}_{cfg.env.env_name}"
         )
         logger = get_logger(
-            cfg.logger.backend, logger_name="impala", experiment_name=exp_name
+            cfg.logger.backend,
+            logger_name="impala",
+            experiment_name=exp_name,
+            project="impala",
         )
 
     # Create test environment
