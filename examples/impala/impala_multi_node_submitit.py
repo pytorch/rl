@@ -22,7 +22,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     from tensordict import TensorDict
     from torchrl.collectors import SyncDataCollector
-    from torchrl.collectors.distributed import RPCDataCollector
+    from torchrl.collectors.distributed import DistributedDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -63,20 +63,33 @@ def main(cfg: "DictConfig"):  # noqa: F821
         "slurm_cpus_per_task": cfg.slurm_config.slurm_cpus_per_task,
         "slurm_gpus_per_node": cfg.slurm_config.slurm_gpus_per_node,
     }
-
     # Create collector
-    collector = RPCDataCollector(
+    device_str = "device" if num_workers <= 1 else "devices"
+    if cfg.collector.backend == "nccl":
+        collector_kwargs = {device_str: "cuda:0", f"storing_{device_str}": "cuda:0"}
+    elif cfg.collector.backend == "gloo":
+        collector_kwargs = {device_str: "cpu", f"storing_{device_str}": "cpu"}
+    else:
+        raise NotImplementedError(
+            f"device assignment not implemented for backend {cfg.collector.backend}"
+        )
+    import ipdb; ipdb.set_trace()
+    collector = DistributedDataCollector(
         create_env_fn=[make_env(cfg.env.env_name, device)] * num_workers,
         policy=actor,
-        collector_class=SyncDataCollector,
+        num_workers_per_collector=1,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
-        max_frames_per_traj=-1,
-        sync=False,
+        collector_class=SyncDataCollector,
+        collector_kwargs=collector_kwargs,
         slurm_kwargs=slurm_kwargs,
+        storing_device="cuda:0" if cfg.collector.backend == "nccl" else "cpu",
         launcher="submitit",
         update_after_each_batch=True,
-    )
+        backend=cfg.collector.backend,
+        )
+
+    import ipdb; ipdb.set_trace()
 
     # Create data buffer
     sampler = SamplerWithoutReplacement()

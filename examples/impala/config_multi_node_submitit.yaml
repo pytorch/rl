@@ -14,6 +14,7 @@ slurm_config:
 
 # collector
 collector:
+  backend: gloo
   frames_per_batch: 80
   total_frames: 200_000_000
   num_workers: 4
