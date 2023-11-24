@@ -297,10 +297,8 @@ class ReinforceLoss(LossModule):
             advantage = tensordict.get(self.tensor_keys.advantage)
 
         # compute log-prob
-        tensordict = self.actor_network(
-            tensordict,
-            params=self.actor_network_params,
-        )
+        with self.actor_network_params.to_module(self.actor_network):
+            tensordict = self.actor_network(tensordict)
 
         log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
         if log_prob.shape == advantage.shape[:-1]:
@@ -317,10 +315,8 @@ class ReinforceLoss(LossModule):
         try:
             target_return = tensordict.get(self.tensor_keys.value_target)
             tensordict_select = tensordict.select(*self.critic.in_keys)
-            state_value = self.critic(
-                tensordict_select,
-                params=self.critic_params,
-            ).get(self.tensor_keys.value)
+            with self.critic_params.to_module(self.critic):
+                state_value = self.critic(tensordict_select).get(self.tensor_keys.value)
             loss_value = distance_loss(
                 target_return,
                 state_value,
