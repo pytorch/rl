@@ -138,7 +138,7 @@ class LossModule(TensorDictModuleBase):
         """
         for key, value in kwargs.items():
             if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
+                raise ValueError(f"{key} is not an accepted tensordict key")
             if value is not None:
                 setattr(self.tensor_keys, key, value)
             else:
@@ -444,6 +444,10 @@ class LossModule(TensorDictModuleBase):
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type == ValueEstimators.GAE:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type == ValueEstimators.VTrace:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
