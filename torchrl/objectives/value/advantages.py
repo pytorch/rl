@@ -294,7 +294,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self._tensor_keys = None
         self.differentiable = differentiable
         self.skip_existing = skip_existing
-        self.__dict__['value_network'] = value_network
+        self.__dict__["value_network"] = value_network
         self.dep_keys = {}
         self.shifted = shifted
 
