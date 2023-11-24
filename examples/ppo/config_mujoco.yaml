@@ -18,7 +18,7 @@ logger:
 optim:
   lr: 3e-4
   weight_decay: 0.0
-  anneal_lr: False
+  anneal_lr: True
 
 # loss
 loss:
@@ -27,7 +27,7 @@ loss:
   ppo_epochs: 10
   gae_lambda: 0.95
   clip_epsilon: 0.2
-  anneal_clip_epsilon: False
+  anneal_clip_epsilon: True
   critic_coef: 0.25
   entropy_coef: 0.0
   loss_critic_type: l2

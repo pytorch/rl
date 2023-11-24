@@ -78,8 +78,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create optimizers
-    actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.optim.lr)
-    critic_optim = torch.optim.Adam(critic.parameters(), lr=cfg.optim.lr)
+    actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.optim.lr, eps=1e-5)
+    critic_optim = torch.optim.Adam(critic.parameters(), lr=cfg.optim.lr, eps=1e-5)
 
     # Create logger
     logger = None
@@ -120,9 +120,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(data.numel())
 
         # Get training rewards and episode lengths
-        episode_rewards = data["next", "episode_reward"][data["next", "terminated"]]
+        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
-            episode_length = data["next", "step_count"][data["next", "terminated"]]
+            episode_length = data["next", "step_count"][data["next", "done"]]
             log_info.update(
                 {
                     "train/reward": episode_rewards.mean().item(),

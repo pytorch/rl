@@ -45,7 +45,7 @@ def make_ppo_models_state(proof_environment):
     # Define input shape
     input_shape = proof_environment.observation_spec["observation"].shape
 
-    # Define policy output distribution class
+    # Define distribution class and kwargs
     num_outputs = proof_environment.action_spec.shape[-1]
     distribution_class = TanhNormal
     distribution_kwargs = {
@@ -54,7 +54,6 @@ def make_ppo_models_state(proof_environment):
         "tanh_loc": False,
     }
 
-    # Define policy architecture
     policy_mlp = MLP(
         in_features=input_shape[-1],
         activation_class=torch.nn.Tanh,
@@ -62,13 +61,11 @@ def make_ppo_models_state(proof_environment):
         num_cells=[64, 64],
     )
 
-    # Initialize policy weights
     for layer in policy_mlp.modules():
         if isinstance(layer, torch.nn.Linear):
             torch.nn.init.orthogonal_(layer.weight, 1.0)
             layer.bias.data.zero_()
 
-    # Add state-independent normal scale
     policy_mlp = torch.nn.Sequential(
         policy_mlp,
         AddStateIndependentNormalScale(proof_environment.action_spec.shape[-1], scale_lb=1e-8)
@@ -89,7 +86,6 @@ def make_ppo_models_state(proof_environment):
         default_interaction_type=ExplorationType.RANDOM,
     )
 
-    # Define value architecture
     value_mlp = MLP(
         in_features=input_shape[-1],
         activation_class=torch.nn.Tanh,
@@ -97,13 +93,11 @@ def make_ppo_models_state(proof_environment):
         num_cells=[64, 64],
     )
 
-    # Initialize value weights
     for layer in value_mlp.modules():
         if isinstance(layer, torch.nn.Linear):
             torch.nn.init.orthogonal_(layer.weight, 0.01)
             layer.bias.data.zero_()
 
-    # Define value module
     value_module = ValueOperator(
         value_mlp,
         in_keys=["observation"],
