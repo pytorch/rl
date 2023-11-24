@@ -46,6 +46,7 @@ class ValueEstimators(Enum):
     TD1 = "TD(1) (infinity-step return)"
     TDLambda = "TD(lambda)"
     GAE = "Generalized advantage estimate"
+    VTrace = "V-trace"
 
 
 def default_value_kwargs(value_type: ValueEstimators):
@@ -68,6 +69,8 @@ def default_value_kwargs(value_type: ValueEstimators):
         return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
     elif value_type == ValueEstimators.TDLambda:
         return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
+    elif value_type == ValueEstimators.VTrace:
+        return {"gamma": 0.99, "differentiable": True}
     else:
         raise NotImplementedError(f"Unknown value type {value_type}.")
 

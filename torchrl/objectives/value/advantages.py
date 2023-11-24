@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
+
 import abc
 import functools
 import warnings
@@ -33,7 +35,9 @@ from torchrl.objectives.value.functional import (
     vec_generalized_advantage_estimate,
     vec_td1_return_estimate,
     vec_td_lambda_return_estimate,
+    vtrace_advantage_estimate,
 )
+
 
 try:
     from torch import vmap
@@ -149,6 +153,17 @@ def _call_value_nets(
     return value, value_
 
 
+def _call_actor_net(
+    actor_net: TensorDictModuleBase,
+    data: TensorDictBase,
+    params: TensorDictBase,
+    log_prob_key: NestedKey,
+):
+    # TODO: extend to handle time dimension (and vmap?)
+    log_pi = actor_net(data.select(actor_net.in_keys)).get(log_prob_key)
+    return log_pi
+
+
 class ValueEstimatorBase(TensorDictModuleBase):
     """An abstract parent class for value function modules.
 
@@ -181,9 +196,11 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 whether a trajectory is done.  Defaults to ``"done"``.
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated.  Defaults to ``"terminated"``.
-            steps_to_next_obs_key (NestedKey): The key in the input tensordict
+            steps_to_next_obs (NestedKey): The key in the input tensordict
                 that indicates the number of steps to the next observation.
                 Defaults to ``"steps_to_next_obs"``.
+            sample_log_prob (NestedKey): The key in the input tensordict that
+                indicates the log probability of the sampled action. Defaults to ``"sample_log_prob"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -193,6 +210,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
         steps_to_next_obs: NestedKey = "steps_to_next_obs"
+        sample_log_prob: NestedKey = "sample_log_prob"
 
     default_keys = _AcceptedKeys()
     value_network: Union[TensorDictModule, Callable]
@@ -224,6 +242,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
     @property
     def steps_to_next_obs_key(self):
         return self.tensor_keys.steps_to_next_obs
+
+    @property
+    def sample_log_prob_key(self):
+        return self.tensor_keys.sample_log_prob
 
     @abc.abstractmethod
     def forward(
@@ -343,7 +365,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 raise ValueError("tensordict keys cannot be None")
             if key not in self._AcceptedKeys.__dict__:
                 raise KeyError(
-                    f"{key} it not an accepted tensordict key for advantages"
+                    f"{key} is not an accepted tensordict key for advantages"
                 )
             if (
                 key == "value"
@@ -601,7 +623,7 @@ class TD0Estimator(ValueEstimatorBase):
 
         if self.average_rewards:
             reward = reward - reward.mean()
-            reward = reward / reward.std().clamp_min(1e-4)
+            reward = reward / reward.std().clamp_min(1e-5)
             tensordict.set(
                 ("next", self.tensor_keys.reward), reward
             )  # we must update the rewards if they are used later in the code
@@ -805,7 +827,7 @@ class TD1Estimator(ValueEstimatorBase):
 
         if self.average_rewards:
             reward = reward - reward.mean()
-            reward = reward / reward.std().clamp_min(1e-4)
+            reward = reward / reward.std().clamp_min(1e-5)
             tensordict.set(
                 ("next", self.tensor_keys.reward), reward
             )  # we must update the rewards if they are used later in the code
@@ -1145,7 +1167,7 @@ class GAE(ValueEstimatorBase):
     def forward(
         self,
         tensordict: TensorDictBase,
-        *unused_args,
+        *,
         params: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
     ) -> TensorDictBase:
@@ -1338,6 +1360,287 @@ class GAE(ValueEstimatorBase):
             time_dim=tensordict.ndim - 1,
         )
         return value_target
+
+
+class VTrace(ValueEstimatorBase):
+    """A class wrapper around V-Trace estimate functional.
+
+    Refer to "IMPALA: Scalable Distributed Deep-RL with Importance Weighted  Actor-Learner Architectures"
+    :ref:`here <https://arxiv.org/abs/1802.01561>`_ for more context.
+
+    Args:
+        gamma (scalar): exponential mean discount.
+        value_network (TensorDictModule): value operator used to retrieve the value estimates.
+        actor_network (TensorDictModule): actor operator used to retrieve the log prob.
+        rho_thresh (Union[float, Tensor]): rho clipping parameter for importance weights.
+            Defaults to ``1.0``.
+        c_thresh (Union[float, Tensor]): c clipping parameter for importance weights.
+            Defaults to ``1.0``.
+        average_adv (bool): if ``True``, the resulting advantage values will be standardized.
+            Default is ``False``.
+        differentiable (bool, optional): if ``True``, gradients are propagated through
+            the computation of the value function. Default is ``False``.
+
+            .. note::
+              The proper way to make the function call non-differentiable is to
+              decorate it in a `torch.no_grad()` context manager/decorator or
+              pass detached parameters for functional modules.
+        skip_existing (bool, optional): if ``True``, the value network will skip
+            modules which outputs are already present in the tensordict.
+            Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
+            is not affected.
+            Defaults to "state_value".
+        advantage_key (str or tuple of str, optional): [Deprecated] the key of
+            the advantage entry.  Defaults to ``"advantage"``.
+        value_target_key (str or tuple of str, optional): [Deprecated] the key
+            of the advantage entry.  Defaults to ``"value_target"``.
+        value_key (str or tuple of str, optional): [Deprecated] the value key to
+            read from the input tensordict.  Defaults to ``"state_value"``.
+        shifted (bool, optional): if ``True``, the value and next value are
+            estimated with a single call to the value network. This is faster
+            but is only valid whenever (1) the ``"next"`` value is shifted by
+            only one time step (which is not the case with multi-step value
+            estimation, for instance) and (2) when the parameters used at time
+            ``t`` and ``t+1`` are identical (which is not the case when target
+            parameters are to be used). Defaults to ``False``.
+
+    VTrace will return an :obj:`"advantage"` entry containing the advantage value. It will also
+    return a :obj:`"value_target"` entry with the V-Trace target value.
+
+    .. note::
+      As other advantage functions do, if the ``value_key`` is already present
+      in the input tensordict, the VTrace module will ignore the calls to the value
+      network (if any) and use the provided value instead.
+
+    """
+
+    def __init__(
+        self,
+        *,
+        gamma: Union[float, torch.Tensor],
+        actor_network: TensorDictModule,
+        value_network: TensorDictModule,
+        rho_thresh: Union[float, torch.Tensor] = 1.0,
+        c_thresh: Union[float, torch.Tensor] = 1.0,
+        average_adv: bool = False,
+        differentiable: bool = False,
+        skip_existing: Optional[bool] = None,
+        advantage_key: Optional[NestedKey] = None,
+        value_target_key: Optional[NestedKey] = None,
+        value_key: Optional[NestedKey] = None,
+        shifted: bool = False,
+    ):
+        super().__init__(
+            shifted=shifted,
+            value_network=value_network,
+            differentiable=differentiable,
+            advantage_key=advantage_key,
+            value_target_key=value_target_key,
+            value_key=value_key,
+            skip_existing=skip_existing,
+        )
+        try:
+            device = next(value_network.parameters()).device
+        except (AttributeError, StopIteration):
+            device = torch.device("cpu")
+
+        if not isinstance(gamma, torch.Tensor):
+            gamma = torch.tensor(gamma, device=device)
+        if not isinstance(rho_thresh, torch.Tensor):
+            rho_thresh = torch.tensor(rho_thresh, device=device)
+        if not isinstance(c_thresh, torch.Tensor):
+            c_thresh = torch.tensor(c_thresh, device=device)
+
+        self.register_buffer("gamma", gamma)
+        self.register_buffer("rho_thresh", rho_thresh)
+        self.register_buffer("c_thresh", c_thresh)
+        self.average_adv = average_adv
+        self.actor_network = actor_network
+
+        if isinstance(gamma, torch.Tensor) and gamma.shape != ():
+            raise NotImplementedError(
+                "Per-value gamma is not supported yet. Gamma must be a scalar."
+            )
+
+    @property
+    def in_keys(self):
+        parent_in_keys = super().in_keys
+        extended_in_keys = parent_in_keys + [self.tensor_keys.sample_log_prob]
+        return extended_in_keys
+
+    @_self_set_skip_existing
+    @_self_set_grad_enabled
+    @dispatch
+    def forward(
+        self,
+        tensordict: TensorDictBase,
+        *,
+        params: Optional[List[Tensor]] = None,
+        target_params: Optional[List[Tensor]] = None,
+    ) -> TensorDictBase:
+        """Computes the V-Trace correction given the data in tensordict.
+
+        If a functional module is provided, a nested TensorDict containing the parameters
+        (and if relevant the target parameters) can be passed to the module.
+
+        Args:
+            tensordict (TensorDictBase): A TensorDict containing the data
+                (an observation key, "action", "reward", "done" and "next" tensordict state
+                as returned by the environment) necessary to compute the value estimates and the GAE.
+                The data passed to this module should be structured as :obj:`[*B, T, F]` where :obj:`B` are
+                the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
+            params (TensorDictBase, optional): A nested TensorDict containing the params
+                to be passed to the functional value network module.
+            target_params (TensorDictBase, optional): A nested TensorDict containing the
+                target params to be passed to the functional value network module.
+
+        Returns:
+            An updated TensorDict with an advantage and a value_error keys as defined in the constructor.
+
+        Examples:
+            >>> value_net = TensorDictModule(nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"])
+            >>> actor_net = TensorDictModule(nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"])
+            >>> actor_net = ProbabilisticActor(
+            ...     module=actor_net,
+            ...     in_keys=["logits"],
+            ...     out_keys=["action"],
+            ...     distribution_class=OneHotCategorical,
+            ...     return_log_prob=True,
+            ... )
+            >>> module = VTrace(
+            ...     gamma=0.98,
+            ...     value_network=value_net,
+            ...     actor_network=actor_net,
+            ...     differentiable=False,
+            ... )
+            >>> obs, next_obs = torch.randn(2, 1, 10, 3)
+            >>> reward = torch.randn(1, 10, 1)
+            >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> sample_log_prob = torch.randn(1, 10, 1)
+            >>> tensordict = TensorDict({
+            ...     "obs": obs,
+            ...     "done": done,
+            ...     "terminated": terminated,
+            ...     "sample_log_prob": sample_log_prob,
+            ...     "next": {"obs": next_obs, "reward": reward, "done": done, "terminated": terminated},
+            ... }, batch_size=[1, 10])
+            >>> _ = module(tensordict)
+            >>> assert "advantage" in tensordict.keys()
+
+        The module supports non-tensordict (i.e. unpacked tensordict) inputs too:
+
+        Examples:
+            >>> value_net = TensorDictModule(nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"])
+            >>> actor_net = TensorDictModule(nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"])
+            >>> actor_net = ProbabilisticActor(
+            ...     module=actor_net,
+            ...     in_keys=["logits"],
+            ...     out_keys=["action"],
+            ...     distribution_class=OneHotCategorical,
+            ...     return_log_prob=True,
+            ... )
+            >>> module = VTrace(
+            ...     gamma=0.98,
+            ...     value_network=value_net,
+            ...     actor_network=actor_net,
+            ...     differentiable=False,
+            ... )
+            >>> obs, next_obs = torch.randn(2, 1, 10, 3)
+            >>> reward = torch.randn(1, 10, 1)
+            >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
+            >>> sample_log_prob = torch.randn(1, 10, 1)
+            >>> tensordict = TensorDict({
+            ...     "obs": obs,
+            ...     "done": done,
+            ...     "terminated": terminated,
+            ...     "sample_log_prob": sample_log_prob,
+            ...     "next": {"obs": next_obs, "reward": reward, "done": done, "terminated": terminated},
+            ... }, batch_size=[1, 10])
+            >>> advantage, value_target = module(
+            ...     obs=obs, next_reward=reward, next_done=done, next_obs=next_obs, next_terminated=terminated, sample_log_prob=sample_log_prob
+            ... )
+
+        """
+        if tensordict.batch_dims < 1:
+            raise RuntimeError(
+                "Expected input tensordict to have at least one dimensions, got "
+                f"tensordict.batch_size = {tensordict.batch_size}"
+            )
+        reward = tensordict.get(("next", self.tensor_keys.reward))
+        device = reward.device
+        gamma = self.gamma.to(device)
+        steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
+        if steps_to_next_obs is not None:
+            gamma = gamma ** steps_to_next_obs.view_as(reward)
+
+        # Make sure we have the value and next value
+        if self.value_network is not None:
+            if params is not None:
+                params = params.detach()
+                if target_params is None:
+                    target_params = params.clone(False)
+            with hold_out_net(self.value_network):
+                # we may still need to pass gradient, but we don't want to assign grads to
+                # value net params
+                value, next_value = _call_value_nets(
+                    value_net=self.value_network,
+                    data=tensordict,
+                    params=params,
+                    next_params=target_params,
+                    single_call=self.shifted,
+                    value_key=self.tensor_keys.value,
+                    detach_next=True,
+                )
+        else:
+            value = tensordict.get(self.tensor_keys.value)
+            next_value = tensordict.get(("next", self.tensor_keys.value))
+
+        # Make sure we have the log prob computed at collection time
+        if self.tensor_keys.sample_log_prob not in tensordict.keys():
+            raise ValueError(
+                f"Expected {self.tensor_keys.sample_log_prob} to be in tensordict"
+            )
+        log_mu = tensordict.get(self.tensor_keys.sample_log_prob).view_as(value)
+
+        # Compute log prob with current policy
+        with hold_out_net(self.actor_network):
+            log_pi = _call_actor_net(
+                actor_net=self.actor_network,
+                data=tensordict,
+                params=None,
+                log_prob_key=self.tensor_keys.sample_log_prob,
+            ).view_as(value)
+
+        # Compute the V-Trace correction
+        done = tensordict.get(("next", self.tensor_keys.done))
+        terminated = tensordict.get(("next", self.tensor_keys.terminated))
+
+        adv, value_target = vtrace_advantage_estimate(
+            gamma,
+            log_pi,
+            log_mu,
+            value,
+            next_value,
+            reward,
+            done,
+            terminated,
+            rho_thresh=self.rho_thresh,
+            c_thresh=self.c_thresh,
+            time_dim=tensordict.ndim - 1,
+        )
+
+        if self.average_adv:
+            loc = adv.mean()
+            scale = adv.std().clamp_min(1e-5)
+            adv = adv - loc
+            adv = adv / scale
+
+        tensordict.set(self.tensor_keys.advantage, adv)
+        tensordict.set(self.tensor_keys.value_target, value_target)
+
+        return tensordict
 
 
 def _deprecate_class(cls, new_cls):
