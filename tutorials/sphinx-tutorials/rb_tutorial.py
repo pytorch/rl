@@ -177,9 +177,7 @@ print("samples: a=", sample["a"], "\n('b', 'c'):", sample["b", "c"])
 # We can also customize the storage location on disk:
 #
 tempdir = tempfile.TemporaryDirectory()
-buffer_lazymemmap = ReplayBuffer(
-    storage=LazyMemmapStorage(size, scratch_dir=tempdir)
-)
+buffer_lazymemmap = ReplayBuffer(storage=LazyMemmapStorage(size, scratch_dir=tempdir))
 buffer_lazymemmap.extend(data)
 print(f"The buffer has {len(buffer_lazymemmap)} elements")
 print("the 'a' tensor is stored in", buffer_lazymemmap._storage._storage["a"].filename)
