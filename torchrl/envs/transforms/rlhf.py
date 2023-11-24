@@ -11,7 +11,7 @@ from tensordict.utils import is_seq_of_nested_key
 from torch import nn
 from torchrl.data.tensor_specs import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.transforms.transforms import Transform
-from torchrl.envs.transforms.utils import _set_missing_tolerance
+from torchrl.envs.transforms.utils import _set_missing_tolerance, _stateless_param
 
 
 class KLRewardTransform(Transform):
@@ -112,9 +112,9 @@ class KLRewardTransform(Transform):
 
         # check that the model has parameters
         params = TensorDict.from_module(actor)
-        with params.apply(lambda t: t.data.to("meta")).to_module(actor):
+        with params.apply(_stateless_param).to_module(actor):
             # copy a stateless actor
-            self.functional_actor = deepcopy(actor)
+            self.__dict__["functional_actor"] = deepcopy(actor)
         # we need to register these params as buffer to have `to` and similar
         # methods work properly
 
