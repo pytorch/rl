@@ -15,9 +15,11 @@ from tensordict.nn import TensorDictModule, AddStateIndependentNormalScale
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import CompositeSpec, LazyMemmapStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
+from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs import (
     GymEnv,
     ClipTransform,
+    StepCounter,
     VecNorm,
     RewardSum,
     DoubleToFloat,
@@ -34,7 +36,98 @@ from torchrl.modules import (
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record.loggers import generate_exp_name, get_logger
-from utils_lol import eval_model, make_env, make_ppo_models
+
+
+# ====================================================================
+# Environment utils
+# --------------------------------------------------------------------
+
+def make_env(env_name="HalfCheetah-v4", device="cpu"):
+    env = GymEnv(env_name, device=device)
+    env = TransformedEnv(env)
+    env.append_transform(VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2))
+    env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
+    env.append_transform(RewardSum())
+    env.append_transform(DoubleToFloat(in_keys=["observation"]))
+    return env
+
+
+# ====================================================================
+# Model utils
+# --------------------------------------------------------------------
+
+
+def make_ppo_modules_state(proof_environment):
+
+    # Define input shape
+    input_shape = proof_environment.observation_spec["observation"].shape
+
+    # Define distribution class and kwargs
+    num_outputs = proof_environment.action_spec.shape[-1]
+    distribution_class = TanhNormal
+    distribution_kwargs = {
+        "min": proof_environment.action_spec.space.minimum,
+        "max": proof_environment.action_spec.space.maximum,
+        "tanh_loc": False,
+    }
+
+    policy_mlp = MLP(
+        in_features=input_shape[-1],
+        activation_class=torch.nn.Tanh,
+        out_features=num_outputs,
+        num_cells=[64, 64],
+    )
+
+    for layer in policy_mlp.modules():
+        if isinstance(layer, torch.nn.Linear):
+            torch.nn.init.orthogonal_(layer.weight, 1.0)
+            layer.bias.data.zero_()
+
+    policy_mlp = torch.nn.Sequential(
+        policy_mlp,
+        AddStateIndependentNormalScale(proof_environment.action_spec.shape[-1], scale_lb=1e-8)
+    )
+
+    # Add probabilistic sampling of the actions
+    policy_module = ProbabilisticActor(
+        TensorDictModule(
+            module=policy_mlp,
+            in_keys=["observation"],
+            out_keys=["loc", "scale"],
+        ),
+        in_keys=["loc", "scale"],
+        spec=CompositeSpec(action=proof_environment.action_spec),
+        safe=True,
+        distribution_class=distribution_class,
+        distribution_kwargs=distribution_kwargs,
+        return_log_prob=True,
+        default_interaction_type=ExplorationType.RANDOM,
+    )
+
+    value_mlp = MLP(
+        in_features=input_shape[-1],
+        activation_class=torch.nn.Tanh,
+        out_features=1,
+        num_cells=[64, 64],
+    )
+
+    for layer in value_mlp.modules():
+        if isinstance(layer, torch.nn.Linear):
+            torch.nn.init.orthogonal_(layer.weight, 0.01)
+            layer.bias.data.zero_()
+
+    value_module = ValueOperator(
+        value_mlp,
+        in_keys=["observation"],
+    )
+
+    return policy_module, value_module
+
+
+def make_ppo_models(env_name):
+    proof_environment = make_env(env_name, device="cpu")
+    actor, critic = make_ppo_modules_state(proof_environment)
+    return actor, critic
 
 
 # ====================================================================
@@ -171,9 +264,7 @@ if __name__ == "__main__":
 
                 # Forward pass PPO loss
                 loss = loss_module(batch)
-                losses[j, i] = loss.select(
-                    "loss_critic", "loss_entropy", "loss_objective"
-                ).detach()
+                losses[j, i] = loss.select("loss_critic", "loss_entropy", "loss_objective").detach()
                 critic_loss = loss["loss_critic"]
                 actor_loss = loss["loss_objective"] + loss["loss_entropy"]
 
