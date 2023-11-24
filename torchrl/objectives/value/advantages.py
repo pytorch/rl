@@ -294,7 +294,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self._tensor_keys = None
         self.differentiable = differentiable
         self.skip_existing = skip_existing
-        self.value_network = value_network
+        self.__dict__['value_network'] = value_network
         self.dep_keys = {}
         self.shifted = shifted
 
@@ -430,6 +430,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
             with hold_out_net(
                 self.value_network
             ) if target_params is None else target_params.to_module(self.value_network):
+                print(step_td, target_params)
                 self.value_network(step_td)
         next_value = step_td.get(self.tensor_keys.value)
         return next_value
