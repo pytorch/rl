@@ -7,6 +7,7 @@
 import abc
 import functools
 import warnings
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from functools import wraps
 from typing import Callable, List, Optional, Union
@@ -26,7 +27,7 @@ from torch import nn, Tensor
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
 
-from torchrl.objectives.utils import hold_out_net
+from torchrl.objectives.utils import _vmap_func, hold_out_net
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,
@@ -121,7 +122,8 @@ def _call_value_nets(
                 "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
             )
         if params is not None:
-            value_est = value_net(data_in, params).get(value_key)
+            with params.to_module(value_net):
+                value_est = value_net(data_in).get(value_key)
         else:
             value_est = value_net(data_in).get(value_key)
         value, value_ = value_est[idx], value_est[idx_]
@@ -138,8 +140,8 @@ def _call_value_nets(
                 "params and next_params must be either both provided or not."
             )
         elif params is not None:
-            params_stack = torch.stack([params, next_params], 0)
-            data_out = vmap(value_net, (0, 0))(data_in, params_stack)
+            params_stack = torch.stack([params, next_params], 0).contiguous()
+            data_out = _vmap_func(value_net, (0, 0))(data_in, params_stack)
         else:
             data_out = vmap(value_net, (0,))(data_in)
         value_est = data_out.get(value_key)
@@ -425,10 +427,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
     def _next_value(self, tensordict, target_params, kwargs):
         step_td = step_mdp(tensordict, keep_other=False)
         if self.value_network is not None:
-            if target_params is not None:
-                kwargs["params"] = target_params
-            with hold_out_net(self.value_network):
-                self.value_network(step_td, **kwargs)
+            with hold_out_net(
+                self.value_network
+            ) if target_params is None else target_params.to_module(self.value_network):
+                self.value_network(step_td)
         next_value = step_td.get(self.tensor_keys.value)
         return next_value
 
@@ -582,7 +584,9 @@ class TD0Estimator(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(self.value_network) if (
+                params is None and target_params is None
+            ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value = _call_value_nets(
@@ -783,7 +787,9 @@ class TD1Estimator(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(self.value_network) if (
+                params is None and target_params is None
+            ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value = _call_value_nets(
@@ -994,7 +1000,9 @@ class TDLambdaEstimator(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(self.value_network) if (
+                params is None and target_params is None
+            ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value = _call_value_nets(
@@ -1240,7 +1248,9 @@ class GAE(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(self.value_network) if (
+                params is None and target_params is None
+            ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value = _call_value_nets(
@@ -1320,7 +1330,9 @@ class GAE(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(self.value_network) if (
+                params is None and target_params is None
+            ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value = _call_value_nets(

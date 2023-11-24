@@ -277,9 +277,7 @@ class PPOLoss(LossModule):
         self._in_keys = None
         self._out_keys = None
         super().__init__()
-        self.convert_to_functional(
-            actor, "actor", funs_to_decorate=["forward", "get_dist"]
-        )
+        self.convert_to_functional(actor, "actor")
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
             # params of critic must be refs to actor if they're shared
@@ -380,7 +378,8 @@ class PPOLoss(LossModule):
                 f"tensordict stored {self.tensor_keys.action} requires grad."
             )
 
-        dist = self.actor.get_dist(tensordict, params=self.actor_params)
+        with self.actor_params.to_module(self.actor):
+            dist = self.actor.get_dist(tensordict)
         log_prob = dist.log_prob(action)
 
         prev_log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
@@ -406,10 +405,8 @@ class PPOLoss(LossModule):
                 f"can be used for the value loss."
             )
 
-        state_value_td = self.critic(
-            tensordict,
-            params=self.critic_params,
-        )
+        with self.critic_params.to_module(self.critic):
+            state_value_td = self.critic(tensordict)
 
         try:
             state_value = state_value_td.get(self.tensor_keys.value)
@@ -863,7 +860,8 @@ class KLPENPPOLoss(PPOLoss):
         neg_loss = log_weight.exp() * advantage
 
         previous_dist = self.actor.build_dist_from_params(tensordict)
-        current_dist = self.actor.get_dist(tensordict, params=self.actor_params)
+        with self.actor_params.to_module(self.actor):
+            current_dist = self.actor.get_dist(tensordict)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:

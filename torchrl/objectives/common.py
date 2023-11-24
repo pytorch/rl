@@ -10,15 +10,9 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
-from tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 
-from tensordict.nn import (
-    make_functional,
-    repopulate_module,
-    TensorDictModule,
-    TensorDictModuleBase,
-    TensorDictParams,
-)
+from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
 from torch import nn
 from torch.nn import Parameter
 
@@ -87,7 +81,7 @@ class LossModule(TensorDictModuleBase):
         pass
 
     default_value_estimator: ValueEstimators = None
-    SEP = "_sep_"
+    SEP = "."
     TARGET_NET_WARNING = (
         "No target network updater has been associated "
         "with this loss module, but target parameters have been found. "
@@ -178,7 +172,7 @@ class LossModule(TensorDictModuleBase):
         expand_dim: Optional[int] = None,
         create_target_params: bool = False,
         compare_against: Optional[List[Parameter]] = None,
-        funs_to_decorate=None,
+        **kwargs,
     ) -> None:
         """Converts a module to functional to be used in the loss.
 
@@ -191,7 +185,7 @@ class LossModule(TensorDictModuleBase):
                 >>> module(tensordict, params=params)
 
                 ``params`` is a :class:`tensordict.TensorDict` instance with parameters
-                stuctured as the output of :func:`tensordict.nn.make_functional`
+                stuctured as the output of :func:`tensordict.TensorDict.from_module`
                 is.
             module_name (str): name where the module will be found.
                 The parameters of the module will be found under ``loss_module.<module_name>_params``
@@ -223,45 +217,27 @@ class LossModule(TensorDictModuleBase):
                 the resulting parameters will be a detached version of the
                 original parameters. If ``None``, the resulting parameters
                 will carry gradients as expected.
-            funs_to_decorate (list of str, optional): if provided, the list of
-                methods of ``module`` to make functional, ie the list of
-                methods that will accept the ``params`` keyword argument.
 
         """
-        if funs_to_decorate is None:
-            funs_to_decorate = ["forward"]
+        if kwargs.pop("funs_to_decorate", None) is not None:
+            warnings.warn(
+                "funs_to_decorate is without effect with the new objective API.",
+                category=DeprecationWarning,
+            )
+        if kwargs:
+            raise TypeError(f"Unrecognised keyword arguments {list(kwargs.keys())}")
         # To make it robust to device casting, we must register list of
         # tensors as lazy calls to `getattr(self, name_of_tensor)`.
         # Otherwise, casting the module to a device will keep old references
         # to uncast tensors
         sep = self.SEP
-        params = make_functional(module, funs_to_decorate=funs_to_decorate)
-        # buffer_names = next(itertools.islice(zip(*module.named_buffers()), 1))
-        buffer_names = []
-        for key, value in params.items(True, True):
-            # we just consider all that is not param as a buffer, but if the module has been made
-            # functional and the params have been replaced this may break
-            if not isinstance(value, nn.Parameter):
-                key = sep.join(key) if not isinstance(key, str) else key
-                buffer_names.append(key)
-        functional_module = deepcopy(module)
-        repopulate_module(module, params)
+        params = TensorDict.from_module(module, as_module=True)
 
-        params_and_buffers = params
-        # we transform the buffers in params to make sure they follow the device
-        # as tensor = nn.Parameter(tensor) keeps its identity when moved to another device
-
-        # separate params and buffers
-        params_and_buffers = TensorDictParams(params_and_buffers, no_convert=True)
-        # sanity check
-        for key in params_and_buffers.keys(True):
+        for key in params.keys(True):
             if sep in key:
                 raise KeyError(
                     f"The key {key} contains the '_sep_' pattern which is prohibited. Consider renaming the parameter / buffer."
                 )
-        params_and_buffers_flat = params_and_buffers.flatten_keys(sep)
-        buffers = params_and_buffers_flat.select(*buffer_names)
-        params = params_and_buffers_flat.exclude(*buffer_names)
         if compare_against is not None:
             compare_against = set(compare_against)
         else:
@@ -273,6 +249,9 @@ class LossModule(TensorDictModuleBase):
             # For buffers, a cloned expansion (or equivalently a repeat) is returned.
 
             def _compare_and_expand(param):
+                if not isinstance(param, nn.Parameter):
+                    buffer = param.expand(expand_dim, *param.shape).clone()
+                    return buffer
                 if param in compare_against:
                     expanded_param = param.data.expand(expand_dim, *param.shape)
                     # the expanded parameter must be sent to device when to()
@@ -287,45 +266,40 @@ class LossModule(TensorDictModuleBase):
                     )
                     return p_out
 
-            params = params.apply(
-                _compare_and_expand, batch_size=[expand_dim, *params.shape]
+            params = TensorDictParams(
+                params.apply(
+                    _compare_and_expand, batch_size=[expand_dim, *params.shape]
+                ),
+                no_convert=True,
             )
-
-            buffers = buffers.apply(
-                lambda buffer: buffer.expand(expand_dim, *buffer.shape).clone(),
-                batch_size=[expand_dim, *buffers.shape],
-            )
-
-            params_and_buffers.update(params.unflatten_keys(sep))
-            params_and_buffers.update(buffers.unflatten_keys(sep))
-            params_and_buffers.batch_size = params.batch_size
-
-            # self.params_to_map = params_to_map
 
         param_name = module_name + "_params"
 
         prev_set_params = set(self.parameters())
 
         # register parameters and buffers
-        for key, parameter in list(params_and_buffers.items(True, True)):
+        for key, parameter in list(params.items(True, True)):
             if parameter not in prev_set_params:
                 pass
             elif compare_against is not None and parameter in compare_against:
-                params_and_buffers.set(key, parameter.data)
+                params.set(key, parameter.data)
 
-        setattr(self, param_name, params_and_buffers)
+        setattr(self, param_name, params)
 
-        # set the functional module
-        setattr(self, module_name, functional_module)
+        # set the functional module: we need to convert the params to non-differentiable params
+        # otherwise they will appear twice in parameters
+        p = TensorDict.from_module(module)
+        with params.detach().to("meta").to_module(module):
+            # avoid buffers and params being exposed
+            self.__dict__[module_name] = deepcopy(module)
+        assert (p == TensorDict.from_module(module)).all()
 
         name_params_target = "target_" + module_name
         if create_target_params:
             # if create_target_params:
             # we create a TensorDictParams to keep the target params as Buffer instances
             target_params = TensorDictParams(
-                params_and_buffers.apply(
-                    _make_target_param(clone=create_target_params)
-                ),
+                params.apply(_make_target_param(clone=create_target_params)),
                 no_convert=True,
             )
             setattr(self, name_params_target + "_params", target_params)
@@ -457,84 +431,6 @@ class LossModule(TensorDictModuleBase):
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
-
-        # def _apply(self, fn, recurse=True):
-        #     """Modifies torch.nn.Module._apply to work with Buffer class."""
-        #     if recurse:
-        #         for module in self.children():
-        #             module._apply(fn)
-        #
-        #     def compute_should_use_set_data(tensor, tensor_applied):
-        #         if torch._has_compatible_shallow_copy_type(tensor, tensor_applied):
-        #             # If the new tensor has compatible tensor type as the existing tensor,
-        #             # the current behavior is to change the tensor in-place using `.data =`,
-        #             # and the future behavior is to overwrite the existing tensor. However,
-        #             # changing the current behavior is a BC-breaking change, and we want it
-        #             # to happen in future releases. So for now we introduce the
-        #             # `torch.__future__.get_overwrite_module_params_on_conversion()`
-        #             # global flag to let the user control whether they want the future
-        #             # behavior of overwriting the existing tensor or not.
-        #             return not torch.__future__.get_overwrite_module_params_on_conversion()
-        #         else:
-        #             return False
-        #
-        #     for key, param in self._parameters.items():
-        #         if param is None:
-        #             continue
-        #         # Tensors stored in modules are graph leaves, and we don't want to
-        #         # track autograd history of `param_applied`, so we have to use
-        #         # `with torch.no_grad():`
-        #         with torch.no_grad():
-        #             param_applied = fn(param)
-        #         should_use_set_data = compute_should_use_set_data(param, param_applied)
-        #         if should_use_set_data:
-        #             param.data = param_applied
-        #             out_param = param
-        #         else:
-        #             assert isinstance(param, Parameter)
-        #             assert param.is_leaf
-        #             out_param = Parameter(param_applied, param.requires_grad)
-        #             self._parameters[key] = out_param
-        #
-        #         if param.grad is not None:
-        #             with torch.no_grad():
-        #                 grad_applied = fn(param.grad)
-        #             should_use_set_data = compute_should_use_set_data(param.grad, grad_applied)
-        #             if should_use_set_data:
-        #                 assert out_param.grad is not None
-        #                 out_param.grad.data = grad_applied
-        #             else:
-        #                 assert param.grad.is_leaf
-        #                 out_param.grad = grad_applied.requires_grad_(param.grad.requires_grad)
-        #
-        #     for key, buffer in self._buffers.items():
-        #         if buffer is None:
-        #             continue
-        #         # Tensors stored in modules are graph leaves, and we don't want to
-        #         # track autograd history of `buffer_applied`, so we have to use
-        #         # `with torch.no_grad():`
-        #         with torch.no_grad():
-        #             buffer_applied = fn(buffer)
-        #         should_use_set_data = compute_should_use_set_data(buffer, buffer_applied)
-        #         if should_use_set_data:
-        #             buffer.data = buffer_applied
-        #             out_buffer = buffer
-        #         else:
-        #             assert isinstance(buffer, Buffer)
-        #             assert buffer.is_leaf
-        #             out_buffer = Buffer(buffer_applied, buffer.requires_grad)
-        #             self._buffers[key] = out_buffer
-        #
-        #         if buffer.grad is not None:
-        #             with torch.no_grad():
-        #                 grad_applied = fn(buffer.grad)
-        #             should_use_set_data = compute_should_use_set_data(buffer.grad, grad_applied)
-        #             if should_use_set_data:
-        #                 assert out_buffer.grad is not None
-        #                 out_buffer.grad.data = grad_applied
-        #             else:
-        #                 assert buffer.grad.is_leaf
-        #                 out_buffer.grad = grad_applied.requires_grad_(buffer.grad.requires_grad)
 
         return self
 

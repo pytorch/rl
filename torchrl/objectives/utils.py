@@ -10,10 +10,17 @@ from typing import Iterable, Optional, Union
 
 import torch
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
 
+try:
+    from torch import vmap
+except ImportError as err:
+    try:
+        from functorch import vmap
+    except ImportError as err_ft:
+        raise err_ft from err
 from torchrl.envs.utils import step_mdp
 
 _GAMMA_LMBDA_DEPREC_WARNING = (
@@ -356,18 +363,13 @@ class hold_out_net(_context_manager):
 
     def __init__(self, network: nn.Module) -> None:
         self.network = network
-        try:
-            self.p_example = next(network.parameters())
-        except (AttributeError, StopIteration):
-            self.p_example = torch.tensor([])
-        self._prev_state = []
 
     def __enter__(self) -> None:
-        self._prev_state.append(self.p_example.requires_grad)
-        self.network.requires_grad_(False)
+        self.params = TensorDict.from_module(self.network)
+        self.params.detach().to_module(self.network, return_swap=False)
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.network.requires_grad_(self._prev_state.pop())
+        self.params.to_module(self.network, return_swap=False)
 
 
 class hold_out_params(_context_manager):
@@ -460,9 +462,23 @@ def _cache_values(fun):
             out = fun(self, netname)
         else:
             out = fun(self)
-        if is_tensor_collection(out):
-            out.lock_()
+        # TODO: decide what to do with locked tds in functional calls
+        # if is_tensor_collection(out):
+        #     out.lock_()
         _cache[attr_name] = out
         return out
 
     return new_fun
+
+
+def _vmap_func(module, *args, func=None, **kwargs):
+    def decorated_module(*module_args_params):
+        params = module_args_params[-1]
+        module_args = module_args_params[:-1]
+        with params.to_module(module):
+            if func is None:
+                return module(*module_args)
+            else:
+                return getattr(module, func)(*module_args)
+
+    return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
