@@ -6,10 +6,10 @@ Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
 
 .. note::
 
-   We have just released `BenchMARL <https://github.com/facebookresearch/BenchMARL>`__, a benchmarking library where you
+   If you are interested in Multi-Agent Reinforcement Learning (MARL) in
+   TorchRL, check out
+   `BenchMARL <https://github.com/facebookresearch/BenchMARL>`__: a benchmarking library where you
    can train and compare MARL algorithms, tasks, and models using TorchRL!
-   Check out `how easy it is to use it <https://colab.research.google.com/github/facebookresearch/BenchMARL/blob/main/notebooks/run.ipynb>`__.
-
 
 This tutorial demonstrates how to use PyTorch and :py:mod:`torchrl` to
 solve a Multi-Agent Reinforcement Learning (MARL) problem.
