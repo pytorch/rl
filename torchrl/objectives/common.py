@@ -103,7 +103,6 @@ class LossModule(TensorDictModuleBase):
     def __init__(self):
         super().__init__()
         self._cache = {}
-        self._prohibited_names = []
         self._param_maps = {}
         self._value_estimator = None
         self._has_update_associated = {}
@@ -295,11 +294,6 @@ class LossModule(TensorDictModuleBase):
         ):
             # avoid buffers and params being exposed
             self.__dict__[module_name] = deepcopy(module)
-            self._prohibited_names.append(module_name)
-        assert all(p.device != torch.device("meta") for p in module.parameters())
-        assert module_name not in self._modules
-        getattr(self, module_name)
-        assert module_name not in self._modules
 
         name_params_target = "target_" + module_name
         if create_target_params:
@@ -311,11 +305,6 @@ class LossModule(TensorDictModuleBase):
             )
             setattr(self, name_params_target + "_params", target_params)
         self._has_update_associated[module_name] = not create_target_params
-
-    def __setattr__(self, key, value):
-        if key in getattr(self, "_prohibited_names", []):
-            raise RuntimeError
-        return super().__setattr__(key, value)
 
     def __getattr__(self, item):
         if item.startswith("target_") and item.endswith("_params"):
