@@ -840,7 +840,7 @@ class CQLLoss(LossModule):
                 "This could be caused by calling alpha_prime_loss method before cql_loss method."
             )
 
-        alpha_prime = torch.clamp(self.log_alpha_prime.exp(), min=0.0, max=1000000.0)
+        alpha_prime = torch.clamp_max(self.log_alpha_prime.exp(), max=1000000.0)
         min_qf1_loss = alpha_prime * (cql_q1_loss.mean() - self.target_action_gap)
         min_qf2_loss = alpha_prime * (cql_q2_loss.mean() - self.target_action_gap)
 
