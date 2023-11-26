@@ -293,7 +293,7 @@ class LossModule(TensorDictModuleBase):
             module
         ):
             # avoid buffers and params being exposed
-            self.__dict__[module_name] = deepcopy(module)
+            self.__dict__[module_name] = module
 
         name_params_target = "target_" + module_name
         if create_target_params:
