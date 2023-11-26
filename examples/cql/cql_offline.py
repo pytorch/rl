@@ -31,7 +31,6 @@ from utils import (
 
 @hydra.main(config_path=".", config_name="offline_config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
-
     # Create logger
     exp_name = generate_exp_name("CQL-offline", cfg.env.exp_name)
     logger = None
@@ -83,6 +82,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # compute loss
         loss_vals = loss_module(data.clone().to(device))
 
+        # official cql implementation uses behavior cloning loss for first few updating steps as it helps for some tasks
         if i >= policy_eval_start:
             actor_loss = loss_vals["loss_actor"]
         else:
