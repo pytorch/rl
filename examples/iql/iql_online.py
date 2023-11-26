@@ -117,7 +117,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         device, non_blocking=True
                     )
                 else:
-                    sampled_tensordict = sampled_tensordict.clone()
+                    sampled_tensordict = sampled_tensordict
                 # compute loss
                 loss_td = loss_module(sampled_tensordict)
 
