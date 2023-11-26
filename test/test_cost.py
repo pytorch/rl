@@ -5985,8 +5985,6 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     def test_ppo_diff(self, loss_class, device, gradient_mode, advantage):
-        if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
-            raise pytest.skip("make_functional_with_buffers needs to be changed")
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
 
@@ -6018,21 +6016,30 @@ class TestPPO(LossModuleTestBase):
 
         loss_fn = loss_class(actor, value, gamma=0.9, loss_critic_type="l2")
 
-        floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
+        params = TensorDict.from_module(loss_fn, as_module=True)
         # fill params with zero
-        for p in params:
-            p.data.zero_()
+        def zero_param(p):
+            if isinstance(p, nn.Parameter):
+                p.data.zero_()
+
+        params.apply(zero_param)
+
         # assert len(list(floss_fn.parameters())) == 0
-        if advantage is not None:
-            advantage(td)
-        loss = floss_fn(params, buffers, td)
+        with params.to_module(loss_fn):
+            if advantage is not None:
+                advantage(td)
+            loss = loss_fn(td)
 
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
         # check that grads are independent and non null
         named_parameters = loss_fn.named_parameters()
-        for (name, _), p in zip(named_parameters, params):
+        for name, p in params.items(True, True):
+            if isinstance(name, tuple):
+                name = "-".join(name)
+            if not isinstance(p, nn.Parameter):
+                continue
             if p.grad is not None and p.grad.norm() > 0.0:
                 assert "actor" not in name
                 assert "critic" in name
@@ -6040,12 +6047,12 @@ class TestPPO(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
 
-        for param in params:
-            param.grad = None
+        for p in params.values(True, True):
+            p.grad = None
         loss_objective.backward()
         named_parameters = loss_fn.named_parameters()
-
-        for (name, other_p), p in zip(named_parameters, params):
+        for (name, other_p) in named_parameters:
+            p = params.get(tuple(name.split(".")))
             assert other_p.shape == p.shape
             assert other_p.dtype == p.dtype
             assert other_p.device == p.device
@@ -6055,7 +6062,7 @@ class TestPPO(LossModuleTestBase):
             if p.grad is None:
                 assert "actor" not in name
                 assert "critic" in name
-        for param in params:
+        for param in params.values(True, True):
             param.grad = None
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
