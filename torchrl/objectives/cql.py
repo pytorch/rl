@@ -520,7 +520,7 @@ class CQLLoss(LossModule):
             }
         )
         tensordict_reshape.set(
-            self.tensor_keys.priority, metadata.pop("td_error").detach().max(0)[0]
+            self.tensor_keys.priority, metadata.pop("td_error").detach().max(0).values
         )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
