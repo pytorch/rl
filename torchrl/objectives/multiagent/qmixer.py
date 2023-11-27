@@ -216,7 +216,7 @@ class QMixerLoss(LossModule):
         with params.apply(
             self._make_meta_params, device=torch.device("meta")
         ).to_module(global_value_network):
-            self.global_value_network = deepcopy(global_value_network)
+            self.__dict__["global_value_network"] = deepcopy(global_value_network)
 
         self.convert_to_functional(
             local_value_network,
