@@ -294,7 +294,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self._tensor_keys = None
         self.differentiable = differentiable
         self.skip_existing = skip_existing
-        self.value_network = value_network
+        self.__dict__["value_network"] = value_network
         self.dep_keys = {}
         self.shifted = shifted
 
@@ -471,6 +471,7 @@ class TD0Estimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
+        device (torch.device, optional): device of the module.
 
     """
 
@@ -486,6 +487,7 @@ class TD0Estimator(ValueEstimatorBase):
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
         skip_existing: Optional[bool] = None,
+        device: Optional[torch.device] = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -496,10 +498,6 @@ class TD0Estimator(ValueEstimatorBase):
             value_key=value_key,
             skip_existing=skip_existing,
         )
-        try:
-            device = next(value_network.parameters()).device
-        except (AttributeError, StopIteration):
-            device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
         self.average_rewards = average_rewards
 
@@ -675,6 +673,7 @@ class TD1Estimator(ValueEstimatorBase):
             estimation, for instance) and (2) when the parameters used at time
             ``t`` and ``t+1`` are identical (which is not the case when target
             parameters are to be used). Defaults to ``False``.
+        device (torch.device, optional): device of the module.
 
     """
 
@@ -690,6 +689,7 @@ class TD1Estimator(ValueEstimatorBase):
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
         shifted: bool = False,
+        device: Optional[torch.device] = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -700,10 +700,6 @@ class TD1Estimator(ValueEstimatorBase):
             shifted=shifted,
             skip_existing=skip_existing,
         )
-        try:
-            device = next(value_network.parameters()).device
-        except (AttributeError, StopIteration):
-            device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
         self.average_rewards = average_rewards
 
@@ -883,6 +879,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             estimation, for instance) and (2) when the parameters used at time
             ``t`` and ``t+1`` are identical (which is not the case when target
             parameters are to be used). Defaults to ``False``.
+        device (torch.device, optional): device of the module.
 
     """
 
@@ -900,6 +897,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
         shifted: bool = False,
+        device: Optional[torch.device] = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -910,10 +908,6 @@ class TDLambdaEstimator(ValueEstimatorBase):
             skip_existing=skip_existing,
             shifted=shifted,
         )
-        try:
-            device = next(value_network.parameters()).device
-        except (AttributeError, StopIteration):
-            device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
         self.register_buffer("lmbda", torch.tensor(lmbda, device=device))
         self.average_rewards = average_rewards
@@ -1113,6 +1107,7 @@ class GAE(ValueEstimatorBase):
             estimation, for instance) and (2) when the parameters used at time
             ``t`` and ``t+1`` are identical (which is not the case when target
             parameters are to be used). Defaults to ``False``.
+        device (torch.device, optional): device of the module.
 
     GAE will return an :obj:`"advantage"` entry containing the advange value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
@@ -1142,6 +1137,7 @@ class GAE(ValueEstimatorBase):
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
         shifted: bool = False,
+        device: Optional[torch.device] = None,
     ):
         super().__init__(
             shifted=shifted,
@@ -1152,10 +1148,6 @@ class GAE(ValueEstimatorBase):
             value_key=value_key,
             skip_existing=skip_existing,
         )
-        try:
-            device = next(value_network.parameters()).device
-        except (AttributeError, StopIteration):
-            device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
         self.register_buffer("lmbda", torch.tensor(lmbda, device=device))
         self.average_gae = average_gae
@@ -1403,6 +1395,7 @@ class VTrace(ValueEstimatorBase):
             estimation, for instance) and (2) when the parameters used at time
             ``t`` and ``t+1`` are identical (which is not the case when target
             parameters are to be used). Defaults to ``False``.
+        device (torch.device, optional): device of the module.
 
     VTrace will return an :obj:`"advantage"` entry containing the advantage value. It will also
     return a :obj:`"value_target"` entry with the V-Trace target value.
@@ -1429,6 +1422,7 @@ class VTrace(ValueEstimatorBase):
         value_target_key: Optional[NestedKey] = None,
         value_key: Optional[NestedKey] = None,
         shifted: bool = False,
+        device: Optional[torch.device] = None,
     ):
         super().__init__(
             shifted=shifted,
@@ -1439,11 +1433,6 @@ class VTrace(ValueEstimatorBase):
             value_key=value_key,
             skip_existing=skip_existing,
         )
-        try:
-            device = next(value_network.parameters()).device
-        except (AttributeError, StopIteration):
-            device = torch.device("cpu")
-
         if not isinstance(gamma, torch.Tensor):
             gamma = torch.tensor(gamma, device=device)
         if not isinstance(rho_thresh, torch.Tensor):

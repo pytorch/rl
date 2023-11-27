@@ -10,6 +10,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
+import torch
 from tensordict import TensorDict, TensorDictBase
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
@@ -178,15 +179,9 @@ class LossModule(TensorDictModuleBase):
 
         Args:
             module (TensorDictModule or compatible): a stateful tensordict module.
-                This module will be made functional, yet still stateful, meaning
-                that it will be callable with the following alternative signatures:
-
-                >>> module(tensordict)
-                >>> module(tensordict, params=params)
-
-                ``params`` is a :class:`tensordict.TensorDict` instance with parameters
-                stuctured as the output of :func:`tensordict.TensorDict.from_module`
-                is.
+                Parameters from this module will be isolated in the `<module_name>_params`
+                attribute and a stateless version of the module will be registed
+                under the `module_name` attribute.
             module_name (str): name where the module will be found.
                 The parameters of the module will be found under ``loss_module.<module_name>_params``
                 whereas the module will be found under ``loss_module.<module_name>``.
@@ -288,11 +283,11 @@ class LossModule(TensorDictModuleBase):
 
         # set the functional module: we need to convert the params to non-differentiable params
         # otherwise they will appear twice in parameters
-        p = TensorDict.from_module(module)
-        with params.detach().to("meta").to_module(module):
+        with params.apply(
+            self._make_meta_params, device=torch.device("meta")
+        ).to_module(module):
             # avoid buffers and params being exposed
             self.__dict__[module_name] = deepcopy(module)
-        assert (p == TensorDict.from_module(module)).all()
 
         name_params_target = "target_" + module_name
         if create_target_params:
@@ -433,6 +428,16 @@ class LossModule(TensorDictModuleBase):
             raise NotImplementedError(f"Unknown value type {value_type}")
 
         return self
+
+    @staticmethod
+    def _make_meta_params(param):
+        is_param = isinstance(param, nn.Parameter)
+
+        pd = param.detach().to("meta")
+
+        if is_param:
+            pd = nn.Parameter(pd, requires_grad=False)
+        return pd
 
 
 class _make_target_param:

@@ -370,7 +370,7 @@ class SACLoss(LossModule):
         self._target_entropy = target_entropy
         self._action_spec = action_spec
         if self._version == 1:
-            self.actor_critic = ActorCriticWrapper(
+            self.__dict__["actor_critic"] = ActorCriticWrapper(
                 self.actor_network, self.value_network
             )
         if gamma is not None:

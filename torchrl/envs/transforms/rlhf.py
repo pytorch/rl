@@ -112,7 +112,7 @@ class KLRewardTransform(Transform):
 
         # check that the model has parameters
         params = TensorDict.from_module(actor)
-        with params.apply(_stateless_param).to_module(actor):
+        with params.apply(_stateless_param, device="meta").to_module(actor):
             # copy a stateless actor
             self.__dict__["functional_actor"] = deepcopy(actor)
         # we need to register these params as buffer to have `to` and similar

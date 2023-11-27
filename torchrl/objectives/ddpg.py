@@ -198,9 +198,9 @@ class DDPGLoss(LossModule):
 
         actor_critic = ActorCriticWrapper(actor_network, value_network)
         params = TensorDict.from_module(actor_critic)
-        params_meta = params.detach().to("meta")
+        params_meta = params.apply(self._make_meta_params, device=torch.device("meta"))
         with params_meta.to_module(actor_critic):
-            self.actor_critic = deepcopy(actor_critic)
+            self.__dict__["actor_critic"] = deepcopy(actor_critic)
 
         self.convert_to_functional(
             actor_network,

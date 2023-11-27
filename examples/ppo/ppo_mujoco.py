@@ -28,7 +28,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.record.loggers import generate_exp_name, get_logger
     from utils_mujoco import eval_model, make_env, make_ppo_models
 
-    # Define paper hyperparameters
     device = "cpu" if not torch.cuda.device_count() else "cuda"
     num_mini_batches = cfg.collector.frames_per_batch // cfg.loss.mini_batch_size
     total_network_updates = (
@@ -67,6 +66,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         value_network=critic,
         average_gae=False,
     )
+
     loss_module = ClipPPOLoss(
         actor=actor,
         critic=critic,
@@ -78,8 +78,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create optimizers
-    actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.optim.lr)
-    critic_optim = torch.optim.Adam(critic.parameters(), lr=cfg.optim.lr)
+    actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.optim.lr, eps=1e-5)
+    critic_optim = torch.optim.Adam(critic.parameters(), lr=cfg.optim.lr, eps=1e-5)
 
     # Create logger
     logger = None
@@ -120,9 +120,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(data.numel())
 
         # Get training rewards and episode lengths
-        episode_rewards = data["next", "episode_reward"][data["next", "terminated"]]
+        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
-            episode_length = data["next", "step_count"][data["next", "terminated"]]
+            episode_length = data["next", "step_count"][data["next", "done"]]
             log_info.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
@@ -187,7 +187,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "train/lr": alpha * cfg_optim_lr,
                 "train/sampling_time": sampling_time,
                 "train/training_time": training_time,
-                "train/clip_epsilon": alpha * cfg_loss_clip_epsilon,
+                "train/clip_epsilon": alpha * cfg_loss_clip_epsilon
+                if cfg_loss_anneal_clip_eps
+                else cfg_loss_clip_epsilon,
             }
         )
 
