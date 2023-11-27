@@ -289,9 +289,9 @@ class LossModule(TensorDictModuleBase):
 
         # set the functional module: we need to convert the params to non-differentiable params
         # otherwise they will appear twice in parameters
-        with params.apply(_make_meta_params, device=torch.device("meta")).to_module(
-            module
-        ):
+        with params.apply(
+            self._make_meta_params, device=torch.device("meta")
+        ).to_module(module):
             # avoid buffers and params being exposed
             self.__dict__[module_name] = deepcopy(module)
 
@@ -435,6 +435,16 @@ class LossModule(TensorDictModuleBase):
 
         return self
 
+    @staticmethod
+    def _make_meta_params(param):
+        is_param = isinstance(param, nn.Parameter)
+
+        pd = param.detach().to("meta")
+
+        if is_param:
+            pd = nn.Parameter(pd, requires_grad=False)
+        return pd
+
 
 class _make_target_param:
     def __init__(self, clone):
@@ -446,13 +456,3 @@ class _make_target_param:
                 x.data.clone() if self.clone else x.data, requires_grad=False
             )
         return x.data.clone() if self.clone else x.data
-
-
-def _make_meta_params(param):
-    is_param = isinstance(param, nn.Parameter)
-
-    pd = param.detach().to("meta")
-
-    if is_param:
-        pd = nn.Parameter(pd, requires_grad=False)
-    return pd
