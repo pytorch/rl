@@ -27,10 +27,10 @@ from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 def make_env(env_name="HalfCheetah-v4", device="cpu"):
     env = GymEnv(env_name, device=device)
     env = TransformedEnv(env)
-    env.append_transform(RewardSum())
-    env.append_transform(StepCounter())
     env.append_transform(VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2))
     env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
+    env.append_transform(RewardSum())
+    env.append_transform(StepCounter())
     env.append_transform(DoubleToFloat(in_keys=["observation"]))
     return env
 
