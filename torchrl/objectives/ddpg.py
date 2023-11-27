@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict.nn import dispatch, make_functional, repopulate_module, TensorDictModule
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from tensordict.utils import NestedKey, unravel_key
@@ -197,10 +197,10 @@ class DDPGLoss(LossModule):
         self.delay_value = delay_value
 
         actor_critic = ActorCriticWrapper(actor_network, value_network)
-        params = make_functional(actor_critic)
-        self.actor_critic = deepcopy(actor_critic)
-        repopulate_module(actor_network, params["module", "0"])
-        repopulate_module(value_network, params["module", "1"])
+        params = TensorDict.from_module(actor_critic)
+        params_meta = params.detach().to("meta")
+        with params_meta.to_module(actor_critic):
+            self.actor_critic = deepcopy(actor_critic)
 
         self.convert_to_functional(
             actor_network,
@@ -280,55 +280,37 @@ class DDPGLoss(LossModule):
             a tuple of 2 tensors containing the DDPG loss.
 
         """
-        loss_value, td_error, pred_val, target_value = self._loss_value(tensordict)
-        td_error = td_error.detach()
-        if tensordict.device is not None:
-            td_error = td_error.to(tensordict.device)
-        tensordict.set(
-            self.tensor_keys.priority,
-            td_error,
-            inplace=True,
-        )
-        loss_actor = self._loss_actor(tensordict)
+        loss_value, metadata = self.loss_value(tensordict)
+        loss_actor, metadata_actor = self.loss_actor(tensordict)
+        metadata.update(metadata_actor)
         return TensorDict(
-            source={
-                "loss_actor": loss_actor.mean(),
-                "loss_value": loss_value.mean(),
-                "pred_value": pred_val.mean().detach(),
-                "target_value": target_value.mean().detach(),
-                "pred_value_max": pred_val.max().detach(),
-                "target_value_max": target_value.max().detach(),
-            },
+            source={"loss_actor": loss_actor, "loss_value": loss_value, **metadata},
             batch_size=[],
         )
 
-    def _loss_actor(
+    def loss_actor(
         self,
         tensordict: TensorDictBase,
-    ) -> torch.Tensor:
+    ) -> [torch.Tensor, dict]:
         td_copy = tensordict.select(
             *self.actor_in_keys, *self.value_exclusive_keys
         ).detach()
-        td_copy = self.actor_network(
-            td_copy,
-            params=self.actor_network_params,
-        )
-        td_copy = self.value_network(
-            td_copy,
-            params=self._cached_detached_value_params,
-        )
-        return -td_copy.get(self.tensor_keys.state_action_value)
+        with self.actor_network_params.to_module(self.actor_network):
+            td_copy = self.actor_network(td_copy)
+        with self._cached_detached_value_params.to_module(self.value_network):
+            td_copy = self.value_network(td_copy)
+        loss_actor = -td_copy.get(self.tensor_keys.state_action_value)
+        metadata = {}
+        return loss_actor.mean(), metadata
 
-    def _loss_value(
+    def loss_value(
         self,
         tensordict: TensorDictBase,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, dict]:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys).detach()
-        self.value_network(
-            td_copy,
-            params=self.value_network_params,
-        )
+        with self.value_network_params.to_module(self.value_network):
+            self.value_network(td_copy)
         pred_val = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
 
         target_value = self.value_estimator.value_estimate(
@@ -340,7 +322,24 @@ class DDPGLoss(LossModule):
             pred_val, target_value, loss_function=self.loss_function
         )
 
-        return loss_value, (pred_val - target_value).pow(2), pred_val, target_value
+        td_error = (pred_val - target_value).pow(2)
+        td_error = td_error.detach()
+        if tensordict.device is not None:
+            td_error = td_error.to(tensordict.device)
+        tensordict.set(
+            self.tensor_keys.priority,
+            td_error,
+            inplace=True,
+        )
+        with torch.no_grad():
+            metadata = {
+                "td_error": td_error.mean(),
+                "pred_value": pred_val.mean(),
+                "target_value": target_value.mean(),
+                "target_value_max": target_value.max(),
+                "pred_value_max": pred_val.max(),
+            }
+        return loss_value.mean(), metadata
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:

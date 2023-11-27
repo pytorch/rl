@@ -19,13 +19,13 @@ from torchrl.envs import (
     DoubleToFloat,
     EnvCreator,
     ExcludeTransform,
-    NoopResetEnv,
     ObservationNorm,
+    ParallelEnv,
     RandomCropTensorDict,
+    RenameTransform,
     Reward2GoTransform,
     RewardScaling,
     RewardSum,
-    SerialEnv,
     TargetReturn,
     TensorDictPrimer,
     TransformedEnv,
@@ -51,8 +51,9 @@ from torchrl.trainers.helpers.envs import LIBS
 # -----------------
 
 
-@set_gym_backend("gym")  # D4RL uses gym so we make sure gymnasium is hidden
 def make_base_env(env_cfg):
+    set_gym_backend(env_cfg.backend).set()
+
     env_library = LIBS[env_cfg.library]
     env_name = env_cfg.name
     frame_skip = env_cfg.frame_skip
@@ -65,8 +66,6 @@ def make_base_env(env_cfg):
         env_task = env_cfg.task
         env_kwargs.update({"task_name": env_task})
     env = env_library(**env_kwargs)
-    if env_cfg.noop > 1:
-        env = TransformedEnv(env, NoopResetEnv(env_cfg.noop))
     return env
 
 
@@ -84,7 +83,7 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
         transformed_env.append_transform(
             TargetReturn(
                 env_cfg.collect_target_return * env_cfg.reward_scaling,
-                out_keys=["return_to_go_single"],
+                out_keys=["return_to_go"],
                 mode=env_cfg.target_return_mode,
             )
         )
@@ -92,19 +91,15 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
         transformed_env.append_transform(
             TargetReturn(
                 env_cfg.eval_target_return * env_cfg.reward_scaling,
-                out_keys=["return_to_go_single"],
+                out_keys=["return_to_go"],
                 mode=env_cfg.target_return_mode,
             )
         )
 
+    # copy action from the input tensordict to the output
     transformed_env.append_transform(TensorDictPrimer(action=base_env.action_spec))
 
-    transformed_env.append_transform(
-        DoubleToFloat(
-            in_keys=["observation"],
-            in_keys_inv=[],
-        )
-    )
+    transformed_env.append_transform(DoubleToFloat())
     obsnorm = ObservationNorm(
         loc=obs_loc, scale=obs_std, in_keys="observation", standard_normal=True
     )
@@ -112,16 +107,16 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
     transformed_env.append_transform(
         UnsqueezeTransform(
             -2,
-            in_keys=["observation", "action", "return_to_go_single"],
-            out_keys=["observation", "action", "return_to_go"],
+            in_keys=["observation", "action", "return_to_go"],
+            out_keys=["observation_cat", "action_cat", "return_to_go_cat"],
         )
     )
     transformed_env.append_transform(
         CatFrames(
-            in_keys=["observation", "action", "return_to_go"],
+            in_keys=["observation_cat", "action_cat", "return_to_go_cat"],
             N=env_cfg.stacked_frames,
             dim=-2,
-            padding="zeros",
+            padding="constant",
         )
     )
 
@@ -138,11 +133,11 @@ def make_parallel_env(env_cfg, obs_loc, obs_std, train=False):
         num_envs = env_cfg.num_eval_envs
 
     def make_env():
-        with set_gym_backend("gym"):
+        with set_gym_backend(env_cfg.backend):
             return make_base_env(env_cfg)
 
     env = make_transformed_env(
-        SerialEnv(num_envs, EnvCreator(make_env)),
+        ParallelEnv(num_envs, EnvCreator(make_env)),
         env_cfg,
         obs_loc,
         obs_std,
@@ -165,14 +160,14 @@ def make_collector(cfg, policy):
     exclude_target_return = ExcludeTransform(
         "return_to_go",
         ("next", "return_to_go"),
-        "return_to_go_single",
-        ("next", "return_to_go_single"),
         ("next", "action"),
         ("next", "observation"),
         "scale",
         "loc",
     )
-    cat = CatFrames(in_keys=["action"], N=20, dim=-2, padding="zeros")
+    cat = CatFrames(
+        in_keys=["action"], out_keys=["action_cat"], N=20, dim=-2, padding="constant"
+    )
     transforms = Compose(
         exclude_target_return,
         cat,
@@ -184,7 +179,7 @@ def make_collector(cfg, policy):
         policy,
         frames_per_batch=collector_cfg.frames_per_batch,
         total_frames=collector_cfg.total_frames,
-        device=collector_cfg.collector_devices,
+        device=collector_cfg.devices,
         max_frames_per_traj=collector_cfg.max_frames_per_traj,
         postproc=transforms,
     )
@@ -193,24 +188,35 @@ def make_collector(cfg, policy):
 
 def make_offline_replay_buffer(rb_cfg, reward_scaling):
     r2g = Reward2GoTransform(
-        gamma=1.0, in_keys=["reward"], out_keys=["return_to_go_single"]
+        gamma=1.0,
+        in_keys=[("next", "reward"), "reward"],
+        out_keys=[("next", "return_to_go"), "return_to_go"],
     )
     reward_scale = RewardScaling(
         loc=0,
         scale=reward_scaling,
-        in_keys="return_to_go_single",
-        out_keys=["return_to_go"],
+        in_keys=[("next", "return_to_go"), "return_to_go"],
         standard_normal=False,
     )
     crop_seq = RandomCropTensorDict(sub_seq_len=rb_cfg.stacked_frames, sample_dim=-1)
-
-    d2f = DoubleToFloat(
-        in_keys=["observation", ("next", "observation")],
-        in_keys_inv=[],
+    d2f = DoubleToFloat()
+    rename = RenameTransform(
+        in_keys=[
+            "action",
+            "observation",
+            "return_to_go",
+            ("next", "return_to_go"),
+            ("next", "observation"),
+        ],
+        out_keys=[
+            "action_cat",
+            "observation_cat",
+            "return_to_go_cat",
+            ("next", "return_to_go_cat"),
+            ("next", "observation_cat"),
+        ],
     )
     exclude = ExcludeTransform(
-        "next_observations",
-        # "timeout",
         "terminal",
         "info",
         ("next", "timeout"),
@@ -224,6 +230,7 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         crop_seq,
         reward_scale,
         d2f,
+        rename,
         exclude,
     )
     data = D4RLExperienceReplay(
@@ -233,41 +240,56 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         sampler=RandomSampler(),  # SamplerWithoutReplacement(drop_last=False),
         transform=transforms,
         use_truncated_as_done=True,
+        direct_download=True,
     )
-    full_data = data._get_dataset_from_env(rb_cfg.dataset, {})
-    loc = full_data["observation"].mean(axis=0).float()
-    std = full_data["observation"].std(axis=0).float()
+    loc = (
+        data._storage._storage.get(("_data", "observation"))
+        .flatten(0, -2)
+        .mean(axis=0)
+        .float()
+    )
+    std = (
+        data._storage._storage.get(("_data", "observation"))
+        .flatten(0, -2)
+        .std(axis=0)
+        .float()
+    )
     obsnorm = ObservationNorm(
-        loc=loc, scale=std, in_keys="observation", standard_normal=True
+        loc=loc,
+        scale=std,
+        in_keys=["observation_cat", ("next", "observation_cat")],
+        standard_normal=True,
     )
     data.append_transform(obsnorm)
     return data, loc, std
 
 
 def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
-    r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go_single"])
+    r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
     reward_scale = RewardScaling(
         loc=0,
         scale=reward_scaling,
-        in_keys=["return_to_go_single"],
+        in_keys=["return_to_go"],
         out_keys=["return_to_go"],
         standard_normal=False,
     )
     catframes = CatFrames(
-        in_keys=["return_to_go_single"],
-        out_keys=["return_to_go"],
+        in_keys=["return_to_go"],
+        out_keys=["return_to_go_cat"],
         N=rb_cfg.stacked_frames,
         dim=-2,
-        padding="zeros",
+        padding="constant",
         as_inverse=True,
     )
     transforms = Compose(
         r2g,
         reward_scale,
-        catframes,  # TODO: cat frames is not an inverse transform doesnt get triggered!
+        catframes,
     )
     storage = LazyMemmapStorage(
-        rb_cfg.capacity, rb_cfg.buffer_scratch_dir, device=rb_cfg.device
+        max_size=rb_cfg.capacity,
+        scratch_dir=rb_cfg.buffer_scratch_dir,
+        device=rb_cfg.device,
     )
 
     replay_buffer = TensorDictReplayBuffer(
@@ -302,9 +324,9 @@ def make_odt_model(cfg):
         if key == "observation":
             state_dim = value.shape[-1]
     in_keys = [
-        "observation",
-        "action",
-        "return_to_go",
+        "observation_cat",
+        "action_cat",
+        "return_to_go_cat",
     ]
 
     actor_net = OnlineDTActor(
@@ -356,9 +378,9 @@ def make_dt_model(cfg):
         if key == "observation":
             state_dim = value.shape[-1]
     in_keys = [
-        "observation",
-        "action",
-        "return_to_go",
+        "observation_cat",
+        "action_cat",
+        "return_to_go_cat",
     ]
 
     actor_net = DTActor(
@@ -374,8 +396,8 @@ def make_dt_model(cfg):
     )
     dist_class = TanhDelta
     dist_kwargs = {
-        "min": action_spec.space.minimum,
-        "max": action_spec.space.maximum,
+        "min": action_spec.space.low,
+        "max": action_spec.space.high,
     }
 
     actor = ProbabilisticActor(
@@ -410,6 +432,7 @@ def make_odt_loss(loss_cfg, actor_network):
         alpha_init=loss_cfg.alpha_init,
         target_entropy=loss_cfg.target_entropy,
     )
+    loss.set_keys(action_target="action_cat")
     return loss
 
 
@@ -418,6 +441,7 @@ def make_dt_loss(loss_cfg, actor_network):
         actor_network,
         loss_function=loss_cfg.loss_function,
     )
+    loss.set_keys(action_target="action_cat")
     return loss
 
 
@@ -461,6 +485,8 @@ def make_dt_optimizer(optim_cfg, loss_module):
 
 
 def make_logger(cfg):
+    from omegaconf import OmegaConf
+
     if not cfg.logger.backend:
         return None
     exp_name = generate_exp_name(cfg.logger.model_name, cfg.logger.exp_name)
@@ -469,6 +495,16 @@ def make_logger(cfg):
         cfg.logger.backend,
         logger_name=cfg.logger.model_name,
         experiment_name=exp_name,
-        wandb_kwargs={"config": cfg},
+        wandb_kwargs={"config": OmegaConf.to_container(cfg)},
     )
     return logger
+
+
+# ====================================================================
+# General utils
+# ---------
+
+
+def log_metrics(logger, metrics, step):
+    for metric_name, metric_value in metrics.items():
+        logger.log_scalar(metric_name, metric_value, step)

@@ -5,13 +5,14 @@
 import math
 import warnings
 from dataclasses import dataclass
+from functools import wraps
 from numbers import Number
 from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
 
-from tensordict.nn import dispatch, make_functional, TensorDictModule
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
@@ -21,26 +22,25 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
+
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_WARNING,
+    _vmap_func,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
-try:
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap
 
-    _has_functorch = True
-    err = ""
-except ImportError as err:
-    _has_functorch = False
-    FUNCTORCH_ERROR = err
+def _delezify(func):
+    @wraps(func)
+    def new_func(self, *args, **kwargs):
+        self.target_entropy
+        return func(self, *args, **kwargs)
+
+    return new_func
 
 
 class SACLoss(LossModule):
@@ -283,8 +283,6 @@ class SACLoss(LossModule):
     ) -> None:
         self._in_keys = None
         self._out_keys = None
-        if not _has_functorch:
-            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
@@ -371,61 +369,65 @@ class SACLoss(LossModule):
 
         self._target_entropy = target_entropy
         self._action_spec = action_spec
-        self.target_entropy_buffer = None
         if self._version == 1:
             self.actor_critic = ActorCriticWrapper(
                 self.actor_network, self.value_network
             )
-            make_functional(self.actor_critic)
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
-        self._vmap_qnetworkN0 = vmap(self.qvalue_network, (None, 0))
+        self._vmap_qnetworkN0 = _vmap_func(self.qvalue_network, (None, 0))
         if self._version == 1:
-            self._vmap_qnetwork00 = vmap(qvalue_network)
+            self._vmap_qnetwork00 = _vmap_func(qvalue_network)
+
+    @property
+    def target_entropy_buffer(self):
+        return self.target_entropy
 
     @property
     def target_entropy(self):
-        target_entropy = self.target_entropy_buffer
-        if target_entropy is None:
-            delattr(self, "target_entropy_buffer")
-            target_entropy = self._target_entropy
-            action_spec = self._action_spec
-            actor_network = self.actor_network
-            device = next(self.parameters()).device
-            if target_entropy == "auto":
-                action_spec = (
-                    action_spec
-                    if action_spec is not None
-                    else getattr(actor_network, "spec", None)
-                )
-                if action_spec is None:
-                    raise RuntimeError(
-                        "Cannot infer the dimensionality of the action. Consider providing "
-                        "the target entropy explicitely or provide the spec of the "
-                        "action tensor in the actor network."
-                    )
-                if not isinstance(action_spec, CompositeSpec):
-                    action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
-                if (
-                    isinstance(self.tensor_keys.action, tuple)
-                    and len(self.tensor_keys.action) > 1
-                ):
-                    action_container_shape = action_spec[
-                        self.tensor_keys.action[:-1]
-                    ].shape
-                else:
-                    action_container_shape = action_spec.shape
-                target_entropy = -float(
-                    action_spec[self.tensor_keys.action]
-                    .shape[len(action_container_shape) :]
-                    .numel()
-                )
-            self.register_buffer(
-                "target_entropy_buffer", torch.tensor(target_entropy, device=device)
+        target_entropy = self._buffers.get("_target_entropy", None)
+        if target_entropy is not None:
+            return target_entropy
+        target_entropy = self._target_entropy
+        action_spec = self._action_spec
+        actor_network = self.actor_network
+        device = next(self.parameters()).device
+        if target_entropy == "auto":
+            action_spec = (
+                action_spec
+                if action_spec is not None
+                else getattr(actor_network, "spec", None)
             )
-            return self.target_entropy_buffer
-        return target_entropy
+            if action_spec is None:
+                raise RuntimeError(
+                    "Cannot infer the dimensionality of the action. Consider providing "
+                    "the target entropy explicitely or provide the spec of the "
+                    "action tensor in the actor network."
+                )
+            if not isinstance(action_spec, CompositeSpec):
+                action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+            if (
+                isinstance(self.tensor_keys.action, tuple)
+                and len(self.tensor_keys.action) > 1
+            ):
+
+                action_container_shape = action_spec[self.tensor_keys.action[:-1]].shape
+            else:
+                action_container_shape = action_spec.shape
+            target_entropy = -float(
+                action_spec[self.tensor_keys.action]
+                .shape[len(action_container_shape) :]
+                .numel()
+            )
+        delattr(self, "_target_entropy")
+        self.register_buffer(
+            "_target_entropy", torch.tensor(target_entropy, device=device)
+        )
+        return self._target_entropy
+
+    state_dict = _delezify(LossModule.state_dict)
+    load_state_dict = _delezify(LossModule.load_state_dict)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -574,11 +576,10 @@ class SACLoss(LossModule):
     def _actor_loss(
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
-        with set_exploration_type(ExplorationType.RANDOM):
-            dist = self.actor_network.get_dist(
-                tensordict,
-                params=self.actor_network_params,
-            )
+        with set_exploration_type(
+            ExplorationType.RANDOM
+        ), self.actor_network_params.to_module(self.actor_network):
+            dist = self.actor_network.get_dist(tensordict)
             a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
 
@@ -665,11 +666,11 @@ class SACLoss(LossModule):
         tensordict = tensordict.clone(False)
         # get actions and log-probs
         with torch.no_grad():
-            with set_exploration_type(ExplorationType.RANDOM):
+            with set_exploration_type(
+                ExplorationType.RANDOM
+            ), self.actor_network_params.to_module(self.actor_network):
                 next_tensordict = tensordict.get("next").clone(False)
-                next_dist = self.actor_network.get_dist(
-                    next_tensordict, params=self.actor_network_params
-                )
+                next_dist = self.actor_network.get_dist(next_tensordict)
                 next_action = next_dist.rsample()
                 next_tensordict.set(self.tensor_keys.action, next_action)
                 next_sample_log_prob = next_dist.log_prob(next_action)
@@ -721,16 +722,11 @@ class SACLoss(LossModule):
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys).detach()
-        self.value_network(
-            td_copy,
-            params=self.value_network_params,
-        )
+        with self.value_network_params.to_module(self.value_network):
+            self.value_network(td_copy)
         pred_val = td_copy.get(self.tensor_keys.value).squeeze(-1)
-
-        action_dist = self.actor_network.get_dist(
-            td_copy,
-            params=self.target_actor_network_params,
-        )  # resample an action
+        with self.target_actor_network_params.to_module(self.actor_network):
+            action_dist = self.actor_network.get_dist(td_copy)  # resample an action
         action = action_dist.rsample()
 
         td_copy.set(self.tensor_keys.action, action, inplace=False)
@@ -976,8 +972,6 @@ class DiscreteSACLoss(LossModule):
         separate_losses: bool = False,
     ):
         self._in_keys = None
-        if not _has_functorch:
-            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
@@ -1055,7 +1049,7 @@ class DiscreteSACLoss(LossModule):
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
-        self._vmap_qnetworkN0 = vmap(self.qvalue_network, (None, 0))
+        self._vmap_qnetworkN0 = _vmap_func(self.qvalue_network, (None, 0))
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -1139,9 +1133,8 @@ class DiscreteSACLoss(LossModule):
             next_tensordict = tensordict.get("next").clone(False)
 
             # get probs and log probs for actions computed from "next"
-            next_dist = self.actor_network.get_dist(
-                next_tensordict, params=self.actor_network_params
-            )
+            with self.actor_network_params.to_module(self.actor_network):
+                next_dist = self.actor_network.get_dist(next_tensordict)
             next_prob = next_dist.probs
             next_log_prob = torch.log(torch.where(next_prob == 0, 1e-8, next_prob))
 
@@ -1206,10 +1199,8 @@ class DiscreteSACLoss(LossModule):
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # get probs and log probs for actions
-        dist = self.actor_network.get_dist(
-            tensordict,
-            params=self.actor_network_params,
-        )
+        with self.actor_network_params.to_module(self.actor_network):
+            dist = self.actor_network.get_dist(tensordict)
         prob = dist.probs
         log_prob = torch.log(torch.where(prob == 0, 1e-8, prob))
 

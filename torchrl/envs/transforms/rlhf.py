@@ -5,17 +5,13 @@
 from copy import copy, deepcopy
 
 import torch
-from tensordict import TensorDictBase, unravel_key
-from tensordict.nn import (
-    make_functional,
-    ProbabilisticTensorDictModule,
-    repopulate_module,
-    TensorDictParams,
-)
+from tensordict import TensorDict, TensorDictBase, unravel_key
+from tensordict.nn import ProbabilisticTensorDictModule, TensorDictParams
 from tensordict.utils import is_seq_of_nested_key
 from torch import nn
 from torchrl.data.tensor_specs import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.transforms.transforms import Transform
+from torchrl.envs.transforms.utils import _set_missing_tolerance, _stateless_param
 
 
 class KLRewardTransform(Transform):
@@ -115,11 +111,10 @@ class KLRewardTransform(Transform):
         self.in_keys = self.in_keys + actor.in_keys
 
         # check that the model has parameters
-        params = make_functional(
-            actor, keep_params=False, funs_to_decorate=["forward", "get_dist"]
-        )
-        self.functional_actor = deepcopy(actor)
-        repopulate_module(actor, params)
+        params = TensorDict.from_module(actor)
+        with params.apply(_stateless_param).to_module(actor):
+            # copy a stateless actor
+            self.__dict__["functional_actor"] = deepcopy(actor)
         # we need to register these params as buffer to have `to` and similar
         # methods work properly
 
@@ -154,6 +149,13 @@ class KLRewardTransform(Transform):
             coef = torch.tensor(coef)
         self.register_buffer("coef", coef)
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # run the actor on the tensordict
         action = tensordict.get("action", None)
@@ -162,9 +164,8 @@ class KLRewardTransform(Transform):
             if self.out_keys[0] != ("reward",) and self.parent is not None:
                 tensordict.set(self.out_keys[0], self.parent.reward_spec.zero())
             return tensordict
-        dist = self.functional_actor.get_dist(
-            tensordict.clone(False), params=self.frozen_params
-        )
+        with self.frozen_params.to_module(self.functional_actor):
+            dist = self.functional_actor.get_dist(tensordict.clone(False))
         # get the log_prob given the original model
         log_prob = dist.log_prob(action)
         reward_key = self.in_keys[0]

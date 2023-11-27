@@ -12,7 +12,7 @@ from typing import Optional, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import dispatch, make_functional, repopulate_module, TensorDictModule
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import nn
 
@@ -212,10 +212,9 @@ class QMixerLoss(LossModule):
             )
 
         global_value_network = SafeSequential(local_value_network, mixer_network)
-        params = make_functional(global_value_network)
-        self.global_value_network = deepcopy(global_value_network)
-        repopulate_module(local_value_network, params["module", "0"])
-        repopulate_module(mixer_network, params["module", "1"])
+        params = TensorDict.from_module(global_value_network)
+        with params.detach().to("meta").to_module(global_value_network):
+            self.global_value_network = deepcopy(global_value_network)
 
         self.convert_to_functional(
             local_value_network,

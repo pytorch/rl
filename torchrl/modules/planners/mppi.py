@@ -51,13 +51,13 @@ class MPPIPlanner(MPCPlannerBase):
         >>> class MyMBEnv(ModelBasedEnvBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
+        ...         self.state_spec = CompositeSpec(
+        ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
+        ...         )
         ...         self.observation_spec = CompositeSpec(
         ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
         ...         )
-        ...         self.input_spec = CompositeSpec(
-        ...             hidden_observation=UnboundedContinuousTensorSpec((4,)),
-        ...             action=UnboundedContinuousTensorSpec((1,)),
-        ...         )
+        ...         self.action_spec = UnboundedContinuousTensorSpec((1,))
         ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
@@ -67,10 +67,13 @@ class MPPIPlanner(MPCPlannerBase):
         ...             device=self.device,
         ...         )
         ...         tensordict = tensordict.update(
-        ...             self.input_spec.rand())
+        ...             self.full_state_spec.rand())
         ...         tensordict = tensordict.update(
-        ...             self.observation_spec.rand())
+        ...             self.full_action_spec.rand())
+        ...         tensordict = tensordict.update(
+        ...             self.full_observation_spec.rand())
         ...         return tensordict
+        ...
         >>> from torchrl.modules import MLP, WorldModelWrapper
         >>> import torch.nn as nn
         >>> world_model = WorldModelWrapper(
@@ -112,10 +115,12 @@ class MPPIPlanner(MPCPlannerBase):
                     fields={
                         done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                         hidden_observation: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                        reward: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        reward: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
                     batch_size=torch.Size([5]),
                     device=cpu,
-                    is_shared=False)},
+                    is_shared=False),
+                terminated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
             batch_size=torch.Size([5]),
             device=cpu,
             is_shared=False)

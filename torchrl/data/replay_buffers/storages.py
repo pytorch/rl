@@ -12,11 +12,11 @@ from typing import Any, Dict, Sequence, Union
 
 import torch
 from tensordict import is_tensorclass
-from tensordict.memmap import MemmapTensor
+from tensordict.memmap import MemmapTensor, MemoryMappedTensor
 from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.utils import expand_right
 
-from torchrl._utils import _CKPT_BACKEND, VERBOSE
+from torchrl._utils import _CKPT_BACKEND, implement_for, VERBOSE
 from torchrl.data.replay_buffers.utils import INT_CLASSES
 
 try:
@@ -304,6 +304,7 @@ class TensorStorage(Storage):
         self.initialized = state_dict["initialized"]
         self._len = state_dict["_len"]
 
+    @implement_for("torch", "2.0", None)
     def set(
         self,
         cursor: Union[int, Sequence[int], slice],
@@ -319,6 +320,70 @@ class TensorStorage(Storage):
                 self._init(data[0])
             else:
                 self._init(data)
+        self._storage[cursor] = data
+
+    @implement_for("torch", None, "2.0")
+    def set(  # noqa: F811
+        self,
+        cursor: Union[int, Sequence[int], slice],
+        data: Union[TensorDictBase, torch.Tensor],
+    ):
+        if isinstance(cursor, INT_CLASSES):
+            self._len = max(self._len, cursor + 1)
+        else:
+            self._len = max(self._len, max(cursor) + 1)
+
+        if not self.initialized:
+            if not isinstance(cursor, INT_CLASSES):
+                self._init(data[0])
+            else:
+                self._init(data)
+        if not isinstance(cursor, (*INT_CLASSES, slice)):
+            if not isinstance(cursor, torch.Tensor):
+                cursor = torch.tensor(cursor, dtype=torch.long)
+            elif cursor.dtype != torch.long:
+                cursor = cursor.to(dtype=torch.long)
+            if len(cursor) > len(self._storage):
+                warnings.warn(
+                    "A cursor of length superior to the storage capacity was provided. "
+                    "To accomodate for this, the cursor will be truncated to its last "
+                    "element such that its length matched the length of the storage. "
+                    "This may **not** be the optimal behaviour for your application! "
+                    "Make sure that the storage capacity is big enough to support the "
+                    "batch size provided."
+                )
+        self._storage[cursor] = data
+
+    @implement_for("torch", None, "2.0")
+    def set(  # noqa: F811
+        self,
+        cursor: Union[int, Sequence[int], slice],
+        data: Union[TensorDictBase, torch.Tensor],
+    ):
+        if isinstance(cursor, INT_CLASSES):
+            self._len = max(self._len, cursor + 1)
+        else:
+            self._len = max(self._len, max(cursor) + 1)
+
+        if not self.initialized:
+            if not isinstance(cursor, INT_CLASSES):
+                self._init(data[0])
+            else:
+                self._init(data)
+        if not isinstance(cursor, (*INT_CLASSES, slice)):
+            if not isinstance(cursor, torch.Tensor):
+                cursor = torch.tensor(cursor, dtype=torch.long, device=self.device)
+            elif cursor.dtype != torch.long:
+                cursor = cursor.to(dtype=torch.long, device=self.device)
+            if len(cursor) > len(self._storage):
+                warnings.warn(
+                    "A cursor of length superior to the storage capacity was provided. "
+                    "To accomodate for this, the cursor will be truncated to its last "
+                    "element such that its length matched the length of the storage. "
+                    "This may **not** be the optimal behaviour for your application! "
+                    "Make sure that the storage capacity is big enough to support the "
+                    "batch size provided."
+                )
         self._storage[cursor] = data
 
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
@@ -417,7 +482,7 @@ class LazyTensorStorage(TensorStorage):
         if self.device == "auto":
             self.device = data.device
         if isinstance(data, torch.Tensor):
-            # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
+            # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
             out = torch.empty(
                 self.max_size,
                 *data.shape,
@@ -466,12 +531,12 @@ class LazyMemmapStorage(LazyTensorStorage):
         >>> storage.get(0)
         TensorDict(
             fields={
-                some data: MemmapTensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
+                some data: MemoryMappedTensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
                 some: TensorDict(
                     fields={
                         nested: TensorDict(
                             fields={
-                                data: MemmapTensor(shape=torch.Size([11, 12]), device=cpu, dtype=torch.float32, is_shared=False)},
+                                data: MemoryMappedTensor(shape=torch.Size([11, 12]), device=cpu, dtype=torch.float32, is_shared=False)},
                             batch_size=torch.Size([11]),
                             device=cpu,
                             is_shared=False)},
@@ -495,8 +560,8 @@ class LazyMemmapStorage(LazyTensorStorage):
         >>> storage.set(range(10), data)
         >>> storage.get(0)
         MyClass(
-            bar=MemmapTensor(shape=torch.Size([11, 12]), device=cpu, dtype=torch.float32, is_shared=False),
-            foo=MemmapTensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
+            bar=MemoryMappedTensor(shape=torch.Size([11, 12]), device=cpu, dtype=torch.float32, is_shared=False),
+            foo=MemoryMappedTensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([11]),
             device=cpu,
             is_shared=False)
@@ -538,7 +603,12 @@ class LazyMemmapStorage(LazyTensorStorage):
             if isinstance(self._storage, torch.Tensor):
                 _mem_map_tensor_as_tensor(self._storage).copy_(_storage)
             elif self._storage is None:
-                self._storage = MemmapTensor(_storage)
+                self._storage = _make_memmap(
+                    _storage,
+                    path=self.scratch_dir + "/tensor.memmap"
+                    if self.scratch_dir is not None
+                    else None,
+                )
             else:
                 raise RuntimeError(
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}"
@@ -571,50 +641,49 @@ class LazyMemmapStorage(LazyTensorStorage):
             print("Creating a MemmapStorage...")
         if self.device == "auto":
             self.device = data.device
-        if isinstance(data, torch.Tensor):
-            # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
-            out = MemmapTensor(
-                self.max_size, *data.shape, device=self.device, dtype=data.dtype
+        if self.device.type != "cpu":
+            warnings.warn(
+                "Support for Memmap device other than CPU will be deprecated in v0.4.0. "
+                "Using a 'cuda' device may be suboptimal.",
+                category=DeprecationWarning,
             )
-            filesize = os.path.getsize(out.filename) / 1024 / 1024
-            if VERBOSE:
-                print(
-                    f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
-                )
-        elif is_tensorclass(data):
-            out = (
-                data.clone()
-                .expand(self.max_size, *data.shape)
-                .memmap_like(prefix=self.scratch_dir)
-                .to(self.device)
-            )
+        if is_tensor_collection(data):
+            out = data.clone().to(self.device)
+            out = out.expand(self.max_size, *data.shape)
+            out = out.memmap_like(prefix=self.scratch_dir)
+
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
-                filesize = os.path.getsize(tensor.filename) / 1024 / 1024
                 if VERBOSE:
+                    filesize = os.path.getsize(tensor.filename) / 1024 / 1024
                     print(
                         f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
                     )
         else:
-            if VERBOSE:
-                print("The storage is being created: ")
-            out = (
-                data.clone()
-                .expand(self.max_size, *data.shape)
-                .memmap_like(prefix=self.scratch_dir)
-                .to(self.device)
+            # If not a tensorclass/tensordict, it must be a tensor(-like)
+            # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
+            out = _make_empty_memmap(
+                (self.max_size, *data.shape),
+                dtype=data.dtype,
+                path=self.scratch_dir + "/tensor.memmap"
+                if self.scratch_dir is not None
+                else None,
             )
-            for key, tensor in sorted(
-                out.items(include_nested=True, leaves_only=True), key=str
-            ):
-                filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                if VERBOSE:
-                    print(
-                        f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
-                    )
+            if VERBOSE:
+                filesize = os.path.getsize(out.filename) / 1024 / 1024
+                print(
+                    f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
+                )
         self._storage = out
         self.initialized = True
+
+    def get(self, index: Union[int, Sequence[int], slice]) -> Any:
+        result = super().get(index)
+        # to be deprecated in v0.4
+        if result.device != self.device:
+            return result.to(self.device, non_blocking=True)
+        return result
 
 
 # Utils
@@ -625,6 +694,7 @@ def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
             f"Supported backends are {_CKPT_BACKEND.backends}"
         )
     if isinstance(mem_map_tensor, torch.Tensor):
+        # This will account for MemoryMappedTensors
         return mem_map_tensor
     if _CKPT_BACKEND == "torchsnapshot":
         # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor
@@ -685,12 +755,8 @@ def _collate_list_tensordict(x):
     return out
 
 
-def _collate_contiguous(x):
+def _collate_id(x):
     return x
-
-
-def _collate_as_tensor(x):
-    return x.contiguous()
 
 
 def _get_default_collate(storage, _is_tensordict=False):
@@ -699,11 +765,17 @@ def _get_default_collate(storage, _is_tensordict=False):
             return _collate_list_tensordict
         else:
             return torch.utils.data._utils.collate.default_collate
-    elif isinstance(storage, LazyMemmapStorage):
-        return _collate_as_tensor
-    elif isinstance(storage, (TensorStorage,)):
-        return _collate_contiguous
+    elif isinstance(storage, TensorStorage):
+        return _collate_id
     else:
         raise NotImplementedError(
             f"Could not find a default collate_fn for storage {type(storage)}."
         )
+
+
+def _make_memmap(tensor, path):
+    return MemoryMappedTensor.from_tensor(tensor, filename=path)
+
+
+def _make_empty_memmap(shape, dtype, path):
+    return MemoryMappedTensor.empty(shape=shape, dtype=dtype, filename=path)

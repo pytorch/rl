@@ -46,7 +46,7 @@ fi
 pip install -U --force-reinstall charset-normalizer
 
 # install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict.git
+pip install git+https://github.com/pytorch/tensordict.git
 
 # smoke test
 python -c "import tensordict"

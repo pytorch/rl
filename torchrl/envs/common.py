@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import abc
+import warnings
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterator, List, Optional, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -26,9 +27,11 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
     _replace_last,
+    _repr_by_depth,
+    _terminated_or_truncated,
+    _update_during_reset,
     get_available_libraries,
     step_mdp,
-    terminated_or_truncated,
 )
 
 LIBRARIES = get_available_libraries()
@@ -243,9 +246,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     ):
         if device is None:
             device = torch.device("cpu")
-        self.__dict__.setdefault("_done_keys", None)
-        self.__dict__.setdefault("_reward_keys", None)
-        self.__dict__.setdefault("_action_keys", None)
         self.__dict__.setdefault("_batch_size", None)
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
@@ -485,25 +485,23 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def output_spec(self, value: TensorSpec) -> None:
         raise RuntimeError("output_spec is protected.")
 
-    # Action spec
-    def _get_action_keys(self):
-        keys = self.input_spec["full_action_spec"].keys(True, True)
-        if not len(keys):
-            raise AttributeError("Could not find action spec")
-        keys = list(keys)
-        self.__dict__["_action_keys"] = keys
-        return keys
-
     @property
     def action_keys(self) -> List[NestedKey]:
         """The action keys of an environment.
 
         By default, there will only be one key named "action".
+
+        Keys are sorted by depth in the data tree.
         """
-        out = self._action_keys
-        if out is None:
-            out = self._get_action_keys()
-        return out
+        action_keys = self.__dict__.get("_action_keys", None)
+        if action_keys is not None:
+            return action_keys
+        keys = self.input_spec["full_action_spec"].keys(True, True)
+        if not len(keys):
+            raise AttributeError("Could not find action spec")
+        keys = sorted(keys, key=_repr_by_depth)
+        self.__dict__["_action_keys"] = keys
+        return keys
 
     @property
     def action_key(self) -> NestedKey:
@@ -648,7 +646,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 )
 
             self.input_spec["full_action_spec"] = value.to(device)
-            self._get_action_keys()
         finally:
             self.input_spec.lock_()
 
@@ -683,22 +680,21 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self.action_spec = spec
 
     # Reward spec
-    def _get_reward_keys(self):
-        keys = self.output_spec["full_reward_spec"].keys(True, True)
-        if not len(keys):
-            raise AttributeError("Could not find reward spec")
-        keys = list(keys)
-        self.__dict__["_reward_keys"] = keys
-        return keys
-
     @property
     def reward_keys(self) -> List[NestedKey]:
         """The reward keys of an environment.
 
         By default, there will only be one key named "reward".
+
+        Keys are sorted by depth in the data tree.
         """
-        result = list(self.full_reward_spec.keys(True, True))
-        return result
+        reward_keys = self.__dict__.get("_reward_keys", None)
+        if reward_keys is not None:
+            return reward_keys
+
+        reward_keys = sorted(self.full_reward_spec.keys(True, True), key=_repr_by_depth)
+        self.__dict__["_reward_keys"] = reward_keys
+        return reward_keys
 
     @property
     def reward_key(self):
@@ -845,7 +841,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                         " spec instead, for instance with a singleton dimension at the tail)."
                     )
             self.output_spec["full_reward_spec"] = value.to(device)
-            self._get_reward_keys()
         finally:
             self.output_spec.lock_()
 
@@ -881,31 +876,20 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self.reward_spec = spec
 
     # done spec
-    def _get_done_keys(self):
-        if "full_done_spec" not in self.output_spec.keys():
-            # populate the "done" entry
-            # this will be raised if there is not full_done_spec (unlikely) or no done_key
-            # Since output_spec is lazily populated with an empty composite spec for
-            # done_spec, the second case is much more likely to occur.
-            self.done_spec = DiscreteTensorSpec(
-                n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
-            )
-
-        keys = self.output_spec["full_done_spec"].keys(True, True)
-        if not len(keys):
-            raise AttributeError("Could not find done spec")
-        keys = list(keys)
-        self.__dict__["_done_keys"] = keys
-        return keys
-
     @property
     def done_keys(self) -> List[NestedKey]:
         """The done keys of an environment.
 
         By default, there will only be one key named "done".
+
+        Keys are sorted by depth in the data tree.
         """
-        result = list(self.full_done_spec.keys(True, True))
-        return result
+        done_keys = self.__dict__.get("_done_keys", None)
+        if done_keys is not None:
+            return done_keys
+        done_keys = sorted(self.full_done_spec.keys(True, True), key=_repr_by_depth)
+        self.__dict__["_done_keys"] = done_keys
+        return done_keys
 
     @property
     def done_key(self):
@@ -1139,7 +1123,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     )
             self.output_spec["full_done_spec"] = value.to(device)
             self._create_done_specs()
-            self._get_done_keys()
         finally:
             self.output_spec.lock_()
 
@@ -1331,7 +1314,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         next_tensordict = self._step_proc_data(next_tensordict)
         if next_preset is not None:
             # tensordict could already have a "next" key
-            next_tensordict.update(next_preset)
+            # this could be done more efficiently by not excluding but just passing
+            # the necessary keys
+            next_tensordict.update(
+                next_preset.exclude(*next_tensordict.keys(True, True))
+            )
         tensordict.set("next", next_tensordict)
         return tensordict
 
@@ -1396,10 +1383,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return data
 
     def _step_proc_data(self, next_tensordict_out):
-        # TODO: Refactor this using reward spec
-        # unsqueeze rewards if needed
-        # the input tensordict may have more leading dimensions than the batch_size
-        # e.g. in model-based contexts.
         batch_size = self.batch_size
         dims = len(batch_size)
         leading_batch_size = (
@@ -1509,39 +1492,61 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
 
+        return self._reset_proc_data(tensordict, tensordict_reset)
+
+    def _reset_proc_data(self, tensordict, tensordict_reset):
         self._complete_done(self.full_done_spec, tensordict_reset)
-
-        if not self._allow_done_after_reset:
-            # we iterate over (reset_key, (done_key, truncated_key)) and check that all
-            # values where reset was true now have a done set to False.
-            # If no reset was present, all done and truncated must be False
-            for reset_key, done_key_group in zip(
-                self.reset_keys, self.done_keys_groups
-            ):
-                reset_value = (
-                    tensordict.get(reset_key, default=None)
-                    if tensordict is not None
-                    else None
-                )
-                if reset_value is not None:
-                    for done_key in done_key_group:
-                        if tensordict_reset.get(done_key)[reset_value].any():
-                            raise RuntimeError(
-                                f"Env done entry '{done_key}' was (partially) True after reset on specified '_reset' dimensions. This is not allowed."
-                            )
-                else:
-                    for done_key in done_key_group:
-                        if tensordict_reset.get(done_key).any():
-                            raise RuntimeError(
-                                f"Env done entry '{done_key}' was (partially) True after a call to reset(). This is not allowed."
-                            )
-
+        self._reset_check_done(tensordict, tensordict_reset)
         if tensordict is not None:
-            tensordict.update(tensordict_reset)
-        else:
-            tensordict = tensordict_reset
-        tensordict.exclude(*self.reset_keys, inplace=True)
-        return tensordict
+            return _update_during_reset(tensordict_reset, tensordict, self.reset_keys)
+        return tensordict_reset
+
+    def _reset_check_done(self, tensordict, tensordict_reset):
+        """Checks the done status after reset.
+
+        If _reset signals were passed, we check that the env is not done for these
+        indices.
+
+        We also check that the input tensordict contained ``"done"``s if the
+        reset is partial and incomplete.
+
+        """
+        # we iterate over (reset_key, (done_key, truncated_key)) and check that all
+        # values where reset was true now have a done set to False.
+        # If no reset was present, all done and truncated must be False
+        for reset_key, done_key_group in zip(self.reset_keys, self.done_keys_groups):
+            reset_value = (
+                tensordict.get(reset_key, default=None)
+                if tensordict is not None
+                else None
+            )
+            if reset_value is not None:
+                for done_key in done_key_group:
+                    done_val = tensordict_reset.get(done_key)
+                    if done_val[reset_value].any() and not self._allow_done_after_reset:
+                        raise RuntimeError(
+                            f"Env done entry '{done_key}' was (partially) True after reset on specified '_reset' dimensions. This is not allowed."
+                        )
+                    if (
+                        done_key not in tensordict.keys(True)
+                        and done_val[~reset_value].any()
+                    ):
+                        warnings.warn(
+                            f"A partial `'_reset'` key has been passed to `reset` ({reset_key}), "
+                            f"but the corresponding done_key ({done_key}) was not present in the input "
+                            f"tensordict. "
+                            f"This is discouraged, since the input tensordict should contain "
+                            f"all the data not being reset."
+                        )
+                        # we set the done val to tensordict, to make sure that
+                        # _update_during_reset does not pad the value
+                        tensordict.set(done_key, done_val)
+            elif not self._allow_done_after_reset:
+                for done_key in done_key_group:
+                    if tensordict_reset.get(done_key).any():
+                        raise RuntimeError(
+                            f"The done entry '{done_key}' was (partially) True after a call to reset() in env {self}."
+                        )
 
     def numel(self) -> int:
         return prod(self.batch_size)
@@ -1597,17 +1602,22 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         """
         shape = torch.Size([])
-        if not self.batch_locked and not self.batch_size and tensordict is not None:
-            shape = tensordict.shape
-        elif not self.batch_locked and not self.batch_size:
-            shape = torch.Size([])
-        elif not self.batch_locked and tensordict.shape != self.batch_size:
-            raise RuntimeError(
-                "The input tensordict and the env have a different batch size: "
-                f"env.batch_size={self.batch_size} and tensordict.batch_size={tensordict.shape}. "
-                f"Non batch-locked environment require the env batch-size to be either empty or to"
-                f" match the tensordict one."
-            )
+        if not self.batch_locked:
+            if not self.batch_size and tensordict is not None:
+                # if we can't infer the batch-size from the env, take it from tensordict
+                shape = tensordict.shape
+            elif not self.batch_size:
+                # if tensordict wasn't provided, we assume empty batch size
+                shape = torch.Size([])
+            elif tensordict.shape != self.batch_size:
+                # if tensordict is not None and the env has a batch size, their shape must match
+                raise RuntimeError(
+                    "The input tensordict and the env have a different batch size: "
+                    f"env.batch_size={self.batch_size} and tensordict.batch_size={tensordict.shape}. "
+                    f"Non batch-locked environment require the env batch-size to be either empty or to"
+                    f" match the tensordict one."
+                )
+        # We generate the action from the full_action_spec
         r = self.input_spec["full_action_spec"].rand(shape)
         if tensordict is None:
             return r
@@ -1652,6 +1662,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         break_when_any_done: bool = True,
         return_contiguous: bool = True,
         tensordict: Optional[TensorDictBase] = None,
+        out=None,
     ):
         """Executes a rollout in the environment.
 
@@ -1788,10 +1799,39 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             raise RuntimeError("tensordict must be provided when auto_reset is False")
         if policy is None:
 
-            def policy(td):
-                self.rand_action(td)
-                return td
+            policy = self.rand_action
 
+        kwargs = {
+            "tensordict": tensordict,
+            "auto_cast_to_device": auto_cast_to_device,
+            "max_steps": max_steps,
+            "policy": policy,
+            "policy_device": policy_device,
+            "env_device": env_device,
+            "callback": callback,
+        }
+        if break_when_any_done:
+            tensordicts = self._rollout_stop_early(**kwargs)
+        else:
+            tensordicts = self._rollout_nonstop(**kwargs)
+        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
+        out_td = torch.stack(tensordicts, len(batch_size), out=out)
+        if return_contiguous:
+            out_td = out_td.contiguous()
+        out_td.refine_names(..., "time")
+        return out_td
+
+    def _rollout_stop_early(
+        self,
+        *,
+        tensordict,
+        auto_cast_to_device,
+        max_steps,
+        policy,
+        policy_device,
+        env_device,
+        callback,
+    ):
         tensordicts = []
         for i in range(max_steps):
             if auto_cast_to_device:
@@ -1816,25 +1856,121 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             )
             # done and truncated are in done_keys
             # We read if any key is done.
-            any_done = terminated_or_truncated(
+            any_done = _terminated_or_truncated(
                 tensordict,
                 full_done_spec=self.output_spec["full_done_spec"],
-                key=None if break_when_any_done else "_reset",
+                key=None,
             )
-            if break_when_any_done and any_done:
+            if any_done:
                 break
-            if not break_when_any_done and any_done:
-                tensordict = self.reset(tensordict)
 
             if callback is not None:
                 callback(self, tensordict)
+        return tensordicts
 
-        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
-        out_td = torch.stack(tensordicts, len(batch_size))
-        if return_contiguous:
-            out_td = out_td.contiguous()
-        out_td.refine_names(..., "time")
-        return out_td
+    def _rollout_nonstop(
+        self,
+        *,
+        tensordict,
+        auto_cast_to_device,
+        max_steps,
+        policy,
+        policy_device,
+        env_device,
+        callback,
+    ):
+        tensordicts = []
+        tensordict_ = tensordict
+        for i in range(max_steps):
+            if auto_cast_to_device:
+                tensordict_ = tensordict_.to(policy_device, non_blocking=True)
+            tensordict_ = policy(tensordict_)
+            if auto_cast_to_device:
+                tensordict_ = tensordict_.to(env_device, non_blocking=True)
+            tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
+            tensordicts.append(tensordict)
+            if i == max_steps - 1:
+                # we don't truncated as one could potentially continue the run
+                break
+            if callback is not None:
+                callback(self, tensordict)
+
+        return tensordicts
+
+    def step_and_maybe_reset(
+        self, tensordict: TensorDictBase
+    ) -> Tuple[TensorDictBase, TensorDictBase]:
+        """Runs a step in the environment and (partially) resets it if needed.
+
+        Args:
+            tensordict (TensorDictBase): an input data structure for the :meth:`~.step`
+                method.
+
+        This method allows to easily code non-stopping rollout functions.
+
+        Examples:
+            >>> from torchrl.envs import ParallelEnv, GymEnv
+            >>> def rollout(env, n):
+            ...     data_ = env.reset()
+            ...     result = []
+            ...     for i in range(n):
+            ...         data, data_ = env.step_and_maybe_reset(data_)
+            ...         result.append(data)
+            ...     return torch.stack(result).contiguous()
+            >>> env = ParallelEnv(2, lambda: GymEnv("CartPole-v1"))
+            >>> print(rollout(env, 2))
+            TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    next: TensorDict(
+                        fields={
+                            done: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            observation: Tensor(shape=torch.Size([2, 2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                            reward: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                            terminated: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            truncated: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                        batch_size=torch.Size([2, 2]),
+                        device=cpu,
+                        is_shared=False),
+                    observation: Tensor(shape=torch.Size([2, 2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([2, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([2, 2]),
+                device=cpu,
+                is_shared=False)
+        """
+        tensordict = self.step(tensordict)
+        # done and truncated are in done_keys
+        # We read if any key is done.
+        tensordict_ = step_mdp(
+            tensordict,
+            keep_other=True,
+            exclude_action=False,
+            exclude_reward=True,
+            reward_keys=self.reward_keys,
+            action_keys=self.action_keys,
+            done_keys=self.done_keys,
+        )
+        any_done = _terminated_or_truncated(
+            tensordict_,
+            full_done_spec=self.output_spec["full_done_spec"],
+            key="_reset",
+        )
+        if any_done:
+            tensordict_ = self.reset(tensordict_)
+        return tensordict, tensordict_
+
+    def empty_cache(self):
+        """Erases all the cached values.
+
+        For regular envs, the key lists (reward, done etc) are cached, but in some cases
+        they may change during the execution of the code (eg, when adding a transform).
+
+        """
+        self.__dict__["_reward_keys"] = None
+        self.__dict__["_done_keys"] = None
+        self.__dict__["_action_keys"] = None
+        self.__dict__["_done_keys_group"] = None
 
     @property
     def reset_keys(self) -> List[NestedKey]:
@@ -1845,32 +1981,43 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         a (possibly empty) tuple of strings pointing to a tensordict location
         where a done state can be found.
 
-        The value of reset_keys is cached.
+        Keys are sorted by depth in the data tree.
         """
         reset_keys = self.__dict__.get("_reset_keys", None)
         if reset_keys is not None:
             return reset_keys
-        prefixes = set()
-        reset_keys = []
 
-        def prefix(key: NestedKey):
-            if isinstance(key, str):
-                return None
-            return key[:-1]
-
-        def combine(prefix_key: tuple | None, key: str):
-            if prefix_key is None:
-                return key
-            return (*prefix_key, key)
-
-        for done_key in self.done_keys:
-            prefix_key = prefix(done_key)
-            if prefix_key in prefixes:
-                continue
-            prefixes.add(prefix_key)
-            reset_keys.append(combine(prefix_key, "_reset"))
+        reset_keys = sorted(
+            (
+                _replace_last(done_key, "_reset")
+                for (done_key, *_) in self.done_keys_groups
+            ),
+            key=_repr_by_depth,
+        )
         self.__dict__["_reset_keys"] = reset_keys
         return reset_keys
+
+    @property
+    def _filtered_reset_keys(self):
+        """Returns the only the effective reset keys, discarding nested resets if they're not being used."""
+        reset_keys = self.reset_keys
+        result = []
+
+        def _root(key):
+            if isinstance(key, str):
+                return ()
+            return key[:-1]
+
+        roots = []
+        for reset_key in reset_keys:
+            cur_root = _root(reset_key)
+            for root in roots:
+                if cur_root[: len(root)] == root:
+                    break
+            else:
+                roots.append(cur_root)
+                result.append(reset_key)
+        return result
 
     @property
     def done_keys_groups(self):
@@ -1879,33 +2026,29 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         This is a list of lists. The outer list has the length of reset keys, the
         inner lists contain the done keys (eg, done and truncated) that can
         be read to determine a reset when it is absent.
-
-        The value of ``done_keys_groups`` is cached.
-
         """
-        done_keys_sorted = self.__dict__.get("_done_keys_groups", None)
-        if done_keys_sorted is not None:
-            return done_keys_sorted
-        # done keys, sorted as reset keys
-        reset_keys = self.reset_keys
-        done_keys = [[] for _ in range(len(reset_keys))]
-        reset_keys_iter = iter(reset_keys)
-        done_keys_iter = iter(done_keys)
-        try:
-            curr_reset_key = next(reset_keys_iter)
-            curr_done_key = next(done_keys_iter)
-        except StopIteration:
-            return done_keys
+        done_keys_group = self.__dict__.get("_done_keys_group", None)
+        if done_keys_group is not None:
+            return done_keys_group
 
+        # done keys, sorted as reset keys
+        done_keys_group = []
+        roots = set()
+        fds = self.full_done_spec
         for done_key in self.done_keys:
-            while type(done_key) != type(curr_reset_key) or (
-                isinstance(done_key, tuple) and done_key[:-1] != curr_reset_key[:-1]
-            ):  # if they are string, they are at the same level
-                curr_reset_key = next(reset_keys_iter)
-                curr_done_key = next(done_keys_iter)
-            curr_done_key.append(done_key)
-        self.__dict__["_done_keys_groups"] = done_keys
-        return done_keys
+            root_name = done_key[:-1] if isinstance(done_key, tuple) else ()
+            root = fds[root_name] if root_name else fds
+            n = len(roots)
+            roots.add(root_name)
+            if len(roots) - n:
+                done_keys_group.append(
+                    [
+                        unravel_key(root_name + (key,))
+                        for key in root.keys(include_nested=False, leaves_only=True)
+                    ]
+                )
+        self.__dict__["_done_keys_group"] = done_keys_group
+        return done_keys_group
 
     def _select_observation_keys(self, tensordict: TensorDictBase) -> Iterator[str]:
         for key in tensordict.keys():

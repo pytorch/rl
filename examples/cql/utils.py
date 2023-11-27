@@ -1,10 +1,11 @@
 import torch.nn
 import torch.optim
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
+    CompositeSpec,
     LazyMemmapStorage,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
@@ -12,36 +13,58 @@ from torchrl.data import (
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
+    CatTensors,
     Compose,
+    DMControlEnv,
     DoubleToFloat,
     EnvCreator,
     ParallelEnv,
-    RewardScaling,
+    RewardSum,
     TransformedEnv,
 )
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
-from torchrl.objectives import CQLLoss, SoftUpdate
+from torchrl.modules import (
+    EGreedyModule,
+    MLP,
+    ProbabilisticActor,
+    QValueActor,
+    TanhNormal,
+    ValueOperator,
+)
+from torchrl.objectives import CQLLoss, DiscreteCQLLoss, SoftUpdate
 
 from torchrl.trainers.helpers.models import ACTIVATIONS
-
 
 # ====================================================================
 # Environment utils
 # -----------------
 
 
-def env_maker(task, frame_skip=1, device="cpu", from_pixels=False):
-    return GymEnv(task, device=device, frame_skip=frame_skip, from_pixels=from_pixels)
+def env_maker(cfg, device="cpu"):
+    lib = cfg.env.library
+    if lib in ("gym", "gymnasium"):
+        with set_gym_backend(lib):
+            return GymEnv(
+                cfg.env.name,
+                device=device,
+            )
+    elif lib == "dm_control":
+        env = DMControlEnv(cfg.env.name, cfg.env.task)
+        return TransformedEnv(
+            env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
+        )
+    else:
+        raise NotImplementedError(f"Unknown lib {lib}.")
 
 
 def apply_env_transforms(env, reward_scaling=1.0):
     transformed_env = TransformedEnv(
         env,
         Compose(
-            RewardScaling(loc=0.0, scale=reward_scaling),
+            # RewardScaling(loc=0.0, scale=reward_scaling),
             DoubleToFloat(),
+            RewardSum(),
         ),
     )
     return transformed_env
@@ -51,7 +74,7 @@ def make_environment(cfg, num_envs=1):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         num_envs,
-        EnvCreator(lambda: env_maker(task=cfg.env.name)),
+        EnvCreator(lambda cfg=cfg: env_maker(cfg)),
     )
     parallel_env.set_seed(cfg.env.seed)
 
@@ -60,7 +83,7 @@ def make_environment(cfg, num_envs=1):
     eval_env = TransformedEnv(
         ParallelEnv(
             num_envs,
-            EnvCreator(lambda: env_maker(task=cfg.env.name)),
+            EnvCreator(lambda cfg=cfg: env_maker(cfg)),
         ),
         train_env.transform.clone(),
     )
@@ -80,7 +103,7 @@ def make_collector(cfg, train_env, actor_model_explore):
         frames_per_batch=cfg.collector.frames_per_batch,
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
-        device=cfg.collector.collector_device,
+        device=cfg.collector.device,
     )
     collector.set_seed(cfg.env.seed)
     return collector
@@ -90,7 +113,7 @@ def make_replay_buffer(
     batch_size,
     prb=False,
     buffer_size=1000000,
-    buffer_scratch_dir="/tmp/",
+    buffer_scratch_dir=None,
     device="cpu",
     prefetch=3,
 ):
@@ -193,6 +216,43 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
     return model
 
 
+def make_discretecql_model(cfg, train_env, eval_env, device="cpu"):
+    model_cfg = cfg.model
+
+    action_spec = train_env.action_spec
+
+    actor_net_kwargs = {
+        "num_cells": model_cfg.hidden_sizes,
+        "out_features": action_spec.shape[-1],
+        "activation_class": ACTIVATIONS[model_cfg.activation],
+    }
+    actor_net = MLP(**actor_net_kwargs)
+    qvalue_module = QValueActor(
+        module=actor_net,
+        spec=CompositeSpec(action=action_spec),
+        in_keys=["observation"],
+    )
+    qvalue_module = qvalue_module.to(device)
+    # init nets
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
+        td = eval_env.reset()
+        td = td.to(device)
+        qvalue_module(td)
+
+    del td
+    greedy_module = EGreedyModule(
+        annealing_num_steps=cfg.collector.annealing_frames,
+        eps_init=cfg.collector.eps_start,
+        eps_end=cfg.collector.eps_end,
+        spec=action_spec,
+    )
+    model_explore = TensorDictSequential(
+        qvalue_module,
+        greedy_module,
+    ).to(device)
+    return qvalue_module, model_explore
+
+
 def make_cql_modules_state(model_cfg, proof_environment):
     action_spec = proof_environment.action_spec
 
@@ -243,10 +303,29 @@ def make_loss(loss_cfg, model):
     return loss_module, target_net_updater
 
 
-def make_cql_optimizer(optim_cfg, loss_module):
+def make_cql_optimizer(cfg, loss_module):
     optim = torch.optim.Adam(
         loss_module.parameters(),
-        lr=optim_cfg.lr,
-        weight_decay=optim_cfg.weight_decay,
+        lr=cfg.optim.lr,
+        weight_decay=cfg.optim.weight_decay,
     )
     return optim
+
+
+def make_discreteloss(loss_cfg, model):
+    loss_module = DiscreteCQLLoss(
+        model,
+        loss_function=loss_cfg.loss_function,
+        delay_value=True,
+        gamma=loss_cfg.gamma,
+    )
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
+    target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
+
+    return loss_module, target_net_updater
+
+
+def log_metrics(logger, metrics, step):
+    if logger is not None:
+        for metric_name, metric_value in metrics.items():
+            logger.log_scalar(metric_name, metric_value, step)

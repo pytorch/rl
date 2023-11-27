@@ -76,7 +76,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # use end-of-life as done key
-    loss_module.set_keys(done="eol", terminated="eol")
+    adv_module.set_keys(done="end-of-life", terminated="end-of-life")
+    loss_module.set_keys(done="end-of-life", terminated="end-of-life")
 
     # Create optimizer
     optim = torch.optim.Adam(
@@ -116,9 +117,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(data.numel())
 
         # Get training rewards and lengths
-        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
+        episode_rewards = data["next", "episode_reward"][data["next", "terminated"]]
         if len(episode_rewards) > 0:
-            episode_length = data["next", "step_count"][data["next", "done"]]
+            episode_length = data["next", "step_count"][data["next", "terminated"]]
             log_info.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
@@ -140,6 +141,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         for k, batch in enumerate(data_buffer):
 
+            # Get a data batch
             batch = batch.to(device)
 
             # Linearly decrease the learning rate and clip epsilon

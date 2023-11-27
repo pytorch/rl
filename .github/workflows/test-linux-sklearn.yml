@@ -17,6 +17,10 @@ concurrency:
 
 jobs:
   unittests:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
@@ -27,7 +31,7 @@ jobs:
       timeout: 120
       script: |
         set -euo pipefail
-        export PYTHON_VERSION="3.8"
+        export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"

@@ -49,7 +49,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create data buffer
     sampler = SamplerWithoutReplacement()
     data_buffer = TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(cfg.collector.frames_per_batch, device=device),
+        storage=LazyMemmapStorage(cfg.collector.frames_per_batch),
         sampler=sampler,
         batch_size=cfg.loss.mini_batch_size,
     )
@@ -101,9 +101,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(data.numel())
 
         # Get training rewards and lengths
-        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
+        episode_rewards = data["next", "episode_reward"][data["next", "terminated"]]
         if len(episode_rewards) > 0:
-            episode_length = data["next", "step_count"][data["next", "done"]]
+            episode_length = data["next", "step_count"][data["next", "terminated"]]
             log_info.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
@@ -124,6 +124,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         data_buffer.extend(data_reshape)
 
         for k, batch in enumerate(data_buffer):
+
+            # Get a data batch
+            batch = batch.to(device)
 
             # Linearly decrease the learning rate and clip epsilon
             alpha = 1.0

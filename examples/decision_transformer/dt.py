@@ -6,15 +6,19 @@
 This is a self-contained example of an offline Decision Transformer training script.
 The helper functions are coded in the utils.py associated with this script.
 """
+import time
 
 import hydra
+import numpy as np
 import torch
 import tqdm
+from torchrl.envs.libs.gym import set_gym_backend
 
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module import DecisionTransformerInferenceWrapper
 
 from utils import (
+    log_metrics,
     make_dt_loss,
     make_dt_model,
     make_dt_optimizer,
@@ -24,28 +28,49 @@ from utils import (
 )
 
 
-@hydra.main(config_path=".", config_name="dt_config")
+@hydra.main(config_path=".", config_name="dt_config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
+    set_gym_backend(cfg.env.backend).set()
+
     model_device = cfg.optim.device
+
+    # Set seeds
+    torch.manual_seed(cfg.env.seed)
+    np.random.seed(cfg.env.seed)
+
+    # Create logger
     logger = make_logger(cfg)
+
+    # Create offline replay buffer
     offline_buffer, obs_loc, obs_std = make_offline_replay_buffer(
         cfg.replay_buffer, cfg.env.reward_scaling
     )
+
+    # Create test environment
     test_env = make_env(cfg.env, obs_loc, obs_std)
+
+    # Create policy model
     actor = make_dt_model(cfg)
     policy = actor.to(model_device)
 
+    # Create loss
     loss_module = make_dt_loss(cfg.loss, actor)
+
+    # Create optimizer
     transformer_optim, scheduler = make_dt_optimizer(cfg.optim, loss_module)
+
+    # Create inference policy
     inference_policy = DecisionTransformerInferenceWrapper(
         policy=policy,
         inference_context=cfg.env.inference_context,
     ).to(model_device)
+    inference_policy.set_tensor_keys(
+        observation="observation_cat",
+        action="action_cat",
+        return_to_go="return_to_go_cat",
+    )
 
     pbar = tqdm.tqdm(total=cfg.optim.pretrain_gradient_steps)
-
-    r0 = None
-    l0 = None
 
     pretrain_gradient_steps = cfg.optim.pretrain_gradient_steps
     clip_grad = cfg.optim.clip_grad
@@ -55,12 +80,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     print(" ***Pretraining*** ")
     # Pretraining
+    start_time = time.time()
     for i in range(pretrain_gradient_steps):
-        pbar.update(i)
+        pbar.update(1)
+
+        # Sample data
         data = offline_buffer.sample()
-        # loss
+        # Compute loss
         loss_vals = loss_module(data.to(model_device))
-        # backprop
         transformer_loss = loss_vals["loss"]
 
         transformer_optim.zero_grad()
@@ -70,28 +97,25 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         scheduler.step()
 
-        # evaluation
-        with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
+        # Log metrics
+        to_log = {"train/loss": loss_vals["loss"]}
+
+        # Evaluation
+        with set_exploration_type(ExplorationType.MODE), torch.no_grad():
             if i % pretrain_log_interval == 0:
                 eval_td = test_env.rollout(
                     max_steps=eval_steps,
                     policy=inference_policy,
                     auto_cast_to_device=True,
                 )
-        if r0 is None:
-            r0 = eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
-        if l0 is None:
-            l0 = transformer_loss.item()
-
-        eval_reward = eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
+            to_log["eval/reward"] = (
+                eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
+            )
         if logger is not None:
-            for key, value in loss_vals.items():
-                logger.log_scalar(key, value.item(), i)
-            logger.log_scalar("evaluation reward", eval_reward, i)
+            log_metrics(logger, to_log, i)
 
-        pbar.set_description(
-            f"[Pre-Training] loss: {transformer_loss.item(): 4.4f} (init: {l0: 4.4f}), evaluation reward: {eval_reward: 4.4f} (init={r0: 4.4f})"
-        )
+    pbar.close()
+    print(f"Training time: {time.time() - start_time}")
 
 
 if __name__ == "__main__":
