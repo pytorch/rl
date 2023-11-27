@@ -10,6 +10,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
+import torch
 from tensordict import TensorDict, TensorDictBase
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
@@ -288,11 +289,11 @@ class LossModule(TensorDictModuleBase):
 
         # set the functional module: we need to convert the params to non-differentiable params
         # otherwise they will appear twice in parameters
-        p = TensorDict.from_module(module)
-        with params.detach().to("meta").to_module(module):
+        with params.apply(_make_meta_params, device=torch.device("meta")).to_module(
+            module
+        ):
             # avoid buffers and params being exposed
             self.__dict__[module_name] = deepcopy(module)
-        assert (p == TensorDict.from_module(module)).all()
 
         name_params_target = "target_" + module_name
         if create_target_params:
@@ -445,3 +446,13 @@ class _make_target_param:
                 x.data.clone() if self.clone else x.data, requires_grad=False
             )
         return x.data.clone() if self.clone else x.data
+
+
+def _make_meta_params(param):
+    is_param = isinstance(param, nn.Parameter)
+
+    pd = param.detach().to("meta")
+
+    if is_param:
+        pd = nn.Parameter(pd, requires_grad=False)
+    return pd

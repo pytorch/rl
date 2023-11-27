@@ -137,7 +137,7 @@ class TokenizedDatasetLoader:
         data_dir = root_dir / str(Path(self.dataset_name).name).split("-")[0]
         data_dir_total = data_dir / split / str(max_length)
         # search for data
-        print(data_dir_total)
+        print("Looking for data in", data_dir_total)
         if os.path.exists(data_dir_total):
             dataset = TensorDict.load_memmap(data_dir_total)
             return dataset
