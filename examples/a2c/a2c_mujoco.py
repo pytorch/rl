@@ -101,9 +101,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(data.numel())
 
         # Get training rewards and lengths
-        episode_rewards = data["next", "episode_reward"][data["next", "terminated"]]
+        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
-            episode_length = data["next", "step_count"][data["next", "terminated"]]
+            episode_length = data["next", "step_count"][data["next", "done"]]
             log_info.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
