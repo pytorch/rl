@@ -746,7 +746,7 @@ class ParallelEnv(_BatchedEnv):
 
         self.parent_channels = []
         self._workers = []
-        if self.device.type == "cuda":
+        if self.shared_tensordict_parent.device.type == "cuda":
             func = _run_worker_pipe_cuda
             self._cuda_stream = torch.cuda.Stream(self.device)
             self._cuda_events = [
@@ -1400,10 +1400,10 @@ def _run_worker_pipe_cuda(
                 td, root_next_td = env.step_and_maybe_reset(env_input)
                 if env_device_cpu:
                     next_shared_tensordict._fast_apply(
-                        _update_cuda, td.get("next"), default=None
+                        _update_cuda, td.get("next", default=None),
                     )
                     shared_tensordict._fast_apply(
-                        _update_cuda, root_next_td, default=None
+                        _update_cuda, root_next_td
                     )
                 else:
                     next_shared_tensordict.update_(td.get("next"))
