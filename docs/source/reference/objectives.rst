@@ -136,6 +136,7 @@ CQL
     :template: rl_template_noinherit.rst
 
     CQLLoss
+    DiscreteCQLLoss
 
 DT
 ----

@@ -5,6 +5,7 @@
 
 
 import torch
+from torch import nn
 
 
 def check_finite(tensor: torch.Tensor):
@@ -59,3 +60,11 @@ def _get_reset(reset_key, tensordict):
     if _reset.ndim > parent_td.ndim:
         _reset = _reset.flatten(parent_td.ndim, -1).any(-1)
     return _reset
+
+
+def _stateless_param(param):
+    is_param = isinstance(param, nn.Parameter)
+    param = param.data.to("meta")
+    if is_param:
+        return nn.Parameter(param, requires_grad=False)
+    return param

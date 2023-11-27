@@ -36,14 +36,20 @@ def get_minibatch():
             batch_size=16,
             block_size=33,
             tensorclass_type=PromptData,
-            dataset_name="test/datasets_mini/openai_summarize_tldr",
+            dataset_name="CarperAI/openai_summarize_tldr",
             device="cpu",
             infinite=False,
             prefetch=0,
             split="train",
-            from_disk=True,
+            from_disk=False,
             root_dir=tmpdir,
         )
         for data in dl:
             data = data.clone().memmap_("test/datasets_mini/tldr_batch/")
             break
+        print("done")
+
+
+if __name__ == "__main__":
+    # generate_small_dataset()
+    get_minibatch()

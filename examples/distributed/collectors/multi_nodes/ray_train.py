@@ -117,7 +117,7 @@ if __name__ == "__main__":
         "object_store_memory": 1024**3,
     }
     collector = RayCollector(
-        env_makers=[env] * num_collectors,
+        create_env_fn=[env] * num_collectors,
         policy=policy_module,
         collector_class=SyncDataCollector,
         collector_kwargs={

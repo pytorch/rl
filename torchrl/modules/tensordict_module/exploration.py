@@ -93,6 +93,10 @@ class EGreedyModule(TensorDictModuleBase):
         action_key: Optional[NestedKey] = "action",
         action_mask_key: Optional[NestedKey] = None,
     ):
+        if not isinstance(eps_init, float):
+            warnings.warn("eps_init should be a float.")
+        if eps_end > eps_init:
+            raise RuntimeError("eps should decrease over time or be constant")
         self.action_key = action_key
         self.action_mask_key = action_mask_key
         in_keys = [self.action_key]
@@ -105,10 +109,8 @@ class EGreedyModule(TensorDictModuleBase):
 
         self.register_buffer("eps_init", torch.tensor([eps_init]))
         self.register_buffer("eps_end", torch.tensor([eps_end]))
-        if self.eps_end > self.eps_init:
-            raise RuntimeError("eps should decrease over time or be constant")
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init]))
+        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
 
         if spec is not None:
             if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
@@ -257,7 +259,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         if self.eps_end > self.eps_init:
             raise RuntimeError("eps should decrease over time or be constant")
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init]))
+        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
         self.action_key = action_key
         self.action_mask_key = action_mask_key
         if spec is not None:
@@ -403,7 +405,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("mean", torch.tensor([mean]))
         self.register_buffer("std", torch.tensor([std]))
-        self.register_buffer("sigma", torch.tensor([sigma_init]))
+        self.register_buffer("sigma", torch.tensor([sigma_init], dtype=torch.float32))
         self.action_key = action_key
         self.out_keys = list(self.td_module.out_keys)
         if action_key not in self.out_keys:
@@ -611,7 +613,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
                 f"got eps_init={eps_init} and eps_end={eps_end}"
             )
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init]))
+        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
         self.out_keys = list(self.td_module.out_keys) + self.ou.out_keys
         self.is_init_key = is_init_key
         noise_key = self.ou.noise_key

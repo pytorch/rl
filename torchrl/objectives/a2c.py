@@ -3,11 +3,17 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import warnings
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
+from tensordict.nn import (
+    dispatch,
+    ProbabilisticTensorDictSequential,
+    repopulate_module,
+    TensorDictModule,
+)
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -20,7 +26,13 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import (
+    GAE,
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+    VTrace,
+)
 
 
 class A2CLoss(LossModule):
@@ -202,6 +214,7 @@ class A2CLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        sample_log_prob: NestedKey = "sample_log_prob"
 
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.GAE
@@ -314,8 +327,8 @@ class A2CLoss(LossModule):
                 f"tensordict stored {self.tensor_keys.action} require grad."
             )
         tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
-
-        dist = self.actor.get_dist(tensordict_clone, params=self.actor_params)
+        with self.actor_params.to_module(self.actor):
+            dist = self.actor.get_dist(tensordict_clone)
         log_prob = dist.log_prob(action)
         log_prob = log_prob.unsqueeze(-1)
         return log_prob, dist
@@ -326,10 +339,10 @@ class A2CLoss(LossModule):
             # overhead that we could easily reduce.
             target_return = tensordict.get(self.tensor_keys.value_target)
             tensordict_select = tensordict.select(*self.critic.in_keys)
-            state_value = self.critic(
-                tensordict_select,
-                params=self.critic_params,
-            ).get(self.tensor_keys.value)
+            with self.critic_params.to_module(self.critic):
+                state_value = self.critic(
+                    tensordict_select,
+                ).get(self.tensor_keys.value)
             loss_value = distance_loss(
                 target_return,
                 state_value,
@@ -361,6 +374,7 @@ class A2CLoss(LossModule):
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
+        assert not advantage.requires_grad
         log_probs, dist = self._log_probs(tensordict)
         loss = -(log_probs * advantage)
         td_out = TensorDict({"loss_objective": loss.mean()}, [])
@@ -379,6 +393,7 @@ class A2CLoss(LossModule):
         self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
+
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         if value_type == ValueEstimators.TD1:
@@ -389,6 +404,14 @@ class A2CLoss(LossModule):
             self._value_estimator = GAE(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
+        elif value_type == ValueEstimators.VTrace:
+            # VTrace currently does not support functional call on the actor
+            actor_with_params = repopulate_module(
+                deepcopy(self.actor), self.actor_params
+            )
+            self._value_estimator = VTrace(
+                value_network=self.critic, actor_network=actor_with_params, **hp
+            )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 
@@ -399,5 +422,6 @@ class A2CLoss(LossModule):
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
             "terminated": self.tensor_keys.terminated,
+            "sample_log_prob": self.tensor_keys.sample_log_prob,
         }
         self._value_estimator.set_keys(**tensor_keys)

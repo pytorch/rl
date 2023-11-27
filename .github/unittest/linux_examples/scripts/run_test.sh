@@ -52,6 +52,12 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/decision_trans
 # ==================================================================================== #
 # ================================ Gymnasium ========================================= #
 
+python .github/unittest/helpers/coverage_run_parallel.py examples/impala/impala_single_node.py \
+  collector.total_frames=80 \
+  collector.frames_per_batch=20 \
+  collector.num_workers=1 \
+  logger.backend= \
+  logger.test_interval=10
 python .github/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo_mujoco.py \
   env.env_name=HalfCheetah-v4 \
   collector.total_frames=40 \
@@ -106,6 +112,16 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   record_video=True \
   record_frames=4 \
   buffer_size=120
+python .github/unittest/helpers/coverage_run_parallel.py examples/cql/discrete_cql_online.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  collector.device=cuda:0 \
+  optim.optim_steps_per_batch=1 \
+  replay_buffer.size=120 \
+  logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py \
   num_workers=4 \
   collector.total_frames=48 \
