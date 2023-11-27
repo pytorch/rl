@@ -24,6 +24,7 @@ from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 # Environment utils
 # --------------------------------------------------------------------
 
+
 def make_env(env_name="HalfCheetah-v4", device="cpu"):
     env = GymEnv(env_name, device=device)
     env = TransformedEnv(env)
@@ -71,7 +72,9 @@ def make_ppo_models_state(proof_environment):
     # Add state-independent normal scale
     policy_mlp = torch.nn.Sequential(
         policy_mlp,
-        AddStateIndependentNormalScale(proof_environment.action_spec.shape[-1], scale_lb=1e-8)
+        AddStateIndependentNormalScale(
+            proof_environment.action_spec.shape[-1], scale_lb=1e-8
+        ),
     )
 
     # Add probabilistic sampling of the actions

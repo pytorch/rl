@@ -187,8 +187,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "train/lr": alpha * cfg_optim_lr,
                 "train/sampling_time": sampling_time,
                 "train/training_time": training_time,
-                "train/clip_epsilon": alpha * cfg_loss_clip_epsilon if
-                cfg_loss_anneal_clip_eps else cfg_loss_clip_epsilon,
+                "train/clip_epsilon": alpha * cfg_loss_clip_epsilon
+                if cfg_loss_anneal_clip_eps
+                else cfg_loss_clip_epsilon,
             }
         )
 
