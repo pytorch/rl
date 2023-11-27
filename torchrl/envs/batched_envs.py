@@ -423,7 +423,7 @@ class _BatchedEnv(EnvBase):
                 *(unravel_key(("next", key)) for key in self._env_output_keys),
                 strict=False,
             )
-            self.shared_tensordict_parent = shared_tensordict_parent.to(self.device)
+            self.shared_tensordict_parent = shared_tensordict_parent
         else:
             # Multi-task: we share tensordict that *may* have different keys
             shared_tensordict_parent = [
@@ -431,7 +431,7 @@ class _BatchedEnv(EnvBase):
                     *self._selected_keys,
                     *(unravel_key(("next", key)) for key in self._env_output_keys),
                     strict=False,
-                ).to(self.device)
+                )
                 for tensordict in shared_tensordict_parent
             ]
             shared_tensordict_parent = torch.stack(
@@ -638,7 +638,7 @@ class SerialEnv(_BatchedEnv):
             if out.device == device:
                 out = out.clone()
             else:
-                out = out.to(self.device, non_blocking=True)
+                out = out.to(device, non_blocking=True)
         return out
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
@@ -679,7 +679,7 @@ class SerialEnv(_BatchedEnv):
             if out.device == device:
                 out = out.clone()
             else:
-                out = out.to(self.device, non_blocking=True)
+                out = out.to(device, non_blocking=True)
         return out
 
     def __getattr__(self, attr: str) -> Any:
