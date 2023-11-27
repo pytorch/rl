@@ -45,6 +45,7 @@ from .transforms import (
     DiscreteActionProjection,
     DoubleToFloat,
     DTypeCastTransform,
+    EndOfLifeTransform,
     ExcludeTransform,
     FiniteTensorDictCheck,
     FlattenObservation,

@@ -2,23 +2,36 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
     DEVICE_TYPING,
     DiscreteTensorSpec,
     LazyStackedCompositeSpec,
+    MultiDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
+    OneHotDiscreteTensorSpec,
+    TensorSpec,
     UnboundedContinuousTensorSpec,
 )
+from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs.common import _EnvWrapper, EnvBase
-from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
-from torchrl.envs.utils import _classproperty, _selective_unsqueeze
+from torchrl.envs.libs.gym import gym_backend, set_gym_backend
+from torchrl.envs.utils import (
+    _classproperty,
+    _selective_unsqueeze,
+    check_marl_grouping,
+    MarlGroupMapType,
+)
 
 _has_vmas = importlib.util.find_spec("vmas") is not None
 
@@ -50,8 +63,85 @@ def _get_envs():
     ]
 
 
+@set_gym_backend("gym")
+def _vmas_to_torchrl_spec_transform(
+    spec,
+    device,
+    categorical_action_encoding,
+) -> TensorSpec:
+    gym_spaces = gym_backend("spaces")
+    if isinstance(spec, gym_spaces.discrete.Discrete):
+        action_space_cls = (
+            DiscreteTensorSpec
+            if categorical_action_encoding
+            else OneHotDiscreteTensorSpec
+        )
+        dtype = (
+            numpy_to_torch_dtype_dict[spec.dtype]
+            if categorical_action_encoding
+            else torch.long
+        )
+        return action_space_cls(spec.n, device=device, dtype=dtype)
+    elif isinstance(spec, gym_spaces.multi_discrete.MultiDiscrete):
+        dtype = (
+            numpy_to_torch_dtype_dict[spec.dtype]
+            if categorical_action_encoding
+            else torch.long
+        )
+        return (
+            MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+            if categorical_action_encoding
+            else MultiOneHotDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+        )
+    elif isinstance(spec, gym_spaces.Box):
+        shape = spec.shape
+        if not len(shape):
+            shape = torch.Size([1])
+        dtype = numpy_to_torch_dtype_dict[spec.dtype]
+        low = torch.tensor(spec.low, device=device, dtype=dtype)
+        high = torch.tensor(spec.high, device=device, dtype=dtype)
+        is_unbounded = low.isinf().all() and high.isinf().all()
+        return (
+            UnboundedContinuousTensorSpec(shape, device=device, dtype=dtype)
+            if is_unbounded
+            else BoundedTensorSpec(
+                low,
+                high,
+                shape,
+                dtype=dtype,
+                device=device,
+            )
+        )
+    else:
+        raise NotImplementedError(
+            f"spec of type {type(spec).__name__} is currently unaccounted for vmas"
+        )
+
+
 class VmasWrapper(_EnvWrapper):
     """Vmas environment wrapper.
+
+    Args:
+        env (``vmas.simulator.environment.environment.Environment``): the vmas environment to wrap.
+        categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
+            them to categorical or one-hot.
+        group_map (MarlGroupMapType or Dict[str, List[str]], optional): how to group agents in tensordicts for
+            input/output. By default, if the agent names follow the ``"<name>_<int>"``
+            convention, they will be grouped by ``"<name>"``. If they do not follow this convention, they will be all put
+            in one group named ``"agents"``.
+            Otherwise, a group map can be specified or selected from some premade options.
+            See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
+
+    Attributes:
+        group_map (Dict[str, List[str]]): how to group agents in tensordicts for
+            input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
+        agent_names (list of str): names of the agent in the environment
+        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the enviornment
+        unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension
+        unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension
+        unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension
+        het_specs (bool): whether the enviornment has any lazy spec
+        het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs
 
     Examples:
         >>>  env = VmasWrapper(
@@ -130,6 +220,7 @@ class VmasWrapper(_EnvWrapper):
         self,
         env: "vmas.simulator.environment.environment.Environment" = None,  # noqa
         categorical_actions: bool = True,
+        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
         **kwargs,
     ):
         if env is not None:
@@ -137,6 +228,7 @@ class VmasWrapper(_EnvWrapper):
             if "device" in kwargs.keys() and kwargs["device"] != str(env.device):
                 raise TypeError("Env device is different from vmas device")
             kwargs["device"] = str(env.device)
+        self.group_map = group_map
         self.categorical_actions = categorical_actions
         super().__init__(**kwargs, allow_done_after_reset=True)
 
@@ -170,26 +262,118 @@ class VmasWrapper(_EnvWrapper):
 
         return env
 
-    @set_gym_backend("gym")
+    def _get_default_group_map(self, agent_names: List[str]):
+        # This function performs the default grouping in vmas.
+        # Agents with names "<name>_<int>" will be grouped in group name "<name>".
+        # If any of the agents does not follow the naming convention, we fall back
+        # back on having all agents in one group named "agents".
+        group_map = {}
+        follows_convention = True
+        for agent_name in agent_names:
+            # See if the agent follows the convention "<name>_<int>"
+            agent_name_split = agent_name.split("_")
+            if len(agent_name_split) == 1:
+                follows_convention = False
+            follows_convention = follows_convention and agent_name_split[-1].isdigit()
+
+            if not follows_convention:
+                break
+
+            # Group it with other agents that follow the same convention
+            group_name = "_".join(agent_name_split[:-1])
+            if group_name in group_map:
+                group_map[group_name].append(agent_name)
+            else:
+                group_map[group_name] = [agent_name]
+
+        if not follows_convention:
+            group_map = MarlGroupMapType.ALL_IN_ONE_GROUP.get_group_map(agent_names)
+
+        # For BC-compatibility rename the "agent" group to "agents"
+        if "agent" in group_map:
+            agent_group = group_map["agent"]
+            group_map["agents"] = agent_group
+            del group_map["agent"]
+        return group_map
+
     def _make_specs(
         self, env: "vmas.simulator.environment.environment.Environment"  # noqa
     ) -> None:
-        # TODO heterogenous spaces
+        # Create and check group map
+        self.agent_names = [agent.name for agent in self.agents]
+        self.agent_names_to_indices_map = {
+            agent.name: i for i, agent in enumerate(self.agents)
+        }
+        if self.group_map is None:
+            self.group_map = self._get_default_group_map(self.agent_names)
+        elif isinstance(self.group_map, MarlGroupMapType):
+            self.group_map = self.group_map.get_group_map(self.agent_names)
+        check_marl_grouping(self.group_map, self.agent_names)
 
+        self.unbatched_action_spec = CompositeSpec(device=self.device)
+        self.unbatched_observation_spec = CompositeSpec(device=self.device)
+        self.unbatched_reward_spec = CompositeSpec(device=self.device)
+
+        self.het_specs = False
+        self.het_specs_map = {}
+        for group in self.group_map.keys():
+            (
+                group_observation_spec,
+                group_action_spec,
+                group_reward_spec,
+                group_info_spec,
+            ) = self._make_unbatched_group_specs(group)
+            self.unbatched_action_spec[group] = group_action_spec
+            self.unbatched_observation_spec[group] = group_observation_spec
+            self.unbatched_reward_spec[group] = group_reward_spec
+            if group_info_spec is not None:
+                self.unbatched_observation_spec[(group, "info")] = group_info_spec
+            group_het_specs = isinstance(
+                group_observation_spec, LazyStackedCompositeSpec
+            ) or isinstance(group_action_spec, LazyStackedCompositeSpec)
+            self.het_specs_map[group] = group_het_specs
+            self.het_specs = self.het_specs or group_het_specs
+
+        self.unbatched_done_spec = CompositeSpec(
+            {
+                "done": DiscreteTensorSpec(
+                    n=2,
+                    shape=torch.Size((1,)),
+                    dtype=torch.bool,
+                    device=self.device,
+                ),
+            },
+        )
+
+        self.action_spec = self.unbatched_action_spec.expand(
+            *self.batch_size, *self.unbatched_action_spec.shape
+        )
+        self.observation_spec = self.unbatched_observation_spec.expand(
+            *self.batch_size, *self.unbatched_observation_spec.shape
+        )
+        self.reward_spec = self.unbatched_reward_spec.expand(
+            *self.batch_size, *self.unbatched_reward_spec.shape
+        )
+        self.done_spec = self.unbatched_done_spec.expand(
+            *self.batch_size, *self.unbatched_done_spec.shape
+        )
+
+    def _make_unbatched_group_specs(self, group: str):
         # Agent specs
         action_specs = []
         observation_specs = []
         reward_specs = []
         info_specs = []
-        for agent_index, agent in enumerate(self.agents):
+        for agent_name in self.group_map[group]:
+            agent_index = self.agent_names_to_indices_map[agent_name]
+            agent = self.agents[agent_index]
             action_specs.append(
                 CompositeSpec(
                     {
-                        "action": _gym_to_torchrl_spec_transform(
+                        "action": _vmas_to_torchrl_spec_transform(
                             self.action_space[agent_index],
                             categorical_action_encoding=self.categorical_actions,
                             device=self.device,
-                            remap_state_to_observation=False,
                         )  # shape = (n_actions_per_agent,)
                     },
                 )
@@ -197,10 +381,10 @@ class VmasWrapper(_EnvWrapper):
             observation_specs.append(
                 CompositeSpec(
                     {
-                        "observation": _gym_to_torchrl_spec_transform(
+                        "observation": _vmas_to_torchrl_spec_transform(
                             self.observation_space[agent_index],
                             device=self.device,
-                            remap_state_to_observation=False,
+                            categorical_action_encoding=self.categorical_actions,
                         )  # shape = (n_obs_per_agent,)
                     },
                 )
@@ -233,49 +417,22 @@ class VmasWrapper(_EnvWrapper):
                 )
 
         # Create multi-agent specs
-        multi_agent_action_spec = torch.stack(
+        group_action_spec = torch.stack(
             action_specs, dim=0
         )  # shape = (n_agents, n_actions_per_agent)
-        multi_agent_observation_spec = torch.stack(
+        group_observation_spec = torch.stack(
             observation_specs, dim=0
         )  # shape = (n_agents, n_obs_per_agent)
-        multi_agent_reward_spec = torch.stack(
-            reward_specs, dim=0
-        )  # shape = (n_agents, 1)
-
-        self.het_specs = isinstance(
-            multi_agent_observation_spec, LazyStackedCompositeSpec
-        ) or isinstance(multi_agent_action_spec, LazyStackedCompositeSpec)
-
-        done_spec = DiscreteTensorSpec(
-            n=2,
-            shape=torch.Size((1,)),
-            dtype=torch.bool,
-            device=self.device,
-        )  # shape = (1,)
-
-        self.unbatched_action_spec = CompositeSpec({"agents": multi_agent_action_spec})
-        self.unbatched_observation_spec = CompositeSpec(
-            {"agents": multi_agent_observation_spec}
-        )
+        group_reward_spec = torch.stack(reward_specs, dim=0)  # shape = (n_agents, 1)
+        group_info_spec = None
         if len(info_specs):
-            multi_agent_info_spec = torch.stack(info_specs, dim=0)
-            self.unbatched_observation_spec[("agents", "info")] = multi_agent_info_spec
+            group_info_spec = torch.stack(info_specs, dim=0)
 
-        self.unbatched_reward_spec = CompositeSpec({"agents": multi_agent_reward_spec})
-        self.unbatched_done_spec = done_spec
-
-        self.action_spec = self.unbatched_action_spec.expand(
-            *self.batch_size, *self.unbatched_action_spec.shape
-        )
-        self.observation_spec = self.unbatched_observation_spec.expand(
-            *self.batch_size, *self.unbatched_observation_spec.shape
-        )
-        self.reward_spec = self.unbatched_reward_spec.expand(
-            *self.batch_size, *self.unbatched_reward_spec.shape
-        )
-        self.done_spec = self.unbatched_done_spec.expand(
-            *self.batch_size, *self.unbatched_done_spec.shape
+        return (
+            group_observation_spec,
+            group_action_spec,
+            group_reward_spec,
+            group_info_spec,
         )
 
     def _check_kwargs(self, kwargs: Dict):
@@ -318,71 +475,93 @@ class VmasWrapper(_EnvWrapper):
         )
         dones = self.read_done(dones)
 
-        agent_tds = []
-        for i in range(self.n_agents):
-            agent_obs = self.read_obs(obs[i])
-            agent_info = self.read_info(infos[i])
+        source = {"done": dones, "terminated": dones.clone()}
+        for group, agent_names in self.group_map.items():
+            agent_tds = []
+            for agent_name in agent_names:
+                i = self.agent_names_to_indices_map[agent_name]
 
-            agent_td = TensorDict(
-                source={
-                    "observation": agent_obs,
-                },
-                batch_size=self.batch_size,
-                device=self.device,
-            )
-            if agent_info is not None:
-                agent_td.set("info", agent_info)
-            agent_tds.append(agent_td)
+                agent_obs = self.read_obs(obs[i])
+                agent_info = self.read_info(infos[i])
+                agent_td = TensorDict(
+                    source={
+                        "observation": agent_obs,
+                    },
+                    batch_size=self.batch_size,
+                    device=self.device,
+                )
+                if agent_info is not None:
+                    agent_td.set("info", agent_info)
+                agent_tds.append(agent_td)
 
-        agent_tds = torch.stack(agent_tds, dim=1)
-        if not self.het_specs:
-            agent_tds = agent_tds.to_tensordict()
+            agent_tds = torch.stack(agent_tds, dim=1)
+            if not self.het_specs_map[group]:
+                agent_tds = agent_tds.to_tensordict()
+            source.update({group: agent_tds})
+
         tensordict_out = TensorDict(
-            source={"agents": agent_tds, "done": dones, "terminated": dones.clone()},
+            source=source,
             batch_size=self.batch_size,
             device=self.device,
         )
-
         return tensordict_out
 
     def _step(
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
-        action = tensordict.get(("agents", "action"))
-        action = self.read_action(action)
+        agent_indices = {}
+        action_list = []
+        n_agents = 0
+        for group, agent_names in self.group_map.items():
+            group_action = tensordict.get((group, "action"))
+            group_action_list = list(self.read_action(group_action, group=group))
+            agent_indices.update(
+                {
+                    self.agent_names_to_indices_map[agent_name]: i + n_agents
+                    for i, agent_name in enumerate(agent_names)
+                }
+            )
+            n_agents += len(agent_names)
+            action_list += group_action_list
+        action = [action_list[agent_indices[i]] for i in range(self.n_agents)]
 
         obs, rews, dones, infos = self._env.step(action)
 
         dones = self.read_done(dones)
 
-        agent_tds = []
-        for i in range(self.n_agents):
-            agent_obs = self.read_obs(obs[i])
-            agent_rew = self.read_reward(rews[i])
-            agent_info = self.read_info(infos[i])
+        source = {"done": dones, "terminated": dones.clone()}
+        for group, agent_names in self.group_map.items():
+            agent_tds = []
+            for agent_name in agent_names:
+                i = self.agent_names_to_indices_map[agent_name]
 
-            agent_td = TensorDict(
-                source={
-                    "observation": agent_obs,
-                    "reward": agent_rew,
-                },
-                batch_size=self.batch_size,
-                device=self.device,
-            )
-            if agent_info is not None:
-                agent_td.set("info", agent_info)
-            agent_tds.append(agent_td)
+                agent_obs = self.read_obs(obs[i])
+                agent_rew = self.read_reward(rews[i])
+                agent_info = self.read_info(infos[i])
 
-        agent_tds = torch.stack(agent_tds, dim=1)
-        if not self.het_specs:
-            agent_tds = agent_tds.to_tensordict()
+                agent_td = TensorDict(
+                    source={
+                        "observation": agent_obs,
+                        "reward": agent_rew,
+                    },
+                    batch_size=self.batch_size,
+                    device=self.device,
+                )
+                if agent_info is not None:
+                    agent_td.set("info", agent_info)
+                agent_tds.append(agent_td)
+
+            agent_tds = torch.stack(agent_tds, dim=1)
+            if not self.het_specs_map[group]:
+                agent_tds = agent_tds.to_tensordict()
+            source.update({group: agent_tds})
+
         tensordict_out = TensorDict(
-            source={"agents": agent_tds, "done": dones, "terminated": dones.clone()},
+            source=source,
             batch_size=self.batch_size,
             device=self.device,
         )
-
         return tensordict_out
 
     def read_obs(
@@ -419,14 +598,10 @@ class VmasWrapper(_EnvWrapper):
         rewards = _selective_unsqueeze(rewards, batch_size=self.batch_size)
         return rewards
 
-    def read_action(self, action):
+    def read_action(self, action, group: str = "agents"):
         if not self.continuous_actions and not self.categorical_actions:
-            action = self.unbatched_action_spec["agents", "action"].to_categorical(
-                action
-            )
-        agent_actions = []
-        for i in range(self.n_agents):
-            agent_actions.append(action[:, i, ...])
+            action = self.unbatched_action_spec[group, "action"].to_categorical(action)
+        agent_actions = action.unbind(dim=1)
         return agent_actions
 
     def __repr__(self) -> str:
@@ -507,6 +682,7 @@ class VmasEnv(VmasWrapper):
         max_steps: Optional[int] = None,
         categorical_actions: bool = True,
         seed: Optional[int] = None,
+        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
         **kwargs,
     ):
         if not _has_vmas:
@@ -520,6 +696,7 @@ class VmasEnv(VmasWrapper):
         kwargs["max_steps"] = max_steps
         kwargs["seed"] = seed
         kwargs["categorical_actions"] = categorical_actions
+        kwargs["group_map"] = group_map
         super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):

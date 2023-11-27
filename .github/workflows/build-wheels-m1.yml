@@ -1,0 +1,43 @@
+name: Build M1 Wheels
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+    tags:
+        # NOTE: Binary build pipelines should only get triggered on release candidate builds
+        # Release candidate tags look like: v1.11.0-rc1
+        - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
+  workflow_dispatch:
+
+jobs:
+  generate-matrix:
+    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@main
+    with:
+      package-type: wheel
+      os: macos-arm64
+      test-infra-repository: pytorch/test-infra
+      test-infra-ref: main
+  build:
+    needs: generate-matrix
+    name: pytorch/rl
+    uses: pytorch/test-infra/.github/workflows/build_wheels_macos.yml@main
+    with:
+      repository: pytorch/rl
+      ref: ""
+      test-infra-repository: pytorch/test-infra
+      test-infra-ref: main
+      build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
+      pre-script: .github/scripts/pre_build_script_m1.sh
+      post-script: ""
+      package-name: torchrl
+      runner-type: macos-m1-12
+      smoke-test-script: ""
+      trigger-event: ${{ github.event_name }}
+      env-var-script: .github/scripts/m1_script.sh
+    secrets:
+      AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID: ${{ secrets.AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID }}
+      AWS_PYTORCH_UPLOADER_SECRET_ACCESS_KEY: ${{ secrets.AWS_PYTORCH_UPLOADER_SECRET_ACCESS_KEY }}

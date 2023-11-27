@@ -37,17 +37,27 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/decision_trans
   optim.updates_per_episode=3 \
   optim.warmup_steps=10 \
   optim.device=cuda:0 \
-  logger.backend=
+  logger.backend= \
+  env.backend=gymnasium \
+  env.name=HalfCheetah-v4
 python .github/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/online_dt.py \
   optim.pretrain_gradient_steps=55 \
   optim.updates_per_episode=3 \
   optim.warmup_steps=10 \
   optim.device=cuda:0 \
-  logger.backend=
+  logger.backend= \
+  env.backend=gymnasium \
+  env.name=HalfCheetah-v4
 
 # ==================================================================================== #
 # ================================ Gymnasium ========================================= #
 
+python .github/unittest/helpers/coverage_run_parallel.py examples/impala/impala_single_node.py \
+  collector.total_frames=80 \
+  collector.frames_per_batch=20 \
+  collector.num_workers=1 \
+  logger.backend= \
+  logger.test_interval=10
 python .github/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo_mujoco.py \
   env.env_name=HalfCheetah-v4 \
   collector.total_frames=40 \
@@ -66,13 +76,12 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo_atari.
 python .github/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
-  optimization.batch_size=10 \
+  optim.batch_size=10 \
   collector.frames_per_batch=16 \
-  collector.num_workers=4 \
   collector.env_per_collector=2 \
-  collector.collector_device=cuda:0 \
+  collector.device=cuda:0 \
   network.device=cuda:0 \
-  optimization.utd_ratio=1 \
+  optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
@@ -103,27 +112,37 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   record_video=True \
   record_frames=4 \
   buffer_size=120
+python .github/unittest/helpers/coverage_run_parallel.py examples/cql/discrete_cql_online.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  collector.device=cuda:0 \
+  optim.optim_steps_per_batch=1 \
+  replay_buffer.size=120 \
+  logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py \
-  total_frames=48 \
-  init_random_frames=10 \
-  batch_size=10 \
-  frames_per_batch=16 \
   num_workers=4 \
-  env_per_collector=2 \
-  collector_device=cuda:0 \
-  optim_steps_per_batch=1 \
-  record_video=True \
-  record_frames=4 \
-  buffer_size=120
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  collector.device=cuda:0 \
+  buffer.batch_size=10 \
+  optim.steps_per_batch=1 \
+  logger.record_video=True \
+  logger.record_frames=4 \
+  buffer.size=120 \
+  logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
-  collector.num_workers=4 \
   collector.env_per_collector=2 \
-  collector.collector_device=cuda:0 \
-  optimization.batch_size=10 \
-  optimization.utd_ratio=1 \
+  collector.device=cuda:0 \
+  optim.batch_size=10 \
+  optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   network.device=cuda:0 \
@@ -138,6 +157,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreame
   num_workers=4 \
   env_per_collector=2 \
   collector_device=cuda:0 \
+  model_device=cuda:0 \
   optim_steps_per_batch=1 \
   record_video=True \
   record_frames=4 \
@@ -146,25 +166,25 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreame
 python .github/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
-  optimization.batch_size=10 \
+  optim.batch_size=10 \
   collector.frames_per_batch=16 \
   collector.num_workers=4 \
   collector.env_per_collector=2 \
-  collector.collector_device=cuda:0 \
+  collector.device=cuda:0 \
+  collector.device=cuda:0 \
   network.device=cuda:0 \
   logger.mode=offline \
   env.name=Pendulum-v1 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
-  total_frames=48 \
-  batch_size=10 \
-  frames_per_batch=16 \
-  num_workers=4 \
-  env_per_collector=2 \
-  collector_device=cuda:0 \
-  device=cuda:0 \
-  mode=offline \
-  logger=
+  collector.total_frames=48 \
+  buffer.batch_size=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  collector.device=cuda:0 \
+  network.device=cuda:0 \
+  logger.mode=offline \
+  logger.backend=
 
 # With single envs
 python .github/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
@@ -175,6 +195,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreame
   num_workers=2 \
   env_per_collector=1 \
   collector_device=cuda:0 \
+  model_device=cuda:0 \
   optim_steps_per_batch=1 \
   record_video=True \
   record_frames=4 \
@@ -183,13 +204,12 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreame
 python .github/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
-  optimization.batch_size=10 \
+  optim.batch_size=10 \
   collector.frames_per_batch=16 \
-  collector.num_workers=2 \
   collector.env_per_collector=1 \
-  collector.collector_device=cuda:0 \
+  collector.device=cuda:0 \
   network.device=cuda:0 \
-  optimization.utd_ratio=1 \
+  optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
@@ -208,52 +228,52 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   record_frames=4 \
   buffer_size=120
 python .github/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py \
-  total_frames=48 \
-  init_random_frames=10 \
-  batch_size=10 \
-  frames_per_batch=16 \
   num_workers=2 \
-  env_per_collector=1 \
-  collector_device=cuda:0 \
-  optim_steps_per_batch=1 \
-  record_video=True \
-  record_frames=4 \
-  buffer_size=120
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=1 \
+  buffer.batch_size=10 \
+  collector.device=cuda:0 \
+  optim.steps_per_batch=1 \
+  logger.record_video=True \
+  logger.record_frames=4 \
+  buffer.size=120 \
+  logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
-  collector.num_workers=2 \
   collector.env_per_collector=1 \
-  collector.collector_device=cuda:0 \
+  collector.device=cuda:0 \
+  optim.batch_size=10 \
+  optim.utd_ratio=1 \
   network.device=cuda:0 \
-  optimization.batch_size=10 \
-  optimization.utd_ratio=1 \
+  optim.batch_size=10 \
+  optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
-#  record_video=True \
-#  record_frames=4 \
 python .github/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
-  total_frames=48 \
-  batch_size=10 \
-  frames_per_batch=16 \
-  num_workers=2 \
-  env_per_collector=1 \
-  mode=offline \
-  device=cuda:0 \
-  collector_device=cuda:0 \
-  logger=
+  collector.total_frames=48 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=1 \
+  collector.device=cuda:0 \
+  network.device=cuda:0 \
+  buffer.batch_size=10 \
+  logger.mode=offline \
+  logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
-  optimization.batch_size=10 \
   collector.frames_per_batch=16 \
   collector.num_workers=2 \
   collector.env_per_collector=1 \
+  collector.device=cuda:0 \
   logger.mode=offline \
-  collector.collector_device=cuda:0 \
+  optim.batch_size=10 \
   env.name=Pendulum-v1 \
+  network.device=cuda:0 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/multiagent/mappo_ippo.py \
   collector.n_iters=2 \
@@ -286,8 +306,10 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/multiagent/sac
   train.minibatch_size=100 \
   logger.backend=
 
-
 python .github/unittest/helpers/coverage_run_parallel.py examples/bandits/dqn.py --n_steps=100
+
+## RLHF
+# RLHF tests are executed in the dedicated workflow
 
 coverage combine
 coverage xml -i

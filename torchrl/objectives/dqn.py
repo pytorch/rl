@@ -71,6 +71,7 @@ class DQNLoss(LossModule):
         ...     "action": spec.rand(batch),
         ...     ("next", "observation"): torch.randn(*batch, n_obs),
         ...     ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...     ("next", "reward"): torch.randn(*batch, 1)
         ... }, batch)
         >>> loss(data)
@@ -84,7 +85,7 @@ class DQNLoss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["observation", "next_observation", "action", "next_reward", "next_done"]``,
+    ``["observation", "next_observation", "action", "next_reward", "next_done", "next_terminated"]``,
     and a single loss value is returned.
 
     Examples:
@@ -103,11 +104,13 @@ class DQNLoss(LossModule):
         >>> action = action_spec.rand()
         >>> next_reward = torch.randn(1)
         >>> next_done = torch.zeros(1, dtype=torch.bool)
+        >>> next_terminated = torch.zeros(1, dtype=torch.bool)
         >>> loss_val = dqn_loss(
         ...     observation=observation,
         ...     next_observation=next_observation,
         ...     next_reward=next_reward,
         ...     next_done=next_done,
+        ...     next_terminated=next_terminated,
         ...     action=action)
 
     """
@@ -137,6 +140,9 @@ class DQNLoss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -147,6 +153,7 @@ class DQNLoss(LossModule):
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -212,6 +219,7 @@ class DQNLoss(LossModule):
                 value=self.tensor_keys.value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
         self._set_in_keys()
 
@@ -220,6 +228,7 @@ class DQNLoss(LossModule):
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.value_network.in_keys,
             *[("next", key) for key in self.value_network.in_keys],
         ]
@@ -260,6 +269,7 @@ class DQNLoss(LossModule):
             "value": self.tensor_keys.value,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)
 
@@ -272,17 +282,15 @@ class DQNLoss(LossModule):
 
         Args:
             tensordict (TensorDictBase): a tensordict with keys ["action"] and the in_keys of
-                the value network (observations, "done", "reward" in a "next" tensordict).
+                the value network (observations, "done", "terminated", "reward" in a "next" tensordict).
 
         Returns:
             a tensor containing the DQN loss.
 
         """
         td_copy = tensordict.clone(False)
-        self.value_network(
-            td_copy,
-            params=self.value_network_params,
-        )
+        with self.value_network_params.to_module(self.value_network):
+            self.value_network(td_copy)
 
         action = tensordict.get(self.tensor_keys.action)
         pred_val = td_copy.get(self.tensor_keys.action_value)
@@ -363,6 +371,8 @@ class DistributionalDQNLoss(LossModule):
                 Defaults to ``"reward"``.
             done (NestedKey): The input tensordict key where the the flag if a trajectory is done is expected.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The input tensordict key where the the flag if a trajectory is done is expected.
+                Defaults to ``"terminated"``.
             steps_to_next_obs (NestedKey): The input tensordict key where the steps_to_next_obs is exptected.
                 Defaults to ``"steps_to_next_obs"``.
         """
@@ -372,6 +382,7 @@ class DistributionalDQNLoss(LossModule):
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
         steps_to_next_obs: NestedKey = "steps_to_next_obs"
 
     default_keys = _AcceptedKeys()
@@ -442,6 +453,7 @@ class DistributionalDQNLoss(LossModule):
         action = tensordict.get(self.tensor_keys.action)
         reward = tensordict.get(("next", self.tensor_keys.reward))
         done = tensordict.get(("next", self.tensor_keys.done))
+        terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
 
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, 1)
         discount = self.gamma**steps_to_next_obs
@@ -449,10 +461,10 @@ class DistributionalDQNLoss(LossModule):
         # Calculate current state probabilities (online network noise already
         # sampled)
         td_clone = tensordict.clone()
-        self.value_network(
-            td_clone,
-            params=self.value_network_params,
-        )  # Log probabilities log p(s_t, ·; θonline)
+        with self.value_network_params.to_module(self.value_network):
+            self.value_network(
+                td_clone,
+            )  # Log probabilities log p(s_t, ·; θonline)
         action_log_softmax = td_clone.get(self.tensor_keys.action_value)
 
         if self.action_space == "categorical":
@@ -462,24 +474,18 @@ class DistributionalDQNLoss(LossModule):
                 action, action_log_softmax, batch_size, atoms
             )
 
-        with torch.no_grad():
+        with torch.no_grad(), self.value_network_params.to_module(self.value_network):
             # Calculate nth next state probabilities
             next_td = step_mdp(tensordict)
-            self.value_network(
-                next_td,
-                params=self.value_network_params,
-            )  # Probabilities p(s_t+n, ·; θonline)
+            self.value_network(next_td)  # Probabilities p(s_t+n, ·; θonline)
 
             next_td_action = next_td.get(self.tensor_keys.action)
             if self.action_space == "categorical":
                 argmax_indices_ns = next_td_action.squeeze(-1)
             else:
                 argmax_indices_ns = next_td_action.argmax(-1)  # one-hot encoding
-
-            self.value_network(
-                next_td,
-                params=self.target_value_network_params,
-            )  # Probabilities p(s_t+n, ·; θtarget)
+            with self.target_value_network_params.to_module(self.value_network):
+                self.value_network(next_td)  # Probabilities p(s_t+n, ·; θtarget)
             pns = next_td.get(self.tensor_keys.action_value).exp()
             # Double-Q probabilities
             # p(s_t+n, argmax_a[(z, p(s_t+n, a; θonline))]; θtarget)
@@ -489,12 +495,13 @@ class DistributionalDQNLoss(LossModule):
             # Tz = R^n + (γ^n)z (accounting for terminal states)
             if isinstance(discount, torch.Tensor):
                 discount = discount.to("cpu")
-            done = done.to("cpu")
+            # done = done.to("cpu")
+            terminated = terminated.to("cpu")
             reward = reward.to("cpu")
             support = support.to("cpu")
             pns_a = pns_a.to("cpu")
 
-            Tz = reward + (1 - done.to(reward.dtype)) * discount * support
+            Tz = reward + (1 - terminated.to(reward.dtype)) * discount * support
             if Tz.shape != torch.Size([batch_size, atoms]):
                 raise RuntimeError(
                     "Tz shape must be torch.Size([batch_size, atoms]), "

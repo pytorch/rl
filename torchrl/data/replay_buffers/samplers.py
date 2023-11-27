@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import Any, Dict, Tuple, Union
@@ -10,12 +10,17 @@ from typing import Any, Dict, Tuple, Union
 import numpy as np
 import torch
 
-from torchrl._torchrl import (
-    MinSegmentTreeFp32,
-    MinSegmentTreeFp64,
-    SumSegmentTreeFp32,
-    SumSegmentTreeFp64,
-)
+from ..._extension import EXTENSION_WARNING
+
+try:
+    from torchrl._torchrl import (
+        MinSegmentTreeFp32,
+        MinSegmentTreeFp64,
+        SumSegmentTreeFp32,
+        SumSegmentTreeFp64,
+    )
+except ImportError:
+    warnings.warn(EXTENSION_WARNING)
 
 from .storages import Storage
 from .utils import _to_numpy, INT_CLASSES

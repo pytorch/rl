@@ -4,11 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 import math
 import warnings
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
+from tensordict.nn import (
+    dispatch,
+    ProbabilisticTensorDictSequential,
+    repopulate_module,
+    TensorDictModule,
+)
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -22,7 +28,7 @@ from torchrl.objectives.utils import (
 )
 
 from .common import LossModule
-from .value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator
+from .value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator, VTrace
 
 
 class PPOLoss(LossModule):
@@ -144,11 +150,11 @@ class PPOLoss(LossModule):
         >>> loss = PPOLoss(actor, value)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
-        >>> data = TensorDict({
-        ...         "observation": torch.randn(*batch, n_obs),
+        >>> data = TensorDict({"observation": torch.randn(*batch, n_obs),
         ...         "action": action,
         ...         "sample_log_prob": torch.randn_like(action[..., 1]),
         ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...         ("next", "reward"): torch.randn(*batch, 1),
         ...         ("next", "observation"): torch.randn(*batch, n_obs),
         ...     }, batch)
@@ -166,7 +172,7 @@ class PPOLoss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["action", "sample_log_prob", "next_reward", "next_done"]`` + in_keys of the actor and value network.
+    ``["action", "sample_log_prob", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and value network.
     The return value is a tuple of tensors in the following order:
     ``["loss_objective"]`` + ``["entropy", "loss_entropy"]`` if entropy_bonus is set
                            + ``"loss_critic"`` if critic_coef is not None.
@@ -204,6 +210,7 @@ class PPOLoss(LossModule):
         ...         action=action,
         ...         sampleLogProb=torch.randn_like(action[..., 1]) / 10,
         ...         next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...         next_reward=torch.randn(*batch, 1),
         ...         next_observation=torch.randn(*batch, n_obs))
         >>> loss_objective.backward()
@@ -233,6 +240,9 @@ class PPOLoss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -242,6 +252,7 @@ class PPOLoss(LossModule):
         action: NestedKey = "action"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
@@ -266,9 +277,7 @@ class PPOLoss(LossModule):
         self._in_keys = None
         self._out_keys = None
         super().__init__()
-        self.convert_to_functional(
-            actor, "actor", funs_to_decorate=["forward", "get_dist"]
-        )
+        self.convert_to_functional(actor, "actor")
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
             # params of critic must be refs to actor if they're shared
@@ -304,6 +313,7 @@ class PPOLoss(LossModule):
             self.tensor_keys.sample_log_prob,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.actor.in_keys,
             *[("next", key) for key in self.actor.in_keys],
             *self.critic.in_keys,
@@ -343,6 +353,7 @@ class PPOLoss(LossModule):
                 value=self.tensor_keys.value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
         self._set_in_keys()
 
@@ -367,7 +378,8 @@ class PPOLoss(LossModule):
                 f"tensordict stored {self.tensor_keys.action} requires grad."
             )
 
-        dist = self.actor.get_dist(tensordict, params=self.actor_params)
+        with self.actor_params.to_module(self.actor):
+            dist = self.actor.get_dist(tensordict)
         log_prob = dist.log_prob(action)
 
         prev_log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
@@ -393,10 +405,8 @@ class PPOLoss(LossModule):
                 f"can be used for the value loss."
             )
 
-        state_value_td = self.critic(
-            tensordict,
-            params=self.critic_params,
-        )
+        with self.critic_params.to_module(self.critic):
+            state_value_td = self.critic(tensordict)
 
         try:
             state_value = state_value_td.get(self.tensor_keys.value)
@@ -462,6 +472,14 @@ class PPOLoss(LossModule):
             self._value_estimator = GAE(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
+        elif value_type == ValueEstimators.VTrace:
+            # VTrace currently does not support functional call on the actor
+            actor_with_params = repopulate_module(
+                deepcopy(self.actor), self.actor_params
+            )
+            self._value_estimator = VTrace(
+                value_network=self.critic, actor_network=actor_with_params, **hp
+            )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 
@@ -471,6 +489,8 @@ class PPOLoss(LossModule):
             "value_target": self.tensor_keys.value_target,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
+            "sample_log_prob": self.tensor_keys.sample_log_prob,
         }
         self._value_estimator.set_keys(**tensor_keys)
 
@@ -641,11 +661,6 @@ class ClipPPOLoss(PPOLoss):
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
             batch = log_weight.shape[0]
 
-        if not advantage.shape == log_weight.shape:
-            raise RuntimeError(
-                f"advantage.shape and log_weight.shape do not match (got {advantage.shape} "
-                f"and {log_weight.shape})"
-            )
         gain1 = log_weight.exp() * advantage
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
@@ -845,7 +860,8 @@ class KLPENPPOLoss(PPOLoss):
         neg_loss = log_weight.exp() * advantage
 
         previous_dist = self.actor.build_dist_from_params(tensordict)
-        current_dist = self.actor.get_dist(tensordict, params=self.actor_params)
+        with self.actor_params.to_module(self.actor):
+            current_dist = self.actor.get_dist(tensordict)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:

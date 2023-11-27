@@ -51,7 +51,7 @@ from torchrl.modules.tensordict_module.exploration import (
 
 
 class TestEGreedy:
-    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1.0])
+    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1])
     @pytest.mark.parametrize("module", [True, False])
     def test_egreedy(self, eps_init, module):
         torch.manual_seed(0)
@@ -78,7 +78,7 @@ class TestEGreedy:
             assert (action == 0).any()
             assert ((action == 1) | (action == 0)).all()
 
-    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1.0])
+    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1])
     @pytest.mark.parametrize("module", [True, False])
     @pytest.mark.parametrize("spec_class", ["discrete", "one_hot"])
     def test_egreedy_masked(self, module, eps_init, spec_class):
@@ -609,7 +609,10 @@ def test_gsde(
         device=device,
     )
     if gSDE:
-        gSDENoise(shape=[batch]).reset(td)
+        td_reset = td.empty()
+        gsde = gSDENoise(shape=[batch], reset_key="_reset").to(device)
+        gsde._reset(td, td_reset)
+        td.update(td_reset)
         assert "_eps_gSDE" in td.keys()
         assert td.get("_eps_gSDE").device == device
     actor(td)

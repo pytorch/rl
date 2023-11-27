@@ -14,6 +14,7 @@ from .replay_buffers import (
     ReplayBuffer,
     RoundRobinWriter,
     Storage,
+    TensorDictMaxValueWriter,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
     TensorDictRoundRobinWriter,

@@ -3,12 +3,18 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import warnings
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional
 
 import torch
 
-from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
+from tensordict.nn import (
+    dispatch,
+    ProbabilisticTensorDictSequential,
+    repopulate_module,
+    TensorDictModule,
+)
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torchrl.objectives.common import LossModule
@@ -18,7 +24,13 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import (
+    GAE,
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+    VTrace,
+)
 
 
 class ReinforceLoss(LossModule):
@@ -98,6 +110,7 @@ class ReinforceLoss(LossModule):
         ...         "observation": torch.randn(batch, n_obs),
         ...         "reward": torch.randn(batch, 1),
         ...         "done": torch.zeros(batch, 1, dtype=torch.bool),
+        ...         "terminated": torch.zeros(batch, 1, dtype=torch.bool),
         ...     },
         ...     "action": torch.randn(batch, n_act),
         ... }, [batch])
@@ -113,7 +126,7 @@ class ReinforceLoss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["action", "next_reward", "next_done"]`` + in_keys of the actor and critic network
+    ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and critic network
     The return value is a tuple of tensors in the following order: ``["loss_actor", "loss_value"]``.
 
     Examples:
@@ -141,6 +154,7 @@ class ReinforceLoss(LossModule):
         ...     next_observation=torch.randn(batch, n_obs),
         ...     next_reward=torch.randn(batch, 1),
         ...     next_done=torch.zeros(batch, 1, dtype=torch.bool),
+        ...     next_terminated=torch.zeros(batch, 1, dtype=torch.bool),
         ...     action=torch.randn(batch, n_act),)
         >>> loss_actor.backward()
 
@@ -169,6 +183,9 @@ class ReinforceLoss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -178,6 +195,7 @@ class ReinforceLoss(LossModule):
         action: NestedKey = "action"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
@@ -241,6 +259,7 @@ class ReinforceLoss(LossModule):
                 value=self.tensor_keys.value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
         self._set_in_keys()
 
@@ -249,6 +268,7 @@ class ReinforceLoss(LossModule):
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
             *self.critic.in_keys,
@@ -277,10 +297,8 @@ class ReinforceLoss(LossModule):
             advantage = tensordict.get(self.tensor_keys.advantage)
 
         # compute log-prob
-        tensordict = self.actor_network(
-            tensordict,
-            params=self.actor_network_params,
-        )
+        with self.actor_network_params.to_module(self.actor_network):
+            tensordict = self.actor_network(tensordict)
 
         log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
         if log_prob.shape == advantage.shape[:-1]:
@@ -297,10 +315,8 @@ class ReinforceLoss(LossModule):
         try:
             target_return = tensordict.get(self.tensor_keys.value_target)
             tensordict_select = tensordict.select(*self.critic.in_keys)
-            state_value = self.critic(
-                tensordict_select,
-                params=self.critic_params,
-            ).get(self.tensor_keys.value)
+            with self.critic_params.to_module(self.critic):
+                state_value = self.critic(tensordict_select).get(self.tensor_keys.value)
             loss_value = distance_loss(
                 target_return,
                 state_value,
@@ -332,6 +348,14 @@ class ReinforceLoss(LossModule):
             self._value_estimator = GAE(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
+        elif value_type == ValueEstimators.VTrace:
+            # VTrace currently does not support functional call on the actor
+            actor_with_params = repopulate_module(
+                deepcopy(self.actor), self.actor_params
+            )
+            self._value_estimator = VTrace(
+                value_network=self.critic, actor_network=actor_with_params, **hp
+            )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 
@@ -341,5 +365,7 @@ class ReinforceLoss(LossModule):
             "value_target": self.tensor_keys.value_target,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
+            "sample_log_prob": self.tensor_keys.sample_log_prob,
         }
         self._value_estimator.set_keys(**tensor_keys)

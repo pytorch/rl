@@ -2,10 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import copy
 import importlib
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import torch
 from tensordict.tensordict import TensorDictBase
@@ -18,12 +19,7 @@ from torchrl.data import (
 )
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
-from torchrl.envs.utils import (
-    _classproperty,
-    _replace_last,
-    check_marl_grouping,
-    MarlGroupMapType,
-)
+from torchrl.envs.utils import _classproperty, check_marl_grouping, MarlGroupMapType
 
 _has_pettingzoo = importlib.util.find_spec("pettingzoo") is not None
 
@@ -159,11 +155,11 @@ class PettingZooWrapper(_EnvWrapper):
             "pettingzoo.utils.env.ParallelEnv",  # noqa: F821
             "pettingzoo.utils.env.AECEnv",  # noqa: F821
         ] = None,
-        return_state: Optional[bool] = False,
-        group_map: Optional[Union[MarlGroupMapType, Dict[str, List[str]]]] = None,
+        return_state: bool = False,
+        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
         use_mask: bool = False,
         categorical_actions: bool = True,
-        seed: Optional[int] = None,
+        seed: int | None = None,
         **kwargs,
     ):
         if env is not None:
@@ -255,7 +251,28 @@ class PettingZooWrapper(_EnvWrapper):
         action_spec = CompositeSpec()
         observation_spec = CompositeSpec()
         reward_spec = CompositeSpec()
-        done_spec = CompositeSpec()
+        done_spec = CompositeSpec(
+            {
+                "done": DiscreteTensorSpec(
+                    n=2,
+                    shape=torch.Size((1,)),
+                    dtype=torch.bool,
+                    device=self.device,
+                ),
+                "terminated": DiscreteTensorSpec(
+                    n=2,
+                    shape=torch.Size((1,)),
+                    dtype=torch.bool,
+                    device=self.device,
+                ),
+                "truncated": DiscreteTensorSpec(
+                    n=2,
+                    shape=torch.Size((1,)),
+                    dtype=torch.bool,
+                    device=self.device,
+                ),
+            },
+        )
         for group, agents in self.group_map.items():
             (
                 group_observation_spec,
@@ -385,7 +402,7 @@ class PettingZooWrapper(_EnvWrapper):
         ):
             raise TypeError("env is not of type expected.")
 
-    def _init_env(self) -> Optional[int]:
+    def _init_env(self):
         # Add info
         if self.parallel:
             _, info_dict = self._reset_parallel(seed=self.seed)
@@ -461,15 +478,22 @@ class PettingZooWrapper(_EnvWrapper):
         self.reset(seed=self.seed)
 
     def _reset(
-        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+        self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
-
+        if tensordict is not None:
+            _reset = tensordict.get("_reset", None)
+            if _reset is not None and not _reset.all():
+                raise RuntimeError(
+                    f"An attempt to call {type(self)}._reset was made when no "
+                    f"reset signal could be found. Expected '_reset' entry to "
+                    f"be `tensor(True)` or `None` but got `{_reset}`."
+                )
         if self.parallel:
             # This resets when any is done
             observation_dict, info_dict = self._reset_parallel(**kwargs)
         else:
             # This resets when all are done
-            observation_dict, info_dict = self._reset_aec(tensordict, **kwargs)
+            observation_dict, info_dict = self._reset_aec(**kwargs)
 
         # We start with zeroed data and fill in the data for alive agents
         tensordict_out = self.cached_reset_output_zero.clone()
@@ -498,26 +522,8 @@ class PettingZooWrapper(_EnvWrapper):
 
         return tensordict_out
 
-    def _reset_aec(self, tensordict=None, **kwargs) -> Tuple[Dict, Dict]:
-        all_done = True
-        if tensordict is not None:
-            _resets = []
-            for done_key in self.done_keys:
-                _reset_key = _replace_last(done_key, "_reset")
-                _reset = tensordict.get(_reset_key, default=None)
-                if _reset is None:
-                    continue
-                _resets.append(_reset)
-            if len(_resets) < len(self.done_keys):
-                all_done = False
-            else:
-                for _reset in _resets:
-                    if not _reset.all():
-                        all_done = False
-                        break
-
-        if all_done:
-            self._env.reset(**kwargs)
+    def _reset_aec(self, **kwargs) -> Tuple[Dict, Dict]:
+        self._env.reset(**kwargs)
 
         observation_dict = {
             agent: self._env.observe(agent) for agent in self.possible_agents
@@ -608,7 +614,47 @@ class PettingZooWrapper(_EnvWrapper):
                         " you need to set use_action_mask=True to allow this."
                     )
 
+        # set done values
+        done, terminated, truncated = self._aggregate_done(
+            tensordict_out, use_any=self.parallel
+        )
+
+        tensordict_out.set("done", done)
+        tensordict_out.set("terminated", terminated)
+        tensordict_out.set("truncated", truncated)
         return tensordict_out
+
+    def _aggregate_done(self, tensordict_out, use_any):
+        done = False if use_any else True
+        truncated = False if use_any else True
+        terminated = False if use_any else True
+        for key in self.done_keys:
+            if isinstance(key, tuple):
+                if use_any:
+                    if key[-1] == "done":
+                        done = done | tensordict_out.get(key).any()
+                    if key[-1] == "terminated":
+                        terminated = terminated | tensordict_out.get(key).any()
+                    if key[-1] == "truncated":
+                        truncated = truncated | tensordict_out.get(key).any()
+                    if done and terminated and truncated:
+                        # no need to proceed further, all values are flipped
+                        break
+                else:
+                    if key[-1] == "done":
+                        done = done & tensordict_out.get(key).all()
+                    if key[-1] == "terminated":
+                        terminated = terminated & tensordict_out.get(key).all()
+                    if key[-1] == "truncated":
+                        truncated = truncated & tensordict_out.get(key).all()
+                    if not done and not terminated and not truncated:
+                        # no need to proceed further, all values are flipped
+                        break
+        return (
+            torch.tensor([done], device=self.device),
+            torch.tensor([terminated], device=self.device),
+            torch.tensor([truncated], device=self.device),
+        )
 
     def _step_parallel(
         self,
@@ -834,11 +880,11 @@ class PettingZooEnv(PettingZooWrapper):
         self,
         task: str,
         parallel: bool,
-        return_state: Optional[bool] = False,
-        group_map: Optional[Union[MarlGroupMapType, Dict[str, List[str]]]] = None,
+        return_state: bool = False,
+        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
         use_mask: bool = False,
         categorical_actions: bool = True,
-        seed: Optional[int] = None,
+        seed: int | None = None,
         **kwargs,
     ):
         if not _has_pettingzoo:

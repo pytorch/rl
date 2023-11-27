@@ -16,6 +16,7 @@ dependencies:
     - pytest-mock
     - pytest-instafail
     - pytest-rerunfailures
+    - pytest-timeout
     - expecttest
     - pyyaml
     - scipy
@@ -27,6 +28,6 @@ dependencies:
     - mlflow
     - av
     - coverage
-    - ray
+    - ray<2.8.0
     - transformers
     - ninja
