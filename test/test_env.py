@@ -354,6 +354,43 @@ class TestModelBasedEnvBase:
 
 
 class TestParallel:
+    @pytest.mark.skipif(
+        not torch.cuda.device_count(), reason="No cuda device detected."
+    )
+    @pytest.mark.parametrize("parallel", [True, False])
+    @pytest.mark.parametrize("hetero", [True, False])
+    @pytest.mark.parametrize("pdevice", [None, "cpu", "cuda"])
+    @pytest.mark.parametrize("edevice", ["cpu", "cuda"])
+    def test_parallel_devices(self, parallel, hetero, pdevice, edevice):
+        if parallel:
+            cls = ParallelEnv
+        else:
+            cls = SerialEnv
+        if not hetero:
+            env = cls(
+                2, lambda: ContinuousActionVecMockEnv(device=edevice), device=pdevice
+            )
+        else:
+            env1 = lambda: ContinuousActionVecMockEnv(device=edevice)
+            env2 = lambda: TransformedEnv(ContinuousActionVecMockEnv(device=edevice))
+            env = cls(2, [env1, env2], device=pdevice)
+
+        r = env.rollout(2)
+        if pdevice is not None:
+            assert env.device == torch.device(pdevice)
+            assert r.device == torch.device(pdevice)
+            assert all(
+                item.device == torch.device(pdevice) for item in r.values(True, True)
+            )
+        else:
+            assert env.device == torch.device(edevice)
+            assert r.device == torch.device(edevice)
+            assert all(
+                item.device == torch.device(edevice) for item in r.values(True, True)
+            )
+        if parallel:
+            assert env.shared_tensordict_parent.device == torch.device(edevice)
+
     @pytest.mark.parametrize("num_parallel_env", [1, 10])
     @pytest.mark.parametrize("env_batch_size", [[], (32,), (32, 1), (32, 0)])
     def test_env_with_batch_size(self, num_parallel_env, env_batch_size):
