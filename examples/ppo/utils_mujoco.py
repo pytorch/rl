@@ -49,8 +49,8 @@ def make_ppo_models_state(proof_environment):
     num_outputs = proof_environment.action_spec.shape[-1]
     distribution_class = TanhNormal
     distribution_kwargs = {
-        "min": proof_environment.action_spec.space.minimum,
-        "max": proof_environment.action_spec.space.maximum,
+        "min": proof_environment.action_spec.space.low,
+        "max": proof_environment.action_spec.space.high,
         "tanh_loc": False,
     }
 
