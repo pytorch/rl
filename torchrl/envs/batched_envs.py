@@ -774,7 +774,6 @@ class ParallelEnv(_BatchedEnv):
                         "parent_pipe": parent_pipe,
                         "child_pipe": child_pipe,
                         "env_fun": env_fun,
-                        "device": self.device,
                         "env_fun_kwargs": self.create_env_kwargs[idx],
                         "shared_tensordict": self.shared_tensordicts[idx],
                         "_selected_input_keys": self._selected_input_keys,
@@ -1138,7 +1137,6 @@ def _run_worker_pipe_shared_mem(
     child_pipe: connection.Connection,
     env_fun: Union[EnvBase, Callable],
     env_fun_kwargs: Dict[str, Any],
-    device: DEVICE_TYPING = None,
     mp_event: mp.Event = None,
     shared_tensordict: TensorDictBase = None,
     _selected_input_keys=None,
@@ -1158,9 +1156,6 @@ def _run_worker_pipe_shared_mem(
             )
         env = env_fun
     env_device = env.device
-    # we check if the devices mismatch. This tells us that the data need
-    # to be cast onto the right device before any op
-    device_mismatch = device != env_device
 
     i = -1
     initialized = False
@@ -1201,8 +1196,6 @@ def _run_worker_pipe_shared_mem(
                 print(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
-            if data is not None and device_mismatch:
-                data = data.to(env_device, non_blocking=True)
             cur_td = env.reset(tensordict=data)
             shared_tensordict.update_(
                 cur_td.select(*_selected_reset_keys, strict=False)
@@ -1213,12 +1206,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            if device_mismatch:
-                env_input = shared_tensordict.select(*_selected_input_keys).to(
-                    env_device, non_blocking=True
-                )
-            else:
-                env_input = shared_tensordict
+            env_input = shared_tensordict
             next_td = env._step(env_input)
             next_shared_tensordict.update_(next_td)
             mp_event.set()
@@ -1227,12 +1215,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            if device_mismatch:
-                env_input = shared_tensordict.select(*_selected_input_keys).to(
-                    env_device, non_blocking=True
-                )
-            else:
-                env_input = shared_tensordict
+            env_input = shared_tensordict
             td, root_next_td = env.step_and_maybe_reset(env_input)
             next_shared_tensordict.update_(td.get("next"))
             shared_tensordict.update_(root_next_td)
@@ -1299,7 +1282,6 @@ def _run_worker_pipe_cuda(
     child_pipe: connection.Connection,
     env_fun: Union[EnvBase, Callable],
     env_fun_kwargs: Dict[str, Any],
-    device: DEVICE_TYPING = None,
     cuda_event: torch.cuda.Event = None,
     shared_tensordict: TensorDictBase = None,
     _selected_input_keys=None,
@@ -1308,23 +1290,23 @@ def _run_worker_pipe_cuda(
     has_lazy_inputs: bool = False,
     verbose: bool = False,
 ) -> None:
-    stream = torch.cuda.Stream(device)
+    parent_pipe.close()
+    pid = os.getpid()
+    if not isinstance(env_fun, EnvBase):
+        env = env_fun(**env_fun_kwargs)
+    else:
+        if env_fun_kwargs:
+            raise RuntimeError(
+                "env_fun_kwargs must be empty if an environment is passed to a process."
+            )
+        env = env_fun
+    del env_fun
+    env_device = env.device
+
+    stream = torch.cuda.Stream(env_device)
     with torch.cuda.StreamContext(stream):
-        parent_pipe.close()
-        pid = os.getpid()
-        if not isinstance(env_fun, EnvBase):
-            env = env_fun(**env_fun_kwargs)
-        else:
-            if env_fun_kwargs:
-                raise RuntimeError(
-                    "env_fun_kwargs must be empty if an environment is passed to a process."
-                )
-            env = env_fun
-        del env_fun
-        env_device = env.device
         # we check if the devices mismatch. This tells us that the data need
         # to be cast onto the right device before any op
-        device_mismatch = device != env_device
         env_device_cpu = env_device.type == "cpu"
         i = -1
         initialized = False
@@ -1365,8 +1347,6 @@ def _run_worker_pipe_cuda(
                     print(f"resetting worker {pid}")
                 if not initialized:
                     raise RuntimeError("call 'init' before resetting")
-                if data is not None and device_mismatch:
-                    data = data.to(env_device, non_blocking=True)
                 cur_td = env._reset(tensordict=data)
                 shared_tensordict.update_(cur_td)
                 stream.record_event(cuda_event)
@@ -1376,12 +1356,7 @@ def _run_worker_pipe_cuda(
                 if not initialized:
                     raise RuntimeError("called 'init' before step")
                 i += 1
-                if device_mismatch:
-                    env_input = shared_tensordict.select(*_selected_input_keys).to(
-                        env_device, non_blocking=True
-                    )
-                else:
-                    env_input = shared_tensordict
+                env_input = shared_tensordict
                 next_td = env._step(env_input)
                 next_shared_tensordict.update_(next_td)
                 stream.record_event(cuda_event)
@@ -1391,22 +1366,10 @@ def _run_worker_pipe_cuda(
                 if not initialized:
                     raise RuntimeError("called 'init' before step")
                 i += 1
-                if device_mismatch:
-                    env_input = shared_tensordict.select(*_selected_input_keys).to(
-                        env_device, non_blocking=True
-                    )
-                else:
-                    env_input = shared_tensordict
+                env_input = shared_tensordict
                 td, root_next_td = env.step_and_maybe_reset(env_input)
-                if env_device_cpu:
-                    next_shared_tensordict._fast_apply(
-                        _update_cuda,
-                        td.get("next", default=None),
-                    )
-                    shared_tensordict._fast_apply(_update_cuda, root_next_td)
-                else:
-                    next_shared_tensordict.update_(td.get("next"))
-                    shared_tensordict.update_(root_next_td)
+                next_shared_tensordict.update_(td.get("next"))
+                shared_tensordict.update_(root_next_td)
                 stream.record_event(cuda_event)
                 stream.synchronize()
 
