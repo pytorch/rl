@@ -746,7 +746,7 @@ class ParallelEnv(_BatchedEnv):
         self._workers = []
         if self.shared_tensordict_parent.device.type == "cuda":
             func = _run_worker_pipe_cuda
-            self._cuda_stream = torch.cuda.Stream(self.device)
+            self._cuda_stream = torch.cuda.Stream(self.shared_tensordict_parent.device)
             self._cuda_events = [
                 torch.cuda.Event(interprocess=True) for _ in range(_num_workers)
             ]
