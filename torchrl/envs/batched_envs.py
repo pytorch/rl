@@ -1008,14 +1008,11 @@ class ParallelEnv(_BatchedEnv):
             if self._verbose:
                 print(f"closing {i}")
             channel.send(("close", None))
-            if self._events is not None:
-                self._events[i].wait()
-                self._events[i].clear()
-            else:
-                for event in self._cuda_events:
-                    self._cuda_stream.wait_event(event)
+            self._events[i].wait()
+            self._events[i].clear()
 
         del self.shared_tensordicts, self.shared_tensordict_parent
+
         for channel in self.parent_channels:
             channel.close()
         for proc in self._workers:
@@ -1114,6 +1111,11 @@ def _run_worker_pipe_shared_mem(
     has_lazy_inputs: bool = False,
     verbose: bool = False,
 ) -> None:
+    device = shared_tensordict.device
+    if device.type == "cuda":
+        event = torch.cuda.Event()
+    else:
+        event = None
     parent_pipe.close()
     pid = os.getpid()
     if not isinstance(env_fun, EnvBase):
@@ -1124,6 +1126,7 @@ def _run_worker_pipe_shared_mem(
                 "env_fun_kwargs must be empty if an environment is passed to a process."
             )
         env = env_fun
+    del env_fun
 
     i = -1
     initialized = False
@@ -1168,6 +1171,9 @@ def _run_worker_pipe_shared_mem(
             shared_tensordict.update_(
                 cur_td.select(*_selected_reset_keys, strict=False)
             )
+            if event is not None:
+                event.record()
+                event.synchronize()
             mp_event.set()
 
         elif cmd == "step":
@@ -1177,6 +1183,9 @@ def _run_worker_pipe_shared_mem(
             env_input = shared_tensordict
             next_td = env._step(env_input)
             next_shared_tensordict.update_(next_td)
+            if event is not None:
+                event.record()
+                event.synchronize()
             mp_event.set()
 
         elif cmd == "step_and_maybe_reset":
@@ -1187,16 +1196,19 @@ def _run_worker_pipe_shared_mem(
             td, root_next_td = env.step_and_maybe_reset(env_input)
             next_shared_tensordict.update_(td.get("next"))
             shared_tensordict.update_(root_next_td)
+            if event is not None:
+                event.record()
+                event.synchronize()
             mp_event.set()
 
-        elif cmd == "step_and_maybe_reset":
-            if not initialized:
-                raise RuntimeError("called 'init' before step")
-            i += 1
-            td, root_next_td = env.step_and_maybe_reset(shared_tensordict.clone(False))
-            next_shared_tensordict.update_(td.get("next"))
-            root_shared_tensordict.update_(root_next_td)
-            mp_event.set()
+        # elif cmd == "step_and_maybe_reset":
+        #     if not initialized:
+        #         raise RuntimeError("called 'init' before step")
+        #     i += 1
+        #     td, root_next_td = env.step_and_maybe_reset(shared_tensordict.clone(False))
+        #     next_shared_tensordict.update_(td.get("next"))
+        #     root_shared_tensordict.update_(root_next_td)
+        #     mp_event.set()
 
         elif cmd == "close":
             del shared_tensordict, data
