@@ -144,24 +144,7 @@ class TestStack:
             )
 
 
-# @pytest.mark.skipif(
-#     sys.platform == "win32",
-#     reason="RuntimeError from Torch serialization.py when creating td_saved on Windows",
-# )
-@pytest.mark.parametrize(
-    "idx",
-    [
-        torch.tensor(
-            [
-                3,
-                5,
-                7,
-                8,
-            ]
-        ),
-        slice(200),
-    ],
-)
+@pytest.mark.parametrize("idx", [0, slice(200)])
 @pytest.mark.parametrize("dtype", [torch.float, torch.bool])
 def test_memmap(idx, dtype, large_scale=False):
     N = 5000 if large_scale else 10

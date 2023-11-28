@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict.nn import dispatch, make_functional, repopulate_module, TensorDictModule
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 
 from tensordict.utils import NestedKey, unravel_key
@@ -197,10 +197,10 @@ class DDPGLoss(LossModule):
         self.delay_value = delay_value
 
         actor_critic = ActorCriticWrapper(actor_network, value_network)
-        params = make_functional(actor_critic)
-        self.actor_critic = deepcopy(actor_critic)
-        repopulate_module(actor_network, params["module", "0"])
-        repopulate_module(value_network, params["module", "1"])
+        params = TensorDict.from_module(actor_critic)
+        params_meta = params.apply(self._make_meta_params, device=torch.device("meta"))
+        with params_meta.to_module(actor_critic):
+            self.__dict__["actor_critic"] = deepcopy(actor_critic)
 
         self.convert_to_functional(
             actor_network,
@@ -295,14 +295,10 @@ class DDPGLoss(LossModule):
         td_copy = tensordict.select(
             *self.actor_in_keys, *self.value_exclusive_keys
         ).detach()
-        td_copy = self.actor_network(
-            td_copy,
-            params=self.actor_network_params,
-        )
-        td_copy = self.value_network(
-            td_copy,
-            params=self._cached_detached_value_params,
-        )
+        with self.actor_network_params.to_module(self.actor_network):
+            td_copy = self.actor_network(td_copy)
+        with self._cached_detached_value_params.to_module(self.value_network):
+            td_copy = self.value_network(td_copy)
         loss_actor = -td_copy.get(self.tensor_keys.state_action_value)
         metadata = {}
         return loss_actor.mean(), metadata
@@ -313,10 +309,8 @@ class DDPGLoss(LossModule):
     ) -> Tuple[torch.Tensor, dict]:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys).detach()
-        self.value_network(
-            td_copy,
-            params=self.value_network_params,
-        )
+        with self.value_network_params.to_module(self.value_network):
+            self.value_network(td_copy)
         pred_val = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
 
         target_value = self.value_estimator.value_estimate(
