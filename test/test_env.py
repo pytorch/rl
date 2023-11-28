@@ -361,7 +361,8 @@ class TestParallel:
     @pytest.mark.parametrize("hetero", [True, False])
     @pytest.mark.parametrize("pdevice", [None, "cpu", "cuda"])
     @pytest.mark.parametrize("edevice", ["cpu", "cuda"])
-    def test_parallel_devices(self, parallel, hetero, pdevice, edevice):
+    @pytest.mark.parametrize("bwad", [True, False])
+    def test_parallel_devices(self, parallel, hetero, pdevice, edevice, bwad):
         if parallel:
             cls = ParallelEnv
         else:
@@ -375,7 +376,7 @@ class TestParallel:
             env2 = lambda: TransformedEnv(ContinuousActionVecMockEnv(device=edevice))
             env = cls(2, [env1, env2], device=pdevice)
 
-        r = env.rollout(2)
+        r = env.rollout(2, break_when_any_done=bwad)
         if pdevice is not None:
             assert env.device == torch.device(pdevice)
             assert r.device == torch.device(pdevice)
