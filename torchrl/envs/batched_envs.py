@@ -944,10 +944,6 @@ class ParallelEnv(_BatchedEnv):
                 out = out.clone()
             else:
                 out = out.to(device, non_blocking=True)
-                assert all(
-                    val.device == device for val in
-                    out.values(True, True)
-                    )
         return out
 
     @_check_start

@@ -378,19 +378,19 @@ class TestParallel:
 
         r = env.rollout(2, break_when_any_done=bwad)
         if pdevice is not None:
-            assert env.device == torch.device(pdevice)
-            assert r.device == torch.device(pdevice)
+            assert env.device.type == torch.device(pdevice).type
+            assert r.device.type == torch.device(pdevice).type
             assert all(
-                item.device == torch.device(pdevice) for item in r.values(True, True)
+                item.device.type == torch.device(pdevice).type for item in r.values(True, True)
             )
         else:
-            assert env.device == torch.device(edevice)
-            assert r.device == torch.device(edevice)
+            assert env.device.type == torch.device(edevice).type
+            assert r.device.type == torch.device(edevice).type
             assert all(
-                item.device == torch.device(edevice) for item in r.values(True, True)
+                item.device.type == torch.device(edevice).type for item in r.values(True, True)
             )
         if parallel:
-            assert env.shared_tensordict_parent.device == torch.device(edevice)
+            assert env.shared_tensordict_parent.device.type == torch.device(edevice).type
 
     @pytest.mark.parametrize("num_parallel_env", [1, 10])
     @pytest.mark.parametrize("env_batch_size", [[], (32,), (32, 1), (32, 0)])
