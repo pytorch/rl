@@ -1201,15 +1201,6 @@ def _run_worker_pipe_shared_mem(
                 event.synchronize()
             mp_event.set()
 
-        # elif cmd == "step_and_maybe_reset":
-        #     if not initialized:
-        #         raise RuntimeError("called 'init' before step")
-        #     i += 1
-        #     td, root_next_td = env.step_and_maybe_reset(shared_tensordict.clone(False))
-        #     next_shared_tensordict.update_(td.get("next"))
-        #     root_shared_tensordict.update_(root_next_td)
-        #     mp_event.set()
-
         elif cmd == "close":
             del shared_tensordict, data
             if not initialized:
