@@ -87,6 +87,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         loss_function="l2",
         delay_value=True,
     )
+    loss_module.set_keys(done="eol", terminated="eol")
     loss_module.make_value_estimator()
     target_net_updater = HardUpdate(
         loss_module, value_network_update_interval=cfg.loss.hard_update_freq
