@@ -745,8 +745,10 @@ class ParallelEnv(_BatchedEnv):
         self.parent_channels = []
         self._workers = []
         func = _run_worker_pipe_shared_mem
-        self._cuda_stream = None
-        self._cuda_events = None
+        if self.shared_tensordict_parent.device.type == "cuda":
+            self.event = torch.cuda.Event()
+        else:
+            self.event = None
         self._events = [ctx.Event() for _ in range(_num_workers)]
         kwargs = [{"mp_event": self._events[i]} for i in range(_num_workers)]
         with clear_mpi_env_vars():
@@ -812,13 +814,9 @@ class ParallelEnv(_BatchedEnv):
             )
         for i, channel in enumerate(self.parent_channels):
             channel.send(("load_state_dict", state_dict[f"worker{i}"]))
-        if self._events is not None:
-            for event in self._events:
-                event.wait()
-                event.clear()
-        else:
-            for event in self._cuda_events:
-                self._cuda_stream.wait_event(event)
+        for event in self._events:
+            event.wait()
+            event.clear()
 
     @_check_start
     def step_and_maybe_reset(
@@ -896,6 +894,9 @@ class ParallelEnv(_BatchedEnv):
             self.shared_tensordict_parent.update_(
                 tensordict.select(*self._env_input_keys, "next", strict=False)
             )
+        if self.event is not None:
+            self.event.record()
+            self.event.synchronize()
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
