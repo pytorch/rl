@@ -744,20 +744,11 @@ class ParallelEnv(_BatchedEnv):
 
         self.parent_channels = []
         self._workers = []
-        if self.shared_tensordict_parent.device.type == "cuda":
-            func = _run_worker_pipe_cuda
-            self._cuda_stream = torch.cuda.Stream(self.shared_tensordict_parent.device)
-            self._cuda_events = [
-                torch.cuda.Event(interprocess=True) for _ in range(_num_workers)
-            ]
-            self._events = None
-            kwargs = [{"cuda_event": self._cuda_events[i]} for i in range(_num_workers)]
-        else:
-            func = _run_worker_pipe_shared_mem
-            self._cuda_stream = None
-            self._cuda_events = None
-            self._events = [ctx.Event() for _ in range(_num_workers)]
-            kwargs = [{"mp_event": self._events[i]} for i in range(_num_workers)]
+        func = _run_worker_pipe_shared_mem
+        self._cuda_stream = None
+        self._cuda_events = None
+        self._events = [ctx.Event() for _ in range(_num_workers)]
+        kwargs = [{"mp_event": self._events[i]} for i in range(_num_workers)]
         with clear_mpi_env_vars():
             for idx in range(_num_workers):
                 if self._verbose:
@@ -860,17 +851,10 @@ class ParallelEnv(_BatchedEnv):
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step_and_maybe_reset", None))
 
-        if self._events is not None:
-            # CPU case
-            for i in range(self.num_workers):
-                event = self._events[i]
-                event.wait()
-                event.clear()
-        else:
-            # CUDA case
-            for i in range(self.num_workers):
-                event = self._cuda_events[i]
-                self._cuda_stream.wait_event(event)
+        for i in range(self.num_workers):
+            event = self._events[i]
+            event.wait()
+            event.clear()
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -915,17 +899,10 @@ class ParallelEnv(_BatchedEnv):
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
-        if self._events is not None:
-            # CPU case
-            for i in range(self.num_workers):
-                event = self._events[i]
-                event.wait()
-                event.clear()
-        else:
-            # CUDA case
-            for i in range(self.num_workers):
-                event = self._cuda_events[i]
-                self._cuda_stream.wait_event(event)
+        for i in range(self.num_workers):
+            event = self._events[i]
+            event.wait()
+            event.clear()
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -993,17 +970,10 @@ class ParallelEnv(_BatchedEnv):
             channel.send(out)
             workers.append(i)
 
-        if self._events is not None:
-            # CPU case
-            for i in workers:
-                event = self._events[i]
-                event.wait()
-                event.clear()
-        else:
-            # CUDA case
-            for i in workers:
-                event = self._cuda_events[i]
-                self._cuda_stream.wait_event(event)
+        for i in workers:
+            event = self._events[i]
+            event.wait()
+            event.clear()
 
         selected_output_keys = self._selected_reset_keys_filt
         device = self.device
@@ -1153,7 +1123,6 @@ def _run_worker_pipe_shared_mem(
                 "env_fun_kwargs must be empty if an environment is passed to a process."
             )
         env = env_fun
-    env_device = env.device
 
     i = -1
     initialized = False
@@ -1273,151 +1242,6 @@ def _run_worker_pipe_shared_mem(
             else:
                 # don't send env through pipe
                 child_pipe.send(("_".join([cmd, "done"]), None))
-
-
-def _run_worker_pipe_cuda(
-    parent_pipe: connection.Connection,
-    child_pipe: connection.Connection,
-    env_fun: Union[EnvBase, Callable],
-    env_fun_kwargs: Dict[str, Any],
-    cuda_event: torch.cuda.Event = None,
-    shared_tensordict: TensorDictBase = None,
-    _selected_input_keys=None,
-    _selected_reset_keys=None,
-    _selected_step_keys=None,
-    has_lazy_inputs: bool = False,
-    verbose: bool = False,
-) -> None:
-    parent_pipe.close()
-    pid = os.getpid()
-    if not isinstance(env_fun, EnvBase):
-        env = env_fun(**env_fun_kwargs)
-    else:
-        if env_fun_kwargs:
-            raise RuntimeError(
-                "env_fun_kwargs must be empty if an environment is passed to a process."
-            )
-        env = env_fun
-    del env_fun
-    env_device = env.device
-
-    stream = torch.cuda.Stream(env_device)
-    with torch.cuda.StreamContext(stream):
-        # we check if the devices mismatch. This tells us that the data need
-        # to be cast onto the right device before any op
-        env_device_cpu = env_device.type == "cpu"
-        i = -1
-        initialized = False
-
-        child_pipe.send("started")
-
-        while True:
-            try:
-                cmd, data = child_pipe.recv()
-            except EOFError as err:
-                raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
-            if cmd == "seed":
-                if not initialized:
-                    raise RuntimeError("call 'init' before closing")
-                # torch.manual_seed(data)
-                # np.random.seed(data)
-                new_seed = env.set_seed(data[0], static_seed=data[1])
-                child_pipe.send(("seeded", new_seed))
-
-            elif cmd == "init":
-                if verbose:
-                    print(f"initializing {pid}")
-                if initialized:
-                    raise RuntimeError("worker already initialized")
-                i = 0
-                next_shared_tensordict = shared_tensordict.get("next")
-                shared_tensordict = shared_tensordict.clone(False)
-                del shared_tensordict["next"]
-
-                if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
-                    raise RuntimeError(
-                        "tensordict must be placed in shared memory (share_memory_() or memmap_())"
-                    )
-                initialized = True
-
-            elif cmd == "reset":
-                if verbose:
-                    print(f"resetting worker {pid}")
-                if not initialized:
-                    raise RuntimeError("call 'init' before resetting")
-                cur_td = env._reset(tensordict=data)
-                shared_tensordict.update_(cur_td)
-                stream.record_event(cuda_event)
-                stream.synchronize()
-
-            elif cmd == "step":
-                if not initialized:
-                    raise RuntimeError("called 'init' before step")
-                i += 1
-                env_input = shared_tensordict
-                next_td = env._step(env_input)
-                next_shared_tensordict.update_(next_td)
-                stream.record_event(cuda_event)
-                stream.synchronize()
-
-            elif cmd == "step_and_maybe_reset":
-                if not initialized:
-                    raise RuntimeError("called 'init' before step")
-                i += 1
-                env_input = shared_tensordict
-                td, root_next_td = env.step_and_maybe_reset(env_input)
-                next_shared_tensordict.update_(td.get("next"))
-                shared_tensordict.update_(root_next_td)
-                stream.record_event(cuda_event)
-                stream.synchronize()
-
-            elif cmd == "close":
-                del shared_tensordict, data
-                if not initialized:
-                    raise RuntimeError("call 'init' before closing")
-                env.close()
-                del env
-                stream.record_event(cuda_event)
-                stream.synchronize()
-                child_pipe.close()
-                if verbose:
-                    print(f"{pid} closed")
-                break
-
-            elif cmd == "load_state_dict":
-                env.load_state_dict(data)
-                stream.record_event(cuda_event)
-                stream.synchronize()
-
-            elif cmd == "state_dict":
-                state_dict = _recursively_strip_locks_from_state_dict(env.state_dict())
-                msg = "state_dict"
-                child_pipe.send((msg, state_dict))
-
-            else:
-                err_msg = f"{cmd} from env"
-                try:
-                    attr = getattr(env, cmd)
-                    if callable(attr):
-                        args, kwargs = data
-                        args_replace = []
-                        for _arg in args:
-                            if isinstance(_arg, str) and _arg == "_self":
-                                continue
-                            else:
-                                args_replace.append(_arg)
-                        result = attr(*args_replace, **kwargs)
-                    else:
-                        result = attr
-                except Exception as err:
-                    raise AttributeError(
-                        f"querying {err_msg} resulted in an error."
-                    ) from err
-                if cmd not in ("to"):
-                    child_pipe.send(("_".join([cmd, "done"]), result))
-                else:
-                    # don't send env through pipe
-                    child_pipe.send(("_".join([cmd, "done"]), None))
 
 
 def _update_cuda(t_dest, t_source):
