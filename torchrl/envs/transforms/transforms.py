@@ -4692,7 +4692,6 @@ class RewardSum(Transform):
         """Initialises the transform. Filters out non-reward input keys and defines output keys."""
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self._reset_keys = reset_keys
-        self._keys_checked = False
 
     @property
     def in_keys(self):
@@ -4771,7 +4770,9 @@ class RewardSum(Transform):
                         return False
                 return True
 
-            if not _check_match(reset_keys, self.in_keys):
+            if len(reset_keys) != len(self.in_keys) or not _check_match(
+                reset_keys, self.in_keys
+            ):
                 raise ValueError(
                     f"Could not match the env reset_keys {reset_keys} with the {type(self)} in_keys {self.in_keys}. "
                     f"Please provide the reset_keys manually. Reset entries can be "
@@ -4780,14 +4781,6 @@ class RewardSum(Transform):
                 )
             reset_keys = copy(reset_keys)
             self._reset_keys = reset_keys
-
-        if not self._keys_checked and len(reset_keys) != len(self.in_keys):
-            raise ValueError(
-                f"Could not match the env reset_keys {reset_keys} with the {type(self)} in_keys {self.in_keys}. "
-                "Please make sure that these have the same length."
-            )
-        self._keys_checked = True
-
         return reset_keys
 
     @reset_keys.setter
