@@ -210,7 +210,7 @@ class LSTM(nn.LSTM):
 
         # should check self.batch_first
         bs, seq_len, input_size = x.size()
-        h_t, c_t = hx
+        h_t, c_t = [h.clone() for h in hx]
 
         outputs = []
         for t in range(seq_len):
@@ -237,6 +237,8 @@ class LSTM(nn.LSTM):
                 # Apply dropout if in training mode
                 if layer < self.num_layers - 1:
                     x_t = F.dropout(h_t[layer], p=self.dropout, training=self.training)
+                else:  # No dropout after the last layer
+                    x_t = h_t[layer]
 
             outputs.append(x_t)
 
@@ -246,6 +248,7 @@ class LSTM(nn.LSTM):
                 1, 0, 2
             )  # Change back (batch, seq_len, features) to (seq_len, batch, features)
 
+        import ipdb; ipdb.set_trace()
         return outputs, (h_t, c_t)
 
     def forward(self, input, hx=None):  # noqa: F811
@@ -775,7 +778,9 @@ class GRUCell(RNNCellBase):
             hx = torch.zeros(
                 input.size(0), self.hidden_size, dtype=input.dtype, device=input.device
             )
-        
+        else:
+            hx = hx.unsqueeze(0) if not is_batched else hx
+
         ret = self.gru_cell(input, hx)
 
         if not is_batched:
@@ -860,7 +865,7 @@ class GRU(nn.GRU):
             )  # Change (seq_len, batch, features) to (batch, seq_len, features)
 
         bs, seq_len, input_size = x.size()
-        h_t = hx
+        h_t = hx.clone()
 
         outputs = []
 
