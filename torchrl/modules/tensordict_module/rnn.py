@@ -156,6 +156,7 @@ class PythonLSTM(nn.LSTM):
         input_size: int,
         hidden_size: int,
         num_layers: int = 1,
+        batch_first: bool = True,
         bias: bool = True,
         dropout: float = 0.0,
         proj_size: int = 0,
@@ -168,7 +169,7 @@ class PythonLSTM(nn.LSTM):
             hidden_size=hidden_size,
             num_layers=num_layers,
             bias=bias,
-            batch_first=True,
+            batch_first=batch_first,
             dropout=dropout,
             bidirectional=False,
             proj_size=proj_size,
@@ -195,6 +196,11 @@ class PythonLSTM(nn.LSTM):
         return hy, cy
 
     def _lstm(self, x, hx):
+
+        if self.batch_first is False:
+            x = x.permute(
+                1, 0, 2
+            )  # Change (seq_len, batch, features) to (batch, seq_len, features)
 
         # should check self.batch_first
         bs, seq_len, input_size = x.size()
@@ -783,6 +789,7 @@ class PythonGRU(nn.GRU):
         hidden_size: int,
         num_layers: int = 1,
         bias: bool = True,
+        batch_first: bool = True,
         dropout: float = 0.0,
         device=None,
         dtype=None,
@@ -793,7 +800,7 @@ class PythonGRU(nn.GRU):
             hidden_size=hidden_size,
             num_layers=num_layers,
             bias=bias,
-            batch_first=True,
+            batch_first=batch_first,
             dropout=dropout,
             bidirectional=False,
             device=device,
@@ -801,7 +808,7 @@ class PythonGRU(nn.GRU):
         )
 
     @staticmethod
-    def _gru_cell(self, x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
+    def _gru_cell(x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
         x = x.view(-1, x.size(1))
 
         gates_ih = F.linear(x, weight_ih, bias_ih)
@@ -818,14 +825,14 @@ class PythonGRU(nn.GRU):
 
         return hy
 
-    def _gru(self, input, hx=None):
+    def _gru(self, x, hx):
 
-        if hx is None:
-            hx = torch.zeros(
-                input.size(0), self.hidden_size, device=self.device, dtype=self.dtype
-            )
+        if self.batch_first is False:
+            x = x.permute(
+                1, 0, 2
+            )  # Change (seq_len, batch, features) to (batch, seq_len, features)
 
-        bs, seq_len, input_size = input.size()
+        bs, seq_len, input_size = x.size()
         h_t = hx
 
         outputs = []
