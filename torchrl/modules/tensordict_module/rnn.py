@@ -237,9 +237,9 @@ class PythonLSTM(nn.LSTM):
     def forward(self, input, hx=None):  # noqa: F811
         self._update_flat_weights()
         real_hidden_size = self.proj_size if self.proj_size > 0 else self.hidden_size
-        if input.dim() not in (2, 3):
+        if input.dim() != 3:
             raise ValueError(
-                f"LSTM: Expected input to be 2D or 3D, got {input.dim()}D instead"
+                f"LSTM: Expected input to be 3D, got {input.dim()}D instead"
             )
         max_batch_size = input.size(0) if self.batch_first else input.size(1)
         if hx is None:
@@ -863,9 +863,9 @@ class PythonGRU(nn.GRU):
 
     def forward(self, input, hx=None):  # noqa: F811
         self._update_flat_weights()
-        if input.dim() not in (2, 3):
+        if input.dim() != 3:
             raise ValueError(
-                f"GRU: Expected input to be 2D or 3D, got {input.dim()}D instead"
+                f"GRU: Expected input to be 3D, got {input.dim()}D instead"
             )
         if hx is not None and hx.dim() != 3:
             raise RuntimeError(
