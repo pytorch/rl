@@ -21,6 +21,8 @@ from torchrl.modules import (
     MultiAgentConvNet,
     MultiAgentMLP,
     OnlineDTActor,
+    PythonGRUCell,
+    PythonLSTMCell,
     QMixer,
     SafeModule,
     TanhModule,
@@ -1184,6 +1186,67 @@ class TestDecisionTransformer:
         assert sig.shape == torch.Size([*batch_dims, T, 4])
         assert (dtactor.log_std_min < sig.log()).all()
         assert (dtactor.log_std_max > sig.log()).all()
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("bias", [True, False])
+def test_python_lstm_cell(device, bias):
+
+    lstm_cell1 = PythonLSTMCell(10, 20, device=device, bias=bias)
+    lstm_cell2 = nn.LSTMCell(10, 20, device=device, bias=bias)
+
+    # Make sure parameters match
+    for (k1, v1), (k2, v2) in zip(
+        lstm_cell1.named_parameters(), lstm_cell2.named_parameters()
+    ):
+        assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
+
+    # Run loop
+    input = torch.randn(2, 3, 10).to(device)
+    hx1 = torch.randn(3, 20).to(device)
+    cx1 = torch.randn(3, 20).to(device)
+    hx2 = torch.randn(3, 20).to(device)
+    cx2 = torch.randn(3, 20).to(device)
+    with torch.no_grad():
+        for i in range(input.size()[0]):
+            hx1, cx1 = lstm_cell1(input[i], (hx1, cx1))
+            hx2, cx2 = lstm_cell2(input[i], (hx2, cx2))
+
+    # Make sure the final hidden states have the same shape
+    assert hx1.shape == hx2.shape
+    assert cx1.shape == cx2.shape
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("bias", [True, False])
+def test_python_gru_cell(device, bias):
+
+    gru_cell1 = PythonGRUCell(10, 20, device=device, bias=bias)
+    gru_cell2 = nn.GRUCell(10, 20, device=device, bias=bias)
+
+    # Make sure parameters match
+    for (k1, v1), (k2, v2) in zip(
+        gru_cell1.named_parameters(), gru_cell2.named_parameters()
+    ):
+        assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
+
+    # Run loop
+    input = torch.randn(2, 3, 10).to(device)
+    hx1 = torch.randn(3, 20).to(device)
+    hx2 = torch.randn(3, 20).to(device)
+    with torch.no_grad():
+        for i in range(input.size()[0]):
+            hx1 = gru_cell1(input[i], hx1)
+            hx2 = gru_cell2(input[i], hx2)
+
+    # Make sure the final hidden states have the same shape
+    assert hx1.shape == hx2.shape
 
 
 if __name__ == "__main__":
