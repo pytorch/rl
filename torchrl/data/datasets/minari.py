@@ -28,6 +28,16 @@ _NAME_MATCH["infos"] = "info"
 
 
 class MinariExperienceReplay(TensorDictReplayBuffer):
+    """Minari Experience replay dataset.
+
+    Args:
+        dataset_id (str):
+        batch_size (int):
+
+    Keyword Args:
+        root (Path or str, optional):
+        download (bool, optional):
+    """
     def __init__(
         self,
         dataset_id,

@@ -152,6 +152,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         self.name = name
         dataset = None
 
+        if not from_env and direct_download is None:
+            self._import_d4rl()
+            direct_download = not self._has_d4rl
+
         if not direct_download:
             if from_env is None:
                 warnings.warn(
@@ -169,9 +173,6 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
                 from_env = False
             self.from_env = from_env
 
-        if not from_env and direct_download is None:
-            self._import_d4rl()
-            direct_download = not self._has_d4rl
         if download and not self._is_downloaded():
             if not direct_download:
                 if terminate_on_end is None:
