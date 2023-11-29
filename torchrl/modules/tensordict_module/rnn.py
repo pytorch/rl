@@ -159,10 +159,16 @@ class LSTM(nn.LSTM):
         batch_first: bool = True,
         bias: bool = True,
         dropout: float = 0.0,
+        bidirectional: float = False,
         proj_size: int = 0,
         device=None,
         dtype=None,
     ) -> None:
+
+        if bidirectional is True:
+            raise NotImplementedError(
+                "Bidirectional LSTMs are not supported yet in this implementation."
+            )
 
         super().__init__(
             input_size=input_size,
@@ -171,7 +177,7 @@ class LSTM(nn.LSTM):
             bias=bias,
             batch_first=batch_first,
             dropout=dropout,
-            bidirectional=False,
+            bidirectional=bidirectional,
             proj_size=proj_size,
             device=device,
             dtype=dtype,
@@ -315,6 +321,7 @@ class LSTMModule(ModuleBase):
         dropout: If non-zero, introduces a `Dropout` layer on the outputs of each
             LSTM layer except the last layer, with dropout probability equal to
             :attr:`dropout`. Default: 0
+        python_based: If ``True``, will use a full Python implementation of the LSTM cell. Default: ``False``
 
     Keyword Args:
         in_key (str or tuple of str): the input key of the module. Exclusive use
@@ -395,6 +402,7 @@ class LSTMModule(ModuleBase):
         dropout=0,
         proj_size=0,
         bidirectional=False,
+        python_based=False,
         *,
         in_key=None,
         in_keys=None,
@@ -418,17 +426,30 @@ class LSTMModule(ModuleBase):
                 raise ValueError("The input lstm must have batch_first=True.")
             if bidirectional:
                 raise ValueError("The input lstm cannot be bidirectional.")
-            lstm = nn.LSTM(
-                input_size=input_size,
-                hidden_size=hidden_size,
-                num_layers=num_layers,
-                bias=bias,
-                dropout=dropout,
-                proj_size=proj_size,
-                device=device,
-                batch_first=True,
-                bidirectional=False,
-            )
+            if python_based is True:
+                lstm = LSTM(
+                    input_size=input_size,
+                    hidden_size=hidden_size,
+                    num_layers=num_layers,
+                    bias=bias,
+                    dropout=dropout,
+                    proj_size=proj_size,
+                    device=device,
+                    batch_first=True,
+                    bidirectional=False,
+                )
+            else:
+                lstm = nn.LSTM(
+                    input_size=input_size,
+                    hidden_size=hidden_size,
+                    num_layers=num_layers,
+                    bias=bias,
+                    dropout=dropout,
+                    proj_size=proj_size,
+                    device=device,
+                    batch_first=True,
+                    bidirectional=False,
+                )
         if not ((in_key is None) ^ (in_keys is None)):
             raise ValueError(
                 f"Either in_keys or in_key must be specified but not both or none. Got {in_keys} and {in_key} respectively."
@@ -795,9 +816,15 @@ class GRU(nn.GRU):
         bias: bool = True,
         batch_first: bool = True,
         dropout: float = 0.0,
+        bidirectional: bool = False,
         device=None,
         dtype=None,
     ) -> None:
+
+        if bidirectional is True:
+            raise NotImplementedError(
+                "Bidirectional LSTMs are not supported yet in this implementation."
+            )
 
         super().__init__(
             input_size=input_size,
@@ -939,6 +966,7 @@ class GRUModule(ModuleBase):
             GRU layer except the last layer, with dropout probability equal to
             :attr:`dropout`. Default: 0
         proj_size: If ``> 0``, will use GRU with projections of corresponding size. Default: 0
+        python_based: If ``True``, will use a full Python implementation of the GRU cell. Default: ``False``
 
     Keyword Args:
         in_key (str or tuple of str): the input key of the module. Exclusive use
@@ -1045,6 +1073,7 @@ class GRUModule(ModuleBase):
         batch_first=True,
         dropout=0,
         bidirectional=False,
+        python_based=False,
         *,
         in_key=None,
         in_keys=None,
@@ -1068,16 +1097,29 @@ class GRUModule(ModuleBase):
                 raise ValueError("The input gru must have batch_first=True.")
             if bidirectional:
                 raise ValueError("The input gru cannot be bidirectional.")
-            gru = nn.GRU(
-                input_size=input_size,
-                hidden_size=hidden_size,
-                num_layers=num_layers,
-                bias=bias,
-                dropout=dropout,
-                device=device,
-                batch_first=True,
-                bidirectional=False,
-            )
+
+            if python_based is True:
+                gru = GRU(
+                    input_size=input_size,
+                    hidden_size=hidden_size,
+                    num_layers=num_layers,
+                    bias=bias,
+                    dropout=dropout,
+                    device=device,
+                    batch_first=True,
+                    bidirectional=False,
+                )
+            else:
+                gru = nn.GRU(
+                    input_size=input_size,
+                    hidden_size=hidden_size,
+                    num_layers=num_layers,
+                    bias=bias,
+                    dropout=dropout,
+                    device=device,
+                    batch_first=True,
+                    bidirectional=False,
+                )
         if not ((in_key is None) ^ (in_keys is None)):
             raise ValueError(
                 f"Either in_keys or in_key must be specified but not both or none. Got {in_keys} and {in_key} respectively."

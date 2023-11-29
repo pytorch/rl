@@ -17,14 +17,14 @@ from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec
 from torchrl.modules import (
     CEMPlanner,
     DTActor,
+    GRU,
+    GRUCell,
+    LSTM,
+    LSTMCell,
     LSTMNet,
     MultiAgentConvNet,
     MultiAgentMLP,
     OnlineDTActor,
-    PythonGRU,
-    PythonGRUCell,
-    PythonLSTM,
-    PythonLSTMCell,
     QMixer,
     SafeModule,
     TanhModule,
@@ -1194,7 +1194,7 @@ class TestDecisionTransformer:
 @pytest.mark.parametrize("bias", [True, False])
 def test_python_lstm_cell(device, bias):
 
-    lstm_cell1 = PythonLSTMCell(10, 20, device=device, bias=bias)
+    lstm_cell1 = LSTMCell(10, 20, device=device, bias=bias)
     lstm_cell2 = nn.LSTMCell(10, 20, device=device, bias=bias)
 
     # Make sure parameters match
@@ -1226,7 +1226,7 @@ def test_python_lstm_cell(device, bias):
 @pytest.mark.parametrize("bias", [True, False])
 def test_python_gru_cell(device, bias):
 
-    gru_cell1 = PythonGRUCell(10, 20, device=device, bias=bias)
+    gru_cell1 = GRUCell(10, 20, device=device, bias=bias)
     gru_cell2 = nn.GRUCell(10, 20, device=device, bias=bias)
 
     # Make sure parameters match
@@ -1257,7 +1257,7 @@ def test_python_gru_cell(device, bias):
 @pytest.mark.parametrize("dropout", [0.0, 0.5])
 def test_python_lstm(device, bias, dropout, batch_first):
 
-    lstm1 = PythonLSTM(
+    lstm1 = LSTM(
         input_size=10,
         hidden_size=20,
         num_layers=2,
@@ -1314,7 +1314,7 @@ def test_python_lstm(device, bias, dropout, batch_first):
 @pytest.mark.parametrize("dropout", [0.0, 0.5])
 def test_python_gru(device, bias, dropout, batch_first):
 
-    gru1 = PythonGRU(
+    gru1 = GRU(
         input_size=10,
         hidden_size=20,
         num_layers=2,
