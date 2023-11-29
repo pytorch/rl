@@ -1208,18 +1208,18 @@ def test_python_lstm_cell(device, bias):
 
     # Run loop
     input = torch.randn(2, 3, 10).to(device)
-    hx1 = torch.randn(3, 20).to(device)
-    cx1 = torch.randn(3, 20).to(device)
-    hx2 = torch.randn(3, 20).to(device)
-    cx2 = torch.randn(3, 20).to(device)
+    h0 = torch.randn(3, 20).to(device)
+    c0 = torch.randn(3, 20).to(device)
     with torch.no_grad():
         for i in range(input.size()[0]):
-            hx1, cx1 = lstm_cell1(input[i], (hx1, cx1))
-            hx2, cx2 = lstm_cell2(input[i], (hx2, cx2))
+            h1, c1 = lstm_cell1(input[i], (h0, c0))
+            h2, c2 = lstm_cell2(input[i], (h0, c0))
 
     # Make sure the final hidden states have the same shape
-    assert hx1.shape == hx2.shape
-    assert cx1.shape == cx2.shape
+    assert h1.shape == h2.shape
+    assert c1.shape == c2.shape
+    assert not torch.isclose(h0, h1).any()
+    assert not torch.isclose(c0, c1).any()
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -1240,15 +1240,15 @@ def test_python_gru_cell(device, bias):
 
     # Run loop
     input = torch.randn(2, 3, 10).to(device)
-    hx1 = torch.randn(3, 20).to(device)
-    hx2 = torch.randn(3, 20).to(device)
+    h0 = torch.randn(3, 20).to(device)
     with torch.no_grad():
         for i in range(input.size()[0]):
-            hx1 = gru_cell1(input[i], hx1)
-            hx2 = gru_cell2(input[i], hx2)
+            h1 = gru_cell1(input[i], h0)
+            h2 = gru_cell2(input[i], h0)
 
     # Make sure the final hidden states have the same shape
-    assert hx1.shape == hx2.shape
+    assert h1.shape == h2.shape
+    assert not torch.isclose(h0, h1).any()
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -1291,21 +1291,23 @@ def test_python_lstm(device, bias, dropout, batch_first):
 
     # Test without hidden states
     with torch.no_grad():
-        output1, (hn1, cn1) = lstm1(input)
-        output2, (hn2, cn2) = lstm2(input)
+        output1, (h1, c1) = lstm1(input)
+        output2, (h2, c2) = lstm2(input)
 
-    assert hn1.shape == hn2.shape
-    assert cn1.shape == cn2.shape
+    assert h1.shape == h2.shape
+    assert c1.shape == c2.shape
     assert output1.shape == output2.shape
 
     # Test with hidden states
     with torch.no_grad():
-        output1, (hn1, cn1) = lstm1(input, (h0, c0))
-        output2, (hn2, cn2) = lstm1(input, (h0, c0))
+        output1, (h1, c1) = lstm1(input, (h0, c0))
+        output2, (h2, c2) = lstm1(input, (h0, c0))
 
-    assert hn1.shape == hn2.shape
-    assert cn1.shape == cn2.shape
+    assert h1.shape == h2.shape
+    assert c1.shape == c2.shape
     assert output1.shape == output2.shape
+    assert not torch.isclose(h0, h1).any()
+    assert not torch.isclose(c0, c1).any()
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -1347,19 +1349,20 @@ def test_python_gru(device, bias, dropout, batch_first):
 
     # Test without hidden states
     with torch.no_grad():
-        output1, hn1 = gru1(input)
-        output2, hn2 = gru2(input)
+        output1, h1 = gru1(input)
+        output2, h2 = gru2(input)
 
-    assert hn1.shape == hn2.shape
+    assert h1.shape == h2.shape
     assert output1.shape == output2.shape
 
     # Test with hidden states
     with torch.no_grad():
-        output1, hn1 = gru1(input, h0)
-        output2, hn2 = gru2(input, h0)
+        output1, h1 = gru1(input, h0)
+        output2, h2 = gru2(input, h0)
 
-    assert hn1.shape == hn2.shape
+    assert h1.shape == h2.shape
     assert output1.shape == output2.shape
+    assert not torch.isclose(h0, h1).any()
 
 
 if __name__ == "__main__":
