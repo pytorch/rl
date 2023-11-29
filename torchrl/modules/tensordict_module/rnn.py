@@ -259,7 +259,7 @@ class PythonLSTM(nn.LSTM):
             )
             hx = (h_zeros, c_zeros)
         else:
-            self.check_forward_args(input, hx, batch_sizes=None)
+            self.check_forward_args(input, hx)
         result = self._lstm(input, hx)
         output = result[0]
         hidden = result[1]
@@ -849,7 +849,6 @@ class PythonGRU(nn.GRU):
 
     def forward(self, input, hx=None):  # noqa: F811
         self._update_flat_weights()
-        batch_sizes = None
         if input.dim() not in (2, 3):
             raise ValueError(
                 f"GRU: Expected input to be 2D or 3D, got {input.dim()}D instead"
@@ -868,8 +867,8 @@ class PythonGRU(nn.GRU):
                 device=input.device,
             )
 
-        self.check_forward_args(input, hx, batch_sizes)
-        result = self._gru(input, batch_sizes, hx)
+        self.check_forward_args(input, hx)
+        result = self._gru(input, hx)
 
         output = result[0]
         hidden = result[1]
