@@ -800,6 +800,7 @@ class PythonGRU(nn.GRU):
             dtype=dtype,
         )
 
+    @staticmethod
     def _gru_cell(self, x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
         x = x.view(-1, x.size(1))
 
