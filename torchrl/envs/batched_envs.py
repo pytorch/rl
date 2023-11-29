@@ -1195,7 +1195,7 @@ def _run_worker_pipe_shared_mem(
             env_input = shared_tensordict
             td, root_next_td = env.step_and_maybe_reset(env_input)
             next_shared_tensordict.update_(td.get("next"))
-            shared_tensordict.update_(root_next_td)
+            root_shared_tensordict.update_(root_next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
