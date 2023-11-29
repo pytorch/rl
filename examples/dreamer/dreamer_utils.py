@@ -147,7 +147,7 @@ def transformed_env_constructor(
     state_dim_gsde: Optional[int] = None,
     batch_dims: Optional[int] = 0,
     obs_norm_state_dict: Optional[dict] = None,
-ignore_device: bool=False,
+    ignore_device: bool = False,
 ) -> Union[Callable, EnvCreator]:
     """
     Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
@@ -262,9 +262,7 @@ def parallel_env_constructor(
         make_transformed_env = transformed_env_constructor(**kwargs)
         return make_transformed_env
     make_transformed_env = transformed_env_constructor(
-        return_transformed_envs=not batch_transform,
-        # ignore_device=True,
-        **kwargs
+        return_transformed_envs=not batch_transform, ignore_device=True, **kwargs
     )
     parallel_env = ParallelEnv(
         num_workers=cfg.env_per_collector,
