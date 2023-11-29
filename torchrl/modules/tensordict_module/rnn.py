@@ -261,15 +261,6 @@ class PythonLSTM(nn.LSTM):
             )
             hx = (h_zeros, c_zeros)
         else:
-            if hx[0].dim() != 2 or hx[1].dim() != 2:
-                msg = (
-                    "For unbatched 2-D input, hx and cx should "
-                    f"also be 2-D but got ({hx[0].dim()}-D, {hx[1].dim()}-D) tensors"
-                )
-                raise RuntimeError(msg)
-            hx = (hx[0].unsqueeze(1), hx[1].unsqueeze(1))
-            # Each batch of the hidden state should match the input sequence that
-            # the user believes he/she is passing in.
             self.check_forward_args(input, hx, batch_sizes=None)
             hx = self.permute_hidden(hx, sorted_indices)
         result = self._lstm(input, hx)
@@ -796,7 +787,6 @@ class PythonGRU(nn.GRU):
         num_layers: int = 1,
         bias: bool = True,
         dropout: float = 0.0,
-        proj_size: int = 0,
         device=None,
         dtype=None,
     ) -> None:
@@ -809,7 +799,6 @@ class PythonGRU(nn.GRU):
             batch_first=True,
             dropout=dropout,
             bidirectional=False,
-            proj_size=proj_size,
             device=device,
             dtype=dtype,
         )
