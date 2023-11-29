@@ -242,8 +242,6 @@ class PythonLSTM(nn.LSTM):
                 f"LSTM: Expected input to be 2D or 3D, got {input.dim()}D instead"
             )
         max_batch_size = input.size(0) if self.batch_first else input.size(1)
-        sorted_indices = None
-        unsorted_indices = None
         if hx is None:
             h_zeros = torch.zeros(
                 self.num_layers,
@@ -262,11 +260,10 @@ class PythonLSTM(nn.LSTM):
             hx = (h_zeros, c_zeros)
         else:
             self.check_forward_args(input, hx, batch_sizes=None)
-            hx = self.permute_hidden(hx, sorted_indices)
         result = self._lstm(input, hx)
         output = result[0]
         hidden = result[1]
-        return output, self.permute_hidden(hidden, unsorted_indices)
+        return output, hidden
 
 
 class LSTMModule(ModuleBase):
@@ -820,7 +817,7 @@ class PythonGRU(nn.GRU):
 
         return hy
 
-    def forward(self, input, hx=None):
+    def _gru(self, input, hx=None):
 
         if hx is None:
             hx = torch.zeros(
@@ -862,8 +859,6 @@ class PythonGRU(nn.GRU):
                 f"For batched 3-D input, hx should also be 3-D but got {hx.dim()}-D tensor"
             )
         max_batch_size = input.size(0) if self.batch_first else input.size(1)
-        sorted_indices = None
-        unsorted_indices = None
         if hx is None:
             hx = torch.zeros(
                 self.num_layers,
@@ -872,10 +867,6 @@ class PythonGRU(nn.GRU):
                 dtype=input.dtype,
                 device=input.device,
             )
-        else:
-            # Each batch of the hidden state should match the input sequence that
-            # the user believes he/she is passing in.
-            hx = self.permute_hidden(hx, sorted_indices)
 
         self.check_forward_args(input, hx, batch_sizes)
         result = self._gru(input, batch_sizes, hx)
@@ -883,7 +874,7 @@ class PythonGRU(nn.GRU):
         output = result[0]
         hidden = result[1]
 
-        return output, self.permute_hidden(hidden, unsorted_indices)
+        return output, hidden
 
 
 class GRUModule(ModuleBase):
