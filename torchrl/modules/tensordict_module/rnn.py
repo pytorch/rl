@@ -25,7 +25,7 @@ from torchrl.objectives.value.functional import (
 from torchrl.objectives.value.utils import _get_num_per_traj_init
 
 
-class PythonLSTMCell(RNNCellBase):
+class LSTMCell(RNNCellBase):
     r"""A long short-term memory (LSTM) cell that performs the same operation as nn.LSTMCell but is fully coded in Python.
 
     .. math::
@@ -148,7 +148,7 @@ class PythonLSTMCell(RNNCellBase):
         return hy, cy
 
 
-class PythonLSTM(nn.LSTM):
+class LSTM(nn.LSTM):
     """A module that runs multiple steps of a multi-layer LSTM and is only coded in Python."""
 
     def __init__(
@@ -666,7 +666,7 @@ class LSTMModule(ModuleBase):
         return tuple(out)
 
 
-class PythonGRUCell(RNNCellBase):
+class GRUCell(RNNCellBase):
     r"""A gated recurrent unit (GRU) cell that performs the same operation as nn.LSTMCell but is fully coded in Python.
 
     .. math::
@@ -784,7 +784,7 @@ class PythonGRUCell(RNNCellBase):
         return hy
 
 
-class PythonGRU(nn.GRU):
+class GRU(nn.GRU):
     """A module that runs multiple steps of a multi-layer GRU network and is only coded in Python."""
 
     def __init__(
