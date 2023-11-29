@@ -1946,7 +1946,8 @@ class TestGRUModule:
         gru_module(padded)
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
-    def test_singel_step(self, shape):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_single_step(self, shape, python_based):
         td = TensorDict(
             {
                 "observation": torch.zeros(*shape, 3),
@@ -1960,6 +1961,7 @@ class TestGRUModule:
             batch_first=True,
             in_keys=["observation", "hidden"],
             out_keys=["intermediate", ("next", "hidden")],
+            python_based=python_based,
         )
         td = gru_module(td)
         td_next = step_mdp(td, keep_other=True)
@@ -1969,7 +1971,8 @@ class TestGRUModule:
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
     @pytest.mark.parametrize("t", [1, 10])
-    def test_single_step_vs_multi(self, shape, t):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_single_step_vs_multi(self, shape, t, python_based):
         td = TensorDict(
             {
                 "observation": torch.arange(t, dtype=torch.float32)
@@ -1985,6 +1988,7 @@ class TestGRUModule:
             batch_first=True,
             in_keys=["observation", "hidden"],
             out_keys=["intermediate", ("next", "hidden")],
+            python_based=python_based,
         )
         gru_module_ms = gru_module_ss.set_recurrent_mode()
         gru_module_ms(td)
@@ -2002,7 +2006,8 @@ class TestGRUModule:
         torch.testing.assert_close(td_ss["hidden"], td["next", "hidden"][..., -1, :, :])
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
-    def test_multi_consecutive(self, shape):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_multi_consecutive(self, shape, python_based):
         t = 20
         td = TensorDict(
             {
@@ -2024,6 +2029,7 @@ class TestGRUModule:
             batch_first=True,
             in_keys=["observation", "hidden"],
             out_keys=["intermediate", ("next", "hidden")],
+            python_based=python_based,
         )
         gru_module_ms = gru_module_ss.set_recurrent_mode()
         gru_module_ms(td)
@@ -2043,7 +2049,8 @@ class TestGRUModule:
             td_ss["intermediate"], td["intermediate"][..., -1, :]
         )
 
-    def test_gru_parallel_env(self):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_gru_parallel_env(self, python_based):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
         device = "cuda" if torch.cuda.device_count() else "cpu"
@@ -2055,6 +2062,7 @@ class TestGRUModule:
             in_key="observation",
             out_key="features",
             device=device,
+            python_based=python_based,
         )
 
         def create_transformed_env():
