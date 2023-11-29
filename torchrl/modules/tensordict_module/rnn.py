@@ -145,7 +145,154 @@ class PythonLSTMCell(RNNCellBase):
 
         hy = o_gate * cy.tanh()
 
-        return (hy, cy)
+        return hy, cy
+
+
+class PythonLSTM(nn.LSTM):
+    """A module that runs multiple steps of LSTM and is only coded in Python."""
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        num_layers: int = 1,
+        bias: bool = True,
+        dropout: float = 0.0,
+        proj_size: int = 0,
+        device=None,
+        dtype=None,
+    ) -> None:
+
+        super().__init__(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            bias=bias,
+            batch_first=True,
+            dropout=dropout,
+            bidirectional=False,
+            proj_size=proj_size,
+            device=device,
+            dtype=dtype,
+        )
+
+    @staticmethod
+    def lstm_cell(x, hx, cx, weight_ih, bias_ih, weight_hh, bias_hh):
+
+        gates = F.linear(x, weight_ih, bias_ih) + F.linear(hx, weight_hh, bias_hh)
+
+        i_gate, f_gate, g_gate, o_gate = gates.chunk(4, 1)
+
+        i_gate = i_gate.sigmoid()
+        f_gate = f_gate.sigmoid()
+        g_gate = g_gate.tanh()
+        o_gate = o_gate.sigmoid()
+
+        cy = cx * f_gate + i_gate * g_gate
+
+        hy = o_gate * cy.tanh()
+
+        return hy, cy
+
+    def _lstm(self, x, hx):
+
+        # should check self.batch_first
+        bs, seq_len, input_size = x.size()
+        h_t, c_t = hx
+
+        outputs = []
+        for t in range(seq_len):
+
+            x_t = x[:, t, :]
+
+            for layer in range(self.num_layers):
+                # Retrieve weights
+                weights = self._all_weights[layer]
+                weight_ih = getattr(self, weights[0])
+                weight_hh = getattr(self, weights[1])
+                if self.bias is True:
+                    bias_ih = getattr(self, weights[2])
+                    bias_hh = getattr(self, weights[3])
+                else:
+                    bias_ih = None
+                    bias_hh = None
+
+                # Run cell
+                h_t[layer], c_t[layer] = self.lstm_cell(
+                    x_t, h_t[layer], c_t[layer], weight_ih, bias_ih, weight_hh, bias_hh
+                )
+
+                # Apply dropout if in training mode
+                if layer < self.num_layers - 1:
+                    x_t = F.dropout(h_t[layer], p=self.dropout, training=self.training)
+                else:  # No dropout after the last layer
+                    x_t = h_t[layer]
+
+            outputs.append(x_t)
+
+        outputs = torch.stack(outputs, dim=1)
+
+        return outputs, (h_t, c_t)
+
+    def forward(self, input, hx=None):  # noqa: F811
+        self._update_flat_weights()
+        real_hidden_size = self.proj_size if self.proj_size > 0 else self.hidden_size
+        if input.dim() not in (2, 3):
+            raise ValueError(
+                f"LSTM: Expected input to be 2D or 3D, got {input.dim()}D instead"
+            )
+        is_batched = input.dim() == 3
+        batch_dim = 0 if self.batch_first else 1
+        if not is_batched:
+            input = input.unsqueeze(batch_dim)
+        max_batch_size = input.size(0) if self.batch_first else input.size(1)
+        sorted_indices = None
+        unsorted_indices = None
+        if hx is None:
+            h_zeros = torch.zeros(
+                self.num_layers,
+                max_batch_size,
+                real_hidden_size,
+                dtype=input.dtype,
+                device=input.device,
+            )
+            c_zeros = torch.zeros(
+                self.num_layers,
+                max_batch_size,
+                self.hidden_size,
+                dtype=input.dtype,
+                device=input.device,
+            )
+            hx = (h_zeros, c_zeros)
+        else:
+            if is_batched:
+                if hx[0].dim() != 3 or hx[1].dim() != 3:
+                    msg = (
+                        "For batched 3-D input, hx and cx should "
+                        f"also be 3-D but got ({hx[0].dim()}-D, {hx[1].dim()}-D) tensors"
+                    )
+                    raise RuntimeError(msg)
+            else:
+                if hx[0].dim() != 2 or hx[1].dim() != 2:
+                    msg = (
+                        "For unbatched 2-D input, hx and cx should "
+                        f"also be 2-D but got ({hx[0].dim()}-D, {hx[1].dim()}-D) tensors"
+                    )
+                    raise RuntimeError(msg)
+                hx = (hx[0].unsqueeze(1), hx[1].unsqueeze(1))
+            # Each batch of the hidden state should match the input sequence that
+            # the user believes he/she is passing in.
+            self.check_forward_args(input, hx, batch_sizes=None)
+            hx = self.permute_hidden(hx, sorted_indices)
+
+        result = self._lstm(input, hx)
+        output = result[0]
+        hidden = result[1]
+
+        if not is_batched:
+            output = output.squeeze(batch_dim)
+            hidden = (hidden[0].squeeze(1), hidden[1].squeeze(1))
+        return output, self.permute_hidden(hidden, unsorted_indices)
 
 
 class LSTMModule(ModuleBase):

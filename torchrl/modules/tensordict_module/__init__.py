@@ -31,6 +31,6 @@ from .probabilistic import (
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
 )
-from .rnn import GRUModule, LSTMModule, PythonGRUCell, PythonLSTMCell
+from .rnn import GRUModule, LSTMModule, PythonGRUCell, PythonLSTM, PythonLSTMCell
 from .sequence import SafeSequential
 from .world_models import WorldModelWrapper

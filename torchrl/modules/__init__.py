@@ -62,6 +62,7 @@ from .tensordict_module import (
     OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
     PythonGRUCell,
+    PythonLSTM,
     PythonLSTMCell,
     QValueActor,
     QValueHook,
