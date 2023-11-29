@@ -1021,6 +1021,7 @@ class ParallelEnv(_BatchedEnv):
         del self.parent_channels
         self._cuda_events = None
         self._events = None
+        self.event = None
 
     @_check_start
     def set_seed(
