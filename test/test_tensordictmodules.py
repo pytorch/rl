@@ -1672,6 +1672,7 @@ class TestLSTMModule:
         lstm_module(padded)
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
+    @pytest.mark.parametrize("python_based", [True, False])
     def test_single_step(self, shape, python_based):
         td = TensorDict(
             {
