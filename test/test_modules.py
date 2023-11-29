@@ -1259,7 +1259,7 @@ def test_python_lstm(device, bias, dropout):
         input_size=10, hidden_size=20, num_layers=2, device=device, bias=bias
     )
     lstm2 = nn.LSTM(
-        input_size=10, hidden_size=20, num_layers=2, device=device, bias=bias
+        input_size=10, hidden_size=20, num_layers=2, device=device, bias=bias, batch_first=True
     )
 
     # Make sure parameters match
