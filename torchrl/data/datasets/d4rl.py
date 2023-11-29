@@ -19,6 +19,8 @@ from tensordict.tensordict import make_tensordict
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.datasets.d4rl_infos import D4RL_DATASETS
+
+from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -410,17 +412,14 @@ def _filepath_from_url(dataset_url):
     return dataset_filepath
 
 
-def _set_dataset_path(path):
-    global DATASET_PATH
-    DATASET_PATH = path
-    os.makedirs(path, exist_ok=True)
-
-
-_set_dataset_path(
-    os.environ.get(
-        "D4RL_DATASET_DIR", os.path.expanduser("~/.cache/torchrl/data/d4rl/datasets")
-    )
-)
+# def _set_dataset_path(path):
+#     global DATASET_PATH
+#     DATASET_PATH = path
+#     os.makedirs(path, exist_ok=True)
+#
+#
+# _set_dataset_path(
+#     os.environ.get(_get_root_dir("d4rl")))
 
 if __name__ == "__main__":
     data = D4RLExperienceReplay("kitchen-partial-v0", batch_size=128)
