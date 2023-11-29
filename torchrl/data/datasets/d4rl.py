@@ -99,6 +99,12 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         terminate_on_end (bool, optional): Set ``done=True`` on the last timestep
             in a trajectory. Default is ``False``, and will discard the
             last timestep in each trajectory.
+        root (Path or str, optional): The D4RL dataset root directory.
+            The actual dataset memory-mapped files will be saved under
+            `<root>/<dataset_id>`. If none is provided, it defaults to
+            ``~/.cache/torchrl/d4rl`.
+        download (bool, optional): Whether the dataset should be downloaded if
+            not found. Defaults to ``True``.
         **env_kwargs (key-value pairs): additional kwargs for
             :func:`d4rl.qlearning_dataset`.
 

@@ -36,7 +36,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
 
-        bash .github/unittest/linux_libs/scripts_d4rl/setup_env.sh
-        bash .github/unittest/linux_libs/scripts_d4rl/install.sh
-        bash .github/unittest/linux_libs/scripts_d4rl/run_test.sh
-        bash .github/unittest/linux_libs/scripts_d4rl/post_process.sh
+        bash .github/unittest/linux_libs/scripts_minari/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_minari/install.sh
+        bash .github/unittest/linux_libs/scripts_minari/run_test.sh
+        bash .github/unittest/linux_libs/scripts_minari/post_process.sh

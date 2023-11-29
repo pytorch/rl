@@ -50,6 +50,7 @@ from torch import nn
 from torchrl._utils import implement_for
 from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
+from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
@@ -89,6 +90,8 @@ _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 _has_sklearn = importlib.util.find_spec("sklearn") is not None
 
 _has_gym_robotics = importlib.util.find_spec("gymnasium_robotics") is not None
+
+_has_minari = importlib.util.find_spec("minari") is not None
 
 if _has_gym:
     try:
@@ -1959,6 +1962,39 @@ class TestD4RL:
             i += 1
         assert len(data) // i == batch_size
         print(f"terminated test after {time.time()-t0}s")
+
+
+@pytest.mark.skipif(not _has_minari, reason="Minari not found")
+class TestMinari:
+    @pytest.fixture(scope="class")
+    def selected_datasets(self):
+        torch.manual_seed(0)
+        import minari
+
+        keys = list(minari.list_remote_datasets())
+        indices = torch.randperm(len(keys))[:10]
+        keys = [keys[idx] for idx in indices]
+        keys = [
+            key
+            for key in keys
+            if "=0.4" in minari.list_remote_datasets()[key]["minari_version"]
+        ]
+        assert len(keys) > 5
+        return keys
+
+    def test_load(self, selected_datasets):
+        for dataset in selected_datasets:
+            print("dataset", dataset)
+            data = MinariExperienceReplay(dataset, batch_size=32)
+            t0 = time.time()
+            for i, sample in enumerate(data):
+                t1 = time.time()
+                print(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+                assert data.metadata["action_space"].is_in(sample["action"])
+                assert data.metadata["observation_space"].is_in(sample["observation"])
+                t0 = time.time()
+                if i == 10:
+                    break
 
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")

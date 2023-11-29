@@ -394,7 +394,7 @@ class TensorStorage(Storage):
         out = self._storage[index]
         if is_tensor_collection(out):
             out = _reset_batch_size(out)
-            return out.unlock_()
+            return out  # .unlock_()
         return out
 
     def __len__(self):
