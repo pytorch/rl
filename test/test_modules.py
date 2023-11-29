@@ -1258,7 +1258,12 @@ def test_python_gru_cell(device, bias):
 def test_python_lstm(device, bias, dropout, batch_first):
 
     lstm1 = PythonLSTM(
-        input_size=10, hidden_size=20, num_layers=2, device=device, bias=bias, batch_first=batch_first,
+        input_size=10,
+        hidden_size=20,
+        num_layers=2,
+        device=device,
+        bias=bias,
+        batch_first=batch_first,
     )
     lstm2 = nn.LSTM(
         input_size=10,
@@ -1310,7 +1315,12 @@ def test_python_lstm(device, bias, dropout, batch_first):
 def test_python_gru(device, bias, dropout, batch_first):
 
     gru1 = PythonGRU(
-        input_size=10, hidden_size=20, num_layers=2, device=device, bias=bias, batch_first=batch_first,
+        input_size=10,
+        hidden_size=20,
+        num_layers=2,
+        device=device,
+        bias=bias,
+        batch_first=batch_first,
     )
     gru2 = nn.GRU(
         input_size=10,

@@ -842,7 +842,7 @@ class PythonGRU(nn.GRU):
         outputs = []
 
         for t in range(seq_len):
-            x_t = input[:, t, :]
+            x_t = x[:, t, :]
 
             for layer in range(self.num_layers):
 
