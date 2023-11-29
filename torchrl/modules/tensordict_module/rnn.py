@@ -237,8 +237,6 @@ class LSTM(nn.LSTM):
                 # Apply dropout if in training mode
                 if layer < self.num_layers - 1:
                     x_t = F.dropout(h_t[layer], p=self.dropout, training=self.training)
-                else:  # No dropout after the last layer
-                    x_t = h_t[layer]
 
             outputs.append(x_t)
 
@@ -777,9 +775,7 @@ class GRUCell(RNNCellBase):
             hx = torch.zeros(
                 input.size(0), self.hidden_size, dtype=input.dtype, device=input.device
             )
-        else:
-            hx = hx.unsqueeze(0) if not is_batched else hx
-
+        
         ret = self.gru_cell(input, hx)
 
         if not is_batched:
