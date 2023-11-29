@@ -259,7 +259,7 @@ class PythonLSTM(nn.LSTM):
             )
             hx = (h_zeros, c_zeros)
         else:
-            self.check_forward_args(input, hx)
+            self.check_forward_args(input, hx, batch_sizes=None)
         result = self._lstm(input, hx)
         output = result[0]
         hidden = result[1]
@@ -867,7 +867,7 @@ class PythonGRU(nn.GRU):
                 device=input.device,
             )
 
-        self.check_forward_args(input, hx)
+        self.check_forward_args(input, hx, batch_sizes=None)
         result = self._gru(input, hx)
 
         output = result[0]
