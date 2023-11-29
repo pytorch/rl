@@ -1253,11 +1253,12 @@ def test_python_gru_cell(device, bias):
 
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("bias", [True, False])
+@pytest.mark.parametrize("batch_first", [True, False])
 @pytest.mark.parametrize("dropout", [0.0, 0.5])
-def test_python_lstm(device, bias, dropout):
+def test_python_lstm(device, bias, dropout, batch_first):
 
     lstm1 = PythonLSTM(
-        input_size=10, hidden_size=20, num_layers=2, device=device, bias=bias
+        input_size=10, hidden_size=20, num_layers=2, device=device, bias=bias, batch_first=batch_first,
     )
     lstm2 = nn.LSTM(
         input_size=10,
@@ -1265,7 +1266,7 @@ def test_python_lstm(device, bias, dropout):
         num_layers=2,
         device=device,
         bias=bias,
-        batch_first=True,
+        batch_first=batch_first,
     )
 
     # Make sure parameters match
@@ -1300,11 +1301,12 @@ def test_python_lstm(device, bias, dropout):
 
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("bias", [True, False])
+@pytest.mark.parametrize("batch_first", [True, False])
 @pytest.mark.parametrize("dropout", [0.0, 0.5])
-def test_python_gru(device, bias, dropout):
+def test_python_gru(device, bias, dropout, batch_first):
 
     gru1 = PythonGRU(
-        input_size=10, hidden_size=20, num_layers=2, device=device, bias=bias
+        input_size=10, hidden_size=20, num_layers=2, device=device, bias=bias, batch_first=batch_first,
     )
     gru2 = nn.GRU(
         input_size=10,
@@ -1312,7 +1314,7 @@ def test_python_gru(device, bias, dropout):
         num_layers=2,
         device=device,
         bias=bias,
-        batch_first=True,
+        batch_first=batch_first,
     )
 
     # Make sure parameters match
