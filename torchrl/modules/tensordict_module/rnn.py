@@ -800,11 +800,11 @@ class PythonGRU(nn.GRU):
             dtype=dtype,
         )
 
-    def _gru_cell(self, x, hx):
+    def _gru_cell(self, x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
         x = x.view(-1, x.size(1))
 
-        gates_ih = F.linear(x, self.weight_ih, self.bias_ih)
-        gates_hh = F.linear(hx, self.weight_hh, self.bias_hh)
+        gates_ih = F.linear(x, weight_ih, bias_ih)
+        gates_hh = F.linear(hx, weight_hh, bias_hh)
 
         r_gate_ih, z_gate_ih, n_gate_ih = gates_ih.chunk(3, 1)
         r_gate_hh, z_gate_hh, n_gate_hh = gates_hh.chunk(3, 1)
@@ -833,7 +833,21 @@ class PythonGRU(nn.GRU):
             x_t = input[:, t, :]
 
             for layer in range(self.num_layers):
-                h_t[layer] = self._gru_cell[layer](x_t, h_t[layer])
+
+                # Retrieve weights
+                weights = self._all_weights[layer]
+                weight_ih = getattr(self, weights[0])
+                weight_hh = getattr(self, weights[1])
+                if self.bias is True:
+                    bias_ih = getattr(self, weights[2])
+                    bias_hh = getattr(self, weights[3])
+                else:
+                    bias_ih = None
+                    bias_hh = None
+
+                h_t[layer] = self._gru_cell(
+                    x_t, h_t[layer], weight_ih, bias_ih, weight_hh, bias_hh
+                )
 
                 # Apply dropout if in training mode and not the last layer
                 if layer < self.num_layers - 1:
