@@ -1276,7 +1276,11 @@ def test_python_lstm(device, bias, dropout, batch_first):
             v1.shape == v2.shape
         ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
-    input = torch.randn(5, 3, 10).to(device)
+    if batch_first is True:
+        input = torch.randn(5, 3, 10).to(device)
+    else:
+        input = torch.randn(3, 5, 10).to(device)
+
     h0 = torch.randn(2, 5, 20).to(device)
     c0 = torch.randn(2, 5, 20).to(device)
 
@@ -1324,7 +1328,11 @@ def test_python_gru(device, bias, dropout, batch_first):
             v1.shape == v2.shape
         ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
-    input = torch.randn(5, 3, 10).to(device)
+    if batch_first is True:
+        input = torch.randn(5, 3, 10).to(device)
+    else:
+        input = torch.randn(3, 5, 10).to(device)
+
     h0 = torch.randn(2, 5, 20).to(device)
 
     # Test without hidden states

@@ -237,6 +237,10 @@ class PythonLSTM(nn.LSTM):
             outputs.append(x_t)
 
         outputs = torch.stack(outputs, dim=1)
+        if self.batch_first is False:
+            outputs = outputs.permute(
+                1, 0, 2
+            )  # Change back (batch, seq_len, features) to (seq_len, batch, features)
 
         return outputs, (h_t, c_t)
 
@@ -866,6 +870,10 @@ class PythonGRU(nn.GRU):
             outputs.append(x_t)
 
         outputs = torch.stack(outputs, dim=1)
+        if self.batch_first is False:
+            outputs = outputs.permute(
+                1, 0, 2
+            )  # Change back (batch, seq_len, features) to (seq_len, batch, features)
 
         return outputs, h_t
 
