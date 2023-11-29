@@ -732,6 +732,32 @@ class ParallelEnv(_BatchedEnv):
     """
 
     __doc__ += _BatchedEnv.__doc__
+    __doc__ += """
+
+    .. note::
+      The choice of the devices where ParallelEnv needs to be executed can
+      drastically influence its performance. The rule of thumbs is:
+
+        - If the base environment (backend, e.g., Gym) is executed on CPU, the
+          sub-environments should be executed on CPU and the data should be
+          passed via shared physical memory.
+        - If the base environment is (or can be) executed on CUDA, the sub-environments
+          should be placed on CUDA too.
+        - If a CUDA device is available and the policy is to be executed on CUDA,
+          the ParallelEnv device should be set to CUDA.
+
+      Therefore, supposing a CUDA device is available, we have the following scenarios:
+
+        >>> # The sub-envs are executed on CPU, but the policy is on GPU
+        >>> env = ParallelEnv(N, MyEnv(..., device="cpu"), device="cuda")
+        >>> # The sub-envs are executed on CUDA
+        >>> env = ParallelEnv(N, MyEnv(..., device="cuda"), device="cuda")
+        >>> # this will create the exact same environment
+        >>> env = ParallelEnv(N, MyEnv(..., device="cuda"))
+        >>> # If no cuda device is available
+        >>> env = ParallelEnv(N, MyEnv(..., device="cpu"))
+
+    """
 
     def _start_workers(self) -> None:
         from torchrl.envs.env_creator import EnvCreator
