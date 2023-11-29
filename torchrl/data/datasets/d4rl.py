@@ -6,15 +6,18 @@ from __future__ import annotations
 
 import importlib
 import os
+import tempfile
 import urllib
 import warnings
+
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
 
 import torch
 
-from tensordict import PersistentTensorDict
+from tensordict import PersistentTensorDict, TensorDict
 from tensordict.tensordict import make_tensordict
 
 from torchrl.collectors.utils import split_trajectories
@@ -23,7 +26,7 @@ from torchrl.data.datasets.d4rl_infos import D4RL_DATASETS
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage, TensorStorage
 from torchrl.data.replay_buffers.writers import Writer
 
 
@@ -105,7 +108,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         >>> from torchrl.envs import ObservationNorm
         >>> data = D4RLExperienceReplay("maze2d-umaze-v1", 128)
         >>> # we can append transforms to the dataset
-        >>> data.append_transform(ObservationNorm(loc=-1, scale=1.0))
+        >>> data.append_transform(ObservationNorm(loc=-1, scale=1.0, in_keys=["observation"]))
         >>> data.sample(128)
 
     """
@@ -138,13 +141,16 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         use_truncated_as_done: bool = True,
         direct_download: bool = None,
         terminate_on_end: bool = None,
+        download: bool = True,
+        root: str | Path | None = None,
         **env_kwargs,
     ):
         self.use_truncated_as_done = use_truncated_as_done
-
-        if not from_env and direct_download is None:
-            self._import_d4rl()
-            direct_download = not self._has_d4rl
+        if root is None:
+            root = _get_root_dir("d4rl")
+        self.root = root
+        self.name = name
+        dataset = None
 
         if not direct_download:
             if from_env is None:
@@ -158,43 +164,59 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
                 )
                 from_env = True
             self.from_env = from_env
-            if terminate_on_end is None:
-                # we use the default of d4rl
-                terminate_on_end = False
-            self._import_d4rl()
-
-            if not self._has_d4rl:
-                raise ImportError("Could not import d4rl") from self.D4RL_ERR
-
-            if from_env:
-                dataset = self._get_dataset_from_env(name, env_kwargs)
-            else:
-                if self.use_truncated_as_done:
-                    warnings.warn(
-                        "Using use_truncated_as_done=True + terminate_on_end=True "
-                        "with from_env=False may not have the intended effect "
-                        "as the timeouts (truncation) "
-                        "can be absent from the static dataset."
-                    )
-                env_kwargs.update({"terminate_on_end": terminate_on_end})
-                dataset = self._get_dataset_direct(name, env_kwargs)
         else:
             if from_env is None:
                 from_env = False
             self.from_env = from_env
-            if terminate_on_end is False:
-                raise ValueError(
-                    "Using terminate_on_end=False is not compatible with direct_download=True."
-                )
-            dataset = self._get_dataset_direct_download(name, env_kwargs)
-        # Fill unknown next states with 0
-        dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0
 
-        if split_trajs:
-            dataset = split_trajectories(dataset)
-            dataset["next", "done"][:, -1] = True
+        if not from_env and direct_download is None:
+            self._import_d4rl()
+            direct_download = not self._has_d4rl
+        if download and not self._is_downloaded():
+            if not direct_download:
+                if terminate_on_end is None:
+                    # we use the default of d4rl
+                    terminate_on_end = False
+                self._import_d4rl()
 
-        storage = LazyMemmapStorage(dataset.shape[0])
+                if not self._has_d4rl:
+                    raise ImportError("Could not import d4rl") from self.D4RL_ERR
+
+                if from_env:
+                    dataset = self._get_dataset_from_env(name, env_kwargs)
+                else:
+                    if self.use_truncated_as_done:
+                        warnings.warn(
+                            "Using use_truncated_as_done=True + terminate_on_end=True "
+                            "with from_env=False may not have the intended effect "
+                            "as the timeouts (truncation) "
+                            "can be absent from the static dataset."
+                        )
+                    env_kwargs.update({"terminate_on_end": terminate_on_end})
+                    dataset = self._get_dataset_direct(name, env_kwargs)
+            else:
+                if terminate_on_end is False:
+                    raise ValueError(
+                        "Using terminate_on_end=False is not compatible with direct_download=True."
+                    )
+                dataset = self._get_dataset_direct_download(name, env_kwargs)
+            # Fill unknown next states with 0
+            dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0
+
+            if split_trajs:
+                dataset = split_trajectories(dataset)
+                dataset["next", "done"][:, -1] = True
+
+            storage = LazyMemmapStorage(
+                dataset.shape[0], scratch_dir=Path(self.root) / name
+            )
+        elif self._is_downloaded():
+            storage = TensorStorage(TensorDict.load_memmap(Path(self.root) / name))
+        else:
+            raise RuntimeError(
+                f"The dataset could not be found in {Path(self.root) / name}."
+            )
+
         super().__init__(
             batch_size=batch_size,
             storage=storage,
@@ -205,7 +227,12 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             prefetch=prefetch,
             transform=transform,
         )
-        self.extend(dataset)
+        if dataset is not None:
+            # if dataset has just been downloaded
+            self.extend(dataset)
+
+    def _is_downloaded(self):
+        return os.path.exists(Path(self.root) / self.name)
 
     def _get_dataset_direct_download(self, name, env_kwargs):
         """Directly download and use a D4RL dataset."""
@@ -216,10 +243,12 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         url = D4RL_DATASETS.get(name, None)
         if url is None:
             raise KeyError(f"Env {name} not found.")
-        h5path = _download_dataset_from_url(url)
-        # h5path_parent = Path(h5path).parent
-        dataset = PersistentTensorDict.from_h5(h5path)
-        dataset = dataset.to_tensordict()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ["D4RL_DATASET_DIR"] = tmpdir
+            h5path = _download_dataset_from_url(url, tmpdir)
+            # h5path_parent = Path(h5path).parent
+            dataset = PersistentTensorDict.from_h5(h5path)
+            dataset = dataset.to_tensordict()
         with dataset.unlock_():
             dataset = self._process_data_from_env(dataset)
         return dataset
@@ -235,15 +264,17 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         import gym
 
         env = GymWrapper(gym.make(name))
-        dataset = d4rl.qlearning_dataset(env._env, **env_kwargs)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ["D4RL_DATASET_DIR"] = tmpdir
+            dataset = d4rl.qlearning_dataset(env._env, **env_kwargs)
 
-        dataset = make_tensordict(
-            {
-                k: torch.from_numpy(item)
-                for k, item in dataset.items()
-                if isinstance(item, np.ndarray)
-            }
-        )
+            dataset = make_tensordict(
+                {
+                    k: torch.from_numpy(item)
+                    for k, item in dataset.items()
+                    if isinstance(item, np.ndarray)
+                }
+            )
         dataset = dataset.unflatten_keys("/")
         if "metadata" in dataset.keys():
             metadata = dataset.get("metadata")
@@ -304,14 +335,16 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         # we do a local import to avoid circular import issues
         from torchrl.envs.libs.gym import GymWrapper
 
-        env = GymWrapper(gym.make(name))
-        dataset = make_tensordict(
-            {
-                k: torch.from_numpy(item)
-                for k, item in env.get_dataset().items()
-                if isinstance(item, np.ndarray)
-            }
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ["D4RL_DATASET_DIR"] = tmpdir
+            env = GymWrapper(gym.make(name))
+            dataset = make_tensordict(
+                {
+                    k: torch.from_numpy(item)
+                    for k, item in env.get_dataset().items()
+                    if isinstance(item, np.ndarray)
+                }
+            )
         dataset = dataset.unflatten_keys("/")
         dataset = self._process_data_from_env(dataset, env)
         return dataset
@@ -396,8 +429,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset[key][0] = 0
 
 
-def _download_dataset_from_url(dataset_url):
-    dataset_filepath = _filepath_from_url(dataset_url)
+def _download_dataset_from_url(dataset_url, dataset_path):
+    dataset_filepath = _filepath_from_url(dataset_url, dataset_path)
     if not os.path.exists(dataset_filepath):
         print("Downloading dataset:", dataset_url, "to", dataset_filepath)
         urllib.request.urlretrieve(dataset_url, dataset_filepath)
@@ -406,9 +439,9 @@ def _download_dataset_from_url(dataset_url):
     return dataset_filepath
 
 
-def _filepath_from_url(dataset_url):
+def _filepath_from_url(dataset_url, dataset_path):
     _, dataset_name = os.path.split(dataset_url)
-    dataset_filepath = os.path.join(DATASET_PATH, dataset_name)
+    dataset_filepath = os.path.join(dataset_path, dataset_name)
     return dataset_filepath
 
 

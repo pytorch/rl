@@ -7,13 +7,16 @@ from __future__ import annotations
 import os.path
 import tempfile
 from pathlib import Path
+from typing import Callable
 
 import torch
 from tensordict import MemoryMappedTensor, PersistentTensorDict, TensorDict
 from torchrl._utils import KeyDependentDefaultDict
 from torchrl.data.datasets.utils import _get_root_dir
-from torchrl.data.replay_buffers import TensorDictReplayBuffer
+from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
+from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
+from torchrl.data.replay_buffers.writers import Writer
 
 _NAME_MATCH = KeyDependentDefaultDict(lambda key: key)
 _NAME_MATCH["observations"] = "observation"
@@ -84,7 +87,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         with tempfile.TemporaryDirectory() as tmpdir:
             os.environ["MINARI_DATASETS_PATH"] = tmpdir
             minari.download_dataset(dataset_id=self.dataset_id)
-            dataset = minari.load_dataset(self.dataset_id)
+            minari.load_dataset(self.dataset_id)
             h5_data = PersistentTensorDict.from_h5(
                 Path(tmpdir) / self.dataset_id / "data/main_data.hdf5"
             )
@@ -139,10 +142,14 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
                     (td_data["next", "terminated"] | td_data["next", "truncated"])
                 )
                 if self.split_trajs:
+                    from torchrl.objectives.utils import split_trajectories
+
                     td_data = split_trajectories(td_data).memmap_(self.data_path)
             return td_data
 
     def _make_split(self):
+        from torchrl.objectives.utils import split_trajectories
+
         td_data = TensorDict.load_memmap(self.data_path_root)
         td_data = split_trajectories(td_data).memmap_(self.data_path)
         return td_data
