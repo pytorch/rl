@@ -149,7 +149,7 @@ class PythonLSTMCell(RNNCellBase):
 
 
 class PythonLSTM(nn.LSTM):
-    """A module that runs multiple steps of LSTM and is only coded in Python."""
+    """A module that runs multiple steps of a multi-layer LSTM and is only coded in Python."""
 
     def __init__(
         self,
@@ -177,7 +177,7 @@ class PythonLSTM(nn.LSTM):
         )
 
     @staticmethod
-    def lstm_cell(x, hx, cx, weight_ih, bias_ih, weight_hh, bias_hh):
+    def _lstm_cell(x, hx, cx, weight_ih, bias_ih, weight_hh, bias_hh):
 
         gates = F.linear(x, weight_ih, bias_ih) + F.linear(hx, weight_hh, bias_hh)
 
@@ -218,7 +218,7 @@ class PythonLSTM(nn.LSTM):
                     bias_hh = None
 
                 # Run cell
-                h_t[layer], c_t[layer] = self.lstm_cell(
+                h_t[layer], c_t[layer] = self._lstm_cell(
                     x_t, h_t[layer], c_t[layer], weight_ih, bias_ih, weight_hh, bias_hh
                 )
 
@@ -241,10 +241,6 @@ class PythonLSTM(nn.LSTM):
             raise ValueError(
                 f"LSTM: Expected input to be 2D or 3D, got {input.dim()}D instead"
             )
-        is_batched = input.dim() == 3
-        batch_dim = 0 if self.batch_first else 1
-        if not is_batched:
-            input = input.unsqueeze(batch_dim)
         max_batch_size = input.size(0) if self.batch_first else input.size(1)
         sorted_indices = None
         unsorted_indices = None
@@ -265,33 +261,20 @@ class PythonLSTM(nn.LSTM):
             )
             hx = (h_zeros, c_zeros)
         else:
-            if is_batched:
-                if hx[0].dim() != 3 or hx[1].dim() != 3:
-                    msg = (
-                        "For batched 3-D input, hx and cx should "
-                        f"also be 3-D but got ({hx[0].dim()}-D, {hx[1].dim()}-D) tensors"
-                    )
-                    raise RuntimeError(msg)
-            else:
-                if hx[0].dim() != 2 or hx[1].dim() != 2:
-                    msg = (
-                        "For unbatched 2-D input, hx and cx should "
-                        f"also be 2-D but got ({hx[0].dim()}-D, {hx[1].dim()}-D) tensors"
-                    )
-                    raise RuntimeError(msg)
-                hx = (hx[0].unsqueeze(1), hx[1].unsqueeze(1))
+            if hx[0].dim() != 2 or hx[1].dim() != 2:
+                msg = (
+                    "For unbatched 2-D input, hx and cx should "
+                    f"also be 2-D but got ({hx[0].dim()}-D, {hx[1].dim()}-D) tensors"
+                )
+                raise RuntimeError(msg)
+            hx = (hx[0].unsqueeze(1), hx[1].unsqueeze(1))
             # Each batch of the hidden state should match the input sequence that
             # the user believes he/she is passing in.
             self.check_forward_args(input, hx, batch_sizes=None)
             hx = self.permute_hidden(hx, sorted_indices)
-
         result = self._lstm(input, hx)
         output = result[0]
         hidden = result[1]
-
-        if not is_batched:
-            output = output.squeeze(batch_dim)
-            hidden = (hidden[0].squeeze(1), hidden[1].squeeze(1))
         return output, self.permute_hidden(hidden, unsorted_indices)
 
 
@@ -801,6 +784,117 @@ class PythonGRUCell(RNNCellBase):
         hy = (1 - z_gate) * n_gate + z_gate * hx
 
         return hy
+
+
+class PythonGRU(nn.GRU):
+    """A module that runs multiple steps of a multi-layer GRU network and is only coded in Python."""
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        num_layers: int = 1,
+        bias: bool = True,
+        dropout: float = 0.0,
+        proj_size: int = 0,
+        device=None,
+        dtype=None,
+    ) -> None:
+
+        super().__init__(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            bias=bias,
+            batch_first=True,
+            dropout=dropout,
+            bidirectional=False,
+            proj_size=proj_size,
+            device=device,
+            dtype=dtype,
+        )
+
+    def _gru_cell(self, x, hx):
+        x = x.view(-1, x.size(1))
+
+        gates_ih = F.linear(x, self.weight_ih, self.bias_ih)
+        gates_hh = F.linear(hx, self.weight_hh, self.bias_hh)
+
+        r_gate_ih, z_gate_ih, n_gate_ih = gates_ih.chunk(3, 1)
+        r_gate_hh, z_gate_hh, n_gate_hh = gates_hh.chunk(3, 1)
+
+        r_gate = (r_gate_ih + r_gate_hh).sigmoid()
+        z_gate = (z_gate_ih + z_gate_hh).sigmoid()
+        n_gate = (n_gate_ih + r_gate * n_gate_hh).tanh()
+
+        hy = (1 - z_gate) * n_gate + z_gate * hx
+
+        return hy
+
+    def forward(self, input, hx=None):
+
+        if hx is None:
+            hx = torch.zeros(
+                input.size(0), self.hidden_size, device=self.device, dtype=self.dtype
+            )
+
+        bs, seq_len, input_size = input.size()
+        h_t = hx
+
+        outputs = []
+
+        for t in range(seq_len):
+            x_t = input[:, t, :]
+
+            for layer in range(self.num_layers):
+                h_t[layer] = self._gru_cell[layer](x_t, h_t[layer])
+
+                # Apply dropout if in training mode and not the last layer
+                if layer < self.num_layers - 1:
+                    x_t = F.dropout(h_t[layer], p=self.dropout, training=self.training)
+                else:
+                    x_t = h_t[layer]
+
+            outputs.append(x_t)
+
+        outputs = torch.stack(outputs, dim=1)
+
+        return outputs, h_t
+
+    def forward(self, input, hx=None):  # noqa: F811
+        self._update_flat_weights()
+        batch_sizes = None
+        if input.dim() not in (2, 3):
+            raise ValueError(
+                f"GRU: Expected input to be 2D or 3D, got {input.dim()}D instead"
+            )
+        if hx is not None and hx.dim() != 3:
+            raise RuntimeError(
+                f"For batched 3-D input, hx should also be 3-D but got {hx.dim()}-D tensor"
+            )
+        max_batch_size = input.size(0) if self.batch_first else input.size(1)
+        sorted_indices = None
+        unsorted_indices = None
+        if hx is None:
+            hx = torch.zeros(
+                self.num_layers,
+                max_batch_size,
+                self.hidden_size,
+                dtype=input.dtype,
+                device=input.device,
+            )
+        else:
+            # Each batch of the hidden state should match the input sequence that
+            # the user believes he/she is passing in.
+            hx = self.permute_hidden(hx, sorted_indices)
+
+        self.check_forward_args(input, hx, batch_sizes)
+        result = self._gru(input, batch_sizes, hx)
+
+        output = result[0]
+        hidden = result[1]
+
+        return output, self.permute_hidden(hidden, unsorted_indices)
 
 
 class GRUModule(ModuleBase):

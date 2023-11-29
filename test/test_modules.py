@@ -21,6 +21,7 @@ from torchrl.modules import (
     MultiAgentConvNet,
     MultiAgentMLP,
     OnlineDTActor,
+    PythonGRU,
     PythonGRUCell,
     PythonLSTM,
     PythonLSTMCell,
@@ -1294,6 +1295,50 @@ def test_python_lstm(device, bias, dropout):
 
     assert hn1.shape == hn2.shape
     assert cn1.shape == cn2.shape
+    assert output1.shape == output2.shape
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("bias", [True, False])
+@pytest.mark.parametrize("dropout", [0.0, 0.5])
+def test_python_gru(device, bias, dropout):
+
+    gru1 = PythonGRU(
+        input_size=10, hidden_size=20, num_layers=2, device=device, bias=bias
+    )
+    gru2 = nn.GRU(
+        input_size=10,
+        hidden_size=20,
+        num_layers=2,
+        device=device,
+        bias=bias,
+        batch_first=True,
+    )
+
+    # Make sure parameters match
+    for (k1, v1), (k2, v2) in zip(gru1.named_parameters(), gru2.named_parameters()):
+        assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
+
+    input = torch.randn(5, 3, 10).to(device)
+    h0 = torch.randn(2, 5, 20).to(device)
+
+    # Test without hidden states
+    with torch.no_grad():
+        output1, hn1 = gru1(input)
+        output2, hn2 = gru2(input)
+
+    assert hn1.shape == hn2.shape
+    assert output1.shape == output2.shape
+
+    # Test with hidden states
+    with torch.no_grad():
+        output1, hn1 = gru1(input, h0)
+        output2, hn2 = gru2(input, h0)
+
+    assert hn1.shape == hn2.shape
     assert output1.shape == output2.shape
 
 
