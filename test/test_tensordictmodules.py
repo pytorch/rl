@@ -1779,7 +1779,8 @@ class TestLSTMModule:
             td_ss["intermediate"], td["intermediate"][..., -1, :]
         )
 
-    def test_lstm_parallel_env(self):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_lstm_parallel_env(self, python_based):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
         device = "cuda" if torch.cuda.device_count() else "cpu"
@@ -1791,6 +1792,7 @@ class TestLSTMModule:
             in_key="observation",
             out_key="features",
             device=device,
+            python_based=python_based,
         )
 
         def create_transformed_env():
