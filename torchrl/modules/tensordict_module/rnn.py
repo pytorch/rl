@@ -248,7 +248,6 @@ class LSTM(nn.LSTM):
                 1, 0, 2
             )  # Change back (batch, seq_len, features) to (seq_len, batch, features)
 
-        import ipdb; ipdb.set_trace()
         return outputs, (h_t, c_t)
 
     def forward(self, input, hx=None):  # noqa: F811
