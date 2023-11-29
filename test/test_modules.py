@@ -1269,9 +1269,9 @@ def test_python_lstm(device, bias, dropout):
             v1.shape == v2.shape
         ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
-    input = torch.randn(5, 3, 10)
-    h0 = torch.randn(2, 5, 20)
-    c0 = torch.randn(2, 5, 20)
+    input = torch.randn(5, 3, 10).to(device)
+    h0 = torch.randn(2, 5, 20).to(device)
+    c0 = torch.randn(2, 5, 20).to(device)
 
     # Test without hidden states
     with torch.no_grad():
