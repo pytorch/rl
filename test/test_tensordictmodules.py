@@ -1775,6 +1775,7 @@ class TestLSTMModule:
             lstm_module_ss(td_ss)
             td_ss = step_mdp(td_ss, keep_other=True)
             td_ss["observation"][:] = _t + 1
+        import ipdb; ipdb.set_trace()  # asssert fails
         torch.testing.assert_close(
             td_ss["intermediate"], td["intermediate"][..., -1, :]
         )
@@ -2045,6 +2046,7 @@ class TestGRUModule:
             gru_module_ss(td_ss)
             td_ss = step_mdp(td_ss, keep_other=True)
             td_ss["observation"][:] = _t + 1
+        import ipdb; ipdb.set_trace()  # asssert fails
         torch.testing.assert_close(
             td_ss["intermediate"], td["intermediate"][..., -1, :]
         )
