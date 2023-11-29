@@ -120,16 +120,16 @@ class PythonLSTMCell(RNNCellBase):
 
         gates = F.linear(x, self.weight_ih, self.bias_ih) + F.linear(hx, self.weight_hh, self.bias_hh)
 
-        ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
+        i_gate, f_gate, g_gate, o_gate = gates.chunk(4, 1)
 
-        ingate = ingate.sigmoid()
-        forgetgate = forgetgate.sigmoid()
-        cellgate = cellgate.tanh()
-        outgate = outgate.sigmoid()
+        i_gate = i_gate.sigmoid()
+        f_gate = f_gate.sigmoid()
+        g_gate = g_gate.tanh()
+        o_gate = o_gate.sigmoid()
 
-        cy = cx * forgetgate + ingate * cellgate
+        cy = cx * f_gate + i_gate * g_gate
 
-        hy = outgate * cy.tanh()
+        hy = o_gate * cy.tanh()
 
         return (hy, cy)
 
@@ -615,21 +615,21 @@ class PythonGRUCell(RNNCellBase):
 
     def gru_cell(self, x, hx):
         x = x.view(-1, x.size(1))
-        gates = F.linear(x, self.weight_ih, self.bias_ih) + F.linear(hx, self.weight_hh, self.bias_hh)
-        
 
-        ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
+        gates_ih = F.linear(x, self.weight_ih, self.bias_ih)
+        gates_hh = F.linear(hx, self.weight_hh, self.bias_hh)
 
-        ingate = ingate.sigmoid()
-        forgetgate = forgetgate.sigmoid()
-        cellgate = cellgate.tanh()
-        outgate = outgate.sigmoid()
+        r_gate_ih, z_gate_ih, n_gate_ih = gates_ih.chunk(3, 1)
+        r_gate_hh, z_gate_hh, n_gate_hh = gates_hh.chunk(3, 1)
 
-        cy = cx * forgetgate + ingate * cellgate
+        r_gate = (r_gate_ih + r_gate_hh).sigmoid()
+        z_gate = (z_gate_ih + z_gate_hh).sigmoid()
+        n_gate = (n_gate_ih + r_gate * n_gate_hh).tanh()
 
-        hy = outgate * cy.tanh()
+        hy = (1 - z_gate) * n_gate + z_gate * hx
 
-        return (hy, cy)
+        return hy
+
 
 class GRUModule(ModuleBase):
     """An embedder for an GRU module.
