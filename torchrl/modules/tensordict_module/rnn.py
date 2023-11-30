@@ -788,19 +788,20 @@ class GRUCell(RNNCellBase):
         return ret
 
     def gru_cell(self, x, hx):
+
         x = x.view(-1, x.size(1))
 
-        gates_ih = F.linear(x, self.weight_ih, self.bias_ih)
-        gates_hh = F.linear(hx, self.weight_hh, self.bias_hh)
+        gate_x = F.linear(x, self.weight_ih, self.bias_ih)
+        gate_h = F.linear(hx, self.weight_hh, self.bias_hh)
 
-        r_gate_ih, z_gate_ih, n_gate_ih = gates_ih.chunk(3, 1)
-        r_gate_hh, z_gate_hh, n_gate_hh = gates_hh.chunk(3, 1)
+        i_r, i_i, i_n = gate_x.chunk(3, 1)
+        h_r, h_i, h_n = gate_h.chunk(3, 1)
 
-        r_gate = (r_gate_ih + r_gate_hh).sigmoid()
-        z_gate = (z_gate_ih + z_gate_hh).sigmoid()
-        n_gate = (n_gate_ih + r_gate * n_gate_hh).tanh()
+        resetgate = F.sigmoid(i_r + h_r)
+        inputgate = F.sigmoid(i_i + h_i)
+        newgate = F.tanh(i_n + (resetgate * h_n))
 
-        hy = (1 - z_gate) * n_gate + z_gate * hx
+        hy = newgate + inputgate * (hx - newgate)
 
         return hy
 
@@ -842,29 +843,47 @@ class GRU(nn.GRU):
     def _gru_cell(x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
         x = x.view(-1, x.size(1))
 
-        gates_ih = F.linear(x, weight_ih, bias_ih)
-        gates_hh = F.linear(hx, weight_hh, bias_hh)
+        gate_x = F.linear(x, weight_ih, bias_ih)
+        gate_h = F.linear(hx, weight_hh, bias_hh)
 
-        r_gate_ih, z_gate_ih, n_gate_ih = gates_ih.chunk(3, 1)
-        r_gate_hh, z_gate_hh, n_gate_hh = gates_hh.chunk(3, 1)
+        i_r, i_i, i_n = gate_x.chunk(3, 1)
+        h_r, h_i, h_n = gate_h.chunk(3, 1)
 
-        r_gate = (r_gate_ih + r_gate_hh).sigmoid()
-        z_gate = (z_gate_ih + z_gate_hh).sigmoid()
-        n_gate = (n_gate_ih + r_gate * n_gate_hh).tanh()
+        resetgate = F.sigmoid(i_r + h_r)
+        inputgate = F.sigmoid(i_i + h_i)
+        newgate = F.tanh(i_n + (resetgate * h_n))
 
-        hy = (1 - z_gate) * n_gate + z_gate * hx
+        hy = newgate + inputgate * (hx - newgate)
 
         return hy
 
+    # @staticmethod
+    # def _gru_cell(x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
+    #     x = x.view(-1, x.size(1))
+    #
+    #     gates_ih = F.linear(x, weight_ih, bias_ih)
+    #     gates_hh = F.linear(hx, weight_hh, bias_hh)
+    #
+    #     r_gate_ih, z_gate_ih, n_gate_ih = gates_ih.chunk(3, 1)
+    #     r_gate_hh, z_gate_hh, n_gate_hh = gates_hh.chunk(3, 1)
+    #
+    #     r_gate = (r_gate_ih + r_gate_hh).sigmoid()
+    #     z_gate = (z_gate_ih + z_gate_hh).sigmoid()
+    #     n_gate = (n_gate_ih + r_gate * n_gate_hh).tanh()
+    #
+    #     hy = (1 - z_gate) * n_gate + z_gate * hx
+    #
+    #     return hy
+
     def _gru(self, x, hx):
 
-        if self.batch_first is False:
+        if not self.batch_first:
             x = x.permute(
                 1, 0, 2
             )  # Change (seq_len, batch, features) to (batch, seq_len, features)
 
         bs, seq_len, input_size = x.size()
-        h_t = hx.clone()
+        h_t = list(hx.unbind(0))
 
         outputs = []
 
@@ -885,11 +904,16 @@ class GRU(nn.GRU):
                     bias_hh = None
 
                 h_t[layer] = self._gru_cell(
-                    x_t, h_t[layer], weight_ih, bias_ih, weight_hh, bias_hh
+                    x_t,
+                    h_t[layer],
+                    weight_ih,
+                    bias_ih,
+                    weight_hh,
+                    bias_hh,
                 )
 
                 # Apply dropout if in training mode and not the last layer
-                if layer < self.num_layers - 1:
+                if layer < self.num_layers - 1 and self.dropout:
                     x_t = F.dropout(h_t[layer], p=self.dropout, training=self.training)
                 else:
                     x_t = h_t[layer]
@@ -902,7 +926,7 @@ class GRU(nn.GRU):
                 1, 0, 2
             )  # Change back (batch, seq_len, features) to (seq_len, batch, features)
 
-        return outputs, h_t
+        return outputs, torch.stack(h_t, 0)
 
     def forward(self, input, hx=None):  # noqa: F811
         self._update_flat_weights()

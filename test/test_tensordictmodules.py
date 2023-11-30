@@ -1736,7 +1736,7 @@ class TestLSTMModule:
         )
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
-    @pytest.mark.parametrize("python_based", [True, False])
+    @pytest.mark.parametrize("python_based", [False, True])
     def test_multi_consecutive(self, shape, python_based):
         t = 20
         td = TensorDict(

@@ -1229,26 +1229,31 @@ def test_python_gru_cell(device, bias):
     gru_cell1 = GRUCell(10, 20, device=device, bias=bias)
     gru_cell2 = nn.GRUCell(10, 20, device=device, bias=bias)
 
+    gru_cell2.load_state_dict(gru_cell1.state_dict())
+
     # Make sure parameters match
     for (k1, v1), (k2, v2) in zip(
         gru_cell1.named_parameters(), gru_cell2.named_parameters()
     ):
         assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
+        assert (v1 == v2).all()
         assert (
             v1.shape == v2.shape
         ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
     # Run loop
-    input = torch.randn(2, 3, 10).to(device)
-    h0 = torch.randn(3, 20).to(device)
+    input = torch.randn(2, 3, 10, device=device)
+    h0 = torch.zeros(3, 20, device=device)
     with torch.no_grad():
         for i in range(input.size()[0]):
+            print(i)
             h1 = gru_cell1(input[i], h0)
             h2 = gru_cell2(input[i], h0)
 
-    # Make sure the final hidden states have the same shape
-    assert h1.shape == h2.shape
-    assert not torch.isclose(h0, h1).any()
+            # Make sure the final hidden states have the same shape
+            assert h1.shape == h2.shape
+            torch.testing.assert_close(h1, h2)
+            h0 = h1
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -1314,12 +1319,14 @@ def test_python_lstm(device, bias, dropout, batch_first):
 @pytest.mark.parametrize("bias", [True, False])
 @pytest.mark.parametrize("batch_first", [True, False])
 @pytest.mark.parametrize("dropout", [0.0, 0.5])
-def test_python_gru(device, bias, dropout, batch_first):
-
+@pytest.mark.parametrize("num_layers", [1, 2])
+def test_python_gru(device, bias, dropout, batch_first, num_layers):
+    B = 5
+    T = 3
     gru1 = GRU(
         input_size=10,
         hidden_size=20,
-        num_layers=2,
+        num_layers=num_layers,
         device=device,
         bias=bias,
         batch_first=batch_first,
@@ -1327,25 +1334,27 @@ def test_python_gru(device, bias, dropout, batch_first):
     gru2 = nn.GRU(
         input_size=10,
         hidden_size=20,
-        num_layers=2,
+        num_layers=num_layers,
         device=device,
         bias=bias,
         batch_first=batch_first,
     )
+    gru2.load_state_dict(gru1.state_dict())
 
     # Make sure parameters match
     for (k1, v1), (k2, v2) in zip(gru1.named_parameters(), gru2.named_parameters()):
         assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
+        torch.testing.assert_close(v1, v2)
         assert (
             v1.shape == v2.shape
         ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
-    if batch_first is True:
-        input = torch.randn(5, 3, 10).to(device)
+    if batch_first:
+        input = torch.randn(B, T, 10, device=device)
     else:
-        input = torch.randn(3, 5, 10).to(device)
+        input = torch.randn(T, B, 10, device=device)
 
-    h0 = torch.randn(2, 5, 20).to(device)
+    h0 = torch.randn(num_layers, 5, 20, device=device)
 
     # Test without hidden states
     with torch.no_grad():
@@ -1354,6 +1363,9 @@ def test_python_gru(device, bias, dropout, batch_first):
 
     assert h1.shape == h2.shape
     assert output1.shape == output2.shape
+    if dropout == 0.0:
+        torch.testing.assert_close(output1, output2)
+        torch.testing.assert_close(h1, h2)
 
     # Test with hidden states
     with torch.no_grad():
@@ -1362,7 +1374,9 @@ def test_python_gru(device, bias, dropout, batch_first):
 
     assert h1.shape == h2.shape
     assert output1.shape == output2.shape
-    assert not torch.isclose(h0, h1).any()
+    if dropout == 0.0:
+        torch.testing.assert_close(output1, output2)
+        torch.testing.assert_close(h1, h2)
 
 
 if __name__ == "__main__":
