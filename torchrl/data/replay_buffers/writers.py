@@ -5,13 +5,15 @@
 
 import heapq
 from abc import ABC, abstractmethod
+from copy import copy
 from typing import Any, Dict, Sequence
 
 import numpy as np
 import torch
 
 from .storages import Storage
-
+from torch import multiprocessing as mp
+from multiprocessing.context import get_spawning_popen
 
 class Writer(ABC):
     """A ReplayBuffer base Writer class."""
@@ -42,6 +44,34 @@ class Writer(ABC):
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         return
 
+    @property
+    def _cursor(self):
+        _cursor_value = self.__dict__.get('_cursor_value', None)
+        if _cursor_value is None:
+            _cursor_value = self._cursor_value = mp.Value('i', 0)
+        return _cursor_value.value
+
+    @_cursor.setter
+    def _cursor(self, value):
+        _cursor_value = self.__dict__.get('_cursor_value', None)
+        if _cursor_value is None:
+            _cursor_value = self._cursor_value = mp.Value('i', 0)
+        _cursor_value.value = value
+
+    def __getstate__(self):
+        state = copy(self.__dict__)
+        if get_spawning_popen() is None:
+            cursor = self._cursor
+            del state["_cursor_value"]
+            state["cursor__context"] = cursor
+        return state
+
+    def __setstate__(self, state):
+        cursor = state.pop("cursor__context", None)
+        if cursor is not None:
+            _cursor_value = mp.Value('i', cursor)
+            state["_cursor_value"] = _cursor_value
+        self.__dict__.update(state)
 
 class RoundRobinWriter(Writer):
     """A RoundRobin Writer class for composable replay buffers."""

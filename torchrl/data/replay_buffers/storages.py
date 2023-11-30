@@ -18,6 +18,8 @@ from tensordict.utils import expand_right
 
 from torchrl._utils import _CKPT_BACKEND, implement_for, VERBOSE
 from torchrl.data.replay_buffers.utils import INT_CLASSES
+from torch import multiprocessing as mp
+from multiprocessing.context import get_spawning_popen
 
 try:
     from torchsnapshot.serialization import tensor_from_memoryview
@@ -258,6 +260,37 @@ class TensorStorage(Storage):
             else "auto"
         )
         self._storage = storage
+
+
+    @property
+    def _len(self):
+        _len_value = self.__dict__.get('_len_value', None)
+        if _len_value is None:
+            _len_value = self._len_value = mp.Value('i', 0)
+        return _len_value.value
+
+    @_len.setter
+    def _len(self, value):
+        _len_value = self.__dict__.get('_len_value', None)
+        if _len_value is None:
+            _len_value = self._len_value = mp.Value('i', 0)
+        _len_value.value = value
+
+    def __getstate__(self):
+        state = copy(self.__dict__)
+        if get_spawning_popen() is None:
+            len = self._len
+            del state["_len_value"]
+            state["len__context"] = len
+        return state
+
+    def __setstate__(self, state):
+        len = state.pop("len__context", None)
+        if len is not None:
+            _len_value = mp.Value('i', len)
+            state["_len_value"] = _len_value
+        self.__dict__.update(state)
+
 
     def state_dict(self) -> Dict[str, Any]:
         _storage = self._storage

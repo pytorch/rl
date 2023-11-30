@@ -63,6 +63,7 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
     VecNorm,
 )
+from torch import multiprocessing as mp
 
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
@@ -1283,6 +1284,38 @@ def test_max_value_writer(size, batch_size, reward_ranges, device):
     rb.extend(td)
     sample = rb.sample()
     assert (sample.get("key") != 0).all()
+
+
+class TestMultiProc:
+    @staticmethod
+    def worker(rb, q0, q1):
+        td = TensorDict({"a": torch.ones(10)}, [10])
+        rb.extend(td)
+        q0.put("extended")
+        extended = q1.get(timeout=5)
+        assert extended == "extended"
+        assert len(rb) == 21, len(rb)
+        assert (rb["_data", "a"][:9] == 2).all()
+        q0.put("finish")
+
+    def test_multiproc_rb(self):
+        rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(21))
+        td = TensorDict({"a": torch.zeros(10)}, [10])
+        rb.extend(td)
+        q0 = mp.Queue(1)
+        q1 = mp.Queue(1)
+        proc = mp.Process(target=self.worker, args=(rb, q0, q1))
+        proc.start()
+        extended = q0.get(timeout=100)
+        assert extended == "extended"
+        assert len(rb) == 20
+        assert (rb["_data", "a"][10:20] == 1).all()
+        td = TensorDict({"a": torch.zeros(10) + 2}, [10])
+        rb.extend(td)
+        q1.put("extended")
+        finish = q0.get(timeout=5)
+        assert finish == "finish"
+        proc.join()
 
 
 if __name__ == "__main__":
