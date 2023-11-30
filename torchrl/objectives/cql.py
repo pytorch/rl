@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import math
 import warnings
+from copy import deepcopy
 from dataclasses import dataclass
 
 from typing import Optional, Tuple, Union
@@ -26,24 +27,13 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_WARNING,
+    _vmap_func,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
 
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-try:
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap
-
-    _has_functorch = True
-    err = ""
-except ImportError as err:
-    _has_functorch = False
-    FUNCTORCH_ERROR = err
 
 
 class CQLLoss(LossModule):
@@ -281,8 +271,6 @@ class CQLLoss(LossModule):
         lagrange_thresh: float = 0.0,
     ) -> None:
         self._out_keys = None
-        if not _has_functorch:
-            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
 
         # Actor
@@ -291,7 +279,6 @@ class CQLLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
-            funs_to_decorate=["forward", "get_dist"],
         )
 
         # Q value
@@ -362,8 +349,8 @@ class CQLLoss(LossModule):
                 torch.nn.Parameter(torch.tensor(math.log(1.0), device=device)),
             )
 
-        self._vmap_qvalue_networkN0 = vmap(self.qvalue_network, (None, 0))
-        self._vmap_qvalue_network00 = vmap(self.qvalue_network)
+        self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
+        self._vmap_qvalue_network00 = _vmap_func(self.qvalue_network)
 
     @property
     def target_entropy(self):
@@ -590,8 +577,10 @@ class CQLLoss(LossModule):
             batch_size=batch_size,
         )
         with torch.no_grad():
-            with set_exploration_type(ExplorationType.RANDOM):
-                dist = self.actor_network.get_dist(tensordict, params=actor_params)
+            with set_exploration_type(ExplorationType.RANDOM), actor_params.to_module(
+                self.actor_network
+            ):
+                dist = self.actor_network.get_dist(tensordict)
                 action = dist.rsample()
                 tensordict.set(self.tensor_keys.action, action)
                 sample_log_prob = dist.log_prob(action)
@@ -607,11 +596,11 @@ class CQLLoss(LossModule):
         tensordict = tensordict.clone(False)
         # get actions and log-probs
         with torch.no_grad():
-            with set_exploration_type(ExplorationType.RANDOM):
+            with set_exploration_type(ExplorationType.RANDOM), actor_params.to_module(
+                self.actor_network
+            ):
                 next_tensordict = tensordict.get("next").clone(False)
-                next_dist = self.actor_network.get_dist(
-                    next_tensordict, params=actor_params
-                )
+                next_dist = self.actor_network.get_dist(next_tensordict)
                 next_action = next_dist.rsample()
                 next_tensordict.set(self.tensor_keys.action, next_action)
                 next_sample_log_prob = next_dist.log_prob(next_action)
@@ -1066,7 +1055,8 @@ class DiscreteCQLLoss(LossModule):
         self.value_type = value_type
 
         # we will take care of computing the next value inside this module
-        value_net = self.value_network
+        value_net = deepcopy(self.value_network)
+        self.value_network_params.to_module(value_net, return_swap=False)
 
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
@@ -1117,10 +1107,8 @@ class DiscreteCQLLoss(LossModule):
         tensordict: TensorDictBase,
     ) -> Tuple[torch.Tensor, dict]:
         td_copy = tensordict.clone(False)
-        self.value_network(
-            td_copy,
-            params=self.value_network_params,
-        )
+        with self.value_network_params.to_module(self.value_network):
+            self.value_network(td_copy)
 
         action = tensordict.get(self.tensor_keys.action)
         pred_val = td_copy.get(self.tensor_keys.action_value)
@@ -1137,8 +1125,7 @@ class DiscreteCQLLoss(LossModule):
         # calculate target value
         with torch.no_grad():
             target_value = self.value_estimator.value_estimate(
-                td_copy,
-                target_params=self._cached_detached_target_value_params,
+                td_copy, params=self._cached_detached_target_value_params
             ).squeeze(-1)
 
         with torch.no_grad():

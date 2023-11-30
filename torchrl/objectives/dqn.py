@@ -289,10 +289,8 @@ class DQNLoss(LossModule):
 
         """
         td_copy = tensordict.clone(False)
-        self.value_network(
-            td_copy,
-            params=self.value_network_params,
-        )
+        with self.value_network_params.to_module(self.value_network):
+            self.value_network(td_copy)
 
         action = tensordict.get(self.tensor_keys.action)
         pred_val = td_copy.get(self.tensor_keys.action_value)
@@ -462,10 +460,10 @@ class DistributionalDQNLoss(LossModule):
         # Calculate current state probabilities (online network noise already
         # sampled)
         td_clone = tensordict.clone()
-        self.value_network(
-            td_clone,
-            params=self.value_network_params,
-        )  # Log probabilities log p(s_t, ·; θonline)
+        with self.value_network_params.to_module(self.value_network):
+            self.value_network(
+                td_clone,
+            )  # Log probabilities log p(s_t, ·; θonline)
         action_log_softmax = td_clone.get(self.tensor_keys.action_value)
 
         if self.action_space == "categorical":
@@ -475,24 +473,18 @@ class DistributionalDQNLoss(LossModule):
                 action, action_log_softmax, batch_size, atoms
             )
 
-        with torch.no_grad():
+        with torch.no_grad(), self.value_network_params.to_module(self.value_network):
             # Calculate nth next state probabilities
             next_td = step_mdp(tensordict)
-            self.value_network(
-                next_td,
-                params=self.value_network_params,
-            )  # Probabilities p(s_t+n, ·; θonline)
+            self.value_network(next_td)  # Probabilities p(s_t+n, ·; θonline)
 
             next_td_action = next_td.get(self.tensor_keys.action)
             if self.action_space == "categorical":
                 argmax_indices_ns = next_td_action.squeeze(-1)
             else:
                 argmax_indices_ns = next_td_action.argmax(-1)  # one-hot encoding
-
-            self.value_network(
-                next_td,
-                params=self.target_value_network_params,
-            )  # Probabilities p(s_t+n, ·; θtarget)
+            with self.target_value_network_params.to_module(self.value_network):
+                self.value_network(next_td)  # Probabilities p(s_t+n, ·; θtarget)
             pns = next_td.get(self.tensor_keys.action_value).exp()
             # Double-Q probabilities
             # p(s_t+n, argmax_a[(z, p(s_t+n, a; θonline))]; θtarget)

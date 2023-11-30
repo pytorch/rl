@@ -15,26 +15,16 @@ from torchrl.data import BoundedTensorSpec, CompositeSpec, TensorSpec
 
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
+
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_WARNING,
+    _vmap_func,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-try:
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap
-
-    FUNCTORCH_ERR = ""
-    _has_functorch = True
-except ImportError as err:
-    FUNCTORCH_ERR = str(err)
-    _has_functorch = False
 
 
 class TD3Loss(LossModule):
@@ -229,10 +219,6 @@ class TD3Loss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
     ) -> None:
-        if not _has_functorch:
-            raise ImportError(
-                f"Failed to import functorch with error message:\n{FUNCTORCH_ERR}"
-            )
 
         super().__init__()
         self._in_keys = None
@@ -310,8 +296,8 @@ class TD3Loss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
-        self._vmap_qvalue_network00 = vmap(self.qvalue_network)
-        self._vmap_actor_network00 = vmap(self.actor_network)
+        self._vmap_qvalue_network00 = _vmap_func(self.qvalue_network)
+        self._vmap_actor_network00 = _vmap_func(self.actor_network)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -359,9 +345,8 @@ class TD3Loss(LossModule):
 
     def actor_loss(self, tensordict):
         tensordict_actor_grad = tensordict.select(*self.actor_network.in_keys)
-        tensordict_actor_grad = self.actor_network(
-            tensordict_actor_grad, self.actor_network_params
-        )
+        with self.actor_network_params.to_module(self.actor_network):
+            tensordict_actor_grad = self.actor_network(tensordict_actor_grad)
         actor_loss_td = tensordict_actor_grad.select(
             *self.qvalue_network.in_keys
         ).expand(
@@ -395,9 +380,8 @@ class TD3Loss(LossModule):
             next_td_actor = step_mdp(tensordict).select(
                 *self.actor_network.in_keys
             )  # next_observation ->
-            next_td_actor = self.actor_network(
-                next_td_actor, self.target_actor_network_params
-            )
+            with self.target_actor_network_params.to_module(self.actor_network):
+                next_td_actor = self.actor_network(next_td_actor)
             next_action = (next_td_actor.get(self.tensor_keys.action) + noise).clamp(
                 self.min_action, self.max_action
             )

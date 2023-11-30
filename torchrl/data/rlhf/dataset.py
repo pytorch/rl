@@ -77,8 +77,8 @@ class TokenizedDatasetLoader:
         >>> print(dataset)
         TensorDict(
             fields={
-                attention_mask: MemmapTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False),
-                input_ids: MemmapTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False)},
+                attention_mask: MemoryMappedTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False),
+                input_ids: MemoryMappedTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False)},
             batch_size=torch.Size([185068]),
             device=None,
             is_shared=False)
@@ -137,6 +137,7 @@ class TokenizedDatasetLoader:
         data_dir = root_dir / str(Path(self.dataset_name).name).split("-")[0]
         data_dir_total = data_dir / split / str(max_length)
         # search for data
+        print("Looking for data in", data_dir_total)
         if os.path.exists(data_dir_total):
             dataset = TensorDict.load_memmap(data_dir_total)
             return dataset
@@ -270,8 +271,8 @@ class TokenizedDatasetLoader:
                         fields={
                             prefix: TensorDict(
                                 fields={
-                                    labels: MemmapTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.float32, is_shared=False),
-                                    tokens: MemmapTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.int64, is_shared=False)},
+                                    labels: MemoryMappedTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.float32, is_shared=False),
+                                    tokens: MemoryMappedTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.int64, is_shared=False)},
                                 batch_size=torch.Size([10]),
                                 device=None,
                                 is_shared=False)},

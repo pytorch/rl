@@ -148,7 +148,7 @@ class EndOfLifeTransform(Transform):
 
         lives = self._get_lives()
         end_of_life = torch.tensor(
-            tensordict.get(self.lives_key) < lives, device=self.parent.device
+            tensordict.get(self.lives_key) > lives, device=self.parent.device
         )
         try:
             done = next_tensordict.get(self.done_key)
