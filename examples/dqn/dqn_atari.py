@@ -65,30 +65,29 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create the replay buffer
-    with (
-        tempfile.TemporaryDirectory()
-        if cfg.buffer.scratch_dir is None
-        else nullcontext(cfg.buffer.scratch_dir)
-    ) as scratch_dir:
-        replay_buffer = TensorDictReplayBuffer(
-            pin_memory=False,
-            prefetch=3,
-            storage=LazyMemmapStorage(
-                max_size=cfg.buffer.buffer_size,
-                scratch_dir=scratch_dir,
-            ),
-            batch_size=cfg.buffer.batch_size,
-        )
+    if cfg.buffer.scratch_dir is None:
+        tempdir = tempfile.TemporaryDirectory()
+        scratch_dir = tempdir.name
+    else:
+        scratch_dir = cfg.buffer.scratch_dir
+    replay_buffer = TensorDictReplayBuffer(
+        pin_memory=False,
+        prefetch=3,
+        storage=LazyMemmapStorage(
+            max_size=cfg.buffer.buffer_size,
+            scratch_dir=scratch_dir,
+        ),
+        batch_size=cfg.buffer.batch_size,
+    )
 
     # Create the loss module
     loss_module = DQNLoss(
         value_network=model,
-        gamma=cfg.loss.gamma,
         loss_function="l2",
         delay_value=True,
     )
     loss_module.set_keys(done="eol", terminated="eol")
-    loss_module.make_value_estimator()
+    loss_module.make_value_estimator(gamma=cfg.loss.gamma)
     target_net_updater = HardUpdate(
         loss_module, value_network_update_interval=cfg.loss.hard_update_freq
     )
