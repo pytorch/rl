@@ -129,8 +129,7 @@ class LSTM(nn.LSTM):
     """A module that runs multiple steps of a multi-layer LSTM and is only coded in Python.
 
     .. note::
-        This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap`
-        and :func:`functorch.vmap`.
+        This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap` and :func:`torch.compile`.
 
     Examples:
         >>> import torch
