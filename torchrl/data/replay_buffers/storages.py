@@ -168,6 +168,14 @@ class ListStorage(Storage):
     def _empty(self):
         self._storage = []
 
+    def __getstate__(self):
+        if get_spawning_popen() is not None:
+            raise RuntimeError(
+                f"Cannot share a storage of type {type(self)} between processes."
+            )
+        state = copy(self.__dict__)
+        return state
+
 
 class TensorStorage(Storage):
     """A storage for tensors and tensordicts.

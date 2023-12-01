@@ -60,6 +60,34 @@ The following mean sampling latency improvements over using ListStorage were fou
 | :class:`LazyMemmapStorage`    | 3.44x     |
 +-------------------------------+-----------+
 
+Replay buffers with a shared storage and regular (RoundRobin) writers can also
+be shared between processes on a single node. This allows each worker to read and
+write onto the storage. The following code snippet examplifies this feature:
+
+  >>> from torchrl.data import TensorDictReplayBuffer, LazyMemmapStorage
+  >>> import torch
+  >>> from torch import multiprocessing as mp
+  >>> from tensordict import TensorDict
+  >>>
+  >>> def worker(rb):
+  ...     # Updates the replay buffer with new data
+  ...     td = TensorDict({"a": torch.ones(10)}, [10])
+  ...     rb.extend(td)
+  ...
+  >>> if __name__ == "__main__":
+  ...     rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(21))
+  ...     td = TensorDict({"a": torch.zeros(10)}, [10])
+  ...     rb.extend(td)
+  ...
+  ...     proc = mp.Process(target=worker, args=(rb,))
+  ...     proc.start()
+  ...     proc.join()
+  ...     # the replay buffer now has a length of 20, since the worker updated it
+  ...     assert len(rb) == 20
+  ...     assert (rb["_data", "a"][:10] == 0).all()  # data from main process
+  ...     assert (rb["_data", "a"][10:20] == 1).all()  # data from remote process
+
+
 Storing trajectories
 ~~~~~~~~~~~~~~~~~~~~
 
