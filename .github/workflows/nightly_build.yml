@@ -89,6 +89,7 @@ jobs:
         run: |
           export CC=clang CXX=clang++
           python3 -mpip install wheel
+          python3 -mpip install ninja
           python3 setup.py bdist_wheel \
             --package_name torchrl-nightly
       - name: Upload wheel for the test-wheel job
