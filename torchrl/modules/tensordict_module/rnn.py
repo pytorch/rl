@@ -210,7 +210,7 @@ class LSTM(nn.LSTM):
 
         # should check self.batch_first
         bs, seq_len, input_size = x.size()
-        h_t, c_t = [h.clone() for h in hx]
+        h_t, c_t = [list(h.unbind(0)) for h in hx]
 
         outputs = []
         for t in range(seq_len):
@@ -235,7 +235,7 @@ class LSTM(nn.LSTM):
                 )
 
                 # Apply dropout if in training mode
-                if layer < self.num_layers - 1:
+                if layer < self.num_layers - 1 and self.dropout:
                     x_t = F.dropout(h_t[layer], p=self.dropout, training=self.training)
                 else:  # No dropout after the last layer
                     x_t = h_t[layer]
@@ -248,7 +248,7 @@ class LSTM(nn.LSTM):
                 1, 0, 2
             )  # Change back (batch, seq_len, features) to (seq_len, batch, features)
 
-        return outputs, (h_t, c_t)
+        return outputs, (torch.stack(h_t, 0), torch.stack(c_t, 0))
 
     def forward(self, input, hx=None):  # noqa: F811
         self._update_flat_weights()
@@ -856,24 +856,6 @@ class GRU(nn.GRU):
         hy = newgate + inputgate * (hx - newgate)
 
         return hy
-
-    # @staticmethod
-    # def _gru_cell(x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
-    #     x = x.view(-1, x.size(1))
-    #
-    #     gates_ih = F.linear(x, weight_ih, bias_ih)
-    #     gates_hh = F.linear(hx, weight_hh, bias_hh)
-    #
-    #     r_gate_ih, z_gate_ih, n_gate_ih = gates_ih.chunk(3, 1)
-    #     r_gate_hh, z_gate_hh, n_gate_hh = gates_hh.chunk(3, 1)
-    #
-    #     r_gate = (r_gate_ih + r_gate_hh).sigmoid()
-    #     z_gate = (z_gate_ih + z_gate_hh).sigmoid()
-    #     n_gate = (n_gate_ih + r_gate * n_gate_hh).tanh()
-    #
-    #     hy = (1 - z_gate) * n_gate + z_gate * hx
-    #
-    #     return hy
 
     def _gru(self, x, hx):
 
