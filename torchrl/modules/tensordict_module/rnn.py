@@ -807,7 +807,9 @@ class GRUCell(RNNCellBase):
 
 
 class GRU(nn.GRU):
-    """A module that runs multiple steps of a multi-layer GRU network and is only coded in Python."""
+    """A module that runs multiple steps of a multi-layer GRU network and is only coded in Python.
+"""
+    __doc__ += nn.LSTM.__doc__
 
     def __init__(
         self,
