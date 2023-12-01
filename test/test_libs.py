@@ -406,7 +406,7 @@ class TestGym:
 
         with set_gym_backend("gymnasium"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
-
+            env.set_seed(0)
             assert env.get_library_name(env._env) == "gymnasium"
         # rollouts can be executed without decorator
         check_env_specs(env)
@@ -415,6 +415,8 @@ class TestGym:
             rollout_consistency_assertion(
                 rollout, done_key="done", observation_key=obs_key
             )
+        env.close()
+        del env
 
     @implement_for("gym", "0.18", "0.27.0")
     @pytest.mark.parametrize(
@@ -441,6 +443,8 @@ class TestGym:
             )
             assert env.batch_size == torch.Size([2])
             check_env_specs(env)
+            env.close()
+            del env
 
     @implement_for("gym", "0.18", "0.27.0")
     @pytest.mark.parametrize(
@@ -451,7 +455,7 @@ class TestGym:
     def test_vecenvs_env(self, envname):  # noqa: F811
         with set_gym_backend("gym"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
-
+            env.set_seed(0)
             assert env.get_library_name(env._env) == "gym"
         # rollouts can be executed without decorator
         check_env_specs(env)
@@ -460,11 +464,16 @@ class TestGym:
             rollout_consistency_assertion(
                 rollout, done_key="done", observation_key=obs_key
             )
+        env.close()
+        del env
         if envname != "CartPole-v1":
             with set_gym_backend("gym"):
                 env = GymEnv(envname, num_envs=2, from_pixels=True)
+                env.set_seed(0)
             # rollouts can be executed without decorator
             check_env_specs(env)
+            env.close()
+            del env
 
     @implement_for("gym", None, "0.18")
     @pytest.mark.parametrize(

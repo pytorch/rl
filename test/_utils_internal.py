@@ -335,7 +335,9 @@ def rollout_consistency_assertion(
     # data resulting from step, when it's not done, after step_mdp
     r_not_done_tp1 = rollout[:, 1:][~done]
     torch.testing.assert_close(
-        r_not_done[observation_key], r_not_done_tp1[observation_key]
+        r_not_done[observation_key],
+        r_not_done_tp1[observation_key],
+        msg=f"Key {observation_key} did not match",
     )
 
     if not done.any():
