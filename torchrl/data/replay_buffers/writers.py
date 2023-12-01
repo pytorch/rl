@@ -6,14 +6,15 @@
 import heapq
 from abc import ABC, abstractmethod
 from copy import copy
+from multiprocessing.context import get_spawning_popen
 from typing import Any, Dict, Sequence
 
 import numpy as np
 import torch
+from torch import multiprocessing as mp
 
 from .storages import Storage
-from torch import multiprocessing as mp
-from multiprocessing.context import get_spawning_popen
+
 
 class Writer(ABC):
     """A ReplayBuffer base Writer class."""
@@ -44,34 +45,6 @@ class Writer(ABC):
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         return
 
-    @property
-    def _cursor(self):
-        _cursor_value = self.__dict__.get('_cursor_value', None)
-        if _cursor_value is None:
-            _cursor_value = self._cursor_value = mp.Value('i', 0)
-        return _cursor_value.value
-
-    @_cursor.setter
-    def _cursor(self, value):
-        _cursor_value = self.__dict__.get('_cursor_value', None)
-        if _cursor_value is None:
-            _cursor_value = self._cursor_value = mp.Value('i', 0)
-        _cursor_value.value = value
-
-    def __getstate__(self):
-        state = copy(self.__dict__)
-        if get_spawning_popen() is None:
-            cursor = self._cursor
-            del state["_cursor_value"]
-            state["cursor__context"] = cursor
-        return state
-
-    def __setstate__(self, state):
-        cursor = state.pop("cursor__context", None)
-        if cursor is not None:
-            _cursor_value = mp.Value('i', cursor)
-            state["_cursor_value"] = _cursor_value
-        self.__dict__.update(state)
 
 class RoundRobinWriter(Writer):
     """A RoundRobin Writer class for composable replay buffers."""
@@ -82,14 +55,17 @@ class RoundRobinWriter(Writer):
 
     def add(self, data: Any) -> int:
         ret = self._cursor
-        self._storage[self._cursor] = data
+        _cursor = self._cursor
+        # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (self._cursor + 1) % self._storage.max_size
+        self._storage[_cursor] = data
         return ret
 
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
         batch_size = len(data)
         index = np.arange(cur_size, batch_size + cur_size) % self._storage.max_size
+        # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (batch_size + cur_size) % self._storage.max_size
         self._storage[index] = data
         return index
@@ -103,21 +79,52 @@ class RoundRobinWriter(Writer):
     def _empty(self):
         self._cursor = 0
 
+    @property
+    def _cursor(self):
+        _cursor_value = self.__dict__.get("_cursor_value", None)
+        if _cursor_value is None:
+            _cursor_value = self._cursor_value = mp.Value("i", 0)
+        return _cursor_value.value
+
+    @_cursor.setter
+    def _cursor(self, value):
+        _cursor_value = self.__dict__.get("_cursor_value", None)
+        if _cursor_value is None:
+            _cursor_value = self._cursor_value = mp.Value("i", 0)
+        _cursor_value.value = value
+
+    def __getstate__(self):
+        state = copy(self.__dict__)
+        if get_spawning_popen() is None:
+            cursor = self._cursor
+            del state["_cursor_value"]
+            state["cursor__context"] = cursor
+        return state
+
+    def __setstate__(self, state):
+        cursor = state.pop("cursor__context", None)
+        if cursor is not None:
+            _cursor_value = mp.Value("i", cursor)
+            state["_cursor_value"] = _cursor_value
+        self.__dict__.update(state)
+
 
 class TensorDictRoundRobinWriter(RoundRobinWriter):
     """A RoundRobin Writer class for composable, tensordict-based replay buffers."""
 
     def add(self, data: Any) -> int:
         ret = self._cursor
+        # we need to update the cursor first to avoid race conditions between workers
+        self._cursor = (ret + 1) % self._storage.max_size
         data["index"] = ret
-        self._storage[self._cursor] = data
-        self._cursor = (self._cursor + 1) % self._storage.max_size
+        self._storage[ret] = data
         return ret
 
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
         batch_size = len(data)
         index = np.arange(cur_size, batch_size + cur_size) % self._storage.max_size
+        # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (batch_size + cur_size) % self._storage.max_size
         # storage must convert the data to the appropriate format if needed
         data["index"] = index
@@ -250,3 +257,11 @@ class TensorDictMaxValueWriter(Writer):
     def _empty(self) -> None:
         self._cursor = 0
         self._current_top_values = []
+
+    def __getstate__(self):
+        if get_spawning_popen() is not None:
+            raise RuntimeError(
+                f"Writers of type {type(self)} cannot be shared between processed."
+            )
+        state = copy(self.__dict__)
+        return state

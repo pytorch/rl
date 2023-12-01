@@ -18,6 +18,7 @@ from _utils_internal import get_default_devices, make_tc
 from packaging.version import parse
 from tensordict import is_tensorclass, tensorclass
 from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
+from torch import multiprocessing as mp
 from torchrl.data import (
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
@@ -63,7 +64,6 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
     VecNorm,
 )
-from torch import multiprocessing as mp
 
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
