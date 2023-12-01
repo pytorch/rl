@@ -1,4 +1,4 @@
-name: D4RL Tests on Linux
+name: Minari Tests on Linux
 
 on:
   pull_request:
