@@ -8,21 +8,6 @@ conda activate ./env
 apt-get update && apt-get remove swig -y && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0
 ln -s /usr/bin/swig3.0 /usr/bin/swig
 
-# we install d4rl here bc env variables have been updated
-git clone https://github.com/Farama-Foundation/d4rl.git
-cd d4rl
-#pip3 install -U 'mujoco-py<2.1,>=2.0'
-pip3 install -U "gym[classic_control,atari,accept-rom-license]"==0.23
-pip3 install -U six
-pip install -e .
-cd ..
-
-#flow is a dependency disaster of biblical scale
-#git clone https://github.com/flow-project/flow.git
-#cd flow
-#python setup.py develop
-#cd ..
-
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
@@ -35,27 +20,8 @@ lib_dir="${env_dir}/lib"
 conda deactivate && conda activate ./env
 
 # this workflow only tests the libs
-python -c "import gym, d4rl"
+python -c "import gym, minari"
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestD4RL --error-for-skips
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestMinari --error-for-skips
 coverage combine
 coverage xml -i
-
-## check what happens if we update gym
-#pip install gym -U
-#python -c """
-#from torchrl.data.datasets import D4RLExperienceReplay
-#data = D4RLExperienceReplay('halfcheetah-medium-v2', batch_size=10, from_env=False, direct_download=True)
-#for batch in data:
-#    print(batch)
-#    break
-#
-#data = D4RLExperienceReplay('halfcheetah-medium-v2', batch_size=10, from_env=False, direct_download=False)
-#for batch in data:
-#    print(batch)
-#    break
-#
-#import d4rl
-#import gym
-#gym.make('halfcheetah-medium-v2')
-#"""
