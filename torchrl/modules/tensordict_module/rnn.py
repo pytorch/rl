@@ -849,9 +849,9 @@ class GRU(nn.GRU):
         i_r, i_i, i_n = gate_x.chunk(3, 1)
         h_r, h_i, h_n = gate_h.chunk(3, 1)
 
-        resetgate = F.sigmoid(i_r + h_r)
-        inputgate = F.sigmoid(i_i + h_i)
-        newgate = F.tanh(i_n + (resetgate * h_n))
+        resetgate = (i_r + h_r).sigmoid()
+        inputgate = (i_i + h_i).sigmoid()
+        newgate = (i_n + (resetgate * h_n)).tanh()
 
         hy = newgate + inputgate * (hx - newgate)
 
