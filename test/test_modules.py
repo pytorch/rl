@@ -1285,6 +1285,8 @@ def test_python_lstm(device, bias, dropout, batch_first, num_layers):
         batch_first=batch_first,
     )
 
+    lstm2.load_state_dict(lstm1.state_dict())
+
     # Make sure parameters match
     for (k1, v1), (k2, v2) in zip(lstm1.named_parameters(), lstm2.named_parameters()):
         assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
