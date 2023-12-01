@@ -18,6 +18,7 @@ from _utils_internal import get_default_devices, make_tc
 from packaging.version import parse
 from tensordict import is_tensorclass, tensorclass
 from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
+from torch import multiprocessing as mp
 from torchrl.data import (
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
@@ -41,6 +42,7 @@ from torchrl.data.replay_buffers.storages import (
 from torchrl.data.replay_buffers.writers import (
     RoundRobinWriter,
     TensorDictMaxValueWriter,
+    TensorDictRoundRobinWriter,
 )
 from torchrl.envs.transforms.transforms import (
     BinarizeReward,
@@ -1283,6 +1285,73 @@ def test_max_value_writer(size, batch_size, reward_ranges, device):
     rb.extend(td)
     sample = rb.sample()
     assert (sample.get("key") != 0).all()
+
+
+class TestMultiProc:
+    @staticmethod
+    def worker(rb, q0, q1):
+        td = TensorDict({"a": torch.ones(10), "next": {"reward": torch.ones(10)}}, [10])
+        rb.extend(td)
+        q0.put("extended")
+        extended = q1.get(timeout=5)
+        assert extended == "extended"
+        assert len(rb) == 21, len(rb)
+        assert (rb["_data", "a"][:9] == 2).all()
+        q0.put("finish")
+
+    def exec_multiproc_rb(
+        self,
+        storage_type=LazyMemmapStorage,
+        init=True,
+        writer_type=TensorDictRoundRobinWriter,
+    ):
+        rb = TensorDictReplayBuffer(storage=storage_type(21), writer=writer_type())
+        if init:
+            td = TensorDict(
+                {"a": torch.zeros(10), "next": {"reward": torch.ones(10)}}, [10]
+            )
+            rb.extend(td)
+        q0 = mp.Queue(1)
+        q1 = mp.Queue(1)
+        proc = mp.Process(target=self.worker, args=(rb, q0, q1))
+        proc.start()
+        try:
+            extended = q0.get(timeout=100)
+            assert extended == "extended"
+            assert len(rb) == 20
+            assert (rb["_data", "a"][10:20] == 1).all()
+            td = TensorDict({"a": torch.zeros(10) + 2}, [10])
+            rb.extend(td)
+            q1.put("extended")
+            finish = q0.get(timeout=5)
+            assert finish == "finish"
+        finally:
+            proc.join()
+
+    def test_multiproc_rb(self):
+        return self.exec_multiproc_rb()
+
+    def test_error_list(self):
+        # list storage cannot be shared
+        with pytest.raises(RuntimeError, match="Cannot share a storage of type"):
+            self.exec_multiproc_rb(storage_type=ListStorage)
+
+    def test_error_nonshared(self):
+        # non shared tensor storage cannot be shared
+        with pytest.raises(
+            RuntimeError, match="The storage must be place in shared memory"
+        ):
+            self.exec_multiproc_rb(storage_type=LazyTensorStorage)
+
+    def test_error_maxwriter(self):
+        # TensorDictMaxValueWriter cannot be shared
+        with pytest.raises(RuntimeError, match="cannot be shared between processed"):
+            self.exec_multiproc_rb(writer_type=TensorDictMaxValueWriter)
+
+    def test_error_noninit(self):
+        # list storage cannot be shared
+        with pytest.raises(RuntimeError, match="it has not been initialized yet"):
+            self.exec_multiproc_rb(init=False)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ import os
 import warnings
 from collections import OrderedDict
 from copy import copy
+from multiprocessing.context import get_spawning_popen
 from typing import Any, Dict, Sequence, Union
 
 import torch
@@ -15,6 +16,7 @@ from tensordict import is_tensorclass
 from tensordict.memmap import MemmapTensor, MemoryMappedTensor
 from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.utils import expand_right
+from torch import multiprocessing as mp
 
 from torchrl._utils import _CKPT_BACKEND, implement_for, VERBOSE
 from torchrl.data.replay_buffers.utils import INT_CLASSES
@@ -166,6 +168,14 @@ class ListStorage(Storage):
     def _empty(self):
         self._storage = []
 
+    def __getstate__(self):
+        if get_spawning_popen() is not None:
+            raise RuntimeError(
+                f"Cannot share a storage of type {type(self)} between processes."
+            )
+        state = copy(self.__dict__)
+        return state
+
 
 class TensorStorage(Storage):
     """A storage for tensors and tensordicts.
@@ -258,6 +268,57 @@ class TensorStorage(Storage):
             else "auto"
         )
         self._storage = storage
+
+    @property
+    def _len(self):
+        _len_value = self.__dict__.get("_len_value", None)
+        if _len_value is None:
+            _len_value = self._len_value = mp.Value("i", 0)
+        return _len_value.value
+
+    @_len.setter
+    def _len(self, value):
+        _len_value = self.__dict__.get("_len_value", None)
+        if _len_value is None:
+            _len_value = self._len_value = mp.Value("i", 0)
+        _len_value.value = value
+
+    def __getstate__(self):
+        state = copy(self.__dict__)
+        if get_spawning_popen() is None:
+            len = self._len
+            del state["_len_value"]
+            state["len__context"] = len
+        elif not self.initialized:
+            # check that the storage is initialized
+            raise RuntimeError(
+                f"Cannot share a storage of type {type(self)} between processed if "
+                f"it has not been initialized yet. Populate the buffer with "
+                f"some data in the main process before passing it to the other "
+                f"subprocesses (or create the buffer explicitely with a TensorStorage)."
+            )
+        else:
+            # check that the content is shared, otherwise tell the user we can't help
+            storage = self._storage
+            STORAGE_ERR = "The storage must be place in shared memory or memmapped before being shared between processes."
+            if is_tensor_collection(storage):
+                if not storage.is_memmap() and not storage.is_shared():
+                    raise RuntimeError(STORAGE_ERR)
+            else:
+                if (
+                    not isinstance(storage, MemoryMappedTensor)
+                    and not storage.is_shared()
+                ):
+                    raise RuntimeError(STORAGE_ERR)
+
+        return state
+
+    def __setstate__(self, state):
+        len = state.pop("len__context", None)
+        if len is not None:
+            _len_value = mp.Value("i", len)
+            state["_len_value"] = _len_value
+        self.__dict__.update(state)
 
     def state_dict(self) -> Dict[str, Any]:
         _storage = self._storage
