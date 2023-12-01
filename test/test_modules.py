@@ -1209,9 +1209,9 @@ def test_python_lstm_cell(device, bias):
         ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
     # Run loop
-    input = torch.randn(2, 3, 10).to(device)
-    h0 = torch.randn(3, 20).to(device)
-    c0 = torch.randn(3, 20).to(device)
+    input = torch.randn(2, 3, 10, device=device)
+    h0 = torch.randn(3, 20, device=device)
+    c0 = torch.randn(3, 20, device=device)
     with torch.no_grad():
         for i in range(input.size()[0]):
             h1, c1 = lstm_cell1(input[i], (h0, c0))
