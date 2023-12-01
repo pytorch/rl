@@ -1197,6 +1197,8 @@ def test_python_lstm_cell(device, bias):
     lstm_cell1 = LSTMCell(10, 20, device=device, bias=bias)
     lstm_cell2 = nn.LSTMCell(10, 20, device=device, bias=bias)
 
+    lstm_cell1.load_state_dict(lstm_cell2.state_dict())
+
     # Make sure parameters match
     for (k1, v1), (k2, v2) in zip(
         lstm_cell1.named_parameters(), lstm_cell2.named_parameters()
