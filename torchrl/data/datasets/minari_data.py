@@ -8,6 +8,7 @@ import json
 import os.path
 import shutil
 import tempfile
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
@@ -241,7 +242,6 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
                             ("next", match),
                             torch.zeros_like(val)[0].unsqueeze(-1),
                         )
-                break
 
             # give it the proper size
             td_data = td_data.expand(total_steps)
@@ -250,7 +250,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
             td_data = td_data.memmap_like(self.data_path_root)
             print(td_data)
 
-            print("Reading data")
+            print(f"Reading data from {max(*episode_dict)} episodes")
             index = 0
             with tqdm.tqdm(total=total_steps) as pbar:
                 # iterate over episodes and populate the tensordict
@@ -302,7 +302,6 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
                 self.metadata["action_space"] = _spec_to_dict(
                     self.metadata["action_space"]
                 )
-                print("self.metadata", self.metadata)
                 json.dump(self.metadata, metadata_file)
             self._load_and_proc_metadata()
             return td_data
@@ -326,7 +325,6 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
             self.metadata["observation_space"]
         )
         self.metadata["action_space"] = _proc_spec(self.metadata["action_space"])
-        print("Loaded metadata", self.metadata)
 
 
 def _proc_spec(spec):

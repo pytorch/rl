@@ -1982,10 +1982,11 @@ class TestMinari:
         assert len(keys) > 5
         return keys
 
-    def test_load(self, selected_datasets):
+    @pytest.mark.parametrize("split", [False, True])
+    def test_load(self, selected_datasets, split):
         for dataset in selected_datasets:
             print("dataset", dataset)
-            data = MinariExperienceReplay(dataset, batch_size=32)
+            data = MinariExperienceReplay(dataset, batch_size=32, split_trajs=split)
             t0 = time.time()
             for i, sample in enumerate(data):
                 t1 = time.time()
