@@ -126,7 +126,8 @@ class LSTMCell(RNNCellBase):
 
 
 class LSTM(nn.LSTM):
-    """A module that runs multiple steps of a multi-layer LSTM and is only coded in Python.
+    """A PyTorch module for executing multiple steps of a multi-layer LSTM. The module behaves exactly like
+    :class:`torch.nn.LSTM`, but this implementation is exclusively coded in Python.
 
     .. note::
         This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap` and :func:`torch.compile`.
@@ -799,7 +800,8 @@ class GRUCell(RNNCellBase):
 
 
 class GRU(nn.GRU):
-    """A module that runs multiple steps of a multi-layer GRU network and is only coded in Python.
+    """A PyTorch module for executing multiple steps of a multi-layer GRU. The module behaves exactly like
+    :class:`torch.nn.GRU`, but this implementation is exclusively coded in Python.
 
     .. note::
         This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap` and :func:`torch.compile`.
