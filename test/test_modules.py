@@ -1297,8 +1297,8 @@ def test_python_lstm(device, bias, dropout, batch_first, num_layers):
     else:
         input = torch.randn(T, B, 10, device=device)
 
-    h0 = torch.randn(num_layers, 5, 20).to(device)
-    c0 = torch.randn(num_layers, 5, 20).to(device)
+    h0 = torch.randn(num_layers, 5, 20, device=device)
+    c0 = torch.randn(num_layers, 5, 20, device=device)
 
     # Test without hidden states
     with torch.no_grad():
