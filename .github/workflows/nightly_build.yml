@@ -87,12 +87,10 @@ jobs:
           python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
       - name: Build TorchRL Nightly
         run: |
-          rm -r dist || true
           export CC=clang CXX=clang++
           python3 -mpip install wheel
           python3 setup.py bdist_wheel \
-            --package_name torchrl-nightly \
-            --python-tag=${{ matrix.python-tag }}
+            --package_name torchrl-nightly
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
         with:
