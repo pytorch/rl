@@ -1215,11 +1215,13 @@ def test_python_lstm_cell(device, bias):
             h1, c1 = lstm_cell1(input[i], (h0, c0))
             h2, c2 = lstm_cell2(input[i], (h0, c0))
 
-    # Make sure the final hidden states have the same shape
-    assert h1.shape == h2.shape
-    assert c1.shape == c2.shape
-    assert not torch.isclose(h0, h1).any()
-    assert not torch.isclose(c0, c1).any()
+        # Make sure the final hidden states have the same shape
+        assert h1.shape == h2.shape
+        assert c1.shape == c2.shape
+        torch.testing.assert_close(h1, h2)
+        torch.testing.assert_close(c1, c2)
+        h0 = h1
+        c0 = c1
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -1260,12 +1262,14 @@ def test_python_gru_cell(device, bias):
 @pytest.mark.parametrize("bias", [True, False])
 @pytest.mark.parametrize("batch_first", [True, False])
 @pytest.mark.parametrize("dropout", [0.0, 0.5])
-def test_python_lstm(device, bias, dropout, batch_first):
-
+@pytest.mark.parametrize("num_layers", [1, 2])
+def test_python_lstm(device, bias, dropout, batch_first, num_layers):
+    B = 5
+    T = 3
     lstm1 = LSTM(
         input_size=10,
         hidden_size=20,
-        num_layers=2,
+        num_layers=num_layers,
         device=device,
         bias=bias,
         batch_first=batch_first,
@@ -1273,7 +1277,7 @@ def test_python_lstm(device, bias, dropout, batch_first):
     lstm2 = nn.LSTM(
         input_size=10,
         hidden_size=20,
-        num_layers=2,
+        num_layers=num_layers,
         device=device,
         bias=bias,
         batch_first=batch_first,
@@ -1286,13 +1290,13 @@ def test_python_lstm(device, bias, dropout, batch_first):
             v1.shape == v2.shape
         ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
-    if batch_first is True:
-        input = torch.randn(5, 3, 10).to(device)
+    if batch_first:
+        input = torch.randn(B, T, 10, device=device)
     else:
-        input = torch.randn(3, 5, 10).to(device)
+        input = torch.randn(T, B, 10, device=device)
 
-    h0 = torch.randn(2, 5, 20).to(device)
-    c0 = torch.randn(2, 5, 20).to(device)
+    h0 = torch.randn(num_layers, 5, 20).to(device)
+    c0 = torch.randn(num_layers, 5, 20).to(device)
 
     # Test without hidden states
     with torch.no_grad():
@@ -1302,6 +1306,10 @@ def test_python_lstm(device, bias, dropout, batch_first):
     assert h1.shape == h2.shape
     assert c1.shape == c2.shape
     assert output1.shape == output2.shape
+    if dropout == 0.0:
+        torch.testing.assert_close(output1, output2)
+        torch.testing.assert_close(h1, h2)
+        torch.testing.assert_close(c1, c2)
 
     # Test with hidden states
     with torch.no_grad():
@@ -1311,8 +1319,10 @@ def test_python_lstm(device, bias, dropout, batch_first):
     assert h1.shape == h2.shape
     assert c1.shape == c2.shape
     assert output1.shape == output2.shape
-    assert not torch.isclose(h0, h1).any()
-    assert not torch.isclose(c0, c1).any()
+    if dropout == 0.0:
+        torch.testing.assert_close(output1, output2)
+        torch.testing.assert_close(h1, h2)
+        torch.testing.assert_close(c1, c2)
 
 
 @pytest.mark.parametrize("device", get_default_devices())
