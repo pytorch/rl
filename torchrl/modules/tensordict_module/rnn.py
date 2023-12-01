@@ -29,8 +29,7 @@ class LSTMCell(RNNCellBase):
     r"""A long short-term memory (LSTM) cell that performs the same operation as nn.LSTMCell but is fully coded in Python.
 
     .. note::
-        This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap`
-        and :func:`functorch.vmap`.
+        This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap` and :func:`torch.compile`.
 
     Examples:
         >>> import torch
