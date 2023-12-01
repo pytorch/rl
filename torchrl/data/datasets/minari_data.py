@@ -4,18 +4,19 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import importlib.util
 import json
 import os.path
 import shutil
 import tempfile
 
 from collections import defaultdict
+from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
 import torch
-import tqdm
 
 from tensordict import MemoryMappedTensor, PersistentTensorDict, TensorDict
 from torchrl._utils import KeyDependentDefaultDict
@@ -31,6 +32,8 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 
+_has_tqdm = importlib.util.find_spec("tqdm", None) is not None
+
 _NAME_MATCH = KeyDependentDefaultDict(lambda key: key)
 _NAME_MATCH["observations"] = "observation"
 _NAME_MATCH["rewards"] = "reward"
@@ -38,6 +41,16 @@ _NAME_MATCH["truncations"] = "truncated"
 _NAME_MATCH["terminations"] = "terminated"
 _NAME_MATCH["actions"] = "action"
 _NAME_MATCH["infos"] = "info"
+
+
+_DTYPE_DIR = {
+    "float16": torch.float16,
+    "float32": torch.float32,
+    "float64": torch.float64,
+    "int64": torch.int64,
+    "int32": torch.int32,
+    "uint8": torch.uint8,
+}
 
 
 class MinariExperienceReplay(TensorDictReplayBuffer):
@@ -198,6 +211,9 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
     def _download_and_preproc(self):
         import minari
 
+        if _has_tqdm:
+            from tqdm import tqdm
+
         with tempfile.TemporaryDirectory() as tmpdir:
             os.environ["MINARI_DATASETS_PATH"] = tmpdir
             minari.download_dataset(dataset_id=self.dataset_id)
@@ -240,7 +256,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
 
             print(f"Reading data from {max(*episode_dict)} episodes")
             index = 0
-            with tqdm.tqdm(total=total_steps) as pbar:
+            with tqdm(total=total_steps) if _has_tqdm else nullcontext() as pbar:
                 # iterate over episodes and populate the tensordict
                 for episode_num in sorted(episode_dict):
                     episode_key = episode_dict[episode_num]
@@ -265,8 +281,11 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
                             td_data[("next", match)][
                                 index : (index + val.shape[0])
                             ] = val.unsqueeze(-1)
-                    pbar.update(steps)
-                    pbar.set_description(f"index={index} - episode num {episode_num}")
+                    if pbar is not None:
+                        pbar.update(steps)
+                        pbar.set_description(
+                            f"index={index} - episode num {episode_num}"
+                        )
                     index += steps
             h5_data.close()
             # Add a "done" entry
@@ -366,16 +385,6 @@ def _spec_to_dict(spec):
     if isinstance(spec, gym_backend("spaces").Text):
         return
     raise NotImplementedError(f"{type(spec)}, {str(spec)}")
-
-
-_DTYPE_DIR = {
-    "float16": torch.float16,
-    "float32": torch.float32,
-    "float64": torch.float64,
-    "int64": torch.int64,
-    "int32": torch.int32,
-    "uint8": torch.uint8,
-}
 
 
 def _patch_info(info_td):
