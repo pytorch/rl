@@ -8,7 +8,8 @@ import json
 import os.path
 import shutil
 import tempfile
-import time
+
+from collections import defaultdict
 from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
@@ -178,7 +179,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         return minari.list_remote_datasets().keys()
 
     def _is_downloaded(self):
-        return os.path.exists(self.data_path)
+        return os.path.exists(self.data_path_root)
 
     @property
     def data_path(self):
@@ -208,39 +209,26 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
             h5_data = PersistentTensorDict.from_h5(parent_dir / "main_data.hdf5")
             # Get the total number of steps for the dataset
             total_steps += sum(
-                h5_data[episode, "actions"].shape[0]
-                for episode in h5_data.keys()
+                h5_data[episode, "actions"].shape[0] for episode in h5_data.keys()
             )
             # populate the tensordict
             episode_dict = {}
             for episode_key, episode in h5_data.items():
-                episode_num = int(episode_key[len("episode_"):])
+                episode_num = int(episode_key[len("episode_") :])
                 episode_dict[episode_num] = episode_key
                 for key, val in episode.items():
                     match = _NAME_MATCH[key]
                     if key in ("observations", "state", "infos"):
                         if not val.shape:
-                            # Data is ambiguous, skipping
-                            continue
-                            # unique_shapes = defaultdict([])
-                            # for subkey, subval in val.items():
-                            #     unique_shapes[subval.shape[0]].append(subkey)
-                            # if not len(unique_shapes) == 2:
-                            #     raise RuntimeError("Unique shapes in a sub-tensordict can only be of length 2.")
-                            # val_td = val.to_tensordict()
-                            # min_shape = min(*unique_shapes) # can only be found at root
-                            # max_shape = min_shape + 1
-                            # val_td = val_td.select(*unique_shapes[min_shape])
-                            # print("key - val", key, val)
-                            # print("episode", episode)
-                        td_data.set(("next", match), torch.zeros_like(val)[0])
-                        td_data.set(match, torch.zeros_like(val)[0])
+                            val = _patch_info(val)
+                        td_data.set(("next", match), torch.zeros_like(val[0]))
+                        td_data.set(match, torch.zeros_like(val[0]))
                     if key not in ("terminations", "truncations", "rewards"):
-                        td_data.set(match, torch.zeros_like(val)[0])
+                        td_data.set(match, torch.zeros_like(val[0]))
                     else:
                         td_data.set(
                             ("next", match),
-                            torch.zeros_like(val)[0].unsqueeze(-1),
+                            torch.zeros_like(val[0].unsqueeze(-1)),
                         )
 
             # give it the proper size
@@ -265,12 +253,9 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
                             "infos",
                         ):
                             if not val.shape:
-                                # Data is ambiguous, skipping
-                                continue
+                                val = _patch_info(val)
                             steps = val.shape[0] - 1
-                            td_data["next", match][index : (index + steps)] = val[
-                                1:
-                            ]
+                            td_data["next", match][index : (index + steps)] = val[1:]
                             td_data[match][index : (index + steps)] = val[:-1]
                         elif key not in ("terminations", "truncations", "rewards"):
                             steps = val.shape[0]
@@ -391,3 +376,25 @@ _DTYPE_DIR = {
     "int32": torch.int32,
     "uint8": torch.uint8,
 }
+
+
+def _patch_info(info_td):
+    # Some info dicts have tensors with one less element than others
+    # We explicitely assume that the missing item is in the first position because
+    # it wasn't given at reset time.
+    # An alternative explanation could be that the last element is missing because
+    # deemed useless for training...
+    unique_shapes = defaultdict(list)
+    for subkey, subval in info_td.items():
+        unique_shapes[subval.shape[0]].append(subkey)
+    if not len(unique_shapes) == 2:
+        raise RuntimeError("Unique shapes in a sub-tensordict can only be of length 2.")
+    val_td = info_td.to_tensordict()
+    min_shape = min(*unique_shapes)  # can only be found at root
+    max_shape = min_shape + 1
+    val_td_sel = val_td.select(*unique_shapes[min_shape]).apply(
+        lambda x: torch.cat([torch.zeros_like(x[:1]), x], 0)
+    )
+    val_td_sel.batch_size = [min_shape + 1]
+    val_td_sel.update(val_td.select(*unique_shapes[max_shape]))
+    return val_td_sel
