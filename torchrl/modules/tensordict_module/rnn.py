@@ -29,7 +29,8 @@ class LSTMCell(RNNCellBase):
     r"""A long short-term memory (LSTM) cell that performs the same operation as nn.LSTMCell but is fully coded in Python.
 
     .. note::
-        This class is implemented without relying on CuDNN, which makes it compatible with :func:`functorch.vmap`.
+        This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap`
+        and :func:`functorch.vmap`.
     """
 
     __doc__ += nn.LSTMCell.__doc__
@@ -101,7 +102,8 @@ class LSTM(nn.LSTM):
     """A module that runs multiple steps of a multi-layer LSTM and is only coded in Python.
 
     .. note::
-        This class is implemented without relying on CuDNN, which makes it compatible with :func:`functorch.vmap`.
+        This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap`
+        and :func:`functorch.vmap`.
     """
 
     __doc__ += nn.LSTM.__doc__
@@ -646,7 +648,8 @@ class GRUCell(RNNCellBase):
     r"""A gated recurrent unit (GRU) cell that performs the same operation as nn.LSTMCell but is fully coded in Python.
 
     .. note::
-        This class is implemented without relying on CuDNN, which makes it compatible with :func:`functorch.vmap`.
+        This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap`
+        and :func:`functorch.vmap`.
     """
 
     __doc__ += nn.GRUCell.__doc__
@@ -712,7 +715,8 @@ class GRU(nn.GRU):
     """A module that runs multiple steps of a multi-layer GRU network and is only coded in Python.
 
     .. note::
-        This class is implemented without relying on CuDNN, which makes it compatible with :func:`functorch.vmap`.
+        This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap`
+        and :func:`functorch.vmap`.
     """
 
     __doc__ += nn.GRU.__doc__
