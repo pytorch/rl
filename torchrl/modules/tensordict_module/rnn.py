@@ -31,6 +31,34 @@ class LSTMCell(RNNCellBase):
     .. note::
         This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap`
         and :func:`functorch.vmap`.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules.tensordict_module.rnn import LSTMCell
+        >>> device = torch.device("cuda") if torch.cuda.device_count() else torch.device("cpu")
+        >>> B = 2
+        >>> N_IN = 10
+        >>> N_OUT = 20
+        >>> V = 4  # vector size
+        >>> lstm_cell = LSTMCell(input_size=N_IN, hidden_size=N_OUT, device=device)
+
+        # single call
+        >>> x = torch.randn(B, 10, device=device)
+        >>> h0 = torch.zeros(B, 20, device=device)
+        >>> c0 = torch.zeros(B, 20, device=device)
+        >>> with torch.no_grad():
+        ...     (h1, c1) = lstm_cell(x, (h0, c0))
+
+        # vectorised call - not possible with nn.LSTMCell
+        >>> def call_lstm(x, h, c):
+        ...     h2, c2 = lstm_cell(x, (h, c))
+        ...     return h2, c2
+        >>> batched_call = torch.vmap(call_lstm)
+        >>> x = torch.randn(V, B, 10, device=device)
+        >>> h0 = torch.zeros(V, B, 20, device=device)
+        >>> c0 = torch.zeros(V, B, 20, device=device)
+        >>> with torch.no_grad():
+        ...     output = batched_call(x, h0, c0)
     """
 
     __doc__ += nn.LSTMCell.__doc__
@@ -650,6 +678,32 @@ class GRUCell(RNNCellBase):
     .. note::
         This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap`
         and :func:`functorch.vmap`.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules.tensordict_module.rnn import GRUCell
+        >>> device = torch.device("cuda") if torch.cuda.device_count() else torch.device("cpu")
+        >>> B = 2
+        >>> N_IN = 10
+        >>> N_OUT = 20
+        >>> V = 4  # vector size
+        >>> gru_cell = GRUCell(input_size=N_IN, hidden_size=N_OUT, device=device)
+
+        # single call
+        >>> x = torch.randn(B, 10, device=device)
+        >>> h0 = torch.zeros(B, 20, device=device)
+        >>> with torch.no_grad():
+        ...     h1 = gru_cell(x, h0)
+
+        # vectorised call - not possible with nn.GRUCell
+        >>> def call_gru(x, h):
+        ...     h2 = gru_cell(x, h)
+        ...     return h2
+        >>> batched_call = torch.vmap(call_gru)
+        >>> x = torch.randn(V, B, 10, device=device)
+        >>> h0 = torch.zeros(V, B, 20, device=device)
+        >>> with torch.no_grad():
+        ...     output = batched_call(x, h0)
     """
 
     __doc__ += nn.GRUCell.__doc__
