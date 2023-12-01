@@ -212,10 +212,10 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
             )
             # populate the tensordict
             episode_dict = {}
-            for key, episode in h5_data.items():
+            for episode_key, episode in h5_data.items():
+                episode_num = int(episode_key[len("episode_"):])
+                episode_dict[episode_num] = episode_key
                 for key, val in episode.items():
-                    episode_num = int(key[len("episode_"):])
-                    episode_dict[episode_num] = key
                     match = _NAME_MATCH[key]
                     if key in ("observations", "state", "infos"):
                         if not val.shape:
@@ -255,8 +255,8 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
             with tqdm.tqdm(total=total_steps) as pbar:
                 # iterate over episodes and populate the tensordict
                 for episode_num in sorted(episode_dict):
-                    key = episode_dict[episode_num]
-                    episode = h5_data.get(key)
+                    episode_key = episode_dict[episode_num]
+                    episode = h5_data.get(episode_key)
                     for key, val in episode.items():
                         match = _NAME_MATCH[key]
                         if key in (
