@@ -51,14 +51,14 @@ class LSTMCell(RNNCellBase):
 
         # vectorised call - not possible with nn.LSTMCell
         >>> def call_lstm(x, h, c):
-        ...     h2, c2 = lstm_cell(x, (h, c))
-        ...     return h2, c2
+        ...     h_out, c_out = lstm_cell(x, (h, c))
+        ...     return h_out, c_out
         >>> batched_call = torch.vmap(call_lstm)
         >>> x = torch.randn(V, B, 10, device=device)
         >>> h0 = torch.zeros(V, B, 20, device=device)
         >>> c0 = torch.zeros(V, B, 20, device=device)
         >>> with torch.no_grad():
-        ...     output = batched_call(x, h0, c0)
+        ...     (h1, c1) = batched_call(x, h0, c0)
     """
 
     __doc__ += nn.LSTMCell.__doc__
@@ -132,6 +132,42 @@ class LSTM(nn.LSTM):
     .. note::
         This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap`
         and :func:`functorch.vmap`.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules.tensordict_module.rnn import LSTM
+
+        >>> device = torch.device("cuda") if torch.cuda.device_count() else torch.device("cpu")
+        >>> B = 2
+        >>> T = 4
+        >>> N_IN = 10
+        >>> N_OUT = 20
+        >>> N_LAYERS = 2
+        >>> V = 4  # vector size
+        >>> lstm = LSTM(
+        ...     input_size=N_IN,
+        ...     hidden_size=N_OUT,
+        ...     device=device,
+        ...     num_layers=N_LAYERS,
+        ... )
+
+        # single call
+        >>> x = torch.randn(B, T, N_IN, device=device)
+        >>> h0 = torch.zeros(N_LAYERS, B, N_OUT, device=device)
+        >>> c0 = torch.zeros(N_LAYERS, B, N_OUT, device=device)
+        >>> with torch.no_grad():
+        ...     h1, c1 = lstm(x, (h0, c0))
+
+        # vectorised call - not possible with nn.LSTM
+        >>> def call_lstm(x, h, c):
+        ...     h_out, c_out = lstm(x, (h, c))
+        ...     return h_out, c_out
+        >>> batched_call = torch.vmap(call_lstm)
+        >>> x = torch.randn(V, B, T, 10, device=device)
+        >>> h0 = torch.zeros(V, N_LAYERS, B, N_OUT, device=device)
+        >>> c0 = torch.zeros(V, N_LAYERS, B, N_OUT, device=device)
+        >>> with torch.no_grad():
+        ...     h1, c1 = batched_call(x, h0, c0)
     """
 
     __doc__ += nn.LSTM.__doc__
@@ -697,13 +733,13 @@ class GRUCell(RNNCellBase):
 
         # vectorised call - not possible with nn.GRUCell
         >>> def call_gru(x, h):
-        ...     h2 = gru_cell(x, h)
-        ...     return h2
+        ...     h_out = gru_cell(x, h)
+        ...     return h_out
         >>> batched_call = torch.vmap(call_gru)
         >>> x = torch.randn(V, B, 10, device=device)
         >>> h0 = torch.zeros(V, B, 20, device=device)
         >>> with torch.no_grad():
-        ...     output = batched_call(x, h0)
+        ...     h1 = batched_call(x, h0)
     """
 
     __doc__ += nn.GRUCell.__doc__
@@ -771,6 +807,40 @@ class GRU(nn.GRU):
     .. note::
         This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap`
         and :func:`functorch.vmap`.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules.tensordict_module.rnn import GRU
+
+        >>> device = torch.device("cuda") if torch.cuda.device_count() else torch.device("cpu")
+        >>> B = 2
+        >>> T = 4
+        >>> N_IN = 10
+        >>> N_OUT = 20
+        >>> N_LAYERS = 2
+        >>> V = 4  # vector size
+        >>> gru = GRU(
+        ...     input_size=N_IN,
+        ...     hidden_size=N_OUT,
+        ...     device=device,
+        ...     num_layers=N_LAYERS,
+        ... )
+
+        # single call
+        >>> x = torch.randn(B, T, N_IN, device=device)
+        >>> h0 = torch.zeros(N_LAYERS, B, N_OUT, device=device)
+        >>> with torch.no_grad():
+        ...     h1 = gru(x, h0)
+
+        # vectorised call - not possible with nn.GRU
+        >>> def call_gru(x, h):
+        ...     h_out = gru(x, h)
+        ...     return h_out
+        >>> batched_call = torch.vmap(call_gru)
+        >>> x = torch.randn(V, B, T, 10, device=device)
+        >>> h0 = torch.zeros(V, N_LAYERS, B, N_OUT, device=device)
+        >>> with torch.no_grad():
+        ...     h1 = batched_call(x, h0)
     """
 
     __doc__ += nn.GRU.__doc__
