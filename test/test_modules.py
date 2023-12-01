@@ -1218,12 +1218,12 @@ def test_python_lstm_cell(device, bias):
             h2, c2 = lstm_cell2(input[i], (h0, c0))
 
         # Make sure the final hidden states have the same shape
-        assert h1.shape == h2.shape
-        assert c1.shape == c2.shape
-        torch.testing.assert_close(h1, h2)
-        torch.testing.assert_close(c1, c2)
-        h0 = h1
-        c0 = c1
+            assert h1.shape == h2.shape
+            assert c1.shape == c2.shape
+            torch.testing.assert_close(h1, h2)
+            torch.testing.assert_close(c1, c2)
+            h0 = h1
+            c0 = c1
 
 
 @pytest.mark.parametrize("device", get_default_devices())
