@@ -966,7 +966,6 @@ class GRU(GRUBase):
         return outputs, torch.stack(h_t, 0)
 
     def forward(self, input, hx=None):  # noqa: F811
-        self._update_flat_weights()
         if input.dim() != 3:
             raise ValueError(
                 f"GRU: Expected input to be 3D, got {input.dim()}D instead"
