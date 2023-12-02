@@ -136,7 +136,7 @@ for attr in nn.LSTM.__dict__:
         setattr(LSTMBase, attr, getattr(nn.LSTM, attr))
 
 
-class LSTM(nn.LSTM):
+class LSTM(LSTMBase):
     """A PyTorch module for executing multiple steps of a multi-layer LSTM. The module behaves exactly like
     :class:`torch.nn.LSTM`, but this implementation is exclusively coded in Python.
 
