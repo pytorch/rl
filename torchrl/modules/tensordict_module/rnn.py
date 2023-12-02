@@ -125,6 +125,17 @@ class LSTMCell(RNNCellBase):
         return hy, cy
 
 
+# copy LSTM
+class LSTMBase(nn.RNNBase):
+    def __init__(self, *args, **kwargs):
+        return super().__init__("LSTM", *args, **kwargs)
+
+
+for attr in nn.LSTM.__dict__:
+    if attr != "__init__":
+        setattr(LSTMBase, attr, getattr(nn.LSTM, attr))
+
+
 class LSTM(nn.LSTM):
     """A PyTorch module for executing multiple steps of a multi-layer LSTM. The module behaves exactly like
     :class:`torch.nn.LSTM`, but this implementation is exclusively coded in Python.
@@ -799,7 +810,18 @@ class GRUCell(RNNCellBase):
         return hy
 
 
-class GRU(nn.GRU):
+# copy GRU
+class GRUBase(nn.RNNBase):
+    def __init__(self, *args, **kwargs):
+        return super().__init__("GRU", *args, **kwargs)
+
+
+for attr in nn.GRU.__dict__:
+    if attr != "__init__":
+        setattr(GRUBase, attr, getattr(nn.GRU, attr))
+
+
+class GRU(GRUBase):
     """A PyTorch module for executing multiple steps of a multi-layer GRU. The module behaves exactly like
     :class:`torch.nn.GRU`, but this implementation is exclusively coded in Python.
 
