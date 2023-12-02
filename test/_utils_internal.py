@@ -341,7 +341,7 @@ def rollout_consistency_assertion(
     )
 
     if not done.any():
-        return
+        raise RuntimeError("No done detected, test could not complete.")
 
     # data resulting from step, when it's done
     r_done = rollout[:, :-1]["next"][done]
@@ -349,7 +349,10 @@ def rollout_consistency_assertion(
     r_done_tp1 = rollout[:, 1:][done]
     assert (
         (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1) > 1e-1
-    ).all(), (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1)
+    ).all(), (
+        f"Entries in next tensordict do not match entries in root "
+        f"tensordict after reset : {(r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1)}"
+    )
 
 
 def rand_reset(env):
