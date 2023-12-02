@@ -282,7 +282,6 @@ class LSTM(LSTMBase):
         return outputs, (torch.stack(h_t, 0), torch.stack(c_t, 0))
 
     def forward(self, input, hx=None):  # noqa: F811
-        self._update_flat_weights()
         real_hidden_size = self.proj_size if self.proj_size > 0 else self.hidden_size
         if input.dim() != 3:
             raise ValueError(
