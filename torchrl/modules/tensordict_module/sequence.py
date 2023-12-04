@@ -33,7 +33,6 @@ class SafeSequential(TensorDictSequential, SafeModule):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
         >>> from torchrl.modules import TanhNormal, SafeSequential, TensorDictModule, NormalParamWrapper
         >>> from torchrl.modules.tensordict_module import SafeProbabilisticModule
@@ -58,8 +57,9 @@ class SafeSequential(TensorDictSequential, SafeModule):
         ...    out_keys=["output"],
         ...    )
         >>> td_module = SafeSequential(td_module1, td_module2)
-        >>> params = make_functional(td_module)
-        >>> td_module(td, params=params)
+        >>> params = TensorDict.from_module(td_module)
+        >>> with params.to_module(td_module):
+        ...     td_module(td)
         >>> print(td)
         TensorDict(
             fields={

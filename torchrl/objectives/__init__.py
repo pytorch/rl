@@ -5,7 +5,7 @@
 
 from .a2c import A2CLoss
 from .common import LossModule
-from .cql import CQLLoss
+from .cql import CQLLoss, DiscreteCQLLoss
 from .ddpg import DDPGLoss
 from .decision_transformer import DTLoss, OnlineDTLoss
 from .dqn import DistributionalDQNLoss, DQNLoss
