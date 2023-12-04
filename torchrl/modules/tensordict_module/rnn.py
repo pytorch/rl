@@ -242,12 +242,16 @@ class LSTM(LSTMBase):
 
         # should check self.batch_first
         bs, seq_len, input_size = x.size()
-        h_t, c_t = [list(h.unbind(0)) for h in hx]
+        h_t, c_t = [h.unbind(0) for h in hx]
+        h_t_out = []
+        c_t_out = []
+
+        x_ts = x.unbind(1)
 
         outputs = []
         for t in range(seq_len):
 
-            x_t = x[:, t, :]
+            x_t = x_ts[t]
 
             for layer in range(self.num_layers):
                 # Retrieve weights
@@ -262,15 +266,17 @@ class LSTM(LSTMBase):
                     bias_hh = None
 
                 # Run cell
-                h_t[layer], c_t[layer] = self._lstm_cell(
+                _h_t, _c_t = self._lstm_cell(
                     x_t, h_t[layer], c_t[layer], weight_ih, bias_ih, weight_hh, bias_hh
                 )
+                h_t_out.append(_h_t)
+                c_t_out.append(_c_t)
 
                 # Apply dropout if in training mode
                 if layer < self.num_layers - 1 and self.dropout:
-                    x_t = F.dropout(h_t[layer], p=self.dropout, training=self.training)
+                    x_t = F.dropout(_h_t, p=self.dropout, training=self.training)
                 else:  # No dropout after the last layer
-                    x_t = h_t[layer]
+                    x_t = _h_t
 
             outputs.append(x_t)
 
@@ -280,7 +286,7 @@ class LSTM(LSTMBase):
                 1, 0, 2
             )  # Change back (batch, seq_len, features) to (seq_len, batch, features)
 
-        return outputs, (torch.stack(h_t, 0), torch.stack(c_t, 0))
+        return outputs, (torch.stack(h_t_out, 0), torch.stack(c_t_out, 0))
 
     def forward(self, input, hx=None):  # noqa: F811
         real_hidden_size = self.proj_size if self.proj_size > 0 else self.hidden_size
@@ -307,10 +313,7 @@ class LSTM(LSTMBase):
             hx = (h_zeros, c_zeros)
         else:
             self.check_forward_args(input, hx, batch_sizes=None)
-        result = self._lstm(input, hx)
-        output = result[0]
-        hidden = result[1]
-        return output, hidden
+        return self._lstm(input, hx)
 
 
 class LSTMModule(ModuleBase):
