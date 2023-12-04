@@ -98,7 +98,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             Otherwise, only the ``terminated`` key is used. Defaults to ``True``.
         terminate_on_end (bool, optional): Set ``done=True`` on the last timestep
             in a trajectory. Default is ``False``, and will discard the
-            last timestep in each trajectory.
+            last timestep in each trajectory. This is to be used only with
+            ``direct_download=False``.
         root (Path or str, optional): The D4RL dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
@@ -173,13 +174,22 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
                     category=DeprecationWarning,
                 )
                 from_env = True
+            else:
+                warnings.warn(
+                    "You are using the D4RL library for collecting data. "
+                    "We advise against this use, as D4RL formatting can be "
+                    "inconsistent. "
+                    "To download the D4RL data without the D4RL library, use "
+                    "direct_download=True in the dataset constructor. "
+                    "Recurring to `direct_download=False` will soon be deprecated."
+                )
             self.from_env = from_env
         else:
             if from_env is None:
                 from_env = False
             self.from_env = from_env
 
-        if download and not self._is_downloaded():
+        if (download == "force") or (download and not self._is_downloaded()):
             if not direct_download:
                 if terminate_on_end is None:
                     # we use the default of d4rl

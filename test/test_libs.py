@@ -1832,6 +1832,7 @@ class TestD4RL:
                 terminate_on_end=True,
                 batch_size=2,
                 use_truncated_as_done=use_truncated_as_done,
+                download="force",
             )
         _ = D4RLExperienceReplay(
             task,
@@ -1840,6 +1841,7 @@ class TestD4RL:
             terminate_on_end=False,
             batch_size=2,
             use_truncated_as_done=use_truncated_as_done,
+            download="force",
         )
         data_from_env = D4RLExperienceReplay(
             task,
@@ -1847,6 +1849,7 @@ class TestD4RL:
             from_env=True,
             batch_size=2,
             use_truncated_as_done=use_truncated_as_done,
+            download="force",
         )
         if not use_truncated_as_done:
             keys = set(data_from_env._storage._storage.keys(True, True))
@@ -1885,6 +1888,7 @@ class TestD4RL:
             batch_size=2,
             use_truncated_as_done=True,
             direct_download=True,
+            download="force",
         )
         data_d4rl = D4RLExperienceReplay(
             task,
@@ -1894,6 +1898,7 @@ class TestD4RL:
             use_truncated_as_done=True,
             direct_download=False,
             terminate_on_end=True,  # keep the last time step
+            download="force",
         )
         keys = set(data_direct._storage._storage.keys(True, True))
         keys = keys.intersection(data_d4rl._storage._storage.keys(True, True))
