@@ -325,7 +325,7 @@ def make_tc(td):
 
 
 def rollout_consistency_assertion(
-    rollout, *, done_key="done", observation_key="observation"
+    rollout, *, done_key="done", observation_key="observation", done_strict=False
 ):
     """Tests that observations in "next" match observations in the next root tensordict when done is False, and don't match otherwise."""
 
@@ -335,11 +335,13 @@ def rollout_consistency_assertion(
     # data resulting from step, when it's not done, after step_mdp
     r_not_done_tp1 = rollout[:, 1:][~done]
     torch.testing.assert_close(
-        r_not_done[observation_key], r_not_done_tp1[observation_key]
+        r_not_done[observation_key],
+        r_not_done_tp1[observation_key],
+        msg=f"Key {observation_key} did not match",
     )
 
-    if not done.any():
-        return
+    if done_strict and not done.any():
+        raise RuntimeError("No done detected, test could not complete.")
 
     # data resulting from step, when it's done
     r_done = rollout[:, :-1]["next"][done]
@@ -347,7 +349,10 @@ def rollout_consistency_assertion(
     r_done_tp1 = rollout[:, 1:][done]
     assert (
         (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1) > 1e-1
-    ).all(), (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1)
+    ).all(), (
+        f"Entries in next tensordict do not match entries in root "
+        f"tensordict after reset : {(r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1) < 1e-1}"
+    )
 
 
 def rand_reset(env):
