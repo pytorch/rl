@@ -235,7 +235,7 @@ class LSTM(LSTMBase):
 
     def _lstm(self, x, hx):
 
-        if self.batch_first is False:
+        if self.batch_first:
             x = x.permute(
                 1, 0, 2
             )  # Change (seq_len, batch, features) to (batch, seq_len, features)
@@ -281,7 +281,7 @@ class LSTM(LSTMBase):
             outputs.append(x_t)
 
         outputs = torch.stack(outputs, dim=1)
-        if self.batch_first is False:
+        if not self.batch_first:
             outputs = outputs.permute(
                 1, 0, 2
             )  # Change back (batch, seq_len, features) to (seq_len, batch, features)
@@ -311,8 +311,6 @@ class LSTM(LSTMBase):
                 device=input.device,
             )
             hx = (h_zeros, c_zeros)
-        else:
-            self.check_forward_args(input, hx, batch_sizes=None)
         return self._lstm(input, hx)
 
 
@@ -460,7 +458,7 @@ class LSTMModule(ModuleBase):
                 raise ValueError("The input lstm must have batch_first=True.")
             if bidirectional:
                 raise ValueError("The input lstm cannot be bidirectional.")
-            if python_based is True:
+            if python_based:
                 lstm = LSTM(
                     input_size=input_size,
                     hidden_size=hidden_size,
@@ -882,7 +880,7 @@ class GRU(GRUBase):
         dtype=None,
     ) -> None:
 
-        if bidirectional is True:
+        if bidirectional:
             raise NotImplementedError(
                 "Bidirectional LSTMs are not supported yet in this implementation."
             )
@@ -938,7 +936,7 @@ class GRU(GRUBase):
                 weights = self._all_weights[layer]
                 weight_ih = getattr(self, weights[0])
                 weight_hh = getattr(self, weights[1])
-                if self.bias is True:
+                if self.bias:
                     bias_ih = getattr(self, weights[2])
                     bias_hh = getattr(self, weights[3])
                 else:
@@ -963,7 +961,7 @@ class GRU(GRUBase):
             outputs.append(x_t)
 
         outputs = torch.stack(outputs, dim=1)
-        if self.batch_first is False:
+        if self.batch_first:
             outputs = outputs.permute(
                 1, 0, 2
             )  # Change back (batch, seq_len, features) to (seq_len, batch, features)
@@ -1163,7 +1161,7 @@ class GRUModule(ModuleBase):
             if bidirectional:
                 raise ValueError("The input gru cannot be bidirectional.")
 
-            if python_based is True:
+            if python_based:
                 gru = GRU(
                     input_size=input_size,
                     hidden_size=hidden_size,
