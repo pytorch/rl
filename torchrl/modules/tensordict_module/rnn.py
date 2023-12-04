@@ -127,6 +127,8 @@ class LSTMCell(RNNCellBase):
 
 # copy LSTM
 class LSTMBase(nn.RNNBase):
+    """A Base module for LSTM. Inheriting from LSTMBase enables compatibility with torch.compile."""
+
     def __init__(self, *args, **kwargs):
         return super().__init__("LSTM", *args, **kwargs)
 
@@ -137,8 +139,7 @@ for attr in nn.LSTM.__dict__:
 
 
 class LSTM(LSTMBase):
-    """A PyTorch module for executing multiple steps of a multi-layer LSTM. The module behaves exactly like
-    :class:`torch.nn.LSTM`, but this implementation is exclusively coded in Python.
+    """A PyTorch module for executing multiple steps of a multi-layer LSTM. The module behaves exactly like :class:`torch.nn.LSTM`, but this implementation is exclusively coded in Python.
 
     .. note::
         This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap` and :func:`torch.compile`.
@@ -811,6 +812,8 @@ class GRUCell(RNNCellBase):
 
 # copy GRU
 class GRUBase(nn.RNNBase):
+    """A Base module for GRU. Inheriting from GRUBase enables compatibility with torch.compile."""
+
     def __init__(self, *args, **kwargs):
         return super().__init__("GRU", *args, **kwargs)
 
@@ -821,8 +824,7 @@ for attr in nn.GRU.__dict__:
 
 
 class GRU(GRUBase):
-    """A PyTorch module for executing multiple steps of a multi-layer GRU. The module behaves exactly like
-    :class:`torch.nn.GRU`, but this implementation is exclusively coded in Python.
+    """A PyTorch module for executing multiple steps of a multi-layer GRU. The module behaves exactly like :class:`torch.nn.GRU`, but this implementation is exclusively coded in Python.
 
     .. note::
         This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap` and :func:`torch.compile`.
