@@ -1828,7 +1828,10 @@ class TestD4RL:
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("use_truncated_as_done", [True, False])
     @pytest.mark.parametrize("split_trajs", [True, False])
-    def test_terminate_on_end(self, task, use_truncated_as_done, split_trajs):
+    def test_terminate_on_end(self, task, use_truncated_as_done, split_trajs, tempdir):
+        root1 = tempdir / "1"
+        root2 = tempdir / "2"
+        root3 = tempdir / "3"
 
         with pytest.warns(
             UserWarning, match="Using use_truncated_as_done=True"
@@ -1840,6 +1843,7 @@ class TestD4RL:
                 terminate_on_end=True,
                 batch_size=2,
                 use_truncated_as_done=use_truncated_as_done,
+                root=root1,
             )
         _ = D4RLExperienceReplay(
             task,
@@ -1848,6 +1852,7 @@ class TestD4RL:
             terminate_on_end=False,
             batch_size=2,
             use_truncated_as_done=use_truncated_as_done,
+            root=root2,
         )
         data_from_env = D4RLExperienceReplay(
             task,
@@ -1855,6 +1860,7 @@ class TestD4RL:
             from_env=True,
             batch_size=2,
             use_truncated_as_done=use_truncated_as_done,
+            root=root3,
         )
         if not use_truncated_as_done:
             keys = set(data_from_env._storage._storage.keys(True, True))
