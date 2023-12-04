@@ -91,6 +91,12 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
             accurate choices regarding this usage of ``split_trajs``.
             Defaults to ``False``.
 
+    .. note::
+      Text data is currenrtly discarded from the wrapped dataset, as there is not
+      PyTorch native way of representing text data.
+      If this feature is required, please post an issue on TorchRL's GitHub
+      repository.
+
     Examples:
         >>> from torchrl.data.datasets.minari_data import MinariExperienceReplay
         >>> data = MinariExperienceReplay("door-human-v1", batch_size=32, download="force")
