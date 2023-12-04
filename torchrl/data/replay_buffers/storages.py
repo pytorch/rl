@@ -283,6 +283,11 @@ class TensorStorage(Storage):
             _len_value = self._len_value = mp.Value("i", 0)
         _len_value.value = value
 
+    def __getitem__(self, item):
+        if self._len < self.max_size:
+            return self._storage[: self._len][item]
+        return super().__getitem__(item)
+
     def __getstate__(self):
         state = copy(self.__dict__)
         if get_spawning_popen() is None:

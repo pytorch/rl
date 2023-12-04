@@ -797,6 +797,14 @@ class TestBuffers:
             b = b.all()
         assert b
 
+    def test_index_nonfull(self, rbtype, storage, size, prefetch):
+        # checks that indexing the buffer before it's full gives the accurate view of the data
+        rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
+        data = self._get_data(rbtype, size=size - 1)
+        rb.extend(data)
+        assert len(rb[: size - 1]) == size - 1
+        assert len(rb[size - 2 :]) == 1
+
 
 def test_multi_loops():
     """Tests that one can iterate multiple times over a buffer without rep."""
