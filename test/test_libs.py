@@ -402,8 +402,6 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=8, reruns_delay=1)
     def test_vecenvs_env(self, envname):
-        from _utils_internal import rollout_consistency_assertion
-
         with set_gym_backend("gymnasium"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
             env.set_seed(0)
@@ -413,7 +411,10 @@ class TestGym:
         rollout = env.rollout(100, break_when_any_done=False)
         for obs_key in env.observation_spec.keys(True, True):
             rollout_consistency_assertion(
-                rollout, done_key="done", observation_key=obs_key
+                rollout,
+                done_key="done",
+                observation_key=obs_key,
+                done_strict="CartPole" in envname,
             )
         env.close()
         del env
@@ -462,7 +463,10 @@ class TestGym:
         rollout = env.rollout(100, break_when_any_done=False)
         for obs_key in env.observation_spec.keys(True, True):
             rollout_consistency_assertion(
-                rollout, done_key="done", observation_key=obs_key
+                rollout,
+                done_key="done",
+                observation_key=obs_key,
+                done_strict="CartPole" in envname,
             )
         env.close()
         del env
