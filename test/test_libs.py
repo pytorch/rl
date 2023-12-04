@@ -1964,38 +1964,51 @@ class TestD4RL:
         print(f"terminated test after {time.time()-t0}s")
 
 
+_MINARI_DATASETS = []
+
+
+def _minari_selected_datasets():
+    if not _has_minari:
+        return
+    global _MINARI_DATASETS
+    import minari
+
+    torch.manual_seed(0)
+
+    keys = list(minari.list_remote_datasets())
+    indices = torch.randperm(len(keys))[:10]
+    keys = [keys[idx] for idx in indices]
+    keys = [
+        key
+        for key in keys
+        if "=0.4" in minari.list_remote_datasets()[key]["minari_version"]
+    ]
+    assert len(keys) > 5
+    _MINARI_DATASETS += keys
+    print("_MINARI_DATASETS", _MINARI_DATASETS)
+
+
+_minari_selected_datasets()
+
+
 @pytest.mark.skipif(not _has_minari, reason="Minari not found")
+@pytest.mark.parametrize("split", [False, True])
+@pytest.mark.parametrize("selected_dataset", _MINARI_DATASETS)
 class TestMinari:
-    @pytest.fixture(scope="class")
-    def selected_datasets(self):
-        torch.manual_seed(0)
-        import minari
-
-        keys = list(minari.list_remote_datasets())
-        indices = torch.randperm(len(keys))[:10]
-        keys = [keys[idx] for idx in indices]
-        keys = [
-            key
-            for key in keys
-            if "=0.4" in minari.list_remote_datasets()[key]["minari_version"]
-        ]
-        assert len(keys) > 5
-        return keys
-
-    @pytest.mark.parametrize("split", [False, True])
-    def test_load(self, selected_datasets, split):
-        for dataset in selected_datasets:
-            print("dataset", dataset)
-            data = MinariExperienceReplay(dataset, batch_size=32, split_trajs=split)
+    def test_load(self, selected_dataset, split):
+        print("dataset", selected_dataset)
+        data = MinariExperienceReplay(
+            selected_dataset, batch_size=32, split_trajs=split
+        )
+        t0 = time.time()
+        for i, sample in enumerate(data):
+            t1 = time.time()
+            print(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            assert data.metadata["action_space"].is_in(sample["action"])
+            assert data.metadata["observation_space"].is_in(sample["observation"])
             t0 = time.time()
-            for i, sample in enumerate(data):
-                t1 = time.time()
-                print(f"sampling time {1000 * (t1-t0): 4.4f}ms")
-                assert data.metadata["action_space"].is_in(sample["action"])
-                assert data.metadata["observation_space"].is_in(sample["observation"])
-                t0 = time.time()
-                if i == 10:
-                    break
+            if i == 10:
+                break
 
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")
