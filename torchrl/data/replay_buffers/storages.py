@@ -448,11 +448,15 @@ class TensorStorage(Storage):
         self._storage[cursor] = data
 
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
+        if self._len < self.max_size:
+            storage = self._storage[: self._len]
+        else:
+            storage = self._storage
         if not self.initialized:
             raise RuntimeError(
                 "Cannot get an item from an unitialized LazyMemmapStorage"
             )
-        out = self._storage[index]
+        out = storage[index]
         if is_tensor_collection(out):
             out = _reset_batch_size(out)
             return out.unlock_()
