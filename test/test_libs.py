@@ -400,7 +400,6 @@ class TestGym:
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
-    @pytest.mark.flaky(reruns=8, reruns_delay=1)
     def test_vecenvs_env(self, envname):
         with set_gym_backend("gymnasium"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
@@ -452,7 +451,6 @@ class TestGym:
         "envname",
         ["CartPole-v1", "HalfCheetah-v4"],
     )
-    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     def test_vecenvs_env(self, envname):  # noqa: F811
         with set_gym_backend("gym"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
