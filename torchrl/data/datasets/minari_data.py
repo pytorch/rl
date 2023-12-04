@@ -105,10 +105,17 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
                     fields={
                         success: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.bool, is_shared=False)},
                     batch_size=torch.Size([32]),
-                    device=None,
+                    device=cpu,
                     is_shared=False),
                 next: TensorDict(
                     fields={
+                        done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        info: TensorDict(
+                            fields={
+                                success: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.bool, is_shared=False)},
+                            batch_size=torch.Size([32]),
+                            device=cpu,
+                            is_shared=False),
                         observation: Tensor(shape=torch.Size([32, 39]), device=cpu, dtype=torch.float64, is_shared=False),
                         reward: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.float64, is_shared=False),
                         state: TensorDict(
@@ -117,12 +124,12 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
                                 qpos: Tensor(shape=torch.Size([32, 30]), device=cpu, dtype=torch.float64, is_shared=False),
                                 qvel: Tensor(shape=torch.Size([32, 30]), device=cpu, dtype=torch.float64, is_shared=False)},
                             batch_size=torch.Size([32]),
-                            device=None,
+                            device=cpu,
                             is_shared=False),
                         terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                         truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
                     batch_size=torch.Size([32]),
-                    device=None,
+                    device=cpu,
                     is_shared=False),
                 observation: Tensor(shape=torch.Size([32, 39]), device=cpu, dtype=torch.float64, is_shared=False),
                 state: TensorDict(
@@ -131,10 +138,10 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
                         qpos: Tensor(shape=torch.Size([32, 30]), device=cpu, dtype=torch.float64, is_shared=False),
                         qvel: Tensor(shape=torch.Size([32, 30]), device=cpu, dtype=torch.float64, is_shared=False)},
                     batch_size=torch.Size([32]),
-                    device=None,
+                    device=cpu,
                     is_shared=False)},
             batch_size=torch.Size([32]),
-            device=None,
+            device=cpu,
             is_shared=False)
 
     """
