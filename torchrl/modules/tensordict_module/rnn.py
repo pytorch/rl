@@ -235,7 +235,7 @@ class LSTM(LSTMBase):
 
     def _lstm(self, x, hx):
 
-        if self.batch_first:
+        if not self.batch_first:
             x = x.permute(
                 1, 0, 2
             )  # Change (seq_len, batch, features) to (batch, seq_len, features)
@@ -961,7 +961,7 @@ class GRU(GRUBase):
             outputs.append(x_t)
 
         outputs = torch.stack(outputs, dim=1)
-        if self.batch_first:
+        if not self.batch_first:
             outputs = outputs.permute(
                 1, 0, 2
             )  # Change back (batch, seq_len, features) to (seq_len, batch, features)
@@ -1161,7 +1161,7 @@ class GRUModule(ModuleBase):
             if bidirectional:
                 raise ValueError("The input gru cannot be bidirectional.")
 
-            if python_based:
+            if python_basedz:
                 gru = GRU(
                     input_size=input_size,
                     hidden_size=hidden_size,
