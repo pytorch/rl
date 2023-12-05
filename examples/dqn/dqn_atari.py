@@ -126,6 +126,19 @@ def main(cfg: "DictConfig"):  # noqa: F821
         greedy_module.step(current_frames)
         replay_buffer.extend(data)
 
+        # Get and log training rewards and episode lengths
+        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
+        if len(episode_rewards) > 0:
+            episode_reward_mean = episode_rewards.mean().item()
+            episode_length = data["next", "step_count"][data["next", "done"]]
+            episode_length_mean = episode_length.sum().item() / len(episode_length)
+            log_info.update(
+                {
+                    "train/episode_reward": episode_reward_mean,
+                    "train/episode_length": episode_length_mean,
+                }
+            )
+
         if collected_frames < init_random_frames:
             continue
 
@@ -160,19 +173,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "train/training_time": training_time,
             }
         )
-
-        # Get and log training rewards and episode lengths
-        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
-        if len(episode_rewards) > 0:
-            episode_reward_mean = episode_rewards.mean().item()
-            episode_length = data["next", "step_count"][data["next", "done"]]
-            episode_length_mean = episode_length.sum().item() / len(episode_length)
-            log_info.update(
-                {
-                    "train/episode_reward": episode_reward_mean,
-                    "train/episode_length": episode_length_mean,
-                }
-            )
 
         # Get and log evaluation rewards and eval time
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
