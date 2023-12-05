@@ -82,7 +82,9 @@ _os_is_windows = sys.platform == "win32"
 @pytest.mark.parametrize(
     "sampler", [samplers.RandomSampler, samplers.PrioritizedSampler]
 )
-@pytest.mark.parametrize("writer", [writers.RoundRobinWriter])
+@pytest.mark.parametrize(
+    "writer", [writers.RoundRobinWriter, writers.TensorDictMaxValueWriter]
+)
 @pytest.mark.parametrize("storage", [ListStorage, LazyTensorStorage, LazyMemmapStorage])
 @pytest.mark.parametrize("size", [3, 5, 100])
 class TestComposableBuffers:
@@ -106,7 +108,9 @@ class TestComposableBuffers:
         elif (
             rb_type is TensorDictReplayBuffer or rb_type is RemoteTensorDictReplayBuffer
         ):
-            data = TensorDict({"a": torch.randint(100, (1,))}, [])
+            data = TensorDict(
+                {"a": torch.randint(100, (1,)), "next": {"reward": torch.randn(1)}}, []
+            )
         else:
             raise NotImplementedError(rb_type)
         return data
@@ -121,6 +125,7 @@ class TestComposableBuffers:
                 {
                     "a": torch.randint(100, (size,)),
                     "b": TensorDict({"c": torch.randint(100, (size,))}, [size]),
+                    "next": {"reward": torch.randn(size, 1)},
                 },
                 [size],
             )
@@ -138,6 +143,12 @@ class TestComposableBuffers:
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
         )
         data = self._get_datum(rb_type)
+        if isinstance(data, torch.Tensor) and writer is TensorDictMaxValueWriter:
+            with pytest.raises(
+                RuntimeError, match="expects data to be a tensor collection"
+            ):
+                rb.add(data)
+            return
         rb.add(data)
         s = rb.sample(1)
         assert s.ndim, s
@@ -156,6 +167,16 @@ class TestComposableBuffers:
         writer.register_storage(storage)
         batch1 = self._get_data(rb_type, size=5)
         cond = OLD_TORCH and size < len(batch1) and isinstance(storage, TensorStorage)
+
+        if isinstance(batch1, torch.Tensor) and isinstance(
+            writer, TensorDictMaxValueWriter
+        ):
+            with pytest.raises(
+                RuntimeError, match="expects data to be a tensor collection"
+            ):
+                writer.extend(batch1)
+            return
+
         with pytest.warns(
             UserWarning,
             match="A cursor of length superior to the storage capacity was provided",
@@ -167,13 +188,19 @@ class TestComposableBuffers:
             assert writer._cursor == 5
         # Added more data than storage max size
         elif size < 5:
-            assert writer._cursor == 5 - size
+            # if Max writer, we don't necessarily overwrite existing values so
+            # we just check that the cursor is before the threshold
+            if isinstance(writer, TensorDictMaxValueWriter):
+                assert writer._cursor <= 5 - size
+            else:
+                assert writer._cursor == 5 - size
         # Added as data as storage max size
         else:
             assert writer._cursor == 0
-            batch2 = self._get_data(rb_type, size=size - 1)
-            writer.extend(batch2)
-            assert writer._cursor == size - 1
+            if not isinstance(writer, TensorDictMaxValueWriter):
+                batch2 = self._get_data(rb_type, size=size - 1)
+                writer.extend(batch2)
+                assert writer._cursor == size - 1
 
     def test_extend(self, rb_type, sampler, writer, storage, size):
         if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
@@ -186,6 +213,15 @@ class TestComposableBuffers:
         )
         data = self._get_data(rb_type, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        if isinstance(data, torch.Tensor) and writer is TensorDictMaxValueWriter:
+            with pytest.raises(
+                RuntimeError, match="expects data to be a tensor collection"
+            ):
+                rb.extend(data)
+            return
+        length = min(rb._storage.max_size, len(rb) + data.shape[0])
+        if writer is TensorDictMaxValueWriter:
+            data["next", "reward"][-length:] = 1_000_000
         with pytest.warns(
             UserWarning,
             match="A cursor of length superior to the storage capacity was provided",
@@ -228,6 +264,12 @@ class TestComposableBuffers:
         )
         data = self._get_data(rb_type, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        if isinstance(data, torch.Tensor) and writer is TensorDictMaxValueWriter:
+            with pytest.raises(
+                RuntimeError, match="expects data to be a tensor collection"
+            ):
+                rb.extend(data)
+            return
         with pytest.warns(
             UserWarning,
             match="A cursor of length superior to the storage capacity was provided",
@@ -264,6 +306,12 @@ class TestComposableBuffers:
         )
         data = self._get_data(rb_type, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        if isinstance(data, torch.Tensor) and writer is TensorDictMaxValueWriter:
+            with pytest.raises(
+                RuntimeError, match="expects data to be a tensor collection"
+            ):
+                rb.extend(data)
+            return
         with pytest.warns(
             UserWarning,
             match="A cursor of length superior to the storage capacity was provided",
@@ -491,6 +539,8 @@ class TestStorages:
         else:
             storage = storage_type(max_size=10)
         storage.set(range(3), data)
+        storage.dumps(dir_save)
+        # check we can dump twice
         storage.dumps(dir_save)
         storage_recover = storage_type(max_size=10)
         if isinit:
@@ -1377,6 +1427,8 @@ class TestMaxValueWriter:
             device=device,
         )
         rb.extend(td)
+        rb._writer.dumps(tmpdir)
+        # check we can dump twice
         rb._writer.dumps(tmpdir)
         other = TensorDictMaxValueWriter(rank_key="key")
         other.loads(tmpdir)

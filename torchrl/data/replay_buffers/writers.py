@@ -13,7 +13,7 @@ from typing import Any, Dict, Sequence
 
 import numpy as np
 import torch
-from tensordict import MemoryMappedTensor
+from tensordict import is_tensor_collection, MemoryMappedTensor
 from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
 
@@ -205,6 +205,10 @@ class TensorDictMaxValueWriter(Writer):
 
     def get_insert_index(self, data: Any) -> int:
         """Returns the index where the data should be inserted, or ``None`` if it should not be inserted."""
+        if not is_tensor_collection(data):
+            raise RuntimeError(
+                f"{type(self)} expects data to be a tensor collection (tensordict or tensorclass). Found a {type(data)} instead."
+            )
         if data.batch_dims > 1:
             raise RuntimeError(
                 "Expected input tensordict to have no more than 1 dimension, got"
@@ -212,7 +216,7 @@ class TensorDictMaxValueWriter(Writer):
             )
 
         ret = None
-        rank_data = data.get(("_data", self._rank_key))
+        rank_data = data.get("_data", default=data).get(self._rank_key)
 
         # If time dimension, sum along it.
         rank_data = rank_data.sum(-1).item()
@@ -222,7 +226,6 @@ class TensorDictMaxValueWriter(Writer):
 
         # If the buffer is not full, add the data
         if len(self._current_top_values) < self._storage.max_size:
-
             ret = self._cursor
             self._cursor = (self._cursor + 1) % self._storage.max_size
 
@@ -270,13 +273,17 @@ class TensorDictMaxValueWriter(Writer):
         # Replace the data in the storage all at once
         if len(data_to_replace) > 0:
             keys, values = zip(*data_to_replace.items())
-            index = data.get("index")
+            index = data.get("index", None)
+            dtype = index.dtype if index is not None else torch.long
+            device = index.device if index is not None else data.device
             values = list(values)
-            keys = index[values] = torch.tensor(
-                keys, dtype=index.dtype, device=index.device
-            )
-            data.set("index", index)
-            self._storage[keys] = data[values]
+            keys = torch.tensor(keys, dtype=dtype, device=device)
+            if index is not None:
+                index[values] = keys
+                data.set("index", index)
+            self._storage.set(keys, data[values])
+            return keys.long()
+        return None
 
     def _empty(self) -> None:
         self._cursor = 0
@@ -294,7 +301,16 @@ class TensorDictMaxValueWriter(Writer):
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
         t = torch.tensor(self._current_top_values)
-        MemoryMappedTensor.from_tensor(t, filename=path / "current_top_values.memmap")
+        try:
+            MemoryMappedTensor.from_filename(
+                filename=path / "current_top_values.memmap",
+                shape=t.shape,
+                dtype=t.dtype,
+            ).copy_(t)
+        except FileNotFoundError:
+            MemoryMappedTensor.from_tensor(
+                t, filename=path / "current_top_values.memmap"
+            )
         with open(path / "metadata.json", "w") as file:
             json.dump(
                 {

@@ -131,6 +131,32 @@ can be used:
         device=None,
         is_shared=False)
 
+Checkpointing Replay Buffers
+----------------------------
+
+Each component of the replay buffer can potentially be stateful and, as such,
+require a dedicated way of being serialized.
+Our replay buffer enjoys two separate APIs for saving their state on disk:
+:meth:`~torchrl.data.ReplayBuffer.dumps` and :meth:`~torchrl.data.ReplayBuffer.loads` will save the
+data of each component except transforms (storage, writer, sampler) using memory-mapped
+tensors and json files for the metadata. This will work across all classes except
+:class:`~torchrl.data.replay_buffers.storages.ListStorage`, which content
+cannot be anticipated (and as such does not comply with memory-mapped data
+structures such as those that can be found in the tensordict library).
+This API guarantees that a buffer that is saved and then loaded back will be in
+the exact same state, whether we look at the status of its sampler (eg, priority trees)
+its writer (eg, max writer heaps) or its storage.
+Under the hood, :meth:`~torchrl.data.ReplayBuffer.dumps` will just call the public
+`dumps` method in a specific folder for each of its components (except transforms
+which we don't assume to be serializable using memory-mapped tensors in general).
+
+Whenever saving data using :meth:`~torchrl.data.ReplayBuffer.dumps` is not possible, an
+alternative way is to use :meth:`~torchrl.data.ReplayBuffer.state_dict`, which returns a data
+structure that can be saved using :func:`torch.save` and loaded using :func:`torch.load`
+before calling :meth:`~torchrl.data.ReplayBuffer.load_state_dict`. The drawback
+of this method is that it will struggle to save big data structures, which is a
+common setting when using replay buffers.
+
 Datasets
 --------
 

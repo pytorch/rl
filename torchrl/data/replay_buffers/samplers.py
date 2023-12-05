@@ -321,11 +321,15 @@ class PrioritizedSampler(Sampler):
 
     def add(self, index: int) -> None:
         super().add(index)
-        self._add_or_extend(index)
+        if index is not None:
+            # some writers don't systematically write data and can return None
+            self._add_or_extend(index)
 
     def extend(self, index: torch.Tensor) -> None:
         super().extend(index)
-        self._add_or_extend(index)
+        if index is not None:
+            # some writers don't systematically write data and can return None
+            self._add_or_extend(index)
 
     def update_priority(
         self, index: Union[int, torch.Tensor], priority: Union[float, torch.Tensor]
@@ -388,12 +392,28 @@ class PrioritizedSampler(Sampler):
     def dumps(self, path):
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
-        mm_st = MemoryMappedTensor.empty(
-            (self._max_capacity,), dtype=torch.float64, filename=path / "sumtree.memmap"
-        )
-        mm_mt = MemoryMappedTensor.empty(
-            (self._max_capacity,), dtype=torch.float64, filename=path / "mintree.memmap"
-        )
+        try:
+            mm_st = MemoryMappedTensor.from_filename(
+                shape=(self._max_capacity,),
+                dtype=torch.float64,
+                filename=path / "sumtree.memmap",
+            )
+            mm_mt = MemoryMappedTensor.from_filename(
+                shape=(self._max_capacity,),
+                dtype=torch.float64,
+                filename=path / "mintree.memmap",
+            )
+        except FileNotFoundError:
+            mm_st = MemoryMappedTensor.empty(
+                (self._max_capacity,),
+                dtype=torch.float64,
+                filename=path / "sumtree.memmap",
+            )
+            mm_mt = MemoryMappedTensor.empty(
+                (self._max_capacity,),
+                dtype=torch.float64,
+                filename=path / "mintree.memmap",
+            )
         mm_st.copy_(
             torch.tensor([self._sum_tree[i] for i in range(self._max_capacity)])
         )

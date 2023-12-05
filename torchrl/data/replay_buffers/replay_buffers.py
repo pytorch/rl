@@ -244,6 +244,42 @@ class ReplayBuffer:
         self._batch_size = state_dict["_batch_size"]
 
     def dumps(self, path):
+        """Saves the replay buffer on disk at the specified path.
+
+        Args:
+            path (Path or str): path where to save the replay buffer.
+
+        Examples:
+            >>> import tempfile
+            >>> import tqdm
+            >>> from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+            >>> from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> # Build and populate the replay buffer
+            >>> S = 1_000_000
+            >>> sampler = PrioritizedSampler(S, 1.1, 1.0)
+            >>> # sampler = RandomSampler()
+            >>> storage = LazyMemmapStorage(S)
+            >>> rb = TensorDictReplayBuffer(storage=storage, sampler=sampler)
+            >>>
+            >>> for _ in tqdm.tqdm(range(100)):
+            ...     td = TensorDict({"obs": torch.randn(100, 3, 4), "next": {"obs": torch.randn(100, 3, 4)}, "td_error": torch.rand(100)}, [100])
+            ...     rb.extend(td)
+            ...     sample = rb.sample(32)
+            ...     rb.update_tensordict_priority(sample)
+            >>> # save and load the buffer
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     rb.dumps(tmpdir)
+            ...
+            ...     sampler = PrioritizedSampler(S, 1.1, 1.0)
+            ...     # sampler = RandomSampler()
+            ...     storage = LazyMemmapStorage(S)
+            ...     rb_load = TensorDictReplayBuffer(storage=storage, sampler=sampler)
+            ...     rb_load.loads(tmpdir)
+            ...     assert len(rb) == len(rb_load)
+
+        """
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
         self._storage.dumps(path / "storage")
@@ -257,6 +293,16 @@ class ReplayBuffer:
             json.dump({"batch_size": self._batch_size}, file)
 
     def loads(self, path):
+        """Loads a replay buffer state at the given path.
+
+        The buffer should have matching components and be saved using :meth:`~.dumps`.
+
+        Args:
+            path (Path or str): path where the replay buffer was saved.
+
+        See :meth:`~.dumps` for more info.
+
+        """
         path = Path(path).absolute()
         self._storage.loads(path / "storage")
         self._sampler.loads(path / "sampler")

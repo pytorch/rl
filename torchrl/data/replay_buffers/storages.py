@@ -13,6 +13,7 @@ from multiprocessing.context import get_spawning_popen
 from pathlib import Path
 from typing import Any, Dict, Sequence, Union
 
+import numpy as np
 import torch
 from tensordict import is_tensorclass
 from tensordict.memmap import MemmapTensor, MemoryMappedTensor
@@ -131,6 +132,11 @@ class ListStorage(Storage):
 
     def set(self, cursor: Union[int, Sequence[int], slice], data: Any):
         if not isinstance(cursor, INT_CLASSES):
+            if (isinstance(cursor, torch.Tensor) and cursor.numel() <= 1) or (
+                isinstance(cursor, np.ndarray) and cursor.size <= 1
+            ):
+                self.set(int(cursor), data)
+                return
             if isinstance(cursor, slice):
                 self._storage[cursor] = data
                 return
@@ -296,14 +302,26 @@ class TensorStorage(Storage):
         if not self.initialized:
             raise RuntimeError("Cannot save a non-initialized storage.")
         if isinstance(self._storage, torch.Tensor):
-            MemoryMappedTensor.from_tensor(
-                self._storage, filename=path / "storage.memmap", copy_existing=True
-            )
+            try:
+                MemoryMappedTensor.from_filename(
+                    shape=self._storage.shape,
+                    filename=path / "storage.memmap",
+                    dtype=self._storage.dtype,
+                ).copy_(self._storage)
+            except FileNotFoundError:
+                MemoryMappedTensor.from_tensor(
+                    self._storage, filename=path / "storage.memmap", copy_existing=True
+                )
             is_tensor = True
             dtype = str(self._storage.dtype)
             shape = list(self._storage.shape)
         else:
-            saved = self._storage.memmap_like(path)
+            # try to load the path and overwrite.
+            try:
+                saved = TensorDict.load_memmap(path)
+            except FileNotFoundError:
+                # otherwise create a new one
+                saved = self._storage.memmap_like(path)
             saved.update_(self._storage)
             is_tensor = False
             dtype = None
