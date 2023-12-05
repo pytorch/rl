@@ -4,13 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 
 import heapq
+import json
 from abc import ABC, abstractmethod
 from copy import copy
 from multiprocessing.context import get_spawning_popen
+from pathlib import Path
 from typing import Any, Dict, Sequence
 
 import numpy as np
 import torch
+from tensordict import MemoryMappedTensor
+from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
 
 from .storages import Storage
@@ -39,6 +43,14 @@ class Writer(ABC):
     def _empty(self):
         ...
 
+    @abstractmethod
+    def dumps(self, path):
+        ...
+
+    @abstractmethod
+    def loads(self, path):
+        ...
+
     def state_dict(self) -> Dict[str, Any]:
         return {}
 
@@ -52,6 +64,18 @@ class RoundRobinWriter(Writer):
     def __init__(self, **kw) -> None:
         super().__init__(**kw)
         self._cursor = 0
+
+    def dumps(self, path):
+        path = Path(path).absolute()
+        path.mkdir(exist_ok=True)
+        with open(path / "metadata.json", "w") as file:
+            json.dump({"cursor": self._cursor}, file)
+
+    def loads(self, path):
+        path = Path(path).absolute()
+        with open(path / "metadata.json", "r") as file:
+            metadata = json.load(file)
+            self._cursor = metadata["cursor"]
 
     def add(self, data: Any) -> int:
         ret = self._cursor
@@ -265,3 +289,33 @@ class TensorDictMaxValueWriter(Writer):
             )
         state = copy(self.__dict__)
         return state
+
+    def dumps(self, path):
+        path = Path(path).absolute()
+        path.mkdir(exist_ok=True)
+        t = torch.tensor(self._current_top_values)
+        MemoryMappedTensor.from_tensor(t, filename=path / "current_top_values.memmap")
+        with open(path / "metadata.json", "w") as file:
+            json.dump(
+                {
+                    "cursor": self._cursor,
+                    "rank_key": self._rank_key,
+                    "dtype": str(t.dtype),
+                    "shape": list(t.shape),
+                },
+                file,
+            )
+
+    def loads(self, path):
+        path = Path(path).absolute()
+        with open(path / "metadata.json", "r") as file:
+            metadata = json.load(file)
+            self._cursor = metadata["cursor"]
+            self._rank_key = metadata["rank_key"]
+            shape = torch.Size(metadata["shape"])
+            dtype = metadata["dtype"]
+        self._current_top_values = MemoryMappedTensor.from_filename(
+            filename=path / "current_top_values.memmap",
+            dtype=_STRDTYPE2DTYPE[dtype],
+            shape=shape,
+        ).tolist()

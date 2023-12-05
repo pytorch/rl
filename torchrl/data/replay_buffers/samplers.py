@@ -2,13 +2,17 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import json
 import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
+from pathlib import Path
 from typing import Any, Dict, Tuple, Union
 
 import numpy as np
 import torch
+
+from tensordict import MemoryMappedTensor
 
 from ..._extension import EXTENSION_WARNING
 
@@ -68,6 +72,14 @@ class Sampler(ABC):
     def _empty(self):
         ...
 
+    @abstractmethod
+    def dumps(self, path):
+        ...
+
+    @abstractmethod
+    def loads(self, path):
+        ...
+
 
 class RandomSampler(Sampler):
     """A uniformly random sampler for composable replay buffers.
@@ -86,6 +98,14 @@ class RandomSampler(Sampler):
 
     def _empty(self):
         pass
+
+    def dumps(self, path):
+        # no op
+        ...
+
+    def loads(self, path):
+        # no op
+        ...
 
 
 class SamplerWithoutReplacement(Sampler):
@@ -113,6 +133,29 @@ class SamplerWithoutReplacement(Sampler):
         self.len_storage = 0
         self.drop_last = drop_last
         self._ran_out = False
+
+    def dumps(self, path):
+        path = Path(path)
+        path.mkdir(exist_ok=True)
+
+        with open(path / "sampler_metadata.json", "w") as file:
+            json.dump(
+                {
+                    "len_storage": self.len_storage,
+                    "_sample_list": self._sample_list,
+                    "drop_last": self.drop_last,
+                    "_ran_out": self._ran_out,
+                },
+                file,
+            )
+
+    def loads(self, path):
+        with open(path / "sampler_metadata.json", "r") as file:
+            metadata = json.load(file)
+        self._sample_list = metadata["_sample_list"]
+        self.len_storage = metadata["len_storage"]
+        self.drop_last = metadata["drop_last"]
+        self._ran_out = metadata["_ran_out"]
 
     def _single_sample(self, len_storage, batch_size):
         index = self._sample_list[:batch_size]
@@ -237,7 +280,9 @@ class PrioritizedSampler(Sampler):
             raise RuntimeError("negative p_sum")
         if p_min <= 0:
             raise RuntimeError("negative p_min")
-        mass = np.random.uniform(0.0, p_sum, size=batch_size)
+        mass = (
+            torch.empty((batch_size,), dtype=torch.float32).uniform_(0, p_sum).numpy()
+        )
         index = self._sum_tree.scan_lower_bound(mass)
         if not isinstance(index, np.ndarray):
             index = np.array([index])
@@ -339,3 +384,58 @@ class PrioritizedSampler(Sampler):
         self._max_priority = state_dict["_max_priority"]
         self._sum_tree = state_dict.pop("_sum_tree")
         self._min_tree = state_dict.pop("_min_tree")
+
+    def dumps(self, path):
+        path = Path(path).absolute()
+        path.mkdir(exist_ok=True)
+        mm_st = MemoryMappedTensor.empty(
+            (self._max_capacity,), dtype=torch.float64, filename=path / "sumtree.memmap"
+        )
+        mm_mt = MemoryMappedTensor.empty(
+            (self._max_capacity,), dtype=torch.float64, filename=path / "mintree.memmap"
+        )
+        mm_st.copy_(
+            torch.tensor([self._sum_tree[i] for i in range(self._max_capacity)])
+        )
+        mm_mt.copy_(
+            torch.tensor([self._min_tree[i] for i in range(self._max_capacity)])
+        )
+        with open(path / "sampler_metadata.json", "w") as file:
+            json.dump(
+                {
+                    "_alpha": self._alpha,
+                    "_beta": self._beta,
+                    "_eps": self._eps,
+                    "_max_priority": self._max_priority,
+                    "_max_capacity": self._max_capacity,
+                },
+                file,
+            )
+
+    def loads(self, path):
+        path = Path(path).absolute()
+        with open(path / "sampler_metadata.json", "r") as file:
+            metadata = json.load(file)
+        self._alpha = metadata["_alpha"]
+        self._beta = metadata["_beta"]
+        self._eps = metadata["_eps"]
+        self._max_priority = metadata["_max_priority"]
+        _max_capacity = metadata["_max_capacity"]
+        if _max_capacity != self._max_capacity:
+            raise RuntimeError(
+                f"max capacity of loaded metadata ({_max_capacity}) differs from self._max_capacity ({self._max_capacity})."
+            )
+        mm_st = MemoryMappedTensor.from_filename(
+            shape=(self._max_capacity,),
+            dtype=torch.float64,
+            filename=path / "sumtree.memmap",
+        )
+        mm_mt = MemoryMappedTensor.from_filename(
+            shape=(self._max_capacity,),
+            dtype=torch.float64,
+            filename=path / "mintree.memmap",
+        )
+        for i, elt in enumerate(mm_st.tolist()):
+            self._sum_tree[i] = elt
+        for i, elt in enumerate(mm_mt.tolist()):
+            self._min_tree[i] = elt

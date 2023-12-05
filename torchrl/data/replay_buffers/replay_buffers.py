@@ -4,9 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import collections
+import json
 import threading
 import warnings
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
@@ -230,6 +232,7 @@ class ReplayBuffer:
             "_storage": self._storage.state_dict(),
             "_sampler": self._sampler.state_dict(),
             "_writer": self._writer.state_dict(),
+            "_transforms": self._transform.state_dict(),
             "_batch_size": self._batch_size,
         }
 
@@ -237,7 +240,33 @@ class ReplayBuffer:
         self._storage.load_state_dict(state_dict["_storage"])
         self._sampler.load_state_dict(state_dict["_sampler"])
         self._writer.load_state_dict(state_dict["_writer"])
+        self._transform.load_state_dict(state_dict["_transforms"])
         self._batch_size = state_dict["_batch_size"]
+
+    def dumps(self, path):
+        path = Path(path).absolute()
+        path.mkdir(exist_ok=True)
+        self._storage.dumps(path / "storage")
+        self._sampler.dumps(path / "sampler")
+        self._writer.dumps(path / "writer")
+        # fall back on state_dict for transforms
+        transform_sd = self._transform.state_dict()
+        if transform_sd:
+            torch.save(transform_sd, path / "transform.t")
+        with open(path / "buffer_metadata.json", "w") as file:
+            json.dump({"batch_size": self._batch_size}, file)
+
+    def loads(self, path):
+        path = Path(path).absolute()
+        self._storage.loads(path / "storage")
+        self._sampler.loads(path / "sampler")
+        self._writer.loads(path / "writer")
+        # fall back on state_dict for transforms
+        if (path / "transform.t").exists():
+            self._transform.load_state_dict(torch.load(path / "transform.t"))
+        with open(path / "buffer_metadata.json", "r") as file:
+            metadata = json.load(file)
+        self._batch_size = metadata["batch_size"]
 
     def add(self, data: Any) -> int:
         """Add a single element to the replay buffer.
