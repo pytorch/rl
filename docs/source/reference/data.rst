@@ -91,7 +91,11 @@ Sharing replay buffers across processes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Replay buffers can be shared between processes as long as their components are
-sharable. Sharable storages include :class:`~torchrl.data.replay_buffers.storages.LazyMemmapStorage`
+sharable. This feature allows for multiple processes to collect data and populate a shared
+replay buffer collaboratively, rather than centralizing the data on the main process
+which can incur some data transmission overhead.
+
+Sharable storages include :class:`~torchrl.data.replay_buffers.storages.LazyMemmapStorage`
 or any subclass of :class:`~torchrl.data.replay_buffers.storages.TensorStorage`
 as long as they are instantiated and their content is stored as memory-mapped
 tensors. Stateful writers such as :class:`~torchrl.data.replay_buffers.writers.TensorDictRoundRobinWriter`
