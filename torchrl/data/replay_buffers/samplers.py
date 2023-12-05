@@ -280,9 +280,7 @@ class PrioritizedSampler(Sampler):
             raise RuntimeError("negative p_sum")
         if p_min <= 0:
             raise RuntimeError("negative p_min")
-        mass = (
-            torch.empty((batch_size,), dtype=torch.float32).uniform_(0, p_sum).numpy()
-        )
+        mass = np.random.uniform(0.0, p_sum, size=batch_size)
         index = self._sum_tree.scan_lower_bound(mass)
         if not isinstance(index, np.ndarray):
             index = np.array([index])

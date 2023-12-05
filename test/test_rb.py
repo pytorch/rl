@@ -646,7 +646,8 @@ def test_prototype_prb(priority_key, contiguous, device):
             "_idx": torch.arange(3).view(3, 1),
         },
         batch_size=[3],
-    ).to(device)
+        device=device,
+    )
     rb.extend(td1)
     s = rb.sample()
     assert s.batch_size == torch.Size([5])
@@ -661,7 +662,8 @@ def test_prototype_prb(priority_key, contiguous, device):
             "_idx": torch.arange(5).view(5, 1),
         },
         batch_size=[5],
-    ).to(device)
+        device=device,
+    )
     rb.extend(td2)
     s = rb.sample()
     assert s.batch_size == torch.Size([5])
