@@ -10,7 +10,6 @@ Deep Q-Learning Algorithm on Atari Environments.
 
 import tempfile
 import time
-from contextlib import nullcontext
 
 import hydra
 import torch.nn
@@ -126,6 +125,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         collected_frames += current_frames
         greedy_module.step(current_frames)
         replay_buffer.extend(data)
+
+        if collected_frames < init_random_frames:
+            continue
 
         # optimization steps
         training_start = time.time()

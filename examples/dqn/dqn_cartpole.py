@@ -97,6 +97,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     num_test_episodes = cfg.logger.num_test_episodes
     frames_per_batch = cfg.collector.frames_per_batch
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    init_random_frames = cfg.collector.init_random_frames
     sampling_start = time.time()
     q_losses = torch.zeros(num_updates, device=device)
 
@@ -110,6 +111,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         replay_buffer.extend(data)
         collected_frames += current_frames
         greedy_module.step(current_frames)
+
+        if collected_frames < init_random_frames:
+            continue
 
         # optimization steps
         training_start = time.time()
