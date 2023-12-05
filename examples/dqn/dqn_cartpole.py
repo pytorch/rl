@@ -23,7 +23,7 @@ from utils_cartpole import eval_model, make_dqn_model, make_env
 @hydra.main(config_path=".", config_name="config_cartpole", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    device = "cpu" if not torch.cuda.device_count() else "cuda"
+    device = torch.device(cfg.device)
 
     # Make the components
     model = make_dqn_model(cfg.env.env_name)

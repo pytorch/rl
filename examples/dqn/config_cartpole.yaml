@@ -1,3 +1,5 @@
+device: cuda:0
+
 # Environment
 env:
   env_name: CartPole-v1

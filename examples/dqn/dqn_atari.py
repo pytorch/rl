@@ -30,7 +30,7 @@ from utils_atari import eval_model, make_dqn_model, make_env
 @hydra.main(config_path=".", config_name="config_atari", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    device = "cpu" if not torch.cuda.device_count() else "cuda"
+    device = torch.device(cfg.device)
 
     # Correct for frame_skip
     frame_skip = 4
