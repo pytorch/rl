@@ -140,6 +140,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
 
         if collected_frames < init_random_frames:
+            if logger:
+                for key, value in log_info.items():
+                    logger.log_scalar(key, value, step=collected_frames)
             continue
 
         # optimization steps
