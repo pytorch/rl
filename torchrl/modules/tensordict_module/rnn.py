@@ -246,21 +246,23 @@ class LSTM(LSTMBase):
         h_t, c_t = h_t.unbind(0), c_t.unbind(0)
 
         outputs = []
+
+        weight_ihs = []
+        weight_hhs = []
+        bias_ihs = []
+        bias_hhs = []
+        for layer, weights in enumerate(self._all_weights):
+            # Retrieve weights
+            weight_ihs.append(getattr(self, weights[0]))
+            weight_hhs.append(getattr(self, weights[1]))
+            bias_ihs.append(getattr(self, weights[2], None))
+            bias_hhs.append(getattr(self, weights[3], None))
+
         for x_t in x.unbind(1):
             h_t_out = []
             c_t_out = []
 
-            for layer, weights in enumerate(self._all_weights):
-                # Retrieve weights
-                weight_ih = getattr(self, weights[0])
-                weight_hh = getattr(self, weights[1])
-                if self.bias is True:
-                    bias_ih = getattr(self, weights[2])
-                    bias_hh = getattr(self, weights[3])
-                else:
-                    bias_ih = None
-                    bias_hh = None
-
+            for weight_ih, bias_ih, weight_hh, bias_hh in zip(weight_ihs, bias_ihs, weight_hhs, bias_hhs):
                 # Run cell
                 _h_t, _c_t = self._lstm_cell(
                     x_t, h_t[layer], c_t[layer], weight_ih, bias_ih, weight_hh, bias_hh
