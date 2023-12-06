@@ -220,7 +220,7 @@ class LSTM(LSTMBase):
 
         # gates = F.linear(x, weight_ih, bias_ih) + F.linear(hx, weight_hh, bias_hh)
         if bias_ih is not None:
-            gates = x @ weight_ih.T + bias_ih + hx @ weight_ih.T + bias_hh
+            gates = x @ weight_ih.T + bias_ih + hx @ weight_hh.T + bias_hh
         else:
             gates = x @ weight_ih.T + hx @ weight_hh.T
 
