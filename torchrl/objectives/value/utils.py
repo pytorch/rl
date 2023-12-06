@@ -296,7 +296,7 @@ def _split_and_pad_sequence(
             device=tensor.device,
         )
         mask_expand = expand_right(mask, (*mask.shape, *tensor.shape[1:]))
-        return torch.masked_scatter(empty_tensor, mask_expand, tensor.view(-1))
+        return torch.masked_scatter(empty_tensor, mask_expand, tensor.reshape(-1))
 
     if isinstance(tensor, TensorDictBase):
         tensor = tensor.apply(_fill_tensor, batch_size=[*shape])
