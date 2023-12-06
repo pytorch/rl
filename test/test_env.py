@@ -354,6 +354,48 @@ class TestModelBasedEnvBase:
 
 
 class TestParallel:
+    @pytest.mark.skipif(
+        not torch.cuda.device_count(), reason="No cuda device detected."
+    )
+    @pytest.mark.parametrize("parallel", [True, False])
+    @pytest.mark.parametrize("hetero", [True, False])
+    @pytest.mark.parametrize("pdevice", [None, "cpu", "cuda"])
+    @pytest.mark.parametrize("edevice", ["cpu", "cuda"])
+    @pytest.mark.parametrize("bwad", [True, False])
+    def test_parallel_devices(self, parallel, hetero, pdevice, edevice, bwad):
+        if parallel:
+            cls = ParallelEnv
+        else:
+            cls = SerialEnv
+        if not hetero:
+            env = cls(
+                2, lambda: ContinuousActionVecMockEnv(device=edevice), device=pdevice
+            )
+        else:
+            env1 = lambda: ContinuousActionVecMockEnv(device=edevice)
+            env2 = lambda: TransformedEnv(ContinuousActionVecMockEnv(device=edevice))
+            env = cls(2, [env1, env2], device=pdevice)
+
+        r = env.rollout(2, break_when_any_done=bwad)
+        if pdevice is not None:
+            assert env.device.type == torch.device(pdevice).type
+            assert r.device.type == torch.device(pdevice).type
+            assert all(
+                item.device.type == torch.device(pdevice).type
+                for item in r.values(True, True)
+            )
+        else:
+            assert env.device.type == torch.device(edevice).type
+            assert r.device.type == torch.device(edevice).type
+            assert all(
+                item.device.type == torch.device(edevice).type
+                for item in r.values(True, True)
+            )
+        if parallel:
+            assert (
+                env.shared_tensordict_parent.device.type == torch.device(edevice).type
+            )
+
     @pytest.mark.parametrize("num_parallel_env", [1, 10])
     @pytest.mark.parametrize("env_batch_size", [[], (32,), (32, 1), (32, 0)])
     def test_env_with_batch_size(self, num_parallel_env, env_batch_size):

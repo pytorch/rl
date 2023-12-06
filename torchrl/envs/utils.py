@@ -237,7 +237,11 @@ def step_mdp(
 
 
 def _set_single_key(
-    source: TensorDictBase, dest: TensorDictBase, key: str | tuple, clone: bool = False
+    source: TensorDictBase,
+    dest: TensorDictBase,
+    key: str | tuple,
+    clone: bool = False,
+    device=None,
 ):
     # key should be already unraveled
     if isinstance(key, str):
@@ -253,7 +257,9 @@ def _set_single_key(
                 source = val
                 dest = new_val
             else:
-                if clone:
+                if device is not None and val.device != device:
+                    val = val.to(device, non_blocking=True)
+                elif clone:
                     val = val.clone()
                 dest._set_str(k, val, inplace=False, validated=True)
         # This is a temporary solution to understand if a key is heterogeneous
@@ -262,7 +268,7 @@ def _set_single_key(
             if re.match(r"Found more than one unique shape in the tensors", str(err)):
                 # this is a het key
                 for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
-                    _set_single_key(s_td, d_td, k, clone)
+                    _set_single_key(s_td, d_td, k, clone=clone, device=device)
                 break
             else:
                 raise err

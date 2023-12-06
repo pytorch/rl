@@ -4,17 +4,22 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import json
 import os
 import warnings
 from collections import OrderedDict
 from copy import copy
+from multiprocessing.context import get_spawning_popen
+from pathlib import Path
 from typing import Any, Dict, Sequence, Union
 
+import numpy as np
 import torch
 from tensordict import is_tensorclass
 from tensordict.memmap import MemmapTensor, MemoryMappedTensor
 from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
-from tensordict.utils import expand_right
+from tensordict.utils import _STRDTYPE2DTYPE, expand_right
+from torch import multiprocessing as mp
 
 from torchrl._utils import _CKPT_BACKEND, implement_for, VERBOSE
 from torchrl.data.replay_buffers.utils import INT_CLASSES
@@ -50,6 +55,14 @@ class Storage:
 
     @abc.abstractmethod
     def get(self, index: int) -> Any:
+        ...
+
+    @abc.abstractmethod
+    def dumps(self, path):
+        ...
+
+    @abc.abstractmethod
+    def loads(self, path):
         ...
 
     def attach(self, buffer: Any) -> None:
@@ -107,8 +120,23 @@ class ListStorage(Storage):
         super().__init__(max_size)
         self._storage = []
 
+    def dumps(self, path):
+        raise NotImplementedError(
+            "ListStorage doesn't support serialization via `dumps` - `loads` API."
+        )
+
+    def loads(self, path):
+        raise NotImplementedError(
+            "ListStorage doesn't support serialization via `dumps` - `loads` API."
+        )
+
     def set(self, cursor: Union[int, Sequence[int], slice], data: Any):
         if not isinstance(cursor, INT_CLASSES):
+            if (isinstance(cursor, torch.Tensor) and cursor.numel() <= 1) or (
+                isinstance(cursor, np.ndarray) and cursor.size <= 1
+            ):
+                self.set(int(cursor), data)
+                return
             if isinstance(cursor, slice):
                 self._storage[cursor] = data
                 return
@@ -165,6 +193,14 @@ class ListStorage(Storage):
 
     def _empty(self):
         self._storage = []
+
+    def __getstate__(self):
+        if get_spawning_popen() is not None:
+            raise RuntimeError(
+                f"Cannot share a storage of type {type(self)} between processes."
+            )
+        state = copy(self.__dict__)
+        return state
 
 
 class TensorStorage(Storage):
@@ -258,6 +294,123 @@ class TensorStorage(Storage):
             else "auto"
         )
         self._storage = storage
+
+    def dumps(self, path):
+        path = Path(path)
+        path.mkdir(exist_ok=True)
+
+        if not self.initialized:
+            raise RuntimeError("Cannot save a non-initialized storage.")
+        if isinstance(self._storage, torch.Tensor):
+            try:
+                MemoryMappedTensor.from_filename(
+                    shape=self._storage.shape,
+                    filename=path / "storage.memmap",
+                    dtype=self._storage.dtype,
+                ).copy_(self._storage)
+            except FileNotFoundError:
+                MemoryMappedTensor.from_tensor(
+                    self._storage, filename=path / "storage.memmap", copy_existing=True
+                )
+            is_tensor = True
+            dtype = str(self._storage.dtype)
+            shape = list(self._storage.shape)
+        else:
+            # try to load the path and overwrite.
+            try:
+                saved = TensorDict.load_memmap(path)
+            except FileNotFoundError:
+                # otherwise create a new one
+                saved = self._storage.memmap_like(path)
+            saved.update_(self._storage)
+            is_tensor = False
+            dtype = None
+            shape = None
+
+        with open(path / "storage_metadata.json", "w") as file:
+            json.dump(
+                {
+                    "is_tensor": is_tensor,
+                    "dtype": dtype,
+                    "shape": shape,
+                    "len": self._len,
+                },
+                file,
+            )
+
+    def loads(self, path):
+        with open(path / "storage_metadata.json", "r") as file:
+            metadata = json.load(file)
+        is_tensor = metadata["is_tensor"]
+        shape = metadata["shape"]
+        dtype = metadata["dtype"]
+        _len = metadata["len"]
+        if dtype is not None:
+            shape = torch.Size(shape)
+            dtype = _STRDTYPE2DTYPE[dtype]
+        if is_tensor:
+            _storage = MemoryMappedTensor.from_filename(
+                path / "storage.memmap", shape=shape, dtype=dtype
+            ).clone()
+        else:
+            _storage = TensorDict.load_memmap(path)
+        if not self.initialized:
+            self._storage = _storage
+            self.initialized = True
+        else:
+            self._storage.copy_(_storage)
+        self._len = _len
+
+    @property
+    def _len(self):
+        _len_value = self.__dict__.get("_len_value", None)
+        if _len_value is None:
+            _len_value = self._len_value = mp.Value("i", 0)
+        return _len_value.value
+
+    @_len.setter
+    def _len(self, value):
+        _len_value = self.__dict__.get("_len_value", None)
+        if _len_value is None:
+            _len_value = self._len_value = mp.Value("i", 0)
+        _len_value.value = value
+
+    def __getstate__(self):
+        state = copy(self.__dict__)
+        if get_spawning_popen() is None:
+            len = self._len
+            del state["_len_value"]
+            state["len__context"] = len
+        elif not self.initialized:
+            # check that the storage is initialized
+            raise RuntimeError(
+                f"Cannot share a storage of type {type(self)} between processed if "
+                f"it has not been initialized yet. Populate the buffer with "
+                f"some data in the main process before passing it to the other "
+                f"subprocesses (or create the buffer explicitely with a TensorStorage)."
+            )
+        else:
+            # check that the content is shared, otherwise tell the user we can't help
+            storage = self._storage
+            STORAGE_ERR = "The storage must be place in shared memory or memmapped before being shared between processes."
+            if is_tensor_collection(storage):
+                if not storage.is_memmap() and not storage.is_shared():
+                    raise RuntimeError(STORAGE_ERR)
+            else:
+                if (
+                    not isinstance(storage, MemoryMappedTensor)
+                    and not storage.is_shared()
+                ):
+                    raise RuntimeError(STORAGE_ERR)
+
+        return state
+
+    def __setstate__(self, state):
+        len = state.pop("len__context", None)
+        if len is not None:
+            _len_value = mp.Value("i", len)
+            state["_len_value"] = _len_value
+        self.__dict__.update(state)
 
     def state_dict(self) -> Dict[str, Any]:
         _storage = self._storage
@@ -387,14 +540,18 @@ class TensorStorage(Storage):
         self._storage[cursor] = data
 
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
+        if self._len < self.max_size:
+            storage = self._storage[: self._len]
+        else:
+            storage = self._storage
         if not self.initialized:
             raise RuntimeError(
                 "Cannot get an item from an unitialized LazyMemmapStorage"
             )
-        out = self._storage[index]
+        out = storage[index]
         if is_tensor_collection(out):
             out = _reset_batch_size(out)
-            return out.unlock_()
+            return out  # .unlock_()
         return out
 
     def __len__(self):

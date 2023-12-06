@@ -1672,7 +1672,8 @@ class TestLSTMModule:
         lstm_module(padded)
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
-    def test_singel_step(self, shape):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_single_step(self, shape, python_based):
         td = TensorDict(
             {
                 "observation": torch.zeros(*shape, 3),
@@ -1686,6 +1687,7 @@ class TestLSTMModule:
             batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+            python_based=python_based,
         )
         td = lstm_module(td)
         td_next = step_mdp(td, keep_other=True)
@@ -1697,7 +1699,8 @@ class TestLSTMModule:
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
     @pytest.mark.parametrize("t", [1, 10])
-    def test_single_step_vs_multi(self, shape, t):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_single_step_vs_multi(self, shape, t, python_based):
         td = TensorDict(
             {
                 "observation": torch.arange(t, dtype=torch.float32)
@@ -1713,6 +1716,7 @@ class TestLSTMModule:
             batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+            python_based=python_based,
         )
         lstm_module_ms = lstm_module_ss.set_recurrent_mode()
         lstm_module_ms(td)
@@ -1732,7 +1736,8 @@ class TestLSTMModule:
         )
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
-    def test_multi_consecutive(self, shape):
+    @pytest.mark.parametrize("python_based", [False, True])
+    def test_multi_consecutive(self, shape, python_based):
         t = 20
         td = TensorDict(
             {
@@ -1754,6 +1759,7 @@ class TestLSTMModule:
             batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+            python_based=python_based,
         )
         lstm_module_ms = lstm_module_ss.set_recurrent_mode()
         lstm_module_ms(td)
@@ -1769,11 +1775,13 @@ class TestLSTMModule:
             lstm_module_ss(td_ss)
             td_ss = step_mdp(td_ss, keep_other=True)
             td_ss["observation"][:] = _t + 1
+        # import ipdb; ipdb.set_trace()  # assert fails when python_based is True, why?
         torch.testing.assert_close(
             td_ss["intermediate"], td["intermediate"][..., -1, :]
         )
 
-    def test_lstm_parallel_env(self):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_lstm_parallel_env(self, python_based):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
         device = "cuda" if torch.cuda.device_count() else "cpu"
@@ -1785,6 +1793,7 @@ class TestLSTMModule:
             in_key="observation",
             out_key="features",
             device=device,
+            python_based=python_based,
         )
 
         def create_transformed_env():
@@ -1938,7 +1947,8 @@ class TestGRUModule:
         gru_module(padded)
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
-    def test_singel_step(self, shape):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_single_step(self, shape, python_based):
         td = TensorDict(
             {
                 "observation": torch.zeros(*shape, 3),
@@ -1952,6 +1962,7 @@ class TestGRUModule:
             batch_first=True,
             in_keys=["observation", "hidden"],
             out_keys=["intermediate", ("next", "hidden")],
+            python_based=python_based,
         )
         td = gru_module(td)
         td_next = step_mdp(td, keep_other=True)
@@ -1961,7 +1972,8 @@ class TestGRUModule:
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
     @pytest.mark.parametrize("t", [1, 10])
-    def test_single_step_vs_multi(self, shape, t):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_single_step_vs_multi(self, shape, t, python_based):
         td = TensorDict(
             {
                 "observation": torch.arange(t, dtype=torch.float32)
@@ -1977,6 +1989,7 @@ class TestGRUModule:
             batch_first=True,
             in_keys=["observation", "hidden"],
             out_keys=["intermediate", ("next", "hidden")],
+            python_based=python_based,
         )
         gru_module_ms = gru_module_ss.set_recurrent_mode()
         gru_module_ms(td)
@@ -1994,7 +2007,8 @@ class TestGRUModule:
         torch.testing.assert_close(td_ss["hidden"], td["next", "hidden"][..., -1, :, :])
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
-    def test_multi_consecutive(self, shape):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_multi_consecutive(self, shape, python_based):
         t = 20
         td = TensorDict(
             {
@@ -2016,6 +2030,7 @@ class TestGRUModule:
             batch_first=True,
             in_keys=["observation", "hidden"],
             out_keys=["intermediate", ("next", "hidden")],
+            python_based=python_based,
         )
         gru_module_ms = gru_module_ss.set_recurrent_mode()
         gru_module_ms(td)
@@ -2035,7 +2050,8 @@ class TestGRUModule:
             td_ss["intermediate"], td["intermediate"][..., -1, :]
         )
 
-    def test_gru_parallel_env(self):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_gru_parallel_env(self, python_based):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
         device = "cuda" if torch.cuda.device_count() else "cpu"
@@ -2047,6 +2063,7 @@ class TestGRUModule:
             in_key="observation",
             out_key="features",
             device=device,
+            python_based=python_based,
         )
 
         def create_transformed_env():
