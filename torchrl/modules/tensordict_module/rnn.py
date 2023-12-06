@@ -220,9 +220,9 @@ class LSTM(LSTMBase):
 
         # gates = F.linear(x, weight_ih, bias_ih) + F.linear(hx, weight_hh, bias_hh)
         if bias_ih is not None:
-            gates = weight_ih @ x + bias_ih + weight_hh @ hx + bias_hh
+            gates = x @ weight_ih.T + bias_ih + hx @ weight_ih.T + bias_hh
         else:
-            gates = weight_ih @ x + weight_hh @ hx
+            gates = x @ weight_ih.T + hx @ weight_hh.T
 
         i_gate, f_gate, g_gate, o_gate = gates.chunk(4, 1)
 
@@ -908,11 +908,11 @@ class GRU(GRUBase):
         # gate_x = F.linear(x, weight_ih, bias_ih)
         # gate_h = F.linear(hx, weight_hh, bias_hh)
         if bias_ih is not None:
-            gate_x = weight_ih @ x + bias_ih
-            gate_h = weight_hh @ hx + bias_hh
+            gate_x = x @ weight_ih.T + bias_ih
+            gate_h = hx @ weight_hh.T + bias_hh
         else:
-            gate_x = weight_ih @ x
-            gate_h = weight_hh @ hx
+            gate_x = x @ weight_ih.T
+            gate_h = hx @ weight_hh.T
 
         i_r, i_i, i_n = gate_x.chunk(3, 1)
         h_r, h_i, h_n = gate_h.chunk(3, 1)
