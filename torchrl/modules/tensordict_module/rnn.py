@@ -262,10 +262,10 @@ class LSTM(LSTMBase):
             h_t_out = []
             c_t_out = []
 
-            for weight_ih, bias_ih, weight_hh, bias_hh in zip(weight_ihs, bias_ihs, weight_hhs, bias_hhs):
+            for weight_ih, bias_ih, weight_hh, bias_hh, _h_t, _c_t in zip(weight_ihs, bias_ihs, weight_hhs, bias_hhs, h_t, c_t):
                 # Run cell
                 _h_t, _c_t = self._lstm_cell(
-                    x_t, h_t[layer], c_t[layer], weight_ih, bias_ih, weight_hh, bias_hh
+                    x_t, _h_t, _c_t, weight_ih, bias_ih, weight_hh, bias_hh
                 )
                 h_t_out.append(_h_t)
                 c_t_out.append(_c_t)
