@@ -235,13 +235,6 @@ class LSTM(LSTMBase):
 
     def _lstm(self, x, hx):
 
-        if not self.batch_first:
-            x = x.permute(
-                1, 0, 2
-            )  # Change (seq_len, batch, features) to (batch, seq_len, features)
-
-        # should check self.batch_first
-        bs, seq_len, input_size = x.size()
         h_t, c_t = hx
         h_t, c_t = h_t.unbind(0), c_t.unbind(0)
 
@@ -262,7 +255,7 @@ class LSTM(LSTMBase):
                 bias_ihs.append(None)
                 bias_hhs.append(None)
 
-        for x_t in x.unbind(1):
+        for x_t in x.unbind(int(self.batch_first)):
             h_t_out = []
             c_t_out = []
 
@@ -283,11 +276,7 @@ class LSTM(LSTMBase):
             c_t = c_t_out
             outputs.append(x_t)
 
-        outputs = torch.stack(outputs, dim=1)
-        if not self.batch_first:
-            outputs = outputs.permute(
-                1, 0, 2
-            )  # Change back (batch, seq_len, features) to (seq_len, batch, features)
+        outputs = torch.stack(outputs, dim=int(self.batch_first))
 
         return outputs, (torch.stack(h_t_out, 0), torch.stack(c_t_out, 0))
 
