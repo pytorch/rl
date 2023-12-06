@@ -130,7 +130,7 @@ jobs:
         # mkdir -p "${TARGET_FOLDER}"
         # rm -rf "${TARGET_FOLDER}"/*
         echo $(ls "${RUNNER_ARTIFACT_DIR}")
-        mv "${RUNNER_ARTIFACT_DIR}"/html/* "${TARGET_FOLDER}"
+        mv "${RUNNER_ARTIFACT_DIR}"/* "${TARGET_FOLDER}"
         git add "${TARGET_FOLDER}" || true
 
         # if [[ "${TARGET_FOLDER}" == main ]]; then
