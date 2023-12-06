@@ -166,7 +166,12 @@ class TestComposableBuffers:
         writer = writer()
         writer.register_storage(storage)
         batch1 = self._get_data(rb_type, size=5)
-        cond = OLD_TORCH and size < len(batch1) and isinstance(storage, TensorStorage)
+        cond = (
+            OLD_TORCH
+            and not isinstance(writer, TensorDictMaxValueWriter)
+            and size < len(batch1)
+            and isinstance(storage, TensorStorage)
+        )
 
         if isinstance(batch1, torch.Tensor) and isinstance(
             writer, TensorDictMaxValueWriter
@@ -212,7 +217,12 @@ class TestComposableBuffers:
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
         )
         data = self._get_data(rb_type, size=5)
-        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        cond = (
+            OLD_TORCH
+            and writer is not TensorDictMaxValueWriter
+            and size < len(data)
+            and isinstance(rb._storage, TensorStorage)
+        )
         if isinstance(data, torch.Tensor) and writer is TensorDictMaxValueWriter:
             with pytest.raises(
                 RuntimeError, match="expects data to be a tensor collection"
@@ -245,7 +255,10 @@ class TestComposableBuffers:
                 raise RuntimeError("did not find match")
         data2 = self._get_data(rb_type, size=2 * size + 2)
         cond = (
-            OLD_TORCH and size < len(data2) and isinstance(rb._storage, TensorStorage)
+            OLD_TORCH
+            and writer is not TensorDictMaxValueWriter
+            and size < len(data2)
+            and isinstance(rb._storage, TensorStorage)
         )
         with pytest.warns(
             UserWarning,
@@ -263,7 +276,12 @@ class TestComposableBuffers:
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
         )
         data = self._get_data(rb_type, size=5)
-        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        cond = (
+            OLD_TORCH
+            and writer is not TensorDictMaxValueWriter
+            and size < len(data)
+            and isinstance(rb._storage, TensorStorage)
+        )
         if isinstance(data, torch.Tensor) and writer is TensorDictMaxValueWriter:
             with pytest.raises(
                 RuntimeError, match="expects data to be a tensor collection"
@@ -305,7 +323,12 @@ class TestComposableBuffers:
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
         )
         data = self._get_data(rb_type, size=5)
-        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        cond = (
+            OLD_TORCH
+            and writer is not TensorDictMaxValueWriter
+            and size < len(data)
+            and isinstance(rb._storage, TensorStorage)
+        )
         if isinstance(data, torch.Tensor) and writer is TensorDictMaxValueWriter:
             with pytest.raises(
                 RuntimeError, match="expects data to be a tensor collection"
