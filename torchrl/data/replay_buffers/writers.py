@@ -4,13 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 
 import heapq
+import json
 from abc import ABC, abstractmethod
 from copy import copy
 from multiprocessing.context import get_spawning_popen
+from pathlib import Path
 from typing import Any, Dict, Sequence
 
 import numpy as np
 import torch
+from tensordict import is_tensor_collection, MemoryMappedTensor
+from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
 
 from .storages import Storage
@@ -39,6 +43,14 @@ class Writer(ABC):
     def _empty(self):
         ...
 
+    @abstractmethod
+    def dumps(self, path):
+        ...
+
+    @abstractmethod
+    def loads(self, path):
+        ...
+
     def state_dict(self) -> Dict[str, Any]:
         return {}
 
@@ -52,6 +64,18 @@ class RoundRobinWriter(Writer):
     def __init__(self, **kw) -> None:
         super().__init__(**kw)
         self._cursor = 0
+
+    def dumps(self, path):
+        path = Path(path).absolute()
+        path.mkdir(exist_ok=True)
+        with open(path / "metadata.json", "w") as file:
+            json.dump({"cursor": self._cursor}, file)
+
+    def loads(self, path):
+        path = Path(path).absolute()
+        with open(path / "metadata.json", "r") as file:
+            metadata = json.load(file)
+            self._cursor = metadata["cursor"]
 
     def add(self, data: Any) -> int:
         ret = self._cursor
@@ -181,6 +205,10 @@ class TensorDictMaxValueWriter(Writer):
 
     def get_insert_index(self, data: Any) -> int:
         """Returns the index where the data should be inserted, or ``None`` if it should not be inserted."""
+        if not is_tensor_collection(data):
+            raise RuntimeError(
+                f"{type(self)} expects data to be a tensor collection (tensordict or tensorclass). Found a {type(data)} instead."
+            )
         if data.batch_dims > 1:
             raise RuntimeError(
                 "Expected input tensordict to have no more than 1 dimension, got"
@@ -188,7 +216,7 @@ class TensorDictMaxValueWriter(Writer):
             )
 
         ret = None
-        rank_data = data.get(("_data", self._rank_key))
+        rank_data = data.get("_data", default=data).get(self._rank_key)
 
         # If time dimension, sum along it.
         rank_data = rank_data.sum(-1).item()
@@ -198,7 +226,6 @@ class TensorDictMaxValueWriter(Writer):
 
         # If the buffer is not full, add the data
         if len(self._current_top_values) < self._storage.max_size:
-
             ret = self._cursor
             self._cursor = (self._cursor + 1) % self._storage.max_size
 
@@ -246,13 +273,17 @@ class TensorDictMaxValueWriter(Writer):
         # Replace the data in the storage all at once
         if len(data_to_replace) > 0:
             keys, values = zip(*data_to_replace.items())
-            index = data.get("index")
+            index = data.get("index", None)
+            dtype = index.dtype if index is not None else torch.long
+            device = index.device if index is not None else data.device
             values = list(values)
-            keys = index[values] = torch.tensor(
-                keys, dtype=index.dtype, device=index.device
-            )
-            data.set("index", index)
-            self._storage[keys] = data[values]
+            keys = torch.tensor(keys, dtype=dtype, device=device)
+            if index is not None:
+                index[values] = keys
+                data.set("index", index)
+            self._storage.set(keys, data[values])
+            return keys.long()
+        return None
 
     def _empty(self) -> None:
         self._cursor = 0
@@ -261,7 +292,46 @@ class TensorDictMaxValueWriter(Writer):
     def __getstate__(self):
         if get_spawning_popen() is not None:
             raise RuntimeError(
-                f"Writers of type {type(self)} cannot be shared between processed."
+                f"Writers of type {type(self)} cannot be shared between processes."
             )
         state = copy(self.__dict__)
         return state
+
+    def dumps(self, path):
+        path = Path(path).absolute()
+        path.mkdir(exist_ok=True)
+        t = torch.tensor(self._current_top_values)
+        try:
+            MemoryMappedTensor.from_filename(
+                filename=path / "current_top_values.memmap",
+                shape=t.shape,
+                dtype=t.dtype,
+            ).copy_(t)
+        except FileNotFoundError:
+            MemoryMappedTensor.from_tensor(
+                t, filename=path / "current_top_values.memmap"
+            )
+        with open(path / "metadata.json", "w") as file:
+            json.dump(
+                {
+                    "cursor": self._cursor,
+                    "rank_key": self._rank_key,
+                    "dtype": str(t.dtype),
+                    "shape": list(t.shape),
+                },
+                file,
+            )
+
+    def loads(self, path):
+        path = Path(path).absolute()
+        with open(path / "metadata.json", "r") as file:
+            metadata = json.load(file)
+            self._cursor = metadata["cursor"]
+            self._rank_key = metadata["rank_key"]
+            shape = torch.Size(metadata["shape"])
+            dtype = metadata["dtype"]
+        self._current_top_values = MemoryMappedTensor.from_filename(
+            filename=path / "current_top_values.memmap",
+            dtype=_STRDTYPE2DTYPE[dtype],
+            shape=shape,
+        ).tolist()
