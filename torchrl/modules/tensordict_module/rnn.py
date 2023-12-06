@@ -273,7 +273,8 @@ class LSTM(LSTMBase):
                     x_t = F.dropout(_h_t, p=self.dropout, training=self.training)
                 else:  # No dropout after the last layer
                     x_t = _h_t
-
+            h_t = h_t_out
+            c_t = c_t_out
             outputs.append(x_t)
 
         outputs = torch.stack(outputs, dim=1)
