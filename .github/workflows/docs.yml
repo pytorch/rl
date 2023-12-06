@@ -84,7 +84,8 @@ jobs:
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
         cd ..
 
-        cp -r docs/_local_build "${RUNNER_ARTIFACT_DIR}"
+        cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
+        echo $(ls "${RUNNER_ARTIFACT_DIR}")
         if [[ ${{ github.event_name == 'pull_request' }} ]]; then
           cp -r docs/_local_build/* "${RUNNER_DOCS_DIR}"
         fi
