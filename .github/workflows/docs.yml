@@ -84,7 +84,8 @@ jobs:
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
         cd ..
 
-        cp -r docs/_local_build "${RUNNER_ARTIFACT_DIR}"
+        cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
+        echo $(ls "${RUNNER_ARTIFACT_DIR}")
         if [[ ${{ github.event_name == 'pull_request' }} ]]; then
           cp -r docs/_local_build/* "${RUNNER_DOCS_DIR}"
         fi
@@ -128,7 +129,8 @@ jobs:
 
         # mkdir -p "${TARGET_FOLDER}"
         # rm -rf "${TARGET_FOLDER}"/*
-        mv "${RUNNER_ARTIFACT_DIR}"/html/* "${TARGET_FOLDER}"
+        echo $(ls "${RUNNER_ARTIFACT_DIR}")
+        mv "${RUNNER_ARTIFACT_DIR}"/* "${TARGET_FOLDER}"
         git add "${TARGET_FOLDER}" || true
 
         # if [[ "${TARGET_FOLDER}" == main ]]; then
