@@ -47,6 +47,7 @@ from .transforms import (
     Transform,
     TransformedEnv,
     UnsqueezeTransform,
+    VecGymEnvTransform,
     VecNorm,
 )
 from .vc1 import VC1Transform

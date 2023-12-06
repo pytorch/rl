@@ -60,9 +60,23 @@ The following mean sampling latency improvements over using ListStorage were fou
 | :class:`LazyMemmapStorage`    | 3.44x     |
 +-------------------------------+-----------+
 
-Replay buffers with a shared storage and regular (RoundRobin) writers can also
-be shared between processes on a single node. This allows each worker to read and
-write onto the storage. The following code snippet examplifies this feature:
+Sharing replay buffers across processes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Replay buffers can be shared between processes as long as their components are
+sharable. This feature allows for multiple processes to collect data and populate a shared
+replay buffer collaboratively, rather than centralizing the data on the main process
+which can incur some data transmission overhead.
+
+Sharable storages include :class:`~torchrl.data.replay_buffers.storages.LazyMemmapStorage`
+or any subclass of :class:`~torchrl.data.replay_buffers.storages.TensorStorage`
+as long as they are instantiated and their content is stored as memory-mapped
+tensors. Stateful writers such as :class:`~torchrl.data.replay_buffers.writers.TensorDictRoundRobinWriter`
+are currently not sharable, and the same goes for stateful samplers such as
+:class:`~torchrl.data.replay_buffers.samplers.PrioritizedSampler`.
+
+A shared replay buffer can be read and extended on any process that has access
+to it, as the following example shows:
 
   >>> from torchrl.data import TensorDictReplayBuffer, LazyMemmapStorage
   >>> import torch
@@ -86,49 +100,6 @@ write onto the storage. The following code snippet examplifies this feature:
   ...     assert len(rb) == 20
   ...     assert (rb["_data", "a"][:10] == 0).all()  # data from main process
   ...     assert (rb["_data", "a"][10:20] == 1).all()  # data from remote process
-
-Sharing replay buffers across processes
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Replay buffers can be shared between processes as long as their components are
-sharable. This feature allows for multiple processes to collect data and populate a shared
-replay buffer collaboratively, rather than centralizing the data on the main process
-which can incur some data transmission overhead.
-
-Sharable storages include :class:`~torchrl.data.replay_buffers.storages.LazyMemmapStorage`
-or any subclass of :class:`~torchrl.data.replay_buffers.storages.TensorStorage`
-as long as they are instantiated and their content is stored as memory-mapped
-tensors. Stateful writers such as :class:`~torchrl.data.replay_buffers.writers.TensorDictRoundRobinWriter`
-are currently not sharable, and the same goes for stateful samplers such as
-:class:`~torchrl.data.replay_buffers.samplers.PrioritizedSampler`.
-
-A shared replay buffer can be read and extended on any process that has access
-to it, as the following example shows:
-
-  >>> import pickle
-  >>>
-  >>> from torchrl.data import TensorDictReplayBuffer, LazyMemmapStorage
-  >>> import torch
-  >>> from torch import multiprocessing as mp
-  >>> from tensordict import TensorDict
-  >>>
-  >>> def worker(rb):
-  ...     td = TensorDict({"a": torch.ones(10)}, [10])
-  ...     # Extends the shared replay buffer on a subprocess
-  ...     rb.extend(td)
-  >>>
-  >>> if __name__ == "__main__":
-  ...     rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(21))
-  ...     td = TensorDict({"a": torch.zeros(10)}, [10])
-  ..      # extends the replay buffer on the main process
-  ...     rb.extend(td)
-  ...
-  ...     proc = mp.Process(target=worker, args=(rb,))
-  ...     proc.start()
-  ...     proc.join()
-  ...     # Checks that the length of the buffer equates the length of both
-  ...     # extensions (local and remote)
-  ...     assert len(rb) == 20
 
 
 Storing trajectories
@@ -175,7 +146,7 @@ can be used:
         is_shared=False)
 
 Checkpointing Replay Buffers
-----------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Each component of the replay buffer can potentially be stateful and, as such,
 require a dedicated way of being serialized.
