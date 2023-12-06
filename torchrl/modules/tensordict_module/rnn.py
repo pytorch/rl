@@ -218,7 +218,11 @@ class LSTM(LSTMBase):
     @staticmethod
     def _lstm_cell(x, hx, cx, weight_ih, bias_ih, weight_hh, bias_hh):
 
-        gates = F.linear(x, weight_ih, bias_ih) + F.linear(hx, weight_hh, bias_hh)
+        # gates = F.linear(x, weight_ih, bias_ih) + F.linear(hx, weight_hh, bias_hh)
+        if bias_ih is not None:
+            gates = weight_ih @ x + bias_ih + weight_hh @ hx + bias_hh
+        else:
+            gates = weight_ih @ x + weight_hh @ hx
 
         i_gate, f_gate, g_gate, o_gate = gates.chunk(4, 1)
 
@@ -901,8 +905,14 @@ class GRU(GRUBase):
     def _gru_cell(x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
         x = x.view(-1, x.size(1))
 
-        gate_x = F.linear(x, weight_ih, bias_ih)
-        gate_h = F.linear(hx, weight_hh, bias_hh)
+        # gate_x = F.linear(x, weight_ih, bias_ih)
+        # gate_h = F.linear(hx, weight_hh, bias_hh)
+        if bias_ih is not None:
+            gate_x = weight_ih @ x + bias_ih
+            gate_h = weight_hh @ hx + bias_hh
+        else:
+            gate_x = weight_ih @ x
+            gate_h = weight_hh @ hx
 
         i_r, i_i, i_n = gate_x.chunk(3, 1)
         h_r, h_i, h_n = gate_h.chunk(3, 1)
@@ -1161,7 +1171,7 @@ class GRUModule(ModuleBase):
             if bidirectional:
                 raise ValueError("The input gru cannot be bidirectional.")
 
-            if python_basedz:
+            if python_based:
                 gru = GRU(
                     input_size=input_size,
                     hidden_size=hidden_size,
