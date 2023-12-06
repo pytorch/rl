@@ -184,6 +184,8 @@ class DQNLoss(LossModule):
             delay_value = False
         super().__init__()
         self._in_keys = None
+        if double_dqn and not delay_value:
+            raise ValueError("double_dqn=True requires delay_value=True.")
         self.double_dqn = double_dqn
         self._set_deprecated_ctor_keys(priority=priority_key)
         self.delay_value = delay_value
@@ -310,7 +312,7 @@ class DQNLoss(LossModule):
         pred_val = td_copy.get(self.tensor_keys.action_value)
 
         if self.action_space == "categorical":
-            if action.shape != pred_val.shape:
+            if action.ndim != pred_val.ndim:
                 # unsqueeze the action if it lacks on trailing singleton dim
                 action = action.unsqueeze(-1)
             pred_val_index = torch.gather(pred_val, -1, index=action).squeeze(-1)
@@ -321,17 +323,20 @@ class DQNLoss(LossModule):
         if self.double_dqn:
             step_td = step_mdp(td_copy, keep_other=False)
             step_td_copy = step_td.clone(False)
-
-            with self.target_value_network_params.to_module(self.value_network):
+            # Use online network to compute the action
+            with self.value_network_params.data.to_module(self.value_network):
                 self.value_network(step_td)
+                next_action = step_td.get(self.tensor_keys.action)
 
+            # Use target network to compute the values
             with self.target_value_network_params.to_module(self.value_network):
                 self.value_network(step_td_copy)
-            next_action = step_td.get(self.tensor_keys.action).to(torch.float)
-            next_pred_val = step_td_copy.get(self.tensor_keys.action_value)
+                next_pred_val = step_td_copy.get(self.tensor_keys.action_value)
+
             if self.action_space == "categorical":
-                if next_action.shape != next_pred_val.shape:
-                    next_action = action.unsqueeze(-1)
+                if next_action.ndim != next_pred_val.ndim:
+                    # unsqueeze the action if it lacks on trailing singleton dim
+                    next_action = next_action.unsqueeze(-1)
                 next_value = torch.gather(next_pred_val, -1, index=next_action)
             else:
                 next_value = (next_pred_val * next_action).sum(-1, keepdim=True)
@@ -404,9 +409,9 @@ class DistributionalDQNLoss(LossModule):
                 Defaults to ``"td_error"``.
             reward (NestedKey): The input tensordict key where the reward is expected.
                 Defaults to ``"reward"``.
-            done (NestedKey): The input tensordict key where the the flag if a trajectory is done is expected.
+            done (NestedKey): The input tensordict key where the flag if a trajectory is done is expected.
                 Defaults to ``"done"``.
-            terminated (NestedKey): The input tensordict key where the the flag if a trajectory is done is expected.
+            terminated (NestedKey): The input tensordict key where the flag if a trajectory is done is expected.
                 Defaults to ``"terminated"``.
             steps_to_next_obs (NestedKey): The input tensordict key where the steps_to_next_obs is exptected.
                 Defaults to ``"steps_to_next_obs"``.
