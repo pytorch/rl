@@ -255,8 +255,12 @@ class LSTM(LSTMBase):
             # Retrieve weights
             weight_ihs.append(getattr(self, weights[0]))
             weight_hhs.append(getattr(self, weights[1]))
-            bias_ihs.append(getattr(self, weights[2], None))
-            bias_hhs.append(getattr(self, weights[3], None))
+            if self.bias:
+                bias_ihs.append(getattr(self, weights[2]))
+                bias_hhs.append(getattr(self, weights[3]))
+            else:
+                bias_ihs.append(None)
+                bias_hhs.append(None)
 
         for x_t in x.unbind(1):
             h_t_out = []
