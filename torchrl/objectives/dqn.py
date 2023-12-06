@@ -44,7 +44,9 @@ class DQNLoss(LossModule):
             Defaults to "l2".
         delay_value (bool, optional): whether to duplicate the value network
             into a new target value network to
-            create a double DQN. Default is ``False``.
+            create a DQN with a target network. Default is ``False``.
+        double_dqn (bool, optional): whether or not to use Double DQN, as described in
+            https://arxiv.org/abs/1509.06461. Defaults to ``False``.
         action_space (str or TensorSpec, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
             or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
@@ -164,13 +166,25 @@ class DQNLoss(LossModule):
         value_network: Union[QValueActor, nn.Module],
         *,
         loss_function: Optional[str] = "l2",
-        delay_value: bool = False,
+        delay_value: bool = None,
+        double_dqn: bool = False,
         gamma: float = None,
         action_space: Union[str, TensorSpec] = None,
         priority_key: str = None,
     ) -> None:
+        if delay_value is None:
+            warnings.warn(
+                f"You did not provide a delay_value argument for {type(self)}. "
+                "Currently (v0.3) the default for delay_value is `False` but as of "
+                "v0.4 it will be `True`. Make sure to adapt your code depending "
+                "on your preferred configuration. "
+                "To remove this warning, indicate the value of delay_value in your "
+                "script."
+            )
+            delay_value = False
         super().__init__()
         self._in_keys = None
+        self.double_dqn = double_dqn
         self._set_deprecated_ctor_keys(priority=priority_key)
         self.delay_value = delay_value
         value_network = ensure_tensordict_compatible(
@@ -304,8 +318,29 @@ class DQNLoss(LossModule):
             action = action.to(torch.float)
             pred_val_index = (pred_val * action).sum(-1)
 
+        if self.double_dqn:
+            step_td = step_mdp(td_copy, keep_other=False)
+            step_td_copy = step_td.clone(False)
+
+            with self.target_value_network_params.to_module(self.value_network):
+                self.value_network(step_td)
+
+            with self.target_value_network_params.to_module(self.value_network):
+                self.value_network(step_td_copy)
+            next_action = step_td.get(self.tensor_keys.action).to(torch.float)
+            next_pred_val = step_td_copy.get(self.tensor_keys.action_value)
+            if self.action_space == "categorical":
+                if next_action.shape != next_pred_val.shape:
+                    next_action = action.unsqueeze(-1)
+                next_value = torch.gather(next_pred_val, -1, index=next_action)
+            else:
+                next_value = (next_pred_val * next_action).sum(-1, keepdim=True)
+        else:
+            next_value = None
         target_value = self.value_estimator.value_estimate(
-            td_copy, target_params=self.target_value_network_params
+            td_copy,
+            target_params=self.target_value_network_params,
+            next_value=next_value,
         ).squeeze(-1)
 
         with torch.no_grad():
@@ -392,9 +427,19 @@ class DistributionalDQNLoss(LossModule):
         self,
         value_network: Union[DistributionalQValueActor, nn.Module],
         gamma: float,
-        delay_value: bool = False,
+        delay_value: bool = None,
         priority_key: str = None,
     ):
+        if delay_value is None:
+            warnings.warn(
+                f"You did not provide a delay_value argument for {type(self)}. "
+                "Currently (v0.3) the default for delay_value is `False` but as of "
+                "v0.4 it will be `True`. Make sure to adapt your code depending "
+                "on your preferred configuration. "
+                "To remove this warning, indicate the value of delay_value in your "
+                "script."
+            )
+            delay_value = False
         super().__init__()
         self._set_deprecated_ctor_keys(priority=priority_key)
         self.register_buffer("gamma", torch.tensor(gamma))
