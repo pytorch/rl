@@ -244,7 +244,7 @@ class LSTM(LSTMBase):
         weight_hhs = []
         bias_ihs = []
         bias_hhs = []
-        for layer, weights in enumerate(self._all_weights):
+        for weights in self._all_weights:
             # Retrieve weights
             weight_ihs.append(getattr(self, weights[0]))
             weight_hhs.append(getattr(self, weights[1]))
@@ -259,7 +259,14 @@ class LSTM(LSTMBase):
             h_t_out = []
             c_t_out = []
 
-            for layer, (weight_ih, bias_ih, weight_hh, bias_hh, _h_t, _c_t) in enumerate(zip(weight_ihs, bias_ihs, weight_hhs, bias_hhs, h_t, c_t)):
+            for layer, (
+                weight_ih,
+                bias_ih,
+                weight_hh,
+                bias_hh,
+                _h_t,
+                _c_t,
+            ) in enumerate(zip(weight_ihs, bias_ihs, weight_hhs, bias_hhs, h_t, c_t)):
                 # Run cell
                 _h_t, _c_t = self._lstm_cell(
                     x_t, _h_t, _c_t, weight_ih, bias_ih, weight_hh, bias_hh
