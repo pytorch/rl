@@ -438,6 +438,8 @@ class TestStorages:
             with pytest.warns(
                 DeprecationWarning, match="Support for Memmap device other than CPU"
             ):
+                # this is rather brittle and will fail with some indices
+                # when both device (storage and data) don't match (eg, range())
                 storage.set(0, data)
         else:
             storage.set(0, data)
@@ -538,13 +540,14 @@ class TestStorages:
             storage = storage_type(max_size=10, scratch_dir=dir_rb)
         else:
             storage = storage_type(max_size=10)
-        storage.set(range(3), data)
+        # We cast the device to CPU as CUDA isn't automatically cast to CPU when using range() index
+        storage.set(range(3), data.cpu())
         storage.dumps(dir_save)
         # check we can dump twice
         storage.dumps(dir_save)
         storage_recover = storage_type(max_size=10)
         if isinit:
-            storage_recover.set(range(3), data.zero_())
+            storage_recover.set(range(3), data.cpu().zero_())
         storage_recover.loads(dir_save)
         if data_type == "tensor":
             torch.testing.assert_close(storage._storage, storage_recover._storage)
@@ -1458,8 +1461,11 @@ class TestMultiProc:
         storage_type=LazyMemmapStorage,
         init=True,
         writer_type=TensorDictRoundRobinWriter,
+        sampler_type=RandomSampler,
     ):
-        rb = TensorDictReplayBuffer(storage=storage_type(21), writer=writer_type())
+        rb = TensorDictReplayBuffer(
+            storage=storage_type(21), writer=writer_type(), sampler=sampler_type()
+        )
         if init:
             td = TensorDict(
                 {"a": torch.zeros(10), "next": {"reward": torch.ones(10)}}, [10]
@@ -1499,8 +1505,15 @@ class TestMultiProc:
 
     def test_error_maxwriter(self):
         # TensorDictMaxValueWriter cannot be shared
-        with pytest.raises(RuntimeError, match="cannot be shared between processed"):
+        with pytest.raises(RuntimeError, match="cannot be shared between processes"):
             self.exec_multiproc_rb(writer_type=TensorDictMaxValueWriter)
+
+    def test_error_prb(self):
+        # PrioritizedSampler cannot be shared
+        with pytest.raises(RuntimeError, match="cannot be shared between processes"):
+            self.exec_multiproc_rb(
+                sampler_type=lambda: PrioritizedSampler(21, alpha=1.1, beta=0.5)
+            )
 
     def test_error_noninit(self):
         # list storage cannot be shared

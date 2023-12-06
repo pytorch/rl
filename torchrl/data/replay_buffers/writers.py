@@ -292,7 +292,7 @@ class TensorDictMaxValueWriter(Writer):
     def __getstate__(self):
         if get_spawning_popen() is not None:
             raise RuntimeError(
-                f"Writers of type {type(self)} cannot be shared between processed."
+                f"Writers of type {type(self)} cannot be shared between processes."
             )
         state = copy(self.__dict__)
         return state

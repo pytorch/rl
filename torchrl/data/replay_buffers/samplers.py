@@ -5,7 +5,8 @@
 import json
 import warnings
 from abc import ABC, abstractmethod
-from copy import deepcopy
+from copy import copy, deepcopy
+from multiprocessing.context import get_spawning_popen
 from pathlib import Path
 from typing import Any, Dict, Tuple, Union
 
@@ -250,6 +251,14 @@ class PrioritizedSampler(Sampler):
         self.reduction = reduction
         self.dtype = dtype
         self._init()
+
+    def __getstate__(self):
+        if get_spawning_popen() is not None:
+            raise RuntimeError(
+                f"Samplers of type {type(self)} cannot be shared between processes."
+            )
+        state = copy(self.__dict__)
+        return state
 
     def _init(self):
         if self.dtype in (torch.float, torch.FloatType, torch.float32):
