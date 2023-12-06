@@ -8,6 +8,7 @@ from typing import Union
 import torch
 
 from tensordict import TensorDictBase
+from tensordict.utils import expand_right
 
 
 def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
@@ -294,8 +295,8 @@ def _split_and_pad_sequence(
             dtype=tensor.dtype,
             device=tensor.device,
         )
-        empty_tensor[mask] = tensor
-        return empty_tensor
+        mask_expand = expand_right(mask, (*mask.shape, *tensor.shape[1:]))
+        return torch.masked_scatter(empty_tensor, mask_expand, tensor.view(-1))
 
     if isinstance(tensor, TensorDictBase):
         tensor = tensor.apply(_fill_tensor, batch_size=[*shape])
