@@ -426,11 +426,13 @@ class TestDQN(LossModuleTestBase):
         )
         return td
 
-    @pytest.mark.parametrize("delay_value", (False, True))
+    @pytest.mark.parametrize(
+        "delay_value,double_dqn", ([False, False], [True, False], [True, True])
+    )
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_dqn(self, delay_value, device, action_spec_type, td_est):
+    def test_dqn(self, delay_value, double_dqn, device, action_spec_type, td_est):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(
             action_spec_type=action_spec_type, device=device
@@ -438,7 +440,9 @@ class TestDQN(LossModuleTestBase):
         td = self._create_mock_data_dqn(
             action_spec_type=action_spec_type, device=device
         )
-        loss_fn = DQNLoss(actor, loss_function="l2", delay_value=delay_value)
+        loss_fn = DQNLoss(
+            actor, loss_function="l2", delay_value=delay_value, double_dqn=double_dqn
+        )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
