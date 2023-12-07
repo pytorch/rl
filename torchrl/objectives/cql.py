@@ -526,10 +526,11 @@ class CQLLoss(LossModule):
         return self.qvalue_network_params.detach()
 
     def actor_bc_loss(self, tensordict: TensorDictBase) -> Tensor:
-        with set_exploration_type(ExplorationType.RANDOM):
+        with set_exploration_type(
+            ExplorationType.RANDOM
+        ), self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(
                 tensordict,
-                params=self.actor_network_params,
             )
             a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
@@ -540,15 +541,16 @@ class CQLLoss(LossModule):
         return bc_actor_loss, metadata
 
     def actor_loss(self, tensordict: TensorDictBase) -> Tensor:
-        with set_exploration_type(ExplorationType.RANDOM):
+        with set_exploration_type(
+            ExplorationType.RANDOM
+        ), self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(
                 tensordict,
-                params=self.actor_network_params,
             )
             a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
 
-        td_q = tensordict.select(*self.qvalue_network.in_keys)
+        td_q = tensordict.segitlect(*self.qvalue_network.in_keys)
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qvalue_networkN0(
             td_q,
