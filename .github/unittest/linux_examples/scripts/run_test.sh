@@ -100,18 +100,14 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c_atari.
   loss.mini_batch_size=20 \
   logger.backend= \
   logger.test_interval=40
-python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
-  total_frames=48 \
-  init_random_frames=10 \
-  batch_size=10 \
-  frames_per_batch=16 \
-  num_workers=4 \
-  env_per_collector=2 \
-  collector_device=cuda:0 \
-  optim_steps_per_batch=1 \
-  record_video=True \
-  record_frames=4 \
-  buffer_size=120
+python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn_atari.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  buffer.batch_size=10 \
+  device=cuda:0 \
+  loss.num_updates=1 \
+  buffer.buffer_size=120
 python .github/unittest/helpers/coverage_run_parallel.py examples/cql/discrete_cql_online.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -215,18 +211,14 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   logger.backend=
 #  record_video=True \
 #  record_frames=4 \
-python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
-  total_frames=48 \
-  init_random_frames=10 \
-  batch_size=10 \
-  frames_per_batch=16 \
-  num_workers=2 \
-  env_per_collector=1 \
-  collector_device=cuda:0 \
-  optim_steps_per_batch=1 \
-  record_video=True \
-  record_frames=4 \
-  buffer_size=120
+python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn_atari.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  buffer.batch_size=10 \
+  device=cuda:0 \
+  loss.num_updates=1 \
+  buffer.buffer_size=120
 python .github/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py \
   num_workers=2 \
   collector.total_frames=48 \
