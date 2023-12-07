@@ -50,6 +50,7 @@ from torch import nn
 from torchrl._utils import implement_for
 from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
+from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
@@ -89,6 +90,8 @@ _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 _has_sklearn = importlib.util.find_spec("sklearn") is not None
 
 _has_gym_robotics = importlib.util.find_spec("gymnasium_robotics") is not None
+
+_has_minari = importlib.util.find_spec("minari") is not None
 
 if _has_gym:
     try:
@@ -400,21 +403,23 @@ class TestGym:
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
-    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     def test_vecenvs_env(self, envname):
-        from _utils_internal import rollout_consistency_assertion
-
         with set_gym_backend("gymnasium"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
-
+            env.set_seed(0)
             assert env.get_library_name(env._env) == "gymnasium"
         # rollouts can be executed without decorator
         check_env_specs(env)
         rollout = env.rollout(100, break_when_any_done=False)
         for obs_key in env.observation_spec.keys(True, True):
             rollout_consistency_assertion(
-                rollout, done_key="done", observation_key=obs_key
+                rollout,
+                done_key="done",
+                observation_key=obs_key,
+                done_strict="CartPole" in envname,
             )
+        env.close()
+        del env
 
     @implement_for("gym", "0.18", "0.27.0")
     @pytest.mark.parametrize(
@@ -441,30 +446,39 @@ class TestGym:
             )
             assert env.batch_size == torch.Size([2])
             check_env_specs(env)
+            env.close()
+            del env
 
     @implement_for("gym", "0.18", "0.27.0")
     @pytest.mark.parametrize(
         "envname",
         ["CartPole-v1", "HalfCheetah-v4"],
     )
-    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     def test_vecenvs_env(self, envname):  # noqa: F811
         with set_gym_backend("gym"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
-
+            env.set_seed(0)
             assert env.get_library_name(env._env) == "gym"
         # rollouts can be executed without decorator
         check_env_specs(env)
         rollout = env.rollout(100, break_when_any_done=False)
         for obs_key in env.observation_spec.keys(True, True):
             rollout_consistency_assertion(
-                rollout, done_key="done", observation_key=obs_key
+                rollout,
+                done_key="done",
+                observation_key=obs_key,
+                done_strict="CartPole" in envname,
             )
+        env.close()
+        del env
         if envname != "CartPole-v1":
             with set_gym_backend("gym"):
                 env = GymEnv(envname, num_envs=2, from_pixels=True)
+                env.set_seed(0)
             # rollouts can be executed without decorator
             check_env_specs(env)
+            env.close()
+            del env
 
     @implement_for("gym", None, "0.18")
     @pytest.mark.parametrize(
@@ -1817,7 +1831,10 @@ class TestD4RL:
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("use_truncated_as_done", [True, False])
     @pytest.mark.parametrize("split_trajs", [True, False])
-    def test_terminate_on_end(self, task, use_truncated_as_done, split_trajs):
+    def test_terminate_on_end(self, task, use_truncated_as_done, split_trajs, tmpdir):
+        root1 = tmpdir / "1"
+        root2 = tmpdir / "2"
+        root3 = tmpdir / "3"
 
         with pytest.warns(
             UserWarning, match="Using use_truncated_as_done=True"
@@ -1829,6 +1846,8 @@ class TestD4RL:
                 terminate_on_end=True,
                 batch_size=2,
                 use_truncated_as_done=use_truncated_as_done,
+                download="force",
+                root=root1,
             )
         _ = D4RLExperienceReplay(
             task,
@@ -1837,6 +1856,8 @@ class TestD4RL:
             terminate_on_end=False,
             batch_size=2,
             use_truncated_as_done=use_truncated_as_done,
+            download="force",
+            root=root2,
         )
         data_from_env = D4RLExperienceReplay(
             task,
@@ -1844,6 +1865,8 @@ class TestD4RL:
             from_env=True,
             batch_size=2,
             use_truncated_as_done=use_truncated_as_done,
+            download="force",
+            root=root3,
         )
         if not use_truncated_as_done:
             keys = set(data_from_env._storage._storage.keys(True, True))
@@ -1874,7 +1897,9 @@ class TestD4RL:
             assert "truncated" not in leaf_names
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
-    def test_direct_download(self, task):
+    def test_direct_download(self, task, tmpdir):
+        root1 = tmpdir / "1"
+        root2 = tmpdir / "2"
         data_direct = D4RLExperienceReplay(
             task,
             split_trajs=False,
@@ -1882,6 +1907,8 @@ class TestD4RL:
             batch_size=2,
             use_truncated_as_done=True,
             direct_download=True,
+            download="force",
+            root=root1,
         )
         data_d4rl = D4RLExperienceReplay(
             task,
@@ -1891,17 +1918,15 @@ class TestD4RL:
             use_truncated_as_done=True,
             direct_download=False,
             terminate_on_end=True,  # keep the last time step
+            download="force",
+            root=root2,
         )
         keys = set(data_direct._storage._storage.keys(True, True))
         keys = keys.intersection(data_d4rl._storage._storage.keys(True, True))
         assert len(keys)
         assert_allclose_td(
-            data_direct._storage._storage.select(*keys).apply(
-                lambda t: t.as_tensor().float()
-            ),
-            data_d4rl._storage._storage.select(*keys).apply(
-                lambda t: t.as_tensor().float()
-            ),
+            data_direct._storage._storage.select(*keys).apply(lambda t: t.float()),
+            data_d4rl._storage._storage.select(*keys).apply(lambda t: t.float()),
         )
 
     @pytest.mark.parametrize(
@@ -1963,6 +1988,53 @@ class TestD4RL:
             i += 1
         assert len(data) // i == batch_size
         print(f"terminated test after {time.time()-t0}s")
+
+
+_MINARI_DATASETS = []
+
+
+def _minari_selected_datasets():
+    if not _has_minari:
+        return
+    global _MINARI_DATASETS
+    import minari
+
+    torch.manual_seed(0)
+
+    keys = list(minari.list_remote_datasets())
+    indices = torch.randperm(len(keys))[:10]
+    keys = [keys[idx] for idx in indices]
+    keys = [
+        key
+        for key in keys
+        if "=0.4" in minari.list_remote_datasets()[key]["minari_version"]
+    ]
+    assert len(keys) > 5
+    _MINARI_DATASETS += keys
+    print("_MINARI_DATASETS", _MINARI_DATASETS)
+
+
+_minari_selected_datasets()
+
+
+@pytest.mark.skipif(not _has_minari, reason="Minari not found")
+@pytest.mark.parametrize("split", [False, True])
+@pytest.mark.parametrize("selected_dataset", _MINARI_DATASETS)
+class TestMinari:
+    def test_load(self, selected_dataset, split):
+        print("dataset", selected_dataset)
+        data = MinariExperienceReplay(
+            selected_dataset, batch_size=32, split_trajs=split
+        )
+        t0 = time.time()
+        for i, sample in enumerate(data):
+            t1 = time.time()
+            print(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            assert data.metadata["action_space"].is_in(sample["action"])
+            assert data.metadata["observation_space"].is_in(sample["observation"])
+            t0 = time.time()
+            if i == 10:
+                break
 
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")

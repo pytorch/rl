@@ -163,7 +163,7 @@ class MaskedCategorical(D.Categorical):
             must be taken into account. Exclusive with ``mask``.
         neg_inf (float, optional): The log-probability value allocated to
             invalid (out-of-mask) indices. Defaults to -inf.
-        padding_value: The padding value in the then mask tensor when
+        padding_value: The padding value in the mask tensor. When
             sparse_mask == True, the padding_value will be ignored.
 
         >>> torch.manual_seed(0)
@@ -314,7 +314,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
             must be taken into account. Exclusive with ``mask``.
         neg_inf (float, optional): The log-probability value allocated to
             invalid (out-of-mask) indices. Defaults to -inf.
-        padding_value: The padding value in the then mask tensor when
+        padding_value: The padding value in then mask tensor when
             sparse_mask == True, the padding_value will be ignored.
         grad_method (ReparamGradientStrategy, optional): strategy to gather
             reparameterized samples.

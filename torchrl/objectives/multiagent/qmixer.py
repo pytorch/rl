@@ -12,7 +12,7 @@ from typing import Optional, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import dispatch, make_functional, repopulate_module, TensorDictModule
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import nn
 
@@ -189,11 +189,21 @@ class QMixerLoss(LossModule):
         mixer_network: Union[TensorDictModule, nn.Module],
         *,
         loss_function: Optional[str] = "l2",
-        delay_value: bool = False,
+        delay_value: bool = None,
         gamma: float = None,
         action_space: Union[str, TensorSpec] = None,
         priority_key: str = None,
     ) -> None:
+        if delay_value is None:
+            warnings.warn(
+                f"You did not provide a delay_value argument for {type(self)}. "
+                "Currently (v0.3) the default for delay_value is `False` but as of "
+                "v0.4 it will be `True`. Make sure to adapt your code depending "
+                "on your preferred configuration. "
+                "To remove this warning, indicate the value of delay_value in your "
+                "script."
+            )
+            delay_value = False
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
@@ -212,10 +222,11 @@ class QMixerLoss(LossModule):
             )
 
         global_value_network = SafeSequential(local_value_network, mixer_network)
-        params = make_functional(global_value_network)
-        self.global_value_network = deepcopy(global_value_network)
-        repopulate_module(local_value_network, params["module", "0"])
-        repopulate_module(mixer_network, params["module", "1"])
+        params = TensorDict.from_module(global_value_network)
+        with params.apply(
+            self._make_meta_params, device=torch.device("meta")
+        ).to_module(global_value_network):
+            self.__dict__["global_value_network"] = deepcopy(global_value_network)
 
         self.convert_to_functional(
             local_value_network,
@@ -326,10 +337,10 @@ class QMixerLoss(LossModule):
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
         td_copy = tensordict.clone(False)
-        self.local_value_network(
-            td_copy,
-            params=self.local_value_network_params,
-        )
+        with self.local_value_network_params.to_module(self.local_value_network):
+            self.local_value_network(
+                td_copy,
+            )
 
         action = tensordict.get(self.tensor_keys.action)
         pred_val = td_copy.get(
@@ -346,7 +357,8 @@ class QMixerLoss(LossModule):
             pred_val_index = (pred_val * action).sum(-1, keepdim=True)
 
         td_copy.set(self.tensor_keys.local_value, pred_val_index)  # [*B, n_agents, 1]
-        self.mixer_network(td_copy, params=self.mixer_network_params)
+        with self.mixer_network_params.to_module(self.mixer_network):
+            self.mixer_network(td_copy)
         pred_val_index = td_copy.get(self.tensor_keys.global_value).squeeze(-1)
         # [*B] this is global and shared among the agents as will be the target
 

@@ -657,6 +657,7 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
             out_keys=[action_key],
             default_interaction_type=InteractionType.RANDOM,
             distribution_class=TanhNormal,
+            distribution_kwargs={"tanh_loc": True},
             spec=CompositeSpec(**{action_key: proof_environment.action_spec}),
         ),
     )
@@ -703,8 +704,9 @@ def _dreamer_make_actor_real(
             SafeProbabilisticModule(
                 in_keys=["loc", "scale"],
                 out_keys=[action_key],
-                default_interaction_type=InteractionType.RANDOM,
+                default_interaction_type=InteractionType.MODE,
                 distribution_class=TanhNormal,
+                distribution_kwargs={"tanh_loc": True},
                 spec=CompositeSpec(
                     **{action_key: proof_environment.action_spec.to("cpu")}
                 ),

@@ -1160,7 +1160,7 @@ class terminal_obs_reader(BaseInfoDictReader):
             # Simplest case: there is one observation,
             # presented as a np.ndarray. The key should be pixels or observation.
             # We just write that value at its location in the tensor
-            tensor[index] = torch.as_tensor(obs, device=tensor.device)
+            tensor[index] = torch.tensor(obs, device=tensor.device)
         elif isinstance(obs, dict):
             if key not in obs:
                 raise KeyError(
@@ -1171,13 +1171,13 @@ class terminal_obs_reader(BaseInfoDictReader):
                 # if the obs is a dict, we expect that the key points also to
                 # a value in the obs. We retrieve this value and write it in the
                 # tensor
-                tensor[index] = torch.as_tensor(subobs, device=tensor.device)
+                tensor[index] = torch.tensor(subobs, device=tensor.device)
 
         elif isinstance(obs, (list, tuple)):
             # tuples are stacked along the first dimension when passing gym spaces
             # to torchrl specs. As such, we can simply stack the tuple and set it
             # at the relevant index (assuming stacking can be achieved)
-            tensor[index] = torch.as_tensor(obs, device=tensor.device)
+            tensor[index] = torch.tensor(obs, device=tensor.device)
         else:
             raise NotImplementedError(
                 f"Observations of type {type(obs)} are not supported yet."
@@ -1186,11 +1186,12 @@ class terminal_obs_reader(BaseInfoDictReader):
     def __call__(self, info_dict, tensordict):
         terminal_obs = info_dict.get(self.backend_key[self.backend], None)
         for key, item in self.info_spec.items(True, True):
-            final_obs = item.zero()
+            final_obs_buffer = item.zero()
             if terminal_obs is not None:
                 for i, obs in enumerate(terminal_obs):
-                    self._read_obs(obs, key[-1], final_obs, index=i)
-            tensordict.set(key, final_obs)
+                    # writes final_obs inplace with terminal_obs content
+                    self._read_obs(obs, key[-1], final_obs_buffer, index=i)
+            tensordict.set(key, final_obs_buffer)
         return tensordict
 
 

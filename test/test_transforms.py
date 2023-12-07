@@ -9,6 +9,7 @@ import importlib.util
 
 import itertools
 import pickle
+import re
 import sys
 from copy import copy
 from functools import partial
@@ -4877,6 +4878,39 @@ class TestRewardSum(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for RewardSum")
+
+    @pytest.mark.parametrize("in_keys", [["reward"], ["reward_1", "reward_2"]])
+    @pytest.mark.parametrize(
+        "out_keys", [["episode_reward"], ["episode_reward_1", "episode_reward_2"]]
+    )
+    @pytest.mark.parametrize("reset_keys", [["_reset"], ["_reset1", "_reset2"]])
+    def test_keys_length_errors(self, in_keys, reset_keys, out_keys, batch=10):
+        reset_dict = {
+            reset_key: torch.zeros(batch, dtype=torch.bool) for reset_key in reset_keys
+        }
+        reward_sum_dict = {out_key: torch.randn(batch) for out_key in out_keys}
+        reset_dict.update(reward_sum_dict)
+        td = TensorDict(reset_dict, [])
+
+        if len(in_keys) != len(out_keys):
+            with pytest.raises(
+                ValueError,
+                match="RewardSum expects the same number of input and output keys",
+            ):
+                RewardSum(in_keys=in_keys, reset_keys=reset_keys, out_keys=out_keys)
+        else:
+            t = RewardSum(in_keys=in_keys, reset_keys=reset_keys, out_keys=out_keys)
+
+            if len(in_keys) != len(reset_keys):
+                with pytest.raises(
+                    ValueError,
+                    match=re.escape(
+                        f"Could not match the env reset_keys {reset_keys} with the in_keys {in_keys}"
+                    ),
+                ):
+                    t.reset(td)
+            else:
+                t.reset(td)
 
 
 class TestReward2Go(TransformBase):

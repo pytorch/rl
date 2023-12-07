@@ -24,6 +24,7 @@ jobs:
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
+      upload-artifact: docs
       runner: "linux.g5.4xlarge.nvidia.gpu"
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
@@ -82,8 +83,12 @@ jobs:
         # bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
         cd ..
-        cp -r docs/_local_build "${RUNNER_ARTIFACT_DIR}"
-        cp -r docs/_local_build/* "${RUNNER_DOCS_DIR}"
+
+        cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
+        echo $(ls "${RUNNER_ARTIFACT_DIR}")
+        if [[ ${{ github.event_name == 'pull_request' }} ]]; then
+          cp -r docs/_local_build/* "${RUNNER_DOCS_DIR}"
+        fi
 
   upload:
     needs: build-docs
@@ -119,12 +124,13 @@ jobs:
         #       ;;
         #   esac
         # fi
-        # echo "Target Folder: ${TARGET_FOLDER}"
         TARGET_FOLDER="./"
+        echo "Target Folder: ${TARGET_FOLDER}"
 
         # mkdir -p "${TARGET_FOLDER}"
         # rm -rf "${TARGET_FOLDER}"/*
-        mv "${RUNNER_ARTIFACT_DIR}"/html/* "${TARGET_FOLDER}"
+        echo $(ls "${RUNNER_ARTIFACT_DIR}")
+        mv "${RUNNER_ARTIFACT_DIR}"/* "${TARGET_FOLDER}"
         git add "${TARGET_FOLDER}" || true
 
         # if [[ "${TARGET_FOLDER}" == main ]]; then

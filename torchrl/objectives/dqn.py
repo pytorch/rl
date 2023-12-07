@@ -44,7 +44,9 @@ class DQNLoss(LossModule):
             Defaults to "l2".
         delay_value (bool, optional): whether to duplicate the value network
             into a new target value network to
-            create a double DQN. Default is ``False``.
+            create a DQN with a target network. Default is ``False``.
+        double_dqn (bool, optional): whether or not to use Double DQN, as described in
+            https://arxiv.org/abs/1509.06461. Defaults to ``False``.
         action_space (str or TensorSpec, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
             or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
@@ -164,13 +166,27 @@ class DQNLoss(LossModule):
         value_network: Union[QValueActor, nn.Module],
         *,
         loss_function: Optional[str] = "l2",
-        delay_value: bool = False,
+        delay_value: bool = None,
+        double_dqn: bool = False,
         gamma: float = None,
         action_space: Union[str, TensorSpec] = None,
         priority_key: str = None,
     ) -> None:
+        if delay_value is None:
+            warnings.warn(
+                f"You did not provide a delay_value argument for {type(self)}. "
+                "Currently (v0.3) the default for delay_value is `False` but as of "
+                "v0.4 it will be `True`. Make sure to adapt your code depending "
+                "on your preferred configuration. "
+                "To remove this warning, indicate the value of delay_value in your "
+                "script."
+            )
+            delay_value = False
         super().__init__()
         self._in_keys = None
+        if double_dqn and not delay_value:
+            raise ValueError("double_dqn=True requires delay_value=True.")
+        self.double_dqn = double_dqn
         self._set_deprecated_ctor_keys(priority=priority_key)
         self.delay_value = delay_value
         value_network = ensure_tensordict_compatible(
@@ -289,16 +305,14 @@ class DQNLoss(LossModule):
 
         """
         td_copy = tensordict.clone(False)
-        self.value_network(
-            td_copy,
-            params=self.value_network_params,
-        )
+        with self.value_network_params.to_module(self.value_network):
+            self.value_network(td_copy)
 
         action = tensordict.get(self.tensor_keys.action)
         pred_val = td_copy.get(self.tensor_keys.action_value)
 
         if self.action_space == "categorical":
-            if action.shape != pred_val.shape:
+            if action.ndim != pred_val.ndim:
                 # unsqueeze the action if it lacks on trailing singleton dim
                 action = action.unsqueeze(-1)
             pred_val_index = torch.gather(pred_val, -1, index=action).squeeze(-1)
@@ -306,8 +320,32 @@ class DQNLoss(LossModule):
             action = action.to(torch.float)
             pred_val_index = (pred_val * action).sum(-1)
 
+        if self.double_dqn:
+            step_td = step_mdp(td_copy, keep_other=False)
+            step_td_copy = step_td.clone(False)
+            # Use online network to compute the action
+            with self.value_network_params.data.to_module(self.value_network):
+                self.value_network(step_td)
+                next_action = step_td.get(self.tensor_keys.action)
+
+            # Use target network to compute the values
+            with self.target_value_network_params.to_module(self.value_network):
+                self.value_network(step_td_copy)
+                next_pred_val = step_td_copy.get(self.tensor_keys.action_value)
+
+            if self.action_space == "categorical":
+                if next_action.ndim != next_pred_val.ndim:
+                    # unsqueeze the action if it lacks on trailing singleton dim
+                    next_action = next_action.unsqueeze(-1)
+                next_value = torch.gather(next_pred_val, -1, index=next_action)
+            else:
+                next_value = (next_pred_val * next_action).sum(-1, keepdim=True)
+        else:
+            next_value = None
         target_value = self.value_estimator.value_estimate(
-            td_copy, target_params=self.target_value_network_params
+            td_copy,
+            target_params=self.target_value_network_params,
+            next_value=next_value,
         ).squeeze(-1)
 
         with torch.no_grad():
@@ -370,9 +408,9 @@ class DistributionalDQNLoss(LossModule):
                 Defaults to ``"td_error"``.
             reward (NestedKey): The input tensordict key where the reward is expected.
                 Defaults to ``"reward"``.
-            done (NestedKey): The input tensordict key where the the flag if a trajectory is done is expected.
+            done (NestedKey): The input tensordict key where the flag if a trajectory is done is expected.
                 Defaults to ``"done"``.
-            terminated (NestedKey): The input tensordict key where the the flag if a trajectory is done is expected.
+            terminated (NestedKey): The input tensordict key where the flag if a trajectory is done is expected.
                 Defaults to ``"terminated"``.
             steps_to_next_obs (NestedKey): The input tensordict key where the steps_to_next_obs is exptected.
                 Defaults to ``"steps_to_next_obs"``.
@@ -393,9 +431,19 @@ class DistributionalDQNLoss(LossModule):
         self,
         value_network: Union[DistributionalQValueActor, nn.Module],
         gamma: float,
-        delay_value: bool = False,
+        delay_value: bool = None,
         priority_key: str = None,
     ):
+        if delay_value is None:
+            warnings.warn(
+                f"You did not provide a delay_value argument for {type(self)}. "
+                "Currently (v0.3) the default for delay_value is `False` but as of "
+                "v0.4 it will be `True`. Make sure to adapt your code depending "
+                "on your preferred configuration. "
+                "To remove this warning, indicate the value of delay_value in your "
+                "script."
+            )
+            delay_value = False
         super().__init__()
         self._set_deprecated_ctor_keys(priority=priority_key)
         self.register_buffer("gamma", torch.tensor(gamma))
@@ -462,10 +510,10 @@ class DistributionalDQNLoss(LossModule):
         # Calculate current state probabilities (online network noise already
         # sampled)
         td_clone = tensordict.clone()
-        self.value_network(
-            td_clone,
-            params=self.value_network_params,
-        )  # Log probabilities log p(s_t, ·; θonline)
+        with self.value_network_params.to_module(self.value_network):
+            self.value_network(
+                td_clone,
+            )  # Log probabilities log p(s_t, ·; θonline)
         action_log_softmax = td_clone.get(self.tensor_keys.action_value)
 
         if self.action_space == "categorical":
@@ -475,24 +523,18 @@ class DistributionalDQNLoss(LossModule):
                 action, action_log_softmax, batch_size, atoms
             )
 
-        with torch.no_grad():
+        with torch.no_grad(), self.value_network_params.to_module(self.value_network):
             # Calculate nth next state probabilities
             next_td = step_mdp(tensordict)
-            self.value_network(
-                next_td,
-                params=self.value_network_params,
-            )  # Probabilities p(s_t+n, ·; θonline)
+            self.value_network(next_td)  # Probabilities p(s_t+n, ·; θonline)
 
             next_td_action = next_td.get(self.tensor_keys.action)
             if self.action_space == "categorical":
                 argmax_indices_ns = next_td_action.squeeze(-1)
             else:
                 argmax_indices_ns = next_td_action.argmax(-1)  # one-hot encoding
-
-            self.value_network(
-                next_td,
-                params=self.target_value_network_params,
-            )  # Probabilities p(s_t+n, ·; θtarget)
+            with self.target_value_network_params.to_module(self.value_network):
+                self.value_network(next_td)  # Probabilities p(s_t+n, ·; θtarget)
             pns = next_td.get(self.tensor_keys.action_value).exp()
             # Double-Q probabilities
             # p(s_t+n, argmax_a[(z, p(s_t+n, a; θonline))]; θtarget)
