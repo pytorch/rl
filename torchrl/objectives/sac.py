@@ -376,9 +376,11 @@ class SACLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
-        self._vmap_qnetworkN0 = _vmap_func(self.qvalue_network, (None, 0))
+        self._vmap_qnetworkN0 = _vmap_func(
+            self.qvalue_network, (None, 0), randomness="different"
+        )
         if self._version == 1:
-            self._vmap_qnetwork00 = _vmap_func(qvalue_network)
+            self._vmap_qnetwork00 = _vmap_func(qvalue_network, randomness="different")
 
     @property
     def target_entropy_buffer(self):

@@ -318,7 +318,9 @@ class REDQLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-        self._vmap_qvalue_network00 = _vmap_func(self.qvalue_network)
+        self._vmap_qvalue_network00 = _vmap_func(
+            self.qvalue_network, randomness="different"
+        )
         self._vmap_getdist = _vmap_func(self.actor_network, func="get_dist_params")
 
     @property
