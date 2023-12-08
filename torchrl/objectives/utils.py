@@ -478,13 +478,23 @@ def _cache_values(fun):
 
 
 def _vmap_func(module, *args, func=None, **kwargs):
-    def decorated_module(*module_args_params):
-        params = module_args_params[-1]
-        module_args = module_args_params[:-1]
-        with params.to_module(module):
-            if func is None:
-                return module(*module_args)
-            else:
-                return getattr(module, func)(*module_args)
+    try:
 
-    return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
+        def decorated_module(*module_args_params):
+            params = module_args_params[-1]
+            module_args = module_args_params[:-1]
+            with params.to_module(module):
+                if func is None:
+                    return module(*module_args)
+                else:
+                    return getattr(module, func)(*module_args)
+
+        return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
+
+    except RuntimeError as err:
+        if "vmap: called random operation while in randomness error mode" in str(
+            err
+        ):  # better to use re.match here but anyway
+            raise RuntimeError(
+                "Please use loss_module.set_vmap_randomness to handle random operations during vmap."
+            ) from err

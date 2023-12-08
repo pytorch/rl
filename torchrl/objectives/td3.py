@@ -201,6 +201,7 @@ class TD3Loss(LossModule):
         "next_state_value",
         "target_value",
     ]
+    _vmap_randomness = None
 
     def __init__(
         self,
@@ -219,7 +220,6 @@ class TD3Loss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
     ) -> None:
-
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
@@ -297,10 +297,10 @@ class TD3Loss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
         self._vmap_qvalue_network00 = _vmap_func(
-            self.qvalue_network, randomness="different"
+            self.qvalue_network, randomness=self.vmap_randomness
         )
         self._vmap_actor_network00 = _vmap_func(
-            self.actor_network, randomness="different"
+            self.actor_network, randomness=self.vmap_randomness
         )
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
@@ -346,6 +346,25 @@ class TD3Loss(LossModule):
         return torch.stack(
             [self.actor_network_params, self.target_actor_network_params], 0
         )
+
+    @property
+    def vmap_randomness(self):
+        if self._vmap_randomness is None:
+            # look for nn.Dropout modules
+            dropouts = (torch.nn.Dropout, torch.nn.Dropout2d, torch.nn.Dropout3d)
+            for a, q in zip(
+                self.actor_network.modules(), self.qvalue_network.modules()
+            ):
+                if isinstance(a, dropouts) or isinstance(q, dropouts):
+                    self._vmap_randomness = "different"
+                    break
+            else:
+                self._vmap_randomness = "error"
+
+        return self._vmap_randomness
+
+    def set_vmap_randomness(self, value):
+        self._vmap_randomness = value
 
     def actor_loss(self, tensordict):
         tensordict_actor_grad = tensordict.select(*self.actor_network.in_keys)
