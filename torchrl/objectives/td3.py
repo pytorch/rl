@@ -26,6 +26,25 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
+RANDOM_MODULE_LIST = (
+    torch.nn.Dropout,
+    torch.nn.Dropout2d,
+    torch.nn.Dropout3d,
+    torch.nn.AlphaDropout,
+    torch.nn.FeatureAlphaDropout,
+    torch.nn.GaussianDropout,
+    torch.nn.GaussianNoise,
+    torch.nn.SyncBatchNorm,
+    torch.nn.GroupNorm,
+    torch.nn.LayerNorm,
+    torch.nn.LocalResponseNorm,
+    torch.nn.InstanceNorm1d,
+    torch.nn.InstanceNorm2d,
+    torch.nn.InstanceNorm3d,
+    torch.nn.SpatialDropout,
+    torch.nn.SpatialCrossMapLRN,
+)
+
 
 class TD3Loss(LossModule):
     """TD3 Loss module.
@@ -350,11 +369,6 @@ class TD3Loss(LossModule):
     @property
     def vmap_randomness(self):
         if self._vmap_randomness is None:
-            RANDOM_MODULE_LIST = (
-                torch.nn.Dropout,
-                torch.nn.Dropout2d,
-                torch.nn.Dropout3d,
-            )
             do_break = False
             for val in self.__dict__.values():
                 if isinstance(val, torch.nn.Module):
