@@ -350,13 +350,21 @@ class TD3Loss(LossModule):
     @property
     def vmap_randomness(self):
         if self._vmap_randomness is None:
-            # look for nn.Dropout modules
-            dropouts = (torch.nn.Dropout, torch.nn.Dropout2d, torch.nn.Dropout3d)
-            for a, q in zip(
-                self.actor_network.modules(), self.qvalue_network.modules()
-            ):
-                if isinstance(a, dropouts) or isinstance(q, dropouts):
-                    self._vmap_randomness = "different"
+            RANDOM_MODULE_LIST = (
+                torch.nn.Dropout,
+                torch.nn.Dropout2d,
+                torch.nn.Dropout3d,
+            )
+            do_break = False
+            for val in self.__dict__.values():
+                if isinstance(val, torch.nn.Module):
+                    for module in val.modules():
+                        if isinstance(module, RANDOM_MODULE_LIST):
+                            self._vmap_randomness = "different"
+                            do_break = True
+                            break
+                if do_break:
+                    # double break
                     break
             else:
                 self._vmap_randomness = "error"
