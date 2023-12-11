@@ -22,28 +22,10 @@ from torchrl.objectives.utils import (
     _vmap_func,
     default_value_kwargs,
     distance_loss,
+    RANDOM_MODULE_LIST,
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-RANDOM_MODULE_LIST = (
-    torch.nn.Dropout,
-    torch.nn.Dropout2d,
-    torch.nn.Dropout3d,
-    torch.nn.AlphaDropout,
-    torch.nn.FeatureAlphaDropout,
-    torch.nn.GaussianDropout,
-    torch.nn.GaussianNoise,
-    torch.nn.SyncBatchNorm,
-    torch.nn.GroupNorm,
-    torch.nn.LayerNorm,
-    torch.nn.LocalResponseNorm,
-    torch.nn.InstanceNorm1d,
-    torch.nn.InstanceNorm2d,
-    torch.nn.InstanceNorm3d,
-    torch.nn.SpatialDropout,
-    torch.nn.SpatialCrossMapLRN,
-)
 
 
 class TD3Loss(LossModule):

@@ -29,6 +29,21 @@ _GAMMA_LMBDA_DEPREC_WARNING = (
     "run `loss_module.make_value_estimator(ValueEstimators.<value_fun>, gamma=val)`."
 )
 
+RANDOM_MODULE_LIST = (
+    nn.Dropout,
+    nn.Dropout2d,
+    nn.Dropout3d,
+    nn.AlphaDropout,
+    nn.FeatureAlphaDropout,
+    nn.SyncBatchNorm,
+    nn.GroupNorm,
+    nn.LayerNorm,
+    nn.LocalResponseNorm,
+    nn.InstanceNorm1d,
+    nn.InstanceNorm2d,
+    nn.InstanceNorm3d,
+)
+
 
 class ValueEstimators(Enum):
     """Value function enumerator for custom-built estimators.
