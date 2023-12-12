@@ -24,6 +24,8 @@ from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.data.replay_buffers.writers import Writer
 
 _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
+_has_h5py = importlib.util.find_spec("h5py", None) is not None
+_has_hf_hub = importlib.util.find_spec("huggingface_hub", None) is not None
 
 _NAME_MATCH = KeyDependentDefaultDict(lambda key: key)
 _NAME_MATCH["observations"] = "observation"
@@ -158,6 +160,10 @@ class RobosetExperienceReplay(TensorDictReplayBuffer):
         split_trajs: bool = False,
         **env_kwargs,
     ):
+        if not _has_h5py or not _has_hf_hub:
+            raise ImportError(
+                "h5py and huggingface_hub are required for Roboset datasets."
+            )
         if dataset_id not in self.available_datasets:
             raise ValueError(
                 f"The dataset_id {dataset_id} isn't part of the accepted datasets. "

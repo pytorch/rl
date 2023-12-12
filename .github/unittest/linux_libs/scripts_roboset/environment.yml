@@ -19,3 +19,4 @@ dependencies:
     - hydra-core
     - huggingface_hub
     - tqdm
+    - h5py
