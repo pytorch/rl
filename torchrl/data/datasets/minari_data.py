@@ -238,30 +238,32 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
             h5_data = PersistentTensorDict.from_h5(parent_dir / "main_data.hdf5")
             # populate the tensordict
             episode_dict = {}
-            for episode_key, episode in h5_data.items():
+            for i, (episode_key, episode) in enumerate(h5_data.items()):
                 episode_num = int(episode_key[len("episode_") :])
                 episode_len = episode["actions"].shape[0]
                 episode_dict[episode_num] = (episode_key, episode_len)
                 # Get the total number of steps for the dataset
                 total_steps += episode_len
-                for key, val in episode.items():
-                    match = _NAME_MATCH[key]
-                    if key in ("observations", "state", "infos"):
-                        if (
-                            not val.shape
-                        ):  # no need for this, we don't need the proper length: or steps != val.shape[0] - 1:
-                            if val.is_empty():
-                                continue
-                            val = _patch_info(val)
-                        td_data.set(("next", match), torch.zeros_like(val[0]))
-                        td_data.set(match, torch.zeros_like(val[0]))
-                    if key not in ("terminations", "truncations", "rewards"):
-                        td_data.set(match, torch.zeros_like(val[0]))
-                    else:
-                        td_data.set(
-                            ("next", match),
-                            torch.zeros_like(val[0].unsqueeze(-1)),
-                        )
+                if i == 0:
+                    td_data.set("episode", 0)
+                    for key, val in episode.items():
+                        match = _NAME_MATCH[key]
+                        if key in ("observations", "state", "infos"):
+                            if (
+                                not val.shape
+                            ):  # no need for this, we don't need the proper length: or steps != val.shape[0] - 1:
+                                if val.is_empty():
+                                    continue
+                                val = _patch_info(val)
+                            td_data.set(("next", match), torch.zeros_like(val[0]))
+                            td_data.set(match, torch.zeros_like(val[0]))
+                        if key not in ("terminations", "truncations", "rewards"):
+                            td_data.set(match, torch.zeros_like(val[0]))
+                        else:
+                            td_data.set(
+                                ("next", match),
+                                torch.zeros_like(val[0].unsqueeze(-1)),
+                            )
 
             # give it the proper size
             td_data["next", "done"] = (
@@ -284,6 +286,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
                     episode = h5_data.get(episode_key)
                     idx = slice(index, (index + steps))
                     data_view = td_data[idx]
+                    data_view.fill_("episode", episode_num)
                     for key, val in episode.items():
                         match = _NAME_MATCH[key]
                         if key in (
