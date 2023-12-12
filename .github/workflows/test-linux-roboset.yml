@@ -1,4 +1,4 @@
-name: Minari Tests on Linux
+name: Roboset Tests on Linux
 
 on:
   pull_request:
