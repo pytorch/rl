@@ -212,6 +212,13 @@ def _main(argv):
         "checkpointing": [
             "torchsnapshot",
         ],
+        "offline-data": [
+            "huggingface_hub",  # for roboset
+            "minari",
+            "tqdm",
+            "scikit-learn",
+            "pandas",
+        ],
         "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1"],
     }
     extra_requires["all"] = set()

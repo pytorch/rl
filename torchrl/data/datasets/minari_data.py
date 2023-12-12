@@ -57,8 +57,9 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
     """Minari Experience replay dataset.
 
     Args:
-        dataset_id (str):
-        batch_size (int):
+        dataset_id (str): The dataset to be downloaded. Must be part of MinariExperienceReplay.available_datasets
+        batch_size (int): Batch-size used during sampling. Can be overridden by `data.sample(batch_size)` if
+            necessary.
 
     Keyword Args:
         root (Path or str, optional): The Minari dataset root directory.
@@ -90,6 +91,9 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
             ``D4RL``, this may not be true. It is up to the user to make
             accurate choices regarding this usage of ``split_trajs``.
             Defaults to ``False``.
+
+    Attributes:
+        available_datasets: a list of accepted entries to be downloaded.
 
     .. note::
       Text data is currenrtly discarded from the wrapped dataset, as there is not
@@ -197,6 +201,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
             pin_memory=pin_memory,
             prefetch=prefetch,
             batch_size=batch_size,
+            transform=transform,
         )
 
     def available_datasets(self):

@@ -4,16 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import glob
 import importlib.util
-import json
 import os.path
 import shutil
 import tempfile
 
-from collections import defaultdict
 from contextlib import nullcontext
-from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
@@ -26,37 +22,125 @@ from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.data.replay_buffers.writers import Writer
-from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    DiscreteTensorSpec,
-    UnboundedContinuousTensorSpec,
-)
 
 _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
 
 _NAME_MATCH = KeyDependentDefaultDict(lambda key: key)
 _NAME_MATCH["observations"] = "observation"
 _NAME_MATCH["rewards"] = "reward"
-_NAME_MATCH["truncations"] = "truncated"
-_NAME_MATCH["terminations"] = "terminated"
 _NAME_MATCH["actions"] = "action"
-_NAME_MATCH["infos"] = "info"
+_NAME_MATCH["env_infos"] = "info"
 
 
 class RobosetExperienceReplay(TensorDictReplayBuffer):
+    """Roboset experience replay dataset.
 
-    available_datasets = {
-        "DAPG(expert)/door_v2d-v1": "1_gRk-k3S8aZortmaeoskeDH5oTo_zKYj",
-        "DAPG(expert)/relocate_v2d-v1": "1QyPss3BUAdDfq5OI6v7HAwcszDteZN10",
-        "DAPG(expert)/hammer_v2d-v1": "1NaipPfSsyCbxlg8Lw4EeJ7ZoWbmB8tX1",
-        "DAPG(expert)/pen_v2d-v1": "11UyaAlbYJcMwR9DBNv9igx_icTkT0roB",
-        "FK1-v4(expert)/FK1_MicroOpenRandom_v2d-v4": "1Y3q6BDR0cAVMOnPyPt0yQJXeIpcLiXBY",
-        "FK1-v4(expert)/FK1_Knob2OffRandom_v2d-v4": "1qs3pI_PrFDA_KTCbsJYZ2SVQvO5rvjYf",
-        "FK1-v4(expert)/FK1_LdoorOpenRandom_v2d-v4": "12jQNpZv7Zxb6q4Z38xPpJMPDj19zLuYI",
-        "FK1-v4(expert)/FK1_SdoorOpenRandom_v2d-v4": "1zpUPeXMXdWbSJAS87k_6BgCEgvcyx228",
-        "FK1-v4(expert)/FK1_Knob1OnRandom_v2d-v4": "1dWe_aAB-jPj-kgN5NYJX9-amHbM6TpXC",
-    }
+    This class downloads the H5 data from roboset and processes it in a mmap
+    format, which makes indexing (and therefore sampling) faster.
+
+    Learn more about roboset here: https://sites.google.com/view/robohive/roboset
+
+    Args:
+        dataset_id (str): the dataset to be downloaded. Must be part of RobosetExperienceReplay.available_datasets.
+        batch_size (int): Batch-size used during sampling. Can be overridden by `data.sample(batch_size)` if
+            necessary.
+
+    Keyword Args:
+        root (Path or str, optional): The Roboset dataset root directory.
+            The actual dataset memory-mapped files will be saved under
+            `<root>/<dataset_id>`. If none is provided, it defaults to
+            ``~/.cache/torchrl/minari`.
+        download (bool or str, optional): Whether the dataset should be downloaded if
+            not found. Defaults to ``True``. Download can also be passed as "force",
+            in which case the downloaded data will be overwritten.
+        sampler (Sampler, optional): the sampler to be used. If none is provided
+            a default RandomSampler() will be used.
+        writer (Writer, optional): the writer to be used. If none is provided
+            a default RoundRobinWriter() will be used.
+        collate_fn (callable, optional): merges a list of samples to form a
+            mini-batch of Tensor(s)/outputs.  Used when using batched
+            loading from a map-style dataset.
+        pin_memory (bool): whether pin_memory() should be called on the rb
+            samples.
+        prefetch (int, optional): number of next batches to be prefetched
+            using multithreading.
+        transform (Transform, optional): Transform to be executed when sample() is called.
+            To chain transforms use the :obj:`Compose` class.
+        split_trajs (bool, optional): if ``True``, the trajectories will be split
+            along the first dimension and padded to have a matching shape.
+            To split the trajectories, the ``"done"`` signal will be used, which
+            is recovered via ``done = truncated | terminated``. In other words,
+            it is assumed that any ``truncated`` or ``terminated`` signal is
+            equivalent to the end of a trajectory. For some datasets from
+            ``D4RL``, this may not be true. It is up to the user to make
+            accurate choices regarding this usage of ``split_trajs``.
+            Defaults to ``False``.
+
+    Attributes:
+        available_datasets: a list of accepted entries to be downloaded.
+
+    Examples:
+        >>> import torch
+        >>> torch.manual_seed(0)
+        >>> from torchrl.envs.transforms import ExcludeTransform
+        >>> from torchrl.data.datasets import RobosetExperienceReplay
+        >>> d = RobosetExperienceReplay("FK1-v4(expert)/FK1_MicroOpenRandom_v2d-v4", batch_size=32,
+        ...     transform=ExcludeTransform("info", ("next", "info")))  # excluding info dict for conciseness
+        >>> for batch in d:
+        ...     break
+        >>> # data is organised by seed and episode, but stored contiguously
+        >>> print(batch["seed"], batch["episode"])
+        tensor([2, 1, 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 2, 2, 2, 1, 1, 2, 0, 2, 0, 2, 2, 1,
+                0, 2, 0, 0, 1, 1, 2, 1]) tensor([17, 20, 18,  9,  6,  1, 12,  6,  2,  6,  8, 15,  8, 21, 17,  3,  9, 20,
+                23, 12,  3, 16, 19, 16, 16,  4,  4, 12,  1,  2, 15, 24])
+        >>> print(batch)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([32, 9]), device=cpu, dtype=torch.float64, is_shared=False),
+                done: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.bool, is_shared=False),
+                episode: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False),
+                index: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([32, 75]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.float64, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([32]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([32, 75]), device=cpu, dtype=torch.float64, is_shared=False),
+                seed: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False),
+                time: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.float64, is_shared=False)},
+            batch_size=torch.Size([32]),
+            device=cpu,
+            is_shared=False)
+
+    """
+
+    available_datasets = [
+        "DAPG(expert)/door_v2d-v1",
+        "DAPG(expert)/relocate_v2d-v1",
+        "DAPG(expert)/hammer_v2d-v1",
+        "DAPG(expert)/pen_v2d-v1",
+        "DAPG(human)/door_v2d-v1",
+        "DAPG(human)/relocate_v2d-v1",
+        "DAPG(human)/hammer_v2d-v1",
+        "DAPG(human)/pen_v2d-v1",
+        "FK1-v4(expert)/FK1_MicroOpenRandom_v2d-v4",
+        "FK1-v4(expert)/FK1_Knob2OffRandom_v2d-v4",
+        "FK1-v4(expert)/FK1_LdoorOpenRandom_v2d-v4",
+        "FK1-v4(expert)/FK1_SdoorOpenRandom_v2d-v4",
+        "FK1-v4(expert)/FK1_Knob1OnRandom_v2d-v4",
+        "FK1-v4(human)/human_demos_by_playdata",
+        "FK1-v4(human)/human_demos_by_task/human_demo_singleTask_Fixed-v4",
+        "FK1-v4(human)/human_demos_by_task/FK1_SdoorOpenRandom_v2d-v4",
+        "FK1-v4(human)/human_demos_by_task/FK1_LdoorOpenRandom_v2d-v4",
+        "FK1-v4(human)/human_demos_by_task/FK1_Knob2OffRandom_v2d-v4",
+        "FK1-v4(human)/human_demos_by_task/FK1_Knob1OnRandom_v2d-v4",
+        "FK1-v4(human)/human_demos_by_task/FK1_MicroOpenRandom_v2d-v4",
+    ]
 
     def __init__(
         self,
@@ -74,6 +158,11 @@ class RobosetExperienceReplay(TensorDictReplayBuffer):
         split_trajs: bool = False,
         **env_kwargs,
     ):
+        if dataset_id not in self.available_datasets:
+            raise ValueError(
+                f"The dataset_id {dataset_id} isn't part of the accepted datasets. "
+                f"To check which dataset can be downloaded, call `{type(self)}.available_datasets`."
+            )
         self.dataset_id = dataset_id
         if root is None:
             root = _get_root_dir("roboset")
@@ -102,37 +191,40 @@ class RobosetExperienceReplay(TensorDictReplayBuffer):
             collate_fn=collate_fn,
             pin_memory=pin_memory,
             prefetch=prefetch,
+            transform=transform,
             batch_size=batch_size,
         )
 
-    def _download_from_google_drive(self, tempdir):
-        tempdir = Path(tempdir)
-        datapath = tempdir / "data"
-        os.makedirs(datapath, exist_ok=True)
-
+    def _download_from_huggingface(self, tempdir):
         try:
-            import gdown
+            from huggingface_hub import hf_hub_download, HfApi
         except ImportError:
             raise ImportError(
-                f"gdown is required for downloading {type(self)}'s datasets."
+                f"huggingface_hub is required for downloading {type(self)}'s datasets."
             )
-
-        url = f"https://drive.google.com/drive/folders/{self.available_datasets[self.dataset_id]}"
-        gdown.download_folder(url, output=str(datapath), quiet=False)
-        print_directory_tree(datapath)
-        # find paths to all h5 files
+        dataset = HfApi().dataset_info("jdvakil/RoboSet_Sim")
         h5_files = []
-
-        # Recursively search for .h5 files in the specified path
-        for root, dirs, files in os.walk(datapath):
-            h5_files.extend(glob.glob(os.path.join(root, "*.h5")))
+        datapath = Path(tempdir) / "data"
+        for sibling in dataset.siblings:
+            if sibling.rfilename.startswith(
+                self.dataset_id
+            ) and sibling.rfilename.endswith(".h5"):
+                path = Path(sibling.rfilename)
+                local_path = hf_hub_download(
+                    "jdvakil/RoboSet_Sim",
+                    subfolder=str(path.parent),
+                    filename=str(path.parts[-1]),
+                    repo_type="dataset",
+                    cache_dir=str(datapath),
+                )
+                h5_files.append(local_path)
 
         return sorted(h5_files)
 
     def _download_and_preproc(self):
 
         with tempfile.TemporaryDirectory() as tempdir:
-            h5_data_files = self._download_from_google_drive(tempdir)
+            h5_data_files = self._download_from_huggingface(tempdir)
             return self._preproc_h5(h5_data_files)
 
     def _preproc_h5(self, h5_data_files):

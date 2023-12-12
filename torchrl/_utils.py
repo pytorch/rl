@@ -620,21 +620,21 @@ class _ProcessNoWarn(mp.Process):
 
 
 def print_directory_tree(path, indent="", display_metadata=True):
-    """
-    Print the directory tree starting from the specified path.
+    """Prints the directory tree starting from the specified path.
 
     Args:
         path (str): The path of the directory to print.
         indent (str): The current indentation level for formatting.
         display_metadata (bool): if ``True``, metadata of the dir will be
             displayed too.
+
     """
     if display_metadata:
 
         def get_directory_size(path="."):
             total_size = 0
 
-            for dirpath, dirnames, filenames in os.walk(path):
+            for dirpath, _, filenames in os.walk(path):
                 for filename in filenames:
                     file_path = os.path.join(dirpath, filename)
                     total_size += os.path.getsize(file_path)
