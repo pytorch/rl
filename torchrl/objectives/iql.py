@@ -20,6 +20,7 @@ from torchrl.objectives.utils import (
     _vmap_func,
     default_value_kwargs,
     distance_loss,
+    RANDOM_MODULE_LIST,
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
@@ -221,6 +222,7 @@ class IQLLoss(LossModule):
         "loss_value",
         "entropy",
     ]
+    _vmap_randomness = None
 
     def __init__(
         self,
@@ -320,6 +322,28 @@ class IQLLoss(LossModule):
     @in_keys.setter
     def in_keys(self, values):
         self._in_keys = values
+
+    @property
+    def vmap_randomness(self):
+        if self._vmap_randomness is None:
+            do_break = False
+            for val in self.__dict__.values():
+                if isinstance(val, torch.nn.Module):
+                    for module in val.modules():
+                        if isinstance(module, RANDOM_MODULE_LIST):
+                            self._vmap_randomness = "different"
+                            do_break = True
+                            break
+                if do_break:
+                    # double break
+                    break
+            else:
+                self._vmap_randomness = "error"
+
+        return self._vmap_randomness
+
+    def set_vmap_randomness(self, value):
+        self._vmap_randomness = value
 
     @staticmethod
     def loss_value_diff(diff, expectile=0.8):
