@@ -317,12 +317,9 @@ class TensorStorage(Storage):
             shape = list(self._storage.shape)
         else:
             # try to load the path and overwrite.
-            try:
-                saved = TensorDict.load_memmap(path)
-            except FileNotFoundError:
-                # otherwise create a new one
-                saved = self._storage.memmap_like(path)
-            saved.update_(self._storage)
+            saved = self._storage.memmap(
+                path, copy_existing=True, num_threads=torch.get_num_threads()
+            )
             is_tensor = False
             dtype = None
             shape = None
