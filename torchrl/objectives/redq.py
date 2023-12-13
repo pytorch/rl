@@ -25,6 +25,7 @@ from torchrl.objectives.utils import (
     _vmap_func,
     default_value_kwargs,
     distance_loss,
+    RANDOM_MODULE_LIST,
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
@@ -234,6 +235,7 @@ class REDQLoss(LossModule):
         "next.state_value",
         "target_value",
     ]
+    _vmap_randomness = None
 
     def __init__(
         self,
@@ -255,7 +257,6 @@ class REDQLoss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
     ):
-
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority_key=priority_key)
@@ -319,9 +320,11 @@ class REDQLoss(LossModule):
             self.gamma = gamma
 
         self._vmap_qvalue_network00 = _vmap_func(
-            self.qvalue_network, randomness="different"
+            self.qvalue_network, randomness=self.vmap_randomness
         )
-        self._vmap_getdist = _vmap_func(self.actor_network, func="get_dist_params")
+        self._vmap_getdist = _vmap_func(
+            self.actor_network, func="get_dist_params", randomess=self.vmap_randomness
+        )
 
     @property
     def target_entropy(self):
@@ -405,6 +408,28 @@ class REDQLoss(LossModule):
     @in_keys.setter
     def in_keys(self, values):
         self._in_keys = values
+
+    @property
+    def vmap_randomness(self):
+        if self._vmap_randomness is None:
+            do_break = False
+            for val in self.__dict__.values():
+                if isinstance(val, torch.nn.Module):
+                    for module in val.modules():
+                        if isinstance(module, RANDOM_MODULE_LIST):
+                            self._vmap_randomness = "different"
+                            do_break = True
+                            break
+                if do_break:
+                    # double break
+                    break
+            else:
+                self._vmap_randomness = "error"
+
+        return self._vmap_randomness
+
+    def set_vmap_randomness(self, value):
+        self._vmap_randomness = value
 
     @property
     @_cache_values
