@@ -317,7 +317,7 @@ class TensorStorage(Storage):
             shape = list(self._storage.shape)
         else:
             # try to load the path and overwrite.
-            saved = self._storage.memmap(
+            self._storage.memmap(
                 path, copy_existing=True, num_threads=torch.get_num_threads()
             )
             is_tensor = False
