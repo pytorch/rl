@@ -1332,7 +1332,7 @@ class GRUModule(ModuleBase):
             tensordict_shaped_shape = tensordict_shaped.shape
             tensordict_shaped = _split_and_pad_sequence(
                 tensordict_shaped.select(*self.in_keys, strict=False), splits
-            ).contiguous()
+            )
             is_init = tensordict_shaped.get("is_init").squeeze(-1)
 
         value, hidden = (
