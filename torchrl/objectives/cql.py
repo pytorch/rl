@@ -550,7 +550,7 @@ class CQLLoss(LossModule):
             a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
 
-        td_q = tensordict.segitlect(*self.qvalue_network.in_keys)
+        td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qvalue_networkN0(
             td_q,
