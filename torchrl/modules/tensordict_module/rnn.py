@@ -647,8 +647,8 @@ class LSTMModule(ModuleBase):
         # if splits is not None:
         #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
         if is_init.any() and hidden0 is not None:
-            torch.where(is_init, 0, hidden0)
-            torch.where(is_init, 0, hidden1)
+            hidden0 = torch.where(is_init, 0, hidden0)
+            hidden1 = torch.where(is_init, 0, hidden1)
         val, hidden0, hidden1 = self._lstm(
             value, batch, steps, device, dtype, hidden0, hidden1
         )
