@@ -12,7 +12,7 @@ from tensordict import TensorDictBase, unravel_key_list
 from tensordict.nn import TensorDictModuleBase as ModuleBase
 
 from tensordict.tensordict import NO_DEFAULT
-from tensordict.utils import prod
+from tensordict.utils import expand_as_right, prod
 
 from torch import nn, Tensor
 from torch.nn.modules.rnn import RNNCellBase
@@ -647,8 +647,9 @@ class LSTMModule(ModuleBase):
         # if splits is not None:
         #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
         if is_init.any() and hidden0 is not None:
-            hidden0 = torch.where(is_init, 0, hidden0)
-            hidden1 = torch.where(is_init, 0, hidden1)
+            is_init_expand = expand_as_right(is_init, hidden0)
+            hidden0 = torch.where(is_init_expand, 0, hidden0)
+            hidden1 = torch.where(is_init_expand, 0, hidden1)
         val, hidden0, hidden1 = self._lstm(
             value, batch, steps, device, dtype, hidden0, hidden1
         )
@@ -1317,7 +1318,8 @@ class GRUModule(ModuleBase):
                 )
         else:
             tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)
-        tensordict_shaped = tensordict_shaped.contiguous()
+        # TODO: replace by contiguous, or ultimately deprecate the default lazy unsqueeze
+        tensordict_shaped = tensordict_shaped.to_tensordict()
 
         is_init = tensordict_shaped.get("is_init").squeeze(-1)
         splits = None
@@ -1346,7 +1348,8 @@ class GRUModule(ModuleBase):
         # if splits is not None:
         #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
         if is_init.any() and hidden is not None:
-            hidden = torch.where(is_init, 0, hidden)
+            is_init_expand = expand_as_right(is_init, hidden)
+            hidden = torch.where(is_init_expand, 0, hidden)
         val, hidden = self._gru(value, batch, steps, device, dtype, hidden)
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden)
