@@ -16,6 +16,7 @@ conda activate ./env
 if [ "${CU_VERSION:-}" == cpu ] ; then
     cudatoolkit="cpuonly"
     version="cpu"
+    torch_cuda="False"
 else
     if [[ ${#CU_VERSION} -eq 4 ]]; then
         CUDA_VERSION="${CU_VERSION:2:1}.${CU_VERSION:3:1}"
@@ -39,7 +40,7 @@ git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 if $torch_cuda ; then
-  pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118
+  pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
 else
   pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
 fi

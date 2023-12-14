@@ -24,8 +24,8 @@ jobs:
         set -euxo pipefail
 
         export PYTHON_VERSION="3.9"
-        export CUDA_VERSION="11.6"
-        export CU_VERSION="cu116"
+        export CUDA_VERSION="12.1"
+        export CU_VERSION="cu121"
 
         # TODO: Port this to pytorch/test-infra/.github/workflows/windows_job.yml
         export PATH="/c/Jenkins/Miniconda3/Scripts:${PATH}"
