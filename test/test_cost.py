@@ -1803,12 +1803,17 @@ class TestTD3(LossModuleTestBase):
         device="cpu",
         in_keys=None,
         out_keys=None,
+        dropout=0.0,
     ):
         # Actor
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        module = nn.Linear(obs_dim, action_dim)
+        module = nn.Sequential(
+            nn.Linear(obs_dim, obs_dim),
+            nn.Dropout(dropout),
+            nn.Linear(obs_dim, action_dim),
+        )
         actor = Actor(
             spec=action_spec, module=module, in_keys=in_keys, out_keys=out_keys
         )
@@ -1984,6 +1989,7 @@ class TestTD3(LossModuleTestBase):
     @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("use_action_spec", [True, False])
+    @pytest.mark.parametrize("dropout", [0.0, 0.1])
     def test_td3(
         self,
         delay_actor,
@@ -1993,9 +1999,10 @@ class TestTD3(LossModuleTestBase):
         noise_clip,
         td_est,
         use_action_spec,
+        dropout,
     ):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(device=device, dropout=dropout)
         value = self._create_mock_value(device=device)
         td = self._create_mock_data_td3(device=device)
         if use_action_spec:
@@ -6056,7 +6063,7 @@ class TestPPO(LossModuleTestBase):
             p.grad = None
         loss_objective.backward()
         named_parameters = loss_fn.named_parameters()
-        for (name, other_p) in named_parameters:
+        for name, other_p in named_parameters:
             p = params.get(tuple(name.split(".")))
             assert other_p.shape == p.shape
             assert other_p.dtype == p.dtype
@@ -11118,7 +11125,6 @@ class TestAdv:
         )
 
         with pytest.warns(DeprecationWarning):
-
             if adv is VTrace:
                 actor_net = TensorDictModule(
                     nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
