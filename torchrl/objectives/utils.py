@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
+import re
 import warnings
 from enum import Enum
 from typing import Iterable, Optional, Union
@@ -500,9 +501,9 @@ def _vmap_func(module, *args, func=None, **kwargs):
         return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
 
     except RuntimeError as err:
-        if "vmap: called random operation while in randomness error mode" in str(
-            err
-        ):  # better to use re.match here but anyway
+        if re.match(
+            r"vmap: called random operation while in randomness error mode", str(err)
+        ):
             raise RuntimeError(
-                "Please use loss_module.set_vmap_randomness to handle random operations during vmap."
+                "Please use <loss_module>.set_vmap_randomness('different') to handle random operations during vmap."
             ) from err
