@@ -1199,15 +1199,19 @@ class DiscreteSACLoss(LossModule):
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # get probs and log probs for actions
+        recurrent_state = tensordict.get("recurrent_state").clone()
         with self.actor_network_params.to_module(self.actor_network):
-            dist = self.actor_network.get_dist(tensordict)
+            dist = self.actor_network.get_dist(tensordict.clone(False))
+        assert (tensordict.get("recurrent_state") == recurrent_state).all()
         prob = dist.probs
-        log_prob = torch.log(torch.where(prob == 0, 1e-8, prob))
+        log_prob = prob.clamp_min(torch.finfo(prob.dtype).resolution)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys)
+
         td_q = self._vmap_qnetworkN0(
-            td_q, self._cached_detached_qvalue_params  # should we clone?
+            td_q, self.qvalue_network_params.detach()  # should we clone?
         )
+        assert (tensordict.get("recurrent_state") == recurrent_state).all()
         min_q = td_q.get(self.tensor_keys.action_value).min(0)[0]
 
         if log_prob.shape != min_q.shape:
@@ -1234,7 +1238,7 @@ class DiscreteSACLoss(LossModule):
     @property
     def _alpha(self):
         if self.min_log_alpha is not None:
-            self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
+            self.log_alpha.data = self.log_alpha.data.clamp(self.min_log_alpha, self.max_log_alpha)
         with torch.no_grad():
             alpha = self.log_alpha.exp()
         return alpha

@@ -647,8 +647,8 @@ class LSTMModule(ModuleBase):
         # if splits is not None:
         #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
         if is_init.any() and hidden0 is not None:
-            hidden0[is_init] = 0
-            hidden1[is_init] = 0
+            torch.where(is_init, 0, hidden0)
+            torch.where(is_init, 0, hidden1)
         val, hidden0, hidden1 = self._lstm(
             value, batch, steps, device, dtype, hidden0, hidden1
         )
@@ -924,31 +924,34 @@ class GRU(GRUBase):
         bs, seq_len, input_size = x.size()
         h_t = list(hx.unbind(0))
 
+        weight_ih = []
+        weight_hh = []
+        bias_ih = []
+        bias_hh = []
+        for layer in range(self.num_layers):
+
+            # Retrieve weights
+            weights = self._all_weights[layer]
+            weight_ih.append(getattr(self, weights[0]))
+            weight_hh.append(getattr(self, weights[1]))
+            if self.bias:
+                bias_ih.append(getattr(self, weights[2]))
+                bias_hh.append(getattr(self, weights[3]))
+            else:
+                bias_ih.append(None)
+                bias_hh.append(None)
+
         outputs = []
 
-        for t in range(seq_len):
-            x_t = x[:, t, :]
-
+        for x_t in x.unbind(1):
             for layer in range(self.num_layers):
-
-                # Retrieve weights
-                weights = self._all_weights[layer]
-                weight_ih = getattr(self, weights[0])
-                weight_hh = getattr(self, weights[1])
-                if self.bias:
-                    bias_ih = getattr(self, weights[2])
-                    bias_hh = getattr(self, weights[3])
-                else:
-                    bias_ih = None
-                    bias_hh = None
-
                 h_t[layer] = self._gru_cell(
                     x_t,
                     h_t[layer],
-                    weight_ih,
-                    bias_ih,
-                    weight_hh,
-                    bias_hh,
+                    weight_ih[layer],
+                    bias_ih[layer],
+                    weight_hh[layer],
+                    bias_hh[layer],
                 )
 
                 # Apply dropout if in training mode and not the last layer
@@ -1314,6 +1317,7 @@ class GRUModule(ModuleBase):
                 )
         else:
             tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)
+        tensordict_shaped = tensordict_shaped.contiguous()
 
         is_init = tensordict_shaped.get("is_init").squeeze(-1)
         splits = None
@@ -1328,7 +1332,7 @@ class GRUModule(ModuleBase):
             tensordict_shaped_shape = tensordict_shaped.shape
             tensordict_shaped = _split_and_pad_sequence(
                 tensordict_shaped.select(*self.in_keys, strict=False), splits
-            )
+            ).contiguous()
             is_init = tensordict_shaped.get("is_init").squeeze(-1)
 
         value, hidden = (
@@ -1342,7 +1346,7 @@ class GRUModule(ModuleBase):
         # if splits is not None:
         #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
         if is_init.any() and hidden is not None:
-            hidden[is_init] = 0
+            hidden = torch.where(is_init, 0, hidden)
         val, hidden = self._gru(value, batch, steps, device, dtype, hidden)
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden)
@@ -1389,7 +1393,7 @@ class GRUModule(ModuleBase):
 
         # we pad the hidden states with zero to make tensordict happy
         hidden = torch.stack(
-            [torch.zeros_like(hidden) for _ in range(steps - 1)] + [hidden],
+            [torch.zeros((), dtype=hidden.dtype, device=hidden.device).expand(hidden.shape) for _ in range(steps - 1)] + [hidden],
             1,
         )
         out = [y, hidden]
