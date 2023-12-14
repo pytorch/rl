@@ -35,13 +35,6 @@ RANDOM_MODULE_LIST = (
     nn.Dropout3d,
     nn.AlphaDropout,
     nn.FeatureAlphaDropout,
-    nn.SyncBatchNorm,
-    nn.GroupNorm,
-    nn.LayerNorm,
-    nn.LocalResponseNorm,
-    nn.InstanceNorm1d,
-    nn.InstanceNorm2d,
-    nn.InstanceNorm3d,
 )
 
 

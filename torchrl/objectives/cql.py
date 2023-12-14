@@ -30,7 +30,6 @@ from torchrl.objectives.utils import (
     _vmap_func,
     default_value_kwargs,
     distance_loss,
-    RANDOM_MODULE_LIST,
     ValueEstimators,
 )
 
@@ -231,7 +230,6 @@ class CQLLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
-    _vmap_randomness = None
 
     def __init__(
         self,
@@ -476,28 +474,6 @@ class CQLLoss(LossModule):
     @out_keys.setter
     def out_keys(self, values):
         self._out_keys = values
-
-    @property
-    def vmap_randomness(self):
-        if self._vmap_randomness is None:
-            do_break = False
-            for val in self.__dict__.values():
-                if isinstance(val, torch.nn.Module):
-                    for module in val.modules():
-                        if isinstance(module, RANDOM_MODULE_LIST):
-                            self._vmap_randomness = "different"
-                            do_break = True
-                            break
-                if do_break:
-                    # double break
-                    break
-            else:
-                self._vmap_randomness = "error"
-
-        return self._vmap_randomness
-
-    def set_vmap_randomness(self, value):
-        self._vmap_randomness = value
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:

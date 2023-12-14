@@ -29,7 +29,6 @@ from torchrl.objectives.utils import (
     _vmap_func,
     default_value_kwargs,
     distance_loss,
-    RANDOM_MODULE_LIST,
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
@@ -258,7 +257,6 @@ class SACLoss(LossModule):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
-    _vmap_randomness = None
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
 
@@ -417,7 +415,6 @@ class SACLoss(LossModule):
                 isinstance(self.tensor_keys.action, tuple)
                 and len(self.tensor_keys.action) > 1
             ):
-
                 action_container_shape = action_spec[self.tensor_keys.action[:-1]].shape
             else:
                 action_container_shape = action_spec.shape
@@ -535,28 +532,6 @@ class SACLoss(LossModule):
     @out_keys.setter
     def out_keys(self, values):
         self._out_keys = values
-
-    @property
-    def vmap_randomness(self):
-        if self._vmap_randomness is None:
-            do_break = False
-            for val in self.__dict__.values():
-                if isinstance(val, torch.nn.Module):
-                    for module in val.modules():
-                        if isinstance(module, RANDOM_MODULE_LIST):
-                            self._vmap_randomness = "different"
-                            do_break = True
-                            break
-                if do_break:
-                    # double break
-                    break
-            else:
-                self._vmap_randomness = "error"
-
-        return self._vmap_randomness
-
-    def set_vmap_randomness(self, value):
-        self._vmap_randomness = value
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -781,7 +756,6 @@ class SACLoss(LossModule):
         return loss_value, {}
 
     def _alpha_loss(self, log_prob: Tensor) -> Tensor:
-
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
             alpha_loss = -self.log_alpha * (log_prob + self.target_entropy)
@@ -972,7 +946,6 @@ class DiscreteSACLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
     delay_actor: bool = False
-    _vmap_randomness = None
     out_keys = [
         "loss_actor",
         "loss_qvalue",
@@ -1113,28 +1086,6 @@ class DiscreteSACLoss(LossModule):
     @in_keys.setter
     def in_keys(self, values):
         self._in_keys = values
-
-    @property
-    def vmap_randomness(self):
-        if self._vmap_randomness is None:
-            do_break = False
-            for val in self.__dict__.values():
-                if isinstance(val, torch.nn.Module):
-                    for module in val.modules():
-                        if isinstance(module, RANDOM_MODULE_LIST):
-                            self._vmap_randomness = "different"
-                            do_break = True
-                            break
-                if do_break:
-                    # double break
-                    break
-            else:
-                self._vmap_randomness = "error"
-
-        return self._vmap_randomness
-
-    def set_vmap_randomness(self, value):
-        self._vmap_randomness = value
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
