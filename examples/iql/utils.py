@@ -137,14 +137,11 @@ def make_offline_replay_buffer(rb_cfg):
         split_trajs=False,
         batch_size=rb_cfg.batch_size,
         sampler=SamplerWithoutReplacement(drop_last=False),
+        prefetch=4,
+        direct_download=True,
     )
 
-    data.append_transform(
-        DoubleToFloat(
-            in_keys=["observation", ("next", "observation")],
-            in_keys_inv=[],
-        )
-    )
+    data.append_transform(DoubleToFloat())
 
     return data
 

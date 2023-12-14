@@ -241,6 +241,7 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         transform=transforms,
         use_truncated_as_done=True,
         direct_download=True,
+        prefetch=4,
     )
     loc = (
         data._storage._storage.get(("_data", "observation"))
