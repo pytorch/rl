@@ -1393,7 +1393,13 @@ class GRUModule(ModuleBase):
 
         # we pad the hidden states with zero to make tensordict happy
         hidden = torch.stack(
-            [torch.zeros((), dtype=hidden.dtype, device=hidden.device).expand(hidden.shape) for _ in range(steps - 1)] + [hidden],
+            [
+                torch.zeros((), dtype=hidden.dtype, device=hidden.device).expand(
+                    hidden.shape
+                )
+                for _ in range(steps - 1)
+            ]
+            + [hidden],
             1,
         )
         out = [y, hidden]

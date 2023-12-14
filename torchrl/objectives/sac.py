@@ -1238,7 +1238,9 @@ class DiscreteSACLoss(LossModule):
     @property
     def _alpha(self):
         if self.min_log_alpha is not None:
-            self.log_alpha.data = self.log_alpha.data.clamp(self.min_log_alpha, self.max_log_alpha)
+            self.log_alpha.data = self.log_alpha.data.clamp(
+                self.min_log_alpha, self.max_log_alpha
+            )
         with torch.no_grad():
             alpha = self.log_alpha.exp()
         return alpha
