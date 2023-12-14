@@ -1836,6 +1836,62 @@ class TestLSTMModule:
             assert (data.get(("next", "recurrent_state_c")) != 0.0).all()
             assert (data.get("recurrent_state_c") != 0.0).any()
 
+    def test_lstm_vmap_complex_model(self):
+        # Tests that all ops in GRU are compatible with VMAP (when build using
+        # the PT backend).
+        # This used to fail when splitting the input based on the is_init mask.
+        # This test is intended not only as a non-regression test but also
+        # to make sure that any change provided to RNNs is compliant with vmap
+        torch.manual_seed(0)
+        input_size = 4
+        hidden_size = 5
+        num_layers = 1
+        output_size = 3
+        out_key = "out"
+
+        embedding_module = TensorDictModule(
+            in_keys=["observation"],
+            out_keys=["embed"],
+            module=torch.nn.Linear(input_size, input_size),
+        )
+
+        lstm_module = LSTMModule(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            in_key="embed",
+            out_key="features",
+            python_based=True,
+        )
+        mlp = TensorDictModule(
+            MLP(
+                in_features=hidden_size,
+                out_features=output_size,
+                num_cells=[],
+            ),
+            in_keys=["features"],
+            out_keys=[out_key],
+        )
+        training_model = TensorDictSequential(
+            embedding_module, lstm_module.set_recurrent_mode(), mlp
+        )
+        is_init = torch.zeros(50, 11, 1, dtype=torch.bool).bernoulli_(0.1)
+        data = TensorDict(
+            {"observation": torch.randn(50, 11, input_size), "is_init": is_init},
+            [50, 11],
+        )
+        training_model(data)
+        params = TensorDict.from_module(training_model)
+        params = params.expand(2)
+
+        def call(data, params):
+            with params.to_module(training_model):
+                return training_model(data)
+
+        assert torch.vmap(call, (None, 0))(data, params).shape == torch.Size(
+            (2, 50, 11)
+        )
+
 
 class TestGRUModule:
     def test_errs(self):
@@ -2105,6 +2161,62 @@ class TestGRUModule:
             data = env.rollout(10, actor, break_when_any_done=break_when_any_done)
             assert (data.get("recurrent_state") != 0.0).any()
             assert (data.get(("next", "recurrent_state")) != 0.0).all()
+
+    def test_gru_vmap_complex_model(self):
+        # Tests that all ops in GRU are compatible with VMAP (when build using
+        # the PT backend).
+        # This used to fail when splitting the input based on the is_init mask.
+        # This test is intended not only as a non-regression test but also
+        # to make sure that any change provided to RNNs is compliant with vmap
+        torch.manual_seed(0)
+        input_size = 4
+        hidden_size = 5
+        num_layers = 1
+        output_size = 3
+        out_key = "out"
+
+        embedding_module = TensorDictModule(
+            in_keys=["observation"],
+            out_keys=["embed"],
+            module=torch.nn.Linear(input_size, input_size),
+        )
+
+        lstm_module = GRUModule(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            in_key="embed",
+            out_key="features",
+            python_based=True,
+        )
+        mlp = TensorDictModule(
+            MLP(
+                in_features=hidden_size,
+                out_features=output_size,
+                num_cells=[],
+            ),
+            in_keys=["features"],
+            out_keys=[out_key],
+        )
+        training_model = TensorDictSequential(
+            embedding_module, lstm_module.set_recurrent_mode(), mlp
+        )
+        is_init = torch.zeros(50, 11, 1, dtype=torch.bool).bernoulli_(0.1)
+        data = TensorDict(
+            {"observation": torch.randn(50, 11, input_size), "is_init": is_init},
+            [50, 11],
+        )
+        training_model(data)
+        params = TensorDict.from_module(training_model)
+        params = params.expand(2)
+
+        def call(data, params):
+            with params.to_module(training_model):
+                return training_model(data)
+
+        assert torch.vmap(call, (None, 0))(data, params).shape == torch.Size(
+            (2, 50, 11)
+        )
 
 
 def test_safe_specs():

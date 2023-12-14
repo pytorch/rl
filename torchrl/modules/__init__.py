@@ -17,6 +17,7 @@ from .distributions import (
     TruncatedNormal,
 )
 from .models import (
+    Conv3dNet,
     ConvNet,
     DdpgCnnActor,
     DdpgCnnQNet,

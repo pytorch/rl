@@ -68,7 +68,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
 
     Args:
         env_name (str): the environment name to build.
-        read_info (bool, optional): whether the the info should be parsed.
+        read_info (bool, optional): whether the info should be parsed.
             Defaults to ``True``.
         device (torch.device, optional): the device on which the input/output
             are expected. Defaults to torch default device.

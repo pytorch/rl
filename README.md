@@ -491,7 +491,7 @@ If you would like to contribute to new features, check our [call for contributio
 ## Examples, tutorials and demos
 
 A series of [examples](examples/) are provided with an illustrative purpose:
-- [DQN and Rainbow](examples/dqn/dqn.py)
+- [DQN](examples/dqn)
 - [DDPG](examples/ddpg/ddpg.py)
 - [IQL](examples/iql/iql.py)
 - [CQL](examples/iql/cql.py)
