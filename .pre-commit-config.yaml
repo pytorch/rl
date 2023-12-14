@@ -16,7 +16,7 @@ repos:
       - id: ufmt
         additional_dependencies:
           - black == 22.3.0
-          - usort == 1.0.7
+          - usort == 1.0.3
           - libcst == 0.4.7
 
   - repo: https://github.com/pycqa/flake8
