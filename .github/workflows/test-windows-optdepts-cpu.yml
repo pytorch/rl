@@ -27,7 +27,7 @@ jobs:
 
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cpu"
-        export torch_cuda="cpu"
+        export torch_cuda="False"
 
         # TODO: Port this to pytorch/test-infra/.github/workflows/windows_job.yml
         export PATH="/c/Jenkins/Miniconda3/Scripts:${PATH}"
