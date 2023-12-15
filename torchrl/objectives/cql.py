@@ -81,9 +81,6 @@ class CQLLoss(LossModule):
         with_lagrange (bool, optional): Whether to use the Lagrange multiplier.
             Default is ``False``.
         lagrange_thresh (float, optional): Lagrange threshold. Default is 0.0.
-        priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
-            Tensordict key where to write the
-            priority (for prioritized replay buffer usage). Defaults to ``"td_error"``.
 
     Examples:
         >>> import torch
@@ -215,14 +212,33 @@ class CQLLoss(LossModule):
                 state action value is expected.  Defaults to ``"state_action_value"``.
             log_prob (NestedKey): The input tensordict key where the log probability is expected.
                 Defaults to ``"_log_prob"``.
+            pred_q1 (NestedKey): The input tensordict key where the predicted Q1 values are expected.
+                Defaults to ``"pred_q1"``.
+            pred_q2 (NestedKey): The input tensordict key where the predicted Q2 values are expected.
+                Defaults to ``"pred_q2"``.
             priority (NestedKey): The input tensordict key where the target priority is written to.
                 Defaults to ``"td_error"``.
+            cql_q1_loss (NestedKey): The input tensordict key where the CQL Q1 loss is expected.
+                Defaults to ``"cql_q1_loss"``.
+            cql_q2_loss (NestedKey): The input tensordict key where the CQL Q2 loss is expected.
+                Defaults to ``"cql_q2_loss"``.
+            reward (NestedKey): The input tensordict key where the reward is expected.
+                Defaults to ``"reward"``.
+            done (NestedKey): The input tensordict key where the done flag is expected.
+                Defaults to ``"done"``.
+            terminated (NestedKey): The input tensordict key where the terminated flag is expected.
+                Defaults to ``"terminated"``.
         """
 
         action: NestedKey = "action"
         value: NestedKey = "state_value"
         state_action_value: NestedKey = "state_action_value"
         log_prob: NestedKey = "_log_prob"
+        pred_q1: NestedKey = "pred_q1"
+        pred_q2: NestedKey = "pred_q2"
+        priority: NestedKey = "td_error"
+        cql_q1_loss: NestedKey = "cql_q1_loss"
+        cql_q2_loss: NestedKey = "cql_q2_loss"
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
@@ -253,11 +269,9 @@ class CQLLoss(LossModule):
         num_random: int = 10,
         with_lagrange: bool = False,
         lagrange_thresh: float = 0.0,
-        priority_key: str = None,
     ) -> None:
         self._out_keys = None
         super().__init__()
-        self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         # Actor
         self.delay_actor = delay_actor
@@ -432,14 +446,6 @@ class CQLLoss(LossModule):
         self._value_estimator.set_keys(**tensor_keys)
 
     @property
-    def device(self) -> torch.device:
-        for p in self.parameters():
-            return p.device
-        raise RuntimeError(
-            "At least one of the networks of CQLLoss must have trainable " "parameters."
-        )
-
-    @property
     def in_keys(self):
         keys = [
             self.tensor_keys.action,
@@ -458,7 +464,9 @@ class CQLLoss(LossModule):
         if self._out_keys is None:
             keys = [
                 "loss_actor",
+                "loss_actor_bc",
                 "loss_qvalue",
+                "loss_cql",
                 "loss_alpha",
                 "loss_alpha_prime",
                 "alpha",
@@ -480,28 +488,36 @@ class CQLLoss(LossModule):
         else:
             tensordict_reshape = tensordict
 
-        device = self.device
-        td_device = tensordict_reshape.to(device)
+        td_device = tensordict_reshape.to(tensordict.device)
 
-        loss_qvalue, loss_alpha_prime, priority = self._loss_qvalue_v(td_device)
-        loss_actor = self._loss_actor(td_device)
-        loss_alpha = self._loss_alpha(td_device)
-        tensordict_reshape.set(self.tensor_keys.priority, priority)
-        if loss_actor.shape != loss_qvalue.shape:
-            raise RuntimeError(
-                f"Losses shape mismatch: {loss_actor.shape} and {loss_qvalue.shape}"
-            )
+        q_loss, metadata = self.q_loss(td_device)
+        cql_loss, cql_metadata = self.cql_loss(td_device)
+        if self.with_lagrange:
+            alpha_prime_loss, alpha_prime_metadata = self.alpha_prime_loss(td_device)
+            metadata.update(alpha_prime_metadata)
+        loss_actor_bc, bc_metadata = self.actor_bc_loss(td_device)
+        loss_actor, actor_metadata = self.actor_loss(td_device)
+        loss_alpha, alpha_metadata = self.alpha_loss(td_device)
+        metadata.update(bc_metadata)
+        metadata.update(cql_metadata)
+        metadata.update(actor_metadata)
+        metadata.update(alpha_metadata)
+        tensordict_reshape.set(
+            self.tensor_keys.priority, metadata.pop("td_error").detach().max(0).values
+        )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
         out = {
             "loss_actor": loss_actor.mean(),
-            "loss_qvalue": loss_qvalue.mean(),
+            "loss_actor_bc": loss_actor_bc.mean(),
+            "loss_qvalue": q_loss.mean(),
+            "loss_cql": cql_loss.mean(),
             "loss_alpha": loss_alpha.mean(),
-            "loss_alpha_prime": loss_alpha_prime,
             "alpha": self._alpha,
             "entropy": -td_device.get(self.tensor_keys.log_prob).mean().detach(),
         }
-
+        if self.with_lagrange:
+            out["loss_alpha_prime"] = alpha_prime_loss.mean()
         return TensorDict(out, [])
 
     @property
@@ -509,12 +525,29 @@ class CQLLoss(LossModule):
     def _cached_detach_qvalue_params(self):
         return self.qvalue_network_params.detach()
 
-    def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
+    def actor_bc_loss(self, tensordict: TensorDictBase) -> Tensor:
         with set_exploration_type(
             ExplorationType.RANDOM
         ), self.actor_network_params.to_module(self.actor_network):
-            dist = self.actor_network.get_dist(tensordict)
-        a_reparm = dist.rsample()
+            dist = self.actor_network.get_dist(
+                tensordict,
+            )
+            a_reparm = dist.rsample()
+        log_prob = dist.log_prob(a_reparm)
+        bc_log_prob = dist.log_prob(tensordict.get(self.tensor_keys.action))
+
+        bc_actor_loss = self._alpha * log_prob - bc_log_prob
+        metadata = {"bc_log_prob": bc_log_prob.mean().detach()}
+        return bc_actor_loss, metadata
+
+    def actor_loss(self, tensordict: TensorDictBase) -> Tensor:
+        with set_exploration_type(
+            ExplorationType.RANDOM
+        ), self.actor_network_params.to_module(self.actor_network):
+            dist = self.actor_network.get_dist(
+                tensordict,
+            )
+            a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys)
@@ -534,7 +567,9 @@ class CQLLoss(LossModule):
 
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
-        return self._alpha * log_prob - min_q_logprob
+        actor_loss = self._alpha * log_prob - min_q_logprob
+
+        return actor_loss, {}
 
     def _get_policy_actions(self, data, actor_params, num_actions=10):
         batch_size = data.batch_size
@@ -580,7 +615,6 @@ class CQLLoss(LossModule):
                 next_state_value = next_tensordict_expand.get(
                     self.tensor_keys.state_action_value
                 ).min(0)[0]
-                # could be wrong to min
                 if (
                     next_state_value.shape[-len(next_sample_log_prob.shape) :]
                     != next_sample_log_prob.shape
@@ -615,7 +649,7 @@ class CQLLoss(LossModule):
             target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
             return target_value
 
-    def _loss_qvalue_v(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def q_loss(self, tensordict: TensorDictBase) -> Tensor:
         # we pass the alpha value to the tensordict. Since it's a scalar, we must erase the batch-size first.
         target_value = self._get_value_v(
             tensordict,
@@ -629,7 +663,36 @@ class CQLLoss(LossModule):
             tensordict_pred_q, self.qvalue_network_params
         ).get(self.tensor_keys.state_action_value)
 
-        # add CQL
+        # write pred values in tensordict for cql loss
+        tensordict.set(self.tensor_keys.pred_q1, q_pred[0])
+        tensordict.set(self.tensor_keys.pred_q2, q_pred[1])
+
+        q_pred = q_pred.squeeze(-1)
+        loss_qval = distance_loss(
+            q_pred,
+            target_value.expand_as(q_pred),
+            loss_function=self.loss_function,
+        )
+        td_error = (q_pred - target_value).pow(2)
+        metadata = {"td_error": td_error.detach()}
+
+        return loss_qval.sum(0).mean(), metadata
+
+    def cql_loss(self, tensordict: TensorDictBase) -> Tensor:
+        pred_q1 = tensordict.get(self.tensor_keys.pred_q1)
+        pred_q2 = tensordict.get(self.tensor_keys.pred_q2)
+
+        if pred_q1 is None:
+            raise KeyError(
+                f"Couldn't find the pred_q1 with key {self.tensor_keys.pred_q1} in the input tensordict. "
+                "This could be caused by calling cql_loss method before q_loss method."
+            )
+        if pred_q2 is None:
+            raise KeyError(
+                f"Couldn't find the pred_q2 with key {self.tensor_keys.pred_q2} in the input tensordict. "
+                "This could be caused by calling cql_loss method before q_loss method."
+            )
+
         random_actions_tensor = (
             torch.FloatTensor(
                 tensordict.shape[0] * self.num_random,
@@ -729,46 +792,49 @@ class CQLLoss(LossModule):
         )
 
         min_qf1_loss = (
-            torch.logsumexp(cat_q1 / self.temperature, dim=1).mean()
+            torch.logsumexp(cat_q1 / self.temperature, dim=1)
             * self.min_q_weight
             * self.temperature
         )
         min_qf2_loss = (
-            torch.logsumexp(cat_q2 / self.temperature, dim=1).mean()
+            torch.logsumexp(cat_q2 / self.temperature, dim=1)
             * self.min_q_weight
             * self.temperature
         )
 
         # Subtract the log likelihood of data
-        min_qf1_loss = min_qf1_loss - q_pred[0].mean() * self.min_q_weight
-        min_qf2_loss = min_qf2_loss - q_pred[1].mean() * self.min_q_weight
-        alpha_prime_loss = 0
-        if self.with_lagrange:
-            alpha_prime = torch.clamp(
-                self.log_alpha_prime.exp(), min=0.0, max=1000000.0
+        cql_q1_loss = min_qf1_loss - pred_q1 * self.min_q_weight
+        cql_q2_loss = min_qf2_loss - pred_q2 * self.min_q_weight
+
+        # write cql losses in tensordict for alpha prime loss
+        tensordict.set(self.tensor_keys.cql_q1_loss, cql_q1_loss)
+        tensordict.set(self.tensor_keys.cql_q2_loss, cql_q2_loss)
+
+        return (cql_q1_loss + cql_q2_loss).mean(), {}
+
+    def alpha_prime_loss(self, tensordict: TensorDictBase) -> Tensor:
+        cql_q1_loss = tensordict.get(self.tensor_keys.cql_q1_loss)
+        cql_q2_loss = tensordict.get(self.tensor_keys.cql_q2_loss)
+
+        if cql_q1_loss is None:
+            raise KeyError(
+                f"Couldn't find the cql_q1_loss with key {self.tensor_keys.cql_q1_loss} in the input tensordict. "
+                "This could be caused by calling alpha_prime_loss method before cql_loss method."
             )
-            min_qf1_loss = alpha_prime * (min_qf1_loss - self.target_action_gap)
-            min_qf2_loss = alpha_prime * (min_qf2_loss - self.target_action_gap)
+        if cql_q2_loss is None:
+            raise KeyError(
+                f"Couldn't find the cql_q2_loss with key {self.tensor_keys.cql_q2_loss} in the input tensordict. "
+                "This could be caused by calling alpha_prime_loss method before cql_loss method."
+            )
 
-            alpha_prime_loss = (-min_qf1_loss - min_qf2_loss) * 0.5
+        alpha_prime = torch.clamp_max(self.log_alpha_prime.exp(), max=1000000.0)
+        min_qf1_loss = alpha_prime * (cql_q1_loss.mean() - self.target_action_gap)
+        min_qf2_loss = alpha_prime * (cql_q2_loss.mean() - self.target_action_gap)
 
-        q_pred = q_pred.squeeze(-1)
-        loss_qval = distance_loss(
-            q_pred,
-            target_value.expand_as(q_pred),
-            loss_function=self.loss_function,
-        )
+        alpha_prime_loss = (-min_qf1_loss - min_qf2_loss) * 0.5
+        return alpha_prime_loss, {}
 
-        qf1_loss = loss_qval[0] + min_qf1_loss
-        qf2_loss = loss_qval[1] + min_qf2_loss
-
-        loss_qval = qf1_loss + qf2_loss
-
-        td_error = abs(q_pred - target_value)
-
-        return loss_qval, alpha_prime_loss, td_error.detach().max(0)[0]
-
-    def _loss_alpha(self, tensordict: TensorDictBase) -> Tensor:
+    def alpha_loss(self, tensordict: TensorDictBase) -> Tensor:
         log_pi = tensordict.get(self.tensor_keys.log_prob)
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
@@ -776,7 +842,7 @@ class CQLLoss(LossModule):
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
-        return alpha_loss
+        return alpha_loss, {}
 
     @property
     def _alpha(self):
