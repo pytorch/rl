@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import json
 import warnings
 from abc import ABC, abstractmethod
@@ -481,6 +483,13 @@ class SliceSampler(Sampler):
             Defaults to ``"episode"`` (commonly used across datasets in TorchRL).
         cache_values (bool, optional): to be used with static datasets.
             Will cache the start and end signal of the trajectory.
+        truncated_key (NestedKey, optional): If not ``None``, this argument
+            indicates where a truncated signal should be written in the output
+            data. This is used to indicate to value estimators where the provided
+            trajectory breaks. Defaults to ``("next", "truncated")``.
+            This feature only works with :class:`~torchrl.data.replay_buffers.TensorDictReplayBuffer`
+            instances (otherwise the truncated key is returned in the info dictionary
+            returned by the :meth:`~torchrl.data.replay_buffers.ReplayBuffer.sample` method).
 
     .. note:: To recover the trajectory splits in the storage,
         :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` will first
@@ -548,9 +557,10 @@ class SliceSampler(Sampler):
         self,
         *,
         num_slices: int,
-        end_key: NestedKey = None,
-        traj_key: NestedKey = None,
+        end_key: NestedKey | None = None,
+        traj_key: NestedKey | None = None,
         cache_values: bool = False,
+        truncated_key: NestedKey | None = ("next", "truncated"),
     ) -> object:
         if end_key is None:
             end_key = ("next", "done")
@@ -559,8 +569,10 @@ class SliceSampler(Sampler):
         self.num_slices = num_slices
         self.end_key = end_key
         self.traj_key = traj_key
+        self.truncated_key = truncated_key
         self.cache_values = cache_values
         self._fetch_traj = True
+        self._uses_data_prefix = False
         self._cache = {}
 
     def _find_start_stop_traj(self, *, trajectory=None, end=None):
@@ -603,6 +615,10 @@ class SliceSampler(Sampler):
                     trajectory = storage.get(("_data", self.traj_key))
                     # cache that value for future use
                     self._used_traj_key = ("_data", self.traj_key)
+                self._uses_data_prefix = (
+                    isinstance(self._used_traj_key, tuple)
+                    and self._used_traj_key[0] == "_data"
+                )
                 return self._cache.setdefault(
                     "stop-and-length", self._find_start_stop_traj(trajectory=trajectory)
                 )
@@ -624,6 +640,10 @@ class SliceSampler(Sampler):
                     done = storage.get(("_data", self.end_key))
                     # cache that value for future use
                     self._used_end_key = ("_data", self.end_key)
+                self._uses_data_prefix = (
+                    isinstance(self._used_end_key, tuple)
+                    and self._used_end_key[0] == "_data"
+                )
                 return self._cache.setdefault(
                     "stop-and-length", self._find_start_stop_traj(end=done.squeeze())
                 )
@@ -637,6 +657,10 @@ class SliceSampler(Sampler):
         if not isinstance(storage, TensorStorage):
             raise RuntimeError(
                 f"{type(self)} can only sample from TensorStorage subclasses, got {type(storage)} instead."
+            )
+        if batch_size % self.num_slices != 0:
+            raise RuntimeError(
+                f"The batch-size must be divisible by the number of slices, got batch_size={batch_size} and num_slices={self.num_slices}."
             )
         seq_length = batch_size // self.num_slices
         # pick up as many trajs as we need
@@ -653,6 +677,15 @@ class SliceSampler(Sampler):
         )
         starts = start_idx[traj_idx] + relative_starts
         index = self._tensor_slices_from_startend(seq_length, starts)
+        if self.truncated_key is not None:
+            if self._uses_data_prefix:
+                truncated_key = ("_data", self.truncated_key)
+            else:
+                truncated_key = self.truncated_key
+            truncated = torch.zeros(index.shape, dtype=torch.bool, device=index.device)
+            truncated.view(self.num_slices, -1)[:, -1] = 1
+
+            return index.to(torch.long), {truncated_key: truncated}
         return index.to(torch.long), {}
 
     @property
@@ -661,7 +694,7 @@ class SliceSampler(Sampler):
 
     @_used_traj_key.setter
     def _used_traj_key(self, value):
-        self.__used_traj_key = value
+        self.__dict__["__used_traj_key"] = value
 
     @property
     def _used_end_key(self):
@@ -669,7 +702,7 @@ class SliceSampler(Sampler):
 
     @_used_end_key.setter
     def _used_end_key(self, value):
-        self.__used_end_key = value
+        self.__dict__["__used_end_key"] = value
 
     def _empty(self):
         pass

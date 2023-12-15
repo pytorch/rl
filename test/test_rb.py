@@ -1596,13 +1596,14 @@ class TestSamplers:
         sampler = SliceSampler(
             num_slices=num_slices, traj_key=episode_key, end_key=done_key
         )
-        index, _ = sampler.sample(storage, batch_size=batch_size)
-        if _data_prefix:
-            samples = storage._storage["_data"][index]
-        else:
-            samples = storage._storage[index]
         trajs_unique_id = set()
         for _ in range(5):
+            index, info = sampler.sample(storage, batch_size=batch_size)
+            if _data_prefix:
+                samples = storage._storage["_data"][index]
+            else:
+                samples = storage._storage[index]
+
             # check that trajs are ok
             samples = samples.view(num_slices, -1)
             assert samples["another_episode"].unique(
@@ -1613,6 +1614,11 @@ class TestSamplers:
                 samples["another_episode"].view(-1).tolist()
             )
         assert len(trajs_unique_id) == 4
+        if _data_prefix:
+            truncated = info[("_data", ("next", "truncated"))]
+        else:
+            truncated = info[("next", "truncated")]
+        assert truncated.view(num_slices, -1)[:, -1].all()
 
     def test_slice_sampler_errors(self):
         device = "cpu"
