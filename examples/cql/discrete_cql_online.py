@@ -25,9 +25,9 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
     log_metrics,
     make_collector,
-    make_cql_optimizer,
+    make_discrete_cql_optimizer,
+    make_discrete_loss,
     make_discretecql_model,
-    make_discreteloss,
     make_environment,
     make_replay_buffer,
 )
@@ -59,7 +59,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model, explore_policy = make_discretecql_model(cfg, train_env, eval_env, device)
 
     # Create loss
-    loss_module, target_net_updater = make_discreteloss(cfg.loss, model)
+    loss_module, target_net_updater = make_discrete_loss(cfg.loss, model)
 
     # Create off-policy collector
     collector = make_collector(cfg, train_env, explore_policy)
@@ -74,7 +74,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create optimizers
-    optimizer = make_cql_optimizer(cfg, loss_module)
+    optimizer = make_discrete_cql_optimizer(cfg, loss_module)
 
     # Main loop
     collected_frames = 0

@@ -1756,6 +1756,7 @@ class TestLSTMModule:
         lstm_module_ss = LSTMModule(
             input_size=3,
             hidden_size=12,
+            num_layers=4,
             batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],

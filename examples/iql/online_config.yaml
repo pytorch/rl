@@ -1,46 +1,61 @@
+# task and env
 env:
   name: Pendulum-v1
-  library: gym
-  async_collection: 1
-  record_video: 0
-  frame_skip: 1
+  task: ""
+  exp_name: iql_${env.name}
+  n_samples_stats: 1000
+  seed: 0
+  train_num_envs: 1
+  eval_num_envs: 1
+  backend: gym
 
-logger:
-  exp_name: "iql_pendulum"
-  backend: wandb
-  mode: online
 
-optim:
-  seed: 42
-  utd_ratio: 1.0
-  lr: 3e-4
-  weight_decay: 0.0
-  eps: 1e-4
-
-network:
-  tanh_loc: False
-  default_policy_scale: 1.0
-  scale_lb: 0.1
-  device: "cuda:0"
-
+# collector
 collector:
-  total_frames: 1000000
+  frames_per_batch: 200
+  total_frames: 20000
+  multi_step: 0
   init_random_frames: 5000
-  device: cuda:0
-  frames_per_batch: 1000 # 5*200
-  env_per_collector: 5
+  env_per_collector: 1
+  device: cpu
   max_frames_per_traj: 200
 
-# IQL hyperparameter
-loss:
+# logger
+logger:
+  backend: wandb
+  log_interval: 5000 # record interval in frames
+  eval_steps: 200
+  mode: online
+  eval_iter: 1000
+
+# replay buffer
+replay_buffer:
+  prb: 0
+  buffer_prefetch: 64
+  size: 1_000_000
+
+# optimization
+optim:
+  utd_ratio: 1
+  device: cuda:0
+  lr: 3e-4
+  weight_decay: 0.0
+  batch_size: 256
+  optim_steps_per_batch: 200
+
+# network
+model:
+  hidden_sizes: [256, 256]
+  activation: relu
+  default_policy_scale: 1.0
+  scale_lb: 0.1
+
+# loss
+loss: 
+  loss_function: l2
+  gamma: 0.99
+  tau: 0.005
+
+# IQL specific hyperparameter
   temperature: 3.0
   expectile: 0.7
-  gamma: 0.99
-  target_update_polyak: 0.995
-  loss_function: smooth_l1
-
-buffer:
-  prefetch: 64
-  prb: 0
-  size: 100000
-  batch_size: 256
