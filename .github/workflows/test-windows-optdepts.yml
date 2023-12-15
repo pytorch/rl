@@ -1,4 +1,4 @@
-name: Unit-tests on Windows CPU
+name: Unit-tests on Windows
 
 on:
   pull_request:
@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  unittests:
+  unittests-cpu:
     uses: pytorch/test-infra/.github/workflows/windows_job.yml@main
     with:
       runner: "windows.4xlarge"
@@ -37,6 +37,43 @@ jobs:
         
         ## setup_env.sh
         ./.github/unittest/windows_optdepts/scripts/setup_env.sh
+
+        ## install.sh
+        ./.github/unittest/windows_optdepts/scripts/install.sh
+
+        ## run_test.sh
+        ./.github/unittest/windows_optdepts/scripts/run_test.sh
+
+        ## post_process.sh
+        ./.github/unittest/windows_optdepts/scripts/post_process.sh
+
+  unittests-gpu:
+    uses: pytorch/test-infra/.github/workflows/windows_job.yml@main
+    with:
+      runner: "windows.g5.4xlarge.nvidia.gpu"
+      repository: pytorch/rl
+      timeout: 240
+      script: |
+        set -euxo pipefail
+
+        export PYTHON_VERSION="3.9"
+        export CUDA_VERSION="11.6"
+        export CU_VERSION="cu116"
+        export torch_cuda="True"
+
+        # TODO: Port this to pytorch/test-infra/.github/workflows/windows_job.yml
+        export PATH="/c/Jenkins/Miniconda3/Scripts:${PATH}"
+
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        
+        ## setup_env.sh
+        ./.github/unittest/windows_optdepts/scripts/setup_env.sh
+
+        ## Install CUDA
+        packaging/windows/internal/cuda_install.bat
+
+        ## Update CUDA Driver
+        packaging/windows/internal/driver_update.bat
 
         ## install.sh
         ./.github/unittest/windows_optdepts/scripts/install.sh

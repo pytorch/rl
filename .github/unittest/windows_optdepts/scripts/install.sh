@@ -58,7 +58,10 @@ fi
 #python -m pip install pip --upgrade
 
 # install tensordict
-pip3 install git+https://github.com/pytorch/tensordict
+git clone https://github.com/pytorch/tensordict
+cd tensordict
+python setup.py develop
+cd ..
 
 # smoke test
 python -c """
