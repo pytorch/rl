@@ -29,7 +29,7 @@ eval "$(${conda_dir}/Scripts/conda.exe 'shell.bash' 'hook')"
 
 # 2. Create test environment at ./env
 printf "* Creating a test environment\n"
-conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION" -f "${this_dir}/environment.yml"
+conda create -f "${this_dir}/environment.yml" --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 
 
 printf "* Activating the environment"
