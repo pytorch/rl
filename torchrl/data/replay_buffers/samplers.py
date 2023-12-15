@@ -575,8 +575,19 @@ class SliceSampler(Sampler):
         self._uses_data_prefix = False
         self._cache = {}
 
-    def _find_start_stop_traj(self, *, trajectory=None, end=None):
+    @staticmethod
+    def _find_start_stop_traj(*, trajectory=None, end=None):
         if trajectory is not None:
+            # slower
+            # _, stop_idx = torch.unique_consecutive(trajectory, return_counts=True)
+            # stop_idx = stop_idx.cumsum(0) - 1
+
+            # even slower
+            # t = trajectory.unsqueeze(0)
+            # w = torch.tensor([1, -1], dtype=torch.int).view(1, 1, 2)
+            # stop_idx = torch.conv1d(t, w).nonzero()
+
+            # faster
             end = trajectory[:-1] != trajectory[1:]
             end = torch.cat([end, torch.ones_like(end[:1])], 0)
         else:
@@ -610,9 +621,9 @@ class SliceSampler(Sampler):
                 # with the keys provided by the user so we fall back on a proxy to
                 # the traj key.
                 try:
-                    trajectory = storage.get(self._used_traj_key)
+                    trajectory = storage._storage.get(self._used_traj_key)
                 except KeyError:
-                    trajectory = storage.get(("_data", self.traj_key))
+                    trajectory = storage._storage.get(("_data", self.traj_key))
                     # cache that value for future use
                     self._used_traj_key = ("_data", self.traj_key)
                 self._uses_data_prefix = (
@@ -635,9 +646,9 @@ class SliceSampler(Sampler):
                 # with the keys provided by the user so we fall back on a proxy to
                 # the traj key.
                 try:
-                    done = storage.get(self._used_end_key)
+                    done = storage._storage.get(self._used_end_key)
                 except KeyError:
-                    done = storage.get(("_data", self.end_key))
+                    done = storage._storage.get(("_data", self.end_key))
                     # cache that value for future use
                     self._used_end_key = ("_data", self.end_key)
                 self._uses_data_prefix = (
