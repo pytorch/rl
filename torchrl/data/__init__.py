@@ -13,6 +13,7 @@ from .replay_buffers import (
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
     RoundRobinWriter,
+    SliceSampler,
     Storage,
     TensorDictMaxValueWriter,
     TensorDictPrioritizedReplayBuffer,

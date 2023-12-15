@@ -28,7 +28,7 @@ try:
 except ImportError:
     warnings.warn(EXTENSION_WARNING)
 
-from .storages import Storage
+from .storages import Storage, TensorStorage
 from .utils import _to_numpy, INT_CLASSES
 
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
@@ -476,7 +476,7 @@ class SliceSampler(Sampler):
         num_slices (int): the number of slices to be sampled. The batch-size
             must be greater or equal to the ``num_slices`` argument.
         end_key (NestedKey, optional): the key indicating the end of a
-            trajectory (or episode). Defaults to ``"done"``.
+            trajectory (or episode). Defaults to ``("next", "done")``.
         traj_key (NestedKey, optional): the key indicating the trajectories.
             Defaults to ``"episode"`` (commonly used across datasets in TorchRL).
         cache_values (bool, optional): to be used with static datasets.
@@ -487,16 +487,75 @@ class SliceSampler(Sampler):
         attempt to find the ``traj_key`` entry in the storage. If it cannot be
         found, the ``end_key`` will be used to reconstruct the episodes.
 
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data.replay_buffers import LazyMemmapStorage, TensorDictReplayBuffer
+        >>> from torchrl.data.replay_buffers.samplers import SliceSampler
+        >>>
+        >>> rb = TensorDictReplayBuffer(
+        ...     storage=LazyMemmapStorage(1_000_000),
+        ...     sampler=SliceSampler(cache_values=True, num_slices=10),
+        ...     batch_size=320,
+        ... )
+        >>> episode = torch.zeros(1000, dtype=torch.int)
+        >>> episode[:300] = 1
+        >>> episode[300:550] = 2
+        >>> episode[550:700] = 3
+        >>> episode[700:] = 4
+        >>> data = TensorDict(
+        ...     {
+        ...         "episode": episode,
+        ...         "obs": torch.randn((3, 4, 5)).expand(1000, 3, 4, 5),
+        ...         "act": torch.randn((20,)).expand(1000, 20),
+        ...         "other": torch.randn((20, 50)).expand(1000, 20, 50),
+        ...     }, [1000]
+        ... )
+        ... rb.extend(data)
+        >>> print("sample:", rb.sample())
+
+    :class:`torchrl.data.replay_buffers.SliceSampler` is default-compatible with
+    most of TorchRL's datasets:
+
+    Examples:
+        >>> import torch
+        >>>
+        >>> from torchrl.data.datasets import RobosetExperienceReplay
+        >>> from torchrl.data import SliceSampler
+        >>>
+        >>> torch.manual_seed(0)
+        >>> num_slices = 10
+        >>> dataid = list(RobosetExperienceReplay.available_datasets)[0]
+        >>> data = RobosetExperienceReplay(dataid, batch_size=320, sampler=SliceSampler(num_slices=num_slices))
+        >>> for batch in data:
+        ...     batch = batch.reshape(num_slices, -1)
+        ...     break
+        >>> print("check that each batch only has one episode:", batch["episode"].unique(dim=1))
+        check that each batch only has one episode: tensor([[19],
+                [14],
+                [ 8],
+                [10],
+                [13],
+                [ 4],
+                [ 2],
+                [ 3],
+                [22],
+                [ 8]])
+
     """
 
     def __init__(
         self,
         *,
         num_slices: int,
-        end_key: NestedKey = ("next", "done"),
-        traj_key: NestedKey = "episode",
+        end_key: NestedKey = None,
+        traj_key: NestedKey = None,
         cache_values: bool = False,
-    ):
+    ) -> object:
+        if end_key is None:
+            end_key = ("next", "done")
+        if traj_key is None:
+            traj_key = "episode"
         self.num_slices = num_slices
         self.end_key = end_key
         self.traj_key = traj_key
@@ -508,10 +567,21 @@ class SliceSampler(Sampler):
         if trajectory is not None:
             end = trajectory[:-1] != trajectory[1:]
             end = torch.cat([end, torch.ones_like(end[:1])], 0)
+        else:
+            end = torch.index_fill(
+                end,
+                index=torch.tensor(-1, device=end.device, dtype=torch.long),
+                dim=0,
+                value=1,
+            )
+        if end.ndim != 1:
+            raise RuntimeError(
+                f"Expected the end-of-trajectory signal to be 1-dimensional. Got a {end.ndim} tensor instead."
+            )
         stop_idx = end.view(-1).nonzero().view(-1)
-        start_idx = torch.cat([torch.zeros_like(stop_idx[:1]), stop_idx[:-1]])
+        start_idx = torch.cat([torch.zeros_like(stop_idx[:1]), stop_idx[:-1] + 1])
         lengths = stop_idx - start_idx
-        return stop_idx, lengths
+        return start_idx, stop_idx, lengths
 
     def _tensor_slices_from_startend(self, seq_length, start):
         return (torch.arange(seq_length).unsqueeze(0) + start.unsqueeze(1)).view(-1)
@@ -555,7 +625,7 @@ class SliceSampler(Sampler):
                     # cache that value for future use
                     self._used_end_key = ("_data", self.end_key)
                 return self._cache.setdefault(
-                    "stop-and-length", self._find_start_stop_traj(end=done)
+                    "stop-and-length", self._find_start_stop_traj(end=done.squeeze())
                 )
             except KeyError:
                 if fallback:
@@ -564,13 +634,24 @@ class SliceSampler(Sampler):
                 raise
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
+        if not isinstance(storage, TensorStorage):
+            raise RuntimeError(
+                f"{type(self)} can only sample from TensorStorage subclasses, got {type(storage)} instead."
+            )
         seq_length = batch_size // self.num_slices
         # pick up as many trajs as we need
-        stop_idx, lengths = self._get_stop_and_length(storage)
-        traj_idx = torch.randint(len(lengths), (self.num_slices,))
-        starts = (
-            torch.rand(self.num_slices) * (stop_idx[traj_idx] - seq_length)
-        ).floor()
+        start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
+        if (lengths < seq_length).any():
+            raise RuntimeError(
+                "Some stored trajectories have a length shorter than the slice that was asked for."
+            )
+        traj_idx = torch.randint(lengths.shape[0], (self.num_slices,))
+        relative_starts = (
+            (torch.rand(self.num_slices) * (lengths[traj_idx] - seq_length))
+            .floor()
+            .to(start_idx.dtype)
+        )
+        starts = start_idx[traj_idx] + relative_starts
         index = self._tensor_slices_from_startend(seq_length, starts)
         return index.to(torch.long), {}
 
