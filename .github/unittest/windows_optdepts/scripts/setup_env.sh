@@ -32,7 +32,13 @@ if [ ! -d "${env_dir}" ]; then
     printf "* Creating a test environment\n"
     conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 fi
+
+
+printf "* Activating the environment"
 conda activate "${env_dir}"
+
+printf "Python version"
+echo $(python --version)
 
 # 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
