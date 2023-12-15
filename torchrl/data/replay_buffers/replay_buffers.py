@@ -439,16 +439,11 @@ class ReplayBuffer:
         if not self._prefetch:
             ret = self._sample(batch_size)
         else:
-            if len(self._prefetch_queue) == 0:
-                ret = self._sample(batch_size)
-            else:
-                with self._futures_lock:
-                    ret = self._prefetch_queue.popleft().result()
-
             with self._futures_lock:
                 while len(self._prefetch_queue) < self._prefetch_cap:
                     fut = self._prefetch_executor.submit(self._sample, batch_size)
                     self._prefetch_queue.append(fut)
+                ret = self._prefetch_queue.popleft().result()
 
         if return_info:
             return ret
