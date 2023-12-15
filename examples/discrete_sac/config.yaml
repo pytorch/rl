@@ -15,7 +15,7 @@ collector:
   init_env_steps: 1000
   frames_per_batch: 500
   reset_at_each_iter: False
-  device: cpu
+  device: cuda:0
   env_per_collector: 1
   num_workers: 1
 
