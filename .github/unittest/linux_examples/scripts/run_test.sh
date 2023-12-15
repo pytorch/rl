@@ -45,9 +45,15 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/decision_trans
   optim.updates_per_episode=3 \
   optim.warmup_steps=10 \
   optim.device=cuda:0 \
-  logger.backend= \
-  env.backend=gymnasium \
-  env.name=HalfCheetah-v4
+  logger.backend=
+python .github/unittest/helpers/coverage_run_parallel.py examples/iql/iql_offline.py \
+  optim.gradient_steps=55 \
+  optim.device=cuda:0 \
+  logger.backend=
+python .github/unittest/helpers/coverage_run_parallel.py examples/cql/cql_offline.py \
+  optim.gradient_steps=55 \
+  optim.device=cuda:0 \
+  logger.backend=
 
 # ==================================================================================== #
 # ================================ Gymnasium ========================================= #
@@ -115,7 +121,6 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/cql/discrete_c
   collector.frames_per_batch=16 \
   collector.env_per_collector=2 \
   collector.device=cuda:0 \
-  optim.optim_steps_per_batch=1 \
   replay_buffer.size=120 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py \
@@ -174,11 +179,20 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
   collector.total_frames=48 \
-  buffer.batch_size=10 \
+  optim.batch_size=10 \
   collector.frames_per_batch=16 \
-  collector.env_per_collector=2 \
+  env.train_num_envs=2 \
+  optim.device=cuda:0 \
   collector.device=cuda:0 \
-  network.device=cuda:0 \
+  logger.mode=offline \
+  logger.backend=
+  python .github/unittest/helpers/coverage_run_parallel.py examples/cql/cql_online.py \
+  collector.total_frames=48 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  env.train_num_envs=2 \
+  collector.device=cuda:0 \
+  optim.device=cuda:0 \
   logger.mode=offline \
   logger.backend=
 
@@ -248,12 +262,21 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
   collector.total_frames=48 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  env.train_num_envs=1 \
+  logger.mode=offline \
+  optim.device=cuda:0 \
+  collector.device=cuda:0 \
+  logger.backend=
+python .github/unittest/helpers/coverage_run_parallel.py examples/cql/cql_online.py \
+  collector.total_frames=48 \
+  optim.batch_size=10 \
   collector.frames_per_batch=16 \
   collector.env_per_collector=1 \
-  collector.device=cuda:0 \
-  network.device=cuda:0 \
-  buffer.batch_size=10 \
   logger.mode=offline \
+  optim.device=cuda:0 \
+  collector.device=cuda:0 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.total_frames=48 \

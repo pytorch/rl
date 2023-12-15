@@ -259,6 +259,7 @@ Here's an example:
     D4RLExperienceReplay
     MinariExperienceReplay
     OpenMLExperienceReplay
+    RobosetExperienceReplay
 
 TensorSpec
 ----------

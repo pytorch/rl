@@ -37,25 +37,6 @@ conda deactivate && conda activate ./env
 # this workflow only tests the libs
 python -c "import gym, d4rl"
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestD4RL --error-for-skips
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestD4RL --error-for-skips --runslow
 coverage combine
 coverage xml -i
-
-## check what happens if we update gym
-#pip install gym -U
-#python -c """
-#from torchrl.data.datasets import D4RLExperienceReplay
-#data = D4RLExperienceReplay('halfcheetah-medium-v2', batch_size=10, from_env=False, direct_download=True)
-#for batch in data:
-#    print(batch)
-#    break
-#
-#data = D4RLExperienceReplay('halfcheetah-medium-v2', batch_size=10, from_env=False, direct_download=False)
-#for batch in data:
-#    print(batch)
-#    break
-#
-#import d4rl
-#import gym
-#gym.make('halfcheetah-medium-v2')
-#"""
