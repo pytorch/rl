@@ -36,6 +36,7 @@ conda deactivate
 conda activate "${env_dir}"
 
 printf "Python version"
+echo $(which python)
 echo $(python --version)
 
 conda env update --file "${this_dir}/environment.yml" --prune
