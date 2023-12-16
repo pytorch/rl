@@ -32,6 +32,7 @@ printf "* Creating a test environment\n"
 conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 
 printf "* Activating the environment"
+conda deactivate
 conda activate "${env_dir}"
 
 printf "Python version"
