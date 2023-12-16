@@ -29,14 +29,15 @@ eval "$(${conda_dir}/Scripts/conda.exe 'shell.bash' 'hook')"
 
 # 2. Create test environment at ./env
 printf "* Creating a test environment\n"
-conda create -f "${this_dir}/environment.yml" --prefix "${env_dir}" -y python="$PYTHON_VERSION"
-
+conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 
 printf "* Activating the environment"
 conda activate "${env_dir}"
 
 printf "Python version"
 echo $(python --version)
+
+conda env update --file "${this_dir}/environment.yml" --prune
 
 # we don't use torchsnapshot
 export CKPT_BACKEND=torch
