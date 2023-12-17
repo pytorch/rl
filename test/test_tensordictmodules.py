@@ -1892,9 +1892,7 @@ class TestLSTMModule:
             with params.to_module(training_model):
                 return training_model(data)
 
-        assert vmap(call, (None, 0))(data, params).shape == torch.Size(
-            (2, 50, 11)
-        )
+        assert vmap(call, (None, 0))(data, params).shape == torch.Size((2, 50, 11))
 
 
 class TestGRUModule:
@@ -2221,9 +2219,7 @@ class TestGRUModule:
             with params.to_module(training_model):
                 return training_model(data)
 
-        assert vmap(call, (None, 0))(data, params).shape == torch.Size(
-            (2, 50, 11)
-        )
+        assert vmap(call, (None, 0))(data, params).shape == torch.Size((2, 50, 11))
 
 
 def test_safe_specs():
