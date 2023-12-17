@@ -25,7 +25,7 @@ cd "${root_dir}"
 #    unset miniconda_exe
 #fi
 #
-#eval "$(${conda_dir}/Scripts/conda.exe 'shell.bash' 'hook')"
+eval "$(${conda_dir}/Scripts/conda.exe 'shell.bash' 'hook')"
 
 # 2. Create test environment at ./env
 printf "* Creating a test environment\n"
