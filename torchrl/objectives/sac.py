@@ -1202,7 +1202,7 @@ class DiscreteSACLoss(LossModule):
         with self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(tensordict.clone(False))
         prob = dist.probs
-        log_prob = prob.clamp_min(torch.finfo(prob.dtype).resolution)
+        log_prob = dist.logits
 
         td_q = tensordict.select(*self.qvalue_network.in_keys)
 
