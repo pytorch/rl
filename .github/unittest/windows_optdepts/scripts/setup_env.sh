@@ -14,25 +14,25 @@ env_dir="${root_dir}/env"
 
 cd "${root_dir}"
 
-# 1. Install conda at ./conda
-if [ ! -d "${conda_dir}" ]; then
-    printf "* Installing conda\n"
-    export tmp_conda="$(echo $conda_dir | tr '/' '\\')"
-    export miniconda_exe="$(echo $root_dir | tr '/' '\\')\\miniconda.exe"
-    curl --output miniconda.exe https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe -O
-    "$this_dir/install_conda.bat"
-    unset tmp_conda
-    unset miniconda_exe
-fi
-
-eval "$(${conda_dir}/Scripts/conda.exe 'shell.bash' 'hook')"
+## 1. Install conda at ./conda
+#if [ ! -d "${conda_dir}" ]; then
+#    printf "* Installing conda\n"
+#    export tmp_conda="$(echo $conda_dir | tr '/' '\\')"
+#    export miniconda_exe="$(echo $root_dir | tr '/' '\\')\\miniconda.exe"
+#    curl --output miniconda.exe https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe -O
+#    "$this_dir/install_conda.bat"
+#    unset tmp_conda
+#    unset miniconda_exe
+#fi
+#
+#eval "$(${conda_dir}/Scripts/conda.exe 'shell.bash' 'hook')"
 
 # 2. Create test environment at ./env
 printf "* Creating a test environment\n"
 conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 
 printf "* Activating the environment"
-conda deactivate
+#conda deactivate
 conda activate "${env_dir}"
 
 printf "Python version"
