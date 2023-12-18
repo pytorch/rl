@@ -170,7 +170,6 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         prefetch: int | None = None,
         transform: "torchrl.envs.Transform" | None = None,  # noqa-F821
         split_trajs: bool = False,
-        **env_kwargs,
     ):
         self.dataset_id = dataset_id
         if root is None:
