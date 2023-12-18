@@ -98,21 +98,157 @@ class OpenXExperienceReplay(ReplayBuffer):
         Text data ...
     
     Args:
-        TODO
+        dataset_id (str): The dataset to be downloaded. 
+            Must be part of OpenXExperienceReplay.available_datasets
+        batch_size (int): Batch-size used during sampling. 
+            Can be overridden by `data.sample(batch_size)` if necessary.
+            See `num_slices` and `slice_len` keyword arguments for a refined
+            sampling strategy.
+            If the ``batch_size`` is ``None`` (default), iterating over the
+            dataset will deliver trajectories one at a time __whereas__ calling
+            :meth:`~.sample` will __still__ require a batch-size to be provided. 
 
     Keyword Args:
-        TODO
+        shuffle (bool, optional): if ``True``, trajectories are delivered in a
+            random order. If ``False``, the dataset is iterated over 
+            in the pre-defined order.
+        num_slice (int, optional): the number of slices in a batch. This 
+            corresponds to the number of trajectories present in a batch.
+            Once collected, the batch is presented as a concatenation of
+            sub-trajectories that can be recovered through `batch.reshape(num_slices, -1)`.
+            The `batch_size` must be divisible by `num_slices` if provided.
+            This argument is exclusive with ``slice_len``.
+            If the ``num_slices`` argument equates the ``batch_size``, each sample
+            will belong to a different trajectory.
+            If neither ``slice_len`` nor ``num_slice`` are provided: 
+            whenever a trajectory has a length shorter than the
+            batch-size, a contiguous slice of it of length `batch_size` will be 
+            sampled. If the trajectory length is insufficient, an exception will
+            be raised unless `pad` is not `None`.
+        slice_len (int, optional): the length of slices in a batch. This 
+            corresponds to the length of trajectories present in a batch.
+            Once collected, the batch is presented as a concatenation of
+            sub-trajectories that can be recovered through `batch.reshape(-1, slice_len)`.
+            The `batch_size` must be divisible by `slice_len` if provided.
+            This argument is exclusive with ``num_slice``.
+            If the ``slice_len`` argument equates ``1``, each sample
+            will belong to a different trajectory.
+            If neither ``slice_len`` nor ``num_slice`` are provided: 
+            whenever a trajectory has a length shorter than the
+            batch-size, a contiguous slice of it of length `batch_size` will be 
+            sampled. If the trajectory length is insufficient, an exception will
+            be raised unless `pad` is not `None`.
+
+            .. note:: 
+              The ``slice_len`` (but not ``num_slices``) can be used when 
+              iterating over a dataset without passing a batch-size in the,
+              constructor. In these cases, a random sub-sequence of the
+              trajectory will be chosen.
+
+        pad (bool, float or None): if ``True``, trajectories of insufficient length
+            given the `slice_len` or `num_slices` arguments will be padded with
+            0s. If another value is provided, it will be used for padding. If
+            ``False`` or ``None`` (default) any encounter with a trajectory of 
+            insufficient length will raise an exception. 
+        root (Path or str, optional): The Minari dataset root directory.
+            The actual dataset memory-mapped files will be saved under
+            `<root>/<dataset_id>`. If none is provided, it defaults to
+            ``~/.cache/torchrl/minari`.
+        download (bool or str, optional): Whether the dataset should be downloaded if
+            not found. Defaults to ``True``. Download can also be passed as "force",
+            in which case the downloaded data will be overwritten.
+        sampler (Sampler, optional): the sampler to be used. If none is provided
+            a default RandomSampler() will be used.
+        writer (Writer, optional): the writer to be used. If none is provided
+            a default RoundRobinWriter() will be used.
+        collate_fn (callable, optional): merges a list of samples to form a
+            mini-batch of Tensor(s)/outputs.  Used when using batched
+            loading from a map-style dataset.
+        pin_memory (bool): whether pin_memory() should be called on the rb
+            samples.
+        prefetch (int, optional): number of next batches to be prefetched
+            using multithreading.
+        transform (Transform, optional): Transform to be executed when sample() is called.
+            To chain transforms use the :obj:`Compose` class.
+        split_trajs (bool, optional): if ``True``, the trajectories will be split
+            along the first dimension and padded to have a matching shape.
+            To split the trajectories, the ``"done"`` signal will be used, which
+            is recovered via ``done = truncated | terminated``. In other words,
+            it is assumed that any ``truncated`` or ``terminated`` signal is
+            equivalent to the end of a trajectory. For some datasets from
+            ``D4RL``, this may not be true. It is up to the user to make
+            accurate choices regarding this usage of ``split_trajs``.
+            Defaults to ``False``.
 
     Examples:
-        TODO
+        >>> from torchrl.data.datasets import OpenXExperienceReplay
+        >>> # Download the data, and sample 128 elements in each batch out of two trajectories
+        >>> num_slices = 2
+        >>> dataset = OpenXExperienceReplay("cmu_stretch", batch_size=128, 
+        ...     num_slices=num_slices, download=True, streaming=False, root=root)
+        >>> for batch in dataset:
+        ...     print(data.reshape(num_slices, -1))
+        ...     break
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([2, 64, 8]), device=cpu, dtype=torch.float64, is_shared=False),
+                discount: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                episode: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.int32, is_shared=False),
+                is_first: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
+                is_init: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
+                is_last: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
+                is_terminal: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
+                language_embedding: Tensor(shape=torch.Size([2, 64, 512]), device=cpu, dtype=torch.float64, is_shared=False),
+                language_instruction: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: TensorDict(
+                            fields={
+                                image: Tensor(shape=torch.Size([2, 64, 3, 2, 64, 2, 64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                                state: Tensor(shape=torch.Size([2, 64, 4]), device=cpu, dtype=torch.float64, is_shared=False)},
+                            batch_size=torch.Size([2, 64]),
+                            device=cpu,
+                            is_shared=False),
+                        reward: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([2, 64]),
+                    device=cpu,
+                    is_shared=False),
+                observation: TensorDict(
+                    fields={
+                        image: Tensor(shape=torch.Size([2, 64, 3, 2, 64, 2, 64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        state: Tensor(shape=torch.Size([2, 64, 4]), device=cpu, dtype=torch.float64, is_shared=False)},
+                    batch_size=torch.Size([2, 64]),
+                    device=cpu,
+                    is_shared=False),
+                reward: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([2, 64]),
+            device=cpu,
+            is_shared=False)
+        >>> # Read data from a stream. Deliver entire trajectories when iterating
+        >>> dataset = OpenXExperienceReplay("cmu_stretch", 
+        ...     num_slices=num_slices, download=True, streaming=False, root=root)
+        >>> for data in dataset: # data does not have a consistent shape
+        ...     break
+        >>> # Define batch-size dynamically
+        >>> data = dataset.sample(128)  # delivers 2 sub-trajectories of length 64
 
     """
 
     def __init__(
         self,
         dataset_id,
-        batch_size: int | None,
+        batch_size: int | None = None,
         *,
+        shuffle: bool = True,
+        num_slices: int | None = None,
+        slice_len: int | None = None,
+        pad: float | bool | None = None,
         streaming: bool = True,
         root: str | Path | None = None,
         download: bool = False,
@@ -128,6 +264,12 @@ class OpenXExperienceReplay(ReplayBuffer):
         self.streaming = streaming
         self.dataset_id = dataset_id
         self.split_trajs = split_trajs
+        self.shuffle = shuffle
+        self.num_slices = num_slices
+        self.slice_len = slice_len
+        self.pad = pad
+        if (self.num_slices is not None) and (self.slice_len is not None):
+            raise ValueError("num_slices or slice_len can be not None, but not both.")
         if split_trajs:
             raise NotImplementedError
         if not streaming:
@@ -147,7 +289,13 @@ class OpenXExperienceReplay(ReplayBuffer):
                 raise ValueError(
                     "download and streaming cannot be set to ``True`` concomitantly."
                 )
-            storage = _StreamingStorage(dataset_id=dataset_id)
+            storage = _StreamingStorage(
+                dataset_id=dataset_id,
+                shuffle=self.shuffle,
+                num_slices=self.num_slices,
+                slice_len=self.slice_len,
+                pad=self.pad,
+            )
             if sampler is None:
                 sampler = _StreamingSampler()
         if writer is None:
@@ -164,6 +312,16 @@ class OpenXExperienceReplay(ReplayBuffer):
             batch_size=batch_size,
             transform=transform,
         )
+
+    def __iter__(self):
+        if self._batch_size is None:
+            # we can still iterate over the dataset
+            if isinstance(self._storage, _StreamingStorage):
+                yield from self._storage
+            else:
+                raise NotImplementedError("TODO: A slice sampler shoudl be used here")
+        else:
+            yield from super().__iter__()
 
     @property
     def data_path(self):
@@ -232,6 +390,8 @@ class OpenXExperienceReplay(ReplayBuffer):
 
 
 class _StreamingStorage(Storage):
+    SLICE_MISMATCH = "The batch_size {} must be divisible by num_slices {} or slice_len {} if provided."
+
     def __init__(
         self,
         dataset_id: str,
@@ -240,6 +400,9 @@ class _StreamingStorage(Storage):
         base_path="data.pickle",
         shuffle: bool = True,
         truncate: bool = True,
+        num_slices=None,
+        slice_len=None,
+        pad=None,
     ):
         if not _has_datasets:
             raise ImportError(
@@ -250,9 +413,27 @@ class _StreamingStorage(Storage):
         dataset = datasets.load_dataset(repo, dataset_id, streaming=True, split=split)
         if shuffle:
             dataset = dataset.shuffle()
-        self.dataset = iter(dataset)
+        self.dataset = dataset
+        self.dataset_iter = iter(dataset)
         self.base_path = base_path
         self.truncate = truncate
+        self.num_slices = num_slices
+        self.slice_len = slice_len
+        self.pad = pad
+
+    def __iter__(self):
+        episode = 0
+        for data in self.dataset:
+            if self.base_path:
+                data = data[self.base_path]
+            data = torch.stack(
+                [_make_tensordict_image_conv(step) for step in data["steps"]]
+            ).contiguous()
+            _format_data(data, episode)
+            if self.slice_len is not None:
+                yield _slice_data(data, slice_len=self.slice_len, pad_value=self.pad)
+            else:
+                yield data
 
     def get(self, index: int) -> Any:
         if not isinstance(index, range):
@@ -261,14 +442,40 @@ class _StreamingStorage(Storage):
         total = 0
         data_list = []
         episode = 0
-        while total < index.stop:
-            data = next(self.dataset)
+        batch_size = index.stop
+        if self.num_slices is not None:
+            if batch_size % self.num_slices != 0:
+                raise ValueError(
+                    self.SLICE_MISMATCH.format(
+                        batch_size, self.num_slices, self.slice_len
+                    )
+                )
+            num_slices = self.num_slices
+            slice_len = batch_size // num_slices
+        else:
+            if batch_size % self.slice_len != 0:
+                raise ValueError(
+                    self.SLICE_MISMATCH.format(
+                        batch_size, self.num_slices, self.slice_len
+                    )
+                )
+            slice_len = self.slice_len
+            # num_slices = batch_size // slice_len
+
+        while total < batch_size:
+            try:
+                data = next(self.dataset_iter)
+            except StopIteration:
+                self.dataset_iter = iter(self.dataset)
+                data = next(self.dataset_iter)
+
             if self.base_path:
                 data = data[self.base_path]
             data = torch.stack(
                 [_make_tensordict_image_conv(step) for step in data["steps"]]
             ).contiguous()
             _format_data(data, episode)
+            data = _slice_data(data, slice_len=slice_len, pad_value=self.pad)
             data_list.append(data)
             total += data.numel()
             episode += 1
@@ -282,6 +489,40 @@ class _StreamingStorage(Storage):
             f"{type(self)} does not have a length. Use a downloaded dataset to "
             f"access this property."
         )
+
+
+def _slice_data(data: TensorDict, slice_len, pad_value):
+    if data.shape[-1] < slice_len:
+        if pad_value is None:
+            raise RuntimeError(
+                f"The trajectory length ({data.shape[-1]}) is shorter than the slice length ({slice_len}). "
+                f"Decrease the slice length or provide a padding value."
+            )
+        if pad_value is True:
+            pad_value = 0
+        return pad(data, [0, slice_len - data.shape[-1]], value=pad_value)
+
+    if data.ndim == 1:
+        random_range = (
+            ((data.shape[-1] - slice_len) * torch.rand(())).floor().int().item()
+        )
+        random_range = slice(random_range, random_range + slice_len)
+    else:
+        raise NotImplementedError(data)
+    data = data[..., random_range]
+    truncated = data.get(("next", "truncated"))
+    truncated = torch.index_fill(
+        truncated,
+        dim=data.ndim,
+        value=True,
+        index=torch.tensor(-1, device=truncated.device),
+    )
+    done = data.get(("next", "done"))
+    data.set(
+        ("next", "truncated"), truncated
+    )
+    data.set(("next", "done"), truncated | done)
+    return data
 
 
 class _StreamingSampler(Sampler):
