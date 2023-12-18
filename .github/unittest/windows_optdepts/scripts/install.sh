@@ -9,8 +9,8 @@ set -ex
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-eval "$(${conda_dir}/Scripts/conda.exe 'shell.bash' 'hook')"
-conda activate rlenv
+eval "$(./conda/Scripts/conda.exe 'shell.bash' 'hook')"
+conda activate ./env
 
 # TODO, refactor the below logic to make it easy to understand how to get correct cuda_version.
 if [ "${CU_VERSION:-}" == cpu ] ; then
