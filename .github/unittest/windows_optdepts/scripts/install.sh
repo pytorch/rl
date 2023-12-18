@@ -37,9 +37,9 @@ git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 if $torch_cuda ; then
-  pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118
+  python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118
 else
-  pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
+  python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
 fi
 
 torch_cuda=$(python -c "import torch; print(torch.cuda.is_available())")

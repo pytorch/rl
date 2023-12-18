@@ -40,7 +40,9 @@ echo $(which python)
 echo $(python --version)
 echo $(conda info -e)
 
-conda env update --file "${this_dir}/environment.yml" --prune
+#conda env update --file "${this_dir}/environment.yml" --prune
+
+python3 -m pip install hypothesis future cloudpickle pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures expecttest pyyaml scipy coverage
 
 # we don't use torchsnapshot
 export CKPT_BACKEND=torch
