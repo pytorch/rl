@@ -91,6 +91,12 @@ class OpenXExperienceReplay(ReplayBuffer):
     spanning 22 robot embodiments, collected through a collaboration between 
     21 institutions, demonstrating 527 skills (160266 tasks).
     
+    .. note::
+        Images ...
+
+    .. note::
+        Text data ...
+    
     Args:
         TODO
 
