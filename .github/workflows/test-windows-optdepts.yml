@@ -21,7 +21,7 @@ jobs:
     with:
       runner: "windows.4xlarge"
       repository: pytorch/rl
-      timeout: 120
+      timeout: 40
       script: |
         set -euxo pipefail
 
@@ -52,7 +52,7 @@ jobs:
     with:
       runner: "windows.g5.4xlarge.nvidia.gpu"
       repository: pytorch/rl
-      timeout: 240
+      timeout: 40
       script: |
         set -euxo pipefail
 
