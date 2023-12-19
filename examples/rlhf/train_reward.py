@@ -65,7 +65,7 @@ def main(cfg):
     dtype = cfg.sys.dtype
     compile_ = cfg.sys.compile
 
-    ctx = setup(device=device, dtype=dtype)
+    ctx = setup(cfg.sys)
 
     train_loader = get_dataloader(
         data_cfg.batch_size,
