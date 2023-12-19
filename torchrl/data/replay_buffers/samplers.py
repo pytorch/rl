@@ -18,7 +18,7 @@ import torch
 from tensordict import MemoryMappedTensor
 from tensordict.utils import NestedKey
 
-from ..._extension import EXTENSION_WARNING
+from torchrl._extension import EXTENSION_WARNING
 
 try:
     from torchrl._torchrl import (
@@ -30,8 +30,8 @@ try:
 except ImportError:
     warnings.warn(EXTENSION_WARNING)
 
-from .storages import Storage, TensorStorage
-from .utils import _to_numpy, INT_CLASSES
+from torchrl.data.replay_buffers.storages import Storage, TensorStorage
+from torchrl.data.replay_buffers.utils import _to_numpy, INT_CLASSES
 
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
@@ -518,7 +518,7 @@ class SliceSampler(Sampler):
         >>> from tensordict import TensorDict
         >>> from torchrl.data.replay_buffers import LazyMemmapStorage, TensorDictReplayBuffer
         >>> from torchrl.data.replay_buffers.samplers import SliceSampler
-        >>>
+        >>> torch.manual_seed(0)
         >>> rb = TensorDictReplayBuffer(
         ...     storage=LazyMemmapStorage(1_000_000),
         ...     sampler=SliceSampler(cache_values=True, num_slices=10),
@@ -537,8 +537,11 @@ class SliceSampler(Sampler):
         ...         "other": torch.randn((20, 50)).expand(1000, 20, 50),
         ...     }, [1000]
         ... )
-        ... rb.extend(data)
-        >>> print("sample:", rb.sample())
+        >>> rb.extend(data)
+        >>> sample = rb.sample()
+        >>> print("sample:", sample)
+        >>> print("episodes", sample.get("episode").unique())
+        episodes tensor([1, 2, 3, 4], dtype=torch.int32)
 
     :class:`torchrl.data.replay_buffers.SliceSampler` is default-compatible with
     most of TorchRL's datasets:
@@ -671,9 +674,8 @@ class SliceSampler(Sampler):
                     isinstance(self._used_traj_key, tuple)
                     and self._used_traj_key[0] == "_data"
                 )
-                return self._cache.setdefault(
-                    "stop-and-length", self._find_start_stop_traj(trajectory=trajectory)
-                )
+                vals = self._find_start_stop_traj(trajectory=trajectory[: len(storage)])
+                return self._cache.setdefault("stop-and-length", vals)
             except KeyError:
                 if fallback:
                     self._fetch_traj = False
@@ -696,9 +698,8 @@ class SliceSampler(Sampler):
                     isinstance(self._used_end_key, tuple)
                     and self._used_end_key[0] == "_data"
                 )
-                return self._cache.setdefault(
-                    "stop-and-length", self._find_start_stop_traj(end=done.squeeze())
-                )
+                vals = self._find_start_stop_traj(end=done.squeeze())[: len(storage)]
+                return self._cache.setdefault("stop-and-length", vals)
             except KeyError:
                 if fallback:
                     self._fetch_traj = True
@@ -763,10 +764,7 @@ class SliceSampler(Sampler):
         starts = start_idx[traj_idx] + relative_starts
         index = self._tensor_slices_from_startend(seq_length, starts)
         if self.truncated_key is not None:
-            if self._uses_data_prefix:
-                truncated_key = ("_data", self.truncated_key)
-            else:
-                truncated_key = self.truncated_key
+            truncated_key = self.truncated_key
 
             truncated = torch.zeros(index.shape, dtype=torch.bool, device=index.device)
             if isinstance(seq_length, int):
@@ -857,8 +855,9 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         >>> from torchrl.data.replay_buffers.samplers import SliceSamplerWithoutReplacement
         >>>
         >>> rb = TensorDictReplayBuffer(
-        ...     storage=LazyMemmapStorage(1_000_000),
-        ...     sampler=SliceSamplerWithoutReplacement(cache_values=True, num_slices=10),
+        ...     storage=LazyMemmapStorage(1000),
+        ...     # asking for 10 slices for a total of 320 elements, ie, 10 trajectories of 32 transitions each
+        ...     sampler=SliceSamplerWithoutReplacement(num_slices=10),
         ...     batch_size=320,
         ... )
         >>> episode = torch.zeros(1000, dtype=torch.int)
@@ -874,8 +873,12 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         ...         "other": torch.randn((20, 50)).expand(1000, 20, 50),
         ...     }, [1000]
         ... )
-        ... rb.extend(data)
-        >>> print("sample:", rb.sample())
+        >>> rb.extend(data)
+        >>> sample = rb.sample()
+        >>> # since we want trajectories of 32 transitions but there are only 4 episodes to
+        >>> # sample from, we only get 4 x 32 = 128 transitions in this batch
+        >>> print("sample:", sample)
+        >>> print("trajectories in sample", sample.get("episode").unique())
 
     :class:`torchrl.data.replay_buffers.SliceSamplerWithoutReplacement` is default-compatible with
     most of TorchRL's datasets, and allows users to consume datasets in a dataloader-like fashion:
@@ -933,6 +936,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         self._storage_len_buffer = len(start_idx)
+        print("self._storage_len_buffer", self._storage_len_buffer)
         # first get indices of the trajectories we want to retrieve
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
         indices, _ = SamplerWithoutReplacement.sample(self, storage, num_slices)

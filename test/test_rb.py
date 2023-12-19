@@ -1646,10 +1646,7 @@ class TestSamplers:
             assert too_short
 
         assert len(trajs_unique_id) == 4
-        if _data_prefix:
-            truncated = info[("_data", ("next", "truncated"))]
-        else:
-            truncated = info[("next", "truncated")]
+        truncated = info[("next", "truncated")]
         assert truncated.view(num_slices, -1)[:, -1].all()
 
     def test_slice_sampler_errors(self):
@@ -1773,10 +1770,7 @@ class TestSamplers:
             trajs_unique_id = trajs_unique_id.union(
                 cur_episodes,
             )
-        if _data_prefix:
-            truncated = info[("_data", ("next", "truncated"))]
-        else:
-            truncated = info[("next", "truncated")]
+        truncated = info[("next", "truncated")]
         assert truncated.view(num_slices, -1)[:, -1].all()
 
 
