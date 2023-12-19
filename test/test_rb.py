@@ -1547,7 +1547,16 @@ class TestMultiProc:
 
 
 class TestSamplers:
-    @pytest.mark.parametrize("batch_size,num_slices", [[100, 20], [120, 30]])
+    @pytest.mark.parametrize(
+        "batch_size,num_slices,slice_len",
+        [
+            [100, 20, None],
+            [120, 30, None],
+            [100, None, 5],
+            [120, None, 4],
+            [101, None, 101],
+        ],
+    )
     @pytest.mark.parametrize("episode_key", ["episode", ("some", "episode")])
     @pytest.mark.parametrize("done_key", ["done", ("some", "done")])
     @pytest.mark.parametrize("match_episode", [True, False])
@@ -1557,6 +1566,7 @@ class TestSamplers:
         self,
         batch_size,
         num_slices,
+        slice_len,
         episode_key,
         done_key,
         match_episode,
@@ -1594,26 +1604,47 @@ class TestSamplers:
         if _data_prefix:
             data = TensorDict({"_data": data}, [100])
         storage.set(range(100), data)
+        if slice_len is not None and slice_len > 15:
+            # we may have to sample trajs shorter than slice_len
+            strict_length = False
+        else:
+            strict_length = True
+
         sampler = SliceSampler(
-            num_slices=num_slices, traj_key=episode_key, end_key=done_key
+            num_slices=num_slices,
+            traj_key=episode_key,
+            end_key=done_key,
+            slice_len=slice_len,
+            strict_length=strict_length,
         )
+        if slice_len is not None:
+            num_slices = batch_size // slice_len
         trajs_unique_id = set()
+        too_short = False
         for _ in range(5):
             index, info = sampler.sample(storage, batch_size=batch_size)
             if _data_prefix:
                 samples = storage._storage["_data"][index]
             else:
                 samples = storage._storage[index]
-
-            # check that trajs are ok
-            samples = samples.view(num_slices, -1)
-            assert samples["another_episode"].unique(
-                dim=1
-            ).squeeze().shape == torch.Size([num_slices])
-            assert (samples["steps"][..., 1:] - 1 == samples["steps"][..., :-1]).all()
+            if strict_length:
+                # check that trajs are ok
+                samples = samples.view(num_slices, -1)
+                assert samples["another_episode"].unique(
+                    dim=1
+                ).squeeze().shape == torch.Size([num_slices])
+                assert (
+                    samples["steps"][..., 1:] - 1 == samples["steps"][..., :-1]
+                ).all()
+            too_short = too_short or index.numel() < batch_size
             trajs_unique_id = trajs_unique_id.union(
                 samples["another_episode"].view(-1).tolist()
             )
+        if strict_length:
+            assert not too_short
+        else:
+            assert too_short
+
         assert len(trajs_unique_id) == 4
         if _data_prefix:
             truncated = info[("_data", ("next", "truncated"))]
@@ -1724,7 +1755,6 @@ class TestSamplers:
         )
         trajs_unique_id = set()
         for i in range(5):
-            print("iter i=", i)
             index, info = sampler.sample(storage, batch_size=batch_size)
             if _data_prefix:
                 samples = storage._storage["_data"][index]
