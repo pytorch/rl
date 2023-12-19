@@ -1026,23 +1026,28 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _shutdown_workers(self) -> None:
-        if self.is_closed:
-            raise RuntimeError(
-                "calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
-            )
-        for i, channel in enumerate(self.parent_channels):
-            if self._verbose:
-                print(f"closing {i}")
-            channel.send(("close", None))
-            self._events[i].wait()
-            self._events[i].clear()
+        try:
+            if self.is_closed:
+                raise RuntimeError(
+                    "calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
+                )
+            for i, channel in enumerate(self.parent_channels):
+                if self._verbose:
+                    print(f"closing {i}")
+                channel.send(("close", None))
+                self._events[i].wait()
+                self._events[i].clear()
 
-        del self.shared_tensordicts, self.shared_tensordict_parent
+            del self.shared_tensordicts, self.shared_tensordict_parent
 
-        for channel in self.parent_channels:
-            channel.close()
-        for proc in self._workers:
-            proc.join()
+            for channel in self.parent_channels:
+                channel.close()
+            for proc in self._workers:
+                proc.join(timeout=1.0)
+        finally:
+            for proc in self._workers:
+                if proc.is_alive():
+                    proc.terminate()
         del self._workers
         del self.parent_channels
         self._cuda_events = None
@@ -1156,13 +1161,23 @@ def _run_worker_pipe_shared_mem(
     del env_fun
 
     i = -1
+    import torchrl
+
+    _timeout = torchrl._utils.BATCHED_PIPE_TIMEOUT
+
     initialized = False
 
     child_pipe.send("started")
 
     while True:
         try:
-            cmd, data = child_pipe.recv()
+            if child_pipe.poll(_timeout):
+                cmd, data = child_pipe.recv()
+            else:
+                raise TimeoutError(
+                    f"Worker timed out after {_timeout}s, "
+                    f"increase timeout if needed throught the BATCHED_PIPE_TIMEOUT environment variable."
+                )
         except EOFError as err:
             raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
         if cmd == "seed":
