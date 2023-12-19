@@ -34,8 +34,9 @@ We also give users the ability to compose a replay buffer using the following co
     Sampler
     PrioritizedSampler
     RandomSampler
-    SliceSampler
     SamplerWithoutReplacement
+    SliceSampler
+    SliceSamplerWithoutReplacement
     Storage
     ListStorage
     LazyTensorStorage
