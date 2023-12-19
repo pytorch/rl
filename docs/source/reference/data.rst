@@ -35,6 +35,8 @@ We also give users the ability to compose a replay buffer using the following co
     PrioritizedSampler
     RandomSampler
     SamplerWithoutReplacement
+    SliceSampler
+    SliceSamplerWithoutReplacement
     Storage
     ListStorage
     LazyTensorStorage
@@ -109,41 +111,59 @@ It is not too difficult to store trajectories in the replay buffer.
 One element to pay attention to is that the size of the replay buffer is always
 the size of the leading dimension of the storage: in other words, creating a
 replay buffer with a storage of size 1M when storing multidimensional data
-does not mean storing 1M frames but 1M trajectories.
+does not mean storing 1M frames but 1M trajectories. However, if trajectories
+(or episodes/rollouts) are flattened before being stored, the capacity will still
+be 1M steps.
 
 When sampling trajectories, it may be desirable to sample sub-trajectories
 to diversify learning or make the sampling more efficient.
-To do this, we provide a custom :class:`~torchrl.envs.Transform` class named
-:class:`~torchrl.envs.RandomCropTensorDict`. Here is an example of how this class
-can be used:
+TorchRL offers two distinctive ways of accomplishing this:
+- The :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` allows to
+  sample a given number of slices of trajectories stored one after another
+  along the leading dimension of the :class:`~torchrl.data.replay_buffers.samplers.TensorStorage`.
+  This is the recommended way of sampling sub-trajectories in TorchRL __especially__
+  when using offline datasets (which are stored using that convention).
+  This strategy requires to flatten the trajectories before extending the replay
+  buffer and reshaping them after sampling. The :class:`~torchrl.data.replay_buffers.samplers.SliceSampler`
+  gives extensive details about this storage and sampling strategy.
 
-.. code-block::Python
+- Trajectories can also be stored independently, with the each element of the
+  leading dimension pointing to a different trajectory. This requires
+  for the trajectories to have a congruent shape (or to be padded).
+  We provide a custom :class:`~torchrl.envs.Transform` class named
+  :class:`~torchrl.envs.RandomCropTensorDict` that allows to sample
+  sub-trajectories in the buffer. Note that, unlike the :class:`~torchrl.data.replay_buffers.samplers.SliceSampler`-based
+  strategy, here having an ``"episode"`` or ``"done"`` key pointing at the
+  start and stop signals isn't required.
+  Here is an example of how this class can be used:
 
-    >>> import torch
-    >>> from tensordict import TensorDict
-    >>> from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
-    >>> from torchrl.envs import RandomCropTensorDict
-    >>>
-    >>> obs = torch.randn(100, 50, 1)
-    >>> data = TensorDict({"obs": obs[:-1], "next": {"obs": obs[1:]}}, [99])
-    >>> rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(1000))
-    >>> rb.extend(data)
-    >>> # subsample trajectories of length 10
-    >>> rb.append_transform(RandomCropTensorDict(sub_seq_len=10))
-    >>> print(rb.sample(128))
-    TensorDict(
-        fields={
-            index: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int32, is_shared=False),
-            next: TensorDict(
-                fields={
-                    obs: Tensor(shape=torch.Size([10, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([10]),
-                device=None,
-                is_shared=False),
-            obs: Tensor(shape=torch.Size([10, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([10]),
-        device=None,
-        is_shared=False)
+  .. code-block::Python
+
+      >>> import torch
+      >>> from tensordict import TensorDict
+      >>> from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+      >>> from torchrl.envs import RandomCropTensorDict
+      >>>
+      >>> obs = torch.randn(100, 50, 1)
+      >>> data = TensorDict({"obs": obs[:-1], "next": {"obs": obs[1:]}}, [99])
+      >>> rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(1000))
+      >>> rb.extend(data)
+      >>> # subsample trajectories of length 10
+      >>> rb.append_transform(RandomCropTensorDict(sub_seq_len=10))
+      >>> print(rb.sample(128))
+      TensorDict(
+          fields={
+              index: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int32, is_shared=False),
+              next: TensorDict(
+                  fields={
+                      obs: Tensor(shape=torch.Size([10, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                  batch_size=torch.Size([10]),
+                  device=None,
+                  is_shared=False),
+              obs: Tensor(shape=torch.Size([10, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+          batch_size=torch.Size([10]),
+          device=None,
+          is_shared=False)
 
 Checkpointing Replay Buffers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
