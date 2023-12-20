@@ -219,7 +219,7 @@ def _main(argv):
             "scikit-learn",
             "pandas",
             "h5py",
-            "pil",
+            "pillow",
         ],
         "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1"],
     }
