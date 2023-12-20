@@ -617,7 +617,7 @@ def _make_tensordict_image_conv(data):
         img_bytes = data["observation"]["image"]["bytes"]
         if not _has_tv:
             raise ImportError(
-                f"the `torchvision` library is required to read the image observation."
+                "the `torchvision` library is required to read the image observation."
             )
         import torchvision.transforms.v2.functional
         from PIL import Image
