@@ -1621,7 +1621,7 @@ class TestSamplers:
             num_slices = batch_size // slice_len
         trajs_unique_id = set()
         too_short = False
-        for _ in range(5):
+        for _ in range(20):
             index, info = sampler.sample(storage, batch_size=batch_size)
             if _data_prefix:
                 samples = storage._storage["_data"][index]

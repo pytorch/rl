@@ -30,6 +30,7 @@ try:
 except ImportError:
     warnings.warn(EXTENSION_WARNING)
 
+from torchrl._utils import _replace_last
 from torchrl.data.replay_buffers.storages import Storage, TensorStorage
 from torchrl.data.replay_buffers.utils import _to_numpy, INT_CLASSES
 
@@ -732,11 +733,18 @@ class SliceSampler(Sampler):
         # pick up as many trajs as we need
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
-        return self._sample_slices(lengths, start_idx, seq_length, num_slices)
+        return self._sample_slices(lengths, start_idx, stop_idx, seq_length, num_slices)
 
     def _sample_slices(
-        self, lengths, start_idx, seq_length, num_slices, traj_idx=None
+        self, lengths, start_idx, stop_idx, seq_length, num_slices, traj_idx=None
     ) -> Tuple[torch.Tensor, dict]:
+        if traj_idx is None:
+            traj_idx = torch.randint(
+                lengths.shape[0], (num_slices,), device=lengths.device
+            )
+        else:
+            num_slices = traj_idx.shape[0]
+
         if (lengths < seq_length).any():
             if self.strict_length:
                 raise RuntimeError(
@@ -745,14 +753,8 @@ class SliceSampler(Sampler):
                     "in you batch."
                 )
             # make seq_length a tensor with values clamped by lengths
-            seq_length = lengths.clamp_max(seq_length)
+            seq_length = lengths[traj_idx].clamp_max(seq_length)
 
-        if traj_idx is None:
-            traj_idx = torch.randint(
-                lengths.shape[0], (num_slices,), device=lengths.device
-            )
-        else:
-            num_slices = traj_idx.shape[0]
         relative_starts = (
             (
                 torch.rand(num_slices, device=lengths.device)
@@ -765,13 +767,30 @@ class SliceSampler(Sampler):
         index = self._tensor_slices_from_startend(seq_length, starts)
         if self.truncated_key is not None:
             truncated_key = self.truncated_key
+            done_key = _replace_last(truncated_key, "done")
+            terminated_key = _replace_last(truncated_key, "terminated")
 
-            truncated = torch.zeros(index.shape, dtype=torch.bool, device=index.device)
+            truncated = torch.zeros(
+                (*index.shape, 1), dtype=torch.bool, device=index.device
+            )
             if isinstance(seq_length, int):
                 truncated.view(num_slices, -1)[:, -1] = 1
             else:
                 truncated[seq_length.cumsum(0) - 1] = 1
-            return index.to(torch.long), {truncated_key: truncated}
+            traj_terminated = stop_idx[traj_idx] == start_idx[traj_idx] + seq_length - 1
+            terminated = torch.zeros_like(truncated)
+            if terminated.any():
+                if isinstance(seq_length, int):
+                    truncated.view(num_slices, -1)[traj_terminated] = 1
+                else:
+                    truncated[(seq_length.cumsum(0) - 1)[traj_terminated]] = 1
+            truncated = truncated & ~terminated
+            done = terminated | truncated
+            return index.to(torch.long), {
+                truncated_key: truncated,
+                done_key: done,
+                terminated_key: terminated,
+            }
         return index.to(torch.long), {}
 
     @property
@@ -936,11 +955,10 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         self._storage_len_buffer = len(start_idx)
-        print("self._storage_len_buffer", self._storage_len_buffer)
         # first get indices of the trajectories we want to retrieve
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
         indices, _ = SamplerWithoutReplacement.sample(self, storage, num_slices)
         idx, info = self._sample_slices(
-            lengths, start_idx, seq_length, num_slices, traj_idx=indices
+            lengths, start_idx, stop_idx, seq_length, num_slices, traj_idx=indices
         )
         return idx, info

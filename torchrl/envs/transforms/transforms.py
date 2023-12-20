@@ -23,6 +23,7 @@ from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn, Tensor
+from torchrl._utils import _replace_last
 
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -43,7 +44,7 @@ from torchrl.envs.transforms.utils import (
     _set_missing_tolerance,
     check_finite,
 )
-from torchrl.envs.utils import _replace_last, _sort_keys, _update_during_reset, step_mdp
+from torchrl.envs.utils import _sort_keys, _update_during_reset, step_mdp
 from torchrl.objectives.value.functional import reward2go
 
 try:

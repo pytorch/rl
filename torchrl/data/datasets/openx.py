@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import importlib.util
-
 import io
 import os
 import tempfile
@@ -16,8 +15,7 @@ import torch
 import tqdm
 
 from tensordict import make_tensordict, pad, TensorDict
-
-from torchrl.data import ImmutableDatasetWriter, ReplayBuffer, Storage, Writer
+from torchrl.data import ImmutableDatasetWriter, Storage, TensorDictReplayBuffer, Writer
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import Sampler
 from torchrl.data.replay_buffers.storages import _collate_id, TensorStorage
@@ -26,7 +24,182 @@ _has_datasets = importlib.util.find_spec("datasets", None) is not None
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
 
 
-class OpenXExperienceReplay(ReplayBuffer):
+class OpenXExperienceReplay(TensorDictReplayBuffer):
+    """Open X-Embodiment datasets experience replay.
+
+    The Open X-Embodiment Dataset contains 1M+ real robot trajectories
+    spanning 22 robot embodiments, collected through a collaboration between
+    21 institutions, demonstrating 527 skills (160266 tasks).
+
+    .. note::
+        Non-tensor data will be written in the tensordict data using the
+        :class:`~tensordict.tensorclass.NonTensorData` primitive.
+        For instance, the `language_instruction` field in the data will
+        be stored in `data.get_non_tensor("language_instruction")` (or equivalently
+        `data.get("language_instruction").data`). See the documentation of this
+        class for more information on how to interact with non-tensor data
+        stored in a :class:`~tensordict.TensorDict`.
+
+    Args:
+        dataset_id (str): The dataset to be downloaded.
+            Must be part of OpenXExperienceReplay.available_datasets
+        batch_size (int): Batch-size used during sampling.
+            Can be overridden by `data.sample(batch_size)` if necessary.
+            See `num_slices` and `slice_len` keyword arguments for a refined
+            sampling strategy.
+            If the ``batch_size`` is ``None`` (default), iterating over the
+            dataset will deliver trajectories one at a time __whereas__ calling
+            :meth:`~.sample` will __still__ require a batch-size to be provided.
+
+    Keyword Args:
+        shuffle (bool, optional): if ``True``, trajectories are delivered in a
+            random order. If ``False``, the dataset is iterated over
+            in the pre-defined order.
+        num_slice (int, optional): the number of slices in a batch. This
+            corresponds to the number of trajectories present in a batch.
+            Once collected, the batch is presented as a concatenation of
+            sub-trajectories that can be recovered through `batch.reshape(num_slices, -1)`.
+            The `batch_size` must be divisible by `num_slices` if provided.
+            This argument is exclusive with ``slice_len``.
+            If the ``num_slices`` argument equates the ``batch_size``, each sample
+            will belong to a different trajectory.
+            If neither ``slice_len`` nor ``num_slice`` are provided:
+            whenever a trajectory has a length shorter than the
+            batch-size, a contiguous slice of it of length `batch_size` will be
+            sampled. If the trajectory length is insufficient, an exception will
+            be raised unless `pad` is not `None`.
+        slice_len (int, optional): the length of slices in a batch. This
+            corresponds to the length of trajectories present in a batch.
+            Once collected, the batch is presented as a concatenation of
+            sub-trajectories that can be recovered through `batch.reshape(-1, slice_len)`.
+            The `batch_size` must be divisible by `slice_len` if provided.
+            This argument is exclusive with ``num_slice``.
+            If the ``slice_len`` argument equates ``1``, each sample
+            will belong to a different trajectory.
+            If neither ``slice_len`` nor ``num_slice`` are provided:
+            whenever a trajectory has a length shorter than the
+            batch-size, a contiguous slice of it of length `batch_size` will be
+            sampled. If the trajectory length is insufficient, an exception will
+            be raised unless `pad` is not `None`.
+
+            .. note::
+              The ``slice_len`` (but not ``num_slices``) can be used when
+              iterating over a dataset without passing a batch-size in the,
+              constructor. In these cases, a random sub-sequence of the
+              trajectory will be chosen.
+
+        with_replacement (bool, optional): if ``False``, sampling will be done
+            without replacement. Defaults to ``True``.
+        pad (bool, float or None): if ``True``, trajectories of insufficient length
+            given the `slice_len` or `num_slices` arguments will be padded with
+            0s. If another value is provided, it will be used for padding. If
+            ``False`` or ``None`` (default) any encounter with a trajectory of
+            insufficient length will raise an exception.
+        root (Path or str, optional): The Minari dataset root directory.
+            The actual dataset memory-mapped files will be saved under
+            `<root>/<dataset_id>`. If none is provided, it defaults to
+            ``~/.cache/torchrl/minari`.
+        streaming (bool, optional): if ``True``, the data won't be downloaded but
+            read from a stream instead.
+
+            .. note:: The formatting of the data __will change__ when `download=True`
+                compared to `streaming=True`. If the data is downloaded and
+                the sampler is left untouched (ie, `num_slices=None`, `slice_len=None`
+                and `sampler=None`, transitions will be sampled randomly from
+                the dataset. This isn't possible at a reasonable cost with
+                `streaming=True`: in this case, trajectories will be sampled
+                one at a time and delivered as such (with cropping to comply with
+                the batch-size etc). The behaviour of the two modalities is
+                much more similar when `num_slices` and `slice_len` are specified,
+                as in these cases, views of sub-episodes will be returned in both
+                cases.
+
+        download (bool or str, optional): Whether the dataset should be downloaded if
+            not found. Defaults to ``True``. Download can also be passed as "force",
+            in which case the downloaded data will be overwritten.
+        sampler (Sampler, optional): the sampler to be used. If none is provided
+            a default RandomSampler() will be used.
+        writer (Writer, optional): the writer to be used. If none is provided
+            a default RoundRobinWriter() will be used.
+        collate_fn (callable, optional): merges a list of samples to form a
+            mini-batch of Tensor(s)/outputs.  Used when using batched
+            loading from a map-style dataset.
+        pin_memory (bool): whether pin_memory() should be called on the rb
+            samples.
+        prefetch (int, optional): number of next batches to be prefetched
+            using multithreading.
+        transform (Transform, optional): Transform to be executed when sample() is called.
+            To chain transforms use the :obj:`Compose` class.
+        split_trajs (bool, optional): if ``True``, the trajectories will be split
+            along the first dimension and padded to have a matching shape.
+            To split the trajectories, the ``"done"`` signal will be used, which
+            is recovered via ``done = truncated | terminated``. In other words,
+            it is assumed that any ``truncated`` or ``terminated`` signal is
+            equivalent to the end of a trajectory. For some datasets from
+            ``D4RL``, this may not be true. It is up to the user to make
+            accurate choices regarding this usage of ``split_trajs``.
+            Defaults to ``False``.
+
+    Examples:
+        >>> from torchrl.data.datasets import OpenXExperienceReplay
+        >>> # Download the data, and sample 128 elements in each batch out of two trajectories
+        >>> num_slices = 2
+        >>> dataset = OpenXExperienceReplay("cmu_stretch", batch_size=128,
+        ...     num_slices=num_slices, download=True, streaming=False, root=root)
+        >>> for batch in dataset:
+        ...     print(data.reshape(num_slices, -1))
+        ...     break
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([2, 64, 8]), device=cpu, dtype=torch.float64, is_shared=False),
+                discount: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                episode: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.int32, is_shared=False),
+                is_first: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
+                is_init: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
+                is_last: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
+                is_terminal: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
+                language_embedding: Tensor(shape=torch.Size([2, 64, 512]), device=cpu, dtype=torch.float64, is_shared=False),
+                language_instruction: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: TensorDict(
+                            fields={
+                                image: Tensor(shape=torch.Size([2, 64, 3, 2, 64, 2, 64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                                state: Tensor(shape=torch.Size([2, 64, 4]), device=cpu, dtype=torch.float64, is_shared=False)},
+                            batch_size=torch.Size([2, 64]),
+                            device=cpu,
+                            is_shared=False),
+                        reward: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([2, 64]),
+                    device=cpu,
+                    is_shared=False),
+                observation: TensorDict(
+                    fields={
+                        image: Tensor(shape=torch.Size([2, 64, 3, 2, 64, 2, 64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        state: Tensor(shape=torch.Size([2, 64, 4]), device=cpu, dtype=torch.float64, is_shared=False)},
+                    batch_size=torch.Size([2, 64]),
+                    device=cpu,
+                    is_shared=False),
+                reward: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([2, 64]),
+            device=cpu,
+            is_shared=False)
+        >>> # Read data from a stream. Deliver entire trajectories when iterating
+        >>> dataset = OpenXExperienceReplay("cmu_stretch",
+        ...     num_slices=num_slices, download=True, streaming=False, root=root)
+        >>> for data in dataset: # data does not have a consistent shape
+        ...     break
+        >>> # Define batch-size dynamically
+        >>> data = dataset.sample(128)  # delivers 2 sub-trajectories of length 64
+
+    """
+
     available_datasets = [
         "fractal20220817_data",
         "kuka",
@@ -85,161 +258,6 @@ class OpenXExperienceReplay(ReplayBuffer):
         "berkeley_gnm_sac_son",
     ]
 
-    """Open X-Embodiment datasets experience replay.
-    
-    The Open X-Embodiment Dataset contains 1M+ real robot trajectories 
-    spanning 22 robot embodiments, collected through a collaboration between 
-    21 institutions, demonstrating 527 skills (160266 tasks).
-    
-    .. note::
-        Images ...
-
-    .. note::
-        Text data ...
-    
-    Args:
-        dataset_id (str): The dataset to be downloaded. 
-            Must be part of OpenXExperienceReplay.available_datasets
-        batch_size (int): Batch-size used during sampling. 
-            Can be overridden by `data.sample(batch_size)` if necessary.
-            See `num_slices` and `slice_len` keyword arguments for a refined
-            sampling strategy.
-            If the ``batch_size`` is ``None`` (default), iterating over the
-            dataset will deliver trajectories one at a time __whereas__ calling
-            :meth:`~.sample` will __still__ require a batch-size to be provided. 
-
-    Keyword Args:
-        shuffle (bool, optional): if ``True``, trajectories are delivered in a
-            random order. If ``False``, the dataset is iterated over 
-            in the pre-defined order.
-        num_slice (int, optional): the number of slices in a batch. This 
-            corresponds to the number of trajectories present in a batch.
-            Once collected, the batch is presented as a concatenation of
-            sub-trajectories that can be recovered through `batch.reshape(num_slices, -1)`.
-            The `batch_size` must be divisible by `num_slices` if provided.
-            This argument is exclusive with ``slice_len``.
-            If the ``num_slices`` argument equates the ``batch_size``, each sample
-            will belong to a different trajectory.
-            If neither ``slice_len`` nor ``num_slice`` are provided: 
-            whenever a trajectory has a length shorter than the
-            batch-size, a contiguous slice of it of length `batch_size` will be 
-            sampled. If the trajectory length is insufficient, an exception will
-            be raised unless `pad` is not `None`.
-        slice_len (int, optional): the length of slices in a batch. This 
-            corresponds to the length of trajectories present in a batch.
-            Once collected, the batch is presented as a concatenation of
-            sub-trajectories that can be recovered through `batch.reshape(-1, slice_len)`.
-            The `batch_size` must be divisible by `slice_len` if provided.
-            This argument is exclusive with ``num_slice``.
-            If the ``slice_len`` argument equates ``1``, each sample
-            will belong to a different trajectory.
-            If neither ``slice_len`` nor ``num_slice`` are provided: 
-            whenever a trajectory has a length shorter than the
-            batch-size, a contiguous slice of it of length `batch_size` will be 
-            sampled. If the trajectory length is insufficient, an exception will
-            be raised unless `pad` is not `None`.
-
-            .. note:: 
-              The ``slice_len`` (but not ``num_slices``) can be used when 
-              iterating over a dataset without passing a batch-size in the,
-              constructor. In these cases, a random sub-sequence of the
-              trajectory will be chosen.
-
-        pad (bool, float or None): if ``True``, trajectories of insufficient length
-            given the `slice_len` or `num_slices` arguments will be padded with
-            0s. If another value is provided, it will be used for padding. If
-            ``False`` or ``None`` (default) any encounter with a trajectory of 
-            insufficient length will raise an exception. 
-        root (Path or str, optional): The Minari dataset root directory.
-            The actual dataset memory-mapped files will be saved under
-            `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/minari`.
-        download (bool or str, optional): Whether the dataset should be downloaded if
-            not found. Defaults to ``True``. Download can also be passed as "force",
-            in which case the downloaded data will be overwritten.
-        sampler (Sampler, optional): the sampler to be used. If none is provided
-            a default RandomSampler() will be used.
-        writer (Writer, optional): the writer to be used. If none is provided
-            a default RoundRobinWriter() will be used.
-        collate_fn (callable, optional): merges a list of samples to form a
-            mini-batch of Tensor(s)/outputs.  Used when using batched
-            loading from a map-style dataset.
-        pin_memory (bool): whether pin_memory() should be called on the rb
-            samples.
-        prefetch (int, optional): number of next batches to be prefetched
-            using multithreading.
-        transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
-        split_trajs (bool, optional): if ``True``, the trajectories will be split
-            along the first dimension and padded to have a matching shape.
-            To split the trajectories, the ``"done"`` signal will be used, which
-            is recovered via ``done = truncated | terminated``. In other words,
-            it is assumed that any ``truncated`` or ``terminated`` signal is
-            equivalent to the end of a trajectory. For some datasets from
-            ``D4RL``, this may not be true. It is up to the user to make
-            accurate choices regarding this usage of ``split_trajs``.
-            Defaults to ``False``.
-
-    Examples:
-        >>> from torchrl.data.datasets import OpenXExperienceReplay
-        >>> # Download the data, and sample 128 elements in each batch out of two trajectories
-        >>> num_slices = 2
-        >>> dataset = OpenXExperienceReplay("cmu_stretch", batch_size=128, 
-        ...     num_slices=num_slices, download=True, streaming=False, root=root)
-        >>> for batch in dataset:
-        ...     print(data.reshape(num_slices, -1))
-        ...     break
-        TensorDict(
-            fields={
-                action: Tensor(shape=torch.Size([2, 64, 8]), device=cpu, dtype=torch.float64, is_shared=False),
-                discount: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
-                done: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                episode: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.int32, is_shared=False),
-                is_first: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
-                is_init: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
-                is_last: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
-                is_terminal: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
-                language_embedding: Tensor(shape=torch.Size([2, 64, 512]), device=cpu, dtype=torch.float64, is_shared=False),
-                language_instruction: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
-                next: TensorDict(
-                    fields={
-                        done: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                        observation: TensorDict(
-                            fields={
-                                image: Tensor(shape=torch.Size([2, 64, 3, 2, 64, 2, 64]), device=cpu, dtype=torch.uint8, is_shared=False),
-                                state: Tensor(shape=torch.Size([2, 64, 4]), device=cpu, dtype=torch.float64, is_shared=False)},
-                            batch_size=torch.Size([2, 64]),
-                            device=cpu,
-                            is_shared=False),
-                        reward: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-                        terminated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                        truncated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
-                    batch_size=torch.Size([2, 64]),
-                    device=cpu,
-                    is_shared=False),
-                observation: TensorDict(
-                    fields={
-                        image: Tensor(shape=torch.Size([2, 64, 3, 2, 64, 2, 64]), device=cpu, dtype=torch.uint8, is_shared=False),
-                        state: Tensor(shape=torch.Size([2, 64, 4]), device=cpu, dtype=torch.float64, is_shared=False)},
-                    batch_size=torch.Size([2, 64]),
-                    device=cpu,
-                    is_shared=False),
-                reward: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
-                terminated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                truncated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
-            batch_size=torch.Size([2, 64]),
-            device=cpu,
-            is_shared=False)
-        >>> # Read data from a stream. Deliver entire trajectories when iterating
-        >>> dataset = OpenXExperienceReplay("cmu_stretch", 
-        ...     num_slices=num_slices, download=True, streaming=False, root=root)
-        >>> for data in dataset: # data does not have a consistent shape
-        ...     break
-        >>> # Define batch-size dynamically
-        >>> data = dataset.sample(128)  # delivers 2 sub-trajectories of length 64
-
-    """
-
     def __init__(
         self,
         dataset_id,
@@ -249,6 +267,7 @@ class OpenXExperienceReplay(ReplayBuffer):
         num_slices: int | None = None,
         slice_len: int | None = None,
         pad: float | bool | None = None,
+        with_replacement: bool = True,
         streaming: bool = True,
         root: str | Path | None = None,
         download: bool = False,
@@ -283,6 +302,29 @@ class OpenXExperienceReplay(ReplayBuffer):
                 storage = self._download_and_preproc()
             else:
                 storage = TensorStorage(TensorDict.load_memmap(self.root / dataset_id))
+            if num_slices is not None or slice_len is not None:
+                if sampler is not None:
+                    raise ValueError(
+                        "`num_slices` and `slice_len` are exclusive with the `sampler` argument."
+                    )
+                from torchrl.data.replay_buffers.samplers import (
+                    SliceSampler,
+                    SliceSamplerWithoutReplacement,
+                )
+
+                if with_replacement:
+                    sampler = SliceSampler(
+                        num_slices=num_slices,
+                        slice_len=slice_len,
+                        strict_length=pad is not None,
+                    )
+                else:
+                    sampler = SliceSamplerWithoutReplacement(
+                        num_slices=num_slices,
+                        slice_len=slice_len,
+                        strict_length=pad is not None,
+                    )
+
         else:
             self.root = None
             if download:
@@ -362,12 +404,12 @@ class OpenXExperienceReplay(ReplayBuffer):
                 if total_frames == 0:
                     for step in data["data.pickle"]["steps"]:
                         td = _make_tensordict_image_conv(step).zero_()
+                        # format td: requires td to have a non-null batch_size
+                        td = td.expand(2, *td.shape)
+                        _format_data(td, 0)
+                        td = td[0]
                 total_frames += len(data["data.pickle"]["steps"])
-            td_data = (
-                td.expand(total_frames)
-                .memmap_like(self.root / self.dataset_id)
-                .unlock_()
-            )
+            td_data = td.expand(total_frames).memmap_like(self.root / self.dataset_id)
             pbar = tqdm.tqdm(dataset, desc="preproc", total=total_frames)
             idx0 = 0
             idx1 = 0
@@ -385,7 +427,6 @@ class OpenXExperienceReplay(ReplayBuffer):
                 td_data[idx0:idx1] = current_ep
                 idx0 = idx1
                 pbar.update(current_ep.shape[0])
-            print("total episodes", td_data["next", "done"].sum())
             return TensorStorage(td_data.lock_())
 
 
@@ -518,9 +559,7 @@ def _slice_data(data: TensorDict, slice_len, pad_value):
         index=torch.tensor(-1, device=truncated.device),
     )
     done = data.get(("next", "done"))
-    data.set(
-        ("next", "truncated"), truncated
-    )
+    data.set(("next", "truncated"), truncated)
     data.set(("next", "done"), truncated | done)
     return data
 

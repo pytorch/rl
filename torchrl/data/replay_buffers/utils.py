@@ -27,9 +27,10 @@ def _to_torch(
 ) -> torch.Tensor:
     if isinstance(data, np.generic):
         return torch.tensor(data, device=device)
-
-    if isinstance(data, np.ndarray):
+    elif isinstance(data, np.ndarray):
         data = torch.from_numpy(data)
+    elif not isinstance(data, Tensor):
+        data = torch.tensor(data, device=device)
 
     if pin_memory:
         data = data.pin_memory()

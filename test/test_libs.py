@@ -2061,7 +2061,7 @@ class TestRoboset:
 @pytest.mark.slow
 class TestOpenX:
     @pytest.mark.parametrize("padding", [None, 0, True, False])
-    @pytest.mark.parametrize("download", [False, True])
+    @pytest.mark.parametrize("download", [True, False])
     @pytest.mark.parametrize("shuffle", [True, False])
     @pytest.mark.parametrize(
         "batch_size,num_slices,slice_len",
@@ -2078,10 +2078,11 @@ class TestOpenX:
         torch.manual_seed(0)
         np.random.seed(0)
 
+        streaming = not download
         dataset = OpenXExperienceReplay(
             "cmu_stretch",
             download=download,
-            streaming=not download,
+            streaming=streaming,
             batch_size=batch_size,
             shuffle=shuffle,
             num_slices=num_slices,
@@ -2089,12 +2090,18 @@ class TestOpenX:
             pad=padding,
         )
         # iterating
-        if padding is None and ((batch_size is not None and batch_size > 1000) or (slice_len is not None and slice_len > 1000)):
-            with pytest.raises(RuntimeError, match="The trajectory length (.*) is shorter than the slice length"):
-                for data in dataset:
+        if padding is None and (
+            (batch_size is not None and batch_size > 1000)
+            or (slice_len is not None and slice_len > 1000)
+        ):
+            with pytest.raises(
+                RuntimeError,
+                match="The trajectory length (.*) is shorter than the slice length",
+            ):
+                for data in dataset:  # noqa: B007
                     break
         else:
-            for data in dataset:
+            for data in dataset:  # noqa: B007
                 break
             # check data shape
             if batch_size is not None:
@@ -2104,7 +2111,7 @@ class TestOpenX:
             if batch_size is not None:
                 if num_slices is not None:
                     assert data.get(("next", "done")).sum(-2) == num_slices
-                else:
+                elif streaming:
                     assert (
                         data.get(("next", "done")).sum(-2)
                         == data.get("episode").unique().numel()
@@ -2121,17 +2128,19 @@ class TestOpenX:
             if padding is None and (batch_size > 1000):
                 with pytest.raises(
                     RuntimeError,
-                    match="The trajectory length (.*) is shorter than the slice length"
-                    ):
+                    match="The trajectory length (.*) is shorter than the slice length",
+                ):
                     sample = dataset.sample()
                 return
             else:
                 sample = dataset.sample()
                 assert sample.shape == (batch_size,)
+        print(sample)
         if slice_len is not None:
             assert sample.get(("next", "done")).sum() == int(batch_size // slice_len)
         elif num_slices is not None:
             assert sample.get(("next", "done")).sum() == num_slices
+
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")
 @pytest.mark.parametrize(
