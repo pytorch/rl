@@ -31,6 +31,8 @@ from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
     SamplerWithoutReplacement,
+    SliceSampler,
+    SliceSamplerWithoutReplacement,
 )
 
 from torchrl.data.replay_buffers.storages import (
@@ -1542,6 +1544,234 @@ class TestMultiProc:
         # list storage cannot be shared
         with pytest.raises(RuntimeError, match="it has not been initialized yet"):
             self.exec_multiproc_rb(init=False)
+
+
+class TestSamplers:
+    @pytest.mark.parametrize(
+        "batch_size,num_slices,slice_len",
+        [
+            [100, 20, None],
+            [120, 30, None],
+            [100, None, 5],
+            [120, None, 4],
+            [101, None, 101],
+        ],
+    )
+    @pytest.mark.parametrize("episode_key", ["episode", ("some", "episode")])
+    @pytest.mark.parametrize("done_key", ["done", ("some", "done")])
+    @pytest.mark.parametrize("match_episode", [True, False])
+    @pytest.mark.parametrize("_data_prefix", [True, False])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_slice_sampler(
+        self,
+        batch_size,
+        num_slices,
+        slice_len,
+        episode_key,
+        done_key,
+        match_episode,
+        _data_prefix,
+        device,
+    ):
+        torch.manual_seed(0)
+        storage = LazyMemmapStorage(100)
+        episode = torch.zeros(100, dtype=torch.int, device=device)
+        episode[:30] = 1
+        episode[30:55] = 2
+        episode[55:70] = 3
+        episode[70:] = 4
+        steps = torch.cat(
+            [torch.arange(30), torch.arange(25), torch.arange(15), torch.arange(30)], 0
+        )
+
+        done = torch.zeros(100, 1, dtype=torch.bool)
+        done[torch.tensor([29, 54, 69])] = 1
+
+        data = TensorDict(
+            {
+                # we only use episode_key if we want the sampler to access it
+                episode_key if match_episode else "whatever_episode": episode,
+                "another_episode": episode,
+                "obs": torch.randn((3, 4, 5)).expand(100, 3, 4, 5),
+                "act": torch.randn((20,)).expand(100, 20),
+                "steps": steps,
+                "other": torch.randn((20, 50)).expand(100, 20, 50),
+                done_key: done,
+            },
+            [100],
+            device=device,
+        )
+        if _data_prefix:
+            data = TensorDict({"_data": data}, [100])
+        storage.set(range(100), data)
+        if slice_len is not None and slice_len > 15:
+            # we may have to sample trajs shorter than slice_len
+            strict_length = False
+        else:
+            strict_length = True
+
+        sampler = SliceSampler(
+            num_slices=num_slices,
+            traj_key=episode_key,
+            end_key=done_key,
+            slice_len=slice_len,
+            strict_length=strict_length,
+        )
+        if slice_len is not None:
+            num_slices = batch_size // slice_len
+        trajs_unique_id = set()
+        too_short = False
+        for _ in range(5):
+            index, info = sampler.sample(storage, batch_size=batch_size)
+            if _data_prefix:
+                samples = storage._storage["_data"][index]
+            else:
+                samples = storage._storage[index]
+            if strict_length:
+                # check that trajs are ok
+                samples = samples.view(num_slices, -1)
+                assert samples["another_episode"].unique(
+                    dim=1
+                ).squeeze().shape == torch.Size([num_slices])
+                assert (
+                    samples["steps"][..., 1:] - 1 == samples["steps"][..., :-1]
+                ).all()
+            too_short = too_short or index.numel() < batch_size
+            trajs_unique_id = trajs_unique_id.union(
+                samples["another_episode"].view(-1).tolist()
+            )
+        if strict_length:
+            assert not too_short
+        else:
+            assert too_short
+
+        assert len(trajs_unique_id) == 4
+        truncated = info[("next", "truncated")]
+        assert truncated.view(num_slices, -1)[:, -1].all()
+
+    def test_slice_sampler_errors(self):
+        device = "cpu"
+        _data_prefix = False
+        batch_size, num_slices = 100, 20
+
+        episode = torch.zeros(100, dtype=torch.int, device=device)
+        episode[:30] = 1
+        episode[30:55] = 2
+        episode[55:70] = 3
+        episode[70:] = 4
+        steps = torch.cat(
+            [torch.arange(30), torch.arange(25), torch.arange(15), torch.arange(30)], 0
+        )
+
+        done = torch.zeros(100, 1, dtype=torch.bool)
+        done[torch.tensor([29, 54, 69])] = 1
+
+        data = TensorDict(
+            {
+                # we only use episode_key if we want the sampler to access it
+                "episode": episode,
+                "another_episode": episode,
+                "obs": torch.randn((3, 4, 5)).expand(100, 3, 4, 5),
+                "act": torch.randn((20,)).expand(100, 20),
+                "steps": steps,
+                "other": torch.randn((20, 50)).expand(100, 20, 50),
+                ("next", "done"): done,
+            },
+            [100],
+            device=device,
+        )
+        if _data_prefix:
+            data = TensorDict({"_data": data}, [100])
+
+        data_wrong_done = data.clone(False)
+        data_wrong_done.rename_key_("episode", "_")
+        data_wrong_done["next", "done"] = done.unsqueeze(1).expand(100, 5, 1)
+        storage = LazyMemmapStorage(100)
+        storage.set(range(100), data_wrong_done)
+        sampler = SliceSampler(num_slices=num_slices)
+        with pytest.raises(
+            RuntimeError,
+            match="Expected the end-of-trajectory signal to be 1-dimensional",
+        ):
+            index, _ = sampler.sample(storage, batch_size=batch_size)
+
+        storage = ListStorage(100)
+        storage.set(range(100), data)
+        sampler = SliceSampler(num_slices=num_slices)
+        with pytest.raises(
+            RuntimeError, match="can only sample from TensorStorage subclasses"
+        ):
+            index, _ = sampler.sample(storage, batch_size=batch_size)
+
+    @pytest.mark.parametrize("batch_size,num_slices", [[20, 4], [4, 2]])
+    @pytest.mark.parametrize("episode_key", ["episode", ("some", "episode")])
+    @pytest.mark.parametrize("done_key", ["done", ("some", "done")])
+    @pytest.mark.parametrize("match_episode", [True, False])
+    @pytest.mark.parametrize("_data_prefix", [True, False])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_slice_sampler_without_replacement(
+        self,
+        batch_size,
+        num_slices,
+        episode_key,
+        done_key,
+        match_episode,
+        _data_prefix,
+        device,
+    ):
+        torch.manual_seed(0)
+        storage = LazyMemmapStorage(100)
+        episode = torch.zeros(100, dtype=torch.int, device=device)
+        steps = []
+        done = torch.zeros(100, 1, dtype=torch.bool)
+        for i in range(0, 100, 5):
+            episode[i : i + 5] = i // 5
+            steps.append(torch.arange(5))
+            done[i + 4] = 1
+        steps = torch.cat(steps)
+
+        data = TensorDict(
+            {
+                # we only use episode_key if we want the sampler to access it
+                episode_key if match_episode else "whatever_episode": episode,
+                "another_episode": episode,
+                "obs": torch.randn((3, 4, 5)).expand(100, 3, 4, 5),
+                "act": torch.randn((20,)).expand(100, 20),
+                "steps": steps,
+                "other": torch.randn((20, 50)).expand(100, 20, 50),
+                done_key: done,
+            },
+            [100],
+            device=device,
+        )
+        if _data_prefix:
+            data = TensorDict({"_data": data}, [100])
+        storage.set(range(100), data)
+        sampler = SliceSamplerWithoutReplacement(
+            num_slices=num_slices, traj_key=episode_key, end_key=done_key
+        )
+        trajs_unique_id = set()
+        for i in range(5):
+            index, info = sampler.sample(storage, batch_size=batch_size)
+            if _data_prefix:
+                samples = storage._storage["_data"][index]
+            else:
+                samples = storage._storage[index]
+
+            # check that trajs are ok
+            samples = samples.view(num_slices, -1)
+            assert samples["another_episode"].unique(
+                dim=1
+            ).squeeze().shape == torch.Size([num_slices])
+            assert (samples["steps"][..., 1:] - 1 == samples["steps"][..., :-1]).all()
+            cur_episodes = samples["another_episode"].view(-1).tolist()
+            for ep in cur_episodes:
+                assert ep not in trajs_unique_id, i
+            trajs_unique_id = trajs_unique_id.union(
+                cur_episodes,
+            )
+        truncated = info[("next", "truncated")]
+        assert truncated.view(num_slices, -1)[:, -1].all()
 
 
 if __name__ == "__main__":
