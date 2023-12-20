@@ -62,7 +62,6 @@ def main(cfg):
     always_save_checkpoint = train_cfg.always_save_checkpoint
 
     device = cfg.sys.device
-    dtype = cfg.sys.dtype
     compile_ = cfg.sys.compile
 
     ctx = setup(cfg.sys)
