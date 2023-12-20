@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any, Callable, Tuple
 
 import torch
-import tqdm
 
 from tensordict import make_tensordict, pad, TensorDict
 from torchrl.data import ImmutableDatasetWriter, Storage, TensorDictReplayBuffer, Writer
@@ -399,7 +398,16 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
             )
             # iterate over the dataset a first time to count elements
             total_frames = 0
-            pbar = tqdm.tqdm(dataset, desc="counting")
+
+            try:
+                import tqdm
+
+                _has_tqdm = True
+                pbar = tqdm.tqdm(dataset, desc="counting")
+            except ImportError:
+                _has_tqdm = False
+                pbar = dataset
+
             for data in pbar:
                 if total_frames == 0:
                     for step in data["data.pickle"]["steps"]:
@@ -410,7 +418,10 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
                         td = td[0]
                 total_frames += len(data["data.pickle"]["steps"])
             td_data = td.expand(total_frames).memmap_like(self.root / self.dataset_id)
-            pbar = tqdm.tqdm(dataset, desc="preproc", total=total_frames)
+            if _has_tqdm:
+                pbar = tqdm.tqdm(dataset, desc="preproc", total=total_frames)
+            else:
+                pbar = dataset
             idx0 = 0
             idx1 = 0
             episode = 0
@@ -426,7 +437,8 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
                 idx1 += len(current_ep)
                 td_data[idx0:idx1] = current_ep
                 idx0 = idx1
-                pbar.update(current_ep.shape[0])
+                if _has_tqdm:
+                    pbar.update(current_ep.shape[0])
             return TensorStorage(td_data.lock_())
 
 
