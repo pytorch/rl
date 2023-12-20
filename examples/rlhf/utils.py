@@ -130,7 +130,7 @@ class Evaluator:
     ):
         self.reward_estimator = reward_estimator
         self.model = model
-        self.promp_logger = prompt_logger
+        self.prompt_logger = prompt_logger
         self.io_cfg = io_cfg
         self.eval_interval = io_cfg.eval_interval
         self.log_interval = io_cfg.log_interval
@@ -154,7 +154,7 @@ class Evaluator:
                 val_reward = self.reward_estimator(self.model, self.val_loader)
                 self.prompt_logger.log(self.model)
             self.val_reward_logger.info(f"VALID: {self.it=}: {val_reward=:.4f}")
-            self.logger.log_scalar({"val_reward": val_reward}, step=self.it)
+            self.logger.log_scalar("val_reward", val_reward, step=self.it)
             # pbar.set_description(f"VALID: {it=}: {val_reward=:.4f}")
             if val_reward > self.best_val_reward:
                 self.best_val_reward = val_reward
