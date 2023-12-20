@@ -32,11 +32,13 @@ root_dir="$(git rev-parse --show-toplevel)"
 env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
 
-conda deactivate && conda activate ./env
+#conda deactivate && conda activate ./env
 
 # this workflow only tests the libs
+printf "* Smoke test"
 python -c "import gym, d4rl"
 
+printf "* Tests"
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestD4RL --error-for-skips --runslow
 coverage combine
 coverage xml -i
