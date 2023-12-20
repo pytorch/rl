@@ -20,3 +20,4 @@ dependencies:
     - tqdm
     - h5py
     - datasets
+    - PIL

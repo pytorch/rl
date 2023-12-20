@@ -218,7 +218,7 @@ def _main(argv):
             "tqdm",
             "scikit-learn",
             "pandas",
-            "h5py",
+            "h5py", "PIL",
         ],
         "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1"],
     }
