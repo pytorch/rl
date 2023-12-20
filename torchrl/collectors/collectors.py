@@ -52,6 +52,7 @@ from torchrl.envs.utils import (
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
+# MAX_IDLE_COUNT is the maximum number of times a Dataloader worker can timeout with his queue.
 _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 1000))
 
 DEFAULT_EXPLORATION_TYPE: ExplorationType = ExplorationType.RANDOM
@@ -1371,32 +1372,35 @@ also that the state dict is synchronised across processes if needed."""
         self._shutdown_main()
 
     def _shutdown_main(self) -> None:
-        if self.closed:
-            return
-        _check_for_faulty_process(self.procs)
-        self.closed = True
-        for idx in range(self.num_workers):
-            if not self.procs[idx].is_alive():
-                continue
-            try:
-                self.pipes[idx].send((None, "close"))
-
-                if self.pipes[idx].poll(10.0):
-                    msg = self.pipes[idx].recv()
-                    if msg != "closed":
-                        raise RuntimeError(f"got {msg} but expected 'close'")
-                else:
+        try:
+            if self.closed:
+                return
+            _check_for_faulty_process(self.procs)
+            self.closed = True
+            for idx in range(self.num_workers):
+                if not self.procs[idx].is_alive():
                     continue
-            except BrokenPipeError:
-                continue
+                try:
+                    self.pipes[idx].send((None, "close"))
 
-        for proc in self.procs:
-            exitcode = proc.join(1.0)
-            if exitcode is None:
-                proc.terminate()
-        self.queue_out.close()
-        for pipe in self.pipes:
-            pipe.close()
+                    if self.pipes[idx].poll(10.0):
+                        msg = self.pipes[idx].recv()
+                        if msg != "closed":
+                            raise RuntimeError(f"got {msg} but expected 'close'")
+                    else:
+                        continue
+                except BrokenPipeError:
+                    continue
+
+            self.queue_out.close()
+            for pipe in self.pipes:
+                pipe.close()
+                for proc in self.procs:
+                    proc.join(1.0)
+        finally:
+            for proc in self.procs:
+                if proc.is_alive():
+                    proc.terminate()
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -2165,7 +2169,7 @@ def _main_async_collector(
                         f"if this is expected via the environment variable MAX_IDLE_COUNT "
                         f"(current value is {_MAX_IDLE_COUNT})."
                         f"\nIf this occurs at the end of a function or program, it means that your collector has not been "
-                        f"collected, consider calling `collector.shutdown()` or `del collector` before ending the program."
+                        f"collected, consider calling `collector.shutdown()` before ending the program."
                     )
                 continue
         if msg in ("continue", "continue_random"):
