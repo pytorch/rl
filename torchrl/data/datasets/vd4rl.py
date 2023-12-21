@@ -401,6 +401,7 @@ _NAME_MATCH.update(
         "reward": ("next", "reward"),
         "image": "pixels",
         "observation": "pixels",
+        "discount": "discount",
         "action": "action",
     }
 )
