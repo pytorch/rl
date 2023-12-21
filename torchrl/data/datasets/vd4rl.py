@@ -208,7 +208,10 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
             or not any(isinstance(t, ToTensorImage) for t in transform)
         ):
             transform = Compose(
-                transform, ToTensorImage(in_keys=["pixels", ("next", "pixels")])
+                transform,
+                ToTensorImage(
+                    in_keys=["pixels", ("next", "pixels")], shape_tolerant=True
+                ),
             )
         if image_size is not None:
             transform = Compose(
