@@ -28,15 +28,18 @@ fi
 eval "$(${conda_dir}/Scripts/conda.exe 'shell.bash' 'hook')"
 
 # 2. Create test environment at ./env
-if [ ! -d "${env_dir}" ]; then
-    printf "* Creating a test environment\n"
-    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
-fi
+printf "* Creating a test environment\n"
+conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
+
+printf "* Activating the environment"
+conda deactivate
 conda activate "${env_dir}"
 
-# 3. Install Conda dependencies
-printf "* Installing dependencies (except PyTorch)\n"
-conda env update --file "${this_dir}/environment.yml" --prune
+printf "Python version"
+echo $(which python)
+echo $(python --version)
+echo $(conda info -e)
 
-# we don't use torchsnapshot
-conda env config vars set CKPT_BACKEND=torch
+#conda env update --file "${this_dir}/environment.yml" --prune
+
+python -m pip install hypothesis future cloudpickle pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures expecttest pyyaml scipy coverage

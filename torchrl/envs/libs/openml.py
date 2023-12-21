@@ -5,15 +5,15 @@
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+from torchrl.data.datasets.openml import OpenMLExperienceReplay
+from torchrl.data.replay_buffers import SamplerWithoutReplacement
 
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
-from torchrl.data.datasets.openml import OpenMLExperienceReplay
-from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import Compose, DoubleToFloat, RenameTransform
 

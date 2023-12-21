@@ -13,7 +13,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDict, TensorDictBase
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     TensorSpec,

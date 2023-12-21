@@ -15,6 +15,8 @@ from .samplers import (
     RandomSampler,
     Sampler,
     SamplerWithoutReplacement,
+    SliceSampler,
+    SliceSamplerWithoutReplacement,
 )
 from .storages import (
     LazyMemmapStorage,
