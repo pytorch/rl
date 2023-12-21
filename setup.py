@@ -216,6 +216,7 @@ def _main(argv):
             "huggingface_hub",  # for roboset
             "minari",
             "tqdm",
+            "torchvision",
             "scikit-learn",
             "pandas",
             "h5py",
