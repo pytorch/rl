@@ -202,7 +202,9 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
         else:
             storage = self._load()
         if totensor and transform is None:
-            transform = ToTensorImage(in_keys=["pixels", ("next", "pixels")])
+            transform = ToTensorImage(
+                in_keys=["pixels", ("next", "pixels")], shape_tolerant=True
+            )
         elif totensor and (
             not isinstance(transform, Compose)
             or not any(isinstance(t, ToTensorImage) for t in transform)
