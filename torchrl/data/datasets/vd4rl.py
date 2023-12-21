@@ -18,7 +18,6 @@ from typing import Callable, List
 import numpy as np
 
 import torch
-import tqdm
 from huggingface_hub import hf_hub_download, HfApi
 from tensordict import PersistentTensorDict, TensorDict
 
@@ -271,6 +270,8 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
                 files = list(files)
             print("Downloaded, processing files")
             if _has_tqdm:
+                import tqdm
+
                 pbar = tqdm.tqdm(files)
             else:
                 pbar = files
