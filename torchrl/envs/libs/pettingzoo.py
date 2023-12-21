@@ -11,7 +11,7 @@ from typing import Dict, List, Tuple, Union
 import torch
 from tensordict.tensordict import TensorDictBase
 
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     OneHotDiscreteTensorSpec,

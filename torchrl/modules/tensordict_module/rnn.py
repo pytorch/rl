@@ -17,7 +17,7 @@ from tensordict.utils import expand_as_right, prod
 from torch import nn, Tensor
 from torch.nn.modules.rnn import RNNCellBase
 
-from torchrl.data import UnboundedContinuousTensorSpec
+from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
 from torchrl.objectives.value.functional import (
     _inv_pad_sequence,
     _split_and_pad_sequence,

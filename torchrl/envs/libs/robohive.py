@@ -14,7 +14,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.tensordict import make_tensordict
 from torchrl._utils import implement_for
-from torchrl.data import UnboundedContinuousTensorSpec
+from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
 from torchrl.envs.libs.gym import _AsyncMeta, _gym_to_torchrl_spec_transform, GymEnv
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
