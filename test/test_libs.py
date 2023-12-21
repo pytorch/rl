@@ -53,6 +53,7 @@ from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.datasets.roboset import RobosetExperienceReplay
+from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
     Compose,
@@ -2055,6 +2056,39 @@ class TestRoboset:
             t0 = time.time()
             if i == 10:
                 break
+
+
+@pytest.mark.slow
+class TestVD4RL:
+    @pytest.mark.parametrize("image_size", [None, (37, 33)])
+    def test_load(self, image_size):
+        torch.manual_seed(0)
+        datasets = VD4RLExperienceReplay.available_datasets
+        for idx in torch.randperm(len(datasets)).tolist()[:4]:
+            selected_dataset = datasets[idx]
+            data = VD4RLExperienceReplay(
+                selected_dataset,
+                batch_size=32,
+                image_size=image_size,
+            )
+            t0 = time.time()
+            for i, batch in enumerate(data):
+                if image_size:
+                    assert batch.get("pixels").shape == (32, 3, *image_size)
+                    assert batch.get(("next", "pixels")).shape == (32, 3, *image_size)
+                else:
+                    assert batch.get("pixels").shape[:2] == (32, 3)
+                    assert batch.get(("next", "pixels")).shape[:2] == (32, 3)
+
+                assert batch.get("pixels").dtype is torch.float32
+                assert batch.get(("next", "pixels")).dtype is torch.float32
+                assert (batch.get("pixels") != 0).any()
+                assert (batch.get(("next", "pixels")) != 0).any()
+                t1 = time.time()
+                print(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+                t0 = time.time()
+                if i == 10:
+                    break
 
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")

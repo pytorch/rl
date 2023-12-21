@@ -1658,19 +1658,31 @@ class Resize(ObservationTransform):
     """Resizes a pixel observation.
 
     Args:
-        w (int): resulting width
-        h (int): resulting height
+        w (int): resulting width.
+        h (int, optional): resulting height. If not provided, the value of `w`
+            is taken.
         interpolation (str): interpolation method
+
+    Examples:
+        >>> from torchrl.envs import GymEnv
+        >>> t = Resize(64, 84)
+        >>> base_env = GymEnv("HalfCheetah-v4", from_pixels=True)
+        >>> env = TransformedEnv(base_env, Compose(ToTensorImage(), t))
     """
 
     def __init__(
         self,
         w: int,
-        h: int,
+        h: int | None = None,
         interpolation: str = "bilinear",
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
     ):
+        # we also allow lists or tuples
+        if isinstance(w, (list, tuple)):
+            w, h = w
+        if h is None:
+            h = w
         if not _has_tv:
             raise ImportError(
                 "Torchvision not found. The Resize transform relies on "

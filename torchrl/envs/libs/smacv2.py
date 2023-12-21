@@ -10,7 +10,7 @@ from typing import Dict, Optional
 import torch
 from tensordict import TensorDict, TensorDictBase
 
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
