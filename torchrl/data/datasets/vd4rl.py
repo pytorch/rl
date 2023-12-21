@@ -18,7 +18,6 @@ from typing import Callable, List
 import numpy as np
 
 import torch
-from huggingface_hub import hf_hub_download, HfApi
 from tensordict import PersistentTensorDict, TensorDict
 
 from torchrl._utils import KeyDependentDefaultDict
@@ -229,6 +228,8 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
 
     @classmethod
     def _parse_datasets(cls):
+        from huggingface_hub import HfApi
+
         dataset = HfApi().dataset_info("conglu/vd4rl")
         sibs = defaultdict(list)
         for sib in dataset.siblings:
@@ -239,6 +240,8 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
 
     @classmethod
     def _download_and_preproc(cls, dataset_id, data_path):
+        from huggingface_hub import hf_hub_download
+
         files = []
         tds = []
         with tempfile.TemporaryDirectory() as tmpdir:
