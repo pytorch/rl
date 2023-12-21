@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import os
 from collections import OrderedDict
 from copy import deepcopy
@@ -486,7 +488,7 @@ class _BatchedEnv(EnvBase):
         if self.is_closed:
             raise RuntimeError("trying to close a closed environment")
         if self._verbose:
-            print(f"closing {self.__class__.__name__}")
+            logging.info(f"closing {self.__class__.__name__}")
 
         self.__dict__["_input_spec"] = None
         self.__dict__["_output_spec"] = None
@@ -780,7 +782,7 @@ class ParallelEnv(_BatchedEnv):
         with clear_mpi_env_vars():
             for idx in range(_num_workers):
                 if self._verbose:
-                    print(f"initiating worker {idx}")
+                    logging.info(f"initiating worker {idx}")
                 # No certainty which module multiprocessing_context is
                 parent_pipe, child_pipe = ctx.Pipe()
                 env_fun = self.create_env_fn[idx]
@@ -1033,7 +1035,7 @@ class ParallelEnv(_BatchedEnv):
                 )
             for i, channel in enumerate(self.parent_channels):
                 if self._verbose:
-                    print(f"closing {i}")
+                    logging.info(f"closing {i}")
                 channel.send(("close", None))
                 self._events[i].wait()
                 self._events[i].clear()
@@ -1190,7 +1192,7 @@ def _run_worker_pipe_shared_mem(
 
         elif cmd == "init":
             if verbose:
-                print(f"initializing {pid}")
+                logging.info(f"initializing {pid}")
             if initialized:
                 raise RuntimeError("worker already initialized")
             i = 0
@@ -1206,7 +1208,7 @@ def _run_worker_pipe_shared_mem(
 
         elif cmd == "reset":
             if verbose:
-                print(f"resetting worker {pid}")
+                logging.info(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             cur_td = env.reset(tensordict=data)
@@ -1252,7 +1254,7 @@ def _run_worker_pipe_shared_mem(
             mp_event.set()
             child_pipe.close()
             if verbose:
-                print(f"{pid} closed")
+                logging.info(f"{pid} closed")
             break
 
         elif cmd == "load_state_dict":

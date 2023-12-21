@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import importlib
+
+import logging
 import os
 import tempfile
 import urllib
@@ -449,7 +451,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 def _download_dataset_from_url(dataset_url, dataset_path):
     dataset_filepath = _filepath_from_url(dataset_url, dataset_path)
     if not os.path.exists(dataset_filepath):
-        print("Downloading dataset:", dataset_url, "to", dataset_filepath)
+        logging.info("Downloading dataset:", dataset_url, "to", dataset_filepath)
         urllib.request.urlretrieve(dataset_url, dataset_filepath)
     if not os.path.exists(dataset_filepath):
         raise IOError("Failed to download dataset from %s" % dataset_url)
@@ -473,7 +475,7 @@ def _filepath_from_url(dataset_url, dataset_path):
 
 if __name__ == "__main__":
     data = D4RLExperienceReplay("kitchen-partial-v0", batch_size=128)
-    print(data)
+    logging.info(data)
     for sample in data:
-        print(sample)
+        logging.info(sample)
         break

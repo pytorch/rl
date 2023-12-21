@@ -5,6 +5,7 @@
 
 import abc
 import json
+import logging
 import os
 import warnings
 from collections import OrderedDict
@@ -632,7 +633,7 @@ class LazyTensorStorage(TensorStorage):
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         if VERBOSE:
-            print("Creating a TensorStorage...")
+            logging.info("Creating a TensorStorage...")
         if self.device == "auto":
             self.device = data.device
         if isinstance(data, torch.Tensor):
@@ -792,7 +793,7 @@ class LazyMemmapStorage(LazyTensorStorage):
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         if VERBOSE:
-            print("Creating a MemmapStorage...")
+            logging.info("Creating a MemmapStorage...")
         if self.device == "auto":
             self.device = data.device
         if self.device.type != "cpu":
@@ -811,7 +812,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             ):
                 if VERBOSE:
                     filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                    print(
+                    logging.info(
                         f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
                     )
         else:
@@ -826,7 +827,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             )
             if VERBOSE:
                 filesize = os.path.getsize(out.filename) / 1024 / 1024
-                print(
+                logging.info(
                     f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
                 )
         self._storage = out
