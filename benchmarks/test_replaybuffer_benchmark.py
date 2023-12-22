@@ -90,13 +90,14 @@ def test_rb_sample(benchmark, rb, storage, sampler, size):
         populated=True,
         size=size,
     )()
+    torch.manual_seed(0)
     benchmark(sample, rb)
 
 
 def infinite_iter(obj):
+    torch.manual_seed(0)
     while True:
-        obj = iter(obj)
-        yield from obj
+        yield from iter(obj)
 
 
 @pytest.mark.parametrize(

@@ -171,10 +171,10 @@ class SamplerWithoutReplacement(Sampler):
         if self._sample_list.numel() == 0 or (
             self.drop_last and len(self._sample_list) < batch_size
         ):
-            self._ran_out = True
+            self.ran_out = True
             self._sample_list = torch.randperm(len_storage)
         else:
-            self._ran_out = False
+            self.ran_out = False
         return index
 
     def _storage_len(self, storage):
