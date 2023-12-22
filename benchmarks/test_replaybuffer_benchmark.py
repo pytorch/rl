@@ -91,7 +91,7 @@ def iterate(rb):
         ],
     ],
 )
-def test_sample_rb(benchmark, rb, storage, sampler, size):
+def test_rb_sample(benchmark, rb, storage, sampler, size):
     (rb,), _ = create_rb(
         rb=rb,
         storage=storage,
@@ -137,7 +137,7 @@ def infinite_iter(obj):
         ],
     ],
 )
-def test_iterate_rb(benchmark, rb, storage, sampler, size):
+def test_rb_iterate(benchmark, rb, storage, sampler, size):
     (rb,), _ = create_rb(
         rb=rb,
         storage=storage,
@@ -177,7 +177,7 @@ def test_iterate_rb(benchmark, rb, storage, sampler, size):
         ],
     ],
 )
-def test_populate_rb(benchmark, rb, storage, sampler, size):
+def test_rb_populate(benchmark, rb, storage, sampler, size):
     benchmark.pedantic(
         populate,
         setup=create_rb(
