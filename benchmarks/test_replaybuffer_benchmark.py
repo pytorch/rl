@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import functools
 
 import pytest
 import torch
@@ -58,8 +59,7 @@ def sample(rb):
 
 
 def iterate(rb):
-    for _ in rb:
-        break
+    next(rb)
 
 
 @pytest.mark.parametrize(
@@ -71,22 +71,43 @@ def iterate(rb):
         [TensorDictReplayBuffer, ListStorage, SamplerWithoutReplacement, 4000],
         [TensorDictReplayBuffer, LazyMemmapStorage, SamplerWithoutReplacement, 10_000],
         [TensorDictReplayBuffer, LazyTensorStorage, SamplerWithoutReplacement, 10_000],
-        [TensorDictPrioritizedReplayBuffer, ListStorage, None, 4000],
-        [TensorDictPrioritizedReplayBuffer, LazyMemmapStorage, None, 10_000],
-        [TensorDictPrioritizedReplayBuffer, LazyTensorStorage, None, 10_000],
+        [
+            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
+            ListStorage,
+            None,
+            4000,
+        ],
+        [
+            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
+            LazyMemmapStorage,
+            None,
+            10_000,
+        ],
+        [
+            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
+            LazyTensorStorage,
+            None,
+            10_000,
+        ],
     ],
 )
 def test_sample_rb(benchmark, rb, storage, sampler, size):
     (rb,), _ = create_rb(
-        rb=TensorDictReplayBuffer,
-        storage=ListStorage,
-        sampler=RandomSampler,
+        rb=rb,
+        storage=storage,
+        sampler=sampler,
         populated=True,
         size=size,
     )()
     benchmark(sample, rb)
 
 
+def infinite_iter(obj):
+    while True:
+        obj = iter(obj)
+        yield from obj
+
+
 @pytest.mark.parametrize(
     "rb,storage,sampler,size",
     [
@@ -96,20 +117,35 @@ def test_sample_rb(benchmark, rb, storage, sampler, size):
         [TensorDictReplayBuffer, ListStorage, SamplerWithoutReplacement, 4000],
         [TensorDictReplayBuffer, LazyMemmapStorage, SamplerWithoutReplacement, 10_000],
         [TensorDictReplayBuffer, LazyTensorStorage, SamplerWithoutReplacement, 10_000],
-        [TensorDictPrioritizedReplayBuffer, ListStorage, None, 4000],
-        [TensorDictPrioritizedReplayBuffer, LazyMemmapStorage, None, 10_000],
-        [TensorDictPrioritizedReplayBuffer, LazyTensorStorage, None, 10_000],
+        [
+            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
+            ListStorage,
+            None,
+            4000,
+        ],
+        [
+            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
+            LazyMemmapStorage,
+            None,
+            10_000,
+        ],
+        [
+            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
+            LazyTensorStorage,
+            None,
+            10_000,
+        ],
     ],
 )
 def test_iterate_rb(benchmark, rb, storage, sampler, size):
     (rb,), _ = create_rb(
-        rb=TensorDictReplayBuffer,
-        storage=ListStorage,
-        sampler=RandomSampler,
+        rb=rb,
+        storage=storage,
+        sampler=sampler,
         populated=True,
         size=size,
     )()
-    benchmark(iterate, rb)
+    benchmark(iterate, infinite_iter(rb))
 
 
 @pytest.mark.parametrize(
@@ -121,18 +157,33 @@ def test_iterate_rb(benchmark, rb, storage, sampler, size):
         [TensorDictReplayBuffer, ListStorage, SamplerWithoutReplacement, 400],
         [TensorDictReplayBuffer, LazyMemmapStorage, SamplerWithoutReplacement, 400],
         [TensorDictReplayBuffer, LazyTensorStorage, SamplerWithoutReplacement, 400],
-        [TensorDictPrioritizedReplayBuffer, ListStorage, None, 400],
-        [TensorDictPrioritizedReplayBuffer, LazyMemmapStorage, None, 400],
-        [TensorDictPrioritizedReplayBuffer, LazyTensorStorage, None, 400],
+        [
+            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
+            ListStorage,
+            None,
+            400,
+        ],
+        [
+            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
+            LazyMemmapStorage,
+            None,
+            400,
+        ],
+        [
+            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
+            LazyTensorStorage,
+            None,
+            400,
+        ],
     ],
 )
 def test_populate_rb(benchmark, rb, storage, sampler, size):
     benchmark.pedantic(
         populate,
         setup=create_rb(
-            rb=TensorDictReplayBuffer,
-            storage=ListStorage,
-            sampler=RandomSampler,
+            rb=rb,
+            storage=storage,
+            sampler=sampler,
             populated=False,
             size=size,
         ),
