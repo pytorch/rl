@@ -18,6 +18,12 @@ from torchrl.data import (
 )
 from torchrl.data.replay_buffers import RandomSampler, SamplerWithoutReplacement
 
+_TensorDictPrioritizedReplayBuffer = partial(
+    TensorDictPrioritizedReplayBuffer, alpha=1, beta=0.9
+)
+# preserve the name of the class even after partial
+_TensorDictPrioritizedReplayBuffer.__name__ = TensorDictPrioritizedReplayBuffer.__name__
+
 
 class create_rb:
     def __init__(self, rb, storage, sampler, populated, size=1_000_000):
@@ -71,24 +77,9 @@ def iterate(rb):
         [TensorDictReplayBuffer, ListStorage, SamplerWithoutReplacement, 4000],
         [TensorDictReplayBuffer, LazyMemmapStorage, SamplerWithoutReplacement, 10_000],
         [TensorDictReplayBuffer, LazyTensorStorage, SamplerWithoutReplacement, 10_000],
-        [
-            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
-            ListStorage,
-            None,
-            4000,
-        ],
-        [
-            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
-            LazyMemmapStorage,
-            None,
-            10_000,
-        ],
-        [
-            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
-            LazyTensorStorage,
-            None,
-            10_000,
-        ],
+        [_TensorDictPrioritizedReplayBuffer, ListStorage, None, 4000],
+        [_TensorDictPrioritizedReplayBuffer, LazyMemmapStorage, None, 10_000],
+        [_TensorDictPrioritizedReplayBuffer, LazyTensorStorage, None, 10_000],
     ],
 )
 def test_rb_sample(benchmark, rb, storage, sampler, size):
@@ -117,24 +108,9 @@ def infinite_iter(obj):
         [TensorDictReplayBuffer, ListStorage, SamplerWithoutReplacement, 4000],
         [TensorDictReplayBuffer, LazyMemmapStorage, SamplerWithoutReplacement, 10_000],
         [TensorDictReplayBuffer, LazyTensorStorage, SamplerWithoutReplacement, 10_000],
-        [
-            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
-            ListStorage,
-            None,
-            4000,
-        ],
-        [
-            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
-            LazyMemmapStorage,
-            None,
-            10_000,
-        ],
-        [
-            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
-            LazyTensorStorage,
-            None,
-            10_000,
-        ],
+        [_TensorDictPrioritizedReplayBuffer, ListStorage, None, 4000],
+        [_TensorDictPrioritizedReplayBuffer, LazyMemmapStorage, None, 10_000],
+        [_TensorDictPrioritizedReplayBuffer, LazyTensorStorage, None, 10_000],
     ],
 )
 def test_rb_iterate(benchmark, rb, storage, sampler, size):
@@ -157,24 +133,9 @@ def test_rb_iterate(benchmark, rb, storage, sampler, size):
         [TensorDictReplayBuffer, ListStorage, SamplerWithoutReplacement, 400],
         [TensorDictReplayBuffer, LazyMemmapStorage, SamplerWithoutReplacement, 400],
         [TensorDictReplayBuffer, LazyTensorStorage, SamplerWithoutReplacement, 400],
-        [
-            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
-            ListStorage,
-            None,
-            400,
-        ],
-        [
-            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
-            LazyMemmapStorage,
-            None,
-            400,
-        ],
-        [
-            functools.partial(TensorDictPrioritizedReplayBuffer, alpha=1.0, beta=0.9),
-            LazyTensorStorage,
-            None,
-            400,
-        ],
+        [_TensorDictPrioritizedReplayBuffer, ListStorage, None, 400],
+        [_TensorDictPrioritizedReplayBuffer, LazyMemmapStorage, None, 400],
+        [_TensorDictPrioritizedReplayBuffer, LazyTensorStorage, None, 400],
     ],
 )
 def test_rb_populate(benchmark, rb, storage, sampler, size):
