@@ -18,7 +18,7 @@ from torchrl.data import (
 )
 from torchrl.data.replay_buffers import RandomSampler, SamplerWithoutReplacement
 
-_TensorDictPrioritizedReplayBuffer = partial(
+_TensorDictPrioritizedReplayBuffer = functools.partial(
     TensorDictPrioritizedReplayBuffer, alpha=1, beta=0.9
 )
 # preserve the name of the class even after partial
