@@ -66,6 +66,9 @@ def tldr_batch_dir(tmp_path_factory):
     with zipfile.ZipFile(dataset_path, "r") as zip_ref:
         zip_ref.extractall(dest)
         yield dest / Path(dataset_path).stem
+    from torchrl._utils import print_directory_tree
+
+    print_directory_tree(dest)
 
 
 @pytest.mark.skipif(
@@ -436,7 +439,7 @@ class TestRollout:
 
     @staticmethod
     def _get_dummy_batch(batch_dir):
-        return PromptData.from_tensordict(TensorDict.load_memmap(batch_dir))
+        return TensorDict.load_memmap(batch_dir)
 
     @property
     def _model(self):
