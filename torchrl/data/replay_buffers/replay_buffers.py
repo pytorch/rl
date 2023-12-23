@@ -484,8 +484,7 @@ class ReplayBuffer:
                 "Batch_size was not specified during construction of the replay buffer."
             )
         while not self._sampler.ran_out:
-            data = self.sample()
-            yield data
+            yield self.sample()
 
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()

@@ -1152,6 +1152,13 @@ class ToTensorImage(ObservationTransform):
         dtype (torch.dtype, optional): dtype to use for the resulting
             observations.
 
+    Keyword arguments:
+        in_keys (list of NestedKeys): keys to process.
+        out_keys (list of NestedKeys): keys to write.
+        shape_tolerant (bool, optional): if ``True``, the shape of the input
+            images will be check. If the last channel is not `3`, the permuation
+            will be ignored. Defaults to ``False``.
+
     Examples:
         >>> transform = ToTensorImage(in_keys=["pixels"])
         >>> ri = torch.randint(0, 255, (1 , 1, 10, 11, 3), dtype=torch.uint8)
@@ -1169,8 +1176,10 @@ class ToTensorImage(ObservationTransform):
         from_int: Optional[bool] = None,
         unsqueeze: bool = False,
         dtype: Optional[torch.device] = None,
+        *,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
+        shape_tolerant: bool = False,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
@@ -1180,6 +1189,7 @@ class ToTensorImage(ObservationTransform):
         self.from_int = from_int
         self.unsqueeze = unsqueeze
         self.dtype = dtype if dtype is not None else torch.get_default_dtype()
+        self.shape_tolerant = shape_tolerant
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
@@ -1189,9 +1199,10 @@ class ToTensorImage(ObservationTransform):
         return tensordict_reset
 
     def _apply_transform(self, observation: torch.FloatTensor) -> torch.Tensor:
-        observation = observation.permute(
-            *list(range(observation.ndimension() - 3)), -1, -3, -2
-        )
+        if not self.shape_tolerant or observation.shape[-1] == 3:
+            observation = observation.permute(
+                *list(range(observation.ndimension() - 3)), -1, -3, -2
+            )
         if self.from_int or (
             self.from_int is None and not torch.is_floating_point(observation)
         ):
@@ -1205,15 +1216,16 @@ class ToTensorImage(ObservationTransform):
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         observation_spec = self._pixel_observation(observation_spec)
         unsqueeze_dim = [1] if self._should_unsqueeze(observation_spec) else []
-        observation_spec.shape = torch.Size(
-            [
-                *unsqueeze_dim,
-                *observation_spec.shape[:-3],
-                observation_spec.shape[-1],
-                observation_spec.shape[-3],
-                observation_spec.shape[-2],
-            ]
-        )
+        if not self.shape_tolerant or observation_spec.shape[-1] == 3:
+            observation_spec.shape = torch.Size(
+                [
+                    *unsqueeze_dim,
+                    *observation_spec.shape[:-3],
+                    observation_spec.shape[-1],
+                    observation_spec.shape[-3],
+                    observation_spec.shape[-2],
+                ]
+            )
         observation_spec.dtype = self.dtype
         return observation_spec
 
@@ -1659,19 +1671,31 @@ class Resize(ObservationTransform):
     """Resizes a pixel observation.
 
     Args:
-        w (int): resulting width
-        h (int): resulting height
+        w (int): resulting width.
+        h (int, optional): resulting height. If not provided, the value of `w`
+            is taken.
         interpolation (str): interpolation method
+
+    Examples:
+        >>> from torchrl.envs import GymEnv
+        >>> t = Resize(64, 84)
+        >>> base_env = GymEnv("HalfCheetah-v4", from_pixels=True)
+        >>> env = TransformedEnv(base_env, Compose(ToTensorImage(), t))
     """
 
     def __init__(
         self,
         w: int,
-        h: int,
+        h: int | None = None,
         interpolation: str = "bilinear",
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
     ):
+        # we also allow lists or tuples
+        if isinstance(w, (list, tuple)):
+            w, h = w
+        if h is None:
+            h = w
         if not _has_tv:
             raise ImportError(
                 "Torchvision not found. The Resize transform relies on "

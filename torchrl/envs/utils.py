@@ -28,6 +28,13 @@ from tensordict.nn.probabilistic import (  # noqa
 from tensordict.tensordict import LazyStackedTensorDict, NestedKey
 from torchrl._utils import _replace_last
 
+from torchrl.data.tensor_specs import (
+    CompositeSpec,
+    TensorSpec,
+    UnboundedContinuousTensorSpec,
+)
+from torchrl.data.utils import check_no_exclusive_keys
+
 __all__ = [
     "exploration_mode",
     "exploration_type",
@@ -41,9 +48,6 @@ __all__ = [
     "check_marl_grouping",
 ]
 
-
-from torchrl.data import CompositeSpec, TensorSpec
-from torchrl.data.utils import check_no_exclusive_keys
 
 ACTION_MASK_ERROR = RuntimeError(
     "An out-of-bounds actions has been provided to an env with an 'action_mask' output."
@@ -567,8 +571,6 @@ def make_composite_from_td(data):
                      shape=torch.Size([1]), space=ContinuousBox(low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True), high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)), device=cpu, dtype=torch.float32, domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
         >>> assert (spec.zero() == data.zero_()).all()
     """
-    from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
-
     # custom funtion to convert a tensordict in a similar spec structure
     # of unbounded values.
     composite = CompositeSpec(

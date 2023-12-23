@@ -14,7 +14,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl._utils import VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
-from torchrl.data import ReplayBuffer
+from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import ExplorationType
 from torchrl.modules import reset_noise
