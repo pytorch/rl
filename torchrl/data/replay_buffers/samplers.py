@@ -121,6 +121,9 @@ class SamplerWithoutReplacement(Sampler):
             If ``False``, this last sample will be kept and (unlike with torch dataloaders)
             completed with other samples from a fresh indices permutation.
             Defaults to ``False``.
+        shuffle (bool, optional): if ``False``, the items are not randomly
+            permuted. This enables to iterate over the replay buffer in the
+            order the data was collected. Defaults to ``True``.
 
     *Caution*: If the size of the storage changes in between two calls, the samples will be re-shuffled
     (as we can't generally keep track of which samples have been sampled before and which haven't).
@@ -134,11 +137,12 @@ class SamplerWithoutReplacement(Sampler):
 
     """
 
-    def __init__(self, drop_last: bool = False):
+    def __init__(self, drop_last: bool = False, shuffle: bool = True):
         self._sample_list = None
         self.len_storage = 0
         self.drop_last = drop_last
         self._ran_out = False
+        self.shuffle = shuffle
 
     def dumps(self, path):
         path = Path(path)
@@ -163,6 +167,22 @@ class SamplerWithoutReplacement(Sampler):
         self.drop_last = metadata["drop_last"]
         self._ran_out = metadata["_ran_out"]
 
+    def _get_sample_list(self, storage: Storage, len_storage: int):
+        if storage is None:
+            device = self._sample_list.device
+        else:
+            device = storage.device if hasattr(storage, "device") else None
+        if self.shuffle:
+            self._sample_list = torch.randperm(
+                len_storage,
+                device=device
+                )
+        else:
+            self._sample_list = torch.arange(
+                len_storage,
+                device=device
+                )
+
     def _single_sample(self, len_storage, batch_size):
         index = self._sample_list[:batch_size]
         self._sample_list = self._sample_list[batch_size:]
@@ -173,7 +193,7 @@ class SamplerWithoutReplacement(Sampler):
             self.drop_last and len(self._sample_list) < batch_size
         ):
             self.ran_out = True
-            self._sample_list = torch.randperm(len_storage)
+            self._get_sample_list(storage=None, len_storage=len_storage)
         else:
             self.ran_out = False
         return index
@@ -188,7 +208,7 @@ class SamplerWithoutReplacement(Sampler):
         if not len_storage:
             raise RuntimeError("An empty storage was passed")
         if self.len_storage != len_storage or self._sample_list is None:
-            self._sample_list = torch.randperm(len_storage)
+            self._get_sample_list(storage, len_storage)
         if len_storage < batch_size and self.drop_last:
             raise ValueError(
                 f"The batch size ({batch_size}) is greater than the storage capacity ({len_storage}). "
@@ -861,6 +881,8 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`torchrl.collectors.split_trajectories`. Defaults to ``True``.
+        shuffle (bool, optional): if ``False``, the order of the trajectories
+            is not shuffled. Defaults to ``True``.
 
     .. note:: To recover the trajectory splits in the storage,
         :class:`~torchrl.data.replay_buffers.samplers.SliceSamplerWithoutReplacement` will first
@@ -922,6 +944,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
 
     """
 
+
     def __init__(
         self,
         *,
@@ -932,6 +955,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         traj_key: NestedKey | None = None,
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
+        shuffle: bool = True,
     ) -> object:
         SliceSampler.__init__(
             self,
@@ -943,7 +967,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             truncated_key=truncated_key,
             strict_length=strict_length,
         )
-        SamplerWithoutReplacement.__init__(self, drop_last=drop_last)
+        SamplerWithoutReplacement.__init__(self, drop_last=drop_last, shuffle=shuffle)
 
     def _empty(self):
         self._cache = {}

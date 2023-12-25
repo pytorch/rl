@@ -14,9 +14,11 @@ from typing import Any, Callable, Tuple
 import torch
 
 from tensordict import make_tensordict, pad, TensorDict
-from torchrl.data import ImmutableDatasetWriter, Storage, TensorDictReplayBuffer, Writer
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
+from torchrl.data.replay_buffers.storages import Storage
+from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.datasets.utils import _get_root_dir
-from torchrl.data.replay_buffers import Sampler
+from torchrl.data.replay_buffers.samplers import Sampler, SliceSamplerWithoutReplacement, SliceSampler
 from torchrl.data.replay_buffers.storages import _collate_id, TensorStorage
 
 _has_datasets = importlib.util.find_spec("datasets", None) is not None
@@ -146,7 +148,7 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         >>> dataset = OpenXExperienceReplay("cmu_stretch", batch_size=128,
         ...     num_slices=num_slices, download=True, streaming=False, root=root)
         >>> for batch in dataset:
-        ...     print(data.reshape(num_slices, -1))
+        ...     print(batch.reshape(num_slices, -1))
         ...     break
         TensorDict(
             fields={
@@ -257,6 +259,9 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         "berkeley_gnm_sac_son",
     ]
 
+    # some very high number that should be above all trajecory lengths in the dataset
+    _MAX_TRAJ_LEN = 1_000_000
+
     def __init__(
         self,
         dataset_id,
@@ -306,10 +311,6 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
                     raise ValueError(
                         "`num_slices` and `slice_len` are exclusive with the `sampler` argument."
                     )
-                from torchrl.data.replay_buffers.samplers import (
-                    SliceSampler,
-                    SliceSamplerWithoutReplacement,
-                )
 
                 if with_replacement:
                     sampler = SliceSampler(
@@ -360,7 +361,9 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
             if isinstance(self._storage, _StreamingStorage):
                 yield from self._storage
             else:
-                raise NotImplementedError("TODO: A slice sampler shoudl be used here")
+                sampler = SliceSamplerWithoutReplacement(
+                    num_slices=self.num_slices, strict_length=False, shuffle=self.shuffle)
+                yield from TensorDictReplayBuffer(storage=self._storage, sampler=sampler, batch_size=self._MAX_TRAJ_LEN)
         else:
             yield from super().__iter__()
 
