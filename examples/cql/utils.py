@@ -1,3 +1,7 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule, TensorDictSequential
@@ -42,7 +46,7 @@ from torchrl.trainers.helpers.models import ACTIVATIONS
 
 
 def env_maker(cfg, device="cpu"):
-    lib = cfg.env.library
+    lib = cfg.env.backend
     if lib in ("gym", "gymnasium"):
         with set_gym_backend(lib):
             return GymEnv(
@@ -58,11 +62,12 @@ def env_maker(cfg, device="cpu"):
         raise NotImplementedError(f"Unknown lib {lib}.")
 
 
-def apply_env_transforms(env, reward_scaling=1.0):
+def apply_env_transforms(
+    env,
+):
     transformed_env = TransformedEnv(
         env,
         Compose(
-            # RewardScaling(loc=0.0, scale=reward_scaling),
             DoubleToFloat(),
             RewardSum(),
         ),
@@ -70,10 +75,10 @@ def apply_env_transforms(env, reward_scaling=1.0):
     return transformed_env
 
 
-def make_environment(cfg, num_envs=1):
+def make_environment(cfg, train_num_envs=1, eval_num_envs=1):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
-        num_envs,
+        train_num_envs,
         EnvCreator(lambda cfg=cfg: env_maker(cfg)),
     )
     parallel_env.set_seed(cfg.env.seed)
@@ -82,7 +87,7 @@ def make_environment(cfg, num_envs=1):
 
     eval_env = TransformedEnv(
         ParallelEnv(
-            num_envs,
+            eval_num_envs,
             EnvCreator(lambda cfg=cfg: env_maker(cfg)),
         ),
         train_env.transform.clone(),
@@ -100,6 +105,7 @@ def make_collector(cfg, train_env, actor_model_explore):
     collector = SyncDataCollector(
         train_env,
         actor_model_explore,
+        init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
@@ -150,6 +156,8 @@ def make_offline_replay_buffer(rb_cfg):
         split_trajs=False,
         batch_size=rb_cfg.batch_size,
         sampler=SamplerWithoutReplacement(drop_last=False),
+        prefetch=4,
+        direct_download=True,
     )
 
     data.append_transform(DoubleToFloat())
@@ -187,8 +195,10 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
         spec=action_spec,
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": action_spec.space.low,
-            "max": action_spec.space.high,
+            "min": action_spec.space.low[len(train_env.batch_size) :],
+            "max": action_spec.space.high[
+                len(train_env.batch_size) :
+            ],  # remove batch-size
             "tanh_loc": False,
         },
         default_interaction_type=ExplorationType.RANDOM,
@@ -284,7 +294,7 @@ def make_cql_modules_state(model_cfg, proof_environment):
 # ---------
 
 
-def make_loss(loss_cfg, model):
+def make_continuous_loss(loss_cfg, model):
     loss_module = CQLLoss(
         model[0],
         model[1],
@@ -303,16 +313,7 @@ def make_loss(loss_cfg, model):
     return loss_module, target_net_updater
 
 
-def make_cql_optimizer(cfg, loss_module):
-    optim = torch.optim.Adam(
-        loss_module.parameters(),
-        lr=cfg.optim.lr,
-        weight_decay=cfg.optim.weight_decay,
-    )
-    return optim
-
-
-def make_discreteloss(loss_cfg, model):
+def make_discrete_loss(loss_cfg, model):
     loss_module = DiscreteCQLLoss(
         model,
         loss_function=loss_cfg.loss_function,
@@ -323,6 +324,48 @@ def make_discreteloss(loss_cfg, model):
     target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
 
     return loss_module, target_net_updater
+
+
+def make_discrete_cql_optimizer(cfg, loss_module):
+    optim = torch.optim.Adam(
+        loss_module.parameters(),
+        lr=cfg.optim.lr,
+        weight_decay=cfg.optim.weight_decay,
+    )
+    return optim
+
+
+def make_continuous_cql_optimizer(cfg, loss_module):
+    critic_params = loss_module.qvalue_network_params.flatten_keys().values()
+    actor_params = loss_module.actor_network_params.flatten_keys().values()
+    actor_optim = torch.optim.Adam(
+        actor_params,
+        lr=cfg.optim.actor_lr,
+        weight_decay=cfg.optim.weight_decay,
+    )
+    critic_optim = torch.optim.Adam(
+        critic_params,
+        lr=cfg.optim.critic_lr,
+        weight_decay=cfg.optim.weight_decay,
+    )
+    alpha_optim = torch.optim.Adam(
+        [loss_module.log_alpha],
+        lr=cfg.optim.actor_lr,
+        weight_decay=cfg.optim.weight_decay,
+    )
+    if loss_module.with_lagrange:
+        alpha_prime_optim = torch.optim.Adam(
+            [loss_module.log_alpha_prime],
+            lr=cfg.optim.critic_lr,
+        )
+    else:
+        alpha_prime_optim = None
+    return actor_optim, critic_optim, alpha_optim, alpha_prime_optim
+
+
+# ====================================================================
+# General utils
+# ---------
 
 
 def log_metrics(logger, metrics, step):

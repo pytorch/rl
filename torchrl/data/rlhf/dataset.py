@@ -15,8 +15,11 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 
 from tensordict.tensordict import NestedKey
-from torchrl.data import TensorDictReplayBuffer, TensorStorage
-from torchrl.data.replay_buffers import SamplerWithoutReplacement
+from torchrl.data.replay_buffers import (
+    SamplerWithoutReplacement,
+    TensorDictReplayBuffer,
+    TensorStorage,
+)
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
