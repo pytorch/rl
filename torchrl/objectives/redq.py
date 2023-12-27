@@ -321,7 +321,7 @@ class REDQLoss(LossModule):
             self.qvalue_network, randomness=self.vmap_randomness
         )
         self._vmap_getdist = _vmap_func(
-            self.actor_network, func="get_dist_params", randomess=self.vmap_randomness
+            self.actor_network, func="get_dist_params", randomness=self.vmap_randomness
         )
 
     @property
