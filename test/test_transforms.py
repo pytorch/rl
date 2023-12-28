@@ -104,6 +104,7 @@ from torchrl.envs import (
     UnsqueezeTransform,
     VC1Transform,
     VIPTransform,
+    History
 )
 from torchrl.envs.libs.dm_control import _has_dm_control
 from torchrl.envs.libs.gym import _has_gym, GymEnv, set_gym_backend
@@ -9364,6 +9365,74 @@ class TestEndOfLife(TransformBase):
 
     def test_transform_inverse(self):
         pass
+
+
+class TestHistory(TransformBase):
+
+    def test_single_trans_env_check(self):
+        env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+        env = TransformedEnv(env, History(["observation"]))
+        check_env_specs(env)
+    
+    def test_serial_trans_env_check(self):
+        def make_env():
+            env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+            env = TransformedEnv(env, History(["observation"]))
+            return env
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+    
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+            env = TransformedEnv(env, History(["observation"]))
+            return env
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        def make_env():
+            env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
+            return env
+
+        env = SerialEnv(2, make_env)
+        env = TransformedEnv(env, History(["observation"]))
+        check_env_specs(env)
+        r = env.rollout(4)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(
+            ParallelEnv(2, ContinuousActionVecMockEnv),
+            Compose(RewardScaling(loc=-1, scale=1), RewardSum()),
+        )
+        check_env_specs(env)
+        r = env.rollout(4)
+
+    @pytest.mark.parametrize("include_last", [True, False])
+    def test_transform_env(self, include_last: bool):
+        n = 4
+        max_steps = torch.randint(5, 10, (n,))
+        env = CountingBatchedEnv(max_steps=max_steps, batch_size=[n])
+        transform = Compose(StepCounter(), History(["observation"], steps=16, include_last=include_last))
+        env = TransformedEnv(env, transform)
+        rollout = env.rollout(32, break_when_any_done=False)
+        for td in rollout.unbind(0):
+            obs = td["observation"]
+            if include_last:
+                obs_h = td["observation_h"]
+            else:
+                obs_h = td[("next", "observation_h")]
+            steps = td["step_count"]
+            dones = td[("next", "done")].squeeze().nonzero().squeeze(-1)
+            start = 0
+            for done in dones:
+                done = done.item()
+                a = obs_h[done, :, -steps[done]:]
+                b = obs[max(start, done-16)+1:done+1].transpose(0, -1)
+                assert torch.allclose(a, b)
+                start = done + 1
 
 
 if __name__ == "__main__":

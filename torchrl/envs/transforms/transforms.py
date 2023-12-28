@@ -6552,3 +6552,103 @@ class VecGymEnvTransform(Transform):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         raise RuntimeError(FORWARD_NOT_IMPLEMENTED.format(type(self)))
+
+
+class History(Transform):
+    """Records and maintains a history of specified observations.
+
+    This transform tracks the history of selected observations over a specified number of steps.
+    It takes a list of observation keys and records their values, maintaining a history buffer 
+    of length 'steps'. The shape of each recorded observation in the output is extended to
+    `[*shape, steps]`, where `shape` is the original shape of the observation. The most recent 
+    observation is indexed at `[..., -1]`.
+
+    Args:
+        in_keys (list of NestedKeys, optional): Keys of the observations in the environment's 
+            observation spec that need to be recorded. 
+        out_keys (list of NestedKeys, optional): Keys under which the recorded observation histories 
+            will be stored in the output. Defaults to `f"{in_key}_h"` for each key in `in_keys`.
+        steps (int): Number of steps for which the observation history is maintained.
+        include_last (bool): If True, includes the current step's observation in the history.
+    
+    Examples:
+        >>> from torchrl.envs.transforms import TransformedEnv, History
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> env = TransformedEnv(GymEnv("CartPole-v1"), History(["observation"]))
+        >>> td = env.reset()
+        >>> print(td["observation_h"].shape)
+        torch.Size([4, 16])
+    """
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey],
+        out_keys: Sequence[NestedKey] = None,
+        steps: int = 16,
+        include_last: bool = True,
+    ):
+        if out_keys is None:
+            out_keys = [
+                f"{key}_h" if isinstance(key, str) else key[:-1] + (f"{key[-1]}_h",)
+                for key in in_keys
+            ]
+        if any(key in in_keys for key in out_keys):
+            raise ValueError(
+                f"out_keys {out_keys} cannot duplicate with in_keys {in_keys}"
+            )
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        self.steps = steps
+        self.include_last = include_last
+    
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            is_tuple = isinstance(in_key, tuple)
+            if in_key in observation_spec.keys(include_nested=is_tuple):
+                spec = observation_spec[in_key]
+                spec = spec.unsqueeze(-1).expand(*spec.shape, self.steps)
+                observation_spec[out_key] = spec
+        return observation_spec
+    
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        state_spec = input_spec["full_state_spec"]
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            spec = self.parent.observation_spec[in_key]
+            state_spec[out_key] = spec.unsqueeze(-1).expand(*spec.shape, self.steps)
+        input_spec["full_state_spec"] = state_spec
+        return input_spec
+
+    def _step(self, tensordict: TensorDictBase, next_tensordict: TensorDictBase) -> TensorDictBase:
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            if self.include_last:
+                val = next_tensordict.get(in_key)
+            else:
+                val = tensordict.get(in_key)
+            val_history = tensordict.get(out_key)
+            val_next = torch.cat([val_history[..., 1:], val.unsqueeze(-1)], dim=-1)
+            next_tensordict.set(out_key, val_next)
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        _reset = tensordict.get("_reset", None)
+        if _reset is None:
+            _reset = torch.ones(tensordict.batch_size, dtype=bool, device=tensordict.device)
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            val_history = tensordict.get(out_key, None)
+            if val_history is None:
+                spec = self.parent.full_observation_spec[in_key]
+                val_history = spec.unsqueeze(-1).expand(*spec.shape, self.steps).zero()
+            else:
+                val_history = val_history.clone()
+                if self.include_last:
+                    val_init = tensordict_reset.get(in_key)
+                    val_init = val_init[expand_as_right(_reset, val_init)]
+                    val_pad = torch.zeros(
+                        *val_init.shape, self.steps-1, dtype=val_init.dtype, device=val_init.device
+                    )
+                    val = torch.cat([val_pad, val_init.unsqueeze(-1)], dim=-1).flatten()
+                else:
+                    val = 0.0
+                val_history[expand_as_right(_reset, val_history)] = val
+            tensordict_reset.set(out_key, val_history)
+        return tensordict_reset
