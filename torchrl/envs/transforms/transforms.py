@@ -6631,27 +6631,26 @@ class BurnInTransform(Transform):
         if not isinstance(modules, Sequence):
             modules = [modules]
 
-        self.modules = modules
-        self.burn_in = burn_in
-
-        for module in self.modules:
+        for module in modules:
             if not isinstance(module, TensorDictModuleBase):
                 raise ValueError(
                     f"All modules must be TensorDictModules, not {type(module)}."
                 )
 
         in_keys = set()
-        for module in self.modules:
+        for module in modules:
             in_keys.update(module.in_keys)
 
         if out_keys is None:
             out_keys = set()
-            for module in self.modules:
+            for module in modules:
                 for key in module.out_keys:
                     if key[0] == "next":
                         out_keys.add(key[1])
 
         super().__init__(in_keys=in_keys, out_keys=out_keys)
+        self.modules = modules
+        self.burn_in = burn_in
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         raise RuntimeError(
