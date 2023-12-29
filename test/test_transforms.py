@@ -9374,7 +9374,7 @@ class TestBurnInTransform(TransformBase):
             hidden_size=hidden_size,
             batch_first=True,
             in_keys=["observation", "rhs", "is_init"],
-            out_keys=["output", ("next", "hidden")],
+            out_keys=["output", ("next", "rhs")],
             device=device,
         ).set_recurrent_mode(True)
 
@@ -9407,7 +9407,7 @@ class TestBurnInTransform(TransformBase):
         return batch
 
     @abc.abstractmethod
-    def test_single_trans_env_check(self, module):
+    def test_single_trans_env_check(self):
         """tests that a transformed env passes the check_env_specs test.
 
         If your transform can overwrite a key or create a new entry in the tensordict,

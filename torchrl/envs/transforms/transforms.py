@@ -6628,11 +6628,12 @@ class BurnInTransform(Transform):
         burn_in: int,
         out_keys: Sequence[NestedKey] | None = None,
     ):
+        if not isinstance(modules, Sequence):
+            modules = [modules]
+
         self.modules = modules
         self.burn_in = burn_in
 
-        if not isinstance(modules, Sequence):
-            self.modules = [modules]
         for module in self.modules:
             if not isinstance(module, TensorDictModuleBase):
                 raise ValueError(
