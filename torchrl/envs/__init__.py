@@ -84,6 +84,7 @@ from .transforms import (
     VecNorm,
     VIPRewardTransform,
     VIPTransform,
+    BurnInTransform,
 )
 from .utils import (
     check_env_specs,

@@ -616,6 +616,7 @@ to be able to create this other composition:
     VC1Transform
     VIPRewardTransform
     VIPTransform
+    BurnInTransform
 
 Environments with masked actions
 --------------------------------
