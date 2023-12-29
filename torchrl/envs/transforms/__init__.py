@@ -9,6 +9,7 @@ from .rlhf import KLRewardTransform
 from .transforms import (
     ActionMask,
     BinarizeReward,
+    BurnInTransform,
     CatFrames,
     CatTensors,
     CenterCrop,
@@ -49,7 +50,6 @@ from .transforms import (
     UnsqueezeTransform,
     VecGymEnvTransform,
     VecNorm,
-    BurnInTransform,
 )
 from .vc1 import VC1Transform
 from .vip import VIPRewardTransform, VIPTransform

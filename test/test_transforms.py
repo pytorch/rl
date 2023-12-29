@@ -60,6 +60,7 @@ from torchrl.data import (
 from torchrl.envs import (
     ActionMask,
     BinarizeReward,
+    BurnInTransform,
     CatFrames,
     CatTensors,
     CenterCrop,
@@ -114,7 +115,7 @@ from torchrl.envs.transforms.transforms import _has_tv, FORWARD_NOT_IMPLEMENTED
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import _replace_last, check_env_specs, step_mdp
-from torchrl.modules import LSTMModule, MLP, ProbabilisticActor, TanhNormal
+from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal
 
 TIMEOUT = 100.0
 
@@ -9364,6 +9365,151 @@ class TestEndOfLife(TransformBase):
 
     def test_transform_inverse(self):
         pass
+
+
+class TestBurnInTransform(TransformBase):
+    def _make_gru_module(self, input_size=4, hidden_size=4, device="cpu"):
+        return GRUModule(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            batch_first=True,
+            in_keys=["observation", "rhs", "is_init"],
+            out_keys=["output", ("next", "hidden")],
+            device=device,
+        ).set_recurrent_mode(True)
+
+    def _make_lstm_module(self, input_size=4, hidden_size=4, device="cpu"):
+        return LSTMModule(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            batch_first=True,
+            in_keys=["observation", "rhs_h", "rhs_c", "is_init"],
+            out_keys=["output", ("next", "rs_h"), ("next", "rs_c")],
+            device=device,
+        ).set_recurrent_mode(True)
+
+    def _make_batch(self, batch_size: int = 2, sequence_length: int = 5):
+        observation = torch.randn(batch_size, sequence_length + 1, 4)
+        is_init = torch.zeros(batch_size, sequence_length, 1, dtype=torch.bool)
+        batch = TensorDict(
+            {
+                "observation": observation[:, :-1],
+                "is_init": is_init,
+                "next": TensorDict(
+                    {
+                        "observation": observation[:, 1:],
+                    },
+                    batch_size=[batch_size, sequence_length],
+                ),
+            },
+            batch_size=[batch_size, sequence_length],
+        )
+        return batch
+
+    @abc.abstractmethod
+    def test_single_trans_env_check(self, module):
+        """tests that a transformed env passes the check_env_specs test.
+
+        If your transform can overwrite a key or create a new entry in the tensordict,
+        it is worth trying both options here.
+
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def test_serial_trans_env_check(self):
+        """tests that a serial transformed env (SerialEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def test_parallel_trans_env_check(self):
+        """tests that a parallel transformed env (ParallelEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def test_trans_serial_env_check(self):
+        """tests that a transformed serial env (TransformedEnv(SerialEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def test_trans_parallel_env_check(self):
+        """tests that a transformed paprallel env (TransformedEnv(ParallelEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def test_transform_no_env(self):
+        """tests the transform on dummy data, without an env."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    @pytest.mark.parametrize("module", ["gru", "lstm"])
+    @pytest.mark.parametrize("batch_size", [2, 4])
+    @pytest.mark.parametrize("sequence_length", [4, 8])
+    @pytest.mark.parametrize("burn_in", [2])
+    def test_transform_compose(self, module, batch_size, sequence_length, burn_in):
+        """tests the transform on dummy data, without an env but inside a Compose."""
+        data = self._make_batch(batch_size, sequence_length)
+
+        if module == "gru":
+            module = self._make_gru_module()
+            hidden = torch.zeros(
+                data.batch_size + (module.gru.num_layers, module.gru.hidden_size)
+            )
+            data.set("hidden", hidden)
+        else:
+            module = self._make_lstm_module()
+            hidden_h = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            hidden_c = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            data.set("hidden_h", hidden_h)
+            data.set("hidden_c", hidden_c)
+
+        burn_in_compose = Compose(BurnInTransform(module, burn_in=burn_in))
+        data = burn_in_compose(data)
+        assert data.shape[-1] == sequence_length - burn_in
+
+        for key in data.keys():
+            if key.startswith("hidden"):
+                assert data[:, 0].get(key).abs().sum() > 0.0
+                assert data[:, 1:].get(key).sum() == 0.0
+
+    @abc.abstractmethod
+    def test_transform_env(self):
+        """tests the transform on a real env.
+
+        If possible, do not use a mock env, as bugs may go unnoticed if the dynamic is too
+        simplistic. A call to reset() and step() should be tested independently, ie
+        a check that reset produces the desired output and that step() does too.
+
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def test_transform_model(self):
+        """tests the transform before an nn.Module that reads the output."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def test_transform_rb(self):
+        """tests the transform when used with a replay buffer.
+
+        If your transform is not supposed to work with a replay buffer, test that
+        an error will be raised when called or appended to a RB.
+
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def test_transform_inverse(self):
+        """tests the inverse transform. If not applicable, simply skip this test.
+
+        If your transform is not supposed to work offline, test that
+        an error will be raised when called in a nn.Module.
+        """
+        raise NotImplementedError
 
 
 if __name__ == "__main__":

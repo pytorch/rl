@@ -19,7 +19,7 @@ import torch
 
 from tensordict import unravel_key, unravel_key_list
 from tensordict._tensordict import _unravel_key_to_tuple
-from tensordict.nn import dispatch
+from tensordict.nn import dispatch, TensorDictModuleBase
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn, Tensor
@@ -6623,10 +6623,10 @@ class BurnInTransform(Transform):
     invertible = False
 
     def __init__(
-            self,
-            modules: Sequence[TensorDictModuleBase],
-            burn_in: int,
-            out_keys: Sequence[NestedKey] | None = None,
+        self,
+        modules: Sequence[TensorDictModuleBase],
+        burn_in: int,
+        out_keys: Sequence[NestedKey] | None = None,
     ):
         self.modules = modules
         self.burn_in = burn_in
@@ -6658,7 +6658,7 @@ class BurnInTransform(Transform):
         )
 
     def _step(
-            self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         raise RuntimeError(
             "BurnInTransform can only be used when appended to a ReplayBuffer."
