@@ -9384,7 +9384,7 @@ class TestBurnInTransform(TransformBase):
             hidden_size=hidden_size,
             batch_first=True,
             in_keys=["observation", "rhs_h", "rhs_c", "is_init"],
-            out_keys=["output", ("next", "rs_h"), ("next", "rs_c")],
+            out_keys=["output", ("next", "rhs_h"), ("next", "rhs_c")],
             device=device,
         ).set_recurrent_mode(True)
 
@@ -9455,7 +9455,7 @@ class TestBurnInTransform(TransformBase):
             hidden = torch.zeros(
                 data.batch_size + (module.gru.num_layers, module.gru.hidden_size)
             )
-            data.set("hidden", hidden)
+            data.set("rhs", hidden)
         else:
             module = self._make_lstm_module()
             hidden_h = torch.zeros(
@@ -9464,15 +9464,15 @@ class TestBurnInTransform(TransformBase):
             hidden_c = torch.zeros(
                 data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
             )
-            data.set("hidden_h", hidden_h)
-            data.set("hidden_c", hidden_c)
+            data.set("rhs_h", hidden_h)
+            data.set("rhs_c", hidden_c)
 
         burn_in_compose = Compose(BurnInTransform(module, burn_in=burn_in))
         data = burn_in_compose(data)
         assert data.shape[-1] == sequence_length - burn_in
 
         for key in data.keys():
-            if key.startswith("hidden"):
+            if key.startswith("rhs"):
                 assert data[:, 0].get(key).abs().sum() > 0.0
                 assert data[:, 1:].get(key).sum() == 0.0
 
