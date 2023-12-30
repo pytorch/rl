@@ -42,7 +42,7 @@ class DreamerModelLoss(LossModule):
         lambda_reward (float, optional): the weight of the reward loss. Default: 1.0.
         reco_loss (str, optional): the reconstruction loss. Default: "l2".
         reward_loss (str, optional): the reward loss. Default: "l2".
-        free_nats (int, optional): the free nats. Default: 3.
+        free_nats (float, optional): the free nats. Default: 3.0.
         delayed_clamp (bool, optional): if ``True``, the KL clamping occurs after
             averaging. If False (default), the kl divergence is clamped to the
             free nats value first and then averaged.
@@ -104,7 +104,7 @@ class DreamerModelLoss(LossModule):
             lambda_continue: float = 1.0,
             reco_loss: Optional[str] = None,
             reward_loss: Optional[str] = None,
-            free_nats: int = 3,
+            free_nats: float = 3.0,
             delayed_clamp: bool = False,
             global_average: bool = False,
             pred_continue: bool = True,
@@ -330,15 +330,15 @@ class DreamerActorLoss(LossModule):
         fake_data.set("lambda_target", lambda_target)
 
         if self.discount_loss:
+            gamma = self.value_estimator.gamma.to(tensordict.device)
             if self.pred_continue:
-                discount = torch.cat([
-                    torch.ones_like(pcont[..., :1, :]).to(tensordict.device),
-                    pcont[..., :-1, :]
-                ], dim=-2)
+                discount = pcont * gamma
             else:
-                gamma = self.value_estimator.gamma.to(tensordict.device)
                 discount = gamma.expand(lambda_target.shape).clone()
-                discount[..., 0, :] = 1
+            discount = torch.cat([
+                torch.ones_like(discount[..., :1, :]).to(tensordict.device),
+                discount[..., :-1, :] * gamma
+            ], dim=-2)
             discount = discount.cumprod(dim=-2)
             fake_data.set("discount", discount)
             actor_loss = -(lambda_target * discount).sum((-2, -1)).mean()
