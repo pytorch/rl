@@ -6634,7 +6634,7 @@ class BurnInTransform(Transform):
         for module in modules:
             if not isinstance(module, TensorDictModuleBase):
                 raise ValueError(
-                    f"All modules must be TensorDictModules, not {type(module)}."
+                    f"All modules must be TensorDictModules, but a {type(module)} was provided."
                 )
 
         in_keys = set()
