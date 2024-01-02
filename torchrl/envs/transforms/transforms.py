@@ -6564,13 +6564,13 @@ class BurnInTransform(Transform):
     replay buffer transform, not as an environment transform.
 
     Args:
-        modules (sequence of TensorDictModule): A list of modules to burn in.
+        modules (sequence of TensorDictModule): A list of modules used to burn-in data sequences.
         burn_in (int): The number of time steps to burn in.
         out_keys (sequence of NestedKey, optional): destination keys. defaults to
         all the modules out keys that point to the next time step (e.g. ("next", "hidden")).
 
     .. note::
-        This transform expects TensorDicts with its last dimension being the
+        This transform expects as inputs TensorDicts with its last dimension being the
         time dimension. It also  assumes that all provided modules can process
         sequential data.
 
@@ -6668,7 +6668,7 @@ class BurnInTransform(Transform):
         td_device = tensordict.device or "cpu"
         B, T, *extra_dims = tensordict.batch_size
 
-        # Split the tensor dict into the burn in and the rest.
+        # Split the tensor dict into burn-in data and the rest.
         td_burn_in = tensordict[..., : self.burn_in]
         td_out = tensordict[..., self.burn_in :]
 
@@ -6680,7 +6680,7 @@ class BurnInTransform(Transform):
                 td_burn_in = module(td_burn_in)
         td_burn_in = td_burn_in.to(td_device)
 
-        # Update out TensorDict with the burnt in data.
+        # Update out TensorDict with the burnt-in data.
         for out_key in self.out_keys:
             if out_key not in td_out.keys():
                 td_out.set(
