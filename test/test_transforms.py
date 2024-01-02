@@ -9436,10 +9436,39 @@ class TestBurnInTransform(TransformBase):
         """tests that a transformed paprallel env (TransformedEnv(ParallelEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def test_transform_no_env(self):
+    @pytest.mark.parametrize("module", ["gru", "lstm"])
+    @pytest.mark.parametrize("batch_size", [2, 4])
+    @pytest.mark.parametrize("sequence_length", [4, 8])
+    @pytest.mark.parametrize("burn_in", [2])
+    def test_transform_no_env(self, module, batch_size, sequence_length, burn_in):
         """tests the transform on dummy data, without an env."""
-        raise NotImplementedError
+        data = self._make_batch(batch_size, sequence_length)
+
+        if module == "gru":
+            module = self._make_gru_module()
+            hidden = torch.zeros(
+                data.batch_size + (module.gru.num_layers, module.gru.hidden_size)
+            )
+            data.set("rhs", hidden)
+        else:
+            module = self._make_lstm_module()
+            hidden_h = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            hidden_c = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            data.set("rhs_h", hidden_h)
+            data.set("rhs_c", hidden_c)
+
+        burn_in_transform = BurnInTransform(module, burn_in=burn_in)
+        data = burn_in_transform(data)
+        assert data.shape[-1] == sequence_length - burn_in
+
+        for key in data.keys():
+            if key.startswith("rhs"):
+                assert data[:, 0].get(key).abs().sum() > 0.0
+                assert data[:, 1:].get(key).sum() == 0.0
 
     @pytest.mark.parametrize("module", ["gru", "lstm"])
     @pytest.mark.parametrize("batch_size", [2, 4])
@@ -9475,16 +9504,15 @@ class TestBurnInTransform(TransformBase):
                 assert data[:, 0].get(key).abs().sum() > 0.0
                 assert data[:, 1:].get(key).sum() == 0.0
 
-    @abc.abstractmethod
     def test_transform_env(self):
-        """tests the transform on a real env.
-
-        If possible, do not use a mock env, as bugs may go unnoticed if the dynamic is too
-        simplistic. A call to reset() and step() should be tested independently, ie
-        a check that reset produces the desired output and that step() does too.
-
-        """
-        raise NotImplementedError
+        module = self._make_gru_module()
+        burn_in_transform = BurnInTransform(module, burn_in=2)
+        env = TransformedEnv(ContinuousActionVecMockEnv(), burn_in_transform)
+        with pytest.raises(
+            RuntimeError,
+            match="BurnInTransform can only be used when appended to a ReplayBuffer.",
+        ):
+            rollout = env.rollout(3)
 
     @pytest.mark.parametrize("module", ["gru", "lstm"])
     @pytest.mark.parametrize("batch_size", [2, 4])
