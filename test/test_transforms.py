@@ -9441,7 +9441,6 @@ class TestBurnInTransform(TransformBase):
         """tests the transform on dummy data, without an env."""
         raise NotImplementedError
 
-    @abc.abstractmethod
     @pytest.mark.parametrize("module", ["gru", "lstm"])
     @pytest.mark.parametrize("batch_size", [2, 4])
     @pytest.mark.parametrize("sequence_length", [4, 8])
@@ -9492,15 +9491,43 @@ class TestBurnInTransform(TransformBase):
         """tests the transform before an nn.Module that reads the output."""
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def test_transform_rb(self):
-        """tests the transform when used with a replay buffer.
+    @pytest.mark.parametrize("module", ["gru", "lstm"])
+    @pytest.mark.parametrize("batch_size", [2, 4])
+    @pytest.mark.parametrize("sequence_length", [4, 8])
+    @pytest.mark.parametrize("burn_in", [2])
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, module, batch_size, sequence_length, burn_in, rbclass):
 
-        If your transform is not supposed to work with a replay buffer, test that
-        an error will be raised when called or appended to a RB.
+        data = self._make_batch(batch_size, sequence_length)
 
-        """
-        raise NotImplementedError
+        if module == "gru":
+            module = self._make_gru_module()
+            hidden = torch.zeros(
+                data.batch_size + (module.gru.num_layers, module.gru.hidden_size)
+            )
+            data.set("rhs", hidden)
+        else:
+            module = self._make_lstm_module()
+            hidden_h = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            hidden_c = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            data.set("rhs_h", hidden_h)
+            data.set("rhs_c", hidden_c)
+
+        burn_in_transform = BurnInTransform(module, burn_in=burn_in)
+        rb = rbclass(storage=LazyTensorStorage(20))
+        rb.append_transform(burn_in_transform)
+        rb.extend(data)
+        batch = rb.sample(2)
+        assert batch.shape[-1] == sequence_length - burn_in
+
+        for key in batch.keys():
+            if key.startswith("rhs"):
+                assert batch[:, 0].get(key).abs().sum() > 0.0
+                assert batch[:, 1:].get(key).sum() == 0.0
 
     @abc.abstractmethod
     def test_transform_inverse(self):
