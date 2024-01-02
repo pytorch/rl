@@ -9486,10 +9486,39 @@ class TestBurnInTransform(TransformBase):
         """
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def test_transform_model(self):
-        """tests the transform before an nn.Module that reads the output."""
-        raise NotImplementedError
+    @pytest.mark.parametrize("module", ["gru", "lstm"])
+    @pytest.mark.parametrize("batch_size", [2, 4])
+    @pytest.mark.parametrize("sequence_length", [4, 8])
+    @pytest.mark.parametrize("burn_in", [2])
+    def test_transform_model(self, module, batch_size, sequence_length, burn_in):
+        data = self._make_batch(batch_size, sequence_length)
+
+        if module == "gru":
+            module = self._make_gru_module()
+            hidden = torch.zeros(
+                data.batch_size + (module.gru.num_layers, module.gru.hidden_size)
+            )
+            data.set("rhs", hidden)
+        else:
+            module = self._make_lstm_module()
+            hidden_h = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            hidden_c = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            data.set("rhs_h", hidden_h)
+            data.set("rhs_c", hidden_c)
+
+        burn_in_transform = BurnInTransform(module, burn_in=burn_in)
+        module = nn.Sequential(burn_in_transform, nn.Identity())
+        data = module(data)
+        assert data.shape[-1] == sequence_length - burn_in
+
+        for key in data.keys():
+            if key.startswith("rhs"):
+                assert data[:, 0].get(key).abs().sum() > 0.0
+                assert data[:, 1:].get(key).sum() == 0.0
 
     @pytest.mark.parametrize("module", ["gru", "lstm"])
     @pytest.mark.parametrize("batch_size", [2, 4])
@@ -9529,14 +9558,8 @@ class TestBurnInTransform(TransformBase):
                 assert batch[:, 0].get(key).abs().sum() > 0.0
                 assert batch[:, 1:].get(key).sum() == 0.0
 
-    @abc.abstractmethod
     def test_transform_inverse(self):
-        """tests the inverse transform. If not applicable, simply skip this test.
-
-        If your transform is not supposed to work offline, test that
-        an error will be raised when called in a nn.Module.
-        """
-        raise NotImplementedError
+        raise pytest.skip("No inverse for BurnInTransform")
 
 
 if __name__ == "__main__":
