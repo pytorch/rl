@@ -6653,16 +6653,12 @@ class BurnInTransform(Transform):
         self.burn_in = burn_in
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        raise RuntimeError(
-            "BurnInTransform can only be used when appended to a ReplayBuffer."
-        )
+        raise RuntimeError("BurnInTransform can only be appended to a ReplayBuffer")
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        raise RuntimeError(
-            "BurnInTransform can only be used when appended to a ReplayBuffer."
-        )
+        raise RuntimeError("BurnInTransform can only be appended to a ReplayBuffer.")
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
 

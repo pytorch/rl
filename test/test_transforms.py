@@ -9406,35 +9406,30 @@ class TestBurnInTransform(TransformBase):
         )
         return batch
 
-    @abc.abstractmethod
     def test_single_trans_env_check(self):
-        """tests that a transformed env passes the check_env_specs test.
+        raise pytest.skip(
+            "BurnInTransform can only be appended to a ReplayBuffer, not to a TransformedEnv."
+        )
 
-        If your transform can overwrite a key or create a new entry in the tensordict,
-        it is worth trying both options here.
-
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
     def test_serial_trans_env_check(self):
-        """tests that a serial transformed env (SerialEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
-        raise NotImplementedError
+        raise pytest.skip(
+            "BurnInTransform can only be appended to a ReplayBuffer, not to a TransformedEnv."
+        )
 
-    @abc.abstractmethod
     def test_parallel_trans_env_check(self):
-        """tests that a parallel transformed env (ParallelEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
-        raise NotImplementedError
+        raise pytest.skip(
+            "BurnInTransform can only be appended to a ReplayBuffer, not to a TransformedEnv."
+        )
 
-    @abc.abstractmethod
     def test_trans_serial_env_check(self):
-        """tests that a transformed serial env (TransformedEnv(SerialEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
-        raise NotImplementedError
+        raise pytest.skip(
+            "BurnInTransform can only be appended to a ReplayBuffer, not to a TransformedEnv."
+        )
 
-    @abc.abstractmethod
     def test_trans_parallel_env_check(self):
-        """tests that a transformed paprallel env (TransformedEnv(ParallelEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
-        raise NotImplementedError
+        raise pytest.skip(
+            "BurnInTransform can only be appended to a ReplayBuffer, not to a TransformedEnv."
+        )
 
     @pytest.mark.parametrize("module", ["gru", "lstm"])
     @pytest.mark.parametrize("batch_size", [2, 4])
@@ -9510,7 +9505,7 @@ class TestBurnInTransform(TransformBase):
         env = TransformedEnv(ContinuousActionVecMockEnv(), burn_in_transform)
         with pytest.raises(
             RuntimeError,
-            match="BurnInTransform can only be used when appended to a ReplayBuffer.",
+            match="BurnInTransform can only be appended to a ReplayBuffer.",
         ):
             rollout = env.rollout(3)
 
