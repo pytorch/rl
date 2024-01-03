@@ -52,6 +52,7 @@ from torchrl.envs.transforms.transforms import (
     CatFrames,
     CatTensors,
     CenterCrop,
+    Compose,
     DiscreteActionProjection,
     DoubleToFloat,
     FiniteTensorDictCheck,
@@ -60,6 +61,7 @@ from torchrl.envs.transforms.transforms import (
     gSDENoise,
     ObservationNorm,
     PinMemoryTransform,
+    RenameTransform,
     Resize,
     RewardClipping,
     RewardScaling,
@@ -1877,6 +1879,54 @@ class TestEnsemble:
                 if batch_iter is not None:
                     assert batch_iter.shape == torch.Size([3, 16])
                 assert batch_sample.shape == torch.Size([3, 16])
+
+    def test_rb_transform(self):
+        rb0 = TensorDictReplayBuffer(
+            storage=LazyMemmapStorage(10),
+            transform=Compose(
+                ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
+                Resize(32, in_keys=["pixels", ("next", "pixels")]),
+                RenameTransform([("some", "key")], ["renamed"]),
+            ),
+        )
+        rb1 = TensorDictReplayBuffer(
+            storage=LazyMemmapStorage(10),
+            transform=Compose(
+                ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
+                Resize(32, in_keys=["pixels", ("next", "pixels")]),
+                RenameTransform(["another_key"], ["renamed"]),
+            ),
+        )
+        rb = ReplayBufferEnsemble(
+            rb0,
+            rb1,
+            p=[0.5, 0.5],
+            transform=Resize(33, in_keys=["pixels"], out_keys=["pixels33"]),
+        )
+        data0 = TensorDict(
+            {
+                "pixels": torch.randint(255, (10, 244, 244, 3)),
+                ("next", "pixels"): torch.randint(255, (10, 244, 244, 3)),
+                ("some", "key"): torch.randn(10),
+            },
+            batch_size=[10],
+        )
+        data1 = TensorDict(
+            {
+                "pixels": torch.randint(255, (10, 64, 64, 3)),
+                ("next", "pixels"): torch.randint(255, (10, 64, 64, 3)),
+                "another_key": torch.randn(10),
+            },
+            batch_size=[10],
+        )
+        rb0.extend(data0)
+        rb1.extend(data1)
+        for _ in range(2):
+            sample = rb.sample(10)
+            assert sample["next", "pixels"].shape == torch.Size([2, 5, 3, 32, 32])
+            assert sample["pixels"].shape == torch.Size([2, 5, 3, 32, 32])
+            assert sample["pixels33"].shape == torch.Size([2, 5, 3, 33, 33])
+            assert sample["renamed"].shape == torch.Size([2, 5])
 
 
 if __name__ == "__main__":

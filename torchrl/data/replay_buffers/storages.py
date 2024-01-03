@@ -841,9 +841,10 @@ class LazyMemmapStorage(LazyTensorStorage):
 
 
 class StorageEnsemble(Storage):
-    def __init__(self, *storages):
+    def __init__(self, *storages, transforms=None):
         self._storages = storages
         self._attached_entities = set()
+        self._transforms = transforms
 
     def extend(self, value):
         raise RuntimeError
@@ -859,6 +860,13 @@ class StorageEnsemble(Storage):
         for (buffer_id, sample) in zip(buffer_ids, index):
             buffer_id = self._convert_id(buffer_id)
             results.append((buffer_id, self._get_storage(buffer_id).get(sample)))
+        if self._transforms is not None:
+            results = [
+                (buffer_id, self._transforms[buffer_id](result))
+                if self._transforms[buffer_id] is not None
+                else (buffer_id, result)
+                for buffer_id, result in results
+            ]
         return results
 
     def _convert_id(self, sub):

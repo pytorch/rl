@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import collections
 import json
@@ -48,7 +49,6 @@ from torchrl.data.replay_buffers.writers import (
     Writer,
     WriterEnsemble,
 )
-
 from torchrl.data.utils import DEVICE_TYPING
 
 
@@ -1142,15 +1142,16 @@ class ReplayBufferEnsemble(ReplayBuffer):
     def __init__(
         self,
         *rbs,
-        storages=None,
-        samplers=None,
-        writers=None,
-        batch_size=None,
-        collate_fn=None,
-        collate_fns=None,
-        p=None,
-        sample_from_all=False,
-        num_buffer_sampled=None,
+        storages: StorageEnsemble | None = None,
+        samplers: SamplerEnsemble | None = None,
+        writers: WriterEnsemble | None = None,
+        transform: List[Transform] | None = None,
+        batch_size: int | None = None,
+        collate_fn: Callable | None = None,
+        collate_fns: List[Callable] | None = None,
+        p: Tensor = None,
+        sample_from_all: bool = False,
+        num_buffer_sampled: int | None = None,
         **kwargs,
     ):
         if collate_fn is None:
@@ -1158,7 +1159,9 @@ class ReplayBufferEnsemble(ReplayBuffer):
         if rbs:
             if storages is not None or samplers is not None or writers is not None:
                 raise RuntimeError
-            storages = StorageEnsemble(*[rb._storage for rb in rbs])
+            storages = StorageEnsemble(
+                *[rb._storage for rb in rbs], transforms=[rb._transform for rb in rbs]
+            )
             samplers = SamplerEnsemble(
                 *[rb._sampler for rb in rbs],
                 p=p,
@@ -1175,6 +1178,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
             storage=storages,
             sampler=samplers,
             writer=writers,
+            transform=transform,
             batch_size=batch_size,
             collate_fn=collate_fn,
             **kwargs,
@@ -1210,3 +1214,6 @@ class ReplayBufferEnsemble(ReplayBuffer):
     @_collate_fn.setter
     def _collate_fn(self, value):
         self._collate_fn_val = value
+
+    def __getitem__(self, index: Union[int, torch.Tensor]) -> Any:
+        raise NotImplementedError
