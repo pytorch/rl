@@ -335,3 +335,23 @@ class TensorDictMaxValueWriter(Writer):
             dtype=_STRDTYPE2DTYPE[dtype],
             shape=shape,
         ).tolist()
+
+
+class WriterEnsemble(Writer):
+    def __init__(self, *writers):
+        self.writers = writers
+
+    def _empty(self):
+        raise NotImplementedError
+
+    def add(self):
+        raise NotImplementedError
+
+    def dumps(self):
+        raise NotImplementedError
+
+    def loads(self):
+        raise NotImplementedError
+
+    def extend(self):
+        raise NotImplementedError

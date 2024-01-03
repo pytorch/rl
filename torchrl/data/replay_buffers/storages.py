@@ -840,6 +840,42 @@ class LazyMemmapStorage(LazyTensorStorage):
         return result
 
 
+class StorageEnsemble(Storage):
+    def __init__(self, *storages):
+        self._storages = storages
+        self._attached_entities = set()
+
+    def extend(self, value):
+        raise RuntimeError
+
+    def add(self, value):
+        raise RuntimeError
+
+    def get(self, item):
+        # we return the buffer id too to be able to track the appropriate collate_fn
+        buffer_ids = item.get("buffer_ids")
+        index = item.get("index")
+        results = []
+        for (buffer_id, sample) in zip(buffer_ids, index):
+            buffer_id = self._convert_id(buffer_id)
+            results.append((buffer_id, self._get_storage(buffer_id).get(sample)))
+        return results
+
+    def _convert_id(self, sub):
+        if isinstance(sub, torch.Tensor):
+            sub = sub.item()
+        return sub
+
+    def _get_storage(self, sub):
+        return self._storages[sub]
+
+    def dumps(self):
+        raise NotImplementedError
+
+    def loads(self):
+        raise NotImplementedError
+
+
 # Utils
 def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
     if _CKPT_BACKEND == "torchsnapshot" and not _has_ts:

@@ -23,6 +23,7 @@ from torchrl.data import (
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
+    ReplayBufferEnsemble,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
@@ -1772,6 +1773,110 @@ class TestSamplers:
             )
         truncated = info[("next", "truncated")]
         assert truncated.view(num_slices, -1)[:, -1].all()
+
+
+class TestEnsemble:
+    def _make_data(self, data_type):
+        if data_type is torch.Tensor:
+            return torch.ones(90)
+        if data_type is TensorDict:
+            return TensorDict(
+                {
+                    "root": torch.arange(90),
+                    "nested": TensorDict(
+                        {"data": torch.arange(180).view(90, 2)}, batch_size=[90, 2]
+                    ),
+                },
+                batch_size=[90],
+            )
+        raise NotImplementedError
+
+    def _make_sampler(self, sampler_type):
+        if sampler_type is SamplerWithoutReplacement:
+            return SamplerWithoutReplacement(drop_last=False)
+        if sampler_type is RandomSampler:
+            return RandomSampler()
+        raise NotImplementedError
+
+    def _make_storage(self, storage_type, data_type):
+        if storage_type is LazyMemmapStorage:
+            return LazyMemmapStorage(max_size=100)
+        if storage_type is TensorStorage:
+            if data_type is TensorDict:
+                return TensorStorage(TensorDict({}, [100]))
+            elif data_type is torch.Tensor:
+                return TensorStorage(torch.zeros(100))
+            else:
+                raise NotImplementedError
+        if storage_type is ListStorage:
+            return ListStorage(max_size=100)
+        raise NotImplementedError
+
+    def _make_collate(self, storage_type):
+        if storage_type is ListStorage:
+            return torch.stack
+        else:
+            return None
+
+    @pytest.mark.parametrize(
+        "storage_type", [LazyMemmapStorage, TensorStorage, ListStorage]
+    )
+    @pytest.mark.parametrize("data_type", [torch.Tensor, TensorDict])
+    @pytest.mark.parametrize("p", [[0.0, 0.9, 0.1], None])
+    @pytest.mark.parametrize("num_buffer_sampled", [3, 16, None])
+    @pytest.mark.parametrize("batch_size", [48, None])
+    @pytest.mark.parametrize("sampler_type", [RandomSampler, SamplerWithoutReplacement])
+    def test_rb(
+        self, storage_type, sampler_type, data_type, p, num_buffer_sampled, batch_size
+    ):
+
+        storages = [self._make_storage(storage_type, data_type) for _ in range(3)]
+        collate_fn = self._make_collate(storage_type)
+        data = [self._make_data(data_type) for _ in range(3)]
+        samplers = [self._make_sampler(sampler_type) for _ in range(3)]
+        rbs = (rb0, rb1, rb2) = [
+            ReplayBuffer(storage=storage, sampler=sampler, collate_fn=collate_fn)
+            for (storage, sampler) in zip(storages, samplers)
+        ]
+        for datum, rb in zip(data, rbs):
+            rb.extend(datum)
+        rb = ReplayBufferEnsemble(
+            *rbs, p=p, num_buffer_sampled=num_buffer_sampled, batch_size=batch_size
+        )
+        if batch_size is not None:
+            for batch_iter in rb:
+                assert isinstance(batch_iter, (torch.Tensor, TensorDictBase))
+                break
+            batch_sample, info = rb.sample(return_info=True)
+        else:
+            batch_iter = None
+            batch_sample, info = rb.sample(48, return_info=True)
+        assert isinstance(batch_sample, (torch.Tensor, TensorDictBase))
+        if isinstance(batch_sample, TensorDictBase):
+            assert "root" in batch_sample.keys()
+            assert "nested" in batch_sample.keys()
+            assert ("nested", "data") in batch_sample.keys(True)
+            if p is not None:
+                if batch_iter is not None:
+                    buffer_ids = batch_iter.get(("index", "buffer_ids"))
+                    assert isinstance(buffer_ids, torch.Tensor), batch_iter
+                    assert 0 not in buffer_ids.unique().tolist()
+
+                buffer_ids = batch_sample.get(("index", "buffer_ids"))
+                assert isinstance(buffer_ids, torch.Tensor), buffer_ids
+                assert 0 not in buffer_ids.unique().tolist()
+            if num_buffer_sampled is not None:
+                if batch_iter is not None:
+                    assert batch_iter.shape == torch.Size(
+                        [num_buffer_sampled, 48 // num_buffer_sampled]
+                    )
+                assert batch_sample.shape == torch.Size(
+                    [num_buffer_sampled, 48 // num_buffer_sampled]
+                )
+            else:
+                if batch_iter is not None:
+                    assert batch_iter.shape == torch.Size([3, 16])
+                assert batch_sample.shape == torch.Size([3, 16])
 
 
 if __name__ == "__main__":

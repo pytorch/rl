@@ -20,7 +20,7 @@ from tensordict.tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.utils import expand_as_right
+from tensordict.utils import expand_as_right, expand_right
 
 from torchrl._utils import accept_remote_rref_udf_invocation
 
@@ -28,11 +28,13 @@ from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
     Sampler,
+    SamplerEnsemble,
 )
 from torchrl.data.replay_buffers.storages import (
     _get_default_collate,
     ListStorage,
     Storage,
+    StorageEnsemble,
 )
 from torchrl.data.replay_buffers.utils import (
     _to_numpy,
@@ -44,6 +46,7 @@ from torchrl.data.replay_buffers.writers import (
     RoundRobinWriter,
     TensorDictRoundRobinWriter,
     Writer,
+    WriterEnsemble,
 )
 
 from torchrl.data.utils import DEVICE_TYPING
@@ -372,7 +375,7 @@ class ReplayBuffer:
         with self._replay_lock:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
-            data = self._storage[index]
+            data = self._storage.get(index)
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
@@ -1133,3 +1136,77 @@ def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
 
     """
     return tuple(torch.stack(tensors, 0) for tensors in zip(*list_of_tensor_iterators))
+
+
+class ReplayBufferEnsemble(ReplayBuffer):
+    def __init__(
+        self,
+        *rbs,
+        storages=None,
+        samplers=None,
+        writers=None,
+        batch_size=None,
+        collate_fn=None,
+        collate_fns=None,
+        p=None,
+        sample_from_all=False,
+        num_buffer_sampled=None,
+        **kwargs,
+    ):
+        if collate_fn is None:
+            collate_fn = torch.stack
+        if rbs:
+            if storages is not None or samplers is not None or writers is not None:
+                raise RuntimeError
+            storages = StorageEnsemble(*[rb._storage for rb in rbs])
+            samplers = SamplerEnsemble(
+                *[rb._sampler for rb in rbs],
+                p=p,
+                sample_from_all=sample_from_all,
+                num_buffer_sampled=num_buffer_sampled,
+            )
+            writers = WriterEnsemble(*[rb._writer for rb in rbs])
+            if collate_fns is None:
+                collate_fns = [rb._collate_fn for rb in rbs]
+        else:
+            pass
+        self._collate_fns = collate_fns
+        super().__init__(
+            storage=storages,
+            sampler=samplers,
+            writer=writers,
+            batch_size=batch_size,
+            collate_fn=collate_fn,
+            **kwargs,
+        )
+
+    def _sample(self, *args, **kwargs):
+        sample, info = super()._sample(*args, **kwargs)
+        if isinstance(sample, TensorDictBase):
+            buffer_ids = info.get(("index", "buffer_ids"))
+            info.set(
+                ("index", "buffer_ids"), expand_right(buffer_ids, sample.batch_size)
+            )
+            if isinstance(info, LazyStackedTensorDict):
+                for _info, _sample in zip(
+                    info.unbind(info.stack_dim), sample.unbind(info.stack_dim)
+                ):
+                    _info.batch_size = _sample.batch_size
+                info = torch.stack(info.tensordicts, info.stack_dim)
+            else:
+                info.batch_size = sample.batch_size
+            sample.update(info)
+
+        return sample, info
+
+    @property
+    def _collate_fn(self):
+        def new_collate(samples):
+            samples = [self._collate_fns[i](sample) for (i, sample) in samples]
+            return self._collate_fn_val(samples)
+
+        return new_collate
+
+    @_collate_fn.setter
+    def _collate_fn(self, value):
+        self._collate_fn_val = value

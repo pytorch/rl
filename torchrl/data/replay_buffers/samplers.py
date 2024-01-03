@@ -15,10 +15,13 @@ from typing import Any, Dict, Tuple, Union
 import numpy as np
 import torch
 
-from tensordict import MemoryMappedTensor
+from tensordict import MemoryMappedTensor, TensorDict
 from tensordict.utils import NestedKey
 
 from torchrl._extension import EXTENSION_WARNING
+
+from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
+from torchrl.data.replay_buffers.utils import _to_numpy, INT_CLASSES
 
 try:
     from torchrl._torchrl import (
@@ -29,9 +32,6 @@ try:
     )
 except ImportError:
     warnings.warn(EXTENSION_WARNING)
-
-from torchrl.data.replay_buffers.storages import Storage, TensorStorage
-from torchrl.data.replay_buffers.utils import _to_numpy, INT_CLASSES
 
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
@@ -940,7 +940,6 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         self._storage_len_buffer = len(start_idx)
-        print("self._storage_len_buffer", self._storage_len_buffer)
         # first get indices of the trajectories we want to retrieve
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
         indices, _ = SamplerWithoutReplacement.sample(self, storage, num_slices)
@@ -948,3 +947,85 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             lengths, start_idx, seq_length, num_slices, traj_idx=indices
         )
         return idx, info
+
+
+class SamplerEnsemble(Sampler):
+    def __init__(
+        self, *samplers, p=None, sample_from_all=False, num_buffer_sampled=None
+    ):
+        self._samplers = samplers
+        self.sample_from_all = sample_from_all
+        self.p = p
+        self.num_buffer_sampled = num_buffer_sampled
+
+    @property
+    def p(self):
+        return self._p
+
+    @p.setter
+    def p(self, value):
+        if not isinstance(value, torch.Tensor) and value is not None:
+            value = torch.tensor(value)
+        self._p = value
+
+    @property
+    def num_buffer_sampled(self):
+        value = self.__dict__.get("_num_buffer_sampled", None)
+        if value is None:
+            value = self.__dict__["_num_buffer_sampled"] = len(self._samplers)
+        return value
+
+    @num_buffer_sampled.setter
+    def num_buffer_sampled(self, value):
+        self.__dict__["_num_buffer_sampled"] = value
+
+    def sample(self, storage, batch_size):
+        if batch_size % self.num_buffer_sampled > 0:
+            raise ValueError
+        if not isinstance(storage, StorageEnsemble):
+            raise TypeError
+        sub_batch_size = batch_size // self.num_buffer_sampled
+        if self.sample_from_all:
+            samples, infos = zip(
+                *[
+                    sampler.sample(storage, sub_batch_size)
+                    for storage, sampler in zip(storage._storages, self._samplers)
+                ]
+            )
+            buffer_ids = torch.arange(len(samples))
+        else:
+            if self.p is None:
+                buffer_ids = torch.randint(
+                    len(self._samplers), (self.num_buffer_sampled,)
+                )
+            else:
+                buffer_ids = torch.multinomial(self.p, self.num_buffer_sampled, True)
+            samples, infos = zip(
+                *[
+                    self._samplers[i].sample(storage._storages[i], sub_batch_size)
+                    for i in buffer_ids.tolist()
+                ]
+            )
+        samples = TensorDict(
+            {
+                "index": torch.stack(samples),
+                "buffer_ids": buffer_ids,
+            },
+            batch_size=[self.num_buffer_sampled],
+        )
+        infos = torch.stack(
+            [
+                TensorDict.from_dict(info) if info else TensorDict({}, [])
+                for info in infos
+            ]
+        )
+        return samples, infos
+
+    def dumps(self):
+        raise NotImplementedError
+
+    def loads(self):
+        raise NotImplementedError
+
+    def _empty(self):
+        raise NotImplementedError
