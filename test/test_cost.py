@@ -120,6 +120,7 @@ from torchrl.objectives.deprecated import DoubleREDQLoss_deprecated, REDQLoss_de
 from torchrl.objectives.redq import REDQLoss
 from torchrl.objectives.reinforce import ReinforceLoss
 from torchrl.objectives.utils import (
+    _vmap_func,
     HardUpdate,
     hold_out_net,
     SoftUpdate,
@@ -231,6 +232,38 @@ class LossModuleTestBase:
             assert (
                 getattr(test_fn.value_estimator.tensor_keys, advantage_key) == new_key
             )
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("vmap_randomness", (None, "different", "same"))
+@pytest.mark.parametrize("dropout", (0.0, 0.1))
+def test_loss_vmap_random(device, vmap_randomness, dropout):
+    class VmapTestLoss(LossModule):
+        def __init__(self):
+            super().__init__()
+            layers = [nn.Linear(4, 4), nn.ReLU()]
+            if dropout > 0.0:
+                layers.append(nn.Dropout(dropout))
+            layers.append(nn.Linear(4, 4))
+            net = nn.Sequential(*layers).to(device)
+            model = TensorDictModule(net, in_keys=["obs"], out_keys=["action"])
+            self.convert_to_functional(model, "model", expand_dim=4)
+            self.vmap_model = _vmap_func(
+                self.model, (None, 0), randomness=self.vmap_randomness
+            )
+
+        def forward(self, td):
+            out = self.vmap_model(td, self.model_params)
+            return {"loss": out["action"].mean()}
+
+    loss_module = VmapTestLoss()
+    td = TensorDict({"obs": torch.randn(3, 4).to(device)}, [3])
+
+    # If user sets vmap randomness to a specific value
+    if vmap_randomness in ("different", "same") and dropout > 0.0:
+        loss_module.set_vmap_randomness(vmap_randomness)
+
+    loss_module(td)["loss"]
 
 
 class TestDQN(LossModuleTestBase):
@@ -4883,7 +4916,6 @@ class TestCQL(LossModuleTestBase):
         device,
         td_est,
     ):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_cql(device=device)
 
