@@ -10,9 +10,9 @@ import numpy as np
 import torch
 from torch import nn
 
-from ...data import DEVICE_TYPING
+from torchrl.data.utils import DEVICE_TYPING
 
-from .models import ConvNet, MLP
+from torchrl.modules.models import ConvNet, MLP
 
 
 class MultiAgentMLP(nn.Module):

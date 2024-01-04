@@ -11,7 +11,7 @@ from tensordict.nn import dispatch, TensorDictModule
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
-from torchrl.data import BoundedTensorSpec, CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec, TensorSpec
 
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
@@ -258,7 +258,7 @@ class TD3Loss(LossModule):
         if not ((action_spec is not None) ^ (bounds is not None)):
             raise ValueError(
                 "One of 'bounds' and 'action_spec' must be provided, "
-                f"but not both. Got bounds={bounds} and action_spec={action_spec}."
+                f"but not both or none. Got bounds={bounds} and action_spec={action_spec}."
             )
         elif action_spec is not None:
             if isinstance(action_spec, CompositeSpec):

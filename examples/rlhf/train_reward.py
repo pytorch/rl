@@ -62,10 +62,9 @@ def main(cfg):
     always_save_checkpoint = train_cfg.always_save_checkpoint
 
     device = cfg.sys.device
-    dtype = cfg.sys.dtype
     compile_ = cfg.sys.compile
 
-    ctx = setup(device=device, dtype=dtype)
+    ctx = setup(cfg.sys)
 
     train_loader = get_dataloader(
         data_cfg.batch_size,

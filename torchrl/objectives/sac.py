@@ -16,7 +16,7 @@ from tensordict.nn import dispatch, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
-from torchrl.data import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor
@@ -1200,11 +1200,12 @@ class DiscreteSACLoss(LossModule):
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # get probs and log probs for actions
         with self.actor_network_params.to_module(self.actor_network):
-            dist = self.actor_network.get_dist(tensordict)
+            dist = self.actor_network.get_dist(tensordict.clone(False))
         prob = dist.probs
-        log_prob = torch.log(torch.where(prob == 0, 1e-8, prob))
+        log_prob = dist.logits
 
         td_q = tensordict.select(*self.qvalue_network.in_keys)
+
         td_q = self._vmap_qnetworkN0(
             td_q, self._cached_detached_qvalue_params  # should we clone?
         )
@@ -1234,7 +1235,9 @@ class DiscreteSACLoss(LossModule):
     @property
     def _alpha(self):
         if self.min_log_alpha is not None:
-            self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
+            self.log_alpha.data = self.log_alpha.data.clamp(
+                self.min_log_alpha, self.max_log_alpha
+            )
         with torch.no_grad():
             alpha = self.log_alpha.exp()
         return alpha
