@@ -6579,7 +6579,6 @@ class BurnInTransform(Transform):
         >>> from tensordict import TensorDict
         >>> from torchrl.envs.transforms import BurnInTransform
         >>> from torchrl.modules import GRUModule
-
         >>> gru_module = GRUModule(
         ...     input_size=10,
         ...     hidden_size=10,
