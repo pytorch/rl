@@ -572,6 +572,7 @@ to be able to create this other composition:
     TransformedEnv
     ActionMask
     BinarizeReward
+    BurnInTransform
     CatFrames
     CatTensors
     CenterCrop
@@ -616,7 +617,6 @@ to be able to create this other composition:
     VC1Transform
     VIPRewardTransform
     VIPTransform
-    BurnInTransform
 
 Environments with masked actions
 --------------------------------
