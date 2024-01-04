@@ -6560,14 +6560,15 @@ class BurnInTransform(Transform):
     This transform is useful to obtain up-to-date recurrent states when
     they are not available. It burns-in a number of steps along the time dimension
     from sampled sequential data slices and returs the remaining data sequence with
-    the burnt in data in its initial time step. It is intended to be used as a
+    the burnt-in data in its initial time step. This transform is intended to be used as a
     replay buffer transform, not as an environment transform.
 
     Args:
         modules (sequence of TensorDictModule): A list of modules used to burn-in data sequences.
         burn_in (int): The number of time steps to burn in.
         out_keys (sequence of NestedKey, optional): destination keys. Defaults to
-            all the modules `out_keys` that point to the next time step (e.g. `("next", "hidden")`).
+            all the modules `out_keys` that point to the next time step (e.g. `"hidden"` if `
+            ("next", "hidden")` is part of the `out_keys` of a module).
 
     .. note::
         This transform expects as inputs TensorDicts with its last dimension being the
@@ -6646,6 +6647,18 @@ class BurnInTransform(Transform):
                 for key in module.out_keys:
                     if key[0] == "next":
                         out_keys.add(key[1])
+        else:
+            out_keys_ = set()
+            for key in out_keys:
+                if isinstance(key, tuple) and key[0] == "next":
+                    key = key[1]
+                    warnings.warn(
+                        f"The 'next' key is not needed in the BurnInTransform `out_key` {key} and "
+                        f"will be ignored. This transform already assumes that `out_keys` will be "
+                        f"retrieved from the next time step of the burnt-in data."
+                    )
+                out_keys_.add(key)
+            out_keys = out_keys_
 
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.modules = modules
