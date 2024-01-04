@@ -235,7 +235,7 @@ class LossModuleTestBase:
 
 
 @pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("vmap_randomness", (None, "different", "same"))
+@pytest.mark.parametrize("vmap_randomness", (None, "different", "same", "error"))
 @pytest.mark.parametrize("dropout", (0.0, 0.1))
 def test_loss_vmap_random(device, vmap_randomness, dropout):
     class VmapTestLoss(LossModule):
@@ -249,7 +249,11 @@ def test_loss_vmap_random(device, vmap_randomness, dropout):
             model = TensorDictModule(net, in_keys=["obs"], out_keys=["action"])
             self.convert_to_functional(model, "model", expand_dim=4)
             self.vmap_model = _vmap_func(
-                self.model, (None, 0), randomness=self.vmap_randomness
+                self.model,
+                (None, 0),
+                randomness="error"
+                if vmap_randomness == "error"
+                else self.vmap_randomness,
             )
 
         def forward(self, td):
@@ -262,8 +266,14 @@ def test_loss_vmap_random(device, vmap_randomness, dropout):
     # If user sets vmap randomness to a specific value
     if vmap_randomness in ("different", "same") and dropout > 0.0:
         loss_module.set_vmap_randomness(vmap_randomness)
+        loss_module(td)["loss"]
+    # Fail case
+    elif vmap_randomness == "error" and dropout > 0.0:
+        with pytest.raises(RuntimeError):
+            loss_module(td)["loss"]
 
-    loss_module(td)["loss"]
+    else:
+        loss_module(td)["loss"]
 
 
 class TestDQN(LossModuleTestBase):
