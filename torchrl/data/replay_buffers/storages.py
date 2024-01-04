@@ -877,11 +877,73 @@ class StorageEnsemble(Storage):
     def _get_storage(self, sub):
         return self._storages[sub]
 
-    def dumps(self):
-        raise NotImplementedError
+    def dumps(self, path: Path):
+        path = Path(path).absolute()
+        for i, storage in enumerate(self._storages):
+            storage.dumps(path / str(i))
 
-    def loads(self):
-        raise NotImplementedError
+    def loads(self, path: Path):
+        path = Path(path).absolute()
+        for i, storage in enumerate(self._storages):
+            storage.loads(path / str(i))
+
+    _INDEX_ERROR = "Expected an index of type torch.Tensor, range, np.ndarray, int, slice or ellipsis, got {} instead."
+
+    def __getitem__(self, index):
+        if isinstance(index, tuple):
+            if index[0] is Ellipsis:
+                index = (slice(None), index[1:])
+            result = self[index[0]]
+            if len(index) > 1:
+                if result is self:
+                    # then index[0] is an ellipsis/slice(None)
+                    sample = [storage[index[1:]] for storage in self._storages]
+                    return sample
+                if isinstance(result, StorageEnsemble):
+                    new_index = (slice(None), *index[1:])
+                    return result[new_index]
+                return result[index[1:]]
+            return result
+        if isinstance(index, slice) and index == slice(None):
+            return self
+        if isinstance(index, (list, range, np.ndarray)):
+            index = torch.tensor(index)
+        if isinstance(index, torch.Tensor):
+            if index.ndim > 1:
+                raise RuntimeError(
+                    f"Cannot index a {type(self)} with tensor indices that have more than one dimension."
+                )
+            if index.is_floating_point():
+                raise TypeError(
+                    "A floating point index was recieved when an integer dtype was expected."
+                )
+        if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
+            try:
+                index = int(index)
+            except Exception:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+            try:
+                return self._storages[index]
+            except IndexError:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+        if isinstance(index, torch.Tensor):
+            index = index.tolist()
+            storages = [self._storages[i] for i in index]
+            transforms = (
+                [self._transforms[i] for i in index]
+                if self._transforms is not None
+                else [None] * len(index)
+            )
+        else:
+            # slice
+            storages = self._storages[index]
+            transforms = (
+                self._transforms[index]
+                if self._transforms is not None
+                else [None] * len(samplers)
+            )
+
+        return StorageEnsemble(*storages, transforms=transforms)
 
 
 # Utils

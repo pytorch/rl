@@ -55,7 +55,7 @@ class Writer(ABC):
         return {}
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        return
+        ...
 
 
 class RoundRobinWriter(Writer):
@@ -339,7 +339,7 @@ class TensorDictMaxValueWriter(Writer):
 
 class WriterEnsemble(Writer):
     def __init__(self, *writers):
-        self.writers = writers
+        self._writers = writers
 
     def _empty(self):
         raise NotImplementedError
@@ -347,11 +347,53 @@ class WriterEnsemble(Writer):
     def add(self):
         raise NotImplementedError
 
-    def dumps(self):
-        raise NotImplementedError
+    def dumps(self, path: Path):
+        ...
 
-    def loads(self):
-        raise NotImplementedError
+    def loads(self, path: Path):
+        ...
 
     def extend(self):
         raise NotImplementedError
+
+    _INDEX_ERROR = "Expected an index of type torch.Tensor, range, np.ndarray, int, slice or ellipsis, got {} instead."
+
+    def __getitem__(self, index):
+        if isinstance(index, tuple):
+            if index[0] is Ellipsis:
+                index = (slice(None), index[1:])
+            result = self[index[0]]
+            if len(index) > 1:
+                raise IndexError(
+                    f"Tuple of length greater than 1 are not accepted to index writers of type {type(self)}."
+                )
+            return result
+        if isinstance(index, slice) and index == slice(None):
+            return self
+        if isinstance(index, (list, range, np.ndarray)):
+            index = torch.tensor(index)
+        if isinstance(index, torch.Tensor):
+            if index.ndim > 1:
+                raise RuntimeError(
+                    f"Cannot index a {type(self)} with tensor indices that have more than one dimension."
+                )
+            if index.is_floating_point():
+                raise TypeError(
+                    "A floating point index was recieved when an integer dtype was expected."
+                )
+        if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
+            try:
+                index = int(index)
+            except Exception:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+            try:
+                return self._writers[index]
+            except IndexError:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+        if isinstance(index, torch.Tensor):
+            index = index.tolist()
+            writers = [self._writers[i] for i in index]
+        else:
+            # slice
+            writers = self._writers[index]
+        return WriterEnsemble(*writers)

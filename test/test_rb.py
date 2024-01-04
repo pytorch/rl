@@ -31,6 +31,7 @@ from torchrl.data.replay_buffers import samplers, writers
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
+    SamplerEnsemble,
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
@@ -40,12 +41,14 @@ from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
+    StorageEnsemble,
     TensorStorage,
 )
 from torchrl.data.replay_buffers.writers import (
     RoundRobinWriter,
     TensorDictMaxValueWriter,
     TensorDictRoundRobinWriter,
+    WriterEnsemble,
 )
 from torchrl.envs.transforms.transforms import (
     BinarizeReward,
@@ -1880,7 +1883,8 @@ class TestEnsemble:
                     assert batch_iter.shape == torch.Size([3, 16])
                 assert batch_sample.shape == torch.Size([3, 16])
 
-    def test_rb_transform(self):
+    def _prepare_dual_replay_buffer(self, explicit=False):
+        torch.manual_seed(0)
         rb0 = TensorDictReplayBuffer(
             storage=LazyMemmapStorage(10),
             transform=Compose(
@@ -1897,12 +1901,27 @@ class TestEnsemble:
                 RenameTransform(["another_key"], ["renamed"]),
             ),
         )
-        rb = ReplayBufferEnsemble(
-            rb0,
-            rb1,
-            p=[0.5, 0.5],
-            transform=Resize(33, in_keys=["pixels"], out_keys=["pixels33"]),
-        )
+        if explicit:
+            storages = StorageEnsemble(
+                rb0._storage, rb1._storage, transforms=[rb0._transform, rb1._transform]
+            )
+            writers = WriterEnsemble(rb0._writer, rb1._writer)
+            samplers = SamplerEnsemble(rb0._sampler, rb1._sampler, p=[0.5, 0.5])
+            collate_fns = [rb0._collate_fn, rb1._collate_fn]
+            rb = ReplayBufferEnsemble(
+                storages=storages,
+                samplers=samplers,
+                writers=writers,
+                collate_fns=collate_fns,
+                transform=Resize(33, in_keys=["pixels"], out_keys=["pixels33"]),
+            )
+        else:
+            rb = ReplayBufferEnsemble(
+                rb0,
+                rb1,
+                p=[0.5, 0.5],
+                transform=Resize(33, in_keys=["pixels"], out_keys=["pixels33"]),
+            )
         data0 = TensorDict(
             {
                 "pixels": torch.randint(255, (10, 244, 244, 3)),
@@ -1921,12 +1940,93 @@ class TestEnsemble:
         )
         rb0.extend(data0)
         rb1.extend(data1)
+        return rb, rb0, rb1
+
+    def test_rb_transform(self):
+        rb, rb0, rb1 = self._prepare_dual_replay_buffer()
         for _ in range(2):
             sample = rb.sample(10)
             assert sample["next", "pixels"].shape == torch.Size([2, 5, 3, 32, 32])
             assert sample["pixels"].shape == torch.Size([2, 5, 3, 32, 32])
             assert sample["pixels33"].shape == torch.Size([2, 5, 3, 33, 33])
             assert sample["renamed"].shape == torch.Size([2, 5])
+
+    @pytest.mark.parametrize("explicit", [False, True])
+    def test_rb_indexing(self, explicit):
+        rb, rb0, rb1 = self._prepare_dual_replay_buffer(explicit=explicit)
+        if explicit:
+            # indirect checks
+            assert rb[0]._storage is rb0._storage
+            assert rb[1]._storage is rb1._storage
+        else:
+            assert rb[0] is rb0
+            assert rb[1] is rb1
+        assert rb[:] is rb
+
+        torch.manual_seed(0)
+        sample1 = rb.sample(6)
+        # tensor
+        torch.manual_seed(0)
+        sample0 = rb[torch.tensor([0, 1])].sample(6)
+        assert_allclose_td(sample0, sample1)
+        # slice
+        torch.manual_seed(0)
+        sample0 = rb[:2].sample(6)
+        assert_allclose_td(sample0, sample1)
+        # np.ndarray
+        torch.manual_seed(0)
+        sample0 = rb[np.array([0, 1])].sample(6)
+        assert_allclose_td(sample0, sample1)
+        # list
+        torch.manual_seed(0)
+        sample0 = rb[[0, 1]].sample(6)
+        assert_allclose_td(sample0, sample1)
+
+        # direct indexing
+        sample1 = rb[:, :3]
+        # tensor
+        sample0 = rb[torch.tensor([0, 1]), :3]
+        assert_allclose_td(sample0, sample1)
+        # slice
+        torch.manual_seed(0)
+        sample0 = rb[:2, :3]
+        assert_allclose_td(sample0, sample1)
+        # np.ndarray
+        torch.manual_seed(0)
+        sample0 = rb[np.array([0, 1]), :3]
+        assert_allclose_td(sample0, sample1)
+        # list
+        torch.manual_seed(0)
+        sample0 = rb[[0, 1], :3]
+        assert_allclose_td(sample0, sample1)
+
+        # check indexing of components
+        assert isinstance(rb._storage[:], StorageEnsemble)
+        assert isinstance(rb._storage[:2], StorageEnsemble)
+        assert isinstance(rb._storage[torch.tensor([0, 1])], StorageEnsemble)
+        assert isinstance(rb._storage[np.array([0, 1])], StorageEnsemble)
+        assert isinstance(rb._storage[[0, 1]], StorageEnsemble)
+        assert isinstance(rb._storage[1], LazyMemmapStorage)
+
+        rb._storage[:, :3]
+        rb._storage[:2, :3]
+        rb._storage[torch.tensor([0, 1]), :3]
+        rb._storage[np.array([0, 1]), :3]
+        rb._storage[[0, 1], :3]
+
+        assert isinstance(rb._sampler[:], SamplerEnsemble)
+        assert isinstance(rb._sampler[:2], SamplerEnsemble)
+        assert isinstance(rb._sampler[torch.tensor([0, 1])], SamplerEnsemble)
+        assert isinstance(rb._sampler[np.array([0, 1])], SamplerEnsemble)
+        assert isinstance(rb._sampler[[0, 1]], SamplerEnsemble)
+        assert isinstance(rb._sampler[1], RandomSampler)
+
+        assert isinstance(rb._writer[:], WriterEnsemble)
+        assert isinstance(rb._writer[:2], WriterEnsemble)
+        assert isinstance(rb._writer[torch.tensor([0, 1])], WriterEnsemble)
+        assert isinstance(rb._writer[np.array([0, 1])], WriterEnsemble)
+        assert isinstance(rb._writer[[0, 1]], WriterEnsemble)
+        assert isinstance(rb._writer[0], RoundRobinWriter)
 
 
 if __name__ == "__main__":

@@ -1021,11 +1021,63 @@ class SamplerEnsemble(Sampler):
         )
         return samples, infos
 
-    def dumps(self):
-        raise NotImplementedError
+    def dumps(self, path: Path):
+        path = Path(path).absolute()
+        for i, sampler in enumerate(self._samplers):
+            sampler.dumps(path / str(i))
 
-    def loads(self):
-        raise NotImplementedError
+    def loads(self, path: Path):
+        path = Path(path).absolute()
+        for i, sampler in enumerate(self._samplers):
+            sampler.loads(path / str(i))
 
     def _empty(self):
         raise NotImplementedError
+
+    _INDEX_ERROR = "Expected an index of type torch.Tensor, range, np.ndarray, int, slice or ellipsis, got {} instead."
+
+    def __getitem__(self, index):
+        if isinstance(index, tuple):
+            if index[0] is Ellipsis:
+                index = (slice(None), index[1:])
+            result = self[index[0]]
+            if len(index) > 1:
+                raise IndexError(
+                    f"Tuple of length greater than 1 are not accepted to index samplers of type {type(self)}."
+                )
+            return result
+        if isinstance(index, slice) and index == slice(None):
+            return self
+        if isinstance(index, (list, range, np.ndarray)):
+            index = torch.tensor(index)
+        if isinstance(index, torch.Tensor):
+            if index.ndim > 1:
+                raise RuntimeError(
+                    f"Cannot index a {type(self)} with tensor indices that have more than one dimension."
+                )
+            if index.is_floating_point():
+                raise TypeError(
+                    "A floating point index was recieved when an integer dtype was expected."
+                )
+        if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
+            try:
+                index = int(index)
+            except Exception:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+            try:
+                return self._samplers[index]
+            except IndexError:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+        if isinstance(index, torch.Tensor):
+            index = index.tolist()
+            samplers = [self._samplers[i] for i in index]
+        else:
+            # slice
+            samplers = self._samplers[index]
+        p = self._p[index]
+        return SamplerEnsemble(
+            *samplers,
+            p=p,
+            sample_from_all=self.sample_from_all,
+            num_buffer_sampled=self.num_buffer_sampled,
+        )
