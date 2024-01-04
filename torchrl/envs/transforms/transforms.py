@@ -6674,7 +6674,7 @@ class BurnInTransform(Transform):
         # Burn in the recurrent state.
         with torch.no_grad():
             for module in self.modules:
-                module_device = next(module.parameters()).device or "cpu"
+                module_device = next(module.parameters()).device or None
                 td_burn_in = td_burn_in.to(module_device)
                 td_burn_in = module(td_burn_in)
         td_burn_in = td_burn_in.to(td_device)
