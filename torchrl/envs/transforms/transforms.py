@@ -6681,7 +6681,7 @@ class BurnInTransform(Transform):
 
         # Update out TensorDict with the burnt-in data.
         for out_key in self.out_keys:
-            if out_key not in td_out.keys():
+            if out_key not in td_out.keys(include_nested=True):
                 td_out.set(
                     out_key,
                     torch.zeros(
