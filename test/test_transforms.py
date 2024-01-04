@@ -9437,6 +9437,7 @@ class TestBurnInTransform(TransformBase):
     @pytest.mark.parametrize("burn_in", [2])
     def test_transform_no_env(self, module, batch_size, sequence_length, burn_in):
         """tests the transform on dummy data, without an env."""
+        torch.manual_seed(0)
         data = self._make_batch(batch_size, sequence_length)
 
         if module == "gru":
@@ -9471,6 +9472,7 @@ class TestBurnInTransform(TransformBase):
     @pytest.mark.parametrize("burn_in", [2])
     def test_transform_compose(self, module, batch_size, sequence_length, burn_in):
         """tests the transform on dummy data, without an env but inside a Compose."""
+        torch.manual_seed(0)
         data = self._make_batch(batch_size, sequence_length)
 
         if module == "gru":
@@ -9514,6 +9516,7 @@ class TestBurnInTransform(TransformBase):
     @pytest.mark.parametrize("sequence_length", [4, 8])
     @pytest.mark.parametrize("burn_in", [2])
     def test_transform_model(self, module, batch_size, sequence_length, burn_in):
+        torch.manual_seed(0)
         data = self._make_batch(batch_size, sequence_length)
 
         if module == "gru":
@@ -9549,7 +9552,7 @@ class TestBurnInTransform(TransformBase):
     @pytest.mark.parametrize("burn_in", [2])
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(self, module, batch_size, sequence_length, burn_in, rbclass):
-
+        torch.manual_seed(0)
         data = self._make_batch(batch_size, sequence_length)
 
         if module == "gru":
