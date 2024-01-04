@@ -6664,7 +6664,7 @@ class BurnInTransform(Transform):
         if self.burn_in == 0:
             return tensordict
 
-        td_device = tensordict.device or "cpu"
+        td_device = tensordict.device
         B, T, *extra_dims = tensordict.batch_size
 
         # Split the tensor dict into burn-in data and the rest.
