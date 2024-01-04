@@ -9407,14 +9407,15 @@ class TestBurnInTransform(TransformBase):
         return batch
 
     def test_single_trans_env_check(self):
-        # raise pytest.skip(
-        #         "BurnInTransform can only be appended to a ReplayBuffer, not to a TransformedEnv."
-        #     )
         module = self._make_gru_module()
         burn_in_transform = BurnInTransform(module, burn_in=2)
-        env = TransformedEnv(ContinuousActionVecMockEnv(), burn_in_transform)
-        check_env_specs(env)
-        env.close()
+        with pytest.raises(
+                RuntimeError,
+                match="BurnInTransform can only be appended to a ReplayBuffer.",
+        ):
+            env = TransformedEnv(ContinuousActionVecMockEnv(), burn_in_transform)
+            check_env_specs(env)
+            env.close()
 
     def test_serial_trans_env_check(self):
         raise pytest.skip(
