@@ -14,6 +14,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
+from torch.nn.modules import dropout
 
 try:
     from torch import vmap
@@ -30,13 +31,7 @@ _GAMMA_LMBDA_DEPREC_WARNING = (
     "run `loss_module.make_value_estimator(ValueEstimators.<value_fun>, gamma=val)`."
 )
 
-RANDOM_MODULE_LIST = (
-    nn.Dropout,
-    nn.Dropout2d,
-    nn.Dropout3d,
-    nn.AlphaDropout,
-    nn.FeatureAlphaDropout,
-)
+RANDOM_MODULE_LIST = (dropout._DropoutNd,)
 
 
 class ValueEstimators(Enum):
