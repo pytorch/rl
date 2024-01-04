@@ -6566,8 +6566,8 @@ class BurnInTransform(Transform):
     Args:
         modules (sequence of TensorDictModule): A list of modules used to burn-in data sequences.
         burn_in (int): The number of time steps to burn in.
-        out_keys (sequence of NestedKey, optional): destination keys. defaults to
-        all the modules out keys that point to the next time step (e.g. ("next", "hidden")).
+        out_keys (sequence of NestedKey, optional): destination keys. Defaults to
+            all the modules `out_keys` that point to the next time step (e.g. `("next", "hidden")`).
 
     .. note::
         This transform expects as inputs TensorDicts with its last dimension being the
