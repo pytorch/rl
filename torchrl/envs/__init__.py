@@ -38,6 +38,7 @@ from .model_based import ModelBasedEnvBase
 from .transforms import (
     ActionMask,
     BinarizeReward,
+    BurnInTransform,
     CatFrames,
     CatTensors,
     CenterCrop,

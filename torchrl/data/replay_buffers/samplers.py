@@ -690,7 +690,9 @@ class SliceSampler(Sampler):
                     and self._used_traj_key[0] == "_data"
                 )
                 vals = self._find_start_stop_traj(trajectory=trajectory[: len(storage)])
-                return self._cache.setdefault("stop-and-length", vals)
+                if self.cache_values:
+                    self._cache["stop-and-length"] = vals
+                return vals
             except KeyError:
                 if fallback:
                     self._fetch_traj = False
@@ -714,7 +716,9 @@ class SliceSampler(Sampler):
                     and self._used_end_key[0] == "_data"
                 )
                 vals = self._find_start_stop_traj(end=done.squeeze())[: len(storage)]
-                return self._cache.setdefault("stop-and-length", vals)
+                if self.cache_values:
+                    self._cache["stop-and-length"] = vals
+                return vals
             except KeyError:
                 if fallback:
                     self._fetch_traj = True
