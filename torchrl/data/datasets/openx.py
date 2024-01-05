@@ -14,12 +14,17 @@ from typing import Any, Callable, Tuple
 import torch
 
 from tensordict import make_tensordict, pad, TensorDict
-from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
-from torchrl.data.replay_buffers.storages import Storage
-from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
+from torchrl.collectors.utils import split_trajectories
 from torchrl.data.datasets.utils import _get_root_dir
-from torchrl.data.replay_buffers.samplers import Sampler, SliceSamplerWithoutReplacement, SliceSampler
-from torchrl.data.replay_buffers.storages import _collate_id, TensorStorage
+from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
+from torchrl.data.replay_buffers.samplers import (
+    Sampler,
+    SliceSampler,
+    SliceSamplerWithoutReplacement,
+)
+from torchrl.data.replay_buffers.storages import _collate_id, Storage, TensorStorage
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
+from torchrl.envs.transforms.transforms import Transform
 
 _has_datasets = importlib.util.find_spec("datasets", None) is not None
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
@@ -140,6 +145,12 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
             ``D4RL``, this may not be true. It is up to the user to make
             accurate choices regarding this usage of ``split_trajs``.
             Defaults to ``False``.
+        strict_length (bool, optional): if ``False``, trajectories of length
+            shorter than `slice_len` (or `batch_size // num_slices`) will be
+            allowed to appear in the batch.
+            Be mindful that this can result in effective `batch_size`  shorter
+            than the one asked for! Trajectories can be split using
+            :func:`torchrl.collectors.split_trajectories`. Defaults to ``True``.
 
     Examples:
         >>> from torchrl.data.datasets import OpenXExperienceReplay
@@ -282,6 +293,7 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         prefetch: int | None = None,
         transform: "torchrl.envs.Transform" | None = None,  # noqa-F821
         split_trajs: bool = False,
+        strict_length: bool = True,
     ):
         self.download = download
         self.streaming = streaming
@@ -296,6 +308,10 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         if split_trajs:
             raise NotImplementedError
         if not streaming:
+            if pad is not None:
+                raise RuntimeError(
+                    "the `pad` argument is to be used only with streaming datasets."
+                )
             if root is None:
                 root = _get_root_dir("openx")
                 os.makedirs(root, exist_ok=True)
@@ -316,13 +332,13 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
                     sampler = SliceSampler(
                         num_slices=num_slices,
                         slice_len=slice_len,
-                        strict_length=pad is not None,
+                        strict_length=strict_length,
                     )
                 else:
                     sampler = SliceSamplerWithoutReplacement(
                         num_slices=num_slices,
                         slice_len=slice_len,
-                        strict_length=pad is not None,
+                        strict_length=strict_length,
                     )
 
         else:
@@ -362,8 +378,17 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
                 yield from self._storage
             else:
                 sampler = SliceSamplerWithoutReplacement(
-                    num_slices=self.num_slices, strict_length=False, shuffle=self.shuffle)
-                yield from TensorDictReplayBuffer(storage=self._storage, sampler=sampler, batch_size=self._MAX_TRAJ_LEN)
+                    num_slices=self.num_slices,
+                    slice_len=self.slice_len,
+                    strict_length=False,
+                    shuffle=self.shuffle,
+                )
+                yield from TensorDictReplayBuffer(
+                    storage=self._storage,
+                    sampler=sampler,
+                    batch_size=self._MAX_TRAJ_LEN,
+                    transform=self._transform,
+                )
         else:
             yield from super().__iter__()
 

@@ -173,15 +173,9 @@ class SamplerWithoutReplacement(Sampler):
         else:
             device = storage.device if hasattr(storage, "device") else None
         if self.shuffle:
-            self._sample_list = torch.randperm(
-                len_storage,
-                device=device
-                )
+            self._sample_list = torch.randperm(len_storage, device=device)
         else:
-            self._sample_list = torch.arange(
-                len_storage,
-                device=device
-                )
+            self._sample_list = torch.arange(len_storage, device=device)
 
     def _single_sample(self, len_storage, batch_size):
         index = self._sample_list[:batch_size]
@@ -943,7 +937,6 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         tensor([ 0,  3,  4, 20, 23])
 
     """
-
 
     def __init__(
         self,

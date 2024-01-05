@@ -31,6 +31,7 @@ from torchrl.data.tensor_specs import (
     DiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
+from torchrl.envs.utils import _classproperty
 
 _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
 
@@ -203,6 +204,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
             transform=transform,
         )
 
+    @_classproperty
     def available_datasets(self):
         import minari
 
@@ -281,7 +283,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
             td_data = td_data.memmap_like(self.data_path_root)
             print("tensordict structure:", td_data)
 
-            print(f"Reading data from {max(*episode_dict)} episodes")
+            print(f"Reading data from {max(*episode_dict) + 1} episodes")
             index = 0
             with tqdm(total=total_steps) if _has_tqdm else nullcontext() as pbar:
                 # iterate over episodes and populate the tensordict

@@ -2094,15 +2094,17 @@ class TestVD4RL:
 
 @pytest.mark.slow
 class TestOpenX:
-    @pytest.mark.parametrize("padding", [None, 0, True, False])
-    @pytest.mark.parametrize("download", [True, False])
+    @pytest.mark.parametrize(
+        "download,padding",
+        [[True, None], [False, None], [False, 0], [False, True], [False, False]],
+    )
     @pytest.mark.parametrize("shuffle", [True, False])
     @pytest.mark.parametrize(
         "batch_size,num_slices,slice_len",
         [
+            [3000, 2, None],
             [32, 32, None],
             [32, None, 1],
-            [3000, 2, None],
             [3000, None, 1500],
             [None, None, 32],
             [None, None, 1500],
@@ -2130,7 +2132,9 @@ class TestOpenX:
         ):
             with pytest.raises(
                 RuntimeError,
-                match="The trajectory length (.*) is shorter than the slice length",
+                match="Some stored trajectories have a length shorter than the slice that was asked for"
+                if not streaming
+                else "The trajectory length (.*) is shorter than the slice length",
             ):
                 for data in dataset:  # noqa: B007
                     break
@@ -2162,14 +2166,15 @@ class TestOpenX:
             if padding is None and (batch_size > 1000):
                 with pytest.raises(
                     RuntimeError,
-                    match="The trajectory length (.*) is shorter than the slice length",
+                    match="Some stored trajectories have a length shorter than the slice that was asked for"
+                    if not streaming
+                    else "The trajectory length (.*) is shorter than the slice length",
                 ):
                     sample = dataset.sample()
                 return
             else:
                 sample = dataset.sample()
                 assert sample.shape == (batch_size,)
-        print(sample)
         if slice_len is not None:
             assert sample.get(("next", "done")).sum() == int(batch_size // slice_len)
         elif num_slices is not None:
