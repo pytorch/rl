@@ -14,7 +14,6 @@ from typing import Any, Callable, Tuple
 import torch
 
 from tensordict import make_tensordict, pad, TensorDict
-from torchrl.collectors.utils import split_trajectories
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
@@ -24,7 +23,6 @@ from torchrl.data.replay_buffers.samplers import (
 )
 from torchrl.data.replay_buffers.storages import _collate_id, Storage, TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
-from torchrl.envs.transforms.transforms import Transform
 
 _has_datasets = importlib.util.find_spec("datasets", None) is not None
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
@@ -48,14 +46,14 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
 
     Args:
         dataset_id (str): The dataset to be downloaded.
-            Must be part of OpenXExperienceReplay.available_datasets
+            Must be part of ``OpenXExperienceReplay.available_datasets``.
         batch_size (int): Batch-size used during sampling.
             Can be overridden by `data.sample(batch_size)` if necessary.
-            See `num_slices` and `slice_len` keyword arguments for a refined
+            See ``num_slices`` and ``slice_len`` keyword arguments for a refined
             sampling strategy.
             If the ``batch_size`` is ``None`` (default), iterating over the
-            dataset will deliver trajectories one at a time __whereas__ calling
-            :meth:`~.sample` will __still__ require a batch-size to be provided.
+            dataset will deliver trajectories one at a time *whereas* calling
+            :meth:`~.sample` will *still* require a batch-size to be provided.
 
     Keyword Args:
         shuffle (bool, optional): if ``True``, trajectories are delivered in a

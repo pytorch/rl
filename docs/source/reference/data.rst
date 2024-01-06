@@ -280,6 +280,7 @@ Here's an example:
     D4RLExperienceReplay
     MinariExperienceReplay
     OpenMLExperienceReplay
+    OpenXExperienceReplay
     RobosetExperienceReplay
     VD4RLExperienceReplay
 
