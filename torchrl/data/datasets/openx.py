@@ -317,7 +317,8 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         if split_trajs:
             raise NotImplementedError
         if not streaming:
-            replacement = True if replacement is None else False
+            if replacement is None:
+                replacement = True
             if pad is not None:
                 raise RuntimeError(
                     "the `pad` argument is to be used only with streaming datasets."
