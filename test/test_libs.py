@@ -2130,14 +2130,18 @@ class TestOpenX:
             (batch_size is not None and batch_size > 1000)
             or (slice_len is not None and slice_len > 1000)
         ):
-            with pytest.raises(
+            raises_cm = pytest.raises(
                 RuntimeError,
-                match="Some stored trajectories have a length shorter than the slice that was asked for"
-                if not streaming
-                else "The trajectory length (.*) is shorter than the slice length",
-            ):
+                match="The trajectory length (.*) is shorter than the slice length|Some stored trajectories have a length shorter than the slice that was asked for"
+            )
+            with raises_cm:
                 for data in dataset:  # noqa: B007
                     break
+            if batch_size is None and slice_len is not None:
+                with raises_cm:
+                    dataset.sample(2 * slice_len)
+                return
+
         else:
             for data in dataset:  # noqa: B007
                 break
@@ -2176,7 +2180,7 @@ class TestOpenX:
                 sample = dataset.sample()
                 assert sample.shape == (batch_size,)
         if slice_len is not None:
-            assert sample.get(("next", "done")).sum() == int(batch_size // slice_len)
+            assert sample.get(("next", "done")).sum() == int(batch_size // slice_len), sample.get(("next", "done"))
         elif num_slices is not None:
             assert sample.get(("next", "done")).sum() == num_slices
 

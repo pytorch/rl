@@ -303,6 +303,7 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         self.num_slices = num_slices
         self.slice_len = slice_len
         self.pad = pad
+        self.strict_length = strict_length
         if (self.num_slices is not None) and (self.slice_len is not None):
             raise ValueError("num_slices or slice_len can be not None, but not both.")
         if split_trajs:
@@ -376,17 +377,35 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
             # we can still iterate over the dataset
             if isinstance(self._storage, _StreamingStorage):
                 yield from self._storage
+            elif self.slice_len is not None and self.num_slices is None:
+                try:
+                    # truncate the trajs with slice_len
+                    self._batch_size = self.slice_len
+                    self.num_slices = 1
+                    self.slice_len = None
+                    yield from self
+                finally:
+                    self.slice_len = self._batch_size
+                    self._batch_size = None
+                    self.num_slices = None
             else:
+                # if we don't have a batch size but we know how many trajectories
+                # we want in each batch, we can build that on the fly.
+                # The only time we can do this is if num_slices is given but not
+                # slice_len.
+                num_slices = self.num_slices
+                if not num_slices:
+                    num_slices = 1
                 sampler = SliceSamplerWithoutReplacement(
-                    num_slices=self.num_slices,
-                    slice_len=self.slice_len,
+                    num_slices=num_slices,
                     strict_length=False,
                     shuffle=self.shuffle,
                 )
+                batch_size = self._MAX_TRAJ_LEN
                 yield from TensorDictReplayBuffer(
                     storage=self._storage,
                     sampler=sampler,
-                    batch_size=self._MAX_TRAJ_LEN,
+                    batch_size=batch_size,
                     transform=self._transform,
                 )
         else:
@@ -594,7 +613,7 @@ def _slice_data(data: TensorDict, slice_len, pad_value):
     truncated = data.get(("next", "truncated"))
     truncated = torch.index_fill(
         truncated,
-        dim=data.ndim,
+        dim=data.ndim-1,
         value=True,
         index=torch.tensor(-1, device=truncated.device),
     )
@@ -637,7 +656,7 @@ def _format_data(data: TensorDict, episode: int):
         data.rename_key_(key, newkey)
     data.set(
         ("next", "truncated"),
-        data.get(("next", "done")) ^ data.get(("next", "terminated")),
+        data.get(("next", "done")) & ~data.get(("next", "terminated")),
     )
 
     for key in ("done", "terminated", "truncated", "reward"):
