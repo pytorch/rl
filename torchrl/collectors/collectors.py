@@ -1262,10 +1262,6 @@ class _MultiDataCollector(DataCollectorBase):
         self.exploration_type = exploration_type
         self.frames_per_worker = np.inf
         if preemptive_threshold is not None:
-            if _is_osx:
-                raise NotImplementedError(
-                    "Cannot use preemption on OSX due to Queue.qsize() not being implemented on this platform."
-                )
             self.preemptive_threshold = np.clip(preemptive_threshold, 0.0, 1.0)
             manager = _InterruptorManager()
             manager.start()
@@ -1297,7 +1293,8 @@ class _MultiDataCollector(DataCollectorBase):
 
     def _run_processes(self) -> None:
         torch.set_num_threads(self.num_threads)
-        queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
+        manager = mp.Manager()
+        queue_out = manager.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
         for i, (env_fun, env_fun_kwargs) in enumerate(
