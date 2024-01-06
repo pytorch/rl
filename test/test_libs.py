@@ -2099,6 +2099,7 @@ class TestOpenX:
         [[True, None], [False, None], [False, 0], [False, True], [False, False]],
     )
     @pytest.mark.parametrize("shuffle", [True, False])
+    @pytest.mark.parametrize("replacement", [True, False])
     @pytest.mark.parametrize(
         "batch_size,num_slices,slice_len",
         [
@@ -2110,21 +2111,38 @@ class TestOpenX:
             [None, None, 1500],
         ],
     )
-    def test_openx(self, download, shuffle, padding, batch_size, num_slices, slice_len):
+    def test_openx(
+        self, download, shuffle, replacement, padding, batch_size, num_slices, slice_len
+    ):
         torch.manual_seed(0)
         np.random.seed(0)
 
         streaming = not download
-        dataset = OpenXExperienceReplay(
-            "cmu_stretch",
-            download=download,
-            streaming=streaming,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_slices=num_slices,
-            slice_len=slice_len,
-            pad=padding,
+        cm = (
+            pytest.raises(RuntimeError, match="shuffle=False")
+            if not streaming and not shuffle and replacement
+            else pytest.raises(
+                RuntimeError,
+                match="replacement=True is not available with streamed datasets",
+            )
+            if streaming and replacement
+            else nullcontext()
         )
+        dataset = None
+        with cm:
+            dataset = OpenXExperienceReplay(
+                "cmu_stretch",
+                download=download,
+                streaming=streaming,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                num_slices=num_slices,
+                slice_len=slice_len,
+                pad=padding,
+                replacement=replacement,
+            )
+        if dataset is None:
+            return
         # iterating
         if padding is None and (
             (batch_size is not None and batch_size > 1000)
@@ -2132,7 +2150,7 @@ class TestOpenX:
         ):
             raises_cm = pytest.raises(
                 RuntimeError,
-                match="The trajectory length (.*) is shorter than the slice length|Some stored trajectories have a length shorter than the slice that was asked for"
+                match="The trajectory length (.*) is shorter than the slice length|Some stored trajectories have a length shorter than the slice that was asked for",
             )
             with raises_cm:
                 for data in dataset:  # noqa: B007
@@ -2180,7 +2198,9 @@ class TestOpenX:
                 sample = dataset.sample()
                 assert sample.shape == (batch_size,)
         if slice_len is not None:
-            assert sample.get(("next", "done")).sum() == int(batch_size // slice_len), sample.get(("next", "done"))
+            assert sample.get(("next", "done")).sum() == int(
+                batch_size // slice_len
+            ), sample.get(("next", "done"))
         elif num_slices is not None:
             assert sample.get(("next", "done")).sum() == num_slices
 

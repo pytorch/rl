@@ -59,8 +59,15 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
 
     Keyword Args:
         shuffle (bool, optional): if ``True``, trajectories are delivered in a
-            random order. If ``False``, the dataset is iterated over
-            in the pre-defined order.
+            random order when the dataset is iterated over.
+            If ``False``, the dataset is iterated over in the pre-defined order.
+
+            .. warning::
+              shuffle=False will also impact the sampling. We advice users to
+              create a copy of the dataset where the ``shuffle`` attribute of the
+              sampler is set to ``False`` if they wish to enjoy the two different
+              behaviours (shuffled and not) within the same code base.
+
         num_slice (int, optional): the number of slices in a batch. This
             corresponds to the number of trajectories present in a batch.
             Once collected, the batch is presented as a concatenation of
@@ -94,8 +101,9 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
               constructor. In these cases, a random sub-sequence of the
               trajectory will be chosen.
 
-        with_replacement (bool, optional): if ``False``, sampling will be done
-            without replacement. Defaults to ``True``.
+        replacement (bool, optional): if ``False``, sampling will be done
+            without replacement. Defaults to ``True`` for downloaded datasets,
+            ``False`` for streamed datasets.
         pad (bool, float or None): if ``True``, trajectories of insufficient length
             given the `slice_len` or `num_slices` arguments will be padded with
             0s. If another value is provided, it will be used for padding. If
@@ -282,7 +290,7 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         num_slices: int | None = None,
         slice_len: int | None = None,
         pad: float | bool | None = None,
-        with_replacement: bool = True,
+        replacement: bool = None,
         streaming: bool = True,
         root: str | Path | None = None,
         download: bool = False,
@@ -309,6 +317,7 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         if split_trajs:
             raise NotImplementedError
         if not streaming:
+            replacement = True if replacement is None else False
             if pad is not None:
                 raise RuntimeError(
                     "the `pad` argument is to be used only with streaming datasets."
@@ -329,7 +338,11 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
                         "`num_slices` and `slice_len` are exclusive with the `sampler` argument."
                     )
 
-                if with_replacement:
+                if replacement:
+                    if not self.shuffle:
+                        raise RuntimeError(
+                            "shuffle=False can only be used when replacement=False."
+                        )
                     sampler = SliceSampler(
                         num_slices=num_slices,
                         slice_len=slice_len,
@@ -340,9 +353,15 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
                         num_slices=num_slices,
                         slice_len=slice_len,
                         strict_length=strict_length,
+                        shuffle=self.shuffle,
                     )
 
         else:
+            if replacement is True:
+                # replacement can be False or None
+                raise RuntimeError(
+                    "replacement=True is not available with streamed datasets."
+                )
             self.root = None
             if download:
                 raise ValueError(
@@ -613,7 +632,7 @@ def _slice_data(data: TensorDict, slice_len, pad_value):
     truncated = data.get(("next", "truncated"))
     truncated = torch.index_fill(
         truncated,
-        dim=data.ndim-1,
+        dim=data.ndim - 1,
         value=True,
         index=torch.tensor(-1, device=truncated.device),
     )
