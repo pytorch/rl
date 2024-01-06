@@ -162,31 +162,37 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
 
     Examples:
         >>> from torchrl.data.datasets import OpenXExperienceReplay
+        >>> import tempfile
         >>> # Download the data, and sample 128 elements in each batch out of two trajectories
         >>> num_slices = 2
-        >>> dataset = OpenXExperienceReplay("cmu_stretch", batch_size=128,
-        ...     num_slices=num_slices, download=True, streaming=False, root=root)
-        >>> for batch in dataset:
-        ...     print(batch.reshape(num_slices, -1))
-        ...     break
+        >>> with tempfile.TemporaryDirectory() as root:
+        ...     dataset = OpenXExperienceReplay("cmu_stretch", batch_size=128,
+        ...         num_slices=num_slices, download=True, streaming=False,
+        ...         root=root,
+        ...         )
+        ...     for batch in dataset:
+        ...         print(batch.reshape(num_slices, -1))
+        ...         break
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([2, 64, 8]), device=cpu, dtype=torch.float64, is_shared=False),
                 discount: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
                 done: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                 episode: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.int32, is_shared=False),
-                is_first: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
+                index: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.int64, is_shared=False),
                 is_init: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
-                is_last: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
-                is_terminal: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),
                 language_embedding: Tensor(shape=torch.Size([2, 64, 512]), device=cpu, dtype=torch.float64, is_shared=False),
-                language_instruction: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                language_instruction: NonTensorData(
+                    data='lift open green garbage can lid',
+                    batch_size=torch.Size([2, 64]),
+                    device=cpu,
+                    is_shared=False),
                 next: TensorDict(
                     fields={
                         done: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                         observation: TensorDict(
                             fields={
-                                image: Tensor(shape=torch.Size([2, 64, 3, 2, 64, 2, 64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                                image: Tensor(shape=torch.Size([2, 64, 3, 128, 128]), device=cpu, dtype=torch.uint8, is_shared=False),
                                 state: Tensor(shape=torch.Size([2, 64, 4]), device=cpu, dtype=torch.float64, is_shared=False)},
                             batch_size=torch.Size([2, 64]),
                             device=cpu,
@@ -199,12 +205,11 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
                     is_shared=False),
                 observation: TensorDict(
                     fields={
-                        image: Tensor(shape=torch.Size([2, 64, 3, 2, 64, 2, 64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        image: Tensor(shape=torch.Size([2, 64, 3, 128, 128]), device=cpu, dtype=torch.uint8, is_shared=False),
                         state: Tensor(shape=torch.Size([2, 64, 4]), device=cpu, dtype=torch.float64, is_shared=False)},
                     batch_size=torch.Size([2, 64]),
                     device=cpu,
                     is_shared=False),
-                reward: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
                 terminated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                 truncated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
             batch_size=torch.Size([2, 64]),
@@ -212,7 +217,7 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
             is_shared=False)
         >>> # Read data from a stream. Deliver entire trajectories when iterating
         >>> dataset = OpenXExperienceReplay("cmu_stretch",
-        ...     num_slices=num_slices, download=True, streaming=False, root=root)
+        ...     num_slices=num_slices, download=False, streaming=True)
         >>> for data in dataset: # data does not have a consistent shape
         ...     break
         >>> # Define batch-size dynamically
