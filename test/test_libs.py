@@ -2,11 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
 import importlib
 from contextlib import nullcontext
 
 from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.modules import MaskedCategorical
+from torchrl.data.datasets.gen_dgrl import GenDGRLExperienceReplay
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -1827,7 +1829,13 @@ class TestVmas:
                 else:
                     assert (pos[agent_name] == prev_pos[agent_name]).all()
 
-
+@pytest.mark.slow
+class TestGenDGRL:
+    def test_gen_dgrl(self):
+        dataset = GenDGRLExperienceReplay(GenDGRLExperienceReplay.available_datasets[-1], batch_size=32)
+        for batch in dataset:
+            print(batch)
+            break
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
 @pytest.mark.slow
 class TestD4RL:
