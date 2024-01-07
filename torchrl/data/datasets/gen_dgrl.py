@@ -234,6 +234,7 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
         dataset_len = self._get_category_len(category_name)
         try:
             from tqdm import tqdm
+
             pbar = tqdm(total=dataset_len)
         except ImportError:
             pbar = None
