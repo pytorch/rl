@@ -1,4 +1,5 @@
 from .d4rl import D4RLExperienceReplay
+from .gen_dgrl import GenDGRLExperienceReplay
 from .minari_data import MinariExperienceReplay
 from .openml import OpenMLExperienceReplay
 from .roboset import RobosetExperienceReplay

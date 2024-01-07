@@ -277,6 +277,7 @@ Here's an example:
 
 
     D4RLExperienceReplay
+    GenDGRLExperienceReplay
     MinariExperienceReplay
     OpenMLExperienceReplay
     RobosetExperienceReplay
