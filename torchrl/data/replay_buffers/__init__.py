@@ -29,6 +29,7 @@ from .storages import (
     TensorStorage,
 )
 from .writers import (
+    ImmutableDatasetWriter,
     RoundRobinWriter,
     TensorDictMaxValueWriter,
     TensorDictRoundRobinWriter,

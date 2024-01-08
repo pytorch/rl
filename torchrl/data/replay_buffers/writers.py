@@ -58,6 +58,27 @@ class Writer(ABC):
         ...
 
 
+class ImmutableDatasetWriter(Writer):
+    """A blocking writer for immutable datasets."""
+
+    WRITING_ERR = "This dataset doesn't allow writing."
+
+    def add(self, data: Any) -> int:
+        raise RuntimeError(self.WRITING_ERR)
+
+    def extend(self, data: Sequence) -> torch.Tensor:
+        raise RuntimeError(self.WRITING_ERR)
+
+    def _empty(self):
+        raise RuntimeError(self.WRITING_ERR)
+
+    def dumps(self, path):
+        ...
+
+    def loads(self, path):
+        ...
+
+
 class RoundRobinWriter(Writer):
     """A RoundRobin Writer class for composable replay buffers."""
 

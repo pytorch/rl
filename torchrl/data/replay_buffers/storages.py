@@ -45,9 +45,16 @@ class Storage:
 
     def __init__(self, max_size: int) -> None:
         self.max_size = int(max_size)
-        # Prototype feature. RBs that use a given instance of Storage should add
+
+    @property
+    def _attached_entities(self):
+        # RBs that use a given instance of Storage should add
         # themselves to this set.
-        self._attached_entities = set()
+        _attached_entities = self.__dict__.get("_attached_entities_set", None)
+        if _attached_entities is None:
+            _attached_entities = set()
+            self.__dict__["_attached_entities_set"] = _attached_entities
+        return _attached_entities
 
     @abc.abstractmethod
     def set(self, cursor: int, data: Any):

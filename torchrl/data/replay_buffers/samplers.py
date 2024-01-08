@@ -33,6 +33,10 @@ try:
 except ImportError:
     warnings.warn(EXTENSION_WARNING)
 
+from torchrl._utils import _replace_last
+from torchrl.data.replay_buffers.storages import Storage, TensorStorage
+from torchrl.data.replay_buffers.utils import _to_numpy, INT_CLASSES
+
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
 
@@ -120,6 +124,9 @@ class SamplerWithoutReplacement(Sampler):
             If ``False``, this last sample will be kept and (unlike with torch dataloaders)
             completed with other samples from a fresh indices permutation.
             Defaults to ``False``.
+        shuffle (bool, optional): if ``False``, the items are not randomly
+            permuted. This enables to iterate over the replay buffer in the
+            order the data was collected. Defaults to ``True``.
 
     *Caution*: If the size of the storage changes in between two calls, the samples will be re-shuffled
     (as we can't generally keep track of which samples have been sampled before and which haven't).
@@ -133,11 +140,12 @@ class SamplerWithoutReplacement(Sampler):
 
     """
 
-    def __init__(self, drop_last: bool = False):
+    def __init__(self, drop_last: bool = False, shuffle: bool = True):
         self._sample_list = None
         self.len_storage = 0
         self.drop_last = drop_last
         self._ran_out = False
+        self.shuffle = shuffle
 
     def dumps(self, path):
         path = Path(path)
@@ -162,6 +170,16 @@ class SamplerWithoutReplacement(Sampler):
         self.drop_last = metadata["drop_last"]
         self._ran_out = metadata["_ran_out"]
 
+    def _get_sample_list(self, storage: Storage, len_storage: int):
+        if storage is None:
+            device = self._sample_list.device
+        else:
+            device = storage.device if hasattr(storage, "device") else None
+        if self.shuffle:
+            self._sample_list = torch.randperm(len_storage, device=device)
+        else:
+            self._sample_list = torch.arange(len_storage, device=device)
+
     def _single_sample(self, len_storage, batch_size):
         index = self._sample_list[:batch_size]
         self._sample_list = self._sample_list[batch_size:]
@@ -172,7 +190,7 @@ class SamplerWithoutReplacement(Sampler):
             self.drop_last and len(self._sample_list) < batch_size
         ):
             self.ran_out = True
-            self._sample_list = torch.randperm(len_storage)
+            self._get_sample_list(storage=None, len_storage=len_storage)
         else:
             self.ran_out = False
         return index
@@ -187,7 +205,7 @@ class SamplerWithoutReplacement(Sampler):
         if not len_storage:
             raise RuntimeError("An empty storage was passed")
         if self.len_storage != len_storage or self._sample_list is None:
-            self._sample_list = torch.randperm(len_storage)
+            self._get_sample_list(storage, len_storage)
         if len_storage < batch_size and self.drop_last:
             raise ValueError(
                 f"The batch size ({batch_size}) is greater than the storage capacity ({len_storage}). "
@@ -736,11 +754,18 @@ class SliceSampler(Sampler):
         # pick up as many trajs as we need
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
-        return self._sample_slices(lengths, start_idx, seq_length, num_slices)
+        return self._sample_slices(lengths, start_idx, stop_idx, seq_length, num_slices)
 
     def _sample_slices(
-        self, lengths, start_idx, seq_length, num_slices, traj_idx=None
+        self, lengths, start_idx, stop_idx, seq_length, num_slices, traj_idx=None
     ) -> Tuple[torch.Tensor, dict]:
+        if traj_idx is None:
+            traj_idx = torch.randint(
+                lengths.shape[0], (num_slices,), device=lengths.device
+            )
+        else:
+            num_slices = traj_idx.shape[0]
+
         if (lengths < seq_length).any():
             if self.strict_length:
                 raise RuntimeError(
@@ -749,18 +774,12 @@ class SliceSampler(Sampler):
                     "in you batch."
                 )
             # make seq_length a tensor with values clamped by lengths
-            seq_length = lengths.clamp_max(seq_length)
+            seq_length = lengths[traj_idx].clamp_max(seq_length)
 
-        if traj_idx is None:
-            traj_idx = torch.randint(
-                lengths.shape[0], (num_slices,), device=lengths.device
-            )
-        else:
-            num_slices = traj_idx.shape[0]
         relative_starts = (
             (
                 torch.rand(num_slices, device=lengths.device)
-                * (lengths[traj_idx] - seq_length)
+                * (lengths[traj_idx] - seq_length + 1)
             )
             .floor()
             .to(start_idx.dtype)
@@ -769,13 +788,30 @@ class SliceSampler(Sampler):
         index = self._tensor_slices_from_startend(seq_length, starts)
         if self.truncated_key is not None:
             truncated_key = self.truncated_key
+            done_key = _replace_last(truncated_key, "done")
+            terminated_key = _replace_last(truncated_key, "terminated")
 
-            truncated = torch.zeros(index.shape, dtype=torch.bool, device=index.device)
+            truncated = torch.zeros(
+                (*index.shape, 1), dtype=torch.bool, device=index.device
+            )
             if isinstance(seq_length, int):
                 truncated.view(num_slices, -1)[:, -1] = 1
             else:
                 truncated[seq_length.cumsum(0) - 1] = 1
-            return index.to(torch.long), {truncated_key: truncated}
+            traj_terminated = stop_idx[traj_idx] == start_idx[traj_idx] + seq_length - 1
+            terminated = torch.zeros_like(truncated)
+            if terminated.any():
+                if isinstance(seq_length, int):
+                    truncated.view(num_slices, -1)[traj_terminated] = 1
+                else:
+                    truncated[(seq_length.cumsum(0) - 1)[traj_terminated]] = 1
+            truncated = truncated & ~terminated
+            done = terminated | truncated
+            return index.to(torch.long), {
+                truncated_key: truncated,
+                done_key: done,
+                terminated_key: terminated,
+            }
         return index.to(torch.long), {}
 
     @property
@@ -846,6 +882,8 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`torchrl.collectors.split_trajectories`. Defaults to ``True``.
+        shuffle (bool, optional): if ``False``, the order of the trajectories
+            is not shuffled. Defaults to ``True``.
 
     .. note:: To recover the trajectory splits in the storage,
         :class:`~torchrl.data.replay_buffers.samplers.SliceSamplerWithoutReplacement` will first
@@ -917,6 +955,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         traj_key: NestedKey | None = None,
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
+        shuffle: bool = True,
     ) -> object:
         SliceSampler.__init__(
             self,
@@ -928,7 +967,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             truncated_key=truncated_key,
             strict_length=strict_length,
         )
-        SamplerWithoutReplacement.__init__(self, drop_last=drop_last)
+        SamplerWithoutReplacement.__init__(self, drop_last=drop_last, shuffle=shuffle)
 
     def _empty(self):
         self._cache = {}
@@ -944,7 +983,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
         indices, _ = SamplerWithoutReplacement.sample(self, storage, num_slices)
         idx, info = self._sample_slices(
-            lengths, start_idx, seq_length, num_slices, traj_idx=indices
+            lengths, start_idx, stop_idx, seq_length, num_slices, traj_idx=indices
         )
         return idx, info
 

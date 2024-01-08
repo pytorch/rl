@@ -16,7 +16,7 @@ import torch.nn as nn
 from tensordict import unravel_key
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
-from torchrl._utils import prod, seed_generator
+from torchrl._utils import _replace_last, prod, seed_generator
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -26,7 +26,6 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
-    _replace_last,
     _repr_by_depth,
     _terminated_or_truncated,
     _update_during_reset,

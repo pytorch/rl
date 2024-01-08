@@ -884,7 +884,10 @@ class TensorDictReplayBuffer(ReplayBuffer):
             if is_locked:
                 data.unlock_()
             for k, v in info.items():
-                data.set(k, expand_as_right(_to_torch(v, data.device), data))
+                v = _to_torch(v, data.device)
+                if v.shape[: data.batch_dims] != data.batch_size:
+                    v = expand_as_right(v, data)
+                data.set(k, v)
             if is_locked:
                 data.lock_()
         if return_info:
