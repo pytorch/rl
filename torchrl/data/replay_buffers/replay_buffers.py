@@ -353,9 +353,7 @@ class ReplayBuffer:
         Returns:
             Indices of the data added to the replay buffer.
         """
-        if self._transform is not None and (
-            is_tensor_collection(data) or len(self._transform)
-        ):
+        if self._transform is not None and (is_tensor_collection(data)):
             data = self._transform.inv(data)
         return self._extend(data)
 
@@ -380,12 +378,8 @@ class ReplayBuffer:
             if not is_tensor_collection(data):
                 data = TensorDict({"data": data}, [])
                 is_td = False
-            is_locked = data.is_locked
-            if is_locked:
-                data.unlock_()
-            data = self._transform(data)
-            if is_locked:
-                data.lock_()
+            with data.unlock_():
+                data = self._transform(data)
             if not is_td:
                 data = data["data"]
 
@@ -800,7 +794,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
         tensordicts = TensorDict(
             {"_data": tensordicts},
-            batch_size=tensordicts.batch_size[:1],
+            batch_size=torch.Size([]),
         )
         if tensordicts.batch_dims > 1:
             # we want the tensordict to have one dimension only. The batch size
@@ -818,16 +812,18 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 tensordicts.batch_size[0], tensordicts.batch_dims - 1
             )
             tensordicts.set("_rb_batch_size", shape)
-        tensordicts.set(
-            "index",
-            torch.zeros(tensordicts.shape, device=tensordicts.device, dtype=torch.int),
-        )
 
         if self._transform is not None:
             data = self._transform.inv(tensordicts.get("_data"))
             tensordicts.set("_data", data)
             if data.device is not None:
                 tensordicts = tensordicts.to(data.device)
+
+        tensordicts.batch_size = tensordicts.get("_data").batch_size[:1]
+        tensordicts.set(
+            "index",
+            torch.zeros(tensordicts.shape, device=tensordicts.device, dtype=torch.int),
+        )
 
         index = super()._extend(tensordicts)
         self.update_tensordict_priority(tensordicts)
@@ -877,19 +873,37 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
         data, info = super().sample(batch_size, return_info=True)
         if not is_tensorclass(data) and include_info in (True, None):
-            is_locked = data.is_locked
-            if is_locked:
-                data.unlock_()
-            for k, v in info.items():
-                v = _to_torch(v, data.device)
-                if v.shape[: data.batch_dims] != data.batch_size:
-                    v = expand_as_right(v, data)
-                data.set(k, v)
-            if is_locked:
-                data.lock_()
+            with data.unlock_():
+                for k, v in info.items():
+                    v = _to_torch(v, data.device)
+                    if v.shape[: data.batch_dims] != data.batch_size:
+                        v = expand_as_right(v, data)
+                    data.set(k, v)
+
+        if self._transform is not None and len(self._transform):
+            is_td = True
+            if not is_tensor_collection(data):
+                data = TensorDict({"data": data}, [])
+                is_td = False
+            with data.unlock_():
+                data = self._transform(data)
+            if not is_td:
+                data = data["data"]
+
         if return_info:
             return data, info
         return data
+
+    @pin_memory_output
+    def _sample(self, batch_size: int) -> Tuple[Any, dict]:
+        with self._replay_lock:
+            index, info = self._sampler.sample(self._storage, batch_size)
+            info["index"] = index
+            data = self._storage[index]
+        if not isinstance(index, INT_CLASSES):
+            data = self._collate_fn(data)
+
+        return data, info
 
 
 class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):

@@ -341,8 +341,7 @@ class Transform(nn.Module):
 
     @dispatch(source="in_keys_inv", dest="out_keys_inv")
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
-        out = self._inv_call(tensordict.clone(False))
-        return out
+        return self._inv_call(tensordict.clone(False))
 
     def transform_env_device(self, device: torch.device):
         """Transforms the device of the parent env."""
