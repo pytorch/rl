@@ -376,7 +376,7 @@ class TensorDictMaxValueWriter(Writer):
 class WriterEnsemble(Writer):
     """An ensemble of writers.
 
-    This class is designed to work with :class:`~torchrl.data.ReplayBufferEnsemble`.
+    This class is designed to work with :class:`~torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble`.
     It contains the writers but blocks writing with any of them.
 
     Args:

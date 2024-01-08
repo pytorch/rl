@@ -851,7 +851,7 @@ class LazyMemmapStorage(LazyTensorStorage):
 class StorageEnsemble(Storage):
     """An ensemble of storages.
 
-    This class is designed to work with :class:`~torchrl.data.ReplayBufferEnsemble`.
+    This class is designed to work with :class:`~torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble`.
 
     Args:
         storages (sequence of Storage): the storages to make the composite storage.

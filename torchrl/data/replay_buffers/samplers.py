@@ -1015,7 +1015,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
 class SamplerEnsemble(Sampler):
     """An ensemble of samplers.
 
-    This class is designed to work with :class:`~torchrl.data.ReplayBufferEnsemble`.
+    This class is designed to work with :class:`~torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble`.
     It contains the samplers as well as the sampling strategy hyperparameters.
 
     Args:
