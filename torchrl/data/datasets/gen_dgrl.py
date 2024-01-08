@@ -29,11 +29,11 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
 
     This dataset accompanies the paper "The Generalization Gap in Offline Reinforcement Learning".
     Arxiv: https://arxiv.org/abs/2312.05742
-    GitHub: https://arxiv.org/abs/2312.05742
+    GitHub: https://github.com/facebookresearch/gen_dgrl
 
     This class gives you access to the ProcGen dataset. Each `dataset_id` registered
     in `GenDGRLExperienceReplay.available_datasets` consists in a particular task
-    (`"bigfish"`, `"bossfight"`, ...) separated from a category (`"1M_E1"`, `"1M_S"`, ...)
+    (`"bigfish"`, `"bossfight"`, ...) separated from a category (`"1M_E"`, `"1M_S"`, ...)
     by a comma (`"bigfish-1M_E"`, ...).
 
     During download and preparation, the data is downloaded as .tar files,
