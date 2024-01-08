@@ -8,6 +8,7 @@ from typing import Callable, Optional
 import numpy as np
 from tensordict.tensordict import TensorDict
 
+from torchrl.data import ImmutableDatasetWriter
 from torchrl.data.replay_buffers import (
     LazyMemmapStorage,
     Sampler,
@@ -72,6 +73,10 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
         self.max_outcome_val = dataset["y"].max().item()
 
         storage = LazyMemmapStorage(dataset.shape[0])
+
+        if writer is None:
+            writer = ImmutableDatasetWriter()
+
         super().__init__(
             batch_size=batch_size,
             storage=storage,

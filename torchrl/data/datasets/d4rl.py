@@ -27,7 +27,7 @@ from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage, TensorStorage
-from torchrl.data.replay_buffers.writers import Writer
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
 
 
 class D4RLExperienceReplay(TensorDictReplayBuffer):
@@ -234,6 +234,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
                 f"The dataset could not be found in {Path(self.root) / name}."
             )
 
+        if writer is None:
+            writer = ImmutableDatasetWriter()
         super().__init__(
             batch_size=batch_size,
             storage=storage,

@@ -21,7 +21,7 @@ from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
-from torchrl.data.replay_buffers.writers import Writer
+from torchrl.data.replay_buffers.writers import Writer, ImmutableDatasetWriter
 
 _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
 _has_h5py = importlib.util.find_spec("h5py", None) is not None
@@ -190,6 +190,10 @@ class RobosetExperienceReplay(TensorDictReplayBuffer):
         else:
             storage = self._load()
         storage = TensorStorage(storage)
+
+        if writer is None:
+            writer = ImmutableDatasetWriter()
+
         super().__init__(
             storage=storage,
             sampler=sampler,
