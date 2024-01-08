@@ -136,11 +136,11 @@ class _BatchedEnv(EnvBase):
             device for the nested environments, one can keep the overhead to a
             minimum.
         num_threads (int, optional): number of threads for this process.
-            Defaults to the number of workers.
-            This parameter has no effect for the :class:`~SerialEnv` class.
-        num_sub_threads (int, optional): number of threads of the subprocesses.
             Should be equal to one plus the number of processes launched within
             each subprocess (or one if a single process is launched).
+            Defaults to the number of workers + 1.
+            This parameter has no effect for the :class:`~SerialEnv` class.
+        num_sub_threads (int, optional): number of threads of the subprocesses.
             Defaults to 1 for safety: if none is indicated, launching multiple
             workers may charge the cpu load too much and harm performance.
             This parameter has no effect for the :class:`~SerialEnv` class.
