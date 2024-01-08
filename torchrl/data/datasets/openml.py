@@ -15,8 +15,6 @@ from torchrl.data.replay_buffers import (
     Writer,
 )
 
-from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter
-
 
 class OpenMLExperienceReplay(TensorDictReplayBuffer):
     """An experience replay for OpenML data.
@@ -73,9 +71,6 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
         self.max_outcome_val = dataset["y"].max().item()
 
         storage = LazyMemmapStorage(dataset.shape[0])
-
-        if writer is None:
-            writer = ImmutableDatasetWriter()
 
         super().__init__(
             batch_size=batch_size,
