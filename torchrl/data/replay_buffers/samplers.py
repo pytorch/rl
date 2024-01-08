@@ -776,7 +776,7 @@ class SliceSampler(Sampler):
         relative_starts = (
             (
                 torch.rand(num_slices, device=lengths.device)
-                * (lengths[traj_idx] - seq_length)
+                * (lengths[traj_idx] - seq_length + 1)
             )
             .floor()
             .to(start_idx.dtype)
