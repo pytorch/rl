@@ -9,6 +9,7 @@ from .rlhf import KLRewardTransform
 from .transforms import (
     ActionMask,
     BinarizeReward,
+    BurnInTransform,
     CatFrames,
     CatTensors,
     CenterCrop,
