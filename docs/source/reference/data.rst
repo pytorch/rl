@@ -43,6 +43,7 @@ We also give users the ability to compose a replay buffer using the following co
     LazyMemmapStorage
     TensorStorage
     Writer
+    ImmutableDatasetWriter
     RoundRobinWriter
     TensorDictRoundRobinWriter
     TensorDictMaxValueWriter
@@ -279,6 +280,7 @@ Here's an example:
     D4RLExperienceReplay
     MinariExperienceReplay
     OpenMLExperienceReplay
+    OpenXExperienceReplay
     RobosetExperienceReplay
     VD4RLExperienceReplay
 
