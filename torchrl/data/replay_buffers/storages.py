@@ -6,12 +6,13 @@
 import abc
 import json
 import os
+import textwrap
 import warnings
 from collections import OrderedDict
 from copy import copy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
-from typing import Any, Dict, Sequence, Union
+from typing import Any, Dict, List, Sequence, Union
 
 import numpy as np
 import torch
@@ -848,10 +849,43 @@ class LazyMemmapStorage(LazyTensorStorage):
 
 
 class StorageEnsemble(Storage):
-    def __init__(self, *storages, transforms=None):
+    """An ensemble of storages.
+
+    This class is designed to work with :class:`~torchrl.data.ReplayBufferEnsemble`.
+
+    Args:
+        storages (sequence of Storage): the storages to make the composite storage.
+
+    Keyword Args:
+        transforms (list of :class:`~torchrl.envs.Transform`, optional): a list of
+            transforms of the same length as storages.
+
+    .. warning::
+      This class signatures for :meth:`~.get` does not match other storages, as
+      it will return a tuple ``(buffer_id, samples)`` rather than just the samples.
+
+    .. warning::
+       This class does not support writing (similarly to :class:`~torchrl.data.replay_buffers.writers.WriterEnsemble`).
+       To extend one of the replay buffers, simply index the parent
+       :class:`~torchrl.data.ReplayBufferEnsemble` object.
+
+    """
+
+    def __init__(
+        self,
+        *storages: Storage,
+        transforms: List["Transform"] = None,  # noqa: F821
+    ):
         self._storages = storages
-        self._attached_entities = set()
         self._transforms = transforms
+        if transforms is not None and len(transforms) != len(storages):
+            raise TypeError(
+                "transforms must have the same length as the storages " "provided."
+            )
+
+    @property
+    def _attached_entities(self):
+        return set()
 
     def extend(self, value):
         raise RuntimeError
@@ -888,11 +922,23 @@ class StorageEnsemble(Storage):
         path = Path(path).absolute()
         for i, storage in enumerate(self._storages):
             storage.dumps(path / str(i))
+        if self._transforms is not None:
+            for i, transform in enumerate(self._transforms):
+                torch.save(transform.state_dict(), path / f"{i}_transform.pt")
 
     def loads(self, path: Path):
         path = Path(path).absolute()
         for i, storage in enumerate(self._storages):
             storage.loads(path / str(i))
+        if self._transforms is not None:
+            for i, transform in enumerate(self._transforms):
+                transform.load_state_dict(torch.load(path / f"{i}_transform.pt"))
+
+    def state_dict(self) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        raise NotImplementedError
 
     _INDEX_ERROR = "Expected an index of type torch.Tensor, range, np.ndarray, int, slice or ellipsis, got {} instead."
 
@@ -947,10 +993,18 @@ class StorageEnsemble(Storage):
             transforms = (
                 self._transforms[index]
                 if self._transforms is not None
-                else [None] * len(samplers)
+                else [None] * len(storages)
             )
 
         return StorageEnsemble(*storages, transforms=transforms)
+
+    def __len__(self):
+        return len(self._storages)
+
+    def __repr__(self):
+        storages = textwrap.indent(f"storages={self._storages}", " " * 4)
+        transforms = textwrap.indent(f"transforms={self._transforms}", " " * 4)
+        return f"StorageEnsemble(\n{storages}, \n{transforms})"
 
 
 # Utils

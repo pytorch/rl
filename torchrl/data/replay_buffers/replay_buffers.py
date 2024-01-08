@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import collections
 import json
+import textwrap
 import threading
 import warnings
 from concurrent.futures import ThreadPoolExecutor
@@ -1142,6 +1143,129 @@ def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
 
 
 class ReplayBufferEnsemble(ReplayBuffer):
+    """An ensemble of replay buffers.
+
+    This class allows to read and sample from multiple replay buffers at once.
+    It automatically composes ensemble of storages (:class:`~torchrl.data.replay_buffers.storages.StorageEnsemble`),
+    writers (:class:`~torchrl.data.replay_buffers.writers.WriterEnsemble`) and
+    samplers (:class:`~torchrl.data.replay_buffers.samplers.SamplerEnsemble`).
+
+    .. note::
+      Writing directly to this class is forbidden, but it can be indexed to retrieve
+      the nested nested-buffer and extending it.
+
+    There are two distinct ways of constructing a :class:`~torchrl.data.ReplayBufferEnsemble`:
+    one can either pass a list of replay buffers, or directly pass the components
+    (storage, writers and samplers) like it is done for other replay buffer subclasses.
+
+    Args:
+        rbs (sequence of ReplayBuffer instances, optional): the replay buffers to ensemble.
+        storages (StorageEnsemble, optional): the ensemble of storages, if the replay
+            buffers are not passed.
+        samplers (SamplerEnsemble, optional): the ensemble of samplers, if the replay
+            buffers are not passed.
+        writers (WriterEnsemble, optional): the ensemble of writers, if the replay
+            buffers are not passed.
+        transform (Transform, optional): if passed, this will be the transform
+            of the ensemble of replay buffers. Individual transforms for each
+            replay buffer is retrieved from its parent replay buffer, or directly
+            written in the :class:`~torchrl.data.replay_buffers.storages.StorageEnsemble`
+            object.
+        batch_size (int, optional): the batch-size to use during sampling.
+        collate_fn (callable, optional): the function to use to collate the
+            data after each individual collate_fn has been called and the data
+            is placed in a list (along with the buffer id).
+        collate_fns (list of callables, optional): collate_fn of each nested
+            replay buffer. Retrieved from the :class:`~ReplayBuffer` instances
+            if not provided.
+        p (list of float or Tensor, optional): a list of floating numbers
+            indicating the relative weight of each replay buffer. Can also
+            be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
+            if the buffer is built explicitely.
+        sample_from_all (bool, optional): if ``True``, each dataset will be sampled
+            from. This is not compatible with the ``p`` argument. Defaults to ``False``.
+            Can also be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
+            if the buffer is built explicitely.
+        num_buffer_sampled (int, optional): the number of buffers to sample.
+            if ``sample_from_all=True``, this has no effect, as it defaults to the
+            number of buffers. If ``sample_from_all=False``, buffers will be
+            sampled according to the probabilities ``p``. Can also
+            be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
+            if the buffer is built explicitely.
+
+    Examples:
+        >>> from torchrl.envs import Compose, ToTensorImage, Resize, RenameTransform
+        >>> from torchrl.data import TensorDictReplayBuffer, ReplayBufferEnsemble, LazyMemmapStorage
+        >>> from tensordict import TensorDict
+        >>> import torch
+        >>> rb0 = TensorDictReplayBuffer(
+        ...     storage=LazyMemmapStorage(10),
+        ...     transform=Compose(
+        ...         ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
+        ...         Resize(32, in_keys=["pixels", ("next", "pixels")]),
+        ...         RenameTransform([("some", "key")], ["renamed"]),
+        ...     ),
+        ... )
+        >>> rb1 = TensorDictReplayBuffer(
+        ...     storage=LazyMemmapStorage(10),
+        ...     transform=Compose(
+        ...         ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
+        ...         Resize(32, in_keys=["pixels", ("next", "pixels")]),
+        ...         RenameTransform(["another_key"], ["renamed"]),
+        ...     ),
+        ... )
+        >>> rb = ReplayBufferEnsemble(
+        ...     rb0,
+        ...     rb1,
+        ...     p=[0.5, 0.5],
+        ...     transform=Resize(33, in_keys=["pixels"], out_keys=["pixels33"]),
+        ... )
+        >>> print(rb)
+        ReplayBufferEnsemble(
+            storages=StorageEnsemble(
+                storages=(<torchrl.data.replay_buffers.storages.LazyMemmapStorage object at 0x13a2ef430>, <torchrl.data.replay_buffers.storages.LazyMemmapStorage object at 0x13a2f9310>),
+                transforms=[Compose(
+                        ToTensorImage(keys=['pixels', ('next', 'pixels')]),
+                        Resize(w=32, h=32, interpolation=InterpolationMode.BILINEAR, keys=['pixels', ('next', 'pixels')]),
+                        RenameTransform(keys=[('some', 'key')])), Compose(
+                        ToTensorImage(keys=['pixels', ('next', 'pixels')]),
+                        Resize(w=32, h=32, interpolation=InterpolationMode.BILINEAR, keys=['pixels', ('next', 'pixels')]),
+                        RenameTransform(keys=['another_key']))]),
+            samplers=SamplerEnsemble(
+                samplers=(<torchrl.data.replay_buffers.samplers.RandomSampler object at 0x13a2f9220>, <torchrl.data.replay_buffers.samplers.RandomSampler object at 0x13a2f9f70>)),
+            writers=WriterEnsemble(
+                writers=(<torchrl.data.replay_buffers.writers.TensorDictRoundRobinWriter object at 0x13a2d9b50>, <torchrl.data.replay_buffers.writers.TensorDictRoundRobinWriter object at 0x13a2f95b0>)),
+        batch_size=None,
+        transform=Compose(
+                Resize(w=33, h=33, interpolation=InterpolationMode.BILINEAR, keys=['pixels'])),
+        collate_fn=<built-in method stack of type object at 0x128648260>)
+        >>> data0 = TensorDict(
+        ...     {
+        ...         "pixels": torch.randint(255, (10, 244, 244, 3)),
+        ...         ("next", "pixels"): torch.randint(255, (10, 244, 244, 3)),
+        ...         ("some", "key"): torch.randn(10),
+        ...     },
+        ...     batch_size=[10],
+        ... )
+        >>> data1 = TensorDict(
+        ...     {
+        ...         "pixels": torch.randint(255, (10, 64, 64, 3)),
+        ...         ("next", "pixels"): torch.randint(255, (10, 64, 64, 3)),
+        ...         "another_key": torch.randn(10),
+        ...     },
+        ...     batch_size=[10],
+        ... )
+        >>> rb[0].extend(data0)
+        >>> rb[1].extend(data1)
+        >>> for _ in range(2):
+        ...     sample = rb.sample(10)
+        ...     assert sample["next", "pixels"].shape == torch.Size([2, 5, 3, 32, 32])
+        ...     assert sample["pixels"].shape == torch.Size([2, 5, 3, 32, 32])
+        ...     assert sample["pixels33"].shape == torch.Size([2, 5, 3, 33, 33])
+        ...     assert sample["renamed"].shape == torch.Size([2, 5])
+
+    """
+
     def __init__(
         self,
         *rbs,
@@ -1322,3 +1446,12 @@ class ReplayBufferEnsemble(ReplayBuffer):
             num_buffer_sampled=self._sampler.num_buffer_sampled,
             p=p,
         )
+
+    def __len__(self):
+        return len(self._storage)
+
+    def __repr__(self):
+        storages = textwrap.indent(f"storages={self._storage}", " " * 4)
+        writers = textwrap.indent(f"writers={self._writer}", " " * 4)
+        samplers = textwrap.indent(f"samplers={self._sampler}", " " * 4)
+        return f"ReplayBufferEnsemble(\n{storages}, \n{samplers}, \n{writers}, \nbatch_size={self._batch_size}, \ntransform={self._transform}, \ncollate_fn={self._collate_fn_val})"

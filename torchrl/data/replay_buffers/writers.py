@@ -5,6 +5,7 @@
 
 import heapq
 import json
+import textwrap
 from abc import ABC, abstractmethod
 from copy import copy
 from multiprocessing.context import get_spawning_popen
@@ -51,9 +52,11 @@ class Writer(ABC):
     def loads(self, path):
         ...
 
+    @abstractmethod
     def state_dict(self) -> Dict[str, Any]:
-        return {}
+        ...
 
+    @abstractmethod
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         ...
 
@@ -77,6 +80,12 @@ class ImmutableDatasetWriter(Writer):
 
     def loads(self, path):
         ...
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        return
 
 
 class RoundRobinWriter(Writer):
@@ -357,22 +366,47 @@ class TensorDictMaxValueWriter(Writer):
             shape=shape,
         ).tolist()
 
+    def state_dict(self) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        raise NotImplementedError
+
 
 class WriterEnsemble(Writer):
+    """An ensemble of writers.
+
+    This class is designed to work with :class:`~torchrl.data.ReplayBufferEnsemble`.
+    It contains the writers but blocks writing with any of them.
+
+    Args:
+        writers (sequence of Writer): the writers to make the composite writer.
+
+    .. warning::
+       This class does not support writing.
+       To extend one of the replay buffers, simply index the parent
+       :class:`~torchrl.data.ReplayBufferEnsemble` object.
+
+    """
+
     def __init__(self, *writers):
         self._writers = writers
 
     def _empty(self):
         raise NotImplementedError
 
-    def add(self):
-        raise NotImplementedError
-
     def dumps(self, path: Path):
-        ...
+        path = Path(path).absolute()
+        for i, writer in enumerate(self._writers):
+            writer.dumps(path / str(i))
 
     def loads(self, path: Path):
-        ...
+        path = Path(path).absolute()
+        for i, writer in enumerate(self._writers):
+            writer.loads(path / str(i))
+
+    def add(self):
+        raise NotImplementedError
 
     def extend(self):
         raise NotImplementedError
@@ -418,3 +452,16 @@ class WriterEnsemble(Writer):
             # slice
             writers = self._writers[index]
         return WriterEnsemble(*writers)
+
+    def __len__(self):
+        return len(self._writers)
+
+    def __repr__(self):
+        writers = textwrap.indent(f"writers={self._writers}", " " * 4)
+        return f"WriterEnsemble(\n{writers})"
+
+    def state_dict(self) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        raise NotImplementedError
