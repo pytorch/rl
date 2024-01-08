@@ -1833,12 +1833,28 @@ class TestVmas:
 
 @pytest.mark.slow
 class TestGenDGRL:
-    def test_gen_dgrl(self, tmpdir):
-        dataset_id = GenDGRLExperienceReplay.available_datasets[0]
+    @staticmethod
+    @pytest.fixture
+    def _patch_traj_len():
+        # avoids processing the entire dataset
+        _get_category_len = GenDGRLExperienceReplay._get_category_len
+
+        def new_get_category_len(cls, category_name):
+            return 100
+
+        GenDGRLExperienceReplay._get_category_len = classmethod(new_get_category_len)
+
+        yield
+        GenDGRLExperienceReplay._get_category_len = _get_category_len
+
+    @pytest.mark.parametrize("dataset_num", [0, 4, 8])
+    def test_gen_dgrl(self, dataset_num, tmpdir, _patch_traj_len):
+        dataset_id = GenDGRLExperienceReplay.available_datasets[dataset_num]
+        print("dataset_id", dataset_id)
         dataset = GenDGRLExperienceReplay(dataset_id, batch_size=32, root=tmpdir)
-        for batch in dataset:
-            print(batch)
+        for batch in dataset:  # noqa: B007
             break
+        assert batch.get(("next", "observation")).shape[-3] == 3
 
 
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")

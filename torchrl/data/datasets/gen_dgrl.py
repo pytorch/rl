@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import importlib.util
 import os
 import tarfile
 import tempfile
@@ -11,14 +12,16 @@ import typing as tp
 from pathlib import Path
 
 import numpy as np
-import requests
 import torch
 
 from tensordict import TensorDict
+from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import TensorStorage
-from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.envs.utils import _classproperty
+
+_has_tqdm = importlib.util.find_spec("tqdm", None) is not None
+_has_requests = importlib.util.find_spec("requests", None) is not None
 
 
 class GenDGRLExperienceReplay(TensorDictReplayBuffer):
@@ -233,16 +236,19 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
         idx = 0
         td_memmap = None
         dataset_len = self._get_category_len(category_name)
-        try:
+        if _has_tqdm:
             from tqdm import tqdm
 
             pbar = tqdm(total=dataset_len)
-        except ImportError:
+        else:
             pbar = None
         mode = "r:xz" if str(file_path).endswith("xz") else "r"
+        full = False
         with tarfile.open(file_path, mode) as tar:
             members = list(tar.getmembers())
             for i in range(0, len(members), batch):
+                if full:
+                    break
                 submembers = [
                     member for member in members[i : i + batch] if member.isfile()
                 ]
@@ -265,7 +271,6 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
                     td.rename_key_("dones", ("next", "done"))
                     td.rename_key_("actions", "action")
                     td.rename_key_("rewards", ("next", "reward"))
-                    td.set(("next", "reward"), td.get(("next", "reward")).unsqueeze(-1))
                     td.set(
                         ("next", "done"), td.get(("next", "done")).bool().unsqueeze(-1)
                     )
@@ -274,6 +279,13 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
                         torch.zeros_like(td.get(("next", "done"))),
                     )
                     td.set(("next", "terminated"), td.get(("next", "done")))
+
+                    td.set(
+                        "terminated", torch.zeros_like(td.get(("next", "terminated")))
+                    )
+                    td.set("done", torch.zeros_like(td.get(("next", "done"))))
+                    td.set("truncated", torch.zeros_like(td.get(("next", "truncated"))))
+
                     td.batch_size = td.get("observation").shape[:1]
                     if td_memmap is None:
                         td_memmap = (
@@ -285,7 +297,14 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
                     idx_end = min(idx_end, td_memmap.shape[0])
                     if pbar is not None:
                         pbar.update(td.shape[0])
-                    td_memmap[idx:idx_end] = td
+                    length = idx_end - idx
+                    if length > 0:
+                        if length != td.shape[0]:
+                            td_memmap[idx:idx_end] = td[:length]
+                        else:
+                            td_memmap[idx:idx_end] = td
+                    else:
+                        full = True
                     idx = idx_end
                     os.remove(npyfile)
 
@@ -323,15 +342,28 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
     @classmethod
     def _download_with_progress_bar(cls, url: str, file_path: str):
         # taken from https://stackoverflow.com/a/62113293/986477
+        if not _has_requests:
+            raise ImportError(
+                "The requests package is required for Gen-DGRL dataset download."
+            )
+        import requests
+
         resp = requests.get(url, stream=True)
         total = int(resp.headers.get("content-length", 0))
-        with open(file_path, "wb") as file, tqdm(
-            desc=file_path,
-            total=total,
-            unit="iB",
-            unit_scale=True,
-            unit_divisor=1024,
-        ) as bar:
+        if _has_tqdm:
+            from tqdm import tqdm
+
+            pbar = tqdm(
+                desc=file_path,
+                total=total,
+                unit="iB",
+                unit_scale=True,
+                unit_divisor=1024,
+            )
+        else:
+            pbar = None
+        with open(file_path, "wb") as file:
             for data in resp.iter_content(chunk_size=1024):
                 size = file.write(data)
-                bar.update(size)
+                if pbar is not None:
+                    pbar.update(size)
