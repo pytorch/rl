@@ -8,6 +8,7 @@ import contextlib
 import functools
 import itertools
 import operator
+import re
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass
@@ -266,14 +267,18 @@ def test_loss_vmap_random(device, vmap_randomness, dropout):
     # If user sets vmap randomness to a specific value
     if vmap_randomness in ("different", "same") and dropout > 0.0:
         loss_module.set_vmap_randomness(vmap_randomness)
-        loss_module(td)["loss"]
     # Fail case
     elif vmap_randomness == "error" and dropout > 0.0:
-        with pytest.raises(RuntimeError):
+        with pytest.raises(RuntimeError) as exc_info:
             loss_module(td)["loss"]
 
-    else:
-        loss_module(td)["loss"]
+        # Accessing cause of the caught exception
+        cause = exc_info.value.__cause__
+        assert re.match(
+            r"vmap: called random operation while in randomness error mode", str(cause)
+        )
+        return
+    loss_module(td)["loss"]
 
 
 class TestDQN(LossModuleTestBase):
