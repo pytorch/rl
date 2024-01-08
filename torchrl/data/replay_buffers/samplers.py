@@ -1102,9 +1102,14 @@ class SamplerEnsemble(Sampler):
                     for i in buffer_ids.tolist()
                 ]
             )
+        if all(samples[0].shape == sample.shape for sample in samples[1:]):
+            samples_stack = torch.stack(samples)
+        else:
+            samples_stack = torch.nested.nested_tensor(list(samples))
+
         samples = TensorDict(
             {
-                "index": torch.stack(samples),
+                "index": samples_stack,
                 "buffer_ids": buffer_ids,
             },
             batch_size=[self.num_buffer_sampled],
