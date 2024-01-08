@@ -18,6 +18,7 @@ from scipy.stats import ttest_1samp
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
 from tensordict.tensordict import TensorDict
 from torch import nn
+from torchrl._utils import _replace_last
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
@@ -28,7 +29,7 @@ from torchrl.data import (
 )
 from torchrl.envs import SerialEnv
 from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
-from torchrl.envs.utils import _replace_last, set_exploration_type
+from torchrl.envs.utils import set_exploration_type
 from torchrl.modules import SafeModule, SafeSequential
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import (

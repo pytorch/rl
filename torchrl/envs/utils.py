@@ -26,6 +26,7 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_type as set_exploration_type,
 )
 from tensordict.tensordict import LazyStackedTensorDict, NestedKey
+from torchrl._utils import _replace_last
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -612,13 +613,6 @@ def clear_mpi_env_vars():
         yield
     finally:
         os.environ.update(removed_environment)
-
-
-def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
-    if isinstance(key, str):
-        return new_ending
-    else:
-        return key[:-1] + (new_ending,)
 
 
 class MarlGroupMapType(Enum):

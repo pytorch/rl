@@ -217,9 +217,11 @@ def _main(argv):
             "minari",
             "requests",
             "tqdm",
+            "torchvision",
             "scikit-learn",
             "pandas",
             "h5py",
+            "pillow",
         ],
         "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1"],
     }

@@ -1595,6 +1595,7 @@ class TestSamplers:
                 "obs": torch.randn((3, 4, 5)).expand(100, 3, 4, 5),
                 "act": torch.randn((20,)).expand(100, 20),
                 "steps": steps,
+                "count": torch.arange(100),
                 "other": torch.randn((20, 50)).expand(100, 20, 50),
                 done_key: done,
             },
@@ -1621,7 +1622,8 @@ class TestSamplers:
             num_slices = batch_size // slice_len
         trajs_unique_id = set()
         too_short = False
-        for _ in range(5):
+        count_unique = set()
+        for _ in range(10):
             index, info = sampler.sample(storage, batch_size=batch_size)
             if _data_prefix:
                 samples = storage._storage["_data"][index]
@@ -1639,6 +1641,14 @@ class TestSamplers:
             too_short = too_short or index.numel() < batch_size
             trajs_unique_id = trajs_unique_id.union(
                 samples["another_episode"].view(-1).tolist()
+            )
+            count_unique = count_unique.union(samples.get("count").view(-1).tolist())
+            if len(count_unique) == 100:
+                # all items have been sampled
+                break
+        else:
+            raise AssertionError(
+                f"Not all items can be sampled: {set(range(100))-count_unique} are missing"
             )
         if strict_length:
             assert not too_short

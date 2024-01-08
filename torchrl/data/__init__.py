@@ -6,6 +6,7 @@
 from . import datasets
 from .postprocs import MultiStep
 from .replay_buffers import (
+    ImmutableDatasetWriter,
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
