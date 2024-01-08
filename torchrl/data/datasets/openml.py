@@ -7,8 +7,6 @@ from typing import Callable, Optional
 
 import numpy as np
 from tensordict.tensordict import TensorDict
-
-from torchrl.data import ImmutableDatasetWriter
 from torchrl.data.replay_buffers import (
     LazyMemmapStorage,
     Sampler,
@@ -16,6 +14,8 @@ from torchrl.data.replay_buffers import (
     TensorDictReplayBuffer,
     Writer,
 )
+
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter
 
 
 class OpenMLExperienceReplay(TensorDictReplayBuffer):
