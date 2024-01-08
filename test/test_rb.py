@@ -16,7 +16,7 @@ import pytest
 import torch
 from _utils_internal import get_default_devices, make_tc
 from packaging.version import parse
-from tensordict import is_tensorclass, tensorclass
+from tensordict import is_tensor_collection, is_tensorclass, tensorclass
 from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl.data import (
@@ -1808,7 +1808,7 @@ class TestEnsemble:
 
     def _make_sampler(self, sampler_type):
         if sampler_type is SamplerWithoutReplacement:
-            return SamplerWithoutReplacement(drop_last=False)
+            return SamplerWithoutReplacement(drop_last=True)
         if sampler_type is RandomSampler:
             return RandomSampler()
         raise NotImplementedError
@@ -1831,7 +1831,17 @@ class TestEnsemble:
         if storage_type is ListStorage:
             return torch.stack
         else:
-            return None
+            return self._robust_stack
+
+    @staticmethod
+    def _robust_stack(tensor_list):
+        if not isinstance(tensor_list, (tuple, list)):
+            return tensor_list
+        if all(tensor.shape == tensor_list[0].shape for tensor in tensor_list[1:]):
+            return torch.stack(list(tensor_list))
+        if is_tensor_collection(tensor_list[0]):
+            return torch.cat(list(tensor_list))
+        return torch.nested.nested_tensor(list(tensor_list))
 
     @pytest.mark.parametrize(
         "storage_type", [LazyMemmapStorage, TensorStorage, ListStorage]
@@ -1849,10 +1859,34 @@ class TestEnsemble:
         collate_fn = self._make_collate(storage_type)
         data = [self._make_data(data_type) for _ in range(3)]
         samplers = [self._make_sampler(sampler_type) for _ in range(3)]
-        rbs = (rb0, rb1, rb2) = [
-            ReplayBuffer(storage=storage, sampler=sampler, collate_fn=collate_fn)
-            for (storage, sampler) in zip(storages, samplers)
-        ]
+        sub_batch_size = (
+            batch_size // 3
+            if issubclass(sampler_type, SamplerWithoutReplacement)
+            and batch_size is not None
+            else None
+        )
+        error_catcher = (
+            pytest.raises(
+                ValueError,
+                match="Samplers with drop_last=True must work with a predictible batch-size",
+            )
+            if batch_size is None
+            and issubclass(sampler_type, SamplerWithoutReplacement)
+            else contextlib.nullcontext()
+        )
+        rbs = None
+        with error_catcher:
+            rbs = (rb0, rb1, rb2) = [
+                ReplayBuffer(
+                    storage=storage,
+                    sampler=sampler,
+                    collate_fn=collate_fn,
+                    batch_size=sub_batch_size,
+                )
+                for (storage, sampler) in zip(storages, samplers)
+            ]
+        if rbs is None:
+            return
         for datum, rb in zip(data, rbs):
             rb.extend(datum)
         rb = ReplayBufferEnsemble(
