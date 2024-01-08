@@ -2247,6 +2247,7 @@ class TestOpenX:
         "magic",
     ],
 )
+@pytest.mark.slow
 class TestOpenML:
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 3)])
     def test_env(self, dataset, batch_size):
