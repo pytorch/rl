@@ -64,7 +64,7 @@ def print_remote_collector_info(self):
         f"{get_node_ip_address()} using gpus {ray.get_gpu_ids()}"
     )
     # logger.warning(s)
-    print(s)
+    logging.info(s)
 
 
 @classmethod

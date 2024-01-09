@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import logging
 import pathlib
 import warnings
 from collections import defaultdict, OrderedDict
@@ -475,7 +476,7 @@ class Trainer:
 
     def shutdown(self):
         if VERBOSE:
-            print("shutting down collector")
+            logging.info("shutting down collector")
         self.collector.shutdown()
 
     def optim_steps(self, batch: TensorDictBase) -> None:

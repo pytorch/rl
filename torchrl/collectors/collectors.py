@@ -2125,7 +2125,7 @@ def _main_async_collector(
         interruptor=interruptor,
     )
     if verbose:
-        print("Sync data collector created")
+        logging.info("Sync data collector created")
     dc_iter = iter(inner_collector)
     j = 0
     pipe_child.send("instantiated")
@@ -2138,10 +2138,10 @@ def _main_async_collector(
             counter = 0
             data_in, msg = pipe_child.recv()
             if verbose:
-                print(f"worker {idx} received {msg}")
+                logging.info(f"worker {idx} received {msg}")
         else:
             if verbose:
-                print(f"poll failed, j={j}, worker={idx}")
+                logging.info(f"poll failed, j={j}, worker={idx}")
             # default is "continue" (after first iteration)
             # this is expected to happen if queue_out reached the timeout, but no new msg was waiting in the pipe
             # in that case, the main process probably expects the worker to continue collect data
@@ -2161,7 +2161,7 @@ def _main_async_collector(
 
                 counter += _timeout
                 if verbose:
-                    print(f"worker {idx} has counter {counter}")
+                    logging.info(f"worker {idx} has counter {counter}")
                 if counter >= (_MAX_IDLE_COUNT * _TIMEOUT):
                     raise RuntimeError(
                         f"This process waited for {counter} seconds "
@@ -2201,13 +2201,13 @@ def _main_async_collector(
             try:
                 queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
-                    print(f"worker {idx} successfully sent data")
+                    logging.info(f"worker {idx} successfully sent data")
                 j += 1
                 has_timed_out = False
                 continue
             except queue.Full:
                 if verbose:
-                    print(f"worker {idx} has timed out")
+                    logging.info(f"worker {idx} has timed out")
                 has_timed_out = True
                 continue
 
@@ -2253,7 +2253,7 @@ def _main_async_collector(
             del inner_collector, dc_iter
             pipe_child.send("closed")
             if verbose:
-                print(f"collector {idx} closed")
+                logging.info(f"collector {idx} closed")
             break
 
         else:

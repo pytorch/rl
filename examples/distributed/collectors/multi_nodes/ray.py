@@ -7,6 +7,7 @@ This example illustrates how a TorchRL collector can be converted into a distrib
 This example should create 3 collector instances, 1 local and 2 remote, but 4 instances seem to
 be created. Why?
 """
+import logging
 
 from tensordict.nn import TensorDictModule
 from torch import nn
@@ -44,4 +45,4 @@ if __name__ == "__main__":
     for batch in distributed_collector:
         counter += 1
         num_frames += batch.shape.numel()
-        print(f"batch {counter}, total frames {num_frames}")
+        logging.info(f"batch {counter}, total frames {num_frames}")
