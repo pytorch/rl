@@ -1986,6 +1986,7 @@ class TestEnsemble:
         rb1.extend(data1)
         return rb, rb0, rb1
 
+    @pytest.mark.skipif(not _has_tv, reason="torchvision not found")
     def test_rb_transform(self):
         rb, rb0, rb1 = self._prepare_dual_replay_buffer()
         for _ in range(2):
@@ -1995,6 +1996,7 @@ class TestEnsemble:
             assert sample["pixels33"].shape == torch.Size([2, 5, 3, 33, 33])
             assert sample["renamed"].shape == torch.Size([2, 5])
 
+    @pytest.mark.skipif(not _has_tv, reason="torchvision not found")
     @pytest.mark.parametrize("explicit", [False, True])
     def test_rb_indexing(self, explicit):
         rb, rb0, rb1 = self._prepare_dual_replay_buffer(explicit=explicit)
