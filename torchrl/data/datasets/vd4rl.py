@@ -25,7 +25,7 @@ from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
-from torchrl.data.replay_buffers.writers import Writer
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
 
 from torchrl.envs.transforms import Compose, Resize, ToTensorImage
 from torchrl.envs.utils import _classproperty
@@ -220,6 +220,10 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
                 transform, Resize(image_size, in_keys=["pixels", ("next", "pixels")])
             )
         storage = TensorStorage(storage)
+
+        if writer is None:
+            writer = ImmutableDatasetWriter()
+
         super().__init__(
             storage=storage,
             sampler=sampler,

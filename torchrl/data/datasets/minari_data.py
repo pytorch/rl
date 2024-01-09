@@ -24,7 +24,7 @@ from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
-from torchrl.data.replay_buffers.writers import Writer
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
@@ -34,6 +34,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.utils import _classproperty
 
 _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
+_has_minari = importlib.util.find_spec("minari", None) is not None
 
 _NAME_MATCH = KeyDependentDefaultDict(lambda key: key)
 _NAME_MATCH["observations"] = "observation"
@@ -193,6 +194,10 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         else:
             storage = self._load()
         storage = TensorStorage(storage)
+
+        if writer is None:
+            writer = ImmutableDatasetWriter()
+
         super().__init__(
             storage=storage,
             sampler=sampler,
@@ -206,6 +211,8 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
 
     @_classproperty
     def available_datasets(self):
+        if not _has_minari:
+            raise ImportError("minari library not found.")
         import minari
 
         return minari.list_remote_datasets().keys()
@@ -228,6 +235,8 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         return Path(self.root) / self.dataset_id / "env_metadata.json"
 
     def _download_and_preproc(self):
+        if not _has_minari:
+            raise ImportError("minari library not found.")
         import minari
 
         if _has_tqdm:
