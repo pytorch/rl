@@ -9,12 +9,12 @@ from typing import Callable, Optional
 import numpy as np
 from tensordict.tensordict import TensorDict
 
-from torchrl.data import TensorStorage
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import (
     Sampler,
     SamplerWithoutReplacement,
     TensorDictReplayBuffer,
+    TensorStorage,
     Writer,
 )
 
