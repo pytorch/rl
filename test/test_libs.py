@@ -1873,28 +1873,25 @@ class TestD4RL:
             root=root3,
         )
         if not use_truncated_as_done:
-            keys = set(data_from_env._storage._storage.keys(True, True))
-            keys = keys.intersection(data_true._storage._storage.keys(True, True))
-            assert (
-                data_true._storage._storage.shape
-                == data_from_env._storage._storage.shape
-            )
+            keys = set(data_from_env[:].keys(True, True))
+            keys = keys.intersection(data_true[:].keys(True, True))
+            assert data_true[:].shape == data_from_env[:].shape
             # for some reason, qlearning_dataset overwrites the next obs that is contained in the buffer,
             # resulting in tiny changes in the value contained for that key. Over 99.99% of the values
             # match, but the test still fails because of this.
             # We exclude that entry from the comparison.
-            keys.discard(("_data", "next", "observation"))
+            keys.discard(("next", "observation"))
             assert_allclose_td(
-                data_true._storage._storage.select(*keys),
-                data_from_env._storage._storage.select(*keys),
+                data_true[:].select(*keys),
+                data_from_env[:].select(*keys),
             )
         else:
-            leaf_names = data_from_env._storage._storage.keys(True)
+            leaf_names = data_from_env[:].keys(True)
             leaf_names = [
                 name[-1] if isinstance(name, tuple) else name for name in leaf_names
             ]
             assert "truncated" in leaf_names
-            leaf_names = data_true._storage._storage.keys(True)
+            leaf_names = data_true[:].keys(True)
             leaf_names = [
                 name[-1] if isinstance(name, tuple) else name for name in leaf_names
             ]
@@ -1925,12 +1922,12 @@ class TestD4RL:
             download="force",
             root=root2,
         )
-        keys = set(data_direct._storage._storage.keys(True, True))
-        keys = keys.intersection(data_d4rl._storage._storage.keys(True, True))
+        keys = set(data_direct[:].keys(True, True))
+        keys = keys.intersection(data_d4rl[:].keys(True, True))
         assert len(keys)
         assert_allclose_td(
-            data_direct._storage._storage.select(*keys).apply(lambda t: t.float()),
-            data_d4rl._storage._storage.select(*keys).apply(lambda t: t.float()),
+            data_direct[:].select(*keys).apply(lambda t: t.float()),
+            data_d4rl[:].select(*keys).apply(lambda t: t.float()),
         )
 
     @pytest.mark.parametrize(

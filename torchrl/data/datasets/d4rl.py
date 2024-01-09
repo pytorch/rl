@@ -228,7 +228,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             storage = TensorStorage(TensorDict.load_memmap(self._dataset_path))
         else:
             raise RuntimeError(
-                f"The dataset could not be found in {Path(self.root) / dataset_id}."
+                f"The dataset could not be found in {self._dataset_path}."
             )
 
         if writer is None:

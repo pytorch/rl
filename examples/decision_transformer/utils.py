@@ -243,18 +243,8 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         direct_download=True,
         prefetch=4,
     )
-    loc = (
-        data._storage._storage.get(("_data", "observation"))
-        .flatten(0, -2)
-        .mean(axis=0)
-        .float()
-    )
-    std = (
-        data._storage._storage.get(("_data", "observation"))
-        .flatten(0, -2)
-        .std(axis=0)
-        .float()
-    )
+    loc = data[:]["observation"].flatten(0, -2).mean(axis=0).float()
+    std = data[:]["observation"].flatten(0, -2).std(axis=0).float()
     obsnorm = ObservationNorm(
         loc=loc,
         scale=std,
