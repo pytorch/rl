@@ -10,8 +10,6 @@ from typing import Callable
 
 import numpy as np
 from tensordict.tensordict import TensorDict
-from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
-from torchrl.data.replay_buffers.samplers import Sampler, SamplerWithoutReplacement
 
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import (
