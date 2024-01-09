@@ -52,6 +52,7 @@ from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
+from torchrl.data.datasets.openx import OpenXExperienceReplay
 from torchrl.data.datasets.roboset import RobosetExperienceReplay
 from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
@@ -2091,6 +2092,119 @@ class TestVD4RL:
                     break
 
 
+@pytest.mark.slow
+class TestOpenX:
+    @pytest.mark.parametrize(
+        "download,padding",
+        [[True, None], [False, None], [False, 0], [False, True], [False, False]],
+    )
+    @pytest.mark.parametrize("shuffle", [True, False])
+    @pytest.mark.parametrize("replacement", [True, False])
+    @pytest.mark.parametrize(
+        "batch_size,num_slices,slice_len",
+        [
+            [3000, 2, None],
+            [32, 32, None],
+            [32, None, 1],
+            [3000, None, 1500],
+            [None, None, 32],
+            [None, None, 1500],
+        ],
+    )
+    def test_openx(
+        self, download, shuffle, replacement, padding, batch_size, num_slices, slice_len
+    ):
+        torch.manual_seed(0)
+        np.random.seed(0)
+
+        streaming = not download
+        cm = (
+            pytest.raises(RuntimeError, match="shuffle=False")
+            if not streaming and not shuffle and replacement
+            else pytest.raises(
+                RuntimeError,
+                match="replacement=True is not available with streamed datasets",
+            )
+            if streaming and replacement
+            else nullcontext()
+        )
+        dataset = None
+        with cm:
+            dataset = OpenXExperienceReplay(
+                "cmu_stretch",
+                download=download,
+                streaming=streaming,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                num_slices=num_slices,
+                slice_len=slice_len,
+                pad=padding,
+                replacement=replacement,
+            )
+        if dataset is None:
+            return
+        # iterating
+        if padding is None and (
+            (batch_size is not None and batch_size > 1000)
+            or (slice_len is not None and slice_len > 1000)
+        ):
+            raises_cm = pytest.raises(
+                RuntimeError,
+                match="The trajectory length (.*) is shorter than the slice length|Some stored trajectories have a length shorter than the slice that was asked for",
+            )
+            with raises_cm:
+                for data in dataset:  # noqa: B007
+                    break
+            if batch_size is None and slice_len is not None:
+                with raises_cm:
+                    dataset.sample(2 * slice_len)
+                return
+
+        else:
+            for data in dataset:  # noqa: B007
+                break
+            # check data shape
+            if batch_size is not None:
+                assert data.shape[0] == batch_size
+            elif slice_len is not None:
+                assert data.shape[0] == slice_len
+            if batch_size is not None:
+                if num_slices is not None:
+                    assert data.get(("next", "done")).sum(-2) == num_slices
+                elif streaming:
+                    assert (
+                        data.get(("next", "done")).sum(-2)
+                        == data.get("episode").unique().numel()
+                    )
+
+        # sampling
+        if batch_size is None:
+            if slice_len is not None:
+                batch_size = 2 * slice_len
+            elif num_slices is not None:
+                batch_size = num_slices * 32
+            sample = dataset.sample(batch_size)
+        else:
+            if padding is None and (batch_size > 1000):
+                with pytest.raises(
+                    RuntimeError,
+                    match="Some stored trajectories have a length shorter than the slice that was asked for"
+                    if not streaming
+                    else "The trajectory length (.*) is shorter than the slice length",
+                ):
+                    sample = dataset.sample()
+                return
+            else:
+                sample = dataset.sample()
+                assert sample.shape == (batch_size,)
+        if slice_len is not None:
+            assert sample.get(("next", "done")).sum() == int(
+                batch_size // slice_len
+            ), sample.get(("next", "done"))
+        elif num_slices is not None:
+            assert sample.get(("next", "done")).sum() == num_slices
+
+
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")
 @pytest.mark.parametrize(
     "dataset",
@@ -2104,6 +2218,7 @@ class TestVD4RL:
         "magic",
     ],
 )
+@pytest.mark.slow
 class TestOpenML:
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 3)])
     def test_env(self, dataset, batch_size):

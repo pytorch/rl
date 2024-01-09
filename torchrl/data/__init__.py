@@ -6,22 +6,27 @@
 from . import datasets
 from .postprocs import MultiStep
 from .replay_buffers import (
+    ImmutableDatasetWriter,
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
+    ReplayBufferEnsemble,
     RoundRobinWriter,
+    SamplerEnsemble,
     SliceSampler,
     SliceSamplerWithoutReplacement,
     Storage,
+    StorageEnsemble,
     TensorDictMaxValueWriter,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
     TensorDictRoundRobinWriter,
     TensorStorage,
     Writer,
+    WriterEnsemble,
 )
 from .rlhf import (
     create_infinite_iterator,

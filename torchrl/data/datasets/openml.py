@@ -7,14 +7,11 @@ from typing import Callable, Optional
 
 import numpy as np
 from tensordict.tensordict import TensorDict
+from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
+from torchrl.data.replay_buffers.samplers import Sampler, SamplerWithoutReplacement
 
-from torchrl.data.replay_buffers import (
-    LazyMemmapStorage,
-    Sampler,
-    SamplerWithoutReplacement,
-    TensorDictReplayBuffer,
-    Writer,
-)
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data.replay_buffers.writers import Writer
 
 
 class OpenMLExperienceReplay(TensorDictReplayBuffer):
