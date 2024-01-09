@@ -71,7 +71,7 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
               sampler is set to ``False`` if they wish to enjoy the two different
               behaviours (shuffled and not) within the same code base.
 
-        num_slice (int, optional): the number of slices in a batch. This
+        num_slices (int, optional): the number of slices in a batch. This
             corresponds to the number of trajectories present in a batch.
             Once collected, the batch is presented as a concatenation of
             sub-trajectories that can be recovered through `batch.reshape(num_slices, -1)`.
