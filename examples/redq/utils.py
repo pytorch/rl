@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import logging
 from copy import copy
 from typing import Callable, Dict, Optional, Sequence, Tuple, Union
 
@@ -216,7 +217,7 @@ def make_trainer(
         >>> logger = TensorboardLogger(exp_name=dir)
         >>> trainer = make_trainer(collector, loss_module, recorder, target_net_updater, policy_exploration,
         ...    replay_buffer, logger)
-        >>> print(trainer)
+        >>> logging.info(trainer)
 
     """
 
@@ -243,7 +244,7 @@ def make_trainer(
         raise NotImplementedError(f"lr scheduler {cfg.optim.lr_scheduler}")
 
     if VERBOSE:
-        print(
+        logging.info(
             f"collector = {collector}; \n"
             f"loss_module = {loss_module}; \n"
             f"recorder = {recorder}; \n"

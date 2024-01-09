@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import logging
+
 import torch
 from tensordict.nn import TensorDictModule
 from transformers import GPT2LMHeadModel
@@ -27,8 +29,7 @@ def init_transformer(
     model.to(device)
 
     if compile_model:
-        # TODO: logging instead of printing?
-        print("Compiling transformer model...")
+        logging.info("Compiling transformer model...")
         model = torch.compile(model)
 
     if as_tensordictmodule:

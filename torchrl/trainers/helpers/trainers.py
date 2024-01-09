@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 from dataclasses import dataclass
 from typing import List, Optional, Union
 from warnings import warn
@@ -173,7 +174,7 @@ def make_trainer(
         raise NotImplementedError(f"lr scheduler {cfg.lr_scheduler}")
 
     if VERBOSE:
-        print(
+        logging.info(
             f"collector = {collector}; \n"
             f"loss_module = {loss_module}; \n"
             f"recorder = {recorder}; \n"

@@ -54,7 +54,6 @@ def get_minibatch():
         for data in dl:
             data = data.clone().memmap_("test/datasets_mini/tldr_batch/")
             break
-        print("done")
 
 
 if __name__ == "__main__":

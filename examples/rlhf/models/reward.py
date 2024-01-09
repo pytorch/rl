@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import logging
 import warnings
 
 import torch
@@ -30,7 +31,7 @@ def init_reward_model(
 
     model.to(device)
     if compile_model:
-        print("Compiling the reward model...")
+        logging.info("Compiling the reward model...")
         model = torch.compile(model)
 
     model = TensorDictModule(

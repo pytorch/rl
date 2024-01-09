@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import logging
 import os
 import pathlib
 import shutil
@@ -280,7 +281,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
                     zip(paths_to_proc, files_to_proc),
                 )
                 files = list(files)
-            print("Downloaded, processing files")
+            logging.info("Downloaded, processing files")
             if _has_tqdm:
                 import tqdm
 
@@ -308,7 +309,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
 
         # From this point, the local paths are non needed anymore
         td_save = td_save.expand(total_steps).memmap_like(data_path, num_threads=32)
-        print("Saved tensordict:", td_save)
+        logging.info("Saved tensordict:", td_save)
         idx0 = 0
         idx1 = 0
         while len(files):
