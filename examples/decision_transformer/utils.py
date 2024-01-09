@@ -10,7 +10,12 @@ from lamb import Lamb
 from tensordict.nn import TensorDictModule
 
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+from torchrl.data import (
+    LazyMemmapStorage,
+    RoundRobinWriter,
+    TensorDictReplayBuffer,
+    TensorStorage,
+)
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.replay_buffers import RandomSampler
 from torchrl.envs import (
@@ -242,7 +247,16 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         use_truncated_as_done=True,
         direct_download=True,
         prefetch=4,
+        writer=RoundRobinWriter(),
     )
+
+    # since we're not extending the data, adding keys can only be done via
+    # the creation of a new storage
+    data_memmap = data[:]
+    with data_memmap.unlock_():
+        data_memmap = r2g.inv(data_memmap)
+        data._storage = TensorStorage(data_memmap)
+
     loc = data[:]["observation"].flatten(0, -2).mean(axis=0).float()
     std = data[:]["observation"].flatten(0, -2).std(axis=0).float()
 
