@@ -785,7 +785,7 @@ class DiscreteSACLoss(LossModule):
             :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
             :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
         num_actions (int, optional): number of actions in the action space.
-            To be provided if target_entropy is ste to "auto".
+            To be provided if target_entropy is set to "auto".
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of `"smooth_l1"`, "l2",
             "l1", Default is "smooth_l1".
