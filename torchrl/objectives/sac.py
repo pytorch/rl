@@ -376,9 +376,13 @@ class SACLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
-        self._vmap_qnetworkN0 = _vmap_func(self.qvalue_network, (None, 0))
+        self._vmap_qnetworkN0 = _vmap_func(
+            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+        )
         if self._version == 1:
-            self._vmap_qnetwork00 = _vmap_func(qvalue_network)
+            self._vmap_qnetwork00 = _vmap_func(
+                qvalue_network, randomness=self.vmap_randomness
+            )
 
     @property
     def target_entropy_buffer(self):
@@ -411,7 +415,6 @@ class SACLoss(LossModule):
                 isinstance(self.tensor_keys.action, tuple)
                 and len(self.tensor_keys.action) > 1
             ):
-
                 action_container_shape = action_spec[self.tensor_keys.action[:-1]].shape
             else:
                 action_container_shape = action_spec.shape
@@ -753,7 +756,6 @@ class SACLoss(LossModule):
         return loss_value, {}
 
     def _alpha_loss(self, log_prob: Tensor) -> Tensor:
-
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
             alpha_loss = -self.log_alpha * (log_prob + self.target_entropy)
@@ -1049,7 +1051,9 @@ class DiscreteSACLoss(LossModule):
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
-        self._vmap_qnetworkN0 = _vmap_func(self.qvalue_network, (None, 0))
+        self._vmap_qnetworkN0 = _vmap_func(
+            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+        )
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
