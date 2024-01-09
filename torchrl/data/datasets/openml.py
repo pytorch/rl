@@ -2,9 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import os
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 
 import numpy as np
 from tensordict.tensordict import TensorDict
@@ -58,12 +60,12 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
         name: str,
         batch_size: int,
         root: Path | None = None,
-        sampler: Optional[Sampler] = None,
-        writer: Optional[Writer] = None,
-        collate_fn: Optional[Callable] = None,
+        sampler: Sampler | None = None,
+        writer: Writer | None = None,
+        collate_fn: Callable | None = None,
         pin_memory: bool = False,
-        prefetch: Optional[int] = None,
-        transform: Optional["Transform"] = None,  # noqa-F821
+        prefetch: int | None = None,
+        transform: "Transform" | None = None,  # noqa-F821
     ):
 
         if sampler is None:
