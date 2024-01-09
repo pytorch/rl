@@ -3,10 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
+from pandas._config.config import _get_root
 from tensordict.tensordict import TensorDict
+
+from torchrl.data import TensorStorage
 from torchrl.data.replay_buffers import (
     LazyMemmapStorage,
     Sampler,
@@ -54,6 +58,7 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
         self,
         name: str,
         batch_size: int,
+        root: Path | None = None,
         sampler: Optional[Sampler] = None,
         writer: Optional[Writer] = None,
         collate_fn: Optional[Callable] = None,
@@ -64,13 +69,17 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
 
         if sampler is None:
             sampler = SamplerWithoutReplacement()
+        if root is None:
+            root = _get_root("openml")
+        self.root = Path(root)
+        self.dataset_id = name
 
         dataset = self._get_data(
             name,
         )
         self.max_outcome_val = dataset["y"].max().item()
 
-        storage = LazyMemmapStorage(dataset.shape[0])
+        storage = TensorStorage(dataset.memmap(self._dataset_path))
 
         super().__init__(
             batch_size=batch_size,
@@ -82,7 +91,9 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
             prefetch=prefetch,
             transform=transform,
         )
-        self.extend(dataset)
+
+    def _dataset_path(self):
+        return self.root / self.dataset_id
 
     @classmethod
     def _get_data(cls, dataset_name):
