@@ -96,6 +96,7 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
             transform=transform,
         )
 
+    @property
     def _dataset_path(self):
         return self.root / self.dataset_id
 

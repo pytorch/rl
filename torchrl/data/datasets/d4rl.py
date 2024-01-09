@@ -155,7 +155,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         self.use_truncated_as_done = use_truncated_as_done
         if root is None:
             root = _get_root_dir("d4rl")
-        self.root = root
+        self.root = Path(root)
         self.dataset_id = dataset_id
 
         if not from_env and direct_download is None:
@@ -225,9 +225,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
             storage = TensorStorage(dataset.memmap(self._dataset_path))
         elif self._is_downloaded():
-            storage = TensorStorage(
-                TensorDict.load_memmap(Path(self.root) / dataset_id)
-            )
+            storage = TensorStorage(TensorDict.load_memmap(self._dataset_path))
         else:
             raise RuntimeError(
                 f"The dataset could not be found in {Path(self.root) / dataset_id}."
@@ -246,6 +244,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             transform=transform,
         )
 
+    @property
     def _dataset_path(self):
         return Path(self.root) / self.dataset_id
 
