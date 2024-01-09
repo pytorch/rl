@@ -704,6 +704,12 @@ class _StreamingSampler(Sampler):
     def loads(self, path):
         ...
 
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        ...
+
 
 OPENX_KEY_MAP = {
     "is_first": "is_init",
