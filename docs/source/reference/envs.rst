@@ -572,6 +572,7 @@ to be able to create this other composition:
     TransformedEnv
     ActionMask
     BinarizeReward
+    BurnInTransform
     CatFrames
     CatTensors
     CenterCrop

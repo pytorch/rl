@@ -169,7 +169,7 @@ def _main(argv):
     if is_nightly:
         tensordict_dep = "tensordict-nightly"
     else:
-        tensordict_dep = "tensordict>=0.2.0"
+        tensordict_dep = "tensordict>=0.3.0"
 
     if is_nightly:
         version = get_nightly_version()
@@ -216,9 +216,11 @@ def _main(argv):
             "huggingface_hub",  # for roboset
             "minari",
             "tqdm",
+            "torchvision",
             "scikit-learn",
             "pandas",
             "h5py",
+            "pillow",
         ],
         "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1"],
     }

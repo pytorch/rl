@@ -24,8 +24,9 @@ from typing import Any, Callable, cast, Dict, TypeVar, Union
 import numpy as np
 import torch
 from packaging.version import parse
-from torch import multiprocessing as mp
 
+from tensordict.utils import NestedKey
+from torch import multiprocessing as mp
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
@@ -662,3 +663,10 @@ def print_directory_tree(path, indent="", display_metadata=True):
             )
     else:
         print(indent + os.path.basename(path))
+
+
+def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
+    if isinstance(key, str):
+        return new_ending
+    else:
+        return key[:-1] + (new_ending,)
