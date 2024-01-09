@@ -26,7 +26,7 @@ from torchrl.data.datasets.d4rl_infos import D4RL_DATASETS
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage, TensorStorage
+from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
 
 
@@ -250,7 +250,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         return Path(self.root) / self.dataset_id
 
     def _is_downloaded(self):
-        return os.path.exists(Path(self.root) / self.dataset_id)
+        return os.path.exists(self._dataset_path)
 
     def _get_dataset_direct_download(self, name, env_kwargs):
         """Directly download and use a D4RL dataset."""

@@ -2,17 +2,16 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import os
 from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
-from pandas._config.config import _get_root
 from tensordict.tensordict import TensorDict
 
 from torchrl.data import TensorStorage
+from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import (
-    LazyMemmapStorage,
     Sampler,
     SamplerWithoutReplacement,
     TensorDictReplayBuffer,
@@ -70,17 +69,20 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
         if sampler is None:
             sampler = SamplerWithoutReplacement()
         if root is None:
-            root = _get_root("openml")
+            root = _get_root_dir("openml")
         self.root = Path(root)
         self.dataset_id = name
 
-        dataset = self._get_data(
-            name,
-        )
+        if not self._is_downloaded():
+            dataset = self._get_data(
+                name,
+            )
+            storage = TensorStorage(dataset.memmap(self._dataset_path))
+        else:
+            dataset = TensorDict.load_memmap(self._dataset_path)
+            storage = TensorStorage(dataset)
+
         self.max_outcome_val = dataset["y"].max().item()
-
-        storage = TensorStorage(dataset.memmap(self._dataset_path))
-
         super().__init__(
             batch_size=batch_size,
             storage=storage,
@@ -94,6 +96,9 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
 
     def _dataset_path(self):
         return self.root / self.dataset_id
+
+    def _is_downloaded(self):
+        return os.path.exists(self._dataset_path)
 
     @classmethod
     def _get_data(cls, dataset_name):
