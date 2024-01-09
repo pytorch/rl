@@ -239,7 +239,7 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         exclude,
     )
     data = D4RLExperienceReplay(
-        rb_cfg.dataset,
+        dataset_id=rb_cfg.dataset,
         split_trajs=True,
         batch_size=rb_cfg.batch_size,
         sampler=RandomSampler(),  # SamplerWithoutReplacement(drop_last=False),
