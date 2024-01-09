@@ -34,6 +34,7 @@ from torchrl.modules.distributions import (
     OneHotCategorical,
     TanhDelta,
     TanhNormal,
+    TruncatedNormal
 )
 from torchrl.modules.distributions.continuous import SafeTanhTransform
 from torchrl.modules.models.exploration import LazygSDEModule
@@ -541,6 +542,7 @@ def make_dreamer(
         cfg.mlp_num_units,
         action_key,
         proof_environment,
+        cfg.actor_dist_type
     )
     actor_simulator = actor_simulator.to(device)
 
@@ -629,6 +631,7 @@ def _dreamer_make_actors(
         mlp_num_units,
         action_key,
         proof_environment,
+        actor_dist_type="truncated_normal"
 ):
     actor_module = DreamerActor(
         out_features=proof_environment.action_spec.shape[0],
@@ -637,7 +640,7 @@ def _dreamer_make_actors(
         activation_class=nn.ELU,
     )
     actor_simulator = _dreamer_make_actor_sim(
-        action_key, proof_environment, actor_module
+        action_key, proof_environment, actor_module, actor_dist_type
     )
     actor_realworld = _dreamer_make_actor_real(
         obs_encoder,
@@ -646,11 +649,13 @@ def _dreamer_make_actors(
         actor_module,
         action_key,
         proof_environment,
+        actor_dist_type
     )
     return actor_simulator, actor_realworld
 
 
-def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
+def _dreamer_make_actor_sim(action_key, proof_environment, actor_module, actor_dist_type):
+    distribution_class = {"truncated_normal": TruncatedNormal, "tanh_normal": TanhNormal}[actor_dist_type]
     actor_simulator = SafeProbabilisticTensorDictSequential(
         SafeModule(
             actor_module,
@@ -673,7 +678,7 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
             in_keys=["loc", "scale"],
             out_keys=[action_key],
             default_interaction_type=InteractionType.RANDOM,
-            distribution_class=TanhNormal,
+            distribution_class=distribution_class,
             distribution_kwargs={"tanh_loc": True},
             spec=CompositeSpec(**{action_key: proof_environment.action_spec}),
         ),
@@ -682,8 +687,9 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
 
 
 def _dreamer_make_actor_real(
-        obs_encoder, rssm_prior, rssm_posterior, actor_module, action_key, proof_environment
+        obs_encoder, rssm_prior, rssm_posterior, actor_module, action_key, proof_environment, actor_dist_type
 ):
+    distribution_class = {"truncated_normal": TruncatedNormal, "tanh_normal": TanhNormal}[actor_dist_type]
     # actor for real world: interacts with states ~ posterior
     # Out actor differs from the original paper where first they compute prior and posterior and then act on it
     # but we found that this approach worked better.
@@ -722,7 +728,7 @@ def _dreamer_make_actor_real(
                 in_keys=["loc", "scale"],
                 out_keys=[action_key],
                 default_interaction_type=InteractionType.MODE,
-                distribution_class=TanhNormal,
+                distribution_class=distribution_class,
                 distribution_kwargs={"tanh_loc": True},
                 spec=CompositeSpec(
                     **{action_key: proof_environment.action_spec.to("cpu")}
@@ -848,6 +854,7 @@ class DreamerConfig:
     # Whether to use the discount loss
     pred_continue: bool = True
     # Whether to predict the continue signal
+    actor_dist_type: str = "truncated_normal"
 
 
 @dataclass

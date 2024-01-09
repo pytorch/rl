@@ -179,9 +179,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if cfg.exploration == "additive_gaussian":
         exploration_policy = AdditiveGaussianWrapper(
             policy,
-            # sigma_init=0.3,
-            # sigma_end=0.3,
-            annealing_num_steps=cfg.total_frames,
+            sigma_init=0.3,
+            sigma_end=0.3,
+            # annealing_num_steps=cfg.total_frames,
         ).to(device)
     elif cfg.exploration == "ou_exploration":
         exploration_policy = OrnsteinUhlenbeckProcessWrapper(

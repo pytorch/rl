@@ -329,10 +329,14 @@ class DreamerActorLoss(LossModule):
         lambda_target = self.lambda_target(reward, next_value, terminated)
         fake_data.set("lambda_target", lambda_target)
 
+        # print("reward", reward[0].reshape(-1))
+        # print("pcont", pcont[0].reshape(-1))
+
         if self.discount_loss:
             gamma = self.value_estimator.gamma.to(tensordict.device)
             if self.pred_continue:
                 discount = pcont * gamma
+                # discount = (pcont > 0.5).float() * gamma
             else:
                 discount = gamma.expand(lambda_target.shape).clone()
             discount = torch.cat([
@@ -344,6 +348,7 @@ class DreamerActorLoss(LossModule):
             actor_loss = -(lambda_target * discount).sum((-2, -1)).mean()
         else:
             actor_loss = -lambda_target.sum((-2, -1)).mean()
+
         loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
         return loss_tensordict, fake_data.detach()
 
@@ -463,11 +468,17 @@ class DreamerValueLoss(LossModule):
         tensordict_select = fake_data.select(*self.value_model.in_keys)
         self.value_model(tensordict_select)
 
+        # print("discount", discount[0].reshape(-1))
+        # print("target", lambda_target[0].reshape(-1))
+        # print("value", tensordict_select.get(self.tensor_keys.value)[0].reshape(-1))
+
         value_loss = (discount * distance_loss(
             tensordict_select.get(self.tensor_keys.value),
             lambda_target,
             self.value_loss,
         )).sum((-1, -2)).mean()
+
+        print("value_loss", value_loss)
 
         loss_tensordict = TensorDict({"loss_value": value_loss}, [])
         return loss_tensordict, fake_data
