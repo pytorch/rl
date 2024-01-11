@@ -572,7 +572,7 @@ class _StreamingStorage(Storage):
             else:
                 yield data
 
-    def get(self, index: range) -> Any:
+    def get(self, index: range | torch.Tensor) -> Any:
         if not isinstance(index, range):
             if (index[1:] != index[:-1] + 1).any():
                 # we use a range to indicate how much data we want
