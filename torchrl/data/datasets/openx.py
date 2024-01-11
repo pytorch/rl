@@ -572,10 +572,12 @@ class _StreamingStorage(Storage):
             else:
                 yield data
 
-    def get(self, index: int) -> Any:
+    def get(self, index: range) -> Any:
         if not isinstance(index, range):
-            # we use a range to indicate how much data we want
-            raise RuntimeError("iterable datasets do not support indexing.")
+            if (index[1:] != index[:-1] + 1).any():
+                # we use a range to indicate how much data we want
+                raise RuntimeError("iterable datasets do not support indexing.")
+            index = range(index.shape[0])
         total = 0
         data_list = []
         episode = 0
