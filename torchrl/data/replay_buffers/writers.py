@@ -312,7 +312,7 @@ class TensorDictMaxValueWriter(Writer):
                 index[values] = keys
                 data.set("index", index)
             self._storage.set(keys, data[values])
-            return keys.long()
+            return keys.long().cpu()
         return None
 
     def _empty(self) -> None:
