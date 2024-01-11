@@ -1102,6 +1102,10 @@ class SamplerEnsemble(Sampler):
                     for i in buffer_ids.tolist()
                 ]
             )
+        samples = [
+            sample if isinstance(sample, torch.Tensor) else torch.tensor(sample)
+            for sample in samples
+        ]
         if all(samples[0].shape == sample.shape for sample in samples[1:]):
             samples_stack = torch.stack(samples)
         else:
@@ -1116,7 +1120,9 @@ class SamplerEnsemble(Sampler):
         )
         infos = torch.stack(
             [
-                TensorDict.from_dict(info) if info else TensorDict({}, [])
+                TensorDict.from_dict(info, batch_dims=samples.ndim - 1)
+                if info
+                else TensorDict({}, [])
                 for info in infos
             ]
         )
