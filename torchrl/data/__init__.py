@@ -11,6 +11,7 @@ from .replay_buffers import (
     LazyTensorStorage,
     ListStorage,
     PrioritizedReplayBuffer,
+    PrioritizedSampler,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
     ReplayBufferEnsemble,
