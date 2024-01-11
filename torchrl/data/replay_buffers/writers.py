@@ -118,7 +118,12 @@ class RoundRobinWriter(Writer):
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
         batch_size = len(data)
-        index = np.arange(cur_size, batch_size + cur_size) % self._storage.max_size
+        index = (
+            torch.arange(
+                cur_size, batch_size + cur_size, dtype=torch.long, device=data.device
+            )
+            % self._storage.max_size
+        )
         # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (batch_size + cur_size) % self._storage.max_size
         self._storage[index] = data
@@ -177,7 +182,12 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
         batch_size = len(data)
-        index = np.arange(cur_size, batch_size + cur_size) % self._storage.max_size
+        index = (
+            torch.arange(
+                cur_size, batch_size + cur_size, dtype=torch.long, device=data.device
+            )
+            % self._storage.max_size
+        )
         # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (batch_size + cur_size) % self._storage.max_size
         # storage must convert the data to the appropriate format if needed
@@ -312,7 +322,7 @@ class TensorDictMaxValueWriter(Writer):
                 index[values] = keys
                 data.set("index", index)
             self._storage.set(keys, data[values])
-            return keys.long().cpu()
+            return keys.long()
         return None
 
     def _empty(self) -> None:
