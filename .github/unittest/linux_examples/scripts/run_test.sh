@@ -200,6 +200,15 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online
   collector.device=cuda:0 \
   logger.mode=offline \
   logger.backend=
+python .github/unittest/helpers/coverage_run_parallel.py examples/iql/discrete_iql.py \
+  collector.total_frames=48 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  env.train_num_envs=2 \
+  optim.device=cuda:0 \
+  collector.device=cuda:0 \
+  logger.mode=offline \
+  logger.backend=
   python .github/unittest/helpers/coverage_run_parallel.py examples/cql/cql_online.py \
   collector.total_frames=48 \
   optim.batch_size=10 \
