@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib.util
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
@@ -16,6 +17,9 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import Compose, DoubleToFloat, RenameTransform
+from torchrl.envs.utils import _classproperty
+
+_has_sklearn = importlib.util.find_spec("sklearn", None) is not None
 
 
 def _make_composite_from_td(td):
@@ -70,6 +74,20 @@ class OpenMLEnv(EnvBase):
             is_shared=False)
 
     """
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_sklearn:
+            return []
+        return [
+            "adult_num",
+            "adult_onehot",
+            "mushroom_num",
+            "mushroom_onehot",
+            "covertype",
+            "shuttle",
+            "magic",
+        ]
 
     def __init__(self, dataset_name, device="cpu", batch_size=None):
         if batch_size is None:

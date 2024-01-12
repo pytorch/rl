@@ -478,6 +478,8 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             for envs to be ``done`` just after :meth:`~.reset` is called.
             Defaults to ``False``.
 
+    Attributes:
+        available_envs (List[str]): a list of environments to build.
 
     Examples:
         >>> env = gym.make("Pendulum-v0")
@@ -490,6 +492,12 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     git_url = "https://github.com/openai/gym"
     libname = "gym"
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_gym:
+            return []
+        return list(_get_envs())
 
     @staticmethod
     def get_library_name(env) -> str:
@@ -690,12 +698,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         )
 
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
-
-    @_classproperty
-    def available_envs(cls):
-        if not _has_gym:
-            return
-        yield from _get_envs()
 
     @property
     def lib(self) -> ModuleType:
@@ -1145,7 +1147,6 @@ class MOGymWrapper(GymWrapper):
         >>> env = MOGymWrapper(mo_gym.make('minecart-v0'), frame_skip=4)
         >>> td = env.rand_step()
         >>> print(td)
-        >>> print(env.available_envs)
 
     """
 
@@ -1153,6 +1154,31 @@ class MOGymWrapper(GymWrapper):
     libname = "mo-gymnasium"
 
     _make_specs = set_gym_backend("gymnasium")(GymEnv._make_specs)
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_mo:
+            return []
+        return [
+            "deep-sea-treasure-v0",
+            "deep-sea-treasure-concave-v0",
+            "resource-gathering-v0",
+            "fishwood-v0",
+            "breakable-bottles-v0",
+            "fruit-tree-v0",
+            "water-reservoir-v0",
+            "four-room-v0",
+            "mo-mountaincar-v0",
+            "mo-mountaincarcontinuous-v0",
+            "mo-lunar-lander-v2",
+            "minecart-v0",
+            "mo-highway-v0",
+            "mo-highway-fast-v0",
+            "mo-supermario-v0",
+            "mo-reacher-v4",
+            "mo-hopper-v4",
+            "mo-halfcheetah-v4",
+        ]
 
 
 class MOGymEnv(GymEnv):
@@ -1168,6 +1194,8 @@ class MOGymEnv(GymEnv):
 
     git_url = "https://github.com/Farama-Foundation/MO-Gymnasium"
     libname = "mo-gymnasium"
+
+    available_envs = MOGymWrapper.available_envs
 
     @property
     def lib(self) -> ModuleType:

@@ -172,11 +172,11 @@ class IsaacGymEnv(IsaacGymWrapper):
     @_classproperty
     def available_envs(cls):
         if not _has_isaac:
-            return
+            return []
 
         import isaacgymenvs  # noqa
 
-        yield from isaacgymenvs.tasks.isaacgym_task_map.keys()
+        return list(isaacgymenvs.tasks.isaacgym_task_map.keys())
 
     def __init__(self, task=None, *, env=None, num_envs, device, **kwargs):
         if env is not None and task is not None:

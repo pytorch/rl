@@ -124,9 +124,9 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
     @_classproperty
     def available_envs(cls):
         if not _has_robohive:
-            return
+            return []
         RoboHiveEnv.register_envs()
-        yield from cls.env_list
+        return cls.env_list
 
     @classmethod
     def register_envs(cls):

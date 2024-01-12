@@ -299,7 +299,7 @@ class JumanjiWrapper(GymLikeEnv):
     @_classproperty
     def available_envs(cls):
         if not _has_jumanji:
-            return
+            return []
         return list(_get_envs())
 
     @property
@@ -556,7 +556,6 @@ class JumanjiEnv(JumanjiWrapper):
     Attributes:
         available_envs: environments availalbe to build
 
-    Examples:
     Examples:
         >>> from torchrl.envs import JumanjiEnv
         >>> env = JumanjiEnv("Snake-v1")

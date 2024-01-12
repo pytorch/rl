@@ -216,7 +216,7 @@ class VmasWrapper(_EnvWrapper):
     @_classproperty
     def available_envs(cls):
         if not _has_vmas:
-            return
+            return []
         return list(_get_envs())
 
     def __init__(

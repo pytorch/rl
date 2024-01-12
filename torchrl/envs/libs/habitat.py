@@ -75,6 +75,9 @@ class HabitatEnv(GymEnv):
             for envs to be ``done`` just after :meth:`~.reset` is called.
             Defaults to ``False``.
 
+    Attributes:
+        available_envs (List[str]): a list of environments to build.
+
     Examples:
         >>> from torchrl.envs import HabitatEnv
         >>> env = HabitatEnv("HabitatRenderPick-v0", from_pixels=True)
@@ -97,8 +100,8 @@ class HabitatEnv(GymEnv):
     @_classproperty
     def available_envs(cls):
         if not _has_habitat:
-            return
-        yield from _get_available_envs()
+            return []
+        return list(_get_available_envs())
 
     def _build_gym_env(self, env, pixels_only):
         if self.from_pixels:
