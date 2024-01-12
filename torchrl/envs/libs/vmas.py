@@ -142,7 +142,8 @@ class VmasWrapper(_EnvWrapper):
 
     .. warning::
         VMAS does not distinguish between truncation (when the env reached ``max_steps``) and termination, and all
-        end-of-trajectories are marked  as terminated.
+        end-of-trajectories are marked  as terminated. If you deem the ``truncation`` signal necessary, set
+        ``max_steps`` to ``None`` and use a :class:`~torchrl.envs.transforms.StepCounter` transform.
 
     Examples:
         >>>  env = VmasWrapper(
@@ -654,7 +655,8 @@ class VmasEnv(VmasWrapper):
 
     .. warning::
         VMAS does not distinguish between truncation (when the env reached ``max_steps``) and termination, and all
-        end-of-trajectories are marked  as terminated.
+        end-of-trajectories are marked  as terminated. If you deem the ``truncation`` signal necessary, set
+        ``max_steps`` to ``None`` and use a :class:`~torchrl.envs.transforms.StepCounter` transform.
 
     Examples:
         >>>  env = VmasEnv(
