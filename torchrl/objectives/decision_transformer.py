@@ -88,7 +88,6 @@ class OnlineDTLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=False,
-            funs_to_decorate=["forward", "get_dist"],
         )
         try:
             device = next(self.parameters()).device
@@ -208,9 +207,8 @@ class OnlineDTLoss(LossModule):
         if target_actions.requires_grad:
             raise RuntimeError("target action cannot be part of a graph.")
 
-        action_dist = self.actor_network.get_dist(
-            tensordict, params=self.actor_network_params
-        )
+        with self.actor_network_params.to_module(self.actor_network):
+            action_dist = self.actor_network.get_dist(tensordict)
 
         log_likelihood = action_dist.log_prob(target_actions).mean()
         entropy = self.get_entropy_bonus(action_dist).mean()
@@ -319,9 +317,10 @@ class DTLoss(LossModule):
         tensordict = tensordict.clone(False)
         target_actions = tensordict.get(self.tensor_keys.action_target).detach()
 
-        pred_actions = self.actor_network(
-            tensordict, params=self.actor_network_params
-        ).get(self.tensor_keys.action_pred)
+        with self.actor_network_params.to_module(self.actor_network):
+            pred_actions = self.actor_network(tensordict).get(
+                self.tensor_keys.action_pred
+            )
         loss = distance_loss(
             pred_actions,
             target_actions,

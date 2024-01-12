@@ -7,6 +7,7 @@ from __future__ import annotations
 import contextlib
 
 import importlib.util
+import logging
 import os
 import re
 from enum import Enum
@@ -26,6 +27,14 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_type as set_exploration_type,
 )
 from tensordict.tensordict import LazyStackedTensorDict, NestedKey
+from torchrl._utils import _replace_last
+
+from torchrl.data.tensor_specs import (
+    CompositeSpec,
+    TensorSpec,
+    UnboundedContinuousTensorSpec,
+)
+from torchrl.data.utils import check_no_exclusive_keys
 
 __all__ = [
     "exploration_mode",
@@ -40,9 +49,6 @@ __all__ = [
     "check_marl_grouping",
 ]
 
-
-from torchrl.data import CompositeSpec, TensorSpec
-from torchrl.data.utils import check_no_exclusive_keys
 
 ACTION_MASK_ERROR = RuntimeError(
     "An out-of-bounds actions has been provided to an env with an 'action_mask' output."
@@ -237,7 +243,11 @@ def step_mdp(
 
 
 def _set_single_key(
-    source: TensorDictBase, dest: TensorDictBase, key: str | tuple, clone: bool = False
+    source: TensorDictBase,
+    dest: TensorDictBase,
+    key: str | tuple,
+    clone: bool = False,
+    device=None,
 ):
     # key should be already unraveled
     if isinstance(key, str):
@@ -253,7 +263,9 @@ def _set_single_key(
                 source = val
                 dest = new_val
             else:
-                if clone:
+                if device is not None and val.device != device:
+                    val = val.to(device, non_blocking=True)
+                elif clone:
                     val = val.clone()
                 dest._set_str(k, val, inplace=False, validated=True)
         # This is a temporary solution to understand if a key is heterogeneous
@@ -262,7 +274,7 @@ def _set_single_key(
             if re.match(r"Found more than one unique shape in the tensors", str(err)):
                 # this is a het key
                 for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
-                    _set_single_key(s_td, d_td, k, clone)
+                    _set_single_key(s_td, d_td, k, clone=clone, device=device)
                 break
             else:
                 raise err
@@ -506,7 +518,7 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )
 
-    print("check_env_specs succeeded!")
+    logging.info("check_env_specs succeeded!")
 
 
 def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int = -1):
@@ -560,8 +572,6 @@ def make_composite_from_td(data):
                      shape=torch.Size([1]), space=ContinuousBox(low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True), high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)), device=cpu, dtype=torch.float32, domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
         >>> assert (spec.zero() == data.zero_()).all()
     """
-    from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
-
     # custom funtion to convert a tensordict in a similar spec structure
     # of unbounded values.
     composite = CompositeSpec(
@@ -604,13 +614,6 @@ def clear_mpi_env_vars():
         yield
     finally:
         os.environ.update(removed_environment)
-
-
-def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
-    if isinstance(key, str):
-        return new_ending
-    else:
-        return key[:-1] + (new_ending,)
 
 
 class MarlGroupMapType(Enum):

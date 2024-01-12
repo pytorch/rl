@@ -14,7 +14,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.tensordict import make_tensordict
 from torchrl._utils import implement_for
-from torchrl.data import UnboundedContinuousTensorSpec
+from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
 from torchrl.envs.libs.gym import _AsyncMeta, _gym_to_torchrl_spec_transform, GymEnv
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
@@ -68,7 +68,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
 
     Args:
         env_name (str): the environment name to build.
-        read_info (bool, optional): whether the the info should be parsed.
+        read_info (bool, optional): whether the info should be parsed.
             Defaults to ``True``.
         device (torch.device, optional): the device on which the input/output
             are expected. Defaults to torch default device.

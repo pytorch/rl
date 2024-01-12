@@ -28,10 +28,10 @@ from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 def make_env(env_name="HalfCheetah-v4", device="cpu"):
     env = GymEnv(env_name, device=device)
     env = TransformedEnv(env)
+    env.append_transform(VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2))
+    env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
-    env.append_transform(VecNorm(in_keys=["observation"]))
-    env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(DoubleToFloat(in_keys=["observation"]))
     return env
 
@@ -72,7 +72,9 @@ def make_ppo_models_state(proof_environment):
     # Add state-independent normal scale
     policy_mlp = torch.nn.Sequential(
         policy_mlp,
-        AddStateIndependentNormalScale(proof_environment.action_spec.shape[-1]),
+        AddStateIndependentNormalScale(
+            proof_environment.action_spec.shape[-1], scale_lb=1e-8
+        ),
     )
 
     # Add probabilistic sampling of the actions

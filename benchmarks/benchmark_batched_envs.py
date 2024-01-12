@@ -68,8 +68,8 @@ if __name__ == "__main__":
         devices.append("cuda")
     for device in devices:
         for num_workers in [1, 4, 16]:
-            print(f"With num_workers={num_workers}, {device}")
-            print("Multithreaded...")
+            logging.info(f"With num_workers={num_workers}, {device}")
+            logging.info("Multithreaded...")
             env_multithreaded = create_multithreaded(num_workers, device)
             res_multithreaded = Timer(
                 stmt="run_env(env)",
@@ -78,7 +78,7 @@ if __name__ == "__main__":
             )
             time_multithreaded = res_multithreaded.blocked_autorange().mean
 
-            print("Serial...")
+            logging.info("Serial...")
             env_serial = create_serial(num_workers, device)
             res_serial = Timer(
                 stmt="run_env(env)",
@@ -87,7 +87,7 @@ if __name__ == "__main__":
             )
             time_serial = res_serial.blocked_autorange().mean
 
-            print("Parallel...")
+            logging.info("Parallel...")
             env_parallel = create_parallel(num_workers, device)
             res_parallel = Timer(
                 stmt="run_env(env)",
@@ -96,7 +96,6 @@ if __name__ == "__main__":
             )
             time_parallel = res_parallel.blocked_autorange().mean
 
-            print(time_serial, time_parallel, time_multithreaded)
             res[f"num_workers_{num_workers}_{device}"] = {
                 "Serial, s": time_serial,
                 "Parallel, s": time_parallel,

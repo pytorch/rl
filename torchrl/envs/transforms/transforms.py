@@ -19,10 +19,11 @@ import torch
 
 from tensordict import unravel_key, unravel_key_list
 from tensordict._tensordict import _unravel_key_to_tuple
-from tensordict.nn import dispatch
+from tensordict.nn import dispatch, TensorDictModuleBase
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn, Tensor
+from torchrl._utils import _replace_last
 
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -43,7 +44,7 @@ from torchrl.envs.transforms.utils import (
     _set_missing_tolerance,
     check_finite,
 )
-from torchrl.envs.utils import _replace_last, _sort_keys, _update_during_reset, step_mdp
+from torchrl.envs.utils import _sort_keys, _update_during_reset, step_mdp
 from torchrl.objectives.value.functional import reward2go
 
 try:
@@ -1151,6 +1152,13 @@ class ToTensorImage(ObservationTransform):
         dtype (torch.dtype, optional): dtype to use for the resulting
             observations.
 
+    Keyword arguments:
+        in_keys (list of NestedKeys): keys to process.
+        out_keys (list of NestedKeys): keys to write.
+        shape_tolerant (bool, optional): if ``True``, the shape of the input
+            images will be check. If the last channel is not `3`, the permuation
+            will be ignored. Defaults to ``False``.
+
     Examples:
         >>> transform = ToTensorImage(in_keys=["pixels"])
         >>> ri = torch.randint(0, 255, (1 , 1, 10, 11, 3), dtype=torch.uint8)
@@ -1168,8 +1176,10 @@ class ToTensorImage(ObservationTransform):
         from_int: Optional[bool] = None,
         unsqueeze: bool = False,
         dtype: Optional[torch.device] = None,
+        *,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
+        shape_tolerant: bool = False,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
@@ -1179,6 +1189,7 @@ class ToTensorImage(ObservationTransform):
         self.from_int = from_int
         self.unsqueeze = unsqueeze
         self.dtype = dtype if dtype is not None else torch.get_default_dtype()
+        self.shape_tolerant = shape_tolerant
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
@@ -1188,9 +1199,10 @@ class ToTensorImage(ObservationTransform):
         return tensordict_reset
 
     def _apply_transform(self, observation: torch.FloatTensor) -> torch.Tensor:
-        observation = observation.permute(
-            *list(range(observation.ndimension() - 3)), -1, -3, -2
-        )
+        if not self.shape_tolerant or observation.shape[-1] == 3:
+            observation = observation.permute(
+                *list(range(observation.ndimension() - 3)), -1, -3, -2
+            )
         if self.from_int or (
             self.from_int is None and not torch.is_floating_point(observation)
         ):
@@ -1204,15 +1216,16 @@ class ToTensorImage(ObservationTransform):
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         observation_spec = self._pixel_observation(observation_spec)
         unsqueeze_dim = [1] if self._should_unsqueeze(observation_spec) else []
-        observation_spec.shape = torch.Size(
-            [
-                *unsqueeze_dim,
-                *observation_spec.shape[:-3],
-                observation_spec.shape[-1],
-                observation_spec.shape[-3],
-                observation_spec.shape[-2],
-            ]
-        )
+        if not self.shape_tolerant or observation_spec.shape[-1] == 3:
+            observation_spec.shape = torch.Size(
+                [
+                    *unsqueeze_dim,
+                    *observation_spec.shape[:-3],
+                    observation_spec.shape[-1],
+                    observation_spec.shape[-3],
+                    observation_spec.shape[-2],
+                ]
+            )
         observation_spec.dtype = self.dtype
         return observation_spec
 
@@ -1658,19 +1671,31 @@ class Resize(ObservationTransform):
     """Resizes a pixel observation.
 
     Args:
-        w (int): resulting width
-        h (int): resulting height
+        w (int): resulting width.
+        h (int, optional): resulting height. If not provided, the value of `w`
+            is taken.
         interpolation (str): interpolation method
+
+    Examples:
+        >>> from torchrl.envs import GymEnv
+        >>> t = Resize(64, 84)
+        >>> base_env = GymEnv("HalfCheetah-v4", from_pixels=True)
+        >>> env = TransformedEnv(base_env, Compose(ToTensorImage(), t))
     """
 
     def __init__(
         self,
         w: int,
-        h: int,
+        h: int | None = None,
         interpolation: str = "bilinear",
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
     ):
+        # we also allow lists or tuples
+        if isinstance(w, (list, tuple)):
+            w, h = w
+        if h is None:
+            h = w
         if not _has_tv:
             raise ImportError(
                 "Torchvision not found. The Resize transform relies on "
@@ -4692,6 +4717,7 @@ class RewardSum(Transform):
         """Initialises the transform. Filters out non-reward input keys and defines output keys."""
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self._reset_keys = reset_keys
+        self._keys_checked = False
 
     @property
     def in_keys(self):
@@ -4770,9 +4796,7 @@ class RewardSum(Transform):
                         return False
                 return True
 
-            if len(reset_keys) != len(self.in_keys) or not _check_match(
-                reset_keys, self.in_keys
-            ):
+            if not _check_match(reset_keys, self.in_keys):
                 raise ValueError(
                     f"Could not match the env reset_keys {reset_keys} with the {type(self)} in_keys {self.in_keys}. "
                     f"Please provide the reset_keys manually. Reset entries can be "
@@ -4781,6 +4805,14 @@ class RewardSum(Transform):
                 )
             reset_keys = copy(reset_keys)
             self._reset_keys = reset_keys
+
+        if not self._keys_checked and len(reset_keys) != len(self.in_keys):
+            raise ValueError(
+                f"Could not match the env reset_keys {reset_keys} with the in_keys {self.in_keys}. "
+                "Please make sure that these have the same length."
+            )
+        self._keys_checked = True
+
         return reset_keys
 
     @reset_keys.setter
@@ -6521,3 +6553,158 @@ class VecGymEnvTransform(Transform):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         raise RuntimeError(FORWARD_NOT_IMPLEMENTED.format(type(self)))
+
+
+class BurnInTransform(Transform):
+    """Transform to partially burn-in data sequences.
+
+    This transform is useful to obtain up-to-date recurrent states when
+    they are not available. It burns-in a number of steps along the time dimension
+    from sampled sequential data slices and returs the remaining data sequence with
+    the burnt-in data in its initial time step. This transform is intended to be used as a
+    replay buffer transform, not as an environment transform.
+
+    Args:
+        modules (sequence of TensorDictModule): A list of modules used to burn-in data sequences.
+        burn_in (int): The number of time steps to burn in.
+        out_keys (sequence of NestedKey, optional): destination keys. Defaults to
+        all the modules `out_keys` that point to the next time step (e.g. `"hidden"` if `
+        ("next", "hidden")` is part of the `out_keys` of a module).
+
+    .. note::
+        This transform expects as inputs TensorDicts with its last dimension being the
+        time dimension. It also  assumes that all provided modules can process
+        sequential data.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs.transforms import BurnInTransform
+        >>> from torchrl.modules import GRUModule
+        >>> gru_module = GRUModule(
+        ...     input_size=10,
+        ...     hidden_size=10,
+        ...     in_keys=["observation", "hidden"],
+        ...     out_keys=["intermediate", ("next", "hidden")],
+        ... ).set_recurrent_mode(True)
+        >>> burn_in_transform = BurnInTransform(
+        ...     modules=[gru_module],
+        ...     burn_in=5,
+        ... )
+        >>> td = TensorDict({
+        ...     "observation": torch.randn(2, 10, 10),
+        ...      "hidden": torch.randn(2, 10, gru_module.gru.num_layers, 10),
+        ...      "is_init": torch.zeros(2, 10, 1),
+        ... }, batch_size=[2, 10])
+        >>> td = burn_in_transform(td)
+        >>> td.shape
+        torch.Size([2, 5])
+        >>> td.get("hidden").abs().sum()
+        tensor(86.3008)
+
+        >>> from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+        >>> buffer = TensorDictReplayBuffer(
+        ...     storage=LazyMemmapStorage(2),
+        ...     batch_size=1,
+        ... )
+        >>> buffer.append_transform(burn_in_transform)
+        >>> td = TensorDict({
+        ...     "observation": torch.randn(2, 10, 10),
+        ...      "hidden": torch.randn(2, 10, gru_module.gru.num_layers, 10),
+        ...      "is_init": torch.zeros(2, 10, 1),
+        ... }, batch_size=[2, 10])
+        >>> buffer.extend(td)
+        >>> td = buffer.sample(1)
+        >>> td.shape
+        torch.Size([1, 5])
+        >>> td.get("hidden").abs().sum()
+        tensor(37.0344)
+    """
+
+    invertible = False
+
+    def __init__(
+        self,
+        modules: Sequence[TensorDictModuleBase],
+        burn_in: int,
+        out_keys: Sequence[NestedKey] | None = None,
+    ):
+        if not isinstance(modules, Sequence):
+            modules = [modules]
+
+        for module in modules:
+            if not isinstance(module, TensorDictModuleBase):
+                raise ValueError(
+                    f"All modules must be TensorDictModules, but a {type(module)} was provided."
+                )
+
+        in_keys = set()
+        for module in modules:
+            in_keys.update(module.in_keys)
+
+        if out_keys is None:
+            out_keys = set()
+            for module in modules:
+                for key in module.out_keys:
+                    if key[0] == "next":
+                        out_keys.add(key[1])
+        else:
+            out_keys_ = set()
+            for key in out_keys:
+                if isinstance(key, tuple) and key[0] == "next":
+                    key = key[1]
+                    warnings.warn(
+                        f"The 'next' key is not needed in the BurnInTransform `out_key` {key} and "
+                        f"will be ignored. This transform already assumes that `out_keys` will be "
+                        f"retrieved from the next time step of the burnt-in data."
+                    )
+                out_keys_.add(key)
+            out_keys = out_keys_
+
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        self.modules = modules
+        self.burn_in = burn_in
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise RuntimeError("BurnInTransform can only be appended to a ReplayBuffer")
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        raise RuntimeError("BurnInTransform can only be appended to a ReplayBuffer.")
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+
+        if self.burn_in == 0:
+            return tensordict
+
+        td_device = tensordict.device
+        B, T, *extra_dims = tensordict.batch_size
+
+        # Split the tensor dict into burn-in data and the rest.
+        td_burn_in = tensordict[..., : self.burn_in]
+        td_out = tensordict[..., self.burn_in :]
+
+        # Burn in the recurrent state.
+        with torch.no_grad():
+            for module in self.modules:
+                module_device = next(module.parameters()).device or None
+                td_burn_in = td_burn_in.to(module_device)
+                td_burn_in = module(td_burn_in)
+        td_burn_in = td_burn_in.to(td_device)
+
+        # Update out TensorDict with the burnt-in data.
+        for out_key in self.out_keys:
+            if out_key not in td_out.keys(include_nested=True):
+                td_out.set(
+                    out_key,
+                    torch.zeros(
+                        B, T - self.burn_in, *tensordict.get(out_key).shape[2:]
+                    ),
+                )
+            td_out[..., 0][out_key].copy_(td_burn_in["next"][..., -1][out_key])
+
+        return td_out
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(burn_in={self.burn_in}, in_keys={self.in_keys}, out_keys={self.out_keys})"

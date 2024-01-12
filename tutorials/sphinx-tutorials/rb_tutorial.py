@@ -46,6 +46,7 @@ Using Replay Buffers
 # replay buffer is a straightforward process, as shown in the following
 # example:
 #
+import tempfile
 
 from torchrl.data import ReplayBuffer
 
@@ -175,9 +176,8 @@ print("samples: a=", sample["a"], "\n('b', 'c'):", sample["b", "c"])
 ######################################################################
 # We can also customize the storage location on disk:
 #
-buffer_lazymemmap = ReplayBuffer(
-    storage=LazyMemmapStorage(size, scratch_dir="/tmp/memmap/")
-)
+tempdir = tempfile.TemporaryDirectory()
+buffer_lazymemmap = ReplayBuffer(storage=LazyMemmapStorage(size, scratch_dir=tempdir))
 buffer_lazymemmap.extend(data)
 print(f"The buffer has {len(buffer_lazymemmap)} elements")
 print("the 'a' tensor is stored in", buffer_lazymemmap._storage._storage["a"].filename)
@@ -207,8 +207,9 @@ print(
 
 from torchrl.data import TensorDictReplayBuffer
 
+tempdir = tempfile.TemporaryDirectory()
 buffer_lazymemmap = TensorDictReplayBuffer(
-    storage=LazyMemmapStorage(size, scratch_dir="/tmp/memmap/"), batch_size=12
+    storage=LazyMemmapStorage(size, scratch_dir=tempdir), batch_size=12
 )
 buffer_lazymemmap.extend(data)
 print(f"The buffer has {len(buffer_lazymemmap)} elements")
@@ -248,8 +249,9 @@ data = MyData(
     batch_size=[1000],
 )
 
+tempdir = tempfile.TemporaryDirectory()
 buffer_lazymemmap = TensorDictReplayBuffer(
-    storage=LazyMemmapStorage(size, scratch_dir="/tmp/memmap/"), batch_size=12
+    storage=LazyMemmapStorage(size, scratch_dir=tempdir), batch_size=12
 )
 buffer_lazymemmap.extend(data)
 print(f"The buffer has {len(buffer_lazymemmap)} elements")

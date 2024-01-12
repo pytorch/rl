@@ -7,6 +7,7 @@ from __future__ import annotations
 import collections
 
 import importlib
+import logging
 import os
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -32,7 +33,7 @@ if torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
     os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
     if VERBOSE:
-        print("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
+        logging.info("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
 
 _has_dmc = _has_dm_control = importlib.util.find_spec("dm_control") is not None
 

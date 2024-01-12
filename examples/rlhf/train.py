@@ -9,6 +9,7 @@ also be overridden at the command line.
 To run on a single GPU, example:
 $ python train.py --batch_size=32 --compile=False
 """
+import logging
 import time
 
 import hydra
@@ -62,7 +63,7 @@ def main(cfg):
     dtype = cfg.sys.dtype
     compile_ = cfg.sys.compile
 
-    ctx = setup(device=device, dtype=dtype)
+    ctx = setup(cfg.sys)
 
     train_loader = get_dataloader(
         data_cfg.batch_size,
@@ -134,20 +135,20 @@ def main(cfg):
             train_loss = estimate_loss(model, train_loader)
             val_loss = estimate_loss(model, val_loader)
             msg = f"VALID: {it=}: {train_loss=:.4f}, {val_loss=:.4f}"
-            print(msg)
+            logging.info(msg)
             loss_logger.info(msg)
             if val_loss < best_val_loss or always_save_checkpoint:
                 best_val_loss = val_loss
                 if it > 0:
                     msg = f"saving checkpoint to {out_dir}"
-                    print(msg)
+                    logging.info(msg)
                     loss_logger.info(msg)
                     model.module.save_pretrained(out_dir)
         elif it % log_interval == 0:
             # loss as float. note: this is a CPU-GPU sync point
             loss = batch.loss.item()
             msg = f"TRAIN: {it=}: {loss=:.4f}, time {dt*1000:.2f}ms"
-            print(msg)
+            logging.info(msg)
             loss_logger.info(msg)
 
 

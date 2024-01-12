@@ -8,6 +8,7 @@ import collections
 
 import functools
 import inspect
+import logging
 
 import math
 import os
@@ -24,12 +25,14 @@ from typing import Any, Callable, cast, Dict, TypeVar, Union
 import numpy as np
 import torch
 from packaging.version import parse
-from torch import multiprocessing as mp
 
+from tensordict.utils import NestedKey
+from torch import multiprocessing as mp
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
+BATCHED_PIPE_TIMEOUT = float(os.environ.get("RL_WARNINGS", "60.0"))
 
 
 class timeit:
@@ -63,7 +66,7 @@ class timeit:
         val[2] = N
 
     @staticmethod
-    def print(prefix=None):
+    def print(prefix=None):  # noqa: T202
         keys = list(timeit._REG)
         keys.sort()
         for name in keys:
@@ -73,7 +76,7 @@ class timeit:
             strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
-            print(" -- ".join(strings))
+            logging.info(" -- ".join(strings))
 
     @staticmethod
     def erase():
@@ -403,7 +406,7 @@ class implement_for:
 
         """
         if VERBOSE:
-            print("resetting implement_for")
+            logging.info("resetting implement_for")
         if setters_dict is None:
             setters_dict = copy(cls._implementations)
         for setter in setters_dict.values():
@@ -617,3 +620,54 @@ class _ProcessNoWarn(mp.Process):
                 warnings.simplefilter("ignore")
                 return mp.Process.run(self, *args, **kwargs)
         return mp.Process.run(self, *args, **kwargs)
+
+
+def print_directory_tree(path, indent="", display_metadata=True):
+    """Prints the directory tree starting from the specified path.
+
+    Args:
+        path (str): The path of the directory to print.
+        indent (str): The current indentation level for formatting.
+        display_metadata (bool): if ``True``, metadata of the dir will be
+            displayed too.
+
+    """
+    if display_metadata:
+
+        def get_directory_size(path="."):
+            total_size = 0
+
+            for dirpath, _, filenames in os.walk(path):
+                for filename in filenames:
+                    file_path = os.path.join(dirpath, filename)
+                    total_size += os.path.getsize(file_path)
+
+            return total_size
+
+        def format_size(size):
+            # Convert size to a human-readable format
+            for unit in ["B", "KB", "MB", "GB", "TB"]:
+                if size < 1024.0:
+                    return f"{size:.2f} {unit}"
+                size /= 1024.0
+
+        total_size_bytes = get_directory_size(path)
+        formatted_size = format_size(total_size_bytes)
+        logging.info(f"Directory size: {formatted_size}")
+
+    if os.path.isdir(path):
+        logging.info(indent + os.path.basename(path) + "/")
+        indent += "    "
+        for item in os.listdir(path):
+            print_directory_tree(
+                os.path.join(path, item), indent=indent, display_metadata=False
+            )
+    else:
+        logging.info(indent + os.path.basename(path))
+
+
+def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
+    if isinstance(key, str):
+        return new_ending
+    else:
+        return key[:-1] + (new_ending,)

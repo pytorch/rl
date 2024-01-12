@@ -14,7 +14,12 @@ import torch
 import torch.nn.functional as F
 
 from _utils_internal import get_default_devices
-from tensordict import is_tensor_collection, MemmapTensor, TensorDict, TensorDictBase
+from tensordict import (
+    is_tensor_collection,
+    MemoryMappedTensor,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.nn import TensorDictModule
 from torchrl.data.rlhf import TensorDictTokenizer
 from torchrl.data.rlhf.dataset import (
@@ -61,6 +66,9 @@ def tldr_batch_dir(tmp_path_factory):
     with zipfile.ZipFile(dataset_path, "r") as zip_ref:
         zip_ref.extractall(dest)
         yield dest / Path(dataset_path).stem
+    from torchrl._utils import print_directory_tree
+
+    print_directory_tree(dest)
 
 
 @pytest.mark.skipif(
@@ -188,8 +196,8 @@ def test_dataset_to_tensordict(tmpdir, suffix):
     else:
         assert ("c", "d", "a") in td.keys(True)
         assert ("c", "d", "b") in td.keys(True)
-    assert isinstance(td.get((suffix, "a")), MemmapTensor)
-    assert isinstance(td.get((suffix, "b")), MemmapTensor)
+    assert isinstance(td.get((suffix, "a")), MemoryMappedTensor)
+    assert isinstance(td.get((suffix, "b")), MemoryMappedTensor)
 
 
 @pytest.mark.skipif(
@@ -431,7 +439,7 @@ class TestRollout:
 
     @staticmethod
     def _get_dummy_batch(batch_dir):
-        return PromptData.from_tensordict(TensorDict.load_memmap(batch_dir))
+        return TensorDict.load_memmap(batch_dir)
 
     @property
     def _model(self):

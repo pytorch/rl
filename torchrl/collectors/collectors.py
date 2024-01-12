@@ -7,6 +7,7 @@ from __future__ import annotations
 import _pickle
 import abc
 import inspect
+import logging
 import os
 import queue
 import sys
@@ -14,7 +15,6 @@ import time
 import warnings
 from collections import OrderedDict
 from copy import deepcopy
-
 from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
 
@@ -52,6 +52,7 @@ from torchrl.envs.utils import (
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
+# MAX_IDLE_COUNT is the maximum number of times a Dataloader worker can timeout with his queue.
 _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 1000))
 
 DEFAULT_EXPLORATION_TYPE: ExplorationType = ExplorationType.RANDOM
@@ -280,11 +281,10 @@ behaviour and more control you can consider writing your own TensorDictModule.
         device = torch.device(device) if device is not None else policy_device
         get_weights_fn = None
         if policy_device != device:
-            param_and_buf = dict(policy.named_parameters())
-            param_and_buf.update(dict(policy.named_buffers()))
+            param_and_buf = TensorDict.from_module(policy, as_module=True)
 
             def get_weights_fn(param_and_buf=param_and_buf):
-                return TensorDict(param_and_buf, []).apply(lambda x: x.data)
+                return param_and_buf.data
 
             policy_cast = deepcopy(policy).requires_grad_(False).to(device)
             # here things may break bc policy.to("cuda") gives us weights on cuda:0 (same
@@ -308,9 +308,9 @@ behaviour and more control you can consider writing your own TensorDictModule.
 
         """
         if policy_weights is not None:
-            self.policy_weights.apply(lambda x: x.data).update_(policy_weights)
+            self.policy_weights.data.update_(policy_weights)
         elif self.get_weights_fn is not None:
-            self.policy_weights.apply(lambda x: x.data).update_(self.get_weights_fn())
+            self.policy_weights.data.update_(self.get_weights_fn())
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         return self.iterator()
@@ -559,10 +559,7 @@ class SyncDataCollector(DataCollectorBase):
         )
 
         if isinstance(self.policy, nn.Module):
-            self.policy_weights = TensorDict(dict(self.policy.named_parameters()), [])
-            self.policy_weights.update(
-                TensorDict(dict(self.policy.named_buffers()), [])
-            )
+            self.policy_weights = TensorDict.from_module(self.policy, as_module=True)
         else:
             self.policy_weights = TensorDict({}, [])
 
@@ -1200,9 +1197,9 @@ class _MultiDataCollector(DataCollectorBase):
             )
             self._policy_dict[_device] = _policy
             if isinstance(_policy, nn.Module):
-                param_dict = dict(_policy.named_parameters())
-                param_dict.update(_policy.named_buffers())
-                self._policy_weights_dict[_device] = TensorDict(param_dict, [])
+                self._policy_weights_dict[_device] = TensorDict.from_module(
+                    _policy, as_module=True
+                )
             else:
                 self._policy_weights_dict[_device] = TensorDict({}, [])
 
@@ -1288,11 +1285,9 @@ class _MultiDataCollector(DataCollectorBase):
     def update_policy_weights_(self, policy_weights=None) -> None:
         for _device in self._policy_dict:
             if policy_weights is not None:
-                self._policy_weights_dict[_device].apply(lambda x: x.data).update_(
-                    policy_weights
-                )
+                self._policy_weights_dict[_device].data.update_(policy_weights)
             elif self._get_weights_fn_dict[_device] is not None:
-                self._policy_weights_dict[_device].update_(
+                self._policy_weights_dict[_device].data.update_(
                     self._get_weights_fn_dict[_device]()
                 )
 
@@ -1377,32 +1372,35 @@ also that the state dict is synchronised across processes if needed."""
         self._shutdown_main()
 
     def _shutdown_main(self) -> None:
-        if self.closed:
-            return
-        _check_for_faulty_process(self.procs)
-        self.closed = True
-        for idx in range(self.num_workers):
-            if not self.procs[idx].is_alive():
-                continue
-            try:
-                self.pipes[idx].send((None, "close"))
-
-                if self.pipes[idx].poll(10.0):
-                    msg = self.pipes[idx].recv()
-                    if msg != "closed":
-                        raise RuntimeError(f"got {msg} but expected 'close'")
-                else:
+        try:
+            if self.closed:
+                return
+            _check_for_faulty_process(self.procs)
+            self.closed = True
+            for idx in range(self.num_workers):
+                if not self.procs[idx].is_alive():
                     continue
-            except BrokenPipeError:
-                continue
+                try:
+                    self.pipes[idx].send((None, "close"))
 
-        for proc in self.procs:
-            exitcode = proc.join(1.0)
-            if exitcode is None:
-                proc.terminate()
-        self.queue_out.close()
-        for pipe in self.pipes:
-            pipe.close()
+                    if self.pipes[idx].poll(10.0):
+                        msg = self.pipes[idx].recv()
+                        if msg != "closed":
+                            raise RuntimeError(f"got {msg} but expected 'close'")
+                    else:
+                        continue
+                except BrokenPipeError:
+                    continue
+
+            self.queue_out.close()
+            for pipe in self.pipes:
+                pipe.close()
+                for proc in self.procs:
+                    proc.join(1.0)
+        finally:
+            for proc in self.procs:
+                if proc.is_alive():
+                    proc.terminate()
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -2127,7 +2125,7 @@ def _main_async_collector(
         interruptor=interruptor,
     )
     if verbose:
-        print("Sync data collector created")
+        logging.info("Sync data collector created")
     dc_iter = iter(inner_collector)
     j = 0
     pipe_child.send("instantiated")
@@ -2140,10 +2138,10 @@ def _main_async_collector(
             counter = 0
             data_in, msg = pipe_child.recv()
             if verbose:
-                print(f"worker {idx} received {msg}")
+                logging.info(f"worker {idx} received {msg}")
         else:
             if verbose:
-                print(f"poll failed, j={j}, worker={idx}")
+                logging.info(f"poll failed, j={j}, worker={idx}")
             # default is "continue" (after first iteration)
             # this is expected to happen if queue_out reached the timeout, but no new msg was waiting in the pipe
             # in that case, the main process probably expects the worker to continue collect data
@@ -2163,7 +2161,7 @@ def _main_async_collector(
 
                 counter += _timeout
                 if verbose:
-                    print(f"worker {idx} has counter {counter}")
+                    logging.info(f"worker {idx} has counter {counter}")
                 if counter >= (_MAX_IDLE_COUNT * _TIMEOUT):
                     raise RuntimeError(
                         f"This process waited for {counter} seconds "
@@ -2171,7 +2169,7 @@ def _main_async_collector(
                         f"if this is expected via the environment variable MAX_IDLE_COUNT "
                         f"(current value is {_MAX_IDLE_COUNT})."
                         f"\nIf this occurs at the end of a function or program, it means that your collector has not been "
-                        f"collected, consider calling `collector.shutdown()` or `del collector` before ending the program."
+                        f"collected, consider calling `collector.shutdown()` before ending the program."
                     )
                 continue
         if msg in ("continue", "continue_random"):
@@ -2203,13 +2201,13 @@ def _main_async_collector(
             try:
                 queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
-                    print(f"worker {idx} successfully sent data")
+                    logging.info(f"worker {idx} successfully sent data")
                 j += 1
                 has_timed_out = False
                 continue
             except queue.Full:
                 if verbose:
-                    print(f"worker {idx} has timed out")
+                    logging.info(f"worker {idx} has timed out")
                 has_timed_out = True
                 continue
 
@@ -2255,7 +2253,7 @@ def _main_async_collector(
             del inner_collector, dc_iter
             pipe_child.send("closed")
             if verbose:
-                print(f"collector {idx} closed")
+                logging.info(f"collector {idx} closed")
             break
 
         else:

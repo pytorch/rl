@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import importlib
+import logging
 import os
 import subprocess
 from functools import partial
@@ -236,12 +237,11 @@ class VC1Transform(Transform):
         try:
             from vc_models import models  # noqa: F401
 
-            print("vc_models found, no need to install.")
+            logging.info("vc_models found, no need to install.")
         except ModuleNotFoundError:
             HOME = os.environ.get("HOME")
             vcdir = HOME + "/.cache/torchrl/eai-vc"
             parentdir = os.path.dirname(os.path.abspath(vcdir))
-            print(parentdir)
             os.makedirs(parentdir, exist_ok=True)
             try:
                 from git import Repo

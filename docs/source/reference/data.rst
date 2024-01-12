@@ -35,12 +35,15 @@ We also give users the ability to compose a replay buffer using the following co
     PrioritizedSampler
     RandomSampler
     SamplerWithoutReplacement
+    SliceSampler
+    SliceSamplerWithoutReplacement
     Storage
     ListStorage
     LazyTensorStorage
     LazyMemmapStorage
     TensorStorage
     Writer
+    ImmutableDatasetWriter
     RoundRobinWriter
     TensorDictRoundRobinWriter
     TensorDictMaxValueWriter
@@ -60,6 +63,48 @@ The following mean sampling latency improvements over using ListStorage were fou
 | :class:`LazyMemmapStorage`    | 3.44x     |
 +-------------------------------+-----------+
 
+Sharing replay buffers across processes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Replay buffers can be shared between processes as long as their components are
+sharable. This feature allows for multiple processes to collect data and populate a shared
+replay buffer collaboratively, rather than centralizing the data on the main process
+which can incur some data transmission overhead.
+
+Sharable storages include :class:`~torchrl.data.replay_buffers.storages.LazyMemmapStorage`
+or any subclass of :class:`~torchrl.data.replay_buffers.storages.TensorStorage`
+as long as they are instantiated and their content is stored as memory-mapped
+tensors. Stateful writers such as :class:`~torchrl.data.replay_buffers.writers.TensorDictRoundRobinWriter`
+are currently not sharable, and the same goes for stateful samplers such as
+:class:`~torchrl.data.replay_buffers.samplers.PrioritizedSampler`.
+
+A shared replay buffer can be read and extended on any process that has access
+to it, as the following example shows:
+
+  >>> from torchrl.data import TensorDictReplayBuffer, LazyMemmapStorage
+  >>> import torch
+  >>> from torch import multiprocessing as mp
+  >>> from tensordict import TensorDict
+  >>>
+  >>> def worker(rb):
+  ...     # Updates the replay buffer with new data
+  ...     td = TensorDict({"a": torch.ones(10)}, [10])
+  ...     rb.extend(td)
+  ...
+  >>> if __name__ == "__main__":
+  ...     rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(21))
+  ...     td = TensorDict({"a": torch.zeros(10)}, [10])
+  ...     rb.extend(td)
+  ...
+  ...     proc = mp.Process(target=worker, args=(rb,))
+  ...     proc.start()
+  ...     proc.join()
+  ...     # the replay buffer now has a length of 20, since the worker updated it
+  ...     assert len(rb) == 20
+  ...     assert (rb["_data", "a"][:10] == 0).all()  # data from main process
+  ...     assert (rb["_data", "a"][10:20] == 1).all()  # data from remote process
+
+
 Storing trajectories
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -67,41 +112,85 @@ It is not too difficult to store trajectories in the replay buffer.
 One element to pay attention to is that the size of the replay buffer is always
 the size of the leading dimension of the storage: in other words, creating a
 replay buffer with a storage of size 1M when storing multidimensional data
-does not mean storing 1M frames but 1M trajectories.
+does not mean storing 1M frames but 1M trajectories. However, if trajectories
+(or episodes/rollouts) are flattened before being stored, the capacity will still
+be 1M steps.
 
 When sampling trajectories, it may be desirable to sample sub-trajectories
 to diversify learning or make the sampling more efficient.
-To do this, we provide a custom :class:`~torchrl.envs.Transform` class named
-:class:`~torchrl.envs.RandomCropTensorDict`. Here is an example of how this class
-can be used:
+TorchRL offers two distinctive ways of accomplishing this:
+- The :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` allows to
+  sample a given number of slices of trajectories stored one after another
+  along the leading dimension of the :class:`~torchrl.data.replay_buffers.samplers.TensorStorage`.
+  This is the recommended way of sampling sub-trajectories in TorchRL __especially__
+  when using offline datasets (which are stored using that convention).
+  This strategy requires to flatten the trajectories before extending the replay
+  buffer and reshaping them after sampling. The :class:`~torchrl.data.replay_buffers.samplers.SliceSampler`
+  gives extensive details about this storage and sampling strategy.
 
-.. code-block::Python
+- Trajectories can also be stored independently, with the each element of the
+  leading dimension pointing to a different trajectory. This requires
+  for the trajectories to have a congruent shape (or to be padded).
+  We provide a custom :class:`~torchrl.envs.Transform` class named
+  :class:`~torchrl.envs.RandomCropTensorDict` that allows to sample
+  sub-trajectories in the buffer. Note that, unlike the :class:`~torchrl.data.replay_buffers.samplers.SliceSampler`-based
+  strategy, here having an ``"episode"`` or ``"done"`` key pointing at the
+  start and stop signals isn't required.
+  Here is an example of how this class can be used:
 
-    >>> import torch
-    >>> from tensordict import TensorDict
-    >>> from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
-    >>> from torchrl.envs import RandomCropTensorDict
-    >>>
-    >>> obs = torch.randn(100, 50, 1)
-    >>> data = TensorDict({"obs": obs[:-1], "next": {"obs": obs[1:]}}, [99])
-    >>> rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(1000))
-    >>> rb.extend(data)
-    >>> # subsample trajectories of length 10
-    >>> rb.append_transform(RandomCropTensorDict(sub_seq_len=10))
-    >>> print(rb.sample(128))
-    TensorDict(
-        fields={
-            index: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int32, is_shared=False),
-            next: TensorDict(
-                fields={
-                    obs: Tensor(shape=torch.Size([10, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([10]),
-                device=None,
-                is_shared=False),
-            obs: Tensor(shape=torch.Size([10, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([10]),
-        device=None,
-        is_shared=False)
+  .. code-block::Python
+
+      >>> import torch
+      >>> from tensordict import TensorDict
+      >>> from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+      >>> from torchrl.envs import RandomCropTensorDict
+      >>>
+      >>> obs = torch.randn(100, 50, 1)
+      >>> data = TensorDict({"obs": obs[:-1], "next": {"obs": obs[1:]}}, [99])
+      >>> rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(1000))
+      >>> rb.extend(data)
+      >>> # subsample trajectories of length 10
+      >>> rb.append_transform(RandomCropTensorDict(sub_seq_len=10))
+      >>> print(rb.sample(128))
+      TensorDict(
+          fields={
+              index: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int32, is_shared=False),
+              next: TensorDict(
+                  fields={
+                      obs: Tensor(shape=torch.Size([10, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                  batch_size=torch.Size([10]),
+                  device=None,
+                  is_shared=False),
+              obs: Tensor(shape=torch.Size([10, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+          batch_size=torch.Size([10]),
+          device=None,
+          is_shared=False)
+
+Checkpointing Replay Buffers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each component of the replay buffer can potentially be stateful and, as such,
+require a dedicated way of being serialized.
+Our replay buffer enjoys two separate APIs for saving their state on disk:
+:meth:`~torchrl.data.ReplayBuffer.dumps` and :meth:`~torchrl.data.ReplayBuffer.loads` will save the
+data of each component except transforms (storage, writer, sampler) using memory-mapped
+tensors and json files for the metadata. This will work across all classes except
+:class:`~torchrl.data.replay_buffers.storages.ListStorage`, which content
+cannot be anticipated (and as such does not comply with memory-mapped data
+structures such as those that can be found in the tensordict library).
+This API guarantees that a buffer that is saved and then loaded back will be in
+the exact same state, whether we look at the status of its sampler (eg, priority trees)
+its writer (eg, max writer heaps) or its storage.
+Under the hood, :meth:`~torchrl.data.ReplayBuffer.dumps` will just call the public
+`dumps` method in a specific folder for each of its components (except transforms
+which we don't assume to be serializable using memory-mapped tensors in general).
+
+Whenever saving data using :meth:`~torchrl.data.ReplayBuffer.dumps` is not possible, an
+alternative way is to use :meth:`~torchrl.data.ReplayBuffer.state_dict`, which returns a data
+structure that can be saved using :func:`torch.save` and loaded using :func:`torch.load`
+before calling :meth:`~torchrl.data.ReplayBuffer.load_state_dict`. The drawback
+of this method is that it will struggle to save big data structures, which is a
+common setting when using replay buffers.
 
 Datasets
 --------
@@ -189,7 +278,90 @@ Here's an example:
 
 
     D4RLExperienceReplay
+    MinariExperienceReplay
     OpenMLExperienceReplay
+    OpenXExperienceReplay
+    RobosetExperienceReplay
+    VD4RLExperienceReplay
+
+Composing datasets
+~~~~~~~~~~~~~~~~~~
+
+In offline RL, it is customary to work with more than one dataset at the same time.
+Moreover, TorchRL usually has a fine-grained dataset nomenclature, where
+each task is represented separately when other libraries will represent these
+datasets in a more compact way. To allow users to compose multiple datasets
+together, we propose a :class:`~torchrl.data.replay_buffers.ReplayBufferEnsemble`
+primitive that allows users to sample from multiple datasets at once.
+
+If the individual dataset formats differ, :class:`~torchrl.envs.Transform` instances
+can be used. In the following example, we create two dummy datasets with semantically
+identical entries that differ in names (``("some", "key")`` and ``"another_key"``)
+and show how they can be renamed to have a matching name. We also resize images
+such that they can be stacked together during sampling.
+
+    >>> from torchrl.envs import Comopse, ToTensorImage, Resize, RenameTransform
+    >>> from torchrl.data import TensorDictReplayBuffer, ReplayBufferEnsemble, LazyMemmapStorage
+    >>> from tensordict import TensorDict
+    >>> import torch
+    >>> rb0 = TensorDictReplayBuffer(
+    ...     storage=LazyMemmapStorage(10),
+    ...     transform=Compose(
+    ...         ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
+    ...         Resize(32, in_keys=["pixels", ("next", "pixels")]),
+    ...         RenameTransform([("some", "key")], ["renamed"]),
+    ...     ),
+    ... )
+    >>> rb1 = TensorDictReplayBuffer(
+    ...     storage=LazyMemmapStorage(10),
+    ...     transform=Compose(
+    ...         ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
+    ...         Resize(32, in_keys=["pixels", ("next", "pixels")]),
+    ...         RenameTransform(["another_key"], ["renamed"]),
+    ...     ),
+    ... )
+    >>> rb = ReplayBufferEnsemble(
+    ...     rb0,
+    ...     rb1,
+    ...     p=[0.5, 0.5],
+    ...     transform=Resize(33, in_keys=["pixels"], out_keys=["pixels33"]),
+    ... )
+    >>> data0 = TensorDict(
+    ...     {
+    ...         "pixels": torch.randint(255, (10, 244, 244, 3)),
+    ...         ("next", "pixels"): torch.randint(255, (10, 244, 244, 3)),
+    ...         ("some", "key"): torch.randn(10),
+    ...     },
+    ...     batch_size=[10],
+    ... )
+    >>> data1 = TensorDict(
+    ...     {
+    ...         "pixels": torch.randint(255, (10, 64, 64, 3)),
+    ...         ("next", "pixels"): torch.randint(255, (10, 64, 64, 3)),
+    ...         "another_key": torch.randn(10),
+    ...     },
+    ...     batch_size=[10],
+    ... )
+    >>> rb[0].extend(data0)
+    >>> rb[1].extend(data1)
+    >>> for _ in range(2):
+    ...     sample = rb.sample(10)
+    ...     assert sample["next", "pixels"].shape == torch.Size([2, 5, 3, 32, 32])
+    ...     assert sample["pixels"].shape == torch.Size([2, 5, 3, 32, 32])
+    ...     assert sample["pixels33"].shape == torch.Size([2, 5, 3, 33, 33])
+    ...     assert sample["renamed"].shape == torch.Size([2, 5])
+
+.. currentmodule:: torchrl.data.replay_buffers
+
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    ReplayBufferEnsemble
+    SamplerEnsemble
+    StorageEnsemble
+    WriterEnsemble
 
 TensorSpec
 ----------

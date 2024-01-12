@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib.util
+import logging
 import os
 from pathlib import Path
 
@@ -15,8 +16,11 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 
 from tensordict.tensordict import NestedKey
-from torchrl.data import TensorDictReplayBuffer, TensorStorage
-from torchrl.data.replay_buffers import SamplerWithoutReplacement
+from torchrl.data.replay_buffers import (
+    SamplerWithoutReplacement,
+    TensorDictReplayBuffer,
+    TensorStorage,
+)
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
@@ -77,8 +81,8 @@ class TokenizedDatasetLoader:
         >>> print(dataset)
         TensorDict(
             fields={
-                attention_mask: MemmapTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False),
-                input_ids: MemmapTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False)},
+                attention_mask: MemoryMappedTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False),
+                input_ids: MemoryMappedTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False)},
             batch_size=torch.Size([185068]),
             device=None,
             is_shared=False)
@@ -137,6 +141,7 @@ class TokenizedDatasetLoader:
         data_dir = root_dir / str(Path(self.dataset_name).name).split("-")[0]
         data_dir_total = data_dir / split / str(max_length)
         # search for data
+        logging.info("Looking for data in", data_dir_total)
         if os.path.exists(data_dir_total):
             dataset = TensorDict.load_memmap(data_dir_total)
             return dataset
@@ -270,8 +275,8 @@ class TokenizedDatasetLoader:
                         fields={
                             prefix: TensorDict(
                                 fields={
-                                    labels: MemmapTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.float32, is_shared=False),
-                                    tokens: MemmapTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.int64, is_shared=False)},
+                                    labels: MemoryMappedTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.float32, is_shared=False),
+                                    tokens: MemoryMappedTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.int64, is_shared=False)},
                                 batch_size=torch.Size([10]),
                                 device=None,
                                 is_shared=False)},

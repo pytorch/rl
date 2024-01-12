@@ -5,6 +5,7 @@
 import argparse
 import distutils.command.clean
 import glob
+import logging
 import os
 import shutil
 import subprocess
@@ -96,7 +97,7 @@ class clean(distutils.command.clean.clean):
 
         # Remove torchrl extension
         for path in (ROOT_DIR / "torchrl").glob("**/*.so"):
-            print(f"removing '{path}'")
+            logging.info(f"removing '{path}'")
             path.unlink()
         # Remove build directory
         build_dirs = [
@@ -104,7 +105,7 @@ class clean(distutils.command.clean.clean):
         ]
         for path in build_dirs:
             if path.exists():
-                print(f"removing '{path}' (and everything under it)")
+                logging.info(f"removing '{path}' (and everything under it)")
                 shutil.rmtree(str(path), ignore_errors=True)
 
 
@@ -128,7 +129,7 @@ def get_extensions():
     }
     debug_mode = os.getenv("DEBUG", "0") == "1"
     if debug_mode:
-        print("Compiling in debug mode")
+        logging.info("Compiling in debug mode")
         extra_compile_args = {
             "cxx": [
                 "-O0",
@@ -169,7 +170,7 @@ def _main(argv):
     if is_nightly:
         tensordict_dep = "tensordict-nightly"
     else:
-        tensordict_dep = "tensordict>=0.2.0"
+        tensordict_dep = "tensordict>=0.3.0"
 
     if is_nightly:
         version = get_nightly_version()
@@ -177,11 +178,11 @@ def _main(argv):
     else:
         version = get_version()
         write_version_file(version)
-    print("Building wheel {}-{}".format(package_name, version))
-    print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
+    logging.info("Building wheel {}-{}".format(package_name, version))
+    logging.info(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
 
     pytorch_package_dep = _get_pytorch_version(is_nightly)
-    print("-- PyTorch dependency:", pytorch_package_dep)
+    logging.info("-- PyTorch dependency:", pytorch_package_dep)
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
 
@@ -211,6 +212,16 @@ def _main(argv):
         ],
         "checkpointing": [
             "torchsnapshot",
+        ],
+        "offline-data": [
+            "huggingface_hub",  # for roboset
+            "minari",
+            "tqdm",
+            "torchvision",
+            "scikit-learn",
+            "pandas",
+            "h5py",
+            "pillow",
         ],
         "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1"],
     }

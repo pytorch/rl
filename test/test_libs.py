@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib
+import logging
 from contextlib import nullcontext
 
 from torchrl.envs.transforms import ActionMask, TransformedEnv
@@ -50,7 +51,11 @@ from torch import nn
 from torchrl._utils import implement_for
 from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
+from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
+from torchrl.data.datasets.openx import OpenXExperienceReplay
+from torchrl.data.datasets.roboset import RobosetExperienceReplay
+from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
     Compose,
@@ -89,6 +94,8 @@ _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 _has_sklearn = importlib.util.find_spec("sklearn") is not None
 
 _has_gym_robotics = importlib.util.find_spec("gymnasium_robotics") is not None
+
+_has_minari = importlib.util.find_spec("minari") is not None
 
 if _has_gym:
     try:
@@ -400,21 +407,23 @@ class TestGym:
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
-    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     def test_vecenvs_env(self, envname):
-        from _utils_internal import rollout_consistency_assertion
-
         with set_gym_backend("gymnasium"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
-
+            env.set_seed(0)
             assert env.get_library_name(env._env) == "gymnasium"
         # rollouts can be executed without decorator
         check_env_specs(env)
         rollout = env.rollout(100, break_when_any_done=False)
         for obs_key in env.observation_spec.keys(True, True):
             rollout_consistency_assertion(
-                rollout, done_key="done", observation_key=obs_key
+                rollout,
+                done_key="done",
+                observation_key=obs_key,
+                done_strict="CartPole" in envname,
             )
+        env.close()
+        del env
 
     @implement_for("gym", "0.18", "0.27.0")
     @pytest.mark.parametrize(
@@ -441,30 +450,39 @@ class TestGym:
             )
             assert env.batch_size == torch.Size([2])
             check_env_specs(env)
+            env.close()
+            del env
 
     @implement_for("gym", "0.18", "0.27.0")
     @pytest.mark.parametrize(
         "envname",
         ["CartPole-v1", "HalfCheetah-v4"],
     )
-    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     def test_vecenvs_env(self, envname):  # noqa: F811
         with set_gym_backend("gym"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
-
+            env.set_seed(0)
             assert env.get_library_name(env._env) == "gym"
         # rollouts can be executed without decorator
         check_env_specs(env)
         rollout = env.rollout(100, break_when_any_done=False)
         for obs_key in env.observation_spec.keys(True, True):
             rollout_consistency_assertion(
-                rollout, done_key="done", observation_key=obs_key
+                rollout,
+                done_key="done",
+                observation_key=obs_key,
+                done_strict="CartPole" in envname,
             )
+        env.close()
+        del env
         if envname != "CartPole-v1":
             with set_gym_backend("gym"):
                 env = GymEnv(envname, num_envs=2, from_pixels=True)
+                env.set_seed(0)
             # rollouts can be executed without decorator
             check_env_specs(env)
+            env.close()
+            del env
 
     @implement_for("gym", None, "0.18")
     @pytest.mark.parametrize(
@@ -1813,11 +1831,15 @@ class TestVmas:
 
 
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
+@pytest.mark.slow
 class TestD4RL:
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("use_truncated_as_done", [True, False])
     @pytest.mark.parametrize("split_trajs", [True, False])
-    def test_terminate_on_end(self, task, use_truncated_as_done, split_trajs):
+    def test_terminate_on_end(self, task, use_truncated_as_done, split_trajs, tmpdir):
+        root1 = tmpdir / "1"
+        root2 = tmpdir / "2"
+        root3 = tmpdir / "3"
 
         with pytest.warns(
             UserWarning, match="Using use_truncated_as_done=True"
@@ -1829,6 +1851,8 @@ class TestD4RL:
                 terminate_on_end=True,
                 batch_size=2,
                 use_truncated_as_done=use_truncated_as_done,
+                download="force",
+                root=root1,
             )
         _ = D4RLExperienceReplay(
             task,
@@ -1837,6 +1861,8 @@ class TestD4RL:
             terminate_on_end=False,
             batch_size=2,
             use_truncated_as_done=use_truncated_as_done,
+            download="force",
+            root=root2,
         )
         data_from_env = D4RLExperienceReplay(
             task,
@@ -1844,37 +1870,38 @@ class TestD4RL:
             from_env=True,
             batch_size=2,
             use_truncated_as_done=use_truncated_as_done,
+            download="force",
+            root=root3,
         )
         if not use_truncated_as_done:
-            keys = set(data_from_env._storage._storage.keys(True, True))
-            keys = keys.intersection(data_true._storage._storage.keys(True, True))
-            assert (
-                data_true._storage._storage.shape
-                == data_from_env._storage._storage.shape
-            )
+            keys = set(data_from_env[:].keys(True, True))
+            keys = keys.intersection(data_true[:].keys(True, True))
+            assert data_true[:].shape == data_from_env[:].shape
             # for some reason, qlearning_dataset overwrites the next obs that is contained in the buffer,
             # resulting in tiny changes in the value contained for that key. Over 99.99% of the values
             # match, but the test still fails because of this.
             # We exclude that entry from the comparison.
-            keys.discard(("_data", "next", "observation"))
+            keys.discard(("next", "observation"))
             assert_allclose_td(
-                data_true._storage._storage.select(*keys),
-                data_from_env._storage._storage.select(*keys),
+                data_true[:].select(*keys),
+                data_from_env[:].select(*keys),
             )
         else:
-            leaf_names = data_from_env._storage._storage.keys(True)
+            leaf_names = data_from_env[:].keys(True)
             leaf_names = [
                 name[-1] if isinstance(name, tuple) else name for name in leaf_names
             ]
             assert "truncated" in leaf_names
-            leaf_names = data_true._storage._storage.keys(True)
+            leaf_names = data_true[:].keys(True)
             leaf_names = [
                 name[-1] if isinstance(name, tuple) else name for name in leaf_names
             ]
             assert "truncated" not in leaf_names
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
-    def test_direct_download(self, task):
+    def test_direct_download(self, task, tmpdir):
+        root1 = tmpdir / "1"
+        root2 = tmpdir / "2"
         data_direct = D4RLExperienceReplay(
             task,
             split_trajs=False,
@@ -1882,6 +1909,8 @@ class TestD4RL:
             batch_size=2,
             use_truncated_as_done=True,
             direct_download=True,
+            download="force",
+            root=root1,
         )
         data_d4rl = D4RLExperienceReplay(
             task,
@@ -1891,17 +1920,15 @@ class TestD4RL:
             use_truncated_as_done=True,
             direct_download=False,
             terminate_on_end=True,  # keep the last time step
+            download="force",
+            root=root2,
         )
-        keys = set(data_direct._storage._storage.keys(True, True))
-        keys = keys.intersection(data_d4rl._storage._storage.keys(True, True))
+        keys = set(data_direct[:].keys(True, True))
+        keys = keys.intersection(data_d4rl[:].keys(True, True))
         assert len(keys)
         assert_allclose_td(
-            data_direct._storage._storage.select(*keys).apply(
-                lambda t: t.as_tensor().float()
-            ),
-            data_d4rl._storage._storage.select(*keys).apply(
-                lambda t: t.as_tensor().float()
-            ),
+            data_direct[:].select(*keys).apply(lambda t: t.float()),
+            data_d4rl[:].select(*keys).apply(lambda t: t.float()),
         )
 
     @pytest.mark.parametrize(
@@ -1922,7 +1949,7 @@ class TestD4RL:
     def test_d4rl_dummy(self, task):
         t0 = time.time()
         _ = D4RLExperienceReplay(task, split_trajs=True, from_env=True, batch_size=2)
-        print(f"terminated test after {time.time()-t0}s")
+        logging.info(f"terminated test after {time.time()-t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -1943,7 +1970,7 @@ class TestD4RL:
             offline = sample.get(key)
             # assert sim.dtype == offline.dtype, key
             assert sim.shape[-1] == offline.shape[-1], key
-        print(f"terminated test after {time.time()-t0}s")
+        logging.info(f"terminated test after {time.time()-t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -1962,7 +1989,217 @@ class TestD4RL:
         for sample in data:  # noqa: B007
             i += 1
         assert len(data) // i == batch_size
-        print(f"terminated test after {time.time()-t0}s")
+        logging.info(f"terminated test after {time.time()-t0}s")
+
+
+_MINARI_DATASETS = []
+
+
+def _minari_selected_datasets():
+    if not _has_minari:
+        return
+    global _MINARI_DATASETS
+    import minari
+
+    torch.manual_seed(0)
+
+    keys = list(minari.list_remote_datasets())
+    indices = torch.randperm(len(keys))[:10]
+    keys = [keys[idx] for idx in indices]
+    keys = [
+        key
+        for key in keys
+        if "=0.4" in minari.list_remote_datasets()[key]["minari_version"]
+    ]
+    assert len(keys) > 5
+    _MINARI_DATASETS += keys
+
+
+_minari_selected_datasets()
+
+
+@pytest.mark.skipif(not _has_minari, reason="Minari not found")
+@pytest.mark.parametrize("split", [False, True])
+@pytest.mark.parametrize("selected_dataset", _MINARI_DATASETS)
+@pytest.mark.slow
+class TestMinari:
+    def test_load(self, selected_dataset, split):
+        logging.info("dataset", selected_dataset)
+        data = MinariExperienceReplay(
+            selected_dataset, batch_size=32, split_trajs=split
+        )
+        t0 = time.time()
+        for i, sample in enumerate(data):
+            t1 = time.time()
+            logging.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            assert data.metadata["action_space"].is_in(sample["action"])
+            assert data.metadata["observation_space"].is_in(sample["observation"])
+            t0 = time.time()
+            if i == 10:
+                break
+
+
+@pytest.mark.slow
+class TestRoboset:
+    def test_load(self):
+        selected_dataset = RobosetExperienceReplay.available_datasets[0]
+        data = RobosetExperienceReplay(
+            selected_dataset,
+            batch_size=32,
+        )
+        t0 = time.time()
+        for i, _ in enumerate(data):
+            t1 = time.time()
+            logging.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            t0 = time.time()
+            if i == 10:
+                break
+
+
+@pytest.mark.slow
+class TestVD4RL:
+    @pytest.mark.parametrize("image_size", [None, (37, 33)])
+    def test_load(self, image_size):
+        torch.manual_seed(0)
+        datasets = VD4RLExperienceReplay.available_datasets
+        for idx in torch.randperm(len(datasets)).tolist()[:4]:
+            selected_dataset = datasets[idx]
+            data = VD4RLExperienceReplay(
+                selected_dataset,
+                batch_size=32,
+                image_size=image_size,
+            )
+            t0 = time.time()
+            for i, batch in enumerate(data):
+                if image_size:
+                    assert batch.get("pixels").shape == (32, 3, *image_size)
+                    assert batch.get(("next", "pixels")).shape == (32, 3, *image_size)
+                else:
+                    assert batch.get("pixels").shape[:2] == (32, 3)
+                    assert batch.get(("next", "pixels")).shape[:2] == (32, 3)
+
+                assert batch.get("pixels").dtype is torch.float32
+                assert batch.get(("next", "pixels")).dtype is torch.float32
+                assert (batch.get("pixels") != 0).any()
+                assert (batch.get(("next", "pixels")) != 0).any()
+                t1 = time.time()
+                logging.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+                t0 = time.time()
+                if i == 10:
+                    break
+
+
+@pytest.mark.slow
+class TestOpenX:
+    @pytest.mark.parametrize(
+        "download,padding",
+        [[True, None], [False, None], [False, 0], [False, True], [False, False]],
+    )
+    @pytest.mark.parametrize("shuffle", [True, False])
+    @pytest.mark.parametrize("replacement", [True, False])
+    @pytest.mark.parametrize(
+        "batch_size,num_slices,slice_len",
+        [
+            [3000, 2, None],
+            [32, 32, None],
+            [32, None, 1],
+            [3000, None, 1500],
+            [None, None, 32],
+            [None, None, 1500],
+        ],
+    )
+    def test_openx(
+        self, download, shuffle, replacement, padding, batch_size, num_slices, slice_len
+    ):
+        torch.manual_seed(0)
+        np.random.seed(0)
+
+        streaming = not download
+        cm = (
+            pytest.raises(RuntimeError, match="shuffle=False")
+            if not streaming and not shuffle and replacement
+            else pytest.raises(
+                RuntimeError,
+                match="replacement=True is not available with streamed datasets",
+            )
+            if streaming and replacement
+            else nullcontext()
+        )
+        dataset = None
+        with cm:
+            dataset = OpenXExperienceReplay(
+                "cmu_stretch",
+                download=download,
+                streaming=streaming,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                num_slices=num_slices,
+                slice_len=slice_len,
+                pad=padding,
+                replacement=replacement,
+            )
+        if dataset is None:
+            return
+        # iterating
+        if padding is None and (
+            (batch_size is not None and batch_size > 1000)
+            or (slice_len is not None and slice_len > 1000)
+        ):
+            raises_cm = pytest.raises(
+                RuntimeError,
+                match="The trajectory length (.*) is shorter than the slice length|Some stored trajectories have a length shorter than the slice that was asked for",
+            )
+            with raises_cm:
+                for data in dataset:  # noqa: B007
+                    break
+            if batch_size is None and slice_len is not None:
+                with raises_cm:
+                    dataset.sample(2 * slice_len)
+                return
+
+        else:
+            for data in dataset:  # noqa: B007
+                break
+            # check data shape
+            if batch_size is not None:
+                assert data.shape[0] == batch_size
+            elif slice_len is not None:
+                assert data.shape[0] == slice_len
+            if batch_size is not None:
+                if num_slices is not None:
+                    assert data.get(("next", "done")).sum(-2) == num_slices
+                elif streaming:
+                    assert (
+                        data.get(("next", "done")).sum(-2)
+                        == data.get("episode").unique().numel()
+                    )
+
+        # sampling
+        if batch_size is None:
+            if slice_len is not None:
+                batch_size = 2 * slice_len
+            elif num_slices is not None:
+                batch_size = num_slices * 32
+            sample = dataset.sample(batch_size)
+        else:
+            if padding is None and (batch_size > 1000):
+                with pytest.raises(
+                    RuntimeError,
+                    match="Some stored trajectories have a length shorter than the slice that was asked for"
+                    if not streaming
+                    else "The trajectory length (.*) is shorter than the slice length",
+                ):
+                    sample = dataset.sample()
+                return
+            else:
+                sample = dataset.sample()
+                assert sample.shape == (batch_size,)
+        if slice_len is not None:
+            assert sample.get(("next", "done")).sum() == int(
+                batch_size // slice_len
+            ), sample.get(("next", "done"))
+        elif num_slices is not None:
+            assert sample.get(("next", "done")).sum() == num_slices
 
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")
@@ -1978,6 +2215,7 @@ class TestD4RL:
         "magic",
     ],
 )
+@pytest.mark.slow
 class TestOpenML:
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 3)])
     def test_env(self, dataset, batch_size):
@@ -2308,16 +2546,16 @@ class TestRoboHive:
                     substr in envname
                     for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")
                 ):
-                    print("not testing envs with prebuilt rendering")
+                    logging.info("not testing envs with prebuilt rendering")
                     return
                 if "Adroit" in envname:
-                    print("tcdm are broken")
+                    logging.info("tcdm are broken")
                     return
                 try:
                     env = RoboHiveEnv(envname)
                 except AttributeError as err:
                     if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
-                        print("tcdm are broken")
+                        logging.info("tcdm are broken")
                         return
                     else:
                         raise err
@@ -2325,7 +2563,7 @@ class TestRoboHive:
                     from_pixels
                     and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0
                 ):
-                    print("no camera")
+                    logging.info("no camera")
                     return
                 check_env_specs(env)
             except Exception as err:

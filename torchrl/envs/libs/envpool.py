@@ -13,7 +13,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDict, TensorDictBase
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     TensorSpec,
@@ -269,7 +269,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _set_seed(self, seed: Optional[int]):
         if seed is not None:
-            print(
+            logging.info(
                 "MultiThreadedEnvWrapper._set_seed ignored, as setting seed in an existing envorinment is not\
                    supported by envpool. Please create a new environment, passing the seed to the constructor."
             )

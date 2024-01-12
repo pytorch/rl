@@ -333,7 +333,11 @@ algorithms, such as DQN, DDPG or Dreamer.
     DistributionalDQNnet
     DreamerActor
     DuelingCnnDQNet
+    GRUCell
+    GRU
     GRUModule
+    LSTMCell
+    LSTM
     LSTMModule
     ObsDecoder
     ObsEncoder

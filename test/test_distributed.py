@@ -8,6 +8,7 @@ Contains distributed tests which are expected to be a considerable burden for th
 """
 import abc
 import argparse
+import logging
 import os
 import sys
 import time
@@ -88,7 +89,7 @@ class DistributedCollectorBase:
         cls._start_worker()
         env = ContinuousActionVecMockEnv
         policy = RandomPolicy(env().action_spec)
-        print("creating collector")
+        logging.info("creating collector")
         collector = cls.distributed_class()(
             [env] * 2,
             policy,
@@ -97,7 +98,7 @@ class DistributedCollectorBase:
             **cls.distributed_kwargs(),
         )
         total = 0
-        print("getting data...")
+        logging.info("getting data...")
         for data in collector:
             total += data.numel()
             assert data.numel() == frames_per_batch

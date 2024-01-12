@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Union
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DEVICE_TYPING,
@@ -45,22 +45,8 @@ def _get_envs():
     import vmas
 
     all_scenarios = vmas.scenarios + vmas.mpe_scenarios + vmas.debug_scenarios
-    # TODO heterogenous spaces
-    # For now torchrl does not support heterogenous spaces (Tple(Box)) so many OpenAI MPE scenarios do not work
-    heterogenous_spaces_scenarios = [
-        "simple_adversary",
-        "simple_crypto",
-        "simple_push",
-        "simple_speaker_listener",
-        "simple_tag",
-        "simple_world_comm",
-    ]
 
-    return [
-        scenario
-        for scenario in all_scenarios
-        if scenario not in heterogenous_spaces_scenarios
-    ]
+    return all_scenarios
 
 
 @set_gym_backend("gym")

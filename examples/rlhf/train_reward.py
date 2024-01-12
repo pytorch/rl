@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import logging
 import time
 
 import hydra
@@ -62,10 +63,9 @@ def main(cfg):
     always_save_checkpoint = train_cfg.always_save_checkpoint
 
     device = cfg.sys.device
-    dtype = cfg.sys.dtype
     compile_ = cfg.sys.compile
 
-    ctx = setup(device=device, dtype=dtype)
+    ctx = setup(cfg.sys)
 
     train_loader = get_dataloader(
         data_cfg.batch_size,
@@ -141,13 +141,13 @@ def main(cfg):
                 f"VALID: {it=}: {train_loss=:.4f}, {val_loss=:.4f}, "
                 f"{train_acc=:.4f}, {val_acc=:.4f}"
             )
-            print(msg)
+            logging.info(msg)
             loss_logger.info(msg)
             if val_loss < best_val_loss or always_save_checkpoint:
                 best_val_loss = val_loss
                 if it > 0:
                     msg = f"saving checkpoint to {reward_out_dir}"
-                    print(msg)
+                    logging.info(msg)
                     loss_logger.info(msg)
                     model.module.save_pretrained(reward_out_dir)
         elif it % log_interval == 0:
@@ -156,7 +156,7 @@ def main(cfg):
                 batch.chosen_data.end_scores, batch.rejected_data.end_scores
             )
             msg = f"TRAIN: {it=}: {loss=:.4f}, {acc=:.4f} time={dt*1000:.2f}ms"
-            print(msg)
+            logging.info(msg)
             loss_logger.info(msg)
 
 

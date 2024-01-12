@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import logging
 
 import hydra
 
@@ -117,9 +118,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(data.numel())
 
         # Get training rewards and lengths
-        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
+        episode_rewards = data["next", "episode_reward"][data["next", "terminated"]]
         if len(episode_rewards) > 0:
-            episode_length = data["next", "step_count"][data["next", "done"]]
+            episode_length = data["next", "step_count"][data["next", "terminated"]]
             log_info.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
@@ -212,7 +213,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     end_time = time.time()
     execution_time = end_time - start_time
-    print(f"Training took {execution_time:.2f} seconds to finish")
+    logging.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

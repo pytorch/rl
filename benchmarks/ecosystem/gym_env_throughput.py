@@ -63,7 +63,6 @@ if __name__ == "__main__":
                 global_step = 0
                 times = []
                 start = time.time()
-                print("Timer started.")
                 for _ in tqdm.tqdm(range(total_frames // num_workers)):
                     env.step(env.action_space.sample())
                     global_step += num_workers
@@ -76,12 +75,12 @@ if __name__ == "__main__":
                 # regular parallel env
                 for device in avail_devices:
 
-                    def make(envname=envname, gym_backend=gym_backend, device=device):
+                    def make(envname=envname, gym_backend=gym_backend):
                         with set_gym_backend(gym_backend):
-                            return GymEnv(envname, device=device)
+                            return GymEnv(envname, device="cpu")
 
                     # env_make = EnvCreator(make)
-                    penv = ParallelEnv(num_workers, EnvCreator(make))
+                    penv = ParallelEnv(num_workers, EnvCreator(make), device=device)
                     with torch.inference_mode():
                         # warmup
                         penv.rollout(2)
@@ -103,13 +102,13 @@ if __name__ == "__main__":
 
                 for device in avail_devices:
 
-                    def make(envname=envname, gym_backend=gym_backend, device=device):
+                    def make(envname=envname, gym_backend=gym_backend):
                         with set_gym_backend(gym_backend):
-                            return GymEnv(envname, device=device)
+                            return GymEnv(envname, device="cpu")
 
                     env_make = EnvCreator(make)
                     # penv = SerialEnv(num_workers, env_make)
-                    penv = ParallelEnv(num_workers, env_make)
+                    penv = ParallelEnv(num_workers, env_make, device=device)
                     collector = SyncDataCollector(
                         penv,
                         RandomPolicy(penv.action_spec),
@@ -164,14 +163,14 @@ if __name__ == "__main__":
                 for device in avail_devices:
                     # async collector
                     # + torchrl parallel env
-                    def make_env(
-                        envname=envname, gym_backend=gym_backend, device=device
-                    ):
+                    def make_env(envname=envname, gym_backend=gym_backend):
                         with set_gym_backend(gym_backend):
-                            return GymEnv(envname, device=device)
+                            return GymEnv(envname, device="cpu")
 
                     penv = ParallelEnv(
-                        num_workers // num_collectors, EnvCreator(make_env)
+                        num_workers // num_collectors,
+                        EnvCreator(make_env),
+                        device=device,
                     )
                     collector = MultiaSyncDataCollector(
                         [penv] * num_collectors,
@@ -206,10 +205,9 @@ if __name__ == "__main__":
                         envname=envname,
                         num_workers=num_workers,
                         gym_backend=gym_backend,
-                        device=device,
                     ):
                         with set_gym_backend(gym_backend):
-                            penv = GymEnv(envname, num_envs=num_workers, device=device)
+                            penv = GymEnv(envname, num_envs=num_workers, device="cpu")
                         return penv
 
                     penv = EnvCreator(
@@ -247,14 +245,14 @@ if __name__ == "__main__":
                 for device in avail_devices:
                     # sync collector
                     # + torchrl parallel env
-                    def make_env(
-                        envname=envname, gym_backend=gym_backend, device=device
-                    ):
+                    def make_env(envname=envname, gym_backend=gym_backend):
                         with set_gym_backend(gym_backend):
-                            return GymEnv(envname, device=device)
+                            return GymEnv(envname, device="cpu")
 
                     penv = ParallelEnv(
-                        num_workers // num_collectors, EnvCreator(make_env)
+                        num_workers // num_collectors,
+                        EnvCreator(make_env),
+                        device=device,
                     )
                     collector = MultiSyncDataCollector(
                         [penv] * num_collectors,
@@ -289,10 +287,9 @@ if __name__ == "__main__":
                         envname=envname,
                         num_workers=num_workers,
                         gym_backend=gym_backend,
-                        device=device,
                     ):
                         with set_gym_backend(gym_backend):
-                            penv = GymEnv(envname, num_envs=num_workers, device=device)
+                            penv = GymEnv(envname, num_envs=num_workers, device="cpu")
                         return penv
 
                     penv = EnvCreator(

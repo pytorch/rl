@@ -9,6 +9,7 @@
 <a href="https://pypi.org/project/torchrl-nightly"><img src="https://img.shields.io/pypi/v/torchrl-nightly?label=nightly" alt="pypi nightly version"></a>
 [![Downloads](https://static.pepy.tech/personalized-badge/torchrl?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads)](https://pepy.tech/project/torchrl)
 [![Downloads](https://static.pepy.tech/personalized-badge/torchrl-nightly?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads%20(nightly))](https://pepy.tech/project/torchrl-nightly)
+[![Discord Shield](https://dcbadge.vercel.app/api/server/cZs26Qq3Dd)](https://discord.gg/cZs26Qq3Dd)
 
 # TorchRL
 
@@ -490,7 +491,7 @@ If you would like to contribute to new features, check our [call for contributio
 ## Examples, tutorials and demos
 
 A series of [examples](examples/) are provided with an illustrative purpose:
-- [DQN and Rainbow](examples/dqn/dqn.py)
+- [DQN](examples/dqn)
 - [DDPG](examples/ddpg/ddpg.py)
 - [IQL](examples/iql/iql.py)
 - [CQL](examples/iql/cql.py)

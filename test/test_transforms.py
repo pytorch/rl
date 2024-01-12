@@ -9,6 +9,7 @@ import importlib.util
 
 import itertools
 import pickle
+import re
 import sys
 from copy import copy
 from functools import partial
@@ -46,7 +47,7 @@ from tensordict.nn import TensorDictSequential
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import _unravel_key_to_tuple
 from torch import multiprocessing as mp, nn, Tensor
-from torchrl._utils import prod
+from torchrl._utils import _replace_last, prod
 from torchrl.data import (
     BoundedTensorSpec,
     CompositeSpec,
@@ -59,6 +60,7 @@ from torchrl.data import (
 from torchrl.envs import (
     ActionMask,
     BinarizeReward,
+    BurnInTransform,
     CatFrames,
     CatTensors,
     CenterCrop,
@@ -112,8 +114,8 @@ from torchrl.envs.transforms.rlhf import KLRewardTransform
 from torchrl.envs.transforms.transforms import _has_tv, FORWARD_NOT_IMPLEMENTED
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
-from torchrl.envs.utils import _replace_last, check_env_specs, step_mdp
-from torchrl.modules import LSTMModule, MLP, ProbabilisticActor, TanhNormal
+from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal
 
 TIMEOUT = 100.0
 
@@ -4878,6 +4880,39 @@ class TestRewardSum(TransformBase):
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for RewardSum")
 
+    @pytest.mark.parametrize("in_keys", [["reward"], ["reward_1", "reward_2"]])
+    @pytest.mark.parametrize(
+        "out_keys", [["episode_reward"], ["episode_reward_1", "episode_reward_2"]]
+    )
+    @pytest.mark.parametrize("reset_keys", [["_reset"], ["_reset1", "_reset2"]])
+    def test_keys_length_errors(self, in_keys, reset_keys, out_keys, batch=10):
+        reset_dict = {
+            reset_key: torch.zeros(batch, dtype=torch.bool) for reset_key in reset_keys
+        }
+        reward_sum_dict = {out_key: torch.randn(batch) for out_key in out_keys}
+        reset_dict.update(reward_sum_dict)
+        td = TensorDict(reset_dict, [])
+
+        if len(in_keys) != len(out_keys):
+            with pytest.raises(
+                ValueError,
+                match="RewardSum expects the same number of input and output keys",
+            ):
+                RewardSum(in_keys=in_keys, reset_keys=reset_keys, out_keys=out_keys)
+        else:
+            t = RewardSum(in_keys=in_keys, reset_keys=reset_keys, out_keys=out_keys)
+
+            if len(in_keys) != len(reset_keys):
+                with pytest.raises(
+                    ValueError,
+                    match=re.escape(
+                        f"Could not match the env reset_keys {reset_keys} with the in_keys {in_keys}"
+                    ),
+                ):
+                    t.reset(td)
+            else:
+                t.reset(td)
+
 
 class TestReward2Go(TransformBase):
     @pytest.mark.parametrize("device", get_default_devices())
@@ -9330,6 +9365,233 @@ class TestEndOfLife(TransformBase):
 
     def test_transform_inverse(self):
         pass
+
+
+class TestBurnInTransform(TransformBase):
+    def _make_gru_module(self, input_size=4, hidden_size=4, device="cpu"):
+        return GRUModule(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            batch_first=True,
+            in_keys=["observation", "rhs", "is_init"],
+            out_keys=["output", ("next", "rhs")],
+            device=device,
+        ).set_recurrent_mode(True)
+
+    def _make_lstm_module(self, input_size=4, hidden_size=4, device="cpu"):
+        return LSTMModule(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            batch_first=True,
+            in_keys=["observation", "rhs_h", "rhs_c", "is_init"],
+            out_keys=["output", ("next", "rhs_h"), ("next", "rhs_c")],
+            device=device,
+        ).set_recurrent_mode(True)
+
+    def _make_batch(self, batch_size: int = 2, sequence_length: int = 5):
+        observation = torch.randn(batch_size, sequence_length + 1, 4)
+        is_init = torch.zeros(batch_size, sequence_length, 1, dtype=torch.bool)
+        batch = TensorDict(
+            {
+                "observation": observation[:, :-1],
+                "is_init": is_init,
+                "next": TensorDict(
+                    {
+                        "observation": observation[:, 1:],
+                    },
+                    batch_size=[batch_size, sequence_length],
+                ),
+            },
+            batch_size=[batch_size, sequence_length],
+        )
+        return batch
+
+    def test_single_trans_env_check(self):
+        module = self._make_gru_module()
+        burn_in_transform = BurnInTransform(module, burn_in=2)
+        with pytest.raises(
+            RuntimeError,
+            match="BurnInTransform can only be appended to a ReplayBuffer.",
+        ):
+            env = TransformedEnv(ContinuousActionVecMockEnv(), burn_in_transform)
+            check_env_specs(env)
+            env.close()
+
+    def test_serial_trans_env_check(self):
+        raise pytest.skip(
+            "BurnInTransform can only be appended to a ReplayBuffer, not to a TransformedEnv."
+        )
+
+    def test_parallel_trans_env_check(self):
+        raise pytest.skip(
+            "BurnInTransform can only be appended to a ReplayBuffer, not to a TransformedEnv."
+        )
+
+    def test_trans_serial_env_check(self):
+        raise pytest.skip(
+            "BurnInTransform can only be appended to a ReplayBuffer, not to a TransformedEnv."
+        )
+
+    def test_trans_parallel_env_check(self):
+        raise pytest.skip(
+            "BurnInTransform can only be appended to a ReplayBuffer, not to a TransformedEnv."
+        )
+
+    @pytest.mark.parametrize("module", ["gru", "lstm"])
+    @pytest.mark.parametrize("batch_size", [2, 4])
+    @pytest.mark.parametrize("sequence_length", [4, 8])
+    @pytest.mark.parametrize("burn_in", [2])
+    def test_transform_no_env(self, module, batch_size, sequence_length, burn_in):
+        """tests the transform on dummy data, without an env."""
+        torch.manual_seed(0)
+        data = self._make_batch(batch_size, sequence_length)
+
+        if module == "gru":
+            module = self._make_gru_module()
+            hidden = torch.zeros(
+                data.batch_size + (module.gru.num_layers, module.gru.hidden_size)
+            )
+            data.set("rhs", hidden)
+        else:
+            module = self._make_lstm_module()
+            hidden_h = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            hidden_c = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            data.set("rhs_h", hidden_h)
+            data.set("rhs_c", hidden_c)
+
+        burn_in_transform = BurnInTransform(module, burn_in=burn_in)
+        data = burn_in_transform(data)
+        assert data.shape[-1] == sequence_length - burn_in
+
+        for key in data.keys():
+            if key.startswith("rhs"):
+                assert data[:, 0].get(key).abs().sum() > 0.0
+                assert data[:, 1:].get(key).sum() == 0.0
+
+    @pytest.mark.parametrize("module", ["gru", "lstm"])
+    @pytest.mark.parametrize("batch_size", [2, 4])
+    @pytest.mark.parametrize("sequence_length", [4, 8])
+    @pytest.mark.parametrize("burn_in", [2])
+    def test_transform_compose(self, module, batch_size, sequence_length, burn_in):
+        """tests the transform on dummy data, without an env but inside a Compose."""
+        torch.manual_seed(0)
+        data = self._make_batch(batch_size, sequence_length)
+
+        if module == "gru":
+            module = self._make_gru_module()
+            hidden = torch.zeros(
+                data.batch_size + (module.gru.num_layers, module.gru.hidden_size)
+            )
+            data.set("rhs", hidden)
+        else:
+            module = self._make_lstm_module()
+            hidden_h = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            hidden_c = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            data.set("rhs_h", hidden_h)
+            data.set("rhs_c", hidden_c)
+
+        burn_in_compose = Compose(BurnInTransform(module, burn_in=burn_in))
+        data = burn_in_compose(data)
+        assert data.shape[-1] == sequence_length - burn_in
+
+        for key in data.keys():
+            if key.startswith("rhs"):
+                assert data[:, 0].get(key).abs().sum() > 0.0
+                assert data[:, 1:].get(key).sum() == 0.0
+
+    def test_transform_env(self):
+        module = self._make_gru_module()
+        burn_in_transform = BurnInTransform(module, burn_in=2)
+        env = TransformedEnv(ContinuousActionVecMockEnv(), burn_in_transform)
+        with pytest.raises(
+            RuntimeError,
+            match="BurnInTransform can only be appended to a ReplayBuffer.",
+        ):
+            rollout = env.rollout(3)
+
+    @pytest.mark.parametrize("module", ["gru", "lstm"])
+    @pytest.mark.parametrize("batch_size", [2, 4])
+    @pytest.mark.parametrize("sequence_length", [4, 8])
+    @pytest.mark.parametrize("burn_in", [2])
+    def test_transform_model(self, module, batch_size, sequence_length, burn_in):
+        torch.manual_seed(0)
+        data = self._make_batch(batch_size, sequence_length)
+
+        if module == "gru":
+            module = self._make_gru_module()
+            hidden = torch.zeros(
+                data.batch_size + (module.gru.num_layers, module.gru.hidden_size)
+            )
+            data.set("rhs", hidden)
+        else:
+            module = self._make_lstm_module()
+            hidden_h = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            hidden_c = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            data.set("rhs_h", hidden_h)
+            data.set("rhs_c", hidden_c)
+
+        burn_in_transform = BurnInTransform(module, burn_in=burn_in)
+        module = nn.Sequential(burn_in_transform, nn.Identity())
+        data = module(data)
+        assert data.shape[-1] == sequence_length - burn_in
+
+        for key in data.keys():
+            if key.startswith("rhs"):
+                assert data[:, 0].get(key).abs().sum() > 0.0
+                assert data[:, 1:].get(key).sum() == 0.0
+
+    @pytest.mark.parametrize("module", ["gru", "lstm"])
+    @pytest.mark.parametrize("batch_size", [2, 4])
+    @pytest.mark.parametrize("sequence_length", [4, 8])
+    @pytest.mark.parametrize("burn_in", [2])
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, module, batch_size, sequence_length, burn_in, rbclass):
+        torch.manual_seed(0)
+        data = self._make_batch(batch_size, sequence_length)
+
+        if module == "gru":
+            module = self._make_gru_module()
+            hidden = torch.zeros(
+                data.batch_size + (module.gru.num_layers, module.gru.hidden_size)
+            )
+            data.set("rhs", hidden)
+        else:
+            module = self._make_lstm_module()
+            hidden_h = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            hidden_c = torch.zeros(
+                data.batch_size + (module.lstm.num_layers, module.lstm.hidden_size)
+            )
+            data.set("rhs_h", hidden_h)
+            data.set("rhs_c", hidden_c)
+
+        burn_in_transform = BurnInTransform(module, burn_in=burn_in)
+        rb = rbclass(storage=LazyTensorStorage(20))
+        rb.append_transform(burn_in_transform)
+        rb.extend(data)
+        batch = rb.sample(2)
+        assert batch.shape[-1] == sequence_length - burn_in
+
+        for key in batch.keys():
+            if key.startswith("rhs"):
+                assert batch[:, 0].get(key).abs().sum() > 0.0
+                assert batch[:, 1:].get(key).sum() == 0.0
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse for BurnInTransform")
 
 
 if __name__ == "__main__":

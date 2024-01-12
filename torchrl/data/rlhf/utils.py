@@ -335,15 +335,6 @@ class RolloutFromModel:
         )  # we assume that if it's not truncated, it was terminated
         return truncated | terminated, terminated
 
-        print("batch.prompt_rindex", batch.prompt_rindex)
-        print("generated", generated.shape)
-        terminated = (generated == self.EOS_TOKEN_ID)[..., -batch.prompt_rindex :]
-        terminated = terminated.int().cumsum(-1).bool()
-        done = terminated.clone()
-        done[..., self.max_new_tokens - 1] = 1
-        print("self.max_new_tokens", self.max_new_tokens)
-        return done.unsqueeze(-1), terminated.unsqueeze(-1)
-
     def _get_action(self, generated, batch):
         # the sequence of actions for each trajectory is just the generated token ids
         action_idx = torch.arange(self.max_new_tokens, device=generated.device)

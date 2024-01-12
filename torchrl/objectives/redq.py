@@ -15,29 +15,19 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 
-from torchrl.data import CompositeSpec
+from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
+
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_WARNING,
+    _vmap_func,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-try:
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap
-
-    FUNCTORCH_ERR = ""
-    _has_functorch = True
-except ImportError as err:
-    FUNCTORCH_ERR = str(err)
-    _has_functorch = False
 
 
 class REDQLoss(LossModule):
@@ -265,9 +255,6 @@ class REDQLoss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
     ):
-        if not _has_functorch:
-            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
-
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority_key=priority_key)
@@ -276,7 +263,6 @@ class REDQLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
-            funs_to_decorate=["forward", "get_dist_params"],
         )
 
         # let's make sure that actor_network has `return_log_prob` set to True
@@ -331,8 +317,12 @@ class REDQLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-        self._vmap_qvalue_network00 = vmap(self.qvalue_network)
-        self._vmap_getdist = vmap(self.actor_network.get_dist_params)
+        self._vmap_qvalue_network00 = _vmap_func(
+            self.qvalue_network, randomness=self.vmap_randomness
+        )
+        self._vmap_getdist = _vmap_func(
+            self.actor_network, func="get_dist_params", randomness=self.vmap_randomness
+        )
 
     @property
     def target_entropy(self):
