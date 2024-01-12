@@ -442,6 +442,43 @@ class _AsyncMeta(_EnvPostInit):
 class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     """OpenAI Gym environment wrapper.
 
+    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`.
+
+    Args:
+        env (gym.Env): the environment to wrap. Batched environments (:class:`~stable_baselines3.common.vec_env.base_vec_env.VecEnv`
+            or :class:`gym.VectorEnv`) are supported and the environment batch-size
+            will reflect the number of environments executed in parallel.
+        categorical_action_encoding (bool, optional): if ``True``, categorical
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            Defaults to ``False``.
+
+    Keyword Args:
+        from_pixels (bool, optional): if ``True``, an attempt to return the pixel
+            observations from the env will be performed. By default, these observations
+            will be written under the ``"pixels"`` entry.
+            The method being used varies
+            depending on the gym version and may involve a ``wrappers.pixel_observation.PixelObservationWrapper``.
+            Defaults to ``False``.
+        pixels_only (bool, optional): if ``True``, only the pixel observations will
+            be returned (by default under the ``"pixels"`` entry in the output tensordict).
+            If ``False``, observations (eg, states) and pixels will be returned
+            whenever ``from_pixels=True``. Defaults to ``True``.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        batch_size (torch.Size, optional): the batch size of the environment.
+            Should match the leading dimensions of all observations, done states,
+            rewards, actions and infos.
+            Defaults to ``torch.Size([])``.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+
+
     Examples:
         >>> env = gym.make("Pendulum-v0")
         >>> env = GymWrapper(env)
@@ -488,21 +525,20 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         )
 
     def __init__(self, env=None, categorical_action_encoding=False, **kwargs):
-        if env is not None:
-            kwargs["env"] = env
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
-        if "env" in kwargs:
+        if env is not None:
             if "EnvCompatibility" in str(
-                kwargs["env"]
+                env
             ):  # a hacky way of knowing if EnvCompatibility is part of the wrappers of env
                 raise ValueError(
                     "GymWrapper does not support the gym.wrapper.compatibility.EnvCompatibility wrapper. "
                     "If this feature is needed, detail your use case in an issue of "
                     "https://github.com/pytorch/rl/issues."
                 )
-            libname = self.get_library_name(kwargs["env"])
+            libname = self.get_library_name(env)
             with set_gym_backend(libname):
+                kwargs["env"] = env
                 super().__init__(**kwargs)
         else:
             super().__init__(**kwargs)
@@ -941,7 +977,46 @@ ACCEPTED_TYPE_ERRORS = {
 
 
 class GymEnv(GymWrapper):
-    """OpenAI Gym environment wrapper.
+    """OpenAI Gym environment wrapper constructed by environment ID directly.
+
+    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`.
+
+    Args:
+        env_name (str): the environment id registered in `gym.registry`.
+        categorical_action_encoding (bool, optional): if ``True``, categorical
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            Defaults to ``False``.
+
+    Keyword Args:
+        num_envs (int, optional): the number of envs to run in parallel. Defaults to
+            ``None`` (a single env is to be run). :class:`~gym.vector.AsyncVectorEnv`
+            will be used by default.
+        disable_env_checker (bool, optional): for gym > 0.24 only. If ``True`` (default
+            for these versions), the environment checker won't be run.
+        from_pixels (bool, optional): if ``True``, an attempt to return the pixel
+            observations from the env will be performed. By default, these observations
+            will be written under the ``"pixels"`` entry.
+            The method being used varies
+            depending on the gym version and may involve a ``wrappers.pixel_observation.PixelObservationWrapper``.
+            Defaults to ``False``.
+        pixels_only (bool, optional): if ``True``, only the pixel observations will
+            be returned (by default under the ``"pixels"`` entry in the output tensordict).
+            If ``False``, observations (eg, states) and pixels will be returned
+            whenever ``from_pixels=True``. Defaults to ``True``.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        batch_size (torch.Size, optional): the batch size of the environment.
+            Should match the leading dimensions of all observations, done states,
+            rewards, actions and infos.
+            Defaults to ``torch.Size([])``.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
 
     Examples:
         >>> env = GymEnv(env_name="Pendulum-v0", frame_skip=4)

@@ -125,7 +125,7 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
         else:
             if value.dtype is torch.bool:
                 value = value.to(torch.uint8)
-            value = jax_dlpack.from_dlpack(torch_dlpack.to_dlpack(value))
+            value = jax_dlpack.from_dlpack(torch_dlpack.to_dlpack(value.contiguous()))
             t[name] = value.reshape(example.shape).view(example.dtype)
     return type(object_example)(**t)
 
