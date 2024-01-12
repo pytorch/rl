@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import importlib
+
+import logging
 import os
 import tempfile
 import urllib
@@ -24,10 +26,10 @@ from torchrl.collectors.utils import split_trajectories
 from torchrl.data.datasets.d4rl_infos import D4RL_DATASETS
 
 from torchrl.data.datasets.utils import _get_root_dir
-from torchrl.data.replay_buffers import TensorDictReplayBuffer
+from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage, TensorStorage
-from torchrl.data.replay_buffers.writers import Writer
+from torchrl.data.replay_buffers.storages import TensorStorage
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
 
 
 class D4RLExperienceReplay(TensorDictReplayBuffer):
@@ -45,7 +47,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
     the ``("next", "observation")`` of ``"done"`` states are zeroed.
 
     Args:
-        name (str): the name of the D4RL env to get the data from.
+        dataset_id (str): the dataset_id of the D4RL env to get the data from.
         batch_size (int): the batch size to use during sampling.
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
@@ -135,7 +137,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
     def __init__(
         self,
-        name,
+        dataset_id,
         batch_size: int,
         sampler: Sampler | None = None,
         writer: Writer | None = None,
@@ -155,9 +157,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         self.use_truncated_as_done = use_truncated_as_done
         if root is None:
             root = _get_root_dir("d4rl")
-        self.root = root
-        self.name = name
-        dataset = None
+        self.root = Path(root)
+        self.dataset_id = dataset_id
 
         if not from_env and direct_download is None:
             self._import_d4rl()
@@ -200,7 +201,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
                     raise ImportError("Could not import d4rl") from self.D4RL_ERR
 
                 if from_env:
-                    dataset = self._get_dataset_from_env(name, env_kwargs)
+                    dataset = self._get_dataset_from_env(dataset_id, env_kwargs)
                 else:
                     if self.use_truncated_as_done:
                         warnings.warn(
@@ -210,13 +211,13 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
                             "can be absent from the static dataset."
                         )
                     env_kwargs.update({"terminate_on_end": terminate_on_end})
-                    dataset = self._get_dataset_direct(name, env_kwargs)
+                    dataset = self._get_dataset_direct(dataset_id, env_kwargs)
             else:
                 if terminate_on_end is False:
                     raise ValueError(
                         "Using terminate_on_end=False is not compatible with direct_download=True."
                     )
-                dataset = self._get_dataset_direct_download(name, env_kwargs)
+                dataset = self._get_dataset_direct_download(dataset_id, env_kwargs)
             # Fill unknown next states with 0
             dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0
 
@@ -224,16 +225,16 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
                 dataset = split_trajectories(dataset)
                 dataset["next", "done"][:, -1] = True
 
-            storage = LazyMemmapStorage(
-                dataset.shape[0], scratch_dir=Path(self.root) / name
-            )
+            storage = TensorStorage(dataset.memmap(self._dataset_path))
         elif self._is_downloaded():
-            storage = TensorStorage(TensorDict.load_memmap(Path(self.root) / name))
+            storage = TensorStorage(TensorDict.load_memmap(self._dataset_path))
         else:
             raise RuntimeError(
-                f"The dataset could not be found in {Path(self.root) / name}."
+                f"The dataset could not be found in {self._dataset_path}."
             )
 
+        if writer is None:
+            writer = ImmutableDatasetWriter()
         super().__init__(
             batch_size=batch_size,
             storage=storage,
@@ -244,12 +245,13 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             prefetch=prefetch,
             transform=transform,
         )
-        if dataset is not None:
-            # if dataset has just been downloaded
-            self.extend(dataset)
+
+    @property
+    def _dataset_path(self):
+        return Path(self.root) / self.dataset_id
 
     def _is_downloaded(self):
-        return os.path.exists(Path(self.root) / self.name)
+        return os.path.exists(self._dataset_path)
 
     def _get_dataset_direct_download(self, name, env_kwargs):
         """Directly download and use a D4RL dataset."""
@@ -449,7 +451,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 def _download_dataset_from_url(dataset_url, dataset_path):
     dataset_filepath = _filepath_from_url(dataset_url, dataset_path)
     if not os.path.exists(dataset_filepath):
-        print("Downloading dataset:", dataset_url, "to", dataset_filepath)
+        logging.info("Downloading dataset:", dataset_url, "to", dataset_filepath)
         urllib.request.urlretrieve(dataset_url, dataset_filepath)
     if not os.path.exists(dataset_filepath):
         raise IOError("Failed to download dataset from %s" % dataset_url)
@@ -473,7 +475,7 @@ def _filepath_from_url(dataset_url, dataset_path):
 
 if __name__ == "__main__":
     data = D4RLExperienceReplay("kitchen-partial-v0", batch_size=128)
-    print(data)
+    logging.info(data)
     for sample in data:
-        print(sample)
+        logging.info(sample)
         break

@@ -286,7 +286,9 @@ class IQLLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
-        self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
+        self._vmap_qvalue_networkN0 = _vmap_func(
+            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+        )
 
     @property
     def device(self) -> torch.device:

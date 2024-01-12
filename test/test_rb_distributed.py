@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import logging
 import os
 
 import sys
@@ -110,7 +111,7 @@ def _construct_buffer(target):
             buffer_rref = rpc.remote(target, ReplayBufferNode, args=(1000,))
             return buffer_rref
         except Exception as e:
-            print(f"Failed to connect: {e}")
+            logging.info(f"Failed to connect: {e}")
             time.sleep(RETRY_BACKOFF)
     raise RuntimeError("Unable to connect to replay buffer")
 

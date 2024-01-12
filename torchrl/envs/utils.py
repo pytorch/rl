@@ -7,6 +7,7 @@ from __future__ import annotations
 import contextlib
 
 import importlib.util
+import logging
 import os
 import re
 from enum import Enum
@@ -517,7 +518,7 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )
 
-    print("check_env_specs succeeded!")
+    logging.info("check_env_specs succeeded!")
 
 
 def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int = -1):

@@ -7,6 +7,8 @@
 This script reproduces the Proximal Policy Optimization (PPO) Algorithm
 results from Schulman et al. 2017 for the on MuJoCo Environments.
 """
+import logging
+
 import hydra
 
 
@@ -221,7 +223,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     end_time = time.time()
     execution_time = end_time - start_time
-    print(f"Training took {execution_time:.2f} seconds to finish")
+    logging.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

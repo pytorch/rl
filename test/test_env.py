@@ -1800,9 +1800,6 @@ class TestConcurrentEnvs:
                 s = ""
                 for key, item in td_equals.items(True, True):
                     if not item.all():
-                        print(key, "failed")
-                        print("r_p", r_p.get(key)[~item])
-                        print("r_s", r_s.get(key)[~item])
                         s = s + f"\t{key}"
                 q.put((f"failed: {s}", j))
             else:

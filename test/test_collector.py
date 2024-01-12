@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import logging
 
 import sys
 
@@ -2080,7 +2081,7 @@ def test_num_threads():
             c.shutdown()
             del c
         except Exception:
-            print("Failed to shut down collector")
+            logging.info("Failed to shut down collector")
         # reset vals
         collectors._main_async_collector = _main_async_collector_saved
         torch.set_num_threads(num_threads)

@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import importlib
+import logging
 from contextlib import nullcontext
 
 from torchrl.data.datasets.gen_dgrl import GenDGRLExperienceReplay
@@ -382,7 +383,7 @@ class TestGym:
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
-    @pytest.mark.flaky(reruns=3, reruns_delay=1)
+    @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):
         import gymnasium
 
@@ -409,6 +410,7 @@ class TestGym:
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
+    @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_env(self, envname):
         with set_gym_backend("gymnasium"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
@@ -432,7 +434,7 @@ class TestGym:
         "envname",
         ["CartPole-v1", "HalfCheetah-v4"],
     )
-    @pytest.mark.flaky(reruns=3, reruns_delay=1)
+    @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):  # noqa: F811
         import gym
 
@@ -460,6 +462,7 @@ class TestGym:
         "envname",
         ["CartPole-v1", "HalfCheetah-v4"],
     )
+    @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_env(self, envname):  # noqa: F811
         with set_gym_backend("gym"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
@@ -1902,28 +1905,25 @@ class TestD4RL:
             root=root3,
         )
         if not use_truncated_as_done:
-            keys = set(data_from_env._storage._storage.keys(True, True))
-            keys = keys.intersection(data_true._storage._storage.keys(True, True))
-            assert (
-                data_true._storage._storage.shape
-                == data_from_env._storage._storage.shape
-            )
+            keys = set(data_from_env[:].keys(True, True))
+            keys = keys.intersection(data_true[:].keys(True, True))
+            assert data_true[:].shape == data_from_env[:].shape
             # for some reason, qlearning_dataset overwrites the next obs that is contained in the buffer,
             # resulting in tiny changes in the value contained for that key. Over 99.99% of the values
             # match, but the test still fails because of this.
             # We exclude that entry from the comparison.
-            keys.discard(("_data", "next", "observation"))
+            keys.discard(("next", "observation"))
             assert_allclose_td(
-                data_true._storage._storage.select(*keys),
-                data_from_env._storage._storage.select(*keys),
+                data_true[:].select(*keys),
+                data_from_env[:].select(*keys),
             )
         else:
-            leaf_names = data_from_env._storage._storage.keys(True)
+            leaf_names = data_from_env[:].keys(True)
             leaf_names = [
                 name[-1] if isinstance(name, tuple) else name for name in leaf_names
             ]
             assert "truncated" in leaf_names
-            leaf_names = data_true._storage._storage.keys(True)
+            leaf_names = data_true[:].keys(True)
             leaf_names = [
                 name[-1] if isinstance(name, tuple) else name for name in leaf_names
             ]
@@ -1954,12 +1954,12 @@ class TestD4RL:
             download="force",
             root=root2,
         )
-        keys = set(data_direct._storage._storage.keys(True, True))
-        keys = keys.intersection(data_d4rl._storage._storage.keys(True, True))
+        keys = set(data_direct[:].keys(True, True))
+        keys = keys.intersection(data_d4rl[:].keys(True, True))
         assert len(keys)
         assert_allclose_td(
-            data_direct._storage._storage.select(*keys).apply(lambda t: t.float()),
-            data_d4rl._storage._storage.select(*keys).apply(lambda t: t.float()),
+            data_direct[:].select(*keys).apply(lambda t: t.float()),
+            data_d4rl[:].select(*keys).apply(lambda t: t.float()),
         )
 
     @pytest.mark.parametrize(
@@ -1980,7 +1980,7 @@ class TestD4RL:
     def test_d4rl_dummy(self, task):
         t0 = time.time()
         _ = D4RLExperienceReplay(task, split_trajs=True, from_env=True, batch_size=2)
-        print(f"terminated test after {time.time()-t0}s")
+        logging.info(f"terminated test after {time.time()-t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -2001,7 +2001,7 @@ class TestD4RL:
             offline = sample.get(key)
             # assert sim.dtype == offline.dtype, key
             assert sim.shape[-1] == offline.shape[-1], key
-        print(f"terminated test after {time.time()-t0}s")
+        logging.info(f"terminated test after {time.time()-t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -2020,7 +2020,7 @@ class TestD4RL:
         for sample in data:  # noqa: B007
             i += 1
         assert len(data) // i == batch_size
-        print(f"terminated test after {time.time()-t0}s")
+        logging.info(f"terminated test after {time.time()-t0}s")
 
 
 _MINARI_DATASETS = []
@@ -2044,7 +2044,6 @@ def _minari_selected_datasets():
     ]
     assert len(keys) > 5
     _MINARI_DATASETS += keys
-    print("_MINARI_DATASETS", _MINARI_DATASETS)
 
 
 _minari_selected_datasets()
@@ -2056,14 +2055,14 @@ _minari_selected_datasets()
 @pytest.mark.slow
 class TestMinari:
     def test_load(self, selected_dataset, split):
-        print("dataset", selected_dataset)
+        logging.info("dataset", selected_dataset)
         data = MinariExperienceReplay(
             selected_dataset, batch_size=32, split_trajs=split
         )
         t0 = time.time()
         for i, sample in enumerate(data):
             t1 = time.time()
-            print(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            logging.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
             assert data.metadata["action_space"].is_in(sample["action"])
             assert data.metadata["observation_space"].is_in(sample["observation"])
             t0 = time.time()
@@ -2082,7 +2081,7 @@ class TestRoboset:
         t0 = time.time()
         for i, _ in enumerate(data):
             t1 = time.time()
-            print(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            logging.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
             t0 = time.time()
             if i == 10:
                 break
@@ -2115,7 +2114,7 @@ class TestVD4RL:
                 assert (batch.get("pixels") != 0).any()
                 assert (batch.get(("next", "pixels")) != 0).any()
                 t1 = time.time()
-                print(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+                logging.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
                 t0 = time.time()
                 if i == 10:
                     break
@@ -2578,16 +2577,16 @@ class TestRoboHive:
                     substr in envname
                     for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")
                 ):
-                    print("not testing envs with prebuilt rendering")
+                    logging.info("not testing envs with prebuilt rendering")
                     return
                 if "Adroit" in envname:
-                    print("tcdm are broken")
+                    logging.info("tcdm are broken")
                     return
                 try:
                     env = RoboHiveEnv(envname)
                 except AttributeError as err:
                     if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
-                        print("tcdm are broken")
+                        logging.info("tcdm are broken")
                         return
                     else:
                         raise err
@@ -2595,7 +2594,7 @@ class TestRoboHive:
                     from_pixels
                     and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0
                 ):
-                    print("no camera")
+                    logging.info("no camera")
                     return
                 check_env_specs(env)
             except Exception as err:

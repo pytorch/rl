@@ -5,6 +5,7 @@
 
 import heapq
 import json
+import textwrap
 from abc import ABC, abstractmethod
 from copy import copy
 from multiprocessing.context import get_spawning_popen
@@ -51,11 +52,13 @@ class Writer(ABC):
     def loads(self, path):
         ...
 
+    @abstractmethod
     def state_dict(self) -> Dict[str, Any]:
-        return {}
+        ...
 
+    @abstractmethod
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        return
+        ...
 
 
 class ImmutableDatasetWriter(Writer):
@@ -77,6 +80,12 @@ class ImmutableDatasetWriter(Writer):
 
     def loads(self, path):
         ...
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        return
 
 
 class RoundRobinWriter(Writer):
@@ -109,7 +118,13 @@ class RoundRobinWriter(Writer):
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
         batch_size = len(data)
-        index = np.arange(cur_size, batch_size + cur_size) % self._storage.max_size
+        device = data.device if hasattr(data, "device") else None
+        index = (
+            torch.arange(
+                cur_size, batch_size + cur_size, dtype=torch.long, device=device
+            )
+            % self._storage.max_size
+        )
         # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (batch_size + cur_size) % self._storage.max_size
         self._storage[index] = data
@@ -168,7 +183,13 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
         batch_size = len(data)
-        index = np.arange(cur_size, batch_size + cur_size) % self._storage.max_size
+        device = data.device if hasattr(data, "device") else None
+        index = (
+            torch.arange(
+                cur_size, batch_size + cur_size, dtype=torch.long, device=device
+            )
+            % self._storage.max_size
+        )
         # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (batch_size + cur_size) % self._storage.max_size
         # storage must convert the data to the appropriate format if needed
@@ -356,3 +377,103 @@ class TensorDictMaxValueWriter(Writer):
             dtype=_STRDTYPE2DTYPE[dtype],
             shape=shape,
         ).tolist()
+
+    def state_dict(self) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        raise NotImplementedError
+
+
+class WriterEnsemble(Writer):
+    """An ensemble of writers.
+
+    This class is designed to work with :class:`~torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble`.
+    It contains the writers but blocks writing with any of them.
+
+    Args:
+        writers (sequence of Writer): the writers to make the composite writer.
+
+    .. warning::
+       This class does not support writing.
+       To extend one of the replay buffers, simply index the parent
+       :class:`~torchrl.data.ReplayBufferEnsemble` object.
+
+    """
+
+    def __init__(self, *writers):
+        self._writers = writers
+
+    def _empty(self):
+        raise NotImplementedError
+
+    def dumps(self, path: Path):
+        path = Path(path).absolute()
+        for i, writer in enumerate(self._writers):
+            writer.dumps(path / str(i))
+
+    def loads(self, path: Path):
+        path = Path(path).absolute()
+        for i, writer in enumerate(self._writers):
+            writer.loads(path / str(i))
+
+    def add(self):
+        raise NotImplementedError
+
+    def extend(self):
+        raise NotImplementedError
+
+    _INDEX_ERROR = "Expected an index of type torch.Tensor, range, np.ndarray, int, slice or ellipsis, got {} instead."
+
+    def __getitem__(self, index):
+        if isinstance(index, tuple):
+            if index[0] is Ellipsis:
+                index = (slice(None), index[1:])
+            result = self[index[0]]
+            if len(index) > 1:
+                raise IndexError(
+                    f"Tuple of length greater than 1 are not accepted to index writers of type {type(self)}."
+                )
+            return result
+        if isinstance(index, slice) and index == slice(None):
+            return self
+        if isinstance(index, (list, range, np.ndarray)):
+            index = torch.tensor(index)
+        if isinstance(index, torch.Tensor):
+            if index.ndim > 1:
+                raise RuntimeError(
+                    f"Cannot index a {type(self)} with tensor indices that have more than one dimension."
+                )
+            if index.is_floating_point():
+                raise TypeError(
+                    "A floating point index was recieved when an integer dtype was expected."
+                )
+        if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
+            try:
+                index = int(index)
+            except Exception:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+            try:
+                return self._writers[index]
+            except IndexError:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+        if isinstance(index, torch.Tensor):
+            index = index.tolist()
+            writers = [self._writers[i] for i in index]
+        else:
+            # slice
+            writers = self._writers[index]
+        return WriterEnsemble(*writers)
+
+    def __len__(self):
+        return len(self._writers)
+
+    def __repr__(self):
+        writers = textwrap.indent(f"writers={self._writers}", " " * 4)
+        return f"WriterEnsemble(\n{writers})"
+
+    def state_dict(self) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        raise NotImplementedError

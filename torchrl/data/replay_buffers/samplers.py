@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import textwrap
 import warnings
 from abc import ABC, abstractmethod
 from copy import copy, deepcopy
@@ -15,10 +16,14 @@ from typing import Any, Dict, Tuple, Union
 import numpy as np
 import torch
 
-from tensordict import MemoryMappedTensor
+from tensordict import MemoryMappedTensor, TensorDict
 from tensordict.utils import NestedKey
 
 from torchrl._extension import EXTENSION_WARNING
+
+from torchrl._utils import _replace_last
+from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
+from torchrl.data.replay_buffers.utils import _to_numpy, INT_CLASSES
 
 try:
     from torchrl._torchrl import (
@@ -29,10 +34,6 @@ try:
     )
 except ImportError:
     warnings.warn(EXTENSION_WARNING)
-
-from torchrl._utils import _replace_last
-from torchrl.data.replay_buffers.storages import Storage, TensorStorage
-from torchrl.data.replay_buffers.utils import _to_numpy, INT_CLASSES
 
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
@@ -62,11 +63,13 @@ class Sampler(ABC):
     def default_priority(self) -> float:
         return 1.0
 
+    @abstractmethod
     def state_dict(self) -> Dict[str, Any]:
-        return {}
+        ...
 
+    @abstractmethod
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        return
+        ...
 
     @property
     def ran_out(self) -> bool:
@@ -111,6 +114,12 @@ class RandomSampler(Sampler):
     def loads(self, path):
         # no op
         ...
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        return
 
 
 class SamplerWithoutReplacement(Sampler):
@@ -229,6 +238,12 @@ class SamplerWithoutReplacement(Sampler):
         self._sample_list = None
         self.len_storage = 0
         self._ran_out = False
+
+    def state_dict(self) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        raise NotImplementedError
 
 
 class PrioritizedSampler(Sampler):
@@ -358,6 +373,7 @@ class PrioritizedSampler(Sampler):
         super().extend(index)
         if index is not None:
             # some writers don't systematically write data and can return None
+            index = index.cpu()
             self._add_or_extend(index)
 
     def update_priority(
@@ -838,6 +854,12 @@ class SliceSampler(Sampler):
         # no op
         ...
 
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        ...
+
     def __getstate__(self):
         state = copy(self.__dict__)
         state["_cache"] = {}
@@ -983,3 +1005,200 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             lengths, start_idx, stop_idx, seq_length, num_slices, traj_idx=indices
         )
         return idx, info
+
+    def state_dict(self) -> Dict[str, Any]:
+        return SamplerWithoutReplacement.state_dict(self)
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        return SamplerWithoutReplacement.load_state_dict(self, state_dict)
+
+
+class SamplerEnsemble(Sampler):
+    """An ensemble of samplers.
+
+    This class is designed to work with :class:`~torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble`.
+    It contains the samplers as well as the sampling strategy hyperparameters.
+
+    Args:
+        samplers (sequence of Sampler): the samplers to make the composite sampler.
+
+    Keyword Args:
+        p (list or tensor of probabilities, optional): if provided, indicates the
+            weights of each dataset during sampling.
+        sample_from_all (bool, optional): if ``True``, each dataset will be sampled
+            from. This is not compatible with the ``p`` argument. Defaults to ``False``.
+        num_buffer_sampled (int, optional): the number of buffers to sample.
+            if ``sample_from_all=True``, this has no effect, as it defaults to the
+            number of buffers. If ``sample_from_all=False``, buffers will be
+            sampled according to the probabilities ``p``.
+
+    .. warning::
+      The indices provided in the info dictionary are placed in a :class:`~tensordict.TensorDict` with
+      keys ``index`` and ``buffer_ids`` that allow the upper :class:`~torchrl.data.ReplayBufferEnsemble`
+      and :class:`~torchrl.data.StorageEnsemble` objects to retrieve the data.
+      This format is different than with other samplers which usually return indices
+      as regular tensors.
+
+    """
+
+    def __init__(
+        self, *samplers, p=None, sample_from_all=False, num_buffer_sampled=None
+    ):
+        self._samplers = samplers
+        self.sample_from_all = sample_from_all
+        if sample_from_all and p is not None:
+            raise RuntimeError(
+                "Cannot pass both `p` argument and `sample_from_all=True`."
+            )
+        self.p = p
+        self.num_buffer_sampled = num_buffer_sampled
+
+    @property
+    def p(self):
+        return self._p
+
+    @p.setter
+    def p(self, value):
+        if not isinstance(value, torch.Tensor) and value is not None:
+            value = torch.tensor(value)
+        if value is not None:
+            value = value / value.sum().clamp_min(1e-6)
+        self._p = value
+
+    @property
+    def num_buffer_sampled(self):
+        value = self.__dict__.get("_num_buffer_sampled", None)
+        if value is None:
+            value = self.__dict__["_num_buffer_sampled"] = len(self._samplers)
+        return value
+
+    @num_buffer_sampled.setter
+    def num_buffer_sampled(self, value):
+        self.__dict__["_num_buffer_sampled"] = value
+
+    def sample(self, storage, batch_size):
+        if batch_size % self.num_buffer_sampled > 0:
+            raise ValueError
+        if not isinstance(storage, StorageEnsemble):
+            raise TypeError
+        sub_batch_size = batch_size // self.num_buffer_sampled
+        if self.sample_from_all:
+            samples, infos = zip(
+                *[
+                    sampler.sample(storage, sub_batch_size)
+                    for storage, sampler in zip(storage._storages, self._samplers)
+                ]
+            )
+            buffer_ids = torch.arange(len(samples))
+        else:
+            if self.p is None:
+                buffer_ids = torch.randint(
+                    len(self._samplers), (self.num_buffer_sampled,)
+                )
+            else:
+                buffer_ids = torch.multinomial(self.p, self.num_buffer_sampled, True)
+            samples, infos = zip(
+                *[
+                    self._samplers[i].sample(storage._storages[i], sub_batch_size)
+                    for i in buffer_ids.tolist()
+                ]
+            )
+        samples = [
+            sample if isinstance(sample, torch.Tensor) else torch.tensor(sample)
+            for sample in samples
+        ]
+        if all(samples[0].shape == sample.shape for sample in samples[1:]):
+            samples_stack = torch.stack(samples)
+        else:
+            samples_stack = torch.nested.nested_tensor(list(samples))
+
+        samples = TensorDict(
+            {
+                "index": samples_stack,
+                "buffer_ids": buffer_ids,
+            },
+            batch_size=[self.num_buffer_sampled],
+        )
+        infos = torch.stack(
+            [
+                TensorDict.from_dict(info, batch_dims=samples.ndim - 1)
+                if info
+                else TensorDict({}, [])
+                for info in infos
+            ]
+        )
+        return samples, infos
+
+    def dumps(self, path: Path):
+        path = Path(path).absolute()
+        for i, sampler in enumerate(self._samplers):
+            sampler.dumps(path / str(i))
+
+    def loads(self, path: Path):
+        path = Path(path).absolute()
+        for i, sampler in enumerate(self._samplers):
+            sampler.loads(path / str(i))
+
+    def state_dict(self) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    def _empty(self):
+        raise NotImplementedError
+
+    _INDEX_ERROR = "Expected an index of type torch.Tensor, range, np.ndarray, int, slice or ellipsis, got {} instead."
+
+    def __getitem__(self, index):
+        if isinstance(index, tuple):
+            if index[0] is Ellipsis:
+                index = (slice(None), index[1:])
+            result = self[index[0]]
+            if len(index) > 1:
+                raise IndexError(
+                    f"Tuple of length greater than 1 are not accepted to index samplers of type {type(self)}."
+                )
+            return result
+        if isinstance(index, slice) and index == slice(None):
+            return self
+        if isinstance(index, (list, range, np.ndarray)):
+            index = torch.tensor(index)
+        if isinstance(index, torch.Tensor):
+            if index.ndim > 1:
+                raise RuntimeError(
+                    f"Cannot index a {type(self)} with tensor indices that have more than one dimension."
+                )
+            if index.is_floating_point():
+                raise TypeError(
+                    "A floating point index was recieved when an integer dtype was expected."
+                )
+        if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
+            try:
+                index = int(index)
+            except Exception:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+            try:
+                return self._samplers[index]
+            except IndexError:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+        if isinstance(index, torch.Tensor):
+            index = index.tolist()
+            samplers = [self._samplers[i] for i in index]
+        else:
+            # slice
+            samplers = self._samplers[index]
+        p = self._p[index]
+        return SamplerEnsemble(
+            *samplers,
+            p=p,
+            sample_from_all=self.sample_from_all,
+            num_buffer_sampled=self.num_buffer_sampled,
+        )
+
+    def __len__(self):
+        return len(self._samplers)
+
+    def __repr__(self):
+        samplers = textwrap.indent(f"samplers={self._samplers}", " " * 4)
+        return f"SamplerEnsemble(\n{samplers})"

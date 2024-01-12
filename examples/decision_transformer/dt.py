@@ -6,6 +6,7 @@
 This is a self-contained example of an offline Decision Transformer training script.
 The helper functions are coded in the utils.py associated with this script.
 """
+import logging
 import time
 
 import hydra
@@ -78,7 +79,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     pretrain_log_interval = cfg.logger.pretrain_log_interval
     reward_scaling = cfg.env.reward_scaling
 
-    print(" ***Pretraining*** ")
+    logging.info(" ***Pretraining*** ")
     # Pretraining
     start_time = time.time()
     for i in range(pretrain_gradient_steps):
@@ -115,7 +116,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             log_metrics(logger, to_log, i)
 
     pbar.close()
-    print(f"Training time: {time.time() - start_time}")
+    logging.info(f"Training time: {time.time() - start_time}")
 
 
 if __name__ == "__main__":
