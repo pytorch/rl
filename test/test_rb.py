@@ -1559,15 +1559,15 @@ class TestSamplers:
     @pytest.mark.parametrize("backend", ["torch", "torchsnapshot"])
     def test_sampler_without_rep_state_dict(self, backend):
         os.environ["CKPT_BACKEND"] = backend
+        torch.manual_seed(0)
 
-        batch_size = 3
+        n_samples = 3
         buffer_size = 100
         storage_in = LazyTensorStorage(buffer_size, device="cpu")
         storage_out = LazyTensorStorage(buffer_size, device="cpu")
 
         replay_buffer = TensorDictReplayBuffer(
             storage=storage_in,
-            batch_size=batch_size,
             sampler=SamplerWithoutReplacement(),
         )
         # fill replay buffer with random data
@@ -1581,14 +1581,13 @@ class TestSamplers:
             },
             batch_size=1,
         )
-        for i in range(batch_size):
-            if i == batch_size - 1:
-                transition = torch.zeros_like(transition)
+        for _ in range(n_samples):
             replay_buffer.extend(transition.clone())
-
-        for _ in range(batch_size - 1):
+        for _ in range(n_samples):
             s = replay_buffer.sample(batch_size=1)
             assert (s.exclude("index") == 1).all()
+
+        replay_buffer.extend(torch.zeros_like(transition))
 
         state_dict = replay_buffer.state_dict()
 
