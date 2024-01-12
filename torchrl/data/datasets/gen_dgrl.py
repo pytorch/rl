@@ -90,7 +90,7 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
 
     """
 
-    BASE_URL = "https://dl.fbaipublicfiles.com/DGRL/"
+    BASE_URL = "https://dl.fbaipublicfiles.com/DGRL/Procgen/Datasets/Compressed"
     # number of files extracted at a time
     _PROCESS_NPY_BATCH = 32
 
@@ -114,14 +114,18 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
             "plunder",
             "starpilot",
         ]
-        categories = ["1M_E", "1M_S", "10M", "25M"]
-
-        return ["-".join((ds, cat)) for cat in categories for ds in datasets] + [
+        categories = [
+            "1M_E",
+            "1M_S",
+            "10M",
+            "25M",
             "level_1_E",
             "level_1_S",
             "level_40_E",
             "level_40_S",
         ]
+
+        return ["-".join((ds, cat)) for cat in categories for ds in datasets]
 
     def __init__(
         self,
@@ -181,28 +185,27 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
         cls, dataset, category_name: str
     ) -> tp.List[str]:
         path = [cls.BASE_URL, cls._convert_category_name(category_name)]
-        if dataset is not None:
-            path += [f"{dataset}.tar.xz"]
+        path += [f"{dataset}.tar.xz"]
         return os.path.join(*path)
 
     @staticmethod
     def _convert_category_name(category_name: str) -> str:
         if category_name == "1M_E":
-            return "1M/expert"
+            return "1M/level_200/expert"
         elif category_name == "1M_S":
-            return "1M/suboptimal"
+            return "1M/level_200/suboptimal"
         elif category_name == "10M":
-            return "10M"
+            return "10M/level_200/expert"
         elif category_name == "25M":
-            return "25M"
+            return "25M/level_200/expert"
         elif category_name == "level_1_S":
-            return "100k_procgen_dataset_1_suboptimal.tar"
+            return "100k/level_1/suboptimal"
         elif category_name == "level_40_S":
-            return "100k_procgen_dataset_40_suboptimal.tar"
+            return "100k/level_40/suboptimal"
         elif category_name == "level_1_E":
-            return "100k_procgen_dataset_1.tar"
+            return "100k/level_1/expert"
         elif category_name == "level_40_E":
-            return "100k_procgen_dataset_40.tar"
+            return "100k/level_40/expert"
         else:
             raise ValueError(f"Unrecognized category name {category_name}!")
 
@@ -252,17 +255,12 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
                 submembers = [
                     member for member in members[i : i + batch] if member.isfile()
                 ]
-                # for member in members:
-                # Extract only regular files, not directories or special files
-                # print(f"Extracting: {[member.name for member in submembers]}", idx)
-                tar.extractall(
-                    members=submembers, path=download_folder
-                )  # Change 'output_directory' to your desired destination
                 for member in submembers:
                     if pbar is not None:
                         pbar.set_description(member.name)
-                    npyfile = Path(download_folder) / member.name
-                    npfile = np.load(npyfile, allow_pickle=True)
+                    npybuffer = tar.extractfile(member=member)
+                    # npyfile = Path(download_folder) / member.name
+                    npfile = np.load(npybuffer, allow_pickle=True)
                     td = TensorDict.from_dict(npfile.tolist())
                     td.set("observations", td.get("observations").to(torch.uint8))
                     td.set(("next", "observation"), td.get("observations")[1:])
@@ -306,9 +304,6 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
                     else:
                         full = True
                     idx = idx_end
-                    os.remove(npyfile)
-
-        # shutil.unpack_archive(file_path, download_folder)
         if clear_archive:
             os.remove(file_path)
         return td_memmap
