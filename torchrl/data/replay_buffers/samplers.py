@@ -374,6 +374,7 @@ class PrioritizedSampler(Sampler):
         super().extend(index)
         if index is not None:
             # some writers don't systematically write data and can return None
+            index = index.cpu()
             self._add_or_extend(index)
 
     def update_priority(
