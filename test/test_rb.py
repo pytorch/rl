@@ -1584,10 +1584,11 @@ class TestSamplers:
         for i in range(batch_size):
             if i == batch_size - 1:
                 transition = torch.zeros_like(transition)
-            replay_buffer.extend(transition)
+            replay_buffer.extend(transition.clone())
 
         for _ in range(batch_size - 1):
-            replay_buffer.sample(batch_size=1)
+            s = replay_buffer.sample(batch_size=1)
+            assert (s.exclude("index") == 1).all()
 
         state_dict = replay_buffer.state_dict()
 
