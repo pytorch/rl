@@ -141,9 +141,10 @@ class VmasWrapper(_EnvWrapper):
         available_envs (List[str]): the list of the scenarios available to build.
 
     .. warning::
-        VMAS does not distinguish between truncation (when the env reached ``max_steps``) and termination, and all
-        end-of-trajectories are marked  as terminated. If you deem the ``truncation`` signal necessary, set
-        ``max_steps`` to ``None`` and use a :class:`~torchrl.envs.transforms.StepCounter` transform.
+        VMAS returns a single ``done`` flag which does not distinguish between
+        when the env reached ``max_steps`` and termination.
+        If you deem the ``truncation`` signal necessary, set ``max_steps`` to
+        ``None`` and use a :class:`~torchrl.envs.transforms.StepCounter` transform.
 
     Examples:
         >>>  env = VmasWrapper(
@@ -654,9 +655,10 @@ class VmasEnv(VmasWrapper):
         available_envs (List[str]): the list of the scenarios available to build.
 
     .. warning::
-        VMAS does not distinguish between truncation (when the env reached ``max_steps``) and termination, and all
-        end-of-trajectories are marked  as terminated. If you deem the ``truncation`` signal necessary, set
-        ``max_steps`` to ``None`` and use a :class:`~torchrl.envs.transforms.StepCounter` transform.
+        VMAS returns a single ``done`` flag which does not distinguish between
+        when the env reached ``max_steps`` and termination.
+        If you deem the ``truncation`` signal necessary, set ``max_steps`` to
+        ``None`` and use a :class:`~torchrl.envs.transforms.StepCounter` transform.
 
     Examples:
         >>>  env = VmasEnv(
