@@ -6,6 +6,7 @@
 import argparse
 import contextlib
 import importlib
+import os
 import pickle
 import sys
 from functools import partial
@@ -479,7 +480,9 @@ class TestStorages:
     @pytest.mark.parametrize("storage_in", ["tensor", "memmap"])
     @pytest.mark.parametrize("storage_out", ["tensor", "memmap"])
     @pytest.mark.parametrize("init_out", [True, False])
-    def test_storage_state_dict(self, storage_in, storage_out, init_out):
+    @pytest.mark.parametrize("backend", ["torch", "torchsnapshot"])
+    def test_storage_state_dict(self, storage_in, storage_out, init_out, backend):
+        os.environ["CKPT_BACKEND"] = backend
         buffer_size = 100
         if storage_in == "memmap":
             storage_in = LazyMemmapStorage(buffer_size, device="cpu")
@@ -1553,6 +1556,51 @@ class TestMultiProc:
 
 
 class TestSamplers:
+    @pytest.mark.parametrize("backend", ["torch", "torchsnapshot"])
+    def test_sampler_without_rep_state_dict(self, backend):
+        os.environ["CKPT_BACKEND"] = backend
+
+        batch_size = 3
+        buffer_size = 100
+        storage_in = LazyTensorStorage(buffer_size, device="cpu")
+        storage_out = LazyTensorStorage(buffer_size, device="cpu")
+
+        replay_buffer = TensorDictReplayBuffer(
+            storage=storage_in,
+            batch_size=batch_size,
+            sampler=SamplerWithoutReplacement(),
+        )
+        # fill replay buffer with random data
+        transition = TensorDict(
+            {
+                "observation": torch.ones(1, 4),
+                "action": torch.ones(1, 2),
+                "reward": torch.ones(1, 1),
+                "dones": torch.ones(1, 1),
+                "next": {"observation": torch.ones(1, 4)},
+            },
+            batch_size=1,
+        )
+        for i in range(batch_size):
+            if i == batch_size - 1:
+                transition = torch.zeros_like(transition)
+            replay_buffer.extend(transition)
+
+        for _ in range(batch_size - 1):
+            replay_buffer.sample(batch_size=1)
+
+        state_dict = replay_buffer.state_dict()
+
+        new_replay_buffer = TensorDictReplayBuffer(
+            storage=storage_out,
+            batch_size=state_dict["_batch_size"],
+            sampler=SamplerWithoutReplacement(),
+        )
+
+        new_replay_buffer.load_state_dict(state_dict)
+        s = new_replay_buffer.sample(batch_size=1)
+        assert (s.exclude("index") == 0).all()
+
     @pytest.mark.parametrize(
         "batch_size,num_slices,slice_len",
         [
