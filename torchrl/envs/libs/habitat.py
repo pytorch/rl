@@ -43,6 +43,14 @@ class HabitatEnv(GymEnv):
     This class currently serves as placeholder and compatibility security.
     It behaves exactly like the GymEnv wrapper.
 
+    Doc: https://aihabitat.org/docs/
+
+    GitHub: https://github.com/facebookresearch/habitat-lab
+
+    URL: https://aihabitat.org/habitat3/
+
+    Paper: https://ai.meta.com/static-resource/habitat3
+
     Args:
         env_name (str): The environment to execute.
         categorical_action_encoding (bool, optional): if ``True``, categorical

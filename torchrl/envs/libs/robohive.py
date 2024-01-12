@@ -63,7 +63,9 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
     RoboHive is a collection of environments/tasks simulated with the MuJoCo physics engine exposed using the OpenAI-Gym API.
 
     Github: https://github.com/vikashplus/robohive/
+
     Doc: https://github.com/vikashplus/robohive/wiki
+
     Paper: https://arxiv.org/abs/2310.06828
 
     .. warning::

@@ -47,6 +47,7 @@ class OpenMLEnv(EnvBase):
     """An environment interface to OpenML data to be used in bandits contexts.
 
     Doc: https://www.openml.org/search?type=data
+
     Scikit-learn interface: https://scikit-learn.org/stable/modules/generated/sklearn.datasets.fetch_openml.html
 
     Args:
@@ -59,6 +60,9 @@ class OpenMLEnv(EnvBase):
             ie. the number of elements samples and returned when a :meth:`~.reset` is
             called. Defaults to an empty batch size, ie. one element is sampled
             at a time.
+
+    Attributes:
+        available_envs (List[str]): list of envs to be built by this class.
 
     Examples:
         >>> env = OpenMLEnv("adult_onehot", batch_size=[2, 3])

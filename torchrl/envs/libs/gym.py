@@ -442,7 +442,7 @@ class _AsyncMeta(_EnvPostInit):
 class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     """OpenAI Gym environment wrapper.
 
-    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`.
+    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
 
     Args:
         env (gym.Env): the environment to wrap. Batched environments (:class:`~stable_baselines3.common.vec_env.base_vec_env.VecEnv`
@@ -481,12 +481,46 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     Attributes:
         available_envs (List[str]): a list of environments to build.
 
+    .. note::
+        If an attribute cannot be found, this class will attempt to retrieve it from
+        the nested env:
+
+            >>> from torchrl.envs import GymWrapper
+            >>> import gymnasium as gym
+            >>> env = GymWrapper(gym.make("Pendulum-v1"))
+            >>> print(env.spec.max_episode_steps)
+            200
+
     Examples:
-        >>> env = gym.make("Pendulum-v0")
-        >>> env = GymWrapper(env)
+        >>> import gymnasium as gym
+        >>> from torchrl.envs import GymWrapper
+        >>> base_env = gym.make("Pendulum-v1")
+        >>> env = GymWrapper(base_env)
         >>> td = env.rand_step()
         >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
         >>> print(env.available_envs)
+        ['ALE/Adventure-ram-v5', 'ALE/Adventure-v5', 'ALE/AirRaid-ram-v5', 'ALE/AirRaid-v5', 'ALE/Alien-ram-v5', 'ALE/Alien-v5',
+
+    .. note::
+        info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
+        if no other reader is provided. To provide another reader, refer to
+        :meth:`~.set_info_dict_reader`.
 
     """
 
@@ -981,7 +1015,7 @@ ACCEPTED_TYPE_ERRORS = {
 class GymEnv(GymWrapper):
     """OpenAI Gym environment wrapper constructed by environment ID directly.
 
-    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`.
+    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
 
     Args:
         env_name (str): the environment id registered in `gym.registry`.
@@ -1020,11 +1054,60 @@ class GymEnv(GymWrapper):
             for envs to be ``done`` just after :meth:`~.reset` is called.
             Defaults to ``False``.
 
+    Attributes:
+        available_envs (List[str]): the list of envs that can be built.
+
+    .. note::
+        If an attribute cannot be found, this class will attempt to retrieve it from
+        the nested env:
+
+            >>> from torchrl.envs import GymEnv
+            >>> env = GymEnv("Pendulum-v1")
+            >>> print(env.spec.max_episode_steps)
+            200
+
     Examples:
-        >>> env = GymEnv(env_name="Pendulum-v0", frame_skip=4)
+        >>> from torchrl.envs import GymEnv
+        >>> env = GymEnv("Pendulum-v1")
         >>> td = env.rand_step()
         >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
         >>> print(env.available_envs)
+        ['ALE/Adventure-ram-v5', 'ALE/Adventure-v5', 'ALE/AirRaid-ram-v5', 'ALE/AirRaid-v5', 'ALE/Alien-ram-v5', 'ALE/Alien-v5',
+
+    .. note::
+        If both `OpenAI/gym` and `gymnasium` are present in the virtual environment,
+        one can swap backend using :func:`~torchrl.envs.libs.gym.set_gym_backend`:
+
+            >>> from torchrl.envs import set_gym_backend, GymEnv
+            >>> with set_gym_backend("gym"):
+            ...     env = GymEnv("Pendulum-v1")
+            ...     print(env._env)
+            <class 'gym.wrappers.time_limit.TimeLimit'>
+            >>> with set_gym_backend("gymnasium"):
+            ...     env = GymEnv("Pendulum-v1")
+            ...     print(env._env)
+            <class 'gymnasium.wrappers.time_limit.TimeLimit'>
+
+    .. note::
+        info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
+        if no other reader is provided. To provide another reader, refer to
+        :meth:`~.set_info_dict_reader`.
 
     """
 

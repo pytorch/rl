@@ -108,6 +108,7 @@ class VmasWrapper(_EnvWrapper):
     """Vmas environment wrapper.
 
     GitHub: https://github.com/proroklab/VectorizedMultiAgentSimulator
+
     Paper: https://arxiv.org/abs/2207.03530
 
     Args:
@@ -622,6 +623,7 @@ class VmasEnv(VmasWrapper):
     """Vmas environment wrapper.
 
     GitHub: https://github.com/proroklab/VectorizedMultiAgentSimulator
+
     Paper: https://arxiv.org/abs/2207.03530
 
     Args:

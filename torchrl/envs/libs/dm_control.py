@@ -111,6 +111,7 @@ class DMControlWrapper(GymLikeEnv):
     """DeepMind Control lab environment wrapper.
 
     The DeepMind control library can be found here: https://github.com/deepmind/dm_control.
+
     Paper: https://arxiv.org/abs/2006.12983
 
     Args:
@@ -327,6 +328,10 @@ class DMControlWrapper(GymLikeEnv):
 
 class DMControlEnv(DMControlWrapper):
     """DeepMind Control lab environment wrapper.
+
+    The DeepMind control library can be found here: https://github.com/deepmind/dm_control.
+
+    Paper: https://arxiv.org/abs/2006.12983
 
     Args:
         env_name (str): name of the environment.

@@ -107,7 +107,9 @@ class JumanjiWrapper(GymLikeEnv):
     allowing for backpropagation through the rollout.
 
     GitHub: https://github.com/instadeepai/jumanji
+
     Doc: https://instadeepai.github.io/jumanji/
+
     Paper: https://arxiv.org/abs/2306.09884
 
     Args:
@@ -272,24 +274,23 @@ class JumanjiWrapper(GymLikeEnv):
         ... env.rollout(2)
         ... ''')
         ...     print(batch_size, timer.timeit(number=10))
-        4 <torch.utils.benchmark.utils.common.Measurement object at 0x1fca91910>
+        4
         env.rollout(100)
         setup: [...]
+        Median: 122.40 ms
+        2 measurements, 1 runs per measurement, 1 thread
 
-          Median: 122.40 ms
-          2 measurements, 1 runs per measurement, 1 thread
-        16 <torch.utils.benchmark.utils.common.Measurement object at 0x1ff9baee0>
+        16
         env.rollout(100)
         setup: [...]
+        Median: 134.39 ms
+        2 measurements, 1 runs per measurement, 1 thread
 
-          Median: 134.39 ms
-          2 measurements, 1 runs per measurement, 1 thread
-        128 <torch.utils.benchmark.utils.common.Measurement object at 0x1ff9ba7c0>
+        128
         env.rollout(100)
         setup: [...]
-
-          Median: 172.31 ms
-          2 measurements, 1 runs per measurement, 1 thread
+        Median: 172.31 ms
+        2 measurements, 1 runs per measurement, 1 thread
 
     """
 
@@ -528,7 +529,9 @@ class JumanjiEnv(JumanjiWrapper):
     allowing for backpropagation through the rollout.
 
     GitHub: https://github.com/instadeepai/jumanji
+
     Doc: https://instadeepai.github.io/jumanji/
+
     Paper: https://arxiv.org/abs/2306.09884
 
     Args:

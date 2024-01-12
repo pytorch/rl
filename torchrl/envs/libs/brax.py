@@ -47,6 +47,7 @@ class BraxWrapper(_EnvWrapper):
     allowing for backpropagation through the rollout.
 
     GitHub: https://github.com/google/brax
+
     Paper: https://arxiv.org/abs/2106.13281
 
     Args:
@@ -121,24 +122,23 @@ class BraxWrapper(_EnvWrapper):
         ... env.rollout(2)
         ... ''')
         ...     print(batch_size, timer.timeit(10))
-        4 <torch.utils.benchmark.utils.common.Measurement object at 0x172e3ef40>
+        4
         env.rollout(100)
         setup: [...]
+        310.00 ms
+        1 measurement, 10 runs , 1 thread
 
-          310.00 ms
-          1 measurement, 10 runs , 1 thread
-        16 <torch.utils.benchmark.utils.common.Measurement object at 0x17049b610>
+        16
         env.rollout(100)
         setup: [...]
+        268.46 ms
+        1 measurement, 10 runs , 1 thread
 
-          268.46 ms
-          1 measurement, 10 runs , 1 thread
-        128 <torch.utils.benchmark.utils.common.Measurement object at 0x1702da940>
+        128
         env.rollout(100)
         setup: [...]
-
-          433.80 ms
-          1 measurement, 10 runs , 1 thread
+        433.80 ms
+        1 measurement, 10 runs , 1 thread
 
     One can backpropagate through the rollout and optimize the policy directly:
 
@@ -422,6 +422,7 @@ class BraxEnv(BraxWrapper):
     allowing for backpropagation through the rollout.
 
     GitHub: https://github.com/google/brax
+
     Paper: https://arxiv.org/abs/2106.13281
 
     Args:
@@ -493,24 +494,23 @@ class BraxEnv(BraxWrapper):
         ... env.rollout(2)
         ... ''')
         ...     print(batch_size, timer.timeit(10))
-        4 <torch.utils.benchmark.utils.common.Measurement object at 0x172e3ef40>
+        4
         env.rollout(100)
         setup: [...]
+        310.00 ms
+        1 measurement, 10 runs , 1 thread
 
-          310.00 ms
-          1 measurement, 10 runs , 1 thread
-        16 <torch.utils.benchmark.utils.common.Measurement object at 0x17049b610>
+        16
         env.rollout(100)
         setup: [...]
+        268.46 ms
+        1 measurement, 10 runs , 1 thread
 
-          268.46 ms
-          1 measurement, 10 runs , 1 thread
-        128 <torch.utils.benchmark.utils.common.Measurement object at 0x1702da940>
+        128
         env.rollout(100)
         setup: [...]
-
-          433.80 ms
-          1 measurement, 10 runs , 1 thread
+        433.80 ms
+        1 measurement, 10 runs , 1 thread
 
     One can backpropagate through the rollout and optimize the policy directly:
 
