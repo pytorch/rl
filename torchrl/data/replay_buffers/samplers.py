@@ -1140,10 +1140,14 @@ class SamplerEnsemble(Sampler):
             sampler.loads(path / str(i))
 
     def state_dict(self) -> Dict[str, Any]:
-        raise NotImplementedError
+        state_dict = OrderedDict()
+        for i, sampler in enumerate(self._samplers):
+            state_dict[str(i)] = sampler.state_dict()
+        return state_dict
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        raise NotImplementedError
+        for i, sampler in enumerate(self._samplers):
+            sampler.load_state_dict(state_dict[str(i)])
 
     def _empty(self):
         raise NotImplementedError
