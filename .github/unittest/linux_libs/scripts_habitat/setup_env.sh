@@ -67,18 +67,20 @@ pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
-#conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightly -y
-#conda install habitat-sim withbullet headless -c conda-forge -c aihabitat -y
-git clone --branch stable https://github.com/facebookresearch/habitat-sim.git
-cd habitat-sim
-python setup.py develop --bullet
-cd ..
-
-#conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
-git clone --branch stable https://github.com/facebookresearch/habitat-lab.git
-cd habitat-lab
-pip install -e habitat-lab  # install habitat_lab
-cd ..
+conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightly -y
+conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
+##conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightly -y
+##conda install habitat-sim withbullet headless -c conda-forge -c aihabitat -y
+#git clone --branch stable https://github.com/facebookresearch/habitat-sim.git
+#cd habitat-sim
+#python setup.py develop --bullet
+#cd ..
+#
+##conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
+#git clone --branch stable https://github.com/facebookresearch/habitat-lab.git
+#cd habitat-lab
+#pip install -e habitat-lab  # install habitat_lab
+#cd ..
 
 #conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-baselines
 
