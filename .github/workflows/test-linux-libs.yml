@@ -91,6 +91,31 @@ jobs:
         bash .github/unittest/linux_libs/scripts_d4rl/run_test.sh
         bash .github/unittest/linux_libs/scripts_d4rl/post_process.sh
 
+  unittests-gym:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      # gpu-arch-type: "cuda"
+      # gpu-arch-version: "11.6"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        set -euxo pipefail
+        export PYTHON_VERSION="3.9"
+        # export CU_VERSION="${{ inputs.gpu-arch-version }}"
+        export CU_VERSION="11.4"
+        export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/work/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin"
+        export TAR_OPTIONS="--no-same-owner"
+
+        ./.github/unittest/linux_libs/scripts_gym/setup_env.sh
+        ./.github/unittest/linux_libs/scripts_gym/batch_scripts.sh
+        ./.github/unittest/linux_libs/scripts_gym/post_process.sh
+
   unittests-jumanji:
     strategy:
       matrix:
