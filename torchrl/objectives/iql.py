@@ -715,6 +715,7 @@ class DiscreteIQLLoss(IQLLoss):
     ) -> None:
         self._in_keys = None
         self._out_keys = None
+        assert expectile < 1.0, "Expectile must be less than 1.0"
         super().__init__(
             actor_network=actor_network,
             qvalue_network=qvalue_network,
@@ -742,29 +743,29 @@ class DiscreteIQLLoss(IQLLoss):
             dist = self.actor_network.get_dist(tensordict)
 
         log_prob = dist.log_prob(tensordict[self.tensor_keys.action])
-        with torch.no_grad():
-            # Min Q value
-            td_q = tensordict.select(*self.qvalue_network.in_keys)
-            td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
-            state_action_value = td_q.get(self.tensor_keys.state_action_value)
-            action = tensordict.get(self.tensor_keys.action)
-            if self.action_space == "categorical":
-                if action.shape != state_action_value.shape:
-                    # unsqueeze the action if it lacks on trailing singleton dim
-                    action = action.unsqueeze(-1)
-                chosen_state_action_value = torch.gather(
-                    state_action_value, -1, index=action
-                ).squeeze(-1)
-            else:
-                action = action.to(torch.float)
-                chosen_state_action_value = (state_action_value * action).sum(-1)
-            min_Q, _ = torch.min(chosen_state_action_value, dim=0)
-            if log_prob.shape != min_Q.shape:
-                raise RuntimeError(
-                    f"Losses shape mismatch: {log_prob.shape} and {min_Q.shape}"
-                )
-            # state value
 
+        # Min Q value
+        td_q = tensordict.select(*self.qvalue_network.in_keys)
+        td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
+        state_action_value = td_q.get(self.tensor_keys.state_action_value)
+        action = tensordict.get(self.tensor_keys.action)
+        if self.action_space == "categorical":
+            if action.shape != state_action_value.shape:
+                # unsqueeze the action if it lacks on trailing singleton dim
+                action = action.unsqueeze(-1)
+            chosen_state_action_value = torch.gather(
+                state_action_value, -1, index=action
+            ).squeeze(-1)
+        else:
+            action = action.to(torch.float)
+            chosen_state_action_value = (state_action_value * action).sum(-1)
+        min_Q, _ = torch.min(chosen_state_action_value, dim=0)
+        if log_prob.shape != min_Q.shape:
+            raise RuntimeError(
+                f"Losses shape mismatch: {log_prob.shape} and {min_Q.shape}"
+            )
+        with torch.no_grad():
+            # state value
             td_copy = tensordict.select(*self.value_network.in_keys).detach()
             with self.value_network_params.to_module(self.value_network):
                 self.value_network(td_copy)
