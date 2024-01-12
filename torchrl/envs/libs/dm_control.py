@@ -183,7 +183,7 @@ class DMControlWrapper(GymLikeEnv):
     def available_envs(cls):
         if not _has_dm_control:
             return
-        return list(get_envs())
+        return list(_get_envs())
 
     @property
     def lib(self):

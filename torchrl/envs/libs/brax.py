@@ -108,6 +108,7 @@ class BraxWrapper(_EnvWrapper):
     and report the execution time for a short rollout:
 
     Examples:
+        >>> from torch.utils.benchmark import Timer
         >>> for batch_size in [4, 16, 128]:
         ...     timer = Timer('''
         ... env.rollout(100)
@@ -122,34 +123,19 @@ class BraxWrapper(_EnvWrapper):
         ...     print(batch_size, timer.timeit(10))
         4 <torch.utils.benchmark.utils.common.Measurement object at 0x172e3ef40>
         env.rollout(100)
-        setup:
-          import brax.envs
-          from torchrl.envs import BraxWrapper, BraxEnv
-          env = BraxEnv("ant", batch_size=[4])
-          env.set_seed(0)
-          env.rollout(2)
+        setup: [...]
 
           310.00 ms
           1 measurement, 10 runs , 1 thread
         16 <torch.utils.benchmark.utils.common.Measurement object at 0x17049b610>
         env.rollout(100)
-        setup:
-          import brax.envs
-          from torchrl.envs import BraxWrapper, BraxEnv
-          env = BraxEnv("ant", batch_size=[16])
-          env.set_seed(0)
-          env.rollout(2)
+        setup: [...]
 
           268.46 ms
           1 measurement, 10 runs , 1 thread
         128 <torch.utils.benchmark.utils.common.Measurement object at 0x1702da940>
         env.rollout(100)
-        setup:
-          import brax.envs
-          from torchrl.envs import BraxWrapper, BraxEnv
-          env = BraxEnv("ant", batch_size=[128])
-          env.set_seed(0)
-          env.rollout(2)
+        setup: [...]
 
           433.80 ms
           1 measurement, 10 runs , 1 thread
@@ -241,7 +227,9 @@ class BraxWrapper(_EnvWrapper):
         self.requires_grad = requires_grad
 
         if from_pixels:
-            raise NotImplementedError("from_pixels=True is not yest supported within BraxWrapper")
+            raise NotImplementedError(
+                "from_pixels=True is not yest supported within BraxWrapper"
+            )
         return env
 
     def _make_state_spec(self, env: "brax.envs.env.Env"):  # noqa: F821
@@ -507,34 +495,19 @@ class BraxEnv(BraxWrapper):
         ...     print(batch_size, timer.timeit(10))
         4 <torch.utils.benchmark.utils.common.Measurement object at 0x172e3ef40>
         env.rollout(100)
-        setup:
-          import brax.envs
-          from torchrl.envs import BraxWrapper, BraxEnv
-          env = BraxEnv("ant", batch_size=[4])
-          env.set_seed(0)
-          env.rollout(2)
+        setup: [...]
 
           310.00 ms
           1 measurement, 10 runs , 1 thread
         16 <torch.utils.benchmark.utils.common.Measurement object at 0x17049b610>
         env.rollout(100)
-        setup:
-          import brax.envs
-          from torchrl.envs import BraxWrapper, BraxEnv
-          env = BraxEnv("ant", batch_size=[16])
-          env.set_seed(0)
-          env.rollout(2)
+        setup: [...]
 
           268.46 ms
           1 measurement, 10 runs , 1 thread
         128 <torch.utils.benchmark.utils.common.Measurement object at 0x1702da940>
         env.rollout(100)
-        setup:
-          import brax.envs
-          from torchrl.envs import BraxWrapper, BraxEnv
-          env = BraxEnv("ant", batch_size=[128])
-          env.set_seed(0)
-          env.rollout(2)
+        setup: [...]
 
           433.80 ms
           1 measurement, 10 runs , 1 thread
