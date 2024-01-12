@@ -110,17 +110,70 @@ def _robust_to_tensor(array: Union[float, np.ndarray]) -> torch.Tensor:
 class DMControlWrapper(GymLikeEnv):
     """DeepMind Control lab environment wrapper.
 
+    The DeepMind control library can be found here: https://github.com/deepmind/dm_control.
+
+    Paper: https://arxiv.org/abs/2006.12983
+
     Args:
-        env (dm_control.suite env): environment instance
-        from_pixels (bool): if ``True``, the observation
+        env (dm_control.suite env): :class:`~dm_control.suite.base.Task`
+            environment instance.
+
+    Keyword Args:
+        from_pixels (bool, optional): if ``True``, an attempt to return the pixel
+            observations from the env will be performed.
+            By default, these observations
+            will be written under the ``"pixels"`` entry.
+            Defaults to ``False``.
+        pixels_only (bool, optional): if ``True``, only the pixel observations will
+            be returned (by default under the ``"pixels"`` entry in the output tensordict).
+            If ``False``, observations (eg, states) and pixels will be returned
+            whenever ``from_pixels=True``. Defaults to ``True``.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        batch_size (torch.Size, optional): the batch size of the environment.
+            Should match the leading dimensions of all observations, done states,
+            rewards, actions and infos.
+            Defaults to ``torch.Size([])``.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+
+    Attributes:
+        available_envs (list): a list of ``Tuple[str, List[str]]`` representing the
+            environment / task pairs available.
 
     Examples:
-        >>> env = dm_control.suite.load("cheetah", "run")
+        >>> from dm_control import suite
+        >>> from torchrl.envs import DMControlWrapper
+        >>> env = suite.load("cheetah", "run")
         >>> env = DMControlWrapper(env,
         ...    from_pixels=True, frame_skip=4)
         >>> td = env.rand_step()
         >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([6]), device=cpu, dtype=torch.float64, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        pixels: Tensor(shape=torch.Size([240, 320, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        position: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float64, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        velocity: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.float64, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
         >>> print(env.available_envs)
+        [('acrobot', ['swingup', 'swingup_sparse']), ('ball_in_cup', ['catch']), ('cartpole', ['balance', 'balance_sparse', 'swingup', 'swingup_sparse', 'three_poles', 'two_poles']), ('cheetah', ['run']), ('finger', ['spin', 'turn_easy', 'turn_hard']), ('fish', ['upright', 'swim']), ('hopper', ['stand', 'hop']), ('humanoid', ['stand', 'walk', 'run', 'run_pure_state']), ('manipulator', ['bring_ball', 'bring_peg', 'insert_ball', 'insert_peg']), ('pendulum', ['swingup']), ('point_mass', ['easy', 'hard']), ('reacher', ['easy', 'hard']), ('swimmer', ['swimmer6', 'swimmer15']), ('walker', ['stand', 'walk', 'run']), ('dog', ['fetch', 'run', 'stand', 'trot', 'walk']), ('humanoid_CMU', ['run', 'stand', 'walk']), ('lqr', ['lqr_2_1', 'lqr_6_2']), ('quadruped', ['escape', 'fetch', 'run', 'walk']), ('stacker', ['stack_2', 'stack_4'])]
 
     """
 
@@ -130,8 +183,8 @@ class DMControlWrapper(GymLikeEnv):
     @_classproperty
     def available_envs(cls):
         if not _has_dm_control:
-            return
-        yield from _get_envs()
+            return []
+        return list(_get_envs())
 
     @property
     def lib(self):
@@ -276,20 +329,68 @@ class DMControlWrapper(GymLikeEnv):
 class DMControlEnv(DMControlWrapper):
     """DeepMind Control lab environment wrapper.
 
+    The DeepMind control library can be found here: https://github.com/deepmind/dm_control.
+
+    Paper: https://arxiv.org/abs/2006.12983
+
     Args:
-        env_name (str): name of the environment
-        task_name (str): name of the task
-        seed (int, optional): seed to use for the environment
-        from_pixels (bool, optional): if ``True``, the observation will be returned
-            as an image.
-            Default is False.
+        env_name (str): name of the environment.
+        task_name (str): name of the task.
+
+    Keyword Args:
+        from_pixels (bool, optional): if ``True``, an attempt to return the pixel
+            observations from the env will be performed.
+            By default, these observations
+            will be written under the ``"pixels"`` entry.
+            Defaults to ``False``.
+        pixels_only (bool, optional): if ``True``, only the pixel observations will
+            be returned (by default under the ``"pixels"`` entry in the output tensordict).
+            If ``False``, observations (eg, states) and pixels will be returned
+            whenever ``from_pixels=True``. Defaults to ``True``.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        batch_size (torch.Size, optional): the batch size of the environment.
+            Should match the leading dimensions of all observations, done states,
+            rewards, actions and infos.
+            Defaults to ``torch.Size([])``.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+
+    Attributes:
+        available_envs (list): a list of ``Tuple[str, List[str]]`` representing the
+            environment / task pairs available.
 
     Examples:
+        >>> from torchrl.envs import DMControlEnv
         >>> env = DMControlEnv(env_name="cheetah", task_name="run",
         ...    from_pixels=True, frame_skip=4)
         >>> td = env.rand_step()
         >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([6]), device=cpu, dtype=torch.float64, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        pixels: Tensor(shape=torch.Size([240, 320, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        position: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float64, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        velocity: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.float64, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
         >>> print(env.available_envs)
+        [('acrobot', ['swingup', 'swingup_sparse']), ('ball_in_cup', ['catch']), ('cartpole', ['balance', 'balance_sparse', 'swingup', 'swingup_sparse', 'three_poles', 'two_poles']), ('cheetah', ['run']), ('finger', ['spin', 'turn_easy', 'turn_hard']), ('fish', ['upright', 'swim']), ('hopper', ['stand', 'hop']), ('humanoid', ['stand', 'walk', 'run', 'run_pure_state']), ('manipulator', ['bring_ball', 'bring_peg', 'insert_ball', 'insert_peg']), ('pendulum', ['swingup']), ('point_mass', ['easy', 'hard']), ('reacher', ['easy', 'hard']), ('swimmer', ['swimmer6', 'swimmer15']), ('walker', ['stand', 'walk', 'run']), ('dog', ['fetch', 'run', 'stand', 'trot', 'walk']), ('humanoid_CMU', ['run', 'stand', 'walk']), ('lqr', ['lqr_2_1', 'lqr_6_2']), ('quadruped', ['escape', 'fetch', 'run', 'walk']), ('stacker', ['stack_2', 'stack_4'])]
 
     """
 
