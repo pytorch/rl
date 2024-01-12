@@ -118,9 +118,10 @@ class RoundRobinWriter(Writer):
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
         batch_size = len(data)
+        device = data.device if hasattr(data, "device") else None
         index = (
             torch.arange(
-                cur_size, batch_size + cur_size, dtype=torch.long, device=data.device
+                cur_size, batch_size + cur_size, dtype=torch.long, device=device
             )
             % self._storage.max_size
         )
@@ -182,9 +183,10 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
         batch_size = len(data)
+        device = data.device if hasattr(data, "device") else None
         index = (
             torch.arange(
-                cur_size, batch_size + cur_size, dtype=torch.long, device=data.device
+                cur_size, batch_size + cur_size, dtype=torch.long, device=device
             )
             % self._storage.max_size
         )
