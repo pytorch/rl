@@ -77,6 +77,7 @@ from torchrl.envs.transforms.transforms import (
 
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
+_has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
 
 
@@ -482,6 +483,8 @@ class TestStorages:
     @pytest.mark.parametrize("init_out", [True, False])
     @pytest.mark.parametrize("backend", ["torch", "torchsnapshot"])
     def test_storage_state_dict(self, storage_in, storage_out, init_out, backend):
+        if backend == "torchsnapshot" and not _has_snapshot:
+            pytest.skip()
         os.environ["CKPT_BACKEND"] = backend
         buffer_size = 100
         if storage_in == "memmap":
@@ -1558,6 +1561,8 @@ class TestMultiProc:
 class TestSamplers:
     @pytest.mark.parametrize("backend", ["torch", "torchsnapshot"])
     def test_sampler_without_rep_state_dict(self, backend):
+        if backend == "torchsnapshot" and not _has_snapshot:
+            pytest.skip()
         os.environ["CKPT_BACKEND"] = backend
         torch.manual_seed(0)
 
