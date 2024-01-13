@@ -30,7 +30,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.utils import numpy_to_torch_dtype_dict
+from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
 from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
 
@@ -325,6 +325,63 @@ def _gym_to_torchrl_spec_transform(
             device=device,
             categorical_action_encoding=categorical_action_encoding,
             remap_state_to_observation=remap_state_to_observation,
+        )
+    else:
+        raise NotImplementedError(
+            f"spec of type {type(spec).__name__} is currently unaccounted for"
+        )
+
+
+def _torchrl_to_gym_spec_transform(
+    spec,
+    batch_size=torch.Size([]),
+    categorical_action_encoding=False,
+    remap_state_to_observation: bool = True,
+) -> TensorSpec:
+    """Maps TorchRL specs to gym spaces.
+
+    Args:
+        spec: the torchrl spec to transform.
+        batch_size (torch.Size): batch-size of the input specs.
+        categorical_action_encoding: whether discrete spaces should be mapped to categorical or one-hot.
+            Defaults to one-hot.
+        remap_state_to_observation: whether to rename the 'state' key of Dict specs to "observation". Default is true.
+
+    """
+    gym_spaces = gym_backend("spaces")
+    shape = spec.shape[len(batch_size) :]
+    if isinstance(spec, MultiDiscreteTensorSpec):
+        return gym_spaces.multi_discrete.MultiDiscrete(
+            spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
+        )
+    if isinstance(spec, MultiOneHotDiscreteTensorSpec):
+        return gym_spaces.multi_discrete.MultiDiscrete(spec.nvec)
+    if isinstance(spec, DiscreteTensorSpec):
+        return gym_spaces.discrete.Discrete(
+            spec.n
+        )  # dtype=torch_to_numpy_dtype_dict[spec.dtype])
+    if isinstance(spec, OneHotDiscreteTensorSpec):
+        return gym_spaces.discrete.Discrete(spec.n)
+    if isinstance(spec, BinaryDiscreteTensorSpec):
+        return gym_spaces.multi_binary.MultiBinary(
+            spec.n, dtype=torch_to_numpy_dtype_dict[spec.dtype]
+        )
+    if isinstance(spec, UnboundedContinuousTensorSpec):
+        return gym_spaces.Box(-float("inf"), float("inf"), shape)
+    if isinstance(spec, BoundedTensorSpec):
+        return gym_spaces.Box(
+            spec.low.detach().cpu().numpy(), spec.high.detach().cpu().numpy(), shape
+        )
+    if isinstance(spec, CompositeSpec):
+        return dict(
+            **{
+                key: _torchrl_to_gym_spec_transform(
+                    val,
+                    batch_size=spec.shape,
+                    categorical_action_encoding=categorical_action_encoding,
+                )
+                for key, val in spec.items()
+            }
         )
     else:
         raise NotImplementedError(

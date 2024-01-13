@@ -1569,6 +1569,14 @@ class BoundedTensorSpec(TensorSpec):
             shape, ContinuousBox(low, high, device=device), device, dtype, "continuous"
         )
 
+    @property
+    def low(self):
+        return self.space.low
+
+    @property
+    def high(self):
+        return self.space.high
+
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
@@ -2372,6 +2380,10 @@ class DiscreteTensorSpec(TensorSpec):
         space = DiscreteBox(n)
         super().__init__(shape, space, device, dtype, domain="discrete")
         self.update_mask(mask)
+
+    @property
+    def n(self):
+        return self.space.n
 
     def update_mask(self, mask):
         if mask is not None:
