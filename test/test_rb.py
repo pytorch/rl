@@ -481,10 +481,10 @@ class TestStorages:
     @pytest.mark.parametrize("storage_in", ["tensor", "memmap"])
     @pytest.mark.parametrize("storage_out", ["tensor", "memmap"])
     @pytest.mark.parametrize("init_out", [True, False])
-    @pytest.mark.parametrize("backend", ["torch", "torchsnapshot"])
+    @pytest.mark.parametrize(
+        "backend", ["torch"] + (["torchsnapshot"] if _has_snapshot else [])
+    )
     def test_storage_state_dict(self, storage_in, storage_out, init_out, backend):
-        if backend == "torchsnapshot" and not _has_snapshot:
-            pytest.skip()
         os.environ["CKPT_BACKEND"] = backend
         buffer_size = 100
         if storage_in == "memmap":
@@ -1559,10 +1559,10 @@ class TestMultiProc:
 
 
 class TestSamplers:
-    @pytest.mark.parametrize("backend", ["torch", "torchsnapshot"])
+    @pytest.mark.parametrize(
+        "backend", ["torch"] + (["torchsnapshot"] if _has_snapshot else [])
+    )
     def test_sampler_without_rep_state_dict(self, backend):
-        if backend == "torchsnapshot" and not _has_snapshot:
-            pytest.skip()
         os.environ["CKPT_BACKEND"] = backend
         torch.manual_seed(0)
 
