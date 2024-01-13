@@ -19,7 +19,6 @@ from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
 
 from torchrl.data.replay_buffers.storages import Storage
-from torchrl.data.replay_buffers.utils import _reduce
 
 
 class Writer(ABC):
@@ -199,10 +198,32 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         return index
 
 
+def _reduce(
+        tensor: torch.Tensor, reduction: str
+) -> float:
+    """Reduces a tensor given the reduction method."""
+    if reduction == "max":
+        result = tensor.max()
+    elif reduction == "min":
+        result = tensor.min()
+    elif reduction == "mean":
+        result = tensor.mean()
+    elif reduction == "sum":
+        result = tensor.sum()
+    else:
+        raise NotImplementedError(f"Unknown reduction method {reduction}")
+    if isinstance(result, tuple):
+        result = result[0]
+    return result.item()
+
+
 class TensorDictMaxValueWriter(Writer):
     """A Writer class for composable replay buffers that keeps the top elements based on some ranking key.
 
-    If rank_key is not provided, the key will be ``("next", "reward")``.
+    Args:
+        rank_key (str or tuple of str): the key to rank the elements by. Defaults to ``("next", "reward")``.
+        reduction (str): the reduction method to use if the rank key has more than one element.
+            Can be ``"max"``, ``"min"``, ``"mean"`` or ``"sum"``.
 
     Examples:
     >>> import torch
@@ -238,7 +259,7 @@ class TensorDictMaxValueWriter(Writer):
     19
     """
 
-    def __init__(self, rank_key=None, reduction: str = "max", **kwargs) -> None:
+    def __init__(self, rank_key=None, reduction: str = "sum", **kwargs) -> None:
         super().__init__(**kwargs)
         self._cursor = 0
         self._current_top_values = []
@@ -263,9 +284,8 @@ class TensorDictMaxValueWriter(Writer):
         rank_data = data.get("_data", default=data).get(self._rank_key)
 
         # If time dimension, sum along it.
-        import ipdb; ipdb.set_trace()
-        rank_data = rank_data.sum(-1).item()
-        rank_data = _reduce(rank_data, self._reduction)
+        if rank_data.numel() > 1:
+            rank_data = _reduce(rank_data, self._reduction)
 
         if rank_data is None:
             raise KeyError(f"Rank key {self._rank_key} not found in data.")

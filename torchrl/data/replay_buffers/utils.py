@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 # import tree
-from __future__ import annotations
 import typing
 from typing import Any, Callable, Union
 
@@ -65,22 +64,3 @@ def _pin_memory(output: Any) -> Any:
         return output.pin_memory()
     else:
         return output
-
-
-def _reduce(
-        tensor: torch.Tensor, reduction: str, dim: int | None = None
-) -> Union[float, torch.Tensor]:
-    """Reduces a tensor given the reduction method."""
-    if reduction == "max":
-        result = tensor.max(dim=dim)
-    elif reduction == "min":
-        result = tensor.min(dim=dim)
-    elif reduction == "mean":
-        result = tensor.mean(dim=dim)
-    elif reduction == "median":
-        result = tensor.median(dim=dim)
-    else:
-        raise NotImplementedError(f"Unknown reduction method {reduction}")
-    if isinstance(result, tuple):
-        result = result[0]
-    return result.item() if dim is None else result
