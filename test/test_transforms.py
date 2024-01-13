@@ -95,6 +95,7 @@ from torchrl.envs import (
     RewardSum,
     SelectTransform,
     SerialEnv,
+    SignTransform,
     SqueezeTransform,
     StepCounter,
     TargetReturn,
@@ -9592,6 +9593,168 @@ class TestBurnInTransform(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for BurnInTransform")
+
+
+class TestSignTransform(TransformBase):
+    @staticmethod
+    def check_sign_applied(tensor):
+        return torch.logical_or(
+            torch.logical_or(tensor == -1, tensor == 1), tensor == 0.0
+        ).all()
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
+        torch.manual_seed(0)
+        rb = rbclass(storage=LazyTensorStorage(20))
+
+        t = Compose(
+            SignTransform(
+                in_keys=["observation", "reward"],
+                out_keys=["obs_sign", "reward_sign"],
+                in_keys_inv=["input"],
+                out_keys_inv=["input_clip"],
+            )
+        )
+        rb.append_transform(t)
+        data = TensorDict({"observation": 1, "reward": 2, "input": 3}, [])
+        rb.add(data)
+        sample = rb.sample(20)
+
+        assert (sample["observation"] == 1).all()
+        assert self.check_sign_applied(sample["obs_sign"])
+
+        assert (sample["reward"] == 2).all()
+        assert self.check_sign_applied(sample["reward_sign"])
+
+        assert (sample["input"] == 3).all()
+        assert self.check_sign_applied(sample["input_sign"])
+
+    def test_single_trans_env_check(self):
+        env = ContinuousActionVecMockEnv()
+        env = TransformedEnv(
+            env,
+            SignTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+            ),
+        )
+        check_env_specs(env)
+
+    def test_transform_compose(self):
+        t = Compose(
+            SignTransform(
+                in_keys=["observation", "reward"],
+                out_keys=["obs_sign", "reward_sign"],
+            )
+        )
+        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = t(data)
+        assert data["observation"] == 1
+        assert self.check_sign_applied(data["obs_sign"])
+        assert data["reward"] == 2
+        assert self.check_sign_applied(data["reward_sign"])
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_transform_env(self, device):
+        base_env = ContinuousActionVecMockEnv(device=device)
+        env = TransformedEnv(
+            base_env,
+            SignTransform(
+                in_keys=["observation", "reward"],
+            ),
+        )
+        r = env.rollout(3)
+        assert r.device == device
+        assert self.check_sign_applied(r["observation"])
+        assert self.check_sign_applied(r["next", "observation"])
+        assert self.check_sign_applied(r["next", "reward"])
+        check_env_specs(env)
+
+    def test_transform_inverse(self):
+        t = SignTransform(
+            in_keys_inv=["observation", "reward"],
+            out_keys_inv=["obs_sign", "reward_sign"],
+        )
+        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = t.inv(data)
+        assert data["observation"] == 1
+        assert self.check_sign_applied(data["obs_sign"])
+        assert data["reward"] == 2
+        assert self.check_sign_applied(data["reward_sign"])
+
+    def test_transform_model(self):
+        t = nn.Sequential(
+            SignTransform(
+                in_keys=["observation", "reward"],
+                out_keys=["obs_sign", "reward_sign"],
+            )
+        )
+        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = t(data)
+        assert data["observation"] == 1
+        assert self.check_sign_applied(data["obs_sign"])
+        assert data["reward"] == 2
+        assert self.check_sign_applied(data["reward_sign"])
+
+    def test_transform_no_env(self):
+        t = SignTransform(
+            in_keys=["observation", "reward"],
+            out_keys=["obs_sign", "reward_sign"],
+        )
+        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = t(data)
+        assert data["observation"] == 1
+        assert self.check_sign_applied(data["obs_sign"])
+        assert data["reward"] == 2
+        assert self.check_sign_applied(data["reward_sign"])
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            env = ContinuousActionVecMockEnv()
+            return TransformedEnv(
+                env,
+                SignTransform(
+                    in_keys=["observation", "reward"],
+                    in_keys_inv=["observation_orig"],
+                ),
+            )
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            env = ContinuousActionVecMockEnv()
+            return TransformedEnv(
+                env,
+                SignTransform(
+                    in_keys=["observation", "reward"],
+                    in_keys_inv=["observation_orig"],
+                ),
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(
+            ParallelEnv(2, ContinuousActionVecMockEnv),
+            SignTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+            ),
+        )
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv),
+            SignTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+            ),
+        )
+        check_env_specs(env)
 
 
 if __name__ == "__main__":
