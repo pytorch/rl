@@ -1478,29 +1478,42 @@ class TestMaxValueWriter:
             torch.tensor(other._current_top_values),
         )
 
-    @pytest.mark.parametrize("size", [[1], [2, 3]])
+    @pytest.mark.parametrize("size", [[], [1], [2, 3]])
     @pytest.mark.parametrize("device", get_default_devices())
-    @pytest.mark.parametrize("reduction", ["max", "min", "mean", "median"])
+    @pytest.mark.parametrize("reduction", ["max", "min", "mean", "median", "sum"])
     def test_max_value_writer_reduce(self, size, device, reduction):
         torch.manual_seed(0)
         batch_size = 4
         rb = TensorDictReplayBuffer(
-            storage=LazyTensorStorage(batch_size, device=device),
+            storage=LazyTensorStorage(1, device=device),
             sampler=SamplerWithoutReplacement(),
             batch_size=batch_size,
             writer=TensorDictMaxValueWriter(rank_key="key", reduction=reduction),
         )
 
+        key = torch.rand(batch_size, *size)
+        obs = torch.rand(batch_size)
         td = TensorDict(
-            {
-                "key": torch.rand(batch_size, *size),
-                "obs": torch.rand(batch_size, *size),
-            },
+            {"key": key, "obs": obs},
             batch_size=batch_size,
             device=device,
         )
         rb.extend(td)
         sample = rb.sample()
+        if reduction == "max":
+            rank_key = torch.stack([k.max() for k in key.unbind(0)])
+        elif reduction == "min":
+            rank_key = torch.stack([k.min() for k in key.unbind(0)])
+        elif reduction == "mean":
+            rank_key = torch.stack([k.mean() for k in key.unbind(0)])
+        elif reduction == "median":
+            rank_key = torch.stack([k.median() for k in key.unbind(0)])
+        elif reduction == "sum":
+            rank_key = torch.stack([k.sum() for k in key.unbind(0)])
+
+        top_rank = torch.argmax(rank_key)
+        assert (sample.get("obs") == obs[top_rank]).all()
+
 
 class TestMultiProc:
     @staticmethod

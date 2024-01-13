@@ -19,6 +19,7 @@ from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
 
 from torchrl.data.replay_buffers.storages import Storage
+from torchrl.data.replay_buffers.utils import _reduce
 
 
 class Writer(ABC):
@@ -198,25 +199,6 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         return index
 
 
-def _reduce(
-        tensor: torch.Tensor, reduction: str
-) -> float:
-    """Reduces a tensor given the reduction method."""
-    if reduction == "max":
-        result = tensor.max()
-    elif reduction == "min":
-        result = tensor.min()
-    elif reduction == "mean":
-        result = tensor.mean()
-    elif reduction == "sum":
-        result = tensor.sum()
-    else:
-        raise NotImplementedError(f"Unknown reduction method {reduction}")
-    if isinstance(result, tuple):
-        result = result[0]
-    return result.item()
-
-
 class TensorDictMaxValueWriter(Writer):
     """A Writer class for composable replay buffers that keeps the top elements based on some ranking key.
 
@@ -285,7 +267,10 @@ class TensorDictMaxValueWriter(Writer):
 
         # If time dimension, sum along it.
         if rank_data.numel() > 1:
+            rank_data = rank_data.reshape(rank_data.shape[0], -1)
             rank_data = _reduce(rank_data, self._reduction)
+        else:
+            rank_data = rank_data.item()
 
         if rank_data is None:
             raise KeyError(f"Rank key {self._rank_key} not found in data.")
@@ -313,9 +298,8 @@ class TensorDictMaxValueWriter(Writer):
     def add(self, data: Any) -> int:
         """Inserts a single element of data at an appropriate index, and returns that index.
 
-        The data passed to this module should be structured as :obj:`[]` or :obj:`[T]` where
-        :obj:`T` the time dimension. If the data is a trajectory, the rank key will be summed
-        over the time dimension.
+        The ``rank_key`` in the data passed to this module should be structured as :obj:`[]`.
+        If it has more dimensions, it will be reduced to a single value using the ``reduction`` method.
         """
         index = self.get_insert_index(data)
         if index is not None:
@@ -326,9 +310,8 @@ class TensorDictMaxValueWriter(Writer):
     def extend(self, data: Sequence) -> None:
         """Inserts a series of data points at appropriate indices.
 
-        The data passed to this module should be structured as :obj:`[B]` or :obj:`[B, T]` where :obj:`B` is
-        the batch size, :obj:`T` the time dimension. If the data is a trajectory, the rank key will be summed over the
-        time dimension.
+        The ``rank_key`` in the data passed to this module should be structured as :obj:`[B]`.
+        If it has more dimensions, it will be reduced to a single value using the ``reduction`` method.
         """
         data_to_replace = {}
         for i, sample in enumerate(data):
