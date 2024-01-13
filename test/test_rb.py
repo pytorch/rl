@@ -6,6 +6,7 @@
 import argparse
 import contextlib
 import importlib
+import os
 import pickle
 import sys
 from functools import partial
@@ -76,6 +77,7 @@ from torchrl.envs.transforms.transforms import (
 
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
+_has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
 
 
@@ -479,7 +481,11 @@ class TestStorages:
     @pytest.mark.parametrize("storage_in", ["tensor", "memmap"])
     @pytest.mark.parametrize("storage_out", ["tensor", "memmap"])
     @pytest.mark.parametrize("init_out", [True, False])
-    def test_storage_state_dict(self, storage_in, storage_out, init_out):
+    @pytest.mark.parametrize(
+        "backend", ["torch"] + (["torchsnapshot"] if _has_snapshot else [])
+    )
+    def test_storage_state_dict(self, storage_in, storage_out, init_out, backend):
+        os.environ["CKPT_BACKEND"] = backend
         buffer_size = 100
         if storage_in == "memmap":
             storage_in = LazyMemmapStorage(buffer_size, device="cpu")
@@ -1553,6 +1559,53 @@ class TestMultiProc:
 
 
 class TestSamplers:
+    @pytest.mark.parametrize(
+        "backend", ["torch"] + (["torchsnapshot"] if _has_snapshot else [])
+    )
+    def test_sampler_without_rep_state_dict(self, backend):
+        os.environ["CKPT_BACKEND"] = backend
+        torch.manual_seed(0)
+
+        n_samples = 3
+        buffer_size = 100
+        storage_in = LazyTensorStorage(buffer_size, device="cpu")
+        storage_out = LazyTensorStorage(buffer_size, device="cpu")
+
+        replay_buffer = TensorDictReplayBuffer(
+            storage=storage_in,
+            sampler=SamplerWithoutReplacement(),
+        )
+        # fill replay buffer with random data
+        transition = TensorDict(
+            {
+                "observation": torch.ones(1, 4),
+                "action": torch.ones(1, 2),
+                "reward": torch.ones(1, 1),
+                "dones": torch.ones(1, 1),
+                "next": {"observation": torch.ones(1, 4)},
+            },
+            batch_size=1,
+        )
+        for _ in range(n_samples):
+            replay_buffer.extend(transition.clone())
+        for _ in range(n_samples):
+            s = replay_buffer.sample(batch_size=1)
+            assert (s.exclude("index") == 1).all()
+
+        replay_buffer.extend(torch.zeros_like(transition))
+
+        state_dict = replay_buffer.state_dict()
+
+        new_replay_buffer = TensorDictReplayBuffer(
+            storage=storage_out,
+            batch_size=state_dict["_batch_size"],
+            sampler=SamplerWithoutReplacement(),
+        )
+
+        new_replay_buffer.load_state_dict(state_dict)
+        s = new_replay_buffer.sample(batch_size=1)
+        assert (s.exclude("index") == 0).all()
+
     @pytest.mark.parametrize(
         "batch_size,num_slices,slice_len",
         [
