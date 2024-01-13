@@ -6711,7 +6711,11 @@ class BurnInTransform(Transform):
 
 
 class SignTransform(Transform):
-    """A transform to compute the sign of TensorDict in_keys and write the values to out_keys.
+    """A transform to compute the signs of TensorDict values.
+
+    This transform reads the tensors in ``in_keys`` and ``in_keys_inv``, computes the
+    signs of their elements and writes the resulting sign tensors to ``out_keys`` and
+    ``out_keys_inv`` respectively.
 
     Args:
         in_keys (list of NestedKeys): input entries (read)
