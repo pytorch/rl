@@ -9612,7 +9612,7 @@ class TestSignTransform(TransformBase):
                 in_keys=["observation", "reward"],
                 out_keys=["obs_sign", "reward_sign"],
                 in_keys_inv=["input"],
-                out_keys_inv=["input_clip"],
+                out_keys_inv=["input_sign"],
             )
         )
         rb.append_transform(t)
