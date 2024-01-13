@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib.util
+import logging
 import os
 import tarfile
 import tempfile
@@ -28,7 +29,9 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
     """Gen-DGRL Experience Replay dataset.
 
     This dataset accompanies the paper "The Generalization Gap in Offline Reinforcement Learning".
+
     Arxiv: https://arxiv.org/abs/2312.05742
+
     GitHub: https://github.com/facebookresearch/gen_dgrl
 
     This class gives you access to the ProcGen dataset. Each `dataset_id` registered
@@ -235,7 +238,7 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
             batch = self._PROCESS_NPY_BATCH
         _, file_name, _ = link
         file_path = os.path.join(download_folder, file_name)
-        print(f"Unpacking dataset file {file_path} ({file_name}) to {download_folder}.")
+        logging.info(f"Unpacking dataset file {file_path} ({file_name}) to {download_folder}.")
         idx = 0
         td_memmap = None
         dataset_len = self._get_category_len(category_name)
@@ -319,14 +322,14 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
         file_path = os.path.join(download_folder, file_name)
 
         if skip_downloaded_files and os.path.isfile(file_path):
-            print(f"Skipping {file_path}, already downloaded!")
+            logging.info(f"Skipping {file_path}, already downloaded!")
             return file_name, True
 
         in_progress_folder = os.path.join(download_folder, "_in_progress")
         os.makedirs(in_progress_folder, exist_ok=True)
         in_progress_file_path = os.path.join(in_progress_folder, file_name)
 
-        print(
+        logging.info(
             f"Downloading dataset file {file_name} ({url}) to {in_progress_file_path}."
         )
         cls._download_with_progress_bar(url, in_progress_file_path)

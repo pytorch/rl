@@ -1854,11 +1854,30 @@ class TestGenDGRL:
     @pytest.mark.parametrize("dataset_num", [0, 4, 8])
     def test_gen_dgrl(self, dataset_num, tmpdir, _patch_traj_len):
         dataset_id = GenDGRLExperienceReplay.available_datasets[dataset_num]
-        print("dataset_id", dataset_id)
         dataset = GenDGRLExperienceReplay(dataset_id, batch_size=32, root=tmpdir)
         for batch in dataset:  # noqa: B007
             break
         assert batch.get(("next", "observation")).shape[-3] == 3
+        for key in (
+            ("next", "done"),
+            ("next", "truncated"),
+            ("next", "terminated"),
+            "observation",
+            "action",
+            ("next", "reward"),
+        ):
+            assert key in batch.keys(True, True)
+        for key in (
+            ("next", "done"),
+            ("next", "truncated"),
+            ("next", "terminated"),
+            "terminated",
+            "truncated",
+            "done",
+            ("next", "reward"),
+        ):
+            val = batch.get(key)
+            assert val.shape[:-1] == batch.shape
 
 
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
