@@ -267,8 +267,7 @@ class TensorDictMaxValueWriter(Writer):
 
         # If time dimension, sum along it.
         if rank_data.numel() > 1:
-            rank_data = rank_data.reshape(rank_data.shape[0], -1)
-            rank_data = _reduce(rank_data, self._reduction, dim=1)
+            rank_data = _reduce(rank_data.reshape(-1), self._reduction, dim=0)
         else:
             rank_data = rank_data.item()
 

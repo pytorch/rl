@@ -1492,7 +1492,7 @@ class TestMaxValueWriter:
         )
 
         key = torch.rand(batch_size, *size)
-        obs = torch.rand(batch_size)
+        obs = torch.rand(batch_size, *size)
         td = TensorDict(
             {"key": key, "obs": obs},
             batch_size=batch_size,
