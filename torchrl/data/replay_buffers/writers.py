@@ -18,7 +18,8 @@ from tensordict import is_tensor_collection, MemoryMappedTensor
 from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
 
-from .storages import Storage
+from torchrl.data.replay_buffers.storages import Storage
+from torchrl.data.replay_buffers.utils import _reduce
 
 
 class Writer(ABC):
@@ -237,11 +238,12 @@ class TensorDictMaxValueWriter(Writer):
     19
     """
 
-    def __init__(self, rank_key=None, **kwargs) -> None:
+    def __init__(self, rank_key=None, reduction: str = "max", **kwargs) -> None:
         super().__init__(**kwargs)
         self._cursor = 0
         self._current_top_values = []
         self._rank_key = rank_key
+        self._reduction = reduction
         if self._rank_key is None:
             self._rank_key = ("next", "reward")
 
@@ -261,7 +263,9 @@ class TensorDictMaxValueWriter(Writer):
         rank_data = data.get("_data", default=data).get(self._rank_key)
 
         # If time dimension, sum along it.
+        import ipdb; ipdb.set_trace()
         rank_data = rank_data.sum(-1).item()
+        rank_data = _reduce(rank_data, self._reduction)
 
         if rank_data is None:
             raise KeyError(f"Rank key {self._rank_key} not found in data.")
