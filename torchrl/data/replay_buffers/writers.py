@@ -205,7 +205,7 @@ class TensorDictMaxValueWriter(Writer):
     Args:
         rank_key (str or tuple of str): the key to rank the elements by. Defaults to ``("next", "reward")``.
         reduction (str): the reduction method to use if the rank key has more than one element.
-            Can be ``"max"``, ``"min"``, ``"mean"`` or ``"sum"``.
+            Can be ``"max"``, ``"min"``, ``"mean"``, ``"median"`` or ``"sum"``.
 
     Examples:
     >>> import torch
