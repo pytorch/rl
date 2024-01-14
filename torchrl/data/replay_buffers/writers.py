@@ -297,7 +297,7 @@ class TensorDictMaxValueWriter(Writer):
     def add(self, data: Any) -> int:
         """Inserts a single element of data at an appropriate index, and returns that index.
 
-        The ``rank_key`` in the data passed to this module should be structured as :obj:`[]`.
+        The ``rank_key`` in the data passed to this module should be structured as [].
         If it has more dimensions, it will be reduced to a single value using the ``reduction`` method.
         """
         index = self.get_insert_index(data)
@@ -309,7 +309,7 @@ class TensorDictMaxValueWriter(Writer):
     def extend(self, data: Sequence) -> None:
         """Inserts a series of data points at appropriate indices.
 
-        The ``rank_key`` in the data passed to this module should be structured as :obj:`[B]`.
+        The ``rank_key`` in the data passed to this module should be structured as [B].
         If it has more dimensions, it will be reduced to a single value using the ``reduction`` method.
         """
         data_to_replace = {}
