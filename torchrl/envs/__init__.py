@@ -71,6 +71,7 @@ from .transforms import (
     RewardScaling,
     RewardSum,
     SelectTransform,
+    SignTransform,
     SqueezeTransform,
     StepCounter,
     TargetReturn,

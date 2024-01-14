@@ -6708,3 +6708,79 @@ class BurnInTransform(Transform):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(burn_in={self.burn_in}, in_keys={self.in_keys}, out_keys={self.out_keys})"
+
+
+class SignTransform(Transform):
+    """A transform to compute the signs of TensorDict values.
+
+    This transform reads the tensors in ``in_keys`` and ``in_keys_inv``, computes the
+    signs of their elements and writes the resulting sign tensors to ``out_keys`` and
+    ``out_keys_inv`` respectively.
+
+    Args:
+        in_keys (list of NestedKeys): input entries (read)
+        out_keys (list of NestedKeys): input entries (write)
+        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
+
+    Examples:
+        >>> from torchrl.envs import GymEnv, TransformedEnv, SignTransform
+        >>> base_env = GymEnv("Pendulum-v1")
+        >>> env = TransformedEnv(base_env, SignTransform(in_keys=['observation']))
+        >>> r = env.rollout(100)
+        >>> obs = r["observation"]
+        >>> assert (torch.logical_or(torch.logical_or(obs == -1, obs == 1), obs == 0.0)).all()
+    """
+
+    def __init__(
+        self,
+        in_keys=None,
+        out_keys=None,
+        in_keys_inv=None,
+        out_keys_inv=None,
+    ):
+        if in_keys is None:
+            in_keys = []
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        if in_keys_inv is None:
+            in_keys_inv = []
+        if out_keys_inv is None:
+            out_keys_inv = copy(in_keys_inv)
+        super().__init__(in_keys, out_keys, in_keys_inv, out_keys_inv)
+
+    def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+        return obs.sign()
+
+    def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
+        return state.sign()
+
+    @_apply_to_composite
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        return BoundedTensorSpec(
+            shape=observation_spec.shape,
+            device=observation_spec.device,
+            dtype=observation_spec.dtype,
+            high=1.0,
+            low=-1.0,
+        )
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        for key in self.in_keys:
+            if key in self.parent.reward_keys:
+                spec = self.parent.output_spec["full_reward_spec"][key]
+                self.parent.output_spec["full_reward_spec"][key] = BoundedTensorSpec(
+                    shape=spec.shape,
+                    device=spec.device,
+                    dtype=spec.dtype,
+                    high=1.0,
+                    low=-1.0,
+                )
+        return self.parent.output_spec["full_reward_spec"]
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
