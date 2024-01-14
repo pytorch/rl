@@ -15,6 +15,7 @@ git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
+export BATCHED_PIPE_TIMEOUT=60
 
 MUJOCO_GL=egl python .github/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 200 --ignore test/test_distributed.py --ignore test/test_rlhf.py
 coverage combine

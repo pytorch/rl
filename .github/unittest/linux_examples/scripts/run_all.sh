@@ -80,7 +80,8 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=egl \
-  PYOPENGL_PLATFORM=egl
+  PYOPENGL_PLATFORM=egl \
+  BATCHED_PIPE_TIMEOUT=60
 
 pip install pip --upgrade
 
