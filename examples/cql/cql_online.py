@@ -12,6 +12,7 @@ The helper functions are coded in the utils.py associated with this script.
 
 """
 import logging
+import math
 import time
 
 import hydra
@@ -89,10 +90,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     init_random_frames = cfg.collector.init_random_frames
     num_updates = int(
-        cfg.collector.env_per_collector
-        * cfg.collector.frames_per_batch
-        * cfg.optim.utd_ratio
-        // cfg.optim.batch_size
+        math.ceil(
+            cfg.collector.env_per_collector
+            * cfg.collector.frames_per_batch
+            * cfg.optim.utd_ratio
+            / cfg.optim.batch_size
+        )
     )
     prb = cfg.replay_buffer.prb
     eval_iter = cfg.logger.eval_iter
