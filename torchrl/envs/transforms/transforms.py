@@ -6724,7 +6724,7 @@ class SignTransform(Transform):
         out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
 
     Examples:
-        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> from torchrl.envs import GymEnv, TransformedEnv, SignTransform
         >>> base_env = GymEnv("Pendulum-v1")
         >>> env = TransformedEnv(base_env, SignTransform(in_keys=['observation']))
         >>> r = env.rollout(100)
