@@ -90,6 +90,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cfg.collector.env_per_collector
         * cfg.collector.frames_per_batch
         * cfg.optim.utd_ratio
+        // cfg.optim.batch_size
     )
     prb = cfg.replay_buffer.prb
     eval_iter = cfg.logger.eval_iter
