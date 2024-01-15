@@ -115,9 +115,9 @@ class VmasWrapper(_EnvWrapper):
         env (``vmas.simulator.environment.environment.Environment``): the vmas environment to wrap.
 
     Keyword Args:
-        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulation using PyTorch,
-            this argument decides the number of vectorized envuironments that should be simulated in a batch. It will also
-            determin the batch size of the environment.
+        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulation using PyTorch.
+            This argument decides the number of vectorized envuironments that should be simulated in a batch. It will also
+            determine the batch size of the environment.
         device (torch.device, optional): Device for simulation. Defaults to ``"cpu"``. All the tensors created by VMAS
             will be placed on this device.
         continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions
@@ -639,9 +639,9 @@ class VmasEnv(VmasWrapper):
             https://github.com/proroklab/VectorizedMultiAgentSimulator?tab=readme-ov-file#main-scenarios
 
     Keyword Args:
-        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulation using PyTorch,
-            this argument decides the number of vectorized envuironments that should be simulated in a batch. It will also
-            determin the batch size of the environment.
+        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulation using PyTorch.
+            This argument decides the number of vectorized envuironments that should be simulated in a batch. It will also
+            determine the batch size of the environment.
         device (torch.device, optional): Device for simulation. Defaults to ``"cpu"``. All the tensors created by VMAS
             will be placed on this device.
         continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions
