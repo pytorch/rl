@@ -29,6 +29,7 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
 from torchrl.envs.batched_envs import CloudpickleWrapper
@@ -207,18 +208,33 @@ def _gym_to_torchrl_spec_transform(
     device="cpu",
     categorical_action_encoding=False,
     remap_state_to_observation: bool = True,
+    batch_size: tuple = torch.Size([]),
 ) -> TensorSpec:
     """Maps the gym specs to the TorchRL specs.
 
     Args:
-        spec: the gym space to transform
-        dtype: a dtype to use for the spec. Defaults to`spec.dtype`.
-        device: the device for the spec. Defaults to "cpu".
-        categorical_action_encoding: whether discrete spaces should be mapped to categorical or one-hot.
-            Defaults to one-hot.
-        remap_state_to_observation: whether to rename the 'state' key of Dict specs to "observation". Default is true.
+        spec (gym.spaces member): the gym space to transform.
+        dtype (torch.dtype): a dtype to use for the spec.
+            Defaults to`spec.dtype`.
+        device (torch.device): the device for the spec.
+            Defaults to ``"cpu"``.
+        categorical_action_encoding (bool): whether discrete spaces should be mapped to categorical or one-hot.
+            Defaults to ``False`` (one-hot).
+        remap_state_to_observation (bool): whether to rename the 'state' key of
+            Dict specs to "observation". Default is true.
+        batch_size (torch.Size): batch size to which expand the spec. Defaults to
+            ``torch.Size([])``.
 
     """
+    if batch_size:
+        return _gym_to_torchrl_spec_transform(
+            spec,
+            dtype=dtype,
+            device=device,
+            categorical_action_encoding=categorical_action_encoding,
+            remap_state_to_observation=remap_state_to_observation,
+            batch_size=None,
+        ).expand(batch_size)
     gym_spaces = gym_backend("spaces")
     if isinstance(spec, gym_spaces.tuple.Tuple):
         return torch.stack(
@@ -332,6 +348,27 @@ def _gym_to_torchrl_spec_transform(
         )
 
 
+@implement_for("gym", None, "0.18")
+def _box_convert(spec, gym_spaces, shape):
+    low = spec.low.detach().unique().cpu().item()
+    high = spec.high.detach().unique().cpu().item()
+    return gym_spaces.Box(low=low, high=high, shape=shape)
+
+
+@implement_for("gym", "0.18")
+def _box_convert(spec, gym_spaces, shape):
+    low = spec.low.detach().cpu().numpy()
+    high = spec.high.detach().cpu().numpy()
+    return gym_spaces.Box(low=low, high=high, shape=shape)
+
+
+@implement_for("gymnasium")
+def _box_convert(spec, gym_spaces, shape):
+    low = spec.low.detach().cpu().numpy()
+    high = spec.high.detach().cpu().numpy()
+    return gym_spaces.Box(low=low, high=high, shape=shape)
+
+
 def _torchrl_to_gym_spec_transform(
     spec,
     batch_size=torch.Size([]),
@@ -349,31 +386,42 @@ def _torchrl_to_gym_spec_transform(
 
     """
     gym_spaces = gym_backend("spaces")
-    shape = spec.shape[len(batch_size) :]
+    shape = spec.shape
     if isinstance(spec, MultiDiscreteTensorSpec):
         return gym_spaces.multi_discrete.MultiDiscrete(
             spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
         )
     if isinstance(spec, MultiOneHotDiscreteTensorSpec):
         return gym_spaces.multi_discrete.MultiDiscrete(spec.nvec)
+    if isinstance(spec, BinaryDiscreteTensorSpec):
+        return gym_spaces.multi_binary.MultiBinary(spec.shape[-1])
     if isinstance(spec, DiscreteTensorSpec):
         return gym_spaces.discrete.Discrete(
             spec.n
         )  # dtype=torch_to_numpy_dtype_dict[spec.dtype])
     if isinstance(spec, OneHotDiscreteTensorSpec):
         return gym_spaces.discrete.Discrete(spec.n)
-    if isinstance(spec, BinaryDiscreteTensorSpec):
-        return gym_spaces.multi_binary.MultiBinary(
-            spec.n, dtype=torch_to_numpy_dtype_dict[spec.dtype]
-        )
     if isinstance(spec, UnboundedContinuousTensorSpec):
-        return gym_spaces.Box(-float("inf"), float("inf"), shape)
-    if isinstance(spec, BoundedTensorSpec):
         return gym_spaces.Box(
-            spec.low.detach().cpu().numpy(), spec.high.detach().cpu().numpy(), shape
+            low=-float("inf"),
+            high=float("inf"),
+            shape=shape,
+            dtype=torch_to_numpy_dtype_dict[spec.dtype],
         )
+    if isinstance(spec, UnboundedDiscreteTensorSpec):
+        return gym_spaces.Box(
+            low=-float("inf"),
+            high=float("inf"),
+            shape=shape,
+            dtype=torch_to_numpy_dtype_dict[spec.dtype],
+        )
+    if isinstance(spec, BoundedTensorSpec):
+        return _box_convert(spec, gym_spaces, shape)
     if isinstance(spec, CompositeSpec):
-        return dict(
+        # remove batch size
+        while spec.shape:
+            spec = spec[0]
+        return gym_spaces.Dict(
             **{
                 key: _torchrl_to_gym_spec_transform(
                     val,

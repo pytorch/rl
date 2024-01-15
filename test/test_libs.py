@@ -50,6 +50,17 @@ from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl._utils import implement_for
 from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
+from torchrl.data import (
+    BinaryDiscreteTensorSpec,
+    BoundedTensorSpec,
+    CompositeSpec,
+    DiscreteTensorSpec,
+    MultiDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
+    OneHotDiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
+)
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
@@ -58,8 +69,10 @@ from torchrl.data.datasets.roboset import RobosetExperienceReplay
 from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
+    CatTensors,
     Compose,
     DoubleToFloat,
+    EnvBase,
     EnvCreator,
     ParallelEnv,
     RenameTransform,
@@ -69,8 +82,10 @@ from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.envpool import _has_envpool, MultiThreadedEnvWrapper
 from torchrl.envs.libs.gym import (
+    _gym_to_torchrl_spec_transform,
     _has_gym,
     _is_from_pixels,
+    _torchrl_to_gym_spec_transform,
     GymEnv,
     GymWrapper,
     MOGymEnv,
@@ -96,6 +111,9 @@ _has_sklearn = importlib.util.find_spec("sklearn") is not None
 _has_gym_robotics = importlib.util.find_spec("gymnasium_robotics") is not None
 
 _has_minari = importlib.util.find_spec("minari") is not None
+
+_has_gymnasium = importlib.util.find_spec("gymnasium") is not None
+_has_gym_regular = importlib.util.find_spec("gym") is not None
 
 if _has_gym:
     try:
@@ -134,6 +152,162 @@ ATOL = 1e-1
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
 class TestGym:
+    class DummyEnv(EnvBase):
+        def __init__(self, arg1, *, arg2, **kwargs):
+            super().__init__(**kwargs)
+
+            assert arg1 == 1
+            assert arg2 == 2
+
+            self.observation_spec = CompositeSpec(
+                observation=UnboundedContinuousTensorSpec((*self.batch_size, 3)),
+                other=UnboundedContinuousTensorSpec((*self.batch_size, 3)),
+                shape=self.batch_size,
+            )
+            self.action_spec = UnboundedContinuousTensorSpec((*self.batch_size, 3))
+            self.done_spec = DiscreteTensorSpec(
+                2, (*self.batch_size, 1), dtype=torch.bool
+            )
+            self.full_done_spec["truncated"] = self.full_done_spec["terminated"].clone()
+
+        def _reset(self, tensordict):
+            return self.observation_spec.rand()
+
+        def _step(self, tensordict):
+            action = tensordict.get("action")
+            return TensorDict(
+                {
+                    "observation": action.clone(),
+                    "other": torch.zeros_like(action),
+                    "reward": action.sum(-1, True),
+                    "done": ~action.any(-1, True),
+                    "terminated": ~action.any(-1, True),
+                    "truncated": torch.zeros((*self.batch_size, 1), dtype=torch.bool),
+                },
+                batch_size=[],
+            )
+
+        def _set_seed(self, seed):
+            return seed + 1
+
+    @pytest.mark.parametrize("categorical", [True, False])
+    def test_gym_spec_cast(self, categorical):
+
+        batch_size = [3, 4]
+        cat = DiscreteTensorSpec if categorical else OneHotDiscreteTensorSpec
+        cat_shape = batch_size if categorical else (*batch_size, 5)
+        multicat = (
+            MultiDiscreteTensorSpec if categorical else MultiOneHotDiscreteTensorSpec
+        )
+        multicat_shape = 2 if categorical else 5
+        spec = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(*batch_size, 1)),
+            b=CompositeSpec(
+                c=cat(5, shape=cat_shape, dtype=torch.int64), shape=batch_size
+            ),
+            d=cat(5, shape=cat_shape, dtype=torch.int64),
+            e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
+            f=BoundedTensorSpec(-3, 4, shape=(*batch_size, 1)),
+            g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            h=BinaryDiscreteTensorSpec(n=5, shape=(*batch_size, 5)),
+            shape=batch_size,
+        )
+        recon = _gym_to_torchrl_spec_transform(
+            _torchrl_to_gym_spec_transform(
+                spec, categorical_action_encoding=categorical
+            ),
+            categorical_action_encoding=categorical,
+            batch_size=batch_size,
+        )
+        for (key0, spec0), (key1, spec1) in zip(
+            spec.items(True, True), recon.items(True, True)
+        ):
+            assert spec0 == spec1, (key0, key1)
+        assert spec == recon
+        assert recon.shape == spec.shape
+
+    _BACKENDS = [None]
+    if _has_gymnasium:
+        _BACKENDS += ["gymnasium"]
+    if _has_gym_regular:
+        _BACKENDS += ["gym"]
+
+    @pytest.mark.parametrize("backend", _BACKENDS)
+    @pytest.mark.parametrize("numpy", [True, False])
+    def test_torchrl_to_gym(self, backend, numpy):
+        from torchrl.envs.libs.gym import gym_backend, set_gym_backend
+
+        EnvBase.register_gym(
+            f"Dummy-{numpy}-v0",
+            entry_point=self.DummyEnv,
+            to_numpy=numpy,
+            backend=backend,
+            arg1=1,
+            arg2=2,
+        )
+
+        with set_gym_backend(backend) if backend is not None else nullcontext():
+            envgym = gym_backend().make(f"Dummy-{numpy}-v0")
+            envgym.reset()
+            obs, *_ = envgym.step(envgym.action_space.sample())
+            assert "observation" in obs
+            assert "other" in obs
+            if numpy:
+                assert all(isinstance(val, np.ndarray) for val in obs.values())
+            else:
+                assert all(isinstance(val, torch.Tensor) for val in obs.values())
+
+            # with a transform
+            envgym = gym_backend().make(
+                f"Dummy-{numpy}-v0", transform=CatTensors(["observation", "other"])
+            )
+            envgym.reset()
+            obs, *_ = envgym.step(envgym.action_space.sample())
+            assert "observation_other" not in obs
+            assert "observation" not in obs
+            assert "other" not in obs
+            if numpy:
+                assert all(isinstance(val, np.ndarray) for val in obs.values())
+            else:
+                assert all(isinstance(val, torch.Tensor) for val in obs.values())
+
+        # register with transform
+        EnvBase.register_gym(
+            f"Dummy-{numpy}-transform-v0",
+            entry_point=self.DummyEnv,
+            backend=backend,
+            to_numpy=numpy,
+            arg1=1,
+            arg2=2,
+            transform=CatTensors(["observation", "other"]),
+        )
+
+        with set_gym_backend(backend) if backend is not None else nullcontext():
+            envgym = gym_backend().make(f"Dummy-{numpy}-transform-v0")
+            envgym.reset()
+            obs, *_ = envgym.step(envgym.action_space.sample())
+            assert "observation_other" not in obs
+            assert "observation" not in obs
+            assert "other" not in obs
+            if numpy:
+                assert all(isinstance(val, np.ndarray) for val in obs.values())
+            else:
+                assert all(isinstance(val, torch.Tensor) for val in obs.values())
+
+        # register with transform
+        EnvBase.register_gym(
+            f"Dummy-{numpy}-noarg-v0",
+            entry_point=self.DummyEnv,
+            backend=backend,
+            to_numpy=numpy,
+        )
+        with set_gym_backend(backend) if backend is not None else nullcontext():
+            with pytest.raises(AssertionError):
+                envgym = gym_backend().make(
+                    f"Dummy-{numpy}-noarg-v0", arg1=None, arg2=None
+                )
+            envgym = gym_backend().make(f"Dummy-{numpy}-noarg-v0", arg1=1, arg2=2)
+
     @pytest.mark.parametrize(
         "env_name",
         [
