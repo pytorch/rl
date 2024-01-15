@@ -1497,8 +1497,8 @@ class TestMaxValueWriter:
             writer=TensorDictMaxValueWriter(rank_key="key", reduction=reduction),
         )
 
-        key = torch.rand(batch_size, *size)
-        obs = torch.rand(batch_size, *size)
+        key = torch.rand(batch_size, *size, device=device)
+        obs = torch.rand(batch_size, *size, device=device)
         td = TensorDict(
             {"key": key, "obs": obs},
             batch_size=batch_size,
