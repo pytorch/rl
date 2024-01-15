@@ -9093,7 +9093,7 @@ class TestDiscreteIQL(LossModuleTestBase):
     ):
         raise NotImplementedError
 
-    def _create_mock_data_iql(
+    def _create_mock_data_discrete_iql(
         self,
         batch=16,
         obs_dim=3,
@@ -9133,7 +9133,7 @@ class TestDiscreteIQL(LossModuleTestBase):
         )
         return td
 
-    def _create_seq_mock_data_iql(
+    def _create_seq_mock_data_discrete_iql(
         self, batch=8, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
     ):
         # create a tensordict
@@ -9175,7 +9175,7 @@ class TestDiscreteIQL(LossModuleTestBase):
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
     @pytest.mark.parametrize("expectile", [0.1, 0.5])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_iql(
+    def test_discrete_iql(
         self,
         num_qvalue,
         device,
@@ -9184,7 +9184,7 @@ class TestDiscreteIQL(LossModuleTestBase):
         td_est,
     ):
         torch.manual_seed(self.seed)
-        td = self._create_mock_data_iql(device=device)
+        td = self._create_mock_data_discrete_iql(device=device)
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
@@ -9299,7 +9299,7 @@ class TestDiscreteIQL(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("temperature", [0.0])
     @pytest.mark.parametrize("expectile", [0.1])
-    def test_iql_state_dict(
+    def test_discrete_iql_state_dict(
         self,
         num_qvalue,
         device,
@@ -9334,7 +9334,7 @@ class TestDiscreteIQL(LossModuleTestBase):
         loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("separate_losses", [False, True])
-    def test_iql_separate_losses(self, separate_losses):
+    def test_discrete_iql_separate_losses(self, separate_losses):
         torch.manual_seed(self.seed)
         actor, value, qvalue, common, td = self._create_mock_common_layer_setup()
         loss_fn = DiscreteIQLLoss(
@@ -9497,7 +9497,7 @@ class TestDiscreteIQL(LossModuleTestBase):
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
     @pytest.mark.parametrize("expectile", [0.1, 0.5])
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_iql_batcher(
+    def test_discrete_iql_batcher(
         self,
         n,
         num_qvalue,
@@ -9507,7 +9507,7 @@ class TestDiscreteIQL(LossModuleTestBase):
         gamma=0.9,
     ):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_iql(device=device)
+        td = self._create_seq_mock_data_discrete_iql(device=device)
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
@@ -9597,7 +9597,7 @@ class TestDiscreteIQL(LossModuleTestBase):
     @pytest.mark.parametrize(
         "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
     )
-    def test_iql_tensordict_keys(self, td_est):
+    def test_discrete_iql_tensordict_keys(self, td_est):
         actor = self._create_mock_actor()
         qvalue = self._create_mock_qvalue()
         value = self._create_mock_value()
@@ -9647,11 +9647,11 @@ class TestDiscreteIQL(LossModuleTestBase):
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
-    def test_iql_notensordict(
+    def test_discrete_iql_notensordict(
         self, action_key, observation_key, reward_key, done_key, terminated_key
     ):
         torch.manual_seed(self.seed)
-        td = self._create_mock_data_iql(
+        td = self._create_mock_data_discrete_iql(
             action_key=action_key,
             observation_key=observation_key,
             reward_key=reward_key,
