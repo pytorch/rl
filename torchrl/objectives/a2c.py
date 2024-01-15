@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import contextlib
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
@@ -46,8 +47,8 @@ class A2CLoss(LossModule):
     https://arxiv.org/abs/1602.01783v2
 
     Args:
-        actor (ProbabilisticTensorDictSequential): policy operator.
-        critic (ValueOperator): value operator.
+        actor_network (ProbabilisticTensorDictSequential): policy operator.
+        critic_network (ValueOperator): value operator.
         entropy_bonus (bool): if ``True``, an entropy bonus will be added to the
             loss to favour exploratory policies.
         samples_mc_entropy (int): if the distribution retrieved from the policy
@@ -221,8 +222,8 @@ class A2CLoss(LossModule):
 
     def __init__(
         self,
-        actor: ProbabilisticTensorDictSequential,
-        critic: TensorDictModule,
+        actor_network: ProbabilisticTensorDictSequential,
+        critic_network: TensorDictModule,
         *,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
@@ -233,23 +234,44 @@ class A2CLoss(LossModule):
         separate_losses: bool = False,
         advantage_key: str = None,
         value_target_key: str = None,
+        functional: bool = True,
+        actor: ProbabilisticTensorDictSequential = None,
+        critic: ProbabilisticTensorDictSequential = None,
     ):
+        if actor is not None:
+            actor_network = actor
+            del actor
+        if critic is not None:
+            critic_network = critic
+            del critic
+
         self._out_keys = None
         super().__init__()
         self._set_deprecated_ctor_keys(
             advantage=advantage_key, value_target=value_target_key
         )
 
-        self.convert_to_functional(
-            actor, "actor", funs_to_decorate=["forward", "get_dist"]
-        )
+        self.functional = functional
+        if functional:
+            self.convert_to_functional(
+                actor_network, "actor_network", funs_to_decorate=["forward", "get_dist"]
+            )
+        else:
+            self.actor_network = actor_network
+
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
             # params of critic must be refs to actor if they're shared
             policy_params = list(actor.parameters())
         else:
             policy_params = None
-        self.convert_to_functional(critic, "critic", compare_against=policy_params)
+        if functional:
+            self.convert_to_functional(
+                critic_network, "critic_network", compare_against=policy_params
+            )
+        else:
+            self.critic_network = critic_network
+
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_coef
 
@@ -266,14 +288,18 @@ class A2CLoss(LossModule):
         self.loss_critic_type = loss_critic_type
 
     @property
+    def actor(self):
+        return self.actor_network
+
+    @property
     def in_keys(self):
         keys = [
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
             ("next", self.tensor_keys.terminated),
-            *self.actor.in_keys,
-            *[("next", key) for key in self.actor.in_keys],
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
         ]
         if self.critic_coef:
             keys.extend(self.critic.in_keys)
@@ -326,9 +352,11 @@ class A2CLoss(LossModule):
             raise RuntimeError(
                 f"tensordict stored {self.tensor_keys.action} require grad."
             )
-        tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
-        with self.actor_params.to_module(self.actor):
-            dist = self.actor.get_dist(tensordict_clone)
+        tensordict_clone = tensordict.select(*self.actor_network.in_keys).clone()
+        with self.actor_network_params.to_module(
+            self.actor_network
+        ) if self.functional else contextlib.nullcontext():
+            dist = self.actor_network.get_dist(tensordict_clone)
         log_prob = dist.log_prob(action)
         log_prob = log_prob.unsqueeze(-1)
         return log_prob, dist
@@ -339,7 +367,9 @@ class A2CLoss(LossModule):
             # overhead that we could easily reduce.
             target_return = tensordict.get(self.tensor_keys.value_target)
             tensordict_select = tensordict.select(*self.critic.in_keys)
-            with self.critic_params.to_module(self.critic):
+            with self.critic_params.to_module(
+                self.critic
+            ) if self.functional else contextlib.nullcontext():
                 state_value = self.critic(
                     tensordict_select,
                 ).get(self.tensor_keys.value)
@@ -407,7 +437,7 @@ class A2CLoss(LossModule):
         elif value_type == ValueEstimators.VTrace:
             # VTrace currently does not support functional call on the actor
             actor_with_params = repopulate_module(
-                deepcopy(self.actor), self.actor_params
+                deepcopy(self.actor_network), self.actor_network_params
             )
             self._value_estimator = VTrace(
                 value_network=self.critic, actor_network=actor_with_params, **hp
