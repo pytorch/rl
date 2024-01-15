@@ -307,6 +307,7 @@ class GymLikeEnv(_EnvWrapper):
         tensordict_out = TensorDict(
             source=source,
             batch_size=self.batch_size,
+            _run_checks=not self.validated,
         )
         if self.info_dict_reader and info is not None:
             for info_dict_reader in self.info_dict_reader:
