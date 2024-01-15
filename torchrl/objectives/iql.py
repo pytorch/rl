@@ -715,7 +715,7 @@ class DiscreteIQLLoss(IQLLoss):
     ) -> None:
         self._in_keys = None
         self._out_keys = None
-        if expectile < 1.0:
+        if expectile >= 1.0:
             raise ValueError(f"Expectile should be lower than 1.0 but is {expectile}")
         super().__init__(
             actor_network=actor_network,
