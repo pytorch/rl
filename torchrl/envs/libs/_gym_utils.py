@@ -44,7 +44,9 @@ class _BaseGymWrapper:
     def _obs_keys(self):
         obs_keys = self.__dict__.get("_observation_keys", None)
         if obs_keys is None:
-            obs_keys = self.__dict__["_observation_keys"] = list(self.torchrl_env.observation_spec.keys(True, True))
+            obs_keys = self.__dict__["_observation_keys"] = list(
+                self.torchrl_env.observation_spec.keys(True, True)
+            )
         return obs_keys
 
 
@@ -57,11 +59,7 @@ if _has_gymnasium:
             self._tensordict.set("action", action)
             self.torchrl_env.step(self._tensordict)
             _tensordict = step_mdp(self._tensordict)
-            observation = (
-                self._tensordict.get("next")
-                .select(*self._obs_keys)
-                .to_dict()
-            )
+            observation = self._tensordict.get("next").select(*self._obs_keys).to_dict()
             reward = self._tensordict.get(("next", "reward"))
             terminated = self._tensordict.get(("next", "terminated"))
             truncated = self._tensordict.get(("next", "truncated"))
@@ -100,11 +98,7 @@ if _has_gym:
             self._tensordict.set("action", action)
             self.torchrl_env.step(self._tensordict)
             _tensordict = step_mdp(self._tensordict)
-            observation = (
-                self._tensordict.get("next")
-                .select(*self._obs_keys)
-                .to_dict()
-            )
+            observation = self._tensordict.get("next").select(*self._obs_keys).to_dict()
             reward = self._tensordict.get(("next", "reward"))
             terminated = self._tensordict.get(("next", "terminated"))
             truncated = self._tensordict.get(("next", "truncated"))
@@ -120,11 +114,7 @@ if _has_gym:
             self._tensordict.set("action", action)
             self.torchrl_env.step(self._tensordict)
             _tensordict = step_mdp(self._tensordict)
-            observation = (
-                self._tensordict.get("next")
-                .select(*self._obs_keys)
-                .to_dict()
-            )
+            observation = self._tensordict.get("next").select(*self._obs_keys).to_dict()
             reward = self._tensordict.get(("next", "reward"))
             done = self._tensordict.get(("next", "done"))
             info = {}
@@ -137,9 +127,7 @@ if _has_gym:
         @implement_for("gym", None, "0.26")
         def reset(self):  # noqa: F811
             self._tensordict = self.torchrl_env.reset()
-            observation = self._tensordict.select(
-                *self._obs_keys
-            ).to_dict()
+            observation = self._tensordict.select(*self._obs_keys).to_dict()
             out = observation
             if self.to_numpy:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
@@ -148,9 +136,7 @@ if _has_gym:
         @implement_for("gym", "0.26", None)
         def reset(self):  # noqa: F811
             self._tensordict = self.torchrl_env.reset()
-            observation = self._tensordict.select(
-                *self._obs_keys
-            ).to_dict()
+            observation = self._tensordict.select(*self._obs_keys).to_dict()
             out = observation, {}
             if self.to_numpy:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)

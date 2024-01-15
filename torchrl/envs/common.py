@@ -1674,6 +1674,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             autoreset=autoreset,
             disable_env_checker=disable_env_checker,
         )
+
     @implement_for("gym", "0.24", "0.25", class_method=True)
     def _register_gym(  # noqa: F811
         cls,
@@ -1725,7 +1726,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             autoreset=autoreset,
         )
 
-    @implement_for("gym", "0.14", "0.24", class_method=True)
+    @implement_for("gym", "0.21", "0.24", class_method=True)
     def _register_gym(  # noqa: F811
         cls,
         id,
@@ -1757,9 +1758,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             )
         if autoreset is not False:
             raise TypeError(
-                cls._GYM_UNRECOGNIZED_KWARG.format(
-                    "autoreset", gym.__version__
-                )
+                cls._GYM_UNRECOGNIZED_KWARG.format("autoreset", gym.__version__)
             )
         from torchrl.envs.libs._gym_utils import _TorchRLGymWrapper
 
@@ -1781,7 +1780,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             order_enforce=order_enforce,
         )
 
-    @implement_for("gym", None, "0.14", class_method=True)
+    @implement_for("gym", None, "0.21", class_method=True)
     def _register_gym(  # noqa: F811
         cls,
         id,

@@ -208,7 +208,7 @@ def _gym_to_torchrl_spec_transform(
     device="cpu",
     categorical_action_encoding=False,
     remap_state_to_observation: bool = True,
-    batch_size: tuple = torch.Size([]),
+    batch_size: tuple = (),
 ) -> TensorSpec:
     """Maps the gym specs to the TorchRL specs.
 
@@ -356,14 +356,14 @@ def _box_convert(spec, gym_spaces, shape):
 
 
 @implement_for("gym", "0.18")
-def _box_convert(spec, gym_spaces, shape):
+def _box_convert(spec, gym_spaces, shape):  # noqa: F811
     low = spec.low.detach().cpu().numpy()
     high = spec.high.detach().cpu().numpy()
     return gym_spaces.Box(low=low, high=high, shape=shape)
 
 
 @implement_for("gymnasium")
-def _box_convert(spec, gym_spaces, shape):
+def _box_convert(spec, gym_spaces, shape):  # noqa: F811
     low = spec.low.detach().cpu().numpy()
     high = spec.high.detach().cpu().numpy()
     return gym_spaces.Box(low=low, high=high, shape=shape)
@@ -371,7 +371,7 @@ def _box_convert(spec, gym_spaces, shape):
 
 def _torchrl_to_gym_spec_transform(
     spec,
-    batch_size=torch.Size([]),
+    batch_size=(),
     categorical_action_encoding=False,
     remap_state_to_observation: bool = True,
 ) -> TensorSpec:

@@ -238,7 +238,7 @@ class TestGym:
         from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
         EnvBase.register_gym(
-            f"Dummy-{numpy}-v0",
+            f"Dummy-{numpy}-{backend}-v0",
             entry_point=self.DummyEnv,
             to_numpy=numpy,
             backend=backend,
@@ -247,7 +247,7 @@ class TestGym:
         )
 
         with set_gym_backend(backend) if backend is not None else nullcontext():
-            envgym = gym_backend().make(f"Dummy-{numpy}-v0")
+            envgym = gym_backend().make(f"Dummy-{numpy}-{backend}-v0")
             envgym.reset()
             obs, *_ = envgym.step(envgym.action_space.sample())
             assert "observation" in obs
@@ -259,7 +259,8 @@ class TestGym:
 
             # with a transform
             envgym = gym_backend().make(
-                f"Dummy-{numpy}-v0", transform=CatTensors(["observation", "other"])
+                f"Dummy-{numpy}-{backend}-v0",
+                transform=CatTensors(["observation", "other"]),
             )
             envgym.reset()
             obs, *_ = envgym.step(envgym.action_space.sample())
@@ -273,7 +274,7 @@ class TestGym:
 
         # register with transform
         EnvBase.register_gym(
-            f"Dummy-{numpy}-transform-v0",
+            f"Dummy-{numpy}-{backend}-transform-v0",
             entry_point=self.DummyEnv,
             backend=backend,
             to_numpy=numpy,
@@ -283,7 +284,7 @@ class TestGym:
         )
 
         with set_gym_backend(backend) if backend is not None else nullcontext():
-            envgym = gym_backend().make(f"Dummy-{numpy}-transform-v0")
+            envgym = gym_backend().make(f"Dummy-{numpy}-{backend}-transform-v0")
             envgym.reset()
             obs, *_ = envgym.step(envgym.action_space.sample())
             assert "observation_other" not in obs
@@ -296,7 +297,7 @@ class TestGym:
 
         # register with transform
         EnvBase.register_gym(
-            f"Dummy-{numpy}-noarg-v0",
+            f"Dummy-{numpy}-{backend}-noarg-v0",
             entry_point=self.DummyEnv,
             backend=backend,
             to_numpy=numpy,
@@ -304,9 +305,11 @@ class TestGym:
         with set_gym_backend(backend) if backend is not None else nullcontext():
             with pytest.raises(AssertionError):
                 envgym = gym_backend().make(
-                    f"Dummy-{numpy}-noarg-v0", arg1=None, arg2=None
+                    f"Dummy-{numpy}-{backend}-noarg-v0", arg1=None, arg2=None
                 )
-            envgym = gym_backend().make(f"Dummy-{numpy}-noarg-v0", arg1=1, arg2=2)
+            envgym = gym_backend().make(
+                f"Dummy-{numpy}-{backend}-noarg-v0", arg1=1, arg2=2
+            )
 
     @pytest.mark.parametrize(
         "env_name",
