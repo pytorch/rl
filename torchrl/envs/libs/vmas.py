@@ -115,13 +115,20 @@ class VmasWrapper(_EnvWrapper):
         env (``vmas.simulator.environment.environment.Environment``): the vmas environment to wrap.
 
     Keyword Args:
-        num_envs (int): Number of vectorized simulation environments.
-        device (torch.device, optional): Device for simulation.
-        continuous_actions (bool, optional): Weather to use continuous actions. Defaults to ``True``.
-        max_steps (int, optional): Maximum number of steps in each vectorized environment after which done is returned.
-            Defaults to ``None`` (no truncation).
+        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulation using PyTorch,
+            this argument decides the number of vectorized envuironments that should be simulated in a batch. It will also
+            determin the batch size of the environment.
+        device (torch.device, optional): Device for simulation. Defaults to ``"cpu"``. All the tensors created by VMAS
+            will be placed on this device.
+        continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions
+            will be discrete. The number of actions and their size will depend on the scenario chosen.
+            See the VMAS repositiory for more info.
+        max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
+            implement a ``done`` function that will define when the scenario is terminated. If ``max_steps`` is specified,
+            the scenario will also be terminated after this horizon has been reached. If instead of terminating the scenario
+            you wish to truncate it, please use a :class:`~torchrl.envs.transforms.StepCounter` transform.
         categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
-            them to categorical or one-hot.
+            them to categorical or one-hot. Defaults to ``True``.
         group_map (MarlGroupMapType or Dict[str, List[str]], optional): how to group agents in tensordicts for
             input/output. By default, if the agent names follow the ``"<name>_<int>"``
             convention, they will be grouped by ``"<name>"``. If they do not follow this convention, they will be all put
@@ -627,16 +634,25 @@ class VmasEnv(VmasWrapper):
     Paper: https://arxiv.org/abs/2207.03530
 
     Args:
-        scenario (str or vmas.simulator.scenario.BaseScenario): the vmas environment to build.
+        scenario (str or vmas.simulator.scenario.BaseScenario): the vmas scenario to build.
+            Must be one of :attr:`.available_envs`. For a description and rendering of available scenarios see
+            https://github.com/proroklab/VectorizedMultiAgentSimulator?tab=readme-ov-file#main-scenarios
 
     Keyword Args:
-        num_envs (int): Number of vectorized simulation environments.
-        device (torch.device, optional): Device for simulation.
-        continuous_actions (bool, optional): Weather to use continuous actions. Defaults to ``True``.
-        max_steps (int, optional): Maximum number of steps in each vectorized environment after which done is returned.
-            Defaults to ``None`` (no truncation).
+        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulation using PyTorch,
+            this argument decides the number of vectorized envuironments that should be simulated in a batch. It will also
+            determin the batch size of the environment.
+        device (torch.device, optional): Device for simulation. Defaults to ``"cpu"``. All the tensors created by VMAS
+            will be placed on this device.
+        continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions
+            will be discrete. The number of actions and their size will depend on the scenario chosen.
+            See the VMAS repositiory for more info.
+        max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
+            implement a ``done`` function that will define when the scenario is terminated. If ``max_steps`` is specified,
+            the scenario will also be terminated after this horizon has been reached. If instead of terminating the scenario
+            you wish to truncate it, please use a :class:`~torchrl.envs.transforms.StepCounter` transform.
         categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
-            them to categorical or one-hot.
+            them to categorical or one-hot. Defaults to ``True``.
         group_map (MarlGroupMapType or Dict[str, List[str]], optional): how to group agents in tensordicts for
             input/output. By default, if the agent names follow the ``"<name>_<int>"``
             convention, they will be grouped by ``"<name>"``. If they do not follow this convention, they will be all put
