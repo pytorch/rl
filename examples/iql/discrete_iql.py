@@ -100,7 +100,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # update weights of the inference policy
         collector.update_policy_weights_()
 
-        tensordict = tensordict.view(-1)
+        tensordict = tensordict.reshape(-1)
         current_frames = tensordict.numel()
         # add to replay buffer
         replay_buffer.extend(tensordict.cpu())
