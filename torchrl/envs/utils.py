@@ -73,7 +73,6 @@ class _classproperty(property):
     def __get__(self, cls, owner):
         return classmethod(self.fget).__get__(None, owner)()
 
-
 def step_mdp(
     tensordict: TensorDictBase,
     next_tensordict: TensorDictBase = None,
@@ -230,23 +229,18 @@ def step_mdp(
     if exclude_action:
         action_keys = map(unravel_key, action_keys)
         excluded = excluded.union(action_keys)
-    keys = set(tensordict.keys(True, True))
-    # remove excluded keys
-    keys = collections.deque(keys - excluded)
-    # make the map
-    keys_map = {}
-    for i in range(len(keys)):
-        key = keys.popleft()
-        if isinstance(key, str) or key[0] != "next":
-            if keep_other or key in action_keys:
-                keys_map[key] = key
+    if keep_other:
+        out = tensordict.exclude(*excluded)
+        for key, val in out.pop("next").items():
+            out._set_str(key, val, validated=True, inplace=False)
+    else:
+        if exclude_action:
+            out = tensordict.exclude(*excluded).get("next")
         else:
-            keys.append(key)
-    while len(keys):
-        key = keys.popleft()
-        keys_map[unravel_key(key[1:])] = key
-    out = tensordict.select(*keys_map.values())
-    out.update(out.pop("next"))
+            out = tensordict.select(*action_keys, "next").exclude(*excluded)
+            for key, val in out.pop("next").items():
+                out._set_str(key, val, validated=True, inplace=False)
+
     if next_tensordict is not None:
         return next_tensordict.update(out)
     else:
