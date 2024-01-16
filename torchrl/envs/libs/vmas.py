@@ -636,7 +636,7 @@ class VmasEnv(VmasWrapper):
     Args:
         scenario (str or vmas.simulator.scenario.BaseScenario): the vmas scenario to build.
             Must be one of :attr:`.available_envs`. For a description and rendering of available scenarios see
-            `the README <hhttps://github.com/proroklab/VectorizedMultiAgentSimulator/tree/VMAS-1.3.3?tab=readme-ov-file#main-scenarios>`__
+            `the README <https://github.com/proroklab/VectorizedMultiAgentSimulator/tree/VMAS-1.3.3?tab=readme-ov-file#main-scenarios>`__.
 
 
     Keyword Args:
@@ -663,7 +663,7 @@ class VmasEnv(VmasWrapper):
         **kwargs (Dict, optional): These are additional argument that can be passed to the VMAS scenario constructor.
             (e.g., number of agents, reward sparsity). The available arguments will vary based on the chosen scenario.
             To see the available arguments for a specific scenario, see the constructor in its file from
-            `the scenario folder <https://github.com/proroklab/VectorizedMultiAgentSimulator/tree/main/vmas/scenarios>`__
+            `the scenario folder <https://github.com/proroklab/VectorizedMultiAgentSimulator/tree/main/vmas/scenarios>`__.
 
 
     Attributes:
