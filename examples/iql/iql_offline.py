@@ -79,6 +79,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(i)
         # sample data
         data = replay_buffer.sample()
+
+        if data.device != device:
+            data = data.to(device, non_blocking=True)
+
         # compute losses
         loss_info = loss_module(data)
         actor_loss = loss_info["loss_actor"]
