@@ -115,14 +115,14 @@ class VmasWrapper(_EnvWrapper):
         env (``vmas.simulator.environment.environment.Environment``): the vmas environment to wrap.
 
     Keyword Args:
-        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulation using PyTorch.
-            This argument decides the number of vectorized environments that should be simulated in a batch. It will also
+        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulations using PyTorch.
+            This argument indicates the number of vectorized environments that should be simulated in a batch. It will also
             determine the batch size of the environment.
         device (torch.device, optional): Device for simulation. Defaults to the default device. All the tensors created by VMAS
             will be placed on this device.
         continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions
             will be discrete. The number of actions and their size will depend on the chosen scenario.
-            See the VMAS repositiory for more info.
+            See the VMAS repository for more info.
         max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
             be terminating or not. If ``max_steps`` is specified,
             the scenario is also terminated whenever this horizon is reached. If instead of terminating the scenario
@@ -635,18 +635,18 @@ class VmasEnv(VmasWrapper):
 
     Args:
         scenario (str or vmas.simulator.scenario.BaseScenario): the vmas scenario to build.
-            Must be one of :attr:`.available_envs`. For a description and rendering of available scenarios see
+            Must be one of :attr:`~.available_envs`. For a description and rendering of available scenarios see
             `the README <https://github.com/proroklab/VectorizedMultiAgentSimulator/tree/VMAS-1.3.3?tab=readme-ov-file#main-scenarios>`__.
 
 
     Keyword Args:
-        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulation using PyTorch.
-            This argument decides the number of vectorized environments that should be simulated in a batch. It will also
+        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulations using PyTorch.
+            This argument indicates the number of vectorized environments that should be simulated in a batch. It will also
             determine the batch size of the environment.
         device (torch.device, optional): Device for simulation. Defaults to the defaultt device. All the tensors created by VMAS
             will be placed on this device.
         continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions
-            will be discrete. The number of actions and their size will depend on the scenario chosen.
+            will be discrete. The number of actions and their size will depend on the chosen scenario.
             See the VMAS repositiory for more info.
         max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
             be terminating or not. If ``max_steps`` is specified,
@@ -660,7 +660,7 @@ class VmasEnv(VmasWrapper):
             in one group named ``"agents"``.
             Otherwise, a group map can be specified or selected from some premade options.
             See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
-        **kwargs (Dict, optional): These are additional argument that can be passed to the VMAS scenario constructor.
+        **kwargs (Dict, optional): These are additional arguments that can be passed to the VMAS scenario constructor.
             (e.g., number of agents, reward sparsity). The available arguments will vary based on the chosen scenario.
             To see the available arguments for a specific scenario, see the constructor in its file from
             `the scenario folder <https://github.com/proroklab/VectorizedMultiAgentSimulator/tree/VMAS-1.3.3/vmas/scenarios>`__.
