@@ -116,7 +116,7 @@ class VmasWrapper(_EnvWrapper):
 
     Keyword Args:
         num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulation using PyTorch.
-            This argument decides the number of vectorized envuironments that should be simulated in a batch. It will also
+            This argument decides the number of vectorized environments that should be simulated in a batch. It will also
             determine the batch size of the environment.
         device (torch.device, optional): Device for simulation. Defaults to ``"cpu"``. All the tensors created by VMAS
             will be placed on this device.
