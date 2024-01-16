@@ -124,7 +124,7 @@ class VmasWrapper(_EnvWrapper):
             will be discrete. The number of actions and their size will depend on the chosen scenario.
             See the VMAS repositiory for more info.
         max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
-            implement a ``done`` function that will define when the scenario is terminated. If ``max_steps`` is specified,
+            be terminating or not. If ``max_steps`` is specified,
             the scenario is also terminated whenever this horizon is reached. If instead of terminating the scenario
             you wish to truncate it, please use a :class:`~torchrl.envs.transforms.StepCounter` transform.
         categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
@@ -649,7 +649,7 @@ class VmasEnv(VmasWrapper):
             will be discrete. The number of actions and their size will depend on the scenario chosen.
             See the VMAS repositiory for more info.
         max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
-            implement a ``done`` function that will define when the scenario is terminated. If ``max_steps`` is specified,
+            be terminating or not. If ``max_steps`` is specified,
             the scenario is also terminated whenever this horizon is reached. If instead of terminating the scenario
             you wish to truncate it, please use a :class:`~torchrl.envs.transforms.StepCounter` transform.
         categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
