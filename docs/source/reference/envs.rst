@@ -605,6 +605,7 @@ to be able to create this other composition:
     RewardSum
     Reward2GoTransform
     SelectTransform
+    SignTransform
     SqueezeTransform
     StepCounter
     TargetReturn
