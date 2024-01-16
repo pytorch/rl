@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import collections
 import contextlib
 
 import importlib.util
@@ -15,7 +16,8 @@ from typing import Dict, List, Union
 
 import torch
 
-from tensordict import is_tensor_collection, TensorDictBase, unravel_key
+from tensordict import is_tensor_collection, TensorDictBase, unravel_key, \
+    TensorDict
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
@@ -187,7 +189,7 @@ def step_mdp(
             next_tensordicts = next_tensordict.unbind(tensordict.stack_dim)
         else:
             next_tensordicts = [None] * len(tensordict.tensordicts)
-        out = torch.stack(
+        out = LazyStackedTensorDict.lazy_stack(
             [
                 step_mdp(
                     td,
@@ -218,24 +220,33 @@ def step_mdp(
 
     excluded = set()
     if exclude_reward:
-        excluded = excluded.union(reward_keys)
+        excluded_reward_keys = [unravel_key(reward_key) for reward_key in reward_keys]
+        excluded_reward_keys += [unravel_key(("next", reward_key)) for reward_key in excluded_reward_keys]
+        excluded = excluded.union(excluded_reward_keys)
     if exclude_done:
-        excluded = excluded.union(done_keys)
+        excluded_done_keys = [unravel_key(done_key) for done_key in done_keys]
+        excluded_done_keys += [unravel_key(("next", done_key)) for done_key in excluded_done_keys]
+        excluded = excluded.union(excluded_done_keys)
     if exclude_action:
+        action_keys = map(unravel_key, action_keys)
         excluded = excluded.union(action_keys)
-    next_td = tensordict.get("next")
-    out = next_td.empty()
-
-    total_key = ()
-    if keep_other:
-        for key in tensordict.keys():
-            if key != "next":
-                _set(tensordict, out, key, total_key, excluded)
-    elif not exclude_action:
-        for action_key in action_keys:
-            _set_single_key(tensordict, out, action_key)
-    for key in next_td.keys():
-        _set(next_td, out, key, total_key, excluded)
+    keys = set(tensordict.keys(True, True))
+    # remove excluded keys
+    keys = collections.deque(keys - excluded)
+    # make the map
+    keys_map = {}
+    for i in range(len(keys)):
+        key = keys.popleft()
+        if isinstance(key, str) or key[0] != "next":
+            if keep_other or key in action_keys:
+                keys_map[key] = key
+        else:
+            keys.append(key)
+    while len(keys):
+        key = keys.popleft()
+        keys_map[unravel_key(key[1:])] = key
+    out = tensordict.select(*keys_map.values())
+    out.update(out.pop("next"))
     if next_tensordict is not None:
         return next_tensordict.update(out)
     else:
