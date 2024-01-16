@@ -196,10 +196,14 @@ Datasets
 --------
 
 TorchRL provides wrappers around offline RL datasets.
-These data are presented a :class:`~torchrl.data.ReplayBuffer` instances, which
+These data are presented as :class:`~torchrl.data.ReplayBuffer` instances, which
 means that they can be customized at will with transforms, samplers and storages.
+For instance, entries can be filtered in or out of a dataset with :class:`~torchrl.envs.SelectTransform`
+or :class:`~torchrl.envs.ExcludeTransform`.
+
 By default, datasets are stored as memory mapped tensors, allowing them to be
 promptly sampled with virtually no memory footprint.
+
 Here's an example:
 
 .. code::Python
@@ -278,6 +282,7 @@ Here's an example:
 
 
     D4RLExperienceReplay
+    GenDGRLExperienceReplay
     MinariExperienceReplay
     OpenMLExperienceReplay
     OpenXExperienceReplay
