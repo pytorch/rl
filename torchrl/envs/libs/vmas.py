@@ -118,7 +118,7 @@ class VmasWrapper(_EnvWrapper):
         num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulation using PyTorch.
             This argument decides the number of vectorized environments that should be simulated in a batch. It will also
             determine the batch size of the environment.
-        device (torch.device, optional): Device for simulation. Defaults to ``"cpu"``. All the tensors created by VMAS
+        device (torch.device, optional): Device for simulation. Defaults to the default device. All the tensors created by VMAS
             will be placed on this device.
         continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions
             will be discrete. The number of actions and their size will depend on the chosen scenario.
@@ -643,7 +643,7 @@ class VmasEnv(VmasWrapper):
         num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulation using PyTorch.
             This argument decides the number of vectorized environments that should be simulated in a batch. It will also
             determine the batch size of the environment.
-        device (torch.device, optional): Device for simulation. Defaults to ``"cpu"``. All the tensors created by VMAS
+        device (torch.device, optional): Device for simulation. Defaults to the defaultt device. All the tensors created by VMAS
             will be placed on this device.
         continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions
             will be discrete. The number of actions and their size will depend on the scenario chosen.
