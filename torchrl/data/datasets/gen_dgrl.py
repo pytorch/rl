@@ -238,7 +238,9 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
             batch = self._PROCESS_NPY_BATCH
         _, file_name, _ = link
         file_path = os.path.join(download_folder, file_name)
-        logging.info(f"Unpacking dataset file {file_path} ({file_name}) to {download_folder}.")
+        logging.info(
+            f"Unpacking dataset file {file_path} ({file_name}) to {download_folder}."
+        )
         idx = 0
         td_memmap = None
         dataset_len = self._get_category_len(category_name)
