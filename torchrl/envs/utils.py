@@ -285,9 +285,9 @@ def _set(source, dest, key, total_key, excluded):
     non_empty = False
     if unravel_key(total_key) not in excluded:
         try:
-            val = source.get(key)
+            val = source._get_str(key, default=None)
             if is_tensor_collection(val):
-                new_val = dest.get(key, None)
+                new_val = dest._get_str(key, None)
                 if new_val is None:
                     new_val = val.empty()
                 non_empty_local = False
