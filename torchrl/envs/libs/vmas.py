@@ -126,7 +126,7 @@ class VmasWrapper(_EnvWrapper):
         max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
             be terminating or not. If ``max_steps`` is specified,
             the scenario is also terminated whenever this horizon is reached.
-            Unlike gym's `TimeLimit` transform or torchrl's :class:`~torchrl.envs.transforms.StepCounter`,
+            Unlike gym's ``TimeLimit`` transform or torchrl's :class:`~torchrl.envs.transforms.StepCounter`,
             this argument will not set the ``"truncated"`` entry in the tensordict.
         categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
             them to categorical or one-hot. Defaults to ``True``.
@@ -652,7 +652,7 @@ class VmasEnv(VmasWrapper):
         max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
             be terminating or not. If ``max_steps`` is specified,
             the scenario is also terminated whenever this horizon is reached.
-            Unlike gym's `TimeLimit` transform or torchrl's :class:`~torchrl.envs.transforms.StepCounter`,
+            Unlike gym's ``TimeLimit`` transform or torchrl's :class:`~torchrl.envs.transforms.StepCounter`,
             this argument will not set the ``"truncated"`` entry in the tensordict.
         categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
             them to categorical or one-hot. Defaults to ``True``.
