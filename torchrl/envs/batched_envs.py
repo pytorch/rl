@@ -475,7 +475,9 @@ class _BatchedEnv(EnvBase):
         self._cache_shared_keys = set(self.shared_tensordict_parent.keys(True, True))
 
         self._shared_tensordict_parent_next = self.shared_tensordict_parent.get("next")
-        self._shared_tensordict_parent_root = self.shared_tensordict_parent.exclude("next", *self.reset_keys)
+        self._shared_tensordict_parent_root = self.shared_tensordict_parent.exclude(
+            "next", *self.reset_keys
+        )
 
     def _start_workers(self) -> None:
         """Starts the various envs."""

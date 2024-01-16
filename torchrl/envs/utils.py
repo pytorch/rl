@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import collections
 import contextlib
 
 import importlib.util
@@ -16,8 +15,7 @@ from typing import Dict, List, Union
 
 import torch
 
-from tensordict import is_tensor_collection, TensorDictBase, unravel_key, \
-    TensorDict
+from tensordict import is_tensor_collection, TensorDictBase, unravel_key
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
@@ -72,6 +70,7 @@ def _convert_exploration_type(*, exploration_mode, exploration_type):
 class _classproperty(property):
     def __get__(self, cls, owner):
         return classmethod(self.fget).__get__(None, owner)()
+
 
 def step_mdp(
     tensordict: TensorDictBase,
@@ -219,28 +218,24 @@ def step_mdp(
 
     excluded = set()
     if exclude_reward:
-        excluded_reward_keys = [unravel_key(reward_key) for reward_key in reward_keys]
-        excluded_reward_keys += [unravel_key(("next", reward_key)) for reward_key in excluded_reward_keys]
-        excluded = excluded.union(excluded_reward_keys)
+        excluded = excluded.union(reward_keys)
     if exclude_done:
-        excluded_done_keys = [unravel_key(done_key) for done_key in done_keys]
-        excluded_done_keys += [unravel_key(("next", done_key)) for done_key in excluded_done_keys]
-        excluded = excluded.union(excluded_done_keys)
+        excluded = excluded.union(done_keys)
     if exclude_action:
-        action_keys = map(unravel_key, action_keys)
         excluded = excluded.union(action_keys)
-    if keep_other:
-        out = tensordict.exclude(*excluded)
-        for key, val in out.pop("next").items():
-            out._set_str(key, val, validated=True, inplace=False)
-    else:
-        if exclude_action:
-            out = tensordict.exclude(*excluded).get("next")
-        else:
-            out = tensordict.select(*action_keys, "next").exclude(*excluded)
-            for key, val in out.pop("next").items():
-                out._set_str(key, val, validated=True, inplace=False)
+    next_td = tensordict.get("next")
+    out = next_td.empty()
 
+    total_key = ()
+    if keep_other:
+        for key in tensordict.keys():
+            if key != "next":
+                _set(tensordict, out, key, total_key, excluded)
+    elif not exclude_action:
+        for action_key in action_keys:
+            _set_single_key(tensordict, out, action_key)
+    for key in next_td.keys():
+        _set(next_td, out, key, total_key, excluded)
     if next_tensordict is not None:
         return next_tensordict.update(out)
     else:
