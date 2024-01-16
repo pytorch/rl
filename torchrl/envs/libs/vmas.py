@@ -636,11 +636,12 @@ class VmasEnv(VmasWrapper):
     Args:
         scenario (str or vmas.simulator.scenario.BaseScenario): the vmas scenario to build.
             Must be one of :attr:`.available_envs`. For a description and rendering of available scenarios see
-            https://github.com/proroklab/VectorizedMultiAgentSimulator?tab=readme-ov-file#main-scenarios
+            `the README <hhttps://github.com/proroklab/VectorizedMultiAgentSimulator/tree/VMAS-1.3.3?tab=readme-ov-file#main-scenarios>`__
+
 
     Keyword Args:
         num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulation using PyTorch.
-            This argument decides the number of vectorized envuironments that should be simulated in a batch. It will also
+            This argument decides the number of vectorized environments that should be simulated in a batch. It will also
             determine the batch size of the environment.
         device (torch.device, optional): Device for simulation. Defaults to ``"cpu"``. All the tensors created by VMAS
             will be placed on this device.
@@ -662,7 +663,8 @@ class VmasEnv(VmasWrapper):
         **kwargs (Dict, optional): These are additional argument that can be passed to the VMAS scenario constructor.
             (e.g., number of agents, reward sparsity). The available arguments will vary based on the chosen scenario.
             To see the available arguments for a specific scenario, see the constructor in its file from
-             https://github.com/proroklab/VectorizedMultiAgentSimulator/tree/main/vmas/scenarios
+            `the scenario folder <https://github.com/proroklab/VectorizedMultiAgentSimulator/tree/main/vmas/scenarios>`__
+
 
     Attributes:
         group_map (Dict[str, List[str]]): how to group agents in tensordicts for
