@@ -661,7 +661,7 @@ class VmasEnv(VmasWrapper):
             See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
         **kwargs (Dict, optional): These are additional argument that can be passed to the VMAS scenario constructor.
             (e.g., number of agents, reward sparsity). The available arguments will vary based on the chosen scenario.
-            To see the available arguments for a specific scneario, see the constructor in its file from
+            To see the available arguments for a specific scenario, see the constructor in its file from
              https://github.com/proroklab/VectorizedMultiAgentSimulator/tree/main/vmas/scenarios
 
     Attributes:
