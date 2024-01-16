@@ -128,6 +128,7 @@ IQL
 
     IQLLoss
     DiscreteIQLLoss
+
 CQL
 ----
 
