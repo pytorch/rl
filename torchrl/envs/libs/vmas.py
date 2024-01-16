@@ -121,7 +121,7 @@ class VmasWrapper(_EnvWrapper):
         device (torch.device, optional): Device for simulation. Defaults to ``"cpu"``. All the tensors created by VMAS
             will be placed on this device.
         continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions
-            will be discrete. The number of actions and their size will depend on the scenario chosen.
+            will be discrete. The number of actions and their size will depend on the chosen scenario.
             See the VMAS repositiory for more info.
         max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
             implement a ``done`` function that will define when the scenario is terminated. If ``max_steps`` is specified,
