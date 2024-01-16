@@ -125,8 +125,9 @@ class VmasWrapper(_EnvWrapper):
             See the VMAS repository for more info.
         max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
             be terminating or not. If ``max_steps`` is specified,
-            the scenario is also terminated whenever this horizon is reached. If instead of terminating the scenario
-            you wish to truncate it, please use a :class:`~torchrl.envs.transforms.StepCounter` transform.
+            the scenario is also terminated whenever this horizon is reached.
+            Unlike gym's `TimeLimit` transform or torchrl's :class:`~torchrl.envs.transforms.StepCounter`,
+            this argument will not set the ``"truncated"`` entry in the tensordict.
         categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
             them to categorical or one-hot. Defaults to ``True``.
         group_map (MarlGroupMapType or Dict[str, List[str]], optional): how to group agents in tensordicts for
@@ -650,8 +651,9 @@ class VmasEnv(VmasWrapper):
             See the VMAS repositiory for more info.
         max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
             be terminating or not. If ``max_steps`` is specified,
-            the scenario is also terminated whenever this horizon is reached. If instead of terminating the scenario
-            you wish to truncate it, please use a :class:`~torchrl.envs.transforms.StepCounter` transform.
+            the scenario is also terminated whenever this horizon is reached.
+            Unlike gym's `TimeLimit` transform or torchrl's :class:`~torchrl.envs.transforms.StepCounter`,
+            this argument will not set the ``"truncated"`` entry in the tensordict.
         categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
             them to categorical or one-hot. Defaults to ``True``.
         group_map (MarlGroupMapType or Dict[str, List[str]], optional): how to group agents in tensordicts for
