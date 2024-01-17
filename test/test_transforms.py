@@ -7691,6 +7691,21 @@ class TestTransformedEnv:
         assert base_env.reward_spec.space.minimum == -np.inf
         assert base_env.reward_spec.space.maximum == np.inf
 
+    def test_allow_done_after_reset(self):
+        base_env = ContinuousActionVecMockEnv(allow_done_after_reset=True)
+        assert base_env.allow_done_after_reset
+        t1 = TransformedEnv(
+            base_env, transform=RewardClipping(clamp_min=0, clamp_max=4)
+        )
+        assert t1.allow_done_after_reset
+        with pytest.raises(
+            RuntimeError,
+            match="allow_done_after_reset is a read-only property for TransformedEnvs",
+        ):
+            t1.allow_done_after_reset = False
+        base_env.allow_done_after_reset = False
+        assert not t1.allow_done_after_reset
+
 
 def test_nested_transformed_env():
     base_env = ContinuousActionVecMockEnv()

@@ -111,6 +111,7 @@ class _MockEnv(EnvBase):
         super().__init__(
             device=kwargs.pop("device", "cpu"),
             dtype=torch.get_default_dtype(),
+            **kwargs,
         )
         self.set_seed(seed)
         self.is_closed = False

@@ -335,6 +335,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self._run_type_checks = run_type_checks
 
     @property
+    def allow_done_after_reset(self) -> bool:
+        return self._allow_done_after_reset
+
+    @allow_done_after_reset.setter
+    def allow_done_after_reset(self, allow_done_after_reset: bool):
+        self._allow_done_after_reset = allow_done_after_reset
+
+    @property
     def batch_size(self) -> torch.Size:
         _batch_size = self.__dict__["_batch_size"]
         if _batch_size is None:
@@ -1522,7 +1530,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if reset_value is not None:
                 for done_key in done_key_group:
                     done_val = tensordict_reset.get(done_key)
-                    if done_val[reset_value].any() and not self._allow_done_after_reset:
+                    if done_val[reset_value].any() and not self.allow_done_after_reset:
                         raise RuntimeError(
                             f"Env done entry '{done_key}' was (partially) True after reset on specified '_reset' dimensions. This is not allowed."
                         )
@@ -1540,7 +1548,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                         # we set the done val to tensordict, to make sure that
                         # _update_during_reset does not pad the value
                         tensordict.set(done_key, done_val)
-            elif not self._allow_done_after_reset:
+            elif not self.allow_done_after_reset:
                 for done_key in done_key_group:
                     if tensordict_reset.get(done_key).any():
                         raise RuntimeError(
