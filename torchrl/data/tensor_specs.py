@@ -3668,15 +3668,7 @@ class CompositeSpec(TensorSpec):
 
     def __eq__(self, other):
         return (
-            type(self) is type(other)
-            and self._device == other._device
-            and all(
-                (key0 == key1) and (v0 == v1)
-                for ((key0, v0), (key1, v1)) in zip(
-                    self._specs.items(), other._specs.items()
-                )
-            )
-        )
+            type(self) is type(other) and self.shape == other.shape and self._device == other._device and set(self._specs.keys()) == set(other._specs.keys()) and all((self._specs[key] == spec) for (key, spec) in other._specs.items()))
 
     def update(self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpec]]) -> None:
         for key, item in dict_or_spec.items():
