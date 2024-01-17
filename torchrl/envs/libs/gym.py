@@ -112,7 +112,6 @@ class set_gym_backend(_DecoratorContextManager):
         DEFAULT_GYM = self.backend
         found_setters = collections.defaultdict(lambda: False)
         for setter in copy(implement_for._setters):
-            found_setter = False
             check_module = (
                 callable(setter.module_name)
                 and setter.module_name.__name__ == self.backend.__name__
@@ -123,9 +122,14 @@ class set_gym_backend(_DecoratorContextManager):
             if check_module and check_version:
                 setter.module_set()
                 found_setter = True
-            found_setters[setter.func_name] = (
-                found_setters[setter.func_name] or found_setter
-            )
+            elif check_module:
+                found_setter = False
+            else:
+                found_setter = None
+            if found_setter is not None:
+                found_setters[setter.func_name] = (
+                    found_setters[setter.func_name] or found_setter
+                )
         # we keep only the setters we need. This is safe because a copy is saved under self._setters_saved
         for func_name, found_setter in found_setters.items():
             if not found_setter:
