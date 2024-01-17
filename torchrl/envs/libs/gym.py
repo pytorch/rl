@@ -981,8 +981,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @property
     def info_dict_reader(self):
-        if not self._info_dict_reader:
-            self._info_dict_reader.append(default_info_dict_reader())
         return self._info_dict_reader
 
     @info_dict_reader.setter

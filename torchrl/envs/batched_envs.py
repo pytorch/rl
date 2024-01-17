@@ -739,7 +739,108 @@ class ParallelEnv(_BatchedEnv):
     __doc__ += _BatchedEnv.__doc__
     __doc__ += """
 
-    .. note::
+    .. warning::
+      TorchRL's ParallelEnv is quite stringent when it comes to env specs, since
+      these are used to build shared memory buffers for inter-process communication.
+      As such, we encourage users to first run a check of the env specs with
+      :func:`~torchrl.envs.utils.check_env_specs`:
+
+        >>> from torchrl.envs import check_env_specs
+        >>> env = make_env()
+        >>> check_env_specs(env) # if this passes without error you're good to go!
+        >>> penv = ParallelEnv(2, make_env)
+
+      In particular, gym-like envs with info-dict readers may be difficult to
+      share across processes if the spec is not properly set, which is hard to
+      do automatically. Check :meth:`~torchrl.envs.GymLikeEnv.set_info_dict_reader`
+      for more information. Here is a short example:
+
+        >>> from torchrl.envs import GymEnv, set_gym_backend, check_env_specs, TransformedEnv, TensorDictPrimer
+        >>> import torch
+        >>> env = GymEnv("HalfCheetah-v4")
+        >>> env.rollout(3)  # no info registered, this env passes check_env_specs
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([10, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([10]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=cpu,
+            is_shared=False)
+        >>> check_env_specs(env)  # succeeds!
+        >>> env.set_info_dict_reader()  # sets the default info_dict reader
+        >>> env.rollout(10)  # because the info_dict is empty at reset time, we're missing the root infos!
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([10, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward_ctrl: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward_run: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        x_position: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                        x_velocity: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False)},
+                    batch_size=torch.Size([10]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=cpu,
+            is_shared=False)
+        >>> check_env_specs(env)  # This check now fails! We should not use an env constructed like this in a parallel env
+        >>> env_fixed = TransformedEnv(env, TensorDictPrimer(env.info_dict_reader[0].info_spec))  # This ad-hoc fix registers the info-spec for reset
+        >>> env_fixed.rollout(10)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([10, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward_ctrl: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward_run: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        x_position: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                        x_velocity: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False)},
+                    batch_size=torch.Size([10]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                reward_ctrl: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                reward_run: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                x_position: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                x_velocity: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=cpu,
+            is_shared=False)
+        >>> check_env_specs(env_fixed)  # Succeeds! This env can be used within a parallel env!
+
+        
+    .. warning::
       The choice of the devices where ParallelEnv needs to be executed can
       drastically influence its performance. The rule of thumbs is:
 
