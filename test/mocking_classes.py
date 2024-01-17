@@ -604,7 +604,6 @@ class ContinuousActionVecMockEnv(_MockEnv):
             tensordict = TensorDict({}, self.batch_size, device=self.device)
 
         tensordict = tensordict.empty()
-
         tensordict.update(self.observation_spec.rand())
         # tensordict.set("next_" + self.out_key, self._get_out_obs(state))
         # tensordict.set("next_" + self._out_key, self._get_out_obs(state))

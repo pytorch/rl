@@ -1210,7 +1210,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError(
                     "tensordict must be placed in shared memory (share_memory_() or memmap_())"
                 )
-            shared_tensordict = shared_tensordict.clone(False)
+            shared_tensordict = shared_tensordict.clone(False).unlock_()
 
             initialized = True
 
