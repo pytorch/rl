@@ -58,7 +58,6 @@ from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator, ParallelEnv, SerialEnv

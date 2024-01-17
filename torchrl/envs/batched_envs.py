@@ -807,7 +807,8 @@ class ParallelEnv(_BatchedEnv):
             device=cpu,
             is_shared=False)
         >>> check_env_specs(env)  # This check now fails! We should not use an env constructed like this in a parallel env
-        >>> env_fixed = TransformedEnv(env, TensorDictPrimer(env.info_dict_reader[0].info_spec))  # This ad-hoc fix registers the info-spec for reset
+        >>> # This ad-hoc fix registers the info-spec for reset. It is wrapped inside `env.auto_register_info_dict()`
+        >>> env_fixed = TransformedEnv(env, TensorDictPrimer(env.info_dict_reader[0].info_spec))
         >>> env_fixed.rollout(10)
         TensorDict(
             fields={
@@ -839,7 +840,9 @@ class ParallelEnv(_BatchedEnv):
             is_shared=False)
         >>> check_env_specs(env_fixed)  # Succeeds! This env can be used within a parallel env!
 
-        
+        Related classes and methods: :meth:`~torchrl.envs.GymLikeEnv.auto_register_info_dict`
+        and :class:`~torchrl.envs.gym_like.default_info_dict_reader`.
+
     .. warning::
       The choice of the devices where ParallelEnv needs to be executed can
       drastically influence its performance. The rule of thumbs is:
