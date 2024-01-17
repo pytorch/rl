@@ -572,7 +572,9 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             env = env.to(device)
         else:
             device = env.device
-        super().__init__(device=None, **kwargs)
+        super().__init__(
+            device=None, allow_done_after_reset=env._allow_done_after_reset, **kwargs
+        )
 
         if isinstance(env, TransformedEnv):
             self._set_env(env.base_env, device)
