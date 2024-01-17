@@ -6990,7 +6990,7 @@ class TestVIP(TransformBase):
             KeyError,
             match=r"VIPRewardTransform.* requires .* key to be present in the input tensordict",
         ):
-            _ = transformed_env.reset(tensordict_reset.select())
+            _ = transformed_env.reset(tensordict_reset.empty())
 
         td = transformed_env.reset(tensordict_reset)
         assert td.device == device

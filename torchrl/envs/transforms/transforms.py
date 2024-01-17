@@ -3119,7 +3119,7 @@ class DTypeCastTransform(Transform):
         ...         obs = self.observation_spec.rand()
         ...         assert reward.dtype == torch.float64
         ...         assert obs["obs"].dtype == torch.float64
-        ...         return obs.select().set("next", obs.update({"reward": reward, "done": done}))
+        ...         return obs.empty().set("next", obs.update({"reward": reward, "done": done}))
         ...     def _set_seed(self, seed):
         ...         pass
         >>> env = TransformedEnv(MyEnv(), DTypeCastTransform(torch.double, torch.float))
@@ -3480,7 +3480,7 @@ class DoubleToFloat(DTypeCastTransform):
         ...         obs = self.observation_spec.rand()
         ...         assert reward.dtype == torch.float64
         ...         assert obs["obs"].dtype == torch.float64
-        ...         return obs.select().set("next", obs.update({"reward": reward, "done": done}))
+        ...         return obs.empty().set("next", obs.update({"reward": reward, "done": done}))
         ...     def _set_seed(self, seed):
         ...         pass
         >>> env = TransformedEnv(MyEnv(), DoubleToFloat())

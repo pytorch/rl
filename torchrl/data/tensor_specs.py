@@ -3364,7 +3364,7 @@ class CompositeSpec(TensorSpec):
         self, vals: Dict[str, Any], *, ignore_device: bool = False
     ) -> Dict[str, torch.Tensor]:
         if isinstance(vals, TensorDict):
-            out = vals.select()  # create and empty tensordict similar to vals
+            out = vals.empty()  # create and empty tensordict similar to vals
         else:
             out = TensorDict({}, torch.Size([]), _run_checks=False)
         for key, item in vals.items():
