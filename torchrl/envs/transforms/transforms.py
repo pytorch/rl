@@ -1663,7 +1663,7 @@ class BinarizeReward(Transform):
     @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         return BinaryDiscreteTensorSpec(
-            n=1, device=reward_spec.device, shape=reward_spec.shape
+            n=1, device=reward_spec.device, shape=reward_spec.shape, dtype=reward_spec.dtype,
         )
 
 
