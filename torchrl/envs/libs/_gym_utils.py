@@ -77,7 +77,6 @@ class _BaseGymWrapper:
                             check_tuple_keys(key, info_key)
                             for info_key in self.info_keys
                         ):
-                            print("found an info key", key)
                             continue
                         keys.append(key)
                     else:
@@ -86,10 +85,8 @@ class _BaseGymWrapper:
                             for info_key in self.info_keys
                             if isinstance(info_key, str)
                         ):
-                            print("found an info key", key)
                             continue
                         keys.append(key)
-                print("keys", keys)
             else:
                 keys = self.torchrl_env.observation_spec.keys(True)
             obs_keys = self.__dict__["_observation_keys"] = sorted(
@@ -154,10 +151,13 @@ if _has_gymnasium:
         @implement_for("gymnasium")
         def reset(self):  # noqa: F811
             self._tensordict = self.torchrl_env.reset()
-            observation = self._tensordict.select(
-                *self._observation_keys,
-            ).to_dict()
-            out = observation, {}
+            observation = self._tensordict
+            if self.info_keys:
+                info = observation.select(*self.info_keys).to_dict()
+            else:
+                info = {}
+            observation = observation.select(*self._observation_keys).to_dict()
+            out = observation, info
             if self.to_numpy:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
             return out
@@ -230,7 +230,8 @@ if _has_gym:
         @implement_for("gym", None, "0.26")
         def reset(self):  # noqa: F811
             self._tensordict = self.torchrl_env.reset()
-            observation = self._tensordict.select(*self._observation_keys).to_dict()
+            observation = self._tensordict
+            observation = observation.select(*self._observation_keys).to_dict()
             out = observation
             if self.to_numpy:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
@@ -239,8 +240,13 @@ if _has_gym:
         @implement_for("gym", "0.26", None)
         def reset(self):  # noqa: F811
             self._tensordict = self.torchrl_env.reset()
-            observation = self._tensordict.select(*self._observation_keys).to_dict()
-            out = observation, {}
+            observation = self._tensordict
+            if self.info_keys:
+                info = observation.select(*self.info_keys).to_dict()
+            else:
+                info = {}
+            observation = observation.select(*self._observation_keys).to_dict()
+            out = observation, info
             if self.to_numpy:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
             return out
