@@ -24,11 +24,12 @@ class _BaseGymWrapper:
     def __init__(
         self, *, entry_point, to_numpy=False, transform=None, info_keys=None, **kwargs
     ):
+        super().__init__()
         torchrl_env = entry_point(**kwargs)
         if transform is not None:
             torchrl_env = TransformedEnv(torchrl_env, transform)
         self.torchrl_env = torchrl_env
-        super().__init__()
+        self.info_keys = info_keys
         self.action_space = _torchrl_to_gym_spec_transform(
             self.torchrl_env.action_spec,
             categorical_action_encoding=self.torchrl_env.__dict__.get(
@@ -42,7 +43,6 @@ class _BaseGymWrapper:
             ),
         )
         self.to_numpy = to_numpy
-        self.info_keys = info_keys
 
     def seed(self, seed: int):
         return self.torchrl_env.set_seed(seed)
