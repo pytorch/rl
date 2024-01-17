@@ -180,9 +180,9 @@ class GymLikeEnv(_EnvWrapper):
             if truncated is not None:
                 truncated = [truncated]
         return (
-            terminated,
-            truncated,
-            done,
+            torch.as_tensor(terminated),
+            torch.as_tensor(truncated),
+            torch.as_tensor(done),
             do_break.any() if not isinstance(do_break, bool) else do_break,
         )
 
@@ -261,10 +261,21 @@ class GymLikeEnv(_EnvWrapper):
             obs_dict["truncated"] = truncated
         obs_dict["done"] = done
         obs_dict["terminated"] = terminated
-
-        tensordict_out = TensorDict(
-            obs_dict, batch_size=tensordict.batch_size, device=self.device
-        )
+        validated = self.validated
+        if not validated:
+            tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
+            if validated is None:
+                # check if any value has to be recast to something else. If not, we can safely
+                # build the tensordict without running checks
+                self.validated = all(
+                    val is tensordict_out.get(key)
+                    for key, val in TensorDict(obs_dict, []).items(True, True)
+                )
+        else:
+            tensordict_out = TensorDict(
+                obs_dict, batch_size=tensordict.batch_size, _run_checks=False
+            )
+        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
 
         if self.info_dict_reader and info is not None:
             if not isinstance(info, dict):
@@ -276,8 +287,15 @@ class GymLikeEnv(_EnvWrapper):
                     out = info_dict_reader(info, tensordict_out)
                     if out is not None:
                         tensordict_out = out
-        # tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
+
+    @property
+    def validated(self):
+        return self.__dict__.get("_validated", None)
+
+    @validated.setter
+    def validated(self, value):
+        self.__dict__["_validated"] = value
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
@@ -289,6 +307,7 @@ class GymLikeEnv(_EnvWrapper):
         tensordict_out = TensorDict(
             source=source,
             batch_size=self.batch_size,
+            _run_checks=not self.validated,
         )
         if self.info_dict_reader and info is not None:
             for info_dict_reader in self.info_dict_reader:

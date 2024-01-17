@@ -32,7 +32,7 @@ from torch import multiprocessing as mp
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
-BATCHED_PIPE_TIMEOUT = float(os.environ.get("RL_WARNINGS", "60.0"))
+BATCHED_PIPE_TIMEOUT = float(os.environ.get("BATCHED_PIPE_TIMEOUT", "10000.0"))
 
 
 class timeit:

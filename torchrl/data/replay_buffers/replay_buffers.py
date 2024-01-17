@@ -41,6 +41,7 @@ from torchrl.data.replay_buffers.storages import (
     StorageEnsemble,
 )
 from torchrl.data.replay_buffers.utils import (
+    _reduce,
     _to_numpy,
     _to_torch,
     INT_CLASSES,
@@ -1091,25 +1092,6 @@ class InPlaceSampler:
         else:
             torch.stack(list_of_tds, 0, out=self.out)
         return self.out
-
-
-def _reduce(
-    tensor: torch.Tensor, reduction: str, dim: int | None = None
-) -> Union[float, torch.Tensor]:
-    """Reduces a tensor given the reduction method."""
-    if reduction == "max":
-        result = tensor.max(dim=dim)
-    elif reduction == "min":
-        result = tensor.min(dim=dim)
-    elif reduction == "mean":
-        result = tensor.mean(dim=dim)
-    elif reduction == "median":
-        result = tensor.median(dim=dim)
-    else:
-        raise NotImplementedError(f"Unknown reduction method {reduction}")
-    if isinstance(result, tuple):
-        result = result[0]
-    return result.item() if dim is None else result
 
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
