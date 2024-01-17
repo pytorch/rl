@@ -1448,6 +1448,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         *,
         entry_point: Callable | None = None,
         transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
         backend: str = None,
         to_numpy: bool = False,
         reward_threshold: float | None = None,
@@ -1486,6 +1487,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 within a :class:`torchrl.envs.Compose` instance) to be used with the env.
                 This arg can be passed during a call to :func:`~gym.make` (see
                 example below).
+            info_keys (List[NestedKey], optional): if provided, these keys will
+                be used to build the info dictionary and will be excluded from
+                the observation keys.
+                This arg can be passed during a call to :func:`~gym.make` (see
+                example below).
             backend (str, optional): the backend. Can be either `"gym"` or `"gymnasium"`
                 or any other backend compatible with :class:`~torchrl.envs.libs.gym.set_gym_backend`.
             to_numpy (bool, optional): if ``True``, the result of calls to `step` and
@@ -1516,8 +1522,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         .. note::
             TorchRL's environment do not have the concept of an ``"info"`` dictionary,
             as ``TensorDict`` offers all the storage requirements deemed necessary
-            in most training settings. Hence, the info dictionary of TorchRL's based
-            gym environments will always be empty.
+            in most training settings. Still, you can use the ``info_keys`` argument to
+            have a fine grained control over what is deemed to be considered
+            as an observation and what should be seen as info.
 
         Examples:
             >>> # Register the "cheetah" env from DMControl with the "run" task
@@ -1563,6 +1570,34 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                      3.3064e-02,  1.0381e-04,  7.6656e-05,  1.0204e-02],
                    dtype=torch.float64)}, {})
 
+        .. note::
+            This feature also works for stateless environments (eg, :class:`~torchrl.envs.BraxEnv`).
+
+                >>> import gymnasium
+                >>> import torch
+                >>> from tensordict import TensorDict
+                >>> from torchrl.envs import BraxEnv, SelectTransform
+                >>>
+                >>> # get action for dydactic purposes
+                >>> env = BraxEnv("ant", batch_size=[2])
+                >>> env.set_seed(0)
+                >>> torch.manual_seed(0)
+                >>> td = env.rollout(10)
+                >>>
+                >>> actions = td.get("action")
+                >>>
+                >>> # register env
+                >>> env.register_gym("Brax-Ant-v0", env_name="ant", batch_size=[2], info_keys=["state"])
+                >>> gym_env = gymnasium.make("Brax-Ant-v0")
+                >>> gym_env.seed(0)
+                >>> torch.manual_seed(0)
+                >>>
+                >>> gym_env.reset()
+                >>> obs = []
+                >>> for i in range(10):
+                ...     obs, reward, terminated, truncated, info = gym_env.step(td[..., i].get("action"))
+
+
         """
         from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
@@ -1574,6 +1609,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 id=id,
                 entry_point=entry_point,
                 transform=transform,
+                info_keys=info_keys,
                 to_numpy=to_numpy,
                 reward_threshold=reward_threshold,
                 nondeterministic=nondeterministic,
@@ -1595,6 +1631,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         id,
         entry_point: Callable | None = None,
         transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
         to_numpy: bool = False,
         reward_threshold: float | None = None,
         nondeterministic: bool = False,
@@ -1613,6 +1650,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         entry_point = functools.partial(
             _TorchRLGymWrapper,
             entry_point=entry_point,
+            info_keys=info_keys,
             to_numpy=to_numpy,
             transform=transform,
             **kwargs,
@@ -1635,6 +1673,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         id,
         entry_point: Callable | None = None,
         transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
         to_numpy: bool = False,
         reward_threshold: float | None = None,
         nondeterministic: bool = False,
@@ -1660,6 +1699,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         entry_point = functools.partial(
             _TorchRLGymWrapper,
             entry_point=entry_point,
+            info_keys=info_keys,
             to_numpy=to_numpy,
             transform=transform,
             **kwargs,
@@ -1681,6 +1721,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         id,
         entry_point: Callable | None = None,
         transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
         to_numpy: bool = False,
         reward_threshold: float | None = None,
         nondeterministic: bool = False,
@@ -1712,6 +1753,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         entry_point = functools.partial(
             _TorchRLGymWrapper,
             entry_point=entry_point,
+            info_keys=info_keys,
             to_numpy=to_numpy,
             transform=transform,
             **kwargs,
@@ -1732,6 +1774,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         id,
         entry_point: Callable | None = None,
         transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
         to_numpy: bool = False,
         reward_threshold: float | None = None,
         nondeterministic: bool = False,
@@ -1767,6 +1810,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         entry_point = functools.partial(
             _TorchRLGymWrapper,
             entry_point=entry_point,
+            info_keys=info_keys,
             to_numpy=to_numpy,
             transform=transform,
             **kwargs,
@@ -1786,6 +1830,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         id,
         entry_point: Callable | None = None,
         transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
         to_numpy: bool = False,
         reward_threshold: float | None = None,
         nondeterministic: bool = False,
@@ -1824,6 +1869,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         entry_point = functools.partial(
             _TorchRLGymWrapper,
             entry_point=entry_point,
+            info_keys=info_keys,
             to_numpy=to_numpy,
             transform=transform,
             **kwargs,
@@ -1842,6 +1888,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         id,
         entry_point: Callable | None = None,
         transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
         to_numpy: bool = False,
         reward_threshold: float | None = None,
         nondeterministic: bool = False,
@@ -1861,6 +1908,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         entry_point = functools.partial(
             _TorchRLGymnasiumWrapper,
             entry_point=entry_point,
+            info_keys=info_keys,
             to_numpy=to_numpy,
             transform=transform,
             **kwargs,

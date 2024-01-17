@@ -431,7 +431,6 @@ def _torchrl_to_gym_spec_transform(
             **{
                 key: _torchrl_to_gym_spec_transform(
                     val,
-                    batch_size=spec.shape,
                     categorical_action_encoding=categorical_action_encoding,
                 )
                 for key, val in spec.items()

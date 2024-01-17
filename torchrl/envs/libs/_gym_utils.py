@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import importlib.util
 
+import torch
+from tensordict.utils import unravel_key
+
 from torch.utils._pytree import tree_map
 
 from torchrl._utils import implement_for
@@ -17,7 +20,9 @@ _has_gymnasium = importlib.util.find_spec("gymnasium", None) is not None
 
 
 class _BaseGymWrapper:
-    def __init__(self, *, entry_point, to_numpy=False, transform=None, **kwargs):
+    def __init__(
+        self, *, entry_point, to_numpy=False, transform=None, info_keys=None, **kwargs
+    ):
         torchrl_env = entry_point(**kwargs)
         if transform is not None:
             torchrl_env = TransformedEnv(torchrl_env, transform)
@@ -36,18 +41,82 @@ class _BaseGymWrapper:
             ),
         )
         self.to_numpy = to_numpy
+        self.info_keys = info_keys
 
     def seed(self, seed: int):
         return self.torchrl_env.set_seed(seed)
 
     @property
-    def _obs_keys(self):
+    def info_keys(self):
+        return self._info_keys
+
+    @info_keys.setter
+    def info_keys(self, value):
+        if value is None:
+            value = []
+        self._info_keys = [unravel_key(v) for v in value]
+
+    @property
+    def _observation_keys(self):
         obs_keys = self.__dict__.get("_observation_keys", None)
         if obs_keys is None:
-            obs_keys = self.__dict__["_observation_keys"] = list(
-                self.torchrl_env.observation_spec.keys(True, True)
+            keys = []
+            if self.info_keys:
+                print("info keys", self.info_keys)
+
+                def check_tuple_keys(key, info_key):
+                    if isinstance(info_key, tuple):
+                        return key[: len(info_key)] == info_key
+                    else:
+                        return key[0] == info_key
+
+                for key in self.torchrl_env.observation_spec.keys(True):
+                    if isinstance(key, tuple):
+                        # check if an info key has the same start
+                        if any(
+                            check_tuple_keys(key, info_key)
+                            for info_key in self.info_keys
+                        ):
+                            print("found an info key", key)
+                            continue
+                        keys.append(key)
+                    else:
+                        if any(
+                            key == info_key
+                            for info_key in self.info_keys
+                            if isinstance(info_key, str)
+                        ):
+                            print("found an info key", key)
+                            continue
+                        keys.append(key)
+                print("keys", keys)
+            else:
+                keys = self.torchrl_env.observation_spec.keys(True)
+            obs_keys = self.__dict__["_observation_keys"] = sorted(
+                keys,
+                key=lambda x: ".".join(x) if isinstance(x, tuple) else x,
             )
         return obs_keys
+
+    @property
+    def _input_keys(self):
+        input_keys = self.__dict__.get("_inp_keys", None)
+        if input_keys is None:
+            input_keys = self.__dict__["_inp_keys"] = sorted(
+                set(self.torchrl_env.state_spec.keys(True)),
+                key=lambda x: ".".join(x) if isinstance(x, tuple) else x,
+            )
+        return input_keys
+
+    @property
+    def _action_keys(self):
+        action_keys = self.__dict__.get("_act_keys", None)
+        if action_keys is None:
+            action_keys = self.__dict__["_act_keys"] = sorted(
+                set(self.torchrl_env.full_action_spec.keys(True)),
+                key=lambda x: ".".join(x) if isinstance(x, tuple) else x,
+            )
+        return action_keys
 
 
 if _has_gymnasium:
@@ -56,15 +125,27 @@ if _has_gymnasium:
     class _TorchRLGymnasiumWrapper(gymnasium.Env, _BaseGymWrapper):
         @implement_for("gymnasium")
         def step(self, action):  # noqa: F811
-            self._tensordict.set("action", action)
+            action_keys = self._action_keys
+            if len(action_keys) == 1:
+                self._tensordict.set(action_keys[0], action)
+            else:
+                raise RuntimeError(
+                    "Wrapping environments with more than one action key is not supported yet."
+                )
             self.torchrl_env.step(self._tensordict)
             _tensordict = step_mdp(self._tensordict)
-            observation = self._tensordict.get("next").select(*self._obs_keys).to_dict()
+            observation = self._tensordict.get("next")
+            if self.info_keys:
+                info = observation.select(*self.info_keys).to_dict()
+            else:
+                info = {}
+            observation = observation.select(*self._observation_keys).to_dict()
             reward = self._tensordict.get(("next", "reward"))
             terminated = self._tensordict.get(("next", "terminated"))
-            truncated = self._tensordict.get(("next", "truncated"))
-            info = {}
-            self._tensordict = _tensordict
+            truncated = self._tensordict.get(
+                ("next", "truncated"), torch.zeros_like(terminated)
+            )
+            self._tensordict = _tensordict.select(*self._input_keys)
             out = (observation, reward, terminated, truncated, info)
             if self.to_numpy:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
@@ -74,7 +155,7 @@ if _has_gymnasium:
         def reset(self):  # noqa: F811
             self._tensordict = self.torchrl_env.reset()
             observation = self._tensordict.select(
-                *self._obs_keys,
+                *self._observation_keys,
             ).to_dict()
             out = observation, {}
             if self.to_numpy:
@@ -95,15 +176,27 @@ if _has_gym:
     class _TorchRLGymWrapper(gym.Env, _BaseGymWrapper):
         @implement_for("gym", "0.26", None)
         def step(self, action):  # noqa: F811
-            self._tensordict.set("action", action)
+            action_keys = self._action_keys
+            if len(action_keys) == 1:
+                self._tensordict.set(action_keys[0], action)
+            else:
+                raise RuntimeError(
+                    "Wrapping environments with more than one action key is not supported yet."
+                )
             self.torchrl_env.step(self._tensordict)
             _tensordict = step_mdp(self._tensordict)
-            observation = self._tensordict.get("next").select(*self._obs_keys).to_dict()
+            observation = self._tensordict.get("next")
+            if self.info_keys:
+                info = observation.select(*self.info_keys).to_dict()
+            else:
+                info = {}
+            observation = observation.select(*self._observation_keys).to_dict()
             reward = self._tensordict.get(("next", "reward"))
             terminated = self._tensordict.get(("next", "terminated"))
-            truncated = self._tensordict.get(("next", "truncated"))
-            info = {}
-            self._tensordict = _tensordict
+            truncated = self._tensordict.get(
+                ("next", "truncated"), torch.zeros_like(terminated)
+            )
+            self._tensordict = _tensordict.select(*self._input_keys)
             out = (observation, reward, terminated, truncated, info)
             if self.to_numpy:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
@@ -111,14 +204,24 @@ if _has_gym:
 
         @implement_for("gym", None, "0.26")
         def step(self, action):  # noqa: F811
-            self._tensordict.set("action", action)
+            action_keys = self._action_keys
+            if len(action_keys) == 1:
+                self._tensordict.set(action_keys[0], action)
+            else:
+                raise RuntimeError(
+                    "Wrapping environments with more than one action key is not supported yet."
+                )
             self.torchrl_env.step(self._tensordict)
             _tensordict = step_mdp(self._tensordict)
-            observation = self._tensordict.get("next").select(*self._obs_keys).to_dict()
+            observation = self._tensordict.get("next")
+            if self.info_keys:
+                info = observation.select(*self.info_keys).to_dict()
+            else:
+                info = {}
+            observation = observation.select(*self._observation_keys).to_dict()
             reward = self._tensordict.get(("next", "reward"))
             done = self._tensordict.get(("next", "done"))
-            info = {}
-            self._tensordict = _tensordict
+            self._tensordict = _tensordict.select(*self._action_keys, *self._input_keys)
             out = (observation, reward, done, info)
             if self.to_numpy:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
@@ -127,7 +230,7 @@ if _has_gym:
         @implement_for("gym", None, "0.26")
         def reset(self):  # noqa: F811
             self._tensordict = self.torchrl_env.reset()
-            observation = self._tensordict.select(*self._obs_keys).to_dict()
+            observation = self._tensordict.select(*self._observation_keys).to_dict()
             out = observation
             if self.to_numpy:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
@@ -136,7 +239,7 @@ if _has_gym:
         @implement_for("gym", "0.26", None)
         def reset(self):  # noqa: F811
             self._tensordict = self.torchrl_env.reset()
-            observation = self._tensordict.select(*self._obs_keys).to_dict()
+            observation = self._tensordict.select(*self._observation_keys).to_dict()
             out = observation, {}
             if self.to_numpy:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
