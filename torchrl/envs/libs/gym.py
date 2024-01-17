@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import collections
 import importlib
 import warnings
 from copy import copy
@@ -109,8 +110,9 @@ class set_gym_backend(_DecoratorContextManager):
         """Sets the backend as default."""
         global DEFAULT_GYM
         DEFAULT_GYM = self.backend
-        found_setter = False
+        found_setters = collections.defaultdict(lambda: False)
         for setter in copy(implement_for._setters):
+            found_setter = False
             check_module = (
                 callable(setter.module_name)
                 and setter.module_name.__name__ == self.backend.__name__
@@ -121,13 +123,17 @@ class set_gym_backend(_DecoratorContextManager):
             if check_module and check_version:
                 setter.module_set()
                 found_setter = True
-        # we keep only the setters we need. This is safe because a copy is saved under self._setters_saved
-        if not found_setter:
-            raise ImportError(
-                f"could not set anything related to gym backend "
-                f"{self.backend.__name__} with version={self.backend.__version__}. "
-                f"Check that the gym versions match!"
+            found_setters[setter.func_name] = (
+                found_setters[setter.func_name] or found_setter
             )
+        # we keep only the setters we need. This is safe because a copy is saved under self._setters_saved
+        for func_name, found_setter in found_setters.items():
+            if not found_setter:
+                raise ImportError(
+                    f"could not set anything related to gym backend "
+                    f"{self.backend.__name__} with version={self.backend.__version__} for the function with name {func_name}. "
+                    f"Check that the gym versions match!"
+                )
 
     def set(self):
         """Irreversibly sets the gym backend in the script."""
@@ -371,18 +377,14 @@ def _box_convert(spec, gym_spaces, shape):  # noqa: F811
 
 def _torchrl_to_gym_spec_transform(
     spec,
-    batch_size=(),
     categorical_action_encoding=False,
-    remap_state_to_observation: bool = True,
 ) -> TensorSpec:
     """Maps TorchRL specs to gym spaces.
 
     Args:
         spec: the torchrl spec to transform.
-        batch_size (torch.Size): batch-size of the input specs.
         categorical_action_encoding: whether discrete spaces should be mapped to categorical or one-hot.
             Defaults to one-hot.
-        remap_state_to_observation: whether to rename the 'state' key of Dict specs to "observation". Default is true.
 
     """
     gym_spaces = gym_backend("spaces")

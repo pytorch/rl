@@ -760,7 +760,9 @@ class TestEquality:
         )
         assert ts != ts_other
         if torch.has_cuda:
-            ts_other = BoundedTensorSpec(minimum, maximum, torch.Size((1,)), "cuda:0", dtype)
+            ts_other = BoundedTensorSpec(
+                minimum, maximum, torch.Size((1,)), "cuda:0", dtype
+            )
             assert ts != ts_other
 
         ts_other = BoundedTensorSpec(
@@ -889,7 +891,9 @@ class TestEquality:
         assert ts != ts_other
 
         if torch.has_cuda:
-            ts_other = DiscreteTensorSpec(n=n, shape=shape, device="cuda:0", dtype=dtype)
+            ts_other = DiscreteTensorSpec(
+                n=n, shape=shape, device="cuda:0", dtype=dtype
+            )
             assert ts != ts_other
 
         ts_other = DiscreteTensorSpec(
@@ -1000,7 +1004,9 @@ class TestEquality:
         assert ts != ts_other
 
         if torch.has_cuda:
-            ts_other = MultiOneHotDiscreteTensorSpec(nvec=nvec, device="cuda:0", dtype=dtype)
+            ts_other = MultiOneHotDiscreteTensorSpec(
+                nvec=nvec, device="cuda:0", dtype=dtype
+            )
             assert ts != ts_other
 
         ts_other = MultiOneHotDiscreteTensorSpec(

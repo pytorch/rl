@@ -1640,7 +1640,15 @@ class RewardClipping(Transform):
 
 
 class BinarizeReward(Transform):
-    """Maps the reward to a binary value (0 or 1) if the reward is null or non-null, respectively."""
+    """Maps the reward to a binary value (0 or 1) if the reward is null or non-null, respectively.
+
+    Args:
+        in_keys (List[NestedKey]): input keys
+        out_keys (List[NestedKey], optional): output keys. Defaults to value
+            of ``in_keys``.
+        dtype (torch.dtype, optional): the dtype of the binerized reward.
+            Defaults to ``torch.int8``.
+    """
 
     def __init__(
         self,
@@ -1658,12 +1666,14 @@ class BinarizeReward(Transform):
             raise RuntimeError(
                 f"Reward shape last dimension must be singleton, got reward of shape {reward.shape}"
             )
-        return (reward > 0.0).to(torch.long)
+        return (reward > 0.0).to(torch.int8)
 
     @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         return BinaryDiscreteTensorSpec(
-            n=1, device=reward_spec.device, shape=reward_spec.shape, dtype=reward_spec.dtype,
+            n=1,
+            device=reward_spec.device,
+            shape=reward_spec.shape,
         )
 
 

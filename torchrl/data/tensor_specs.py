@@ -3451,7 +3451,7 @@ class CompositeSpec(TensorSpec):
         self, vals: Dict[str, Any], *, ignore_device: bool = False
     ) -> Dict[str, torch.Tensor]:
         if isinstance(vals, TensorDict):
-            out = vals.select()  # create and empty tensordict similar to vals
+            out = vals.empty()  # create and empty tensordict similar to vals
         else:
             out = TensorDict({}, torch.Size([]), _run_checks=False)
         for key, item in vals.items():
@@ -3668,7 +3668,12 @@ class CompositeSpec(TensorSpec):
 
     def __eq__(self, other):
         return (
-            type(self) is type(other) and self.shape == other.shape and self._device == other._device and set(self._specs.keys()) == set(other._specs.keys()) and all((self._specs[key] == spec) for (key, spec) in other._specs.items()))
+            type(self) is type(other)
+            and self.shape == other.shape
+            and self._device == other._device
+            and set(self._specs.keys()) == set(other._specs.keys())
+            and all((self._specs[key] == spec) for (key, spec) in other._specs.items())
+        )
 
     def update(self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpec]]) -> None:
         for key, item in dict_or_spec.items():
