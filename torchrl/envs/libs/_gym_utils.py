@@ -12,6 +12,7 @@ from tensordict.utils import unravel_key
 from torch.utils._pytree import tree_map
 
 from torchrl._utils import implement_for
+from torchrl.data import CompositeSpec
 from torchrl.envs import step_mdp, TransformedEnv
 from torchrl.envs.libs.gym import _torchrl_to_gym_spec_transform
 
@@ -35,7 +36,7 @@ class _BaseGymWrapper:
             ),
         )
         self.observation_space = _torchrl_to_gym_spec_transform(
-            self.torchrl_env.observation_spec,
+            CompositeSpec({key: self.torchrl_env.full_observation_spec[key] for key in self._observation_keys}),
             categorical_action_encoding=self.torchrl_env.__dict__.get(
                 "categorical_action_encoding", True
             ),
