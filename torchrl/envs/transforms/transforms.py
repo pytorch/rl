@@ -572,7 +572,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             env = env.to(device)
         else:
             device = env.device
-        super().__init__(device=None, **kwargs)
+        super().__init__(device=None, allow_done_after_reset=None, **kwargs)
 
         if isinstance(env, TransformedEnv):
             self._set_env(env.base_env, device)
@@ -680,13 +680,15 @@ but got an object of type {type(transform)}."""
         )
 
     @property
-    def allow_done_after_reset(self) -> bool:
-        return self.base_env.allow_done_after_reset
+    def _allow_done_after_reset(self) -> bool:
+        return self.base_env._allow_done_after_reset
 
-    @allow_done_after_reset.setter
-    def allow_done_after_reset(self, value):
+    @_allow_done_after_reset.setter
+    def _allow_done_after_reset(self, value):
+        if value is None:
+            return
         raise RuntimeError(
-            "allow_done_after_reset is a read-only property for TransformedEnvs"
+            "_allow_done_after_reset is a read-only property for TransformedEnvs"
         )
 
     @property
