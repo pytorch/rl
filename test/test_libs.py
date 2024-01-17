@@ -2,9 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
 import importlib
 import logging
 from contextlib import nullcontext
+
+from torchrl.data.datasets.gen_dgrl import GenDGRLExperienceReplay
 
 from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.modules import MaskedCategorical
@@ -2007,6 +2010,51 @@ class TestVmas:
                     assert (pos[agent_name] > prev_pos[agent_name]).all()
                 else:
                     assert (pos[agent_name] == prev_pos[agent_name]).all()
+
+
+@pytest.mark.slow
+class TestGenDGRL:
+    @staticmethod
+    @pytest.fixture
+    def _patch_traj_len():
+        # avoids processing the entire dataset
+        _get_category_len = GenDGRLExperienceReplay._get_category_len
+
+        def new_get_category_len(cls, category_name):
+            return 100
+
+        GenDGRLExperienceReplay._get_category_len = classmethod(new_get_category_len)
+
+        yield
+        GenDGRLExperienceReplay._get_category_len = _get_category_len
+
+    @pytest.mark.parametrize("dataset_num", [0, 4, 8])
+    def test_gen_dgrl(self, dataset_num, tmpdir, _patch_traj_len):
+        dataset_id = GenDGRLExperienceReplay.available_datasets[dataset_num]
+        dataset = GenDGRLExperienceReplay(dataset_id, batch_size=32, root=tmpdir)
+        for batch in dataset:  # noqa: B007
+            break
+        assert batch.get(("next", "observation")).shape[-3] == 3
+        for key in (
+            ("next", "done"),
+            ("next", "truncated"),
+            ("next", "terminated"),
+            "observation",
+            "action",
+            ("next", "reward"),
+        ):
+            assert key in batch.keys(True, True)
+        for key in (
+            ("next", "done"),
+            ("next", "truncated"),
+            ("next", "terminated"),
+            "terminated",
+            "truncated",
+            "done",
+            ("next", "reward"),
+        ):
+            val = batch.get(key)
+            assert val.shape[:-1] == batch.shape
 
 
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")

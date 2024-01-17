@@ -1242,7 +1242,7 @@ class TestStepMdp:
         obs_key = "state"
         if nested_obs:
             obs_key = nested_key + (obs_key,)
-        other_key = "beatles"
+        other_key = "other"
         if nested_other:
             other_key = nested_key + (other_key,)
 
@@ -1310,7 +1310,7 @@ class TestStepMdp:
         else:
             assert done_key not in td_nested_keys
         if keep_other:
-            assert other_key in td_nested_keys
+            assert other_key in td_nested_keys, other_key
             assert (td[other_key] == 0).all()
         else:
             assert other_key not in td_nested_keys

@@ -37,7 +37,9 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
     21 institutions, demonstrating 527 skills (160266 tasks).
 
     Website: https://robotics-transformer-x.github.io/
+
     GitHub: https://github.com/google-deepmind/open_x_embodiment
+
     Paper: https://arxiv.org/abs/2310.08864
 
     .. note::

@@ -216,6 +216,7 @@ def _main(argv):
         "offline-data": [
             "huggingface_hub",  # for roboset
             "minari",
+            "requests",
             "tqdm",
             "torchvision",
             "scikit-learn",

@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 """IQL Example.
 
-This is a self-contained example of an online IQL training script.
+This is a self-contained example of an online discrete IQL training script.
 
 It works across Gym and MuJoCo over a variety of tasks.
 
@@ -24,18 +24,18 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
     log_metrics,
     make_collector,
+    make_discrete_iql_model,
+    make_discrete_loss,
     make_environment,
-    make_iql_model,
     make_iql_optimizer,
-    make_loss,
     make_replay_buffer,
 )
 
 
-@hydra.main(config_path=".", config_name="online_config")
+@hydra.main(config_path=".", config_name="discrete_iql")
 def main(cfg: "DictConfig"):  # noqa: F821
     # Create logger
-    exp_name = generate_exp_name("IQL-online", cfg.env.exp_name)
+    exp_name = generate_exp_name("Discrete-IQL-online", cfg.env.exp_name)
     logger = None
     if cfg.logger.backend:
         logger = get_logger(
@@ -66,13 +66,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create model
-    model = make_iql_model(cfg, train_env, eval_env, device)
+    model = make_discrete_iql_model(cfg, train_env, eval_env, device)
 
     # Create collector
     collector = make_collector(cfg, train_env, actor_model_explore=model[0])
 
     # Create loss
-    loss_module, target_net_updater = make_loss(cfg.loss, model)
+    loss_module, target_net_updater = make_discrete_loss(cfg.loss, model)
 
     # Create optimizer
     optimizer_actor, optimizer_critic, optimizer_value = make_iql_optimizer(
@@ -100,7 +100,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # update weights of the inference policy
         collector.update_policy_weights_()
 
-        tensordict = tensordict.view(-1)
+        tensordict = tensordict.reshape(-1)
         current_frames = tensordict.numel()
         # add to replay buffer
         replay_buffer.extend(tensordict.cpu())
@@ -119,19 +119,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 else:
                     sampled_tensordict = sampled_tensordict
                 # compute losses
-                loss_info = loss_module(sampled_tensordict)
-                actor_loss = loss_info["loss_actor"]
-                value_loss = loss_info["loss_value"]
-                q_loss = loss_info["loss_qvalue"]
-
+                actor_loss, _ = loss_module.actor_loss(sampled_tensordict)
                 optimizer_actor.zero_grad()
                 actor_loss.backward()
                 optimizer_actor.step()
 
+                value_loss, _ = loss_module.value_loss(sampled_tensordict)
                 optimizer_value.zero_grad()
                 value_loss.backward()
                 optimizer_value.step()
 
+                q_loss, metadata = loss_module.qvalue_loss(sampled_tensordict)
                 optimizer_critic.zero_grad()
                 q_loss.backward()
                 optimizer_critic.step()
@@ -141,7 +139,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # update priority
                 if prb:
+                    sampled_tensordict.set(
+                        loss_module.tensor_keys.priority,
+                        metadata.pop("td_error").detach().max(0).values,
+                    )
                     replay_buffer.update_priority(sampled_tensordict)
+
         training_time = time.time() - training_start
         episode_rewards = tensordict["next", "episode_reward"][
             tensordict["next", "done"]
@@ -161,7 +164,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/q_loss"] = q_loss.detach()
             metrics_to_log["train/actor_loss"] = actor_loss.detach()
             metrics_to_log["train/value_loss"] = value_loss.detach()
-            metrics_to_log["train/entropy"] = loss_info.get("entropy").detach()
             metrics_to_log["train/sampling_time"] = sampling_time
             metrics_to_log["train/training_time"] = training_time
 
