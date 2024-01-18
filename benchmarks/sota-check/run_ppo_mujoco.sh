@@ -15,5 +15,4 @@ python ../../examples/ppo/ppo_mujoco.py  \
   loss.mini_batch_size=10 \
   loss.ppo_epochs=2 \
   logger.backend=wandb \
-  logger.project_name="sota-check" \
   logger.test_interval=10

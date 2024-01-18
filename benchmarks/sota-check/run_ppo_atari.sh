@@ -8,7 +8,7 @@
 #SBATCH --output=ppo_atari_output_%j.txt
 #SBATCH --error=ppo_atari_error_%j.txt
 
-CUDA_VISIBLE_DEVICES=1 python ../../examples/ppo/ppo_atari.py \
+python ../../examples/ppo/ppo_atari.py \
   collector.total_frames=80 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=20 \

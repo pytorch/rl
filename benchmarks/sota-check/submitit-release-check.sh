@@ -6,7 +6,7 @@ sbatch run_a2c_mujoco.sh
 #sbatch run_cql_offline.sh
 #sbatch run_cql_online.sh
 #sbatch run_ddpg.sh
-#sbatch run_discrete_sac.sh
+sbatch run_discrete_sac.sh
 sbatch run_dqn_atari.sh
 sbatch run_dqn_cartpole.sh
 #sbatch run_dreamer.sh

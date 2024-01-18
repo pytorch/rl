@@ -8,7 +8,7 @@
 #SBATCH --output=td3_output_%j.txt
 #SBATCH --error=td3_error_%j.txt
 
-CUDA_VISIBLE_DEVICES=1 python ../../examples/td3/td3.py \
+python ../../examples/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   optim.batch_size=10 \

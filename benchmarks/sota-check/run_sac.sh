@@ -8,7 +8,7 @@
 #SBATCH --output=sac_output_%j.txt
 #SBATCH --error=sac_error_%j.txt
 
-CUDA_VISIBLE_DEVICES=1 python ../../examples/sac/sac.py \
+python ../../examples/sac/sac.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
