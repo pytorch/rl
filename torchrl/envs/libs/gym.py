@@ -312,6 +312,12 @@ def _gym_to_torchrl_spec_transform(
         low = torch.tensor(spec.low, device=device, dtype=dtype)
         high = torch.tensor(spec.high, device=device, dtype=dtype)
         is_unbounded = low.isinf().all() and high.isinf().all()
+
+        minval, maxval = _minmax_dtype(dtype)
+        is_unbounded = is_unbounded or (
+            torch.isclose(low, torch.tensor(minval)).all()
+            and torch.isclose(high, torch.tensor(maxval)).all()
+        )
         return (
             UnboundedContinuousTensorSpec(shape, device=device, dtype=dtype)
             if is_unbounded
