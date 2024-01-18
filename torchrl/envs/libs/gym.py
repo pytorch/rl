@@ -395,14 +395,14 @@ def _multidiscrete_convert(gym_spaces, spec):
 
 
 @implement_for("gymnasium")
-def _multidiscrete_convert(gym_spaces, spec):
+def _multidiscrete_convert(gym_spaces, spec):  # noqa: F811
     return gym_spaces.multi_discrete.MultiDiscrete(
         spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
     )
 
 
 @implement_for("gym", None, "0.21")
-def _multidiscrete_convert(gym_spaces, spec):
+def _multidiscrete_convert(gym_spaces, spec):  # noqa: F811
     return gym_spaces.multi_discrete.MultiDiscrete(spec.nvec)
 
 
