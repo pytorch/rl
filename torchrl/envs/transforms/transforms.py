@@ -4930,8 +4930,8 @@ class RewardSum(Transform):
 class StepCounter(Transform):
     """Counts the steps from a reset and optionally sets the truncated state to ``True`` after a certain number of steps.
 
-    The ``"done"`` state is also adaptec accordingly (as done is the intersection
-    of task completetion and early truncation).
+    The ``"done"`` state is also adapted accordingly (as done is the disjunction
+    of task completion and early truncation).
 
     Args:
         max_steps (int, optional): a positive integer that indicates the
