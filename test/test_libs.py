@@ -535,7 +535,7 @@ class TestGym:
         env.rand_step()
         env.rollout(3)
 
-    @implement_for("gymnasium", "0.27.0", None)
+    @implement_for("gymnasium")
     def test_one_hot_and_categorical(self):
         # tests that one-hot and categorical work ok when an integer is expected as action
         cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=True)
@@ -546,7 +546,7 @@ class TestGym:
         cliff_walking.rollout(10)
         check_env_specs(cliff_walking)
 
-    @implement_for("gym", None, "0.27.0")
+    @implement_for("gym")
     def test_one_hot_and_categorical(self):  # noqa: F811
         # we do not skip (bc we may want to make sure nothing is skipped)
         # but CliffWalking-v0 in earlier Gym versions uses np.bool, which
@@ -554,7 +554,7 @@ class TestGym:
         # versions.
         return
 
-    @implement_for("gymnasium", "0.27.0", None)
+    @implement_for("gymnasium")
     @pytest.mark.parametrize(
         "envname",
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
@@ -580,7 +580,7 @@ class TestGym:
         assert env.batch_size == torch.Size([2])
         check_env_specs(env)
 
-    @implement_for("gymnasium", "0.27.0", None)
+    @implement_for("gymnasium")
     # this env has Dict-based observation which is a nice thing to test
     @pytest.mark.parametrize(
         "envname",
@@ -821,7 +821,7 @@ class TestGym:
         del c
         return
 
-    @implement_for("gymnasium", "0.27.0", None)
+    @implement_for("gymnasium")
     def test_vecenvs_nan(self):  # noqa: F811
         # new versions of gym must never return nan for next values when there is a done state
         torch.manual_seed(0)
