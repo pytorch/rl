@@ -36,10 +36,7 @@ from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_d
 from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
 
-from torchrl.envs.gym_like import (
-    BaseInfoDictReader,
-    GymLikeEnv,
-)
+from torchrl.envs.gym_like import BaseInfoDictReader, GymLikeEnv
 
 from torchrl.envs.utils import _classproperty
 
@@ -364,6 +361,8 @@ def _gym_to_torchrl_spec_transform(
 
 
 def _minmax_dtype(dtype):
+    if dtype is torch.bool:
+        return torch.tensor(False), torch.tensor(True)
     if dtype.is_floating_point:
         info = torch.finfo(dtype)
     else:
