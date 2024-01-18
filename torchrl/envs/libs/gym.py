@@ -36,7 +36,6 @@ from torchrl.envs.common import _EnvPostInit
 
 from torchrl.envs.gym_like import (
     BaseInfoDictReader,
-    default_info_dict_reader,
     GymLikeEnv,
 )
 
@@ -520,7 +519,8 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     .. note::
         info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
         if no other reader is provided. To provide another reader, refer to
-        :meth:`~.set_info_dict_reader`.
+        :meth:`~.set_info_dict_reader`. To automatically register the info_dict
+        content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
 
     """
 
@@ -981,8 +981,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @property
     def info_dict_reader(self):
-        if not self._info_dict_reader:
-            self._info_dict_reader.append(default_info_dict_reader())
         return self._info_dict_reader
 
     @info_dict_reader.setter
@@ -1107,7 +1105,8 @@ class GymEnv(GymWrapper):
     .. note::
         info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
         if no other reader is provided. To provide another reader, refer to
-        :meth:`~.set_info_dict_reader`.
+        :meth:`~.set_info_dict_reader`. To automatically register the info_dict
+        content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
 
     """
 
