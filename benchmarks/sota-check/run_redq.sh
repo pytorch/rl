@@ -21,4 +21,4 @@ CUDA_VISIBLE_DEVICES=1 python ../../examples/redq/redq.py \
   logger.record_frames=4 \
   buffer.size=120 \
   logger.backend=wandb \
-  logger.backend.project_name="sota-check"
+  logger.project_name="sota-check"

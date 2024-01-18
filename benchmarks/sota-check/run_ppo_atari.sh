@@ -14,5 +14,5 @@ CUDA_VISIBLE_DEVICES=1 python ../../examples/ppo/ppo_atari.py \
   loss.mini_batch_size=20 \
   loss.ppo_epochs=2 \
   logger.backend=wandb \
-  logger.backend.project_name="sota-check" \
+  logger.project_name="sota-check" \
   logger.test_interval=10

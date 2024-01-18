@@ -21,4 +21,4 @@ CUDA_VISIBLE_DEVICES=1 python ../../examples/td3/td3.py \
   logger.mode=offline \
   env.name=Pendulum-v1 \
   logger.backend=wandb \
-  logger.backend.project_name="sota-check"
+  logger.project_name="sota-check"

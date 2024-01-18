@@ -17,4 +17,4 @@ CUDA_VISIBLE_DEVICES=1 python ../../examples/dqn/dqn_cartpole.py \
   loss.num_updates=1 \
   buffer.buffer_size=120 \
   logger.backend=wandb \
-  logger.backend.project_name="sota-check"
+  logger.project_name="sota-check"

@@ -20,4 +20,4 @@ CUDA_VISIBLE_DEVICES=1 python ../../examples/sac/sac.py \
   env.name=Pendulum-v1 \
   network.device=cuda:0 \
   logger.backend=wandb \
-  logger.backend.project_name="sota-check"
+  logger.project_name="sota-check"
