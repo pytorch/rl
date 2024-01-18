@@ -1,7 +1,7 @@
 #!/bin/bash
 
-#sbatch run_a2c_atari.sh
-#sbatch run_a2c_mujoco.sh
+sbatch run_a2c_atari.sh
+sbatch run_a2c_mujoco.sh
 #sbatch run_bandits.sh
 #sbatch run_cql_offline.sh
 #sbatch run_cql_online.sh
