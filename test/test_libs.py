@@ -193,17 +193,23 @@ class TestGym:
         def _set_seed(self, seed):
             return seed + 1
 
-    @pytest.mark.parametrize("categorical", [True, False])
-    def test_gym_spec_cast(self, categorical):
-
-        batch_size = [3, 4]
-        cat = DiscreteTensorSpec if categorical else OneHotDiscreteTensorSpec
-        cat_shape = batch_size if categorical else (*batch_size, 5)
-        multicat = (
-            MultiDiscreteTensorSpec if categorical else MultiOneHotDiscreteTensorSpec
+    @implement_for("gym", None, "0.18")
+    def _make_spec(self, batch_size, cat, cat_shape, multicat, multicat_shape):
+        return CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(*batch_size, 1)),
+            b=CompositeSpec(
+                c=cat(5, shape=cat_shape, dtype=torch.int64), shape=batch_size
+            ),
+            d=cat(5, shape=cat_shape, dtype=torch.int64),
+            e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
+            f=BoundedTensorSpec(-3, 4, shape=(*batch_size, 1)),
+            # g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            h=BinaryDiscreteTensorSpec(n=5, shape=(*batch_size, 5)),
+            shape=batch_size,
         )
-        multicat_shape = 2 if categorical else 5
-        spec = CompositeSpec(
+    @implement_for("gym", "0.18", None)
+    def _make_spec(self, batch_size, cat, cat_shape, multicat, multicat_shape):
+        return CompositeSpec(
             a=UnboundedContinuousTensorSpec(shape=(*batch_size, 1)),
             b=CompositeSpec(
                 c=cat(5, shape=cat_shape, dtype=torch.int64), shape=batch_size
@@ -215,6 +221,32 @@ class TestGym:
             h=BinaryDiscreteTensorSpec(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
+    @implement_for("gymnasium")
+    def _make_spec(self, batch_size, cat, cat_shape, multicat, multicat_shape):
+        return CompositeSpec(
+            a=UnboundedContinuousTensorSpec(shape=(*batch_size, 1)),
+            b=CompositeSpec(
+                c=cat(5, shape=cat_shape, dtype=torch.int64), shape=batch_size
+            ),
+            d=cat(5, shape=cat_shape, dtype=torch.int64),
+            e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
+            f=BoundedTensorSpec(-3, 4, shape=(*batch_size, 1)),
+            g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            h=BinaryDiscreteTensorSpec(n=5, shape=(*batch_size, 5)),
+            shape=batch_size,
+        )
+
+    @pytest.mark.parametrize("categorical", [True, False])
+    def test_gym_spec_cast(self, categorical):
+
+        batch_size = [3, 4]
+        cat = DiscreteTensorSpec if categorical else OneHotDiscreteTensorSpec
+        cat_shape = batch_size if categorical else (*batch_size, 5)
+        multicat = (
+            MultiDiscreteTensorSpec if categorical else MultiOneHotDiscreteTensorSpec
+        )
+        multicat_shape = 2 if categorical else 5
+        spec = self._make_spec(batch_size, cat, cat_shape, multicat, multicat_shape)
         recon = _gym_to_torchrl_spec_transform(
             _torchrl_to_gym_spec_transform(
                 spec, categorical_action_encoding=categorical
@@ -225,7 +257,7 @@ class TestGym:
         for (key0, spec0), (key1, spec1) in zip(
             spec.items(True, True), recon.items(True, True)
         ):
-            assert spec0 == spec1, (key0, key1)
+            assert spec0 == spec1, (key0, key1, spec0, spec1)
         assert spec == recon
         assert recon.shape == spec.shape
 
@@ -2223,7 +2255,7 @@ _MINARI_DATASETS = []
 
 
 def _minari_selected_datasets():
-    if not _has_minari:
+    if not _has_minari or not _has_gymnasium:
         return
     global _MINARI_DATASETS
     import minari
@@ -2245,7 +2277,7 @@ def _minari_selected_datasets():
 _minari_selected_datasets()
 
 
-@pytest.mark.skipif(not _has_minari, reason="Minari not found")
+@pytest.mark.skipif(not _has_minari or not _has_gymnasium, reason="Minari not found")
 @pytest.mark.parametrize("split", [False, True])
 @pytest.mark.parametrize("selected_dataset", _MINARI_DATASETS)
 @pytest.mark.slow

@@ -378,6 +378,22 @@ def _box_convert(spec, gym_spaces, shape):  # noqa: F811
     high = spec.high.detach().cpu().numpy()
     return gym_spaces.Box(low=low, high=high, shape=shape)
 
+@implement_for("gym", "0.21", None)
+def _multidiscrete_convert(gym_spaces, spec):
+    return gym_spaces.multi_discrete.MultiDiscrete(
+        spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
+    )
+@implement_for("gymnasium")
+def _multidiscrete_convert(gym_spaces, spec):
+    return gym_spaces.multi_discrete.MultiDiscrete(
+        spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
+    )
+@implement_for("gym", None, "0.21")
+def _multidiscrete_convert(gym_spaces, spec):
+    return gym_spaces.multi_discrete.MultiDiscrete(
+        spec.nvec
+    )
+
 
 def _torchrl_to_gym_spec_transform(
     spec,
@@ -394,9 +410,7 @@ def _torchrl_to_gym_spec_transform(
     gym_spaces = gym_backend("spaces")
     shape = spec.shape
     if isinstance(spec, MultiDiscreteTensorSpec):
-        return gym_spaces.multi_discrete.MultiDiscrete(
-            spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
-        )
+        return _multidiscrete_convert(gym_spaces, spec)
     if isinstance(spec, MultiOneHotDiscreteTensorSpec):
         return gym_spaces.multi_discrete.MultiDiscrete(spec.nvec)
     if isinstance(spec, BinaryDiscreteTensorSpec):
