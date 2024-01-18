@@ -77,8 +77,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     logger = None
     if cfg.logger.backend:
         exp_name = generate_exp_name("A2C", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
+        backend_kwargs = cfg.logger.get("backend_kwargs") or {}
         logger = get_logger(
-            cfg.logger.backend, logger_name="a2c", experiment_name=exp_name
+            cfg.logger.backend, logger_name="a2c", experiment_name=exp_name, **backend_kwargs
         )
 
     # Create test environment

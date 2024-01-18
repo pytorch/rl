@@ -94,9 +94,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     logger = None
     if cfg.logger.backend:
         exp_name = generate_exp_name("PPO", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
-        logger = get_logger(
-            cfg.logger.backend, logger_name="ppo", experiment_name=exp_name, *cfg.logger.get("backend_kwargs", {})
-        )
+        backend_kwargs = cfg.logger.get("backend_kwargs") or {}
+        logger = get_logger(cfg.logger.backend, logger_name="ppo", experiment_name=exp_name, **backend_kwargs)
 
     # Create test environment
     test_env = make_parallel_env(cfg.env.env_name, 1, device, is_test=True)
