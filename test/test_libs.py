@@ -207,6 +207,7 @@ class TestGym:
             h=BinaryDiscreteTensorSpec(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
+
     @implement_for("gym", "0.18", None)
     def _make_spec(self, batch_size, cat, cat_shape, multicat, multicat_shape):
         return CompositeSpec(
@@ -221,6 +222,7 @@ class TestGym:
             h=BinaryDiscreteTensorSpec(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
+
     @implement_for("gymnasium")
     def _make_spec(self, batch_size, cat, cat_shape, multicat, multicat_shape):
         return CompositeSpec(

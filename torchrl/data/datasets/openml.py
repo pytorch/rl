@@ -134,7 +134,9 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
                 X[col] = encoder.fit_transform(X[col])
             y = encoder.fit_transform(y)
             if dataset_name == "adult_onehot":
-                cat_features = OneHotEncoder(sparse_output=False).fit_transform(X[cat_ix])
+                cat_features = OneHotEncoder(sparse_output=False).fit_transform(
+                    X[cat_ix]
+                )
                 num_features = StandardScaler().fit_transform(X[num_ix])
                 X = np.concatenate((num_features, cat_features), axis=1)
             else:

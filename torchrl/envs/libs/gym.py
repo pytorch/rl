@@ -357,12 +357,14 @@ def _gym_to_torchrl_spec_transform(
             f"spec of type {type(spec).__name__} is currently unaccounted for"
         )
 
+
 def _minmax_dtype(dtype):
     if dtype.is_floating_point:
         info = torch.finfo(dtype)
     else:
         info = torch.iinfo(dtype)
     return info.min, info.max
+
 
 @implement_for("gym", None, "0.18")
 def _box_convert(spec, gym_spaces, shape):
@@ -384,21 +386,24 @@ def _box_convert(spec, gym_spaces, shape):  # noqa: F811
     high = spec.high.detach().cpu().numpy()
     return gym_spaces.Box(low=low, high=high, shape=shape)
 
+
 @implement_for("gym", "0.21", None)
 def _multidiscrete_convert(gym_spaces, spec):
     return gym_spaces.multi_discrete.MultiDiscrete(
         spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
     )
+
+
 @implement_for("gymnasium")
 def _multidiscrete_convert(gym_spaces, spec):
     return gym_spaces.multi_discrete.MultiDiscrete(
         spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
     )
+
+
 @implement_for("gym", None, "0.21")
 def _multidiscrete_convert(gym_spaces, spec):
-    return gym_spaces.multi_discrete.MultiDiscrete(
-        spec.nvec
-    )
+    return gym_spaces.multi_discrete.MultiDiscrete(spec.nvec)
 
 
 def _torchrl_to_gym_spec_transform(
