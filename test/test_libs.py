@@ -638,7 +638,7 @@ class TestGym:
         env.close()
         del env
 
-    @implement_for("gym", "0.18", "0.27.0")
+    @implement_for("gym", "0.18")
     @pytest.mark.parametrize(
         "envname",
         ["CartPole-v1", "HalfCheetah-v4"],
