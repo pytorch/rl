@@ -15,6 +15,5 @@ python ../../examples/ppo/ppo_mujoco.py  \
   loss.mini_batch_size=10 \
   loss.ppo_epochs=2 \
   logger.backend=wandb \
-  logger.backend_kwargs=logger.logger_kwargs="{"wandb_kwargs": {"project": "sota-check"}}" \
+  logger.backend_kwargs='{"wandb_kwargs": {"project": "sota-check"}}' \
   logger.test_interval=10
-
