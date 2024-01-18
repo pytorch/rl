@@ -14,6 +14,7 @@ python ../../examples/ppo/ppo_mujoco.py  \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=10 \
   loss.ppo_epochs=2 \
-  logger.backend= \
+  logger.backend=wandb \
+  logger.backend_kwargs=logger.logger_kwargs="{"wandb_kwargs": {"project": "sota-check"}}" \
   logger.test_interval=10
 
