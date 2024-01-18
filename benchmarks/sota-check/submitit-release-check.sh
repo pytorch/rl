@@ -22,7 +22,7 @@ sbatch run_dqn_cartpole.sh
 #sbatch run_multiagent_sac.sh
 sbatch run_ppo_atari.sh
 sbatch run_ppo_mujoco.sh
-# sbatch run_redq.sh
+sbatch run_redq.sh
 # sbatch run_rlhf.sh
-# sbatch run_sac.sh
-# sbatch run_td3.sh
+sbatch run_sac.sh
+sbatch run_td3.sh

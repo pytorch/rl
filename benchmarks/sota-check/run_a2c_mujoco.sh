@@ -14,5 +14,5 @@ python ../../examples/a2c/a2c_mujoco.py \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=10 \
   logger.backend=wandb \
-  logger.backend_kwargs="{"wandb_kwargs": {"project": "sota-check"}}" \
+  logger.backend.project_name="sota-check" \
   logger.test_interval=40

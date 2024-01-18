@@ -47,5 +47,6 @@ network:
 # logging
 logger:
   backend: wandb
+  project_name: rl_examples_td3
   mode: online
   eval_iter: 25000

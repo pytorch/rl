@@ -44,8 +44,8 @@ logger:
   record_frames: 10000
   exp_name: cheetah
   backend: wandb
-  kwargs:
-    offline: False
+  project_name: rl_examples_redq
+  mode: online
   recorder_log_keys:
 
 optim:

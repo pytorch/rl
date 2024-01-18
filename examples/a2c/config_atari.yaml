@@ -11,7 +11,7 @@ collector:
 # logger
 logger:
   backend: wandb
-  backend_kwargs: null
+  project_name: rl_examples_a2c
   exp_name: Atari_Schulman17
   test_interval: 40_000_000
   num_test_episodes: 3

@@ -45,7 +45,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             logger_type=cfg.logger.backend,
             logger_name="td3_logging",
             experiment_name=exp_name,
-            wandb_kwargs={"mode": cfg.logger.mode, "config": cfg},
+            wandb_kwargs={"mode": cfg.logger.mode, "config": cfg, "project": cfg.logger.project_name},
         )
 
     # Set seeds
