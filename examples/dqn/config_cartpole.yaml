@@ -21,6 +21,7 @@ buffer:
 # logger
 logger:
   backend: null
+  backend_kwargs: null
   exp_name: DQN
   test_interval: 50_000
   num_test_episodes: 5

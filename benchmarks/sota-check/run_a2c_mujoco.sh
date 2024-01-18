@@ -1,6 +1,7 @@
 #!/bin/bash
 
 #SBATCH --job-name=a2c_mujoco
+#SBATCH --partition=test
 #SBATCH --ntasks=32
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
