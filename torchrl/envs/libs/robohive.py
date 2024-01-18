@@ -147,7 +147,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
     @implement_for(
         "gymnasium",
     )  # make sure gym 0.13 is installed, otherwise raise an exception
-    def _build_env(self, *args, **kwargs):
+    def _build_env(self, *args, **kwargs):  # noqa: F811
         raise NotImplementedError(
             "Your gym version is too recent, RoboHiveEnv is only compatible with gym==0.13."
         )
@@ -155,7 +155,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
     @implement_for(
         "gym", "0.14", None
     )  # make sure gym 0.13 is installed, otherwise raise an exception
-    def _build_env(self, *args, **kwargs):
+    def _build_env(self, *args, **kwargs):  # noqa: F811
         raise NotImplementedError(
             "Your gym version is too recent, RoboHiveEnv is only compatible with gym 0.13."
         )

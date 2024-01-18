@@ -68,8 +68,6 @@ class _BaseGymWrapper:
         if obs_keys is None:
             keys = []
             if self.info_keys:
-                print("info keys", self.info_keys)
-
                 def check_tuple_keys(key, info_key):
                     if isinstance(info_key, tuple):
                         return key[: len(info_key)] == info_key
