@@ -226,7 +226,7 @@ if _has_gym:
             observation = observation.select(*self._observation_keys).to_dict()
             reward = self._tensordict.get(("next", "reward"))
             done = self._tensordict.get(("next", "done"))
-            self._tensordict = _tensordict.select(*self._action_keys, *self._input_keys)
+            self._tensordict = _tensordict.select(*self._input_keys)
             out = (observation, reward, done, info)
             if self.to_numpy:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
