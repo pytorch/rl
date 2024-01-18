@@ -44,5 +44,6 @@ network:
 # logging
 logger:
   backend: wandb
+  project_name: rl_examples_ddpg
   mode: online
   eval_iter: 25000

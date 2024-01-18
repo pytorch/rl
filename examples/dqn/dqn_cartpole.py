@@ -85,7 +85,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             cfg.logger.backend,
             logger_name="dqn",
             experiment_name=exp_name,
-            wandb_kwargs={"project": cfg.logger.project_name},
+            wandb_kwargs={"config": dict(cfg), "project": cfg.logger.project_name},
         )
 
     # Create the test environment

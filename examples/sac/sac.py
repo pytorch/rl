@@ -42,12 +42,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     exp_name = generate_exp_name("SAC", cfg.env.exp_name)
     logger = None
     if cfg.logger.backend:
-        backend_kwargs = cfg.logger.get("backend_kwargs") or {}
         logger = get_logger(
             logger_type=cfg.logger.backend,
             logger_name="sac_logging",
             experiment_name=exp_name,
-            wandb_kwargs={"mode": cfg.logger.mode, "config": cfg, "project": cfg.logger.project_name},
+            wandb_kwargs={"mode": cfg.logger.mode, "config": dict(cfg), "project": cfg.logger.project_name},
         )
 
     torch.manual_seed(cfg.env.seed)

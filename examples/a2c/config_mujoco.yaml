@@ -10,7 +10,7 @@ collector:
 # logger
 logger:
   backend: wandb
-  backend_kwargs: rl_examples_a2c
+  project_name: rl_examples_a2c
   exp_name: Mujoco_Schulman17
   test_interval: 1_000_000
   num_test_episodes: 5
