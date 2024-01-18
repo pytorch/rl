@@ -357,6 +357,12 @@ def _gym_to_torchrl_spec_transform(
             f"spec of type {type(spec).__name__} is currently unaccounted for"
         )
 
+def _minmax_dtype(dtype):
+    if dtype.is_floating_point:
+        info = torch.finfo(dtype)
+    else:
+        info = torch.iinfo(dtype)
+    return info.min, info.max
 
 @implement_for("gym", None, "0.18")
 def _box_convert(spec, gym_spaces, shape):
@@ -422,16 +428,18 @@ def _torchrl_to_gym_spec_transform(
     if isinstance(spec, OneHotDiscreteTensorSpec):
         return gym_spaces.discrete.Discrete(spec.n)
     if isinstance(spec, UnboundedContinuousTensorSpec):
+        minval, maxval = _minmax_dtype(spec.dtype)
         return gym_spaces.Box(
-            low=-float("inf"),
-            high=float("inf"),
+            low=minval,
+            high=maxval,
             shape=shape,
             dtype=torch_to_numpy_dtype_dict[spec.dtype],
         )
     if isinstance(spec, UnboundedDiscreteTensorSpec):
+        minval, maxval = _minmax_dtype(spec.dtype)
         return gym_spaces.Box(
-            low=-float("inf"),
-            high=float("inf"),
+            low=minval,
+            high=maxval,
             shape=shape,
             dtype=torch_to_numpy_dtype_dict[spec.dtype],
         )
