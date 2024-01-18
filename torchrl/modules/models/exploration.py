@@ -2,15 +2,17 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import math
 import warnings
 from typing import Optional, Sequence, Union
 
+import math
 import torch
 from torch import distributions as d, nn
 from torch.nn.modules.lazy import LazyModuleMixin
 from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
 
+from tensordict.nn import TensorDictModuleBase
+from tensordict.utils import NestedKey
 from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
 from torchrl.envs.utils import exploration_type, ExplorationType
@@ -108,10 +110,14 @@ class NoisyLinear(nn.Linear):
     def reset_parameters(self) -> None:
         mu_range = 1 / math.sqrt(self.in_features)
         self.weight_mu.data.uniform_(-mu_range, mu_range)
-        self.weight_sigma.data.fill_(self.std_init / math.sqrt(self.in_features))
+        self.weight_sigma.data.fill_(
+            self.std_init / math.sqrt(self.in_features)
+            )
         if self.bias_mu is not None:
             self.bias_mu.data.uniform_(-mu_range, mu_range)
-            self.bias_sigma.data.fill_(self.std_init / math.sqrt(self.out_features))
+            self.bias_sigma.data.fill_(
+                self.std_init / math.sqrt(self.out_features)
+                )
 
     def reset_noise(self) -> None:
         epsilon_in = self._scale_noise(self.in_features)
@@ -120,7 +126,10 @@ class NoisyLinear(nn.Linear):
         if self.bias_mu is not None:
             self.bias_epsilon.copy_(epsilon_out)
 
-    def _scale_noise(self, size: Union[int, torch.Size, Sequence]) -> torch.Tensor:
+    def _scale_noise(
+        self,
+        size: Union[int, torch.Size, Sequence]
+        ) -> torch.Tensor:
         if isinstance(size, int):
             size = (size,)
         x = torch.randn(*size, device=self.weight_mu.device)
@@ -184,7 +193,10 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         )
         if bias:
             self.bias_mu = UninitializedParameter(device=device, dtype=dtype)
-            self.bias_sigma = UninitializedParameter(device=device, dtype=dtype)
+            self.bias_sigma = UninitializedParameter(
+                device=device,
+                dtype=dtype
+                )
             self.register_buffer(
                 "bias_epsilon", UninitializedBuffer(device=device, dtype=dtype)
             )
@@ -204,9 +216,15 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         if self.has_uninitialized_params():
             with torch.no_grad():
                 self.in_features = input.shape[-1]
-                self.weight_mu.materialize((self.out_features, self.in_features))
-                self.weight_sigma.materialize((self.out_features, self.in_features))
-                self.weight_epsilon.materialize((self.out_features, self.in_features))
+                self.weight_mu.materialize(
+                    (self.out_features, self.in_features)
+                    )
+                self.weight_sigma.materialize(
+                    (self.out_features, self.in_features)
+                    )
+                self.weight_epsilon.materialize(
+                    (self.out_features, self.in_features)
+                    )
                 if self.bias_mu is not None:
                     self.bias_mu.materialize((self.out_features,))
                     self.bias_sigma.materialize((self.out_features,))
@@ -327,12 +345,16 @@ class gSDEModule(nn.Module):
         self.learn_sigma = learn_sigma
         if learn_sigma:
             if sigma_init is None:
-                sigma_init = inv_softplus(math.sqrt((1.0 - scale_min) / state_dim))
+                sigma_init = inv_softplus(
+                    math.sqrt((1.0 - scale_min) / state_dim)
+                    )
             self.register_parameter(
                 "log_sigma",
                 nn.Parameter(
                     torch.zeros(
-                        (action_dim, state_dim), requires_grad=True, device=device
+                        (action_dim, state_dim),
+                        requires_grad=True,
+                        device=device
                     )
                 ),
             )
@@ -345,7 +367,10 @@ class gSDEModule(nn.Module):
             )
 
         if sigma_init != 0.0:
-            self.register_buffer("sigma_init", torch.tensor(sigma_init, device=device))
+            self.register_buffer(
+                "sigma_init",
+                torch.tensor(sigma_init, device=device)
+                )
 
     @property
     def sigma(self):
@@ -371,15 +396,22 @@ class gSDEModule(nn.Module):
         if _eps_gSDE is None and exploration_type() == ExplorationType.MODE:
             # noise is irrelevant in with no exploration
             _eps_gSDE = torch.zeros(
-                *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
+                *state.shape[:-1],
+                *sigma.shape,
+                device=sigma.device,
+                dtype=sigma.dtype
             )
-        elif (_eps_gSDE is None and exploration_type() == ExplorationType.RANDOM) or (
+        elif (
+            _eps_gSDE is None and exploration_type() == ExplorationType.RANDOM) or (
             _eps_gSDE is not None
             and _eps_gSDE.numel() == prod(state.shape[:-1])
             and (_eps_gSDE == 0).all()
         ):
             _eps_gSDE = torch.randn(
-                *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
+                *state.shape[:-1],
+                *sigma.shape,
+                device=sigma.device,
+                dtype=sigma.dtype
             )
         elif _eps_gSDE is None:
             raise RuntimeError(_err_explo)
@@ -394,7 +426,9 @@ class gSDEModule(nn.Module):
         else:
             raise RuntimeError(_err_explo)
 
-        sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(1e-5).sqrt()
+        sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(
+            1e-5
+            ).sqrt()
         if not torch.isfinite(sigma).all():
             warnings.warn("inf sigma")
 
@@ -404,7 +438,10 @@ class gSDEModule(nn.Module):
 
     def to(self, device_or_dtype: Union[torch.dtype, DEVICE_TYPING]):
         if isinstance(device_or_dtype, DEVICE_TYPING_ARGS):
-            self.transform = _cast_transform_device(self.transform, device_or_dtype)
+            self.transform = _cast_transform_device(
+                self.transform,
+                device_or_dtype
+                )
         return super().to(device_or_dtype)
 
 
@@ -490,7 +527,9 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
                     if self._sigma_init is None:
                         state_flatten_var.clamp_min_(self.scale_min)
                         self.sigma_init.data.copy_(
-                            inv_softplus((state_flatten_var / state_dim).sqrt())
+                            inv_softplus(
+                                (state_flatten_var / state_dim).sqrt()
+                                )
                         )
                     else:
                         self.sigma_init.data.copy_(
@@ -501,7 +540,9 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
                         )
 
                     self.log_sigma.materialize((action_dim, state_dim))
-                    self.log_sigma.data.copy_(self.sigma_init.expand_as(self.log_sigma))
+                    self.log_sigma.data.copy_(
+                        self.sigma_init.expand_as(self.log_sigma)
+                        )
 
                 else:
                     if self._sigma_init is None:
@@ -510,7 +551,80 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
                         )
                     else:
                         self.sigma_init.data.copy_(
-                            (state_flatten_var / state_dim).sqrt() * self._sigma_init
+                            (
+                                    state_flatten_var / state_dim).sqrt() * self._sigma_init
                         )
                     self._sigma.materialize((action_dim, state_dim))
-                    self._sigma.data.copy_(self.sigma_init.expand_as(self._sigma))
+                    self._sigma.data.copy_(
+                        self.sigma_init.expand_as(self._sigma)
+                        )
+
+
+class ConsistentDropout(nn.Module):
+    """Consistent Dropout.
+
+    This module was proposed in "Consistent Dropout for Policy Gradient Reinforcement Learning"
+    (Matthew Hausknecht, Nolan Wagener), https://arxiv.org/abs/2202.11818
+
+    This code is a light modification of the original code proposed in the paper, to make
+    it well fit for carrying data via TensorDict primitives.
+
+    """
+
+    def __init__(self, p=0.5):
+        super().__init__()
+        self.p = p
+        self.scale_factor = 1 / (1 - self.p)
+
+    def forward(self, x, mask=None):
+        if self.training:
+            if mask is None:
+                mask = self.make_mask(x)
+            return x * mask * self.scale_factor, mask
+        else:
+            return x
+
+    def make_mask(self, x):
+        return torch.bernoulli(torch.full_like(x, 1 - self.p)).bool()
+
+class ConsistentDropoutModule(TensorDictModuleBase):
+    """
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> consistent_dropout = ConsistentDropout()
+        >>> module = ConsistentDropoutModule(consistent_dropout)
+        >>> td = TensorDict({"x": torch.randn(3, 4)}, [3])
+        >>> module(td)
+        TensorDict(
+            fields={
+                mask_6127171760: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
+                x: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+
+    """
+    def __init__(self, consistent_dropout: ConsistentDropout, in_key: NestedKey=None, in_keys=None, out_keys=None):
+        if in_key is None:
+            in_key = "x"
+        if in_keys is None:
+            in_keys = [in_key, f"mask_{id(self)}"]
+        elif len(in_keys) != 2:
+            raise ValueError("in_keys and out_keys length must be 2 for consistent dropout.")
+        if out_keys is None:
+            out_keys = [in_key, f"mask_{id(self)}"]
+        elif len(out_keys) != 2:
+            raise ValueError("in_keys and out_keys length must be 2 for consistent dropout.")
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+        super().__init__()
+        self.consistent_dropout = consistent_dropout
+
+    def forward(self, tensordict):
+        x = tensordict.get(self.in_keys[0])
+        mask = tensordict.get(self.in_keys[1], default=None)
+        x, mask = self.consistent_dropout(x, mask=mask)
+        tensordict.set(self.out_keys[0], x)
+        tensordict.set(self.out_keys[1], mask)
+        return tensordict
