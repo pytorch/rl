@@ -209,9 +209,9 @@ class TestGym:
         )
 
     @implement_for("gym", "0.18", None)
-    def _make_spec(
+    def _make_spec(  # noqa: F811
         self, batch_size, cat, cat_shape, multicat, multicat_shape
-    ):  # noqa: F811
+    ):
         return CompositeSpec(
             a=UnboundedContinuousTensorSpec(shape=(*batch_size, 1)),
             b=CompositeSpec(
@@ -226,9 +226,9 @@ class TestGym:
         )
 
     @implement_for("gymnasium")
-    def _make_spec(
+    def _make_spec(  # noqa: F811
         self, batch_size, cat, cat_shape, multicat, multicat_shape
-    ):  # noqa: F811
+    ):
         return CompositeSpec(
             a=UnboundedContinuousTensorSpec(shape=(*batch_size, 1)),
             b=CompositeSpec(
