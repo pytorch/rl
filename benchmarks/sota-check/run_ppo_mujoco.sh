@@ -8,12 +8,12 @@
 #SBATCH --output=ppo_mujoco_output_%j.txt
 #SBATCH --error=ppo_mujoco_error_%j.txt
 
-# Activate your virtual environment if needed
-conda activate torch_rl2
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/abou/.mujoco/mujoco210/bin
+python ../../examples/ppo/ppo_mujoco.py  \
+  env.env_name=HalfCheetah-v4 \
+  collector.total_frames=40 \
+  collector.frames_per_batch=20 \
+  loss.mini_batch_size=10 \
+  loss.ppo_epochs=2 \
+  logger.backend= \
+  logger.test_interval=10
 
-python ../../examples/ppo/ppo_mujoco.py
-
-# Deactivate the virtual environment if activated
-conda deactivate

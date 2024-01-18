@@ -20,7 +20,7 @@
 #sbatch run_multiagent_iql.sh
 #sbatch run_multiagent_qmix.sh
 #sbatch run_multiagent_sac.sh
-# sbatch run_ppo_atari.sh
+sbatch run_ppo_atari.sh
 sbatch run_ppo_mujoco.sh
 # sbatch run_redq.sh
 # sbatch run_rlhf.sh
