@@ -1813,7 +1813,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
             if shape == _DEFAULT_SHAPE
             else None
         )
-        domain = kwargs.get("domain", "continuous")
+        domain = kwargs.pop("domain", "continuous")
         super().__init__(
             shape=shape, space=box, device=device, dtype=dtype, domain=domain, **kwargs
         )
