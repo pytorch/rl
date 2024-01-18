@@ -425,6 +425,21 @@ class ContinuousBox(Box):
         return f"{self.__class__.__name__}({min_str},{max_str})"
 
     def __eq__(self, other):
+        if other is None:
+            from torchrl.envs.libs.gym import _minmax_dtype
+
+            minval, maxval = _minmax_dtype(self.low.dtype)
+            if (
+                torch.isclose(self.low, minval).all()
+                and torch.isclose(self.high, maxval).all()
+            ):
+                return True
+            if (
+                not torch.isfinite(self.low).any()
+                and not torch.isfinite(self.high).any()
+            ):
+                return True
+            return False
         return (
             type(self) == type(other)
             and self.low.dtype == other.low.dtype
@@ -1813,7 +1828,8 @@ class UnboundedContinuousTensorSpec(TensorSpec):
             if shape == _DEFAULT_SHAPE
             else None
         )
-        domain = kwargs.pop("domain", "continuous")
+        default_domain = "continuous" if dtype.is_floating_point else "discrete"
+        domain = kwargs.pop("domain", default_domain)
         super().__init__(
             shape=shape, space=box, device=device, dtype=dtype, domain=domain, **kwargs
         )
@@ -1877,6 +1893,34 @@ class UnboundedContinuousTensorSpec(TensorSpec):
             )
             for i in range(self.shape[dim])
         )
+
+    def __eq__(self, other):
+        # those specs are equivalent to a discrete spec
+        if isinstance(other, UnboundedDiscreteTensorSpec):
+            return (
+                UnboundedDiscreteTensorSpec(
+                    shape=self.shape,
+                    device=self.device,
+                    dtype=self.dtype,
+                )
+                == other
+            )
+        if isinstance(other, BoundedTensorSpec):
+            from torchrl.envs.libs.gym import _minmax_dtype
+
+            minval, maxval = _minmax_dtype(self.dtype)
+            return (
+                BoundedTensorSpec(
+                    shape=self.shape,
+                    high=maxval,
+                    low=minval,
+                    dtype=self.dtype,
+                    device=self.device,
+                    domain=self.domain,
+                )
+                == other
+            )
+        return super().__eq__(other)
 
 
 @dataclass(repr=False)
