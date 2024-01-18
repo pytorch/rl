@@ -37,7 +37,12 @@ class _BaseGymWrapper:
             ),
         )
         self.observation_space = _torchrl_to_gym_spec_transform(
-            CompositeSpec({key: self.torchrl_env.full_observation_spec[key] for key in self._observation_keys}),
+            CompositeSpec(
+                {
+                    key: self.torchrl_env.full_observation_spec[key]
+                    for key in self._observation_keys
+                }
+            ),
             categorical_action_encoding=self.torchrl_env.__dict__.get(
                 "categorical_action_encoding", True
             ),
