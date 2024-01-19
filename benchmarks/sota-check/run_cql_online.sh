@@ -9,7 +9,7 @@
 #SBATCH --error=cql_online_error_%j.txt
 
 python ../../examples/cql/cql_online.py \
-  collector.total_frames=48 \
+  collector.total_frames=256 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
   collector.env_per_collector=1 \

@@ -12,6 +12,6 @@ python ../../examples/a2c/a2c_atari.py \
   collector.total_frames=80 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=20 \
+  logger.test_interval=40 \
   logger.backend=wandb \
-  logger.project_name="sota-check" \
-  logger.test_interval=40
+  logger.project_name="sota-check"

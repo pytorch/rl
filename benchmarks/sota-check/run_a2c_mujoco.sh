@@ -13,6 +13,6 @@ python ../../examples/a2c/a2c_mujoco.py \
   collector.total_frames=40 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=10 \
+  logger.test_interval=40 \
   logger.backend=wandb \
-  logger.project_name="sota-check" \
-  logger.test_interval=40
+  logger.project_name="sota-check"

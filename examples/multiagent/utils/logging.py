@@ -19,7 +19,7 @@ def init_logging(cfg, model_name: str):
         experiment_name=generate_exp_name(cfg.env.scenario_name, model_name),
         wandb_kwargs={
             "group": model_name,
-            "project": f"torchrl_{cfg.env.scenario_name}",
+            "project": cfg.logger.project_name or f"torchrl_{cfg.env.scenario_name}",
         },
     )
     logger.log_hparams(cfg)

@@ -9,10 +9,10 @@
 #SBATCH --error=iql_online_error_%j.txt
 
 python ../../examples/iql/iql_online.py \
-  collector.total_frames=48 \
+  collector.total_frames=256 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
-  env.train_num_envs=2 \
+  env.train_num_envs=1 \
   optim.device=cuda:0 \
   collector.device=cuda:0 \
   logger.mode=offline \

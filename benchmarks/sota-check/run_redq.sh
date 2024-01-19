@@ -17,7 +17,6 @@ python ../../examples/redq/redq.py \
   buffer.batch_size=10 \
   collector.device=cuda:0 \
   optim.steps_per_batch=1 \
-  logger.record_video=True \
   logger.record_frames=4 \
   buffer.size=120 \
   logger.backend=wandb \
