@@ -11,7 +11,8 @@ collector:
 # logger
 logger:
   backend: wandb
-  project_name: rl_examples_a2c
+  project_name: torchrl_example_a2c
+  group_name: null
   exp_name: Atari_Schulman17
   test_interval: 40_000_000
   num_test_episodes: 3

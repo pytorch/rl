@@ -3,7 +3,6 @@ env:
   name: Hopper-v2
   task: ""
   library: gym
-  exp_name: cql_${replay_buffer.dataset}
   n_samples_stats: 1000
   seed: 0
   backend: gym  # D4RL uses gym so we make sure gymnasium is hidden
@@ -11,7 +10,9 @@ env:
 # logger
 logger:
   backend: wandb
-  project_name: rl_examples_cql
+  project_name: torchrl_example_cql
+  group_name: null
+  exp_name: cql_${replay_buffer.dataset}
   eval_iter: 5000
   eval_steps: 1000
   mode: online

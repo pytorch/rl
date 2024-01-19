@@ -2,7 +2,6 @@
 env:
   name: HalfCheetah-v3
   task: ""
-  exp_name: ${env.name}_DDPG
   library: gymnasium
   max_episode_steps: 1000
   seed: 42
@@ -44,6 +43,8 @@ network:
 # logging
 logger:
   backend: wandb
-  project_name: rl_examples_ddpg
+  project_name: torchrl_example_ddpg
+  group_name: null
+  exp_name: ${env.name}_DDPG
   mode: online
   eval_iter: 25000

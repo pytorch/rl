@@ -2,7 +2,6 @@
 env:
   name: Pendulum-v1
   task: ""
-  exp_name: cql_${env.name}
   n_samples_stats: 1000
   seed: 0
   train_num_envs: 1
@@ -23,7 +22,9 @@ collector:
 # logger
 logger:
   backend: wandb
-  project_name: rl_examples_cql
+  project_name: torchrl_example_cql
+  group_name: null
+  exp_name: cql_${env.name}
   log_interval: 5000 # record interval in frames
   eval_steps: 1000
   mode: online

@@ -21,7 +21,8 @@ buffer:
 # logger
 logger:
   backend: wandb
-  project_name: rl_examples_dqn
+  project_name: torchrl_example_dqn
+  group_name: null
   exp_name: DQN
   test_interval: 50_000
   num_test_episodes: 5

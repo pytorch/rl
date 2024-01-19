@@ -486,8 +486,6 @@ def make_dt_optimizer(optim_cfg, loss_module):
 
 
 def make_logger(cfg):
-    from omegaconf import OmegaConf
-
     if not cfg.logger.backend:
         return None
     exp_name = generate_exp_name(cfg.logger.model_name, cfg.logger.exp_name)
@@ -496,7 +494,11 @@ def make_logger(cfg):
         cfg.logger.backend,
         logger_name=cfg.logger.model_name,
         experiment_name=exp_name,
-        wandb_kwargs={"config": dict(cfg), "project": cfg.logger.project_name},
+        wandb_kwargs={
+            "config": dict(cfg),
+            "project": cfg.logger.project_name,
+            "group": cfg.logger.group_name,
+        },
     )
     return logger
 

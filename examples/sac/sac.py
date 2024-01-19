@@ -39,14 +39,19 @@ def main(cfg: "DictConfig"):  # noqa: F821
     device = torch.device(cfg.network.device)
 
     # Create logger
-    exp_name = generate_exp_name("SAC", cfg.env.exp_name)
+    exp_name = generate_exp_name("SAC", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:
         logger = get_logger(
             logger_type=cfg.logger.backend,
             logger_name="sac_logging",
             experiment_name=exp_name,
-            wandb_kwargs={"mode": cfg.logger.mode, "config": dict(cfg), "project": cfg.logger.project_name},
+            wandb_kwargs={
+                "mode": cfg.logger.mode,
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
 
     torch.manual_seed(cfg.env.seed)

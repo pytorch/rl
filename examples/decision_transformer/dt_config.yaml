@@ -20,8 +20,9 @@ env:
 # logger
 logger:
   backend: wandb
-  project_name: rl_examples_dt
+  project_name: torchrl_example_dt
   model_name: DT
+  group_name: null
   exp_name: DT-HalfCheetah-medium-v2
   pretrain_log_interval: 500 # record interval in frames
   fintune_log_interval: 1

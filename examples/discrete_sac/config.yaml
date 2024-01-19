@@ -3,7 +3,6 @@
 env:
   name: CartPole-v1
   task: ""
-  exp_name: ${env.name}_DiscreteSAC
   library: gym
   seed: 42
   max_episode_steps: 500
@@ -48,6 +47,8 @@ network:
 # logging
 logger:
   backend: wandb
-  project_name: rl_examples_discrete_sac
+  project_name: torchrl_example_discrete_sac
+  group_name: null
+  exp_name: ${env.name}_DiscreteSAC
   mode: online
   eval_iter: 5000

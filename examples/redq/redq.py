@@ -8,7 +8,6 @@ from datetime import datetime
 
 import hydra
 import torch.cuda
-from omegaconf import OmegaConf
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -68,7 +67,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger_type=cfg.logger.backend,
         logger_name="redq_logging",
         experiment_name=exp_name,
-        wandb_kwargs={"mode": cfg.logger.mode, "config": dict(cfg), "project": cfg.logger.project_name},
+        wandb_kwargs={
+            "mode": cfg.logger.mode,
+            "config": dict(cfg),
+            "project": cfg.logger.project_name,
+            "group": cfg.logger.group_name,
+        },
     )
     video_tag = exp_name if cfg.logger.record_video else ""
 

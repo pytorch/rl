@@ -2,7 +2,6 @@
 env:
   name: HalfCheetah-v3
   task: ""
-  exp_name: ${env.name}_SAC
   library: gymnasium
   max_episode_steps: 1000
   seed: 42
@@ -46,6 +45,8 @@ network:
 # logging
 logger:
   backend: wandb
-  project_name: rl_examples_sac
+  project_name: torchrl_example_sac
+  group_name: null
+  exp_name: ${env.name}_SAC
   mode: online
   eval_iter: 25000

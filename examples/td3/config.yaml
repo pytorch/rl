@@ -2,7 +2,6 @@
 env:
   name: HalfCheetah-v3
   task: ""
-  exp_name: ${env.name}_TD3
   library: gymnasium
   seed: 42
   max_episode_steps: 1000
@@ -47,6 +46,8 @@ network:
 # logging
 logger:
   backend: wandb
-  project_name: rl_examples_td3
+  project_name: torchrl_example_td3
+  group_name: null
+  exp_name: ${env.name}_TD3
   mode: online
   eval_iter: 25000

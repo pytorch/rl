@@ -40,3 +40,4 @@ eval:
 logger:
   backend: wandb # Delete to remove logging
   project_name: null
+  group_name: null
