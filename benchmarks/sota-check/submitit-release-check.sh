@@ -68,7 +68,7 @@ scripts=(
     run_sac.sh
     run_td3.sh
     #run_bandits.sh
-    # run_rlhf.sh
+    run_rlhf.sh
 )
 
 # Submit jobs with the specified partition the specified number of times
