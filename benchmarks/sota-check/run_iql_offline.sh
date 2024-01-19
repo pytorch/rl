@@ -8,9 +8,10 @@
 #SBATCH --error=iql_offline_error_%j.txt
 
 current_commit=$(git rev-parse HEAD)
-project_name="sota-check_$current_commit"
+project_name="torchrl-example-check-$current_commit"
 python ../../examples/iql/iql_offline.py \
   optim.gradient_steps=55 \
   optim.device=cuda:0 \
   logger.backend=wandb \
-  logger.project_name="$project_name"
+  logger.project_name="$project_name" \
+  logger.group_name="iql_offline"

@@ -8,7 +8,7 @@
 #SBATCH --error=dqn_cartpole_error_%j.txt
 
 current_commit=$(git rev-parse HEAD)
-project_name="sota-check_$current_commit"
+project_name="torchrl-example-check-$current_commit"
 python ../../examples/dqn/dqn_cartpole.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -18,4 +18,5 @@ python ../../examples/dqn/dqn_cartpole.py \
   loss.num_updates=1 \
   buffer.buffer_size=120 \
   logger.backend=wandb \
-  logger.project_name="$project_name"
+  logger.project_name="$project_name" \
+  logger.group_name="dqn_cartpole"

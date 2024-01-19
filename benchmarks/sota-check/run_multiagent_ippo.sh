@@ -8,11 +8,12 @@
 #SBATCH --error=marl_ippo_error_%j.txt
 
 current_commit=$(git rev-parse HEAD)
-project_name="sota-check_$current_commit"
+project_name="torchrl-example-check-$current_commit"
 python ../../examples/multiagent/maddpg_ippo.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \
   train.num_epochs=3 \
   train.minibatch_size=100 \
   logger.backend=wandb \
-  logger.project_name="$project_name"
+  logger.project_name="$project_name" \
+  logger.group_name="marl_ippo"

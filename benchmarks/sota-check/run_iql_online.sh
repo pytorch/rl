@@ -8,7 +8,7 @@
 #SBATCH --error=iql_online_error_%j.txt
 
 current_commit=$(git rev-parse HEAD)
-project_name="sota-check_$current_commit"
+project_name="torchrl-example-check-$current_commit"
 python ../../examples/iql/iql_online.py \
   collector.total_frames=256 \
   optim.batch_size=10 \
@@ -18,4 +18,5 @@ python ../../examples/iql/iql_online.py \
   collector.device=cuda:0 \
   logger.mode=offline \
   logger.backend=wandb \
-  logger.project_name="$project_name"
+  logger.project_name="$project_name" \
+  logger.group_name="iql_online"

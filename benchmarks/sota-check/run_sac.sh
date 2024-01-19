@@ -8,7 +8,7 @@
 #SBATCH --error=sac_error_%j.txt
 
 current_commit=$(git rev-parse HEAD)
-project_name="sota-check_$current_commit"
+project_name="torchrl-example-check-$current_commit"
 python ../../examples/sac/sac.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -21,4 +21,5 @@ python ../../examples/sac/sac.py \
   env.name=Pendulum-v1 \
   network.device=cuda:0 \
   logger.backend=wandb \
-  logger.project_name="$project_name"
+  logger.project_name="$project_name" \
+  logger.group_name="sac"

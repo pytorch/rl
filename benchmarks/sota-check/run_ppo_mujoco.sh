@@ -8,7 +8,7 @@
 #SBATCH --error=ppo_mujoco_error_%j.txt
 
 current_commit=$(git rev-parse HEAD)
-project_name="sota-check_$current_commit"
+project_name="torchrl-example-check-$current_commit"
 python ../../examples/ppo/ppo_mujoco.py  \
   env.env_name=HalfCheetah-v4 \
   collector.total_frames=40 \
@@ -17,4 +17,5 @@ python ../../examples/ppo/ppo_mujoco.py  \
   loss.ppo_epochs=2 \
   logger.test_interval=10 \
   logger.backend=wandb \
-  logger.project_name="$project_name"
+  logger.project_name="$project_name" \
+  logger.group_name="ppo_mujoco"

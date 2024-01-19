@@ -8,7 +8,7 @@
 #SBATCH --error=ppo_atari_error_%j.txt
 
 current_commit=$(git rev-parse HEAD)
-project_name="sota-check_$current_commit"
+project_name="torchrl-example-check-$current_commit"
 python ../../examples/ppo/ppo_atari.py \
   collector.total_frames=80 \
   collector.frames_per_batch=20 \
@@ -16,4 +16,5 @@ python ../../examples/ppo/ppo_atari.py \
   loss.ppo_epochs=2 \
   logger.test_interval=10 \
   logger.backend=wandb \
-  logger.project_name="$project_name"
+  logger.project_name="$project_name" \
+  logger.group_name="ppo_atari"

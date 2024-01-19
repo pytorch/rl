@@ -8,7 +8,7 @@
 #SBATCH --error=ddpg_error_%j.txt
 
 current_commit=$(git rev-parse HEAD)
-project_name="sota-check_$current_commit"
+project_name="torchrl-example-check-$current_commit"
 python ../../examples/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -21,4 +21,5 @@ python ../../examples/ddpg/ddpg.py \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=wandb \
-  logger.project_name="$project_name"
+  logger.project_name="$project_name" \
+  logger.group_name="ddpg"
