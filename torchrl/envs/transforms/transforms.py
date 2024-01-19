@@ -5419,8 +5419,6 @@ class SelectTransform(Transform):
             if they should be kept. Defaults to ``True``.
         keep_dones (bool, optional): if ``False``, the done keys must be provided
             if they should be kept. Defaults to ``True``.
-        remove_empty_specs (bool, optional): if ``True``, empty composite specs
-            will be deleted from the observation_spec, reward_spec and done_spec. Defaults to ``False``.
 
         >>> import gymnasium
         >>> from torchrl.envs import GymWrapper
@@ -5453,7 +5451,6 @@ class SelectTransform(Transform):
         *selected_keys: NestedKey,
         keep_rewards: bool = True,
         keep_dones: bool = True,
-        remove_empty_specs: bool = False,
     ):
         super().__init__()
         try:
@@ -5465,7 +5462,6 @@ class SelectTransform(Transform):
         self.selected_keys = selected_keys
         self.keep_done_keys = keep_dones
         self.keep_reward_keys = keep_rewards
-        self.remove_empty_specs = remove_empty_specs
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.parent is not None:
@@ -5513,27 +5509,15 @@ class SelectTransform(Transform):
             for key in list(full_done_spec.keys(True, True)):
                 if unravel_key(key) not in self.selected_keys:
                     del full_done_spec[key]
-            if self.remove_empty_specs:
-                for key, spec in reversed(list(full_done_spec.items(True))):
-                    if isinstance(spec, CompositeSpec) and spec.is_empty():
-                        del full_done_spec[key]
 
         for key in list(full_observation_spec.keys(True, True)):
             if unravel_key(key) not in self.selected_keys:
                 del full_observation_spec[key]
-        if self.remove_empty_specs:
-            for key, spec in reversed(list(full_observation_spec.items(True))):
-                if isinstance(spec, CompositeSpec) and spec.is_empty():
-                    del full_observation_spec[key]
 
         if not self.keep_reward_keys:
             for key in list(full_reward_spec.keys(True, True)):
                 if unravel_key(key) not in self.selected_keys:
                     del full_reward_spec[key]
-            if self.remove_empty_specs:
-                for key, spec in reversed(list(full_reward_spec.items(True))):
-                    if isinstance(spec, CompositeSpec) and spec.is_empty():
-                        del full_reward_spec[key]
 
         return output_spec
 
