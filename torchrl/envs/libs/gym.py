@@ -310,7 +310,9 @@ def _gym_to_torchrl_spec_transform(
         high = torch.tensor(spec.high, device=device, dtype=dtype)
         is_unbounded = low.isinf().all() and high.isinf().all()
 
-        minval, maxval = _minmax_dtype(dtype, device)
+        minval, maxval = _minmax_dtype(dtype)
+        minval = torch.as_tensor(minval).to(low.device, dtype)
+        maxval = torch.as_tensor(maxval).to(low.device, dtype)
         is_unbounded = is_unbounded or (
             torch.isclose(low, torch.tensor(minval, dtype=dtype)).all()
             and torch.isclose(high, torch.tensor(maxval, dtype=dtype)).all()
@@ -428,7 +430,7 @@ def _torchrl_to_gym_spec_transform(
     if isinstance(spec, OneHotDiscreteTensorSpec):
         return gym_spaces.discrete.Discrete(spec.n)
     if isinstance(spec, UnboundedContinuousTensorSpec):
-        minval, maxval = _minmax_dtype(spec.dtype, spec.device)
+        minval, maxval = _minmax_dtype(spec.dtype)
         return gym_spaces.Box(
             low=minval,
             high=maxval,
@@ -436,7 +438,7 @@ def _torchrl_to_gym_spec_transform(
             dtype=torch_to_numpy_dtype_dict[spec.dtype],
         )
     if isinstance(spec, UnboundedDiscreteTensorSpec):
-        minval, maxval = _minmax_dtype(spec.dtype, spec.device)
+        minval, maxval = _minmax_dtype(spec.dtype)
         return gym_spaces.Box(
             low=minval,
             high=maxval,

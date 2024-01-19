@@ -427,7 +427,9 @@ class ContinuousBox(Box):
     def __eq__(self, other):
         if other is None:
 
-            minval, maxval = _minmax_dtype(self.low.dtype, self.low.device)
+            minval, maxval = _minmax_dtype(self.low.dtype)
+            minval = torch.as_tensor(minval).to(self.low.device, self.low.dtype)
+            maxval = torch.as_tensor(maxval).to(self.low.device, self.low.dtype)
             if (
                 torch.isclose(self.low, minval).all()
                 and torch.isclose(self.high, maxval).all()
@@ -1905,7 +1907,9 @@ class UnboundedContinuousTensorSpec(TensorSpec):
                 == other
             )
         if isinstance(other, BoundedTensorSpec):
-            minval, maxval = _minmax_dtype(self.dtype, self.device)
+            minval, maxval = _minmax_dtype(self.dtype)
+            minval = torch.as_tensor(minval).to(self.device, self.dtype)
+            maxval = torch.as_tensor(maxval).to(self.device, self.dtype)
             return (
                 BoundedTensorSpec(
                     shape=self.shape,
@@ -4352,16 +4356,11 @@ class _CompositeSpecKeysView:
             return False
 
 
-def _minmax_dtype(dtype, device=None):
+def _minmax_dtype(dtype):
     if dtype is torch.bool:
-        return torch.tensor(False, device=device), torch.tensor(True, device=device)
+        return False, True
     if dtype.is_floating_point:
         info = torch.finfo(dtype)
     else:
         info = torch.iinfo(dtype)
-    if device is None:
-        return torch.as_tensor(info.min), torch.as_tensor(info.max)
-    else:
-        return torch.as_tensor(info.min).to(device), torch.as_tensor(info.max).to(
-            device
-        )
+    return info.min, info.max
