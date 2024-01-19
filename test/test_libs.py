@@ -672,7 +672,7 @@ class TestGym:
             env.close()
             del env
 
-    @implement_for("gym", "0.18", "0.27.0")
+    @implement_for("gym", "0.18")
     @pytest.mark.parametrize(
         "envname",
         ["CartPole-v1", "HalfCheetah-v4"],
@@ -739,7 +739,7 @@ class TestGym:
         assert "done" in env.done_keys
         check_env_specs(env)
 
-    @implement_for("gym", "0.26", None)
+    @implement_for("gym", "0.26")
     @pytest.mark.parametrize("wrapper", [True, False])
     def test_gym_output_num(self, wrapper):  # noqa: F811
         # gym has 5 outputs, with truncation
@@ -765,7 +765,7 @@ class TestGym:
             ):
                 GymWrapper(EnvCompatibility(gym.make("CartPole-v1")))
 
-    @implement_for("gymnasium", "0.27", None)
+    @implement_for("gymnasium")
     @pytest.mark.parametrize("wrapper", [True, False])
     def test_gym_output_num(self, wrapper):  # noqa: F811
         # gym has 5 outputs, with truncation
@@ -895,7 +895,7 @@ def _make_gym_environment(env_name):  # noqa: F811
     return gym.make(env_name, render_mode="rgb_array")
 
 
-@implement_for("gymnasium", "0.27", None)
+@implement_for("gymnasium")
 def _make_gym_environment(env_name):  # noqa: F811
     return gym.make(env_name, render_mode="rgb_array")
 

@@ -246,7 +246,7 @@ class implement_for:
         ...     # More recent gym versions will return x + 2
         ...     return x + 2
         ...
-        >>> @implement_for("gymnasium", "0.27", None)
+        >>> @implement_for("gymnasium")
         >>> def fun(self, x):
         ...     # If gymnasium is to be used instead of gym, x+3 will be returned
         ...     return x + 3

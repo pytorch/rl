@@ -494,7 +494,7 @@ def _get_gym_envs():  # noqa: F811
     return gym.envs.registration.registry.keys()
 
 
-@implement_for("gymnasium", "0.27.0", None)
+@implement_for("gymnasium")
 def _get_gym_envs():  # noqa: F811
     gym = gym_backend()
     return gym.envs.registration.registry.keys()
@@ -851,7 +851,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
-    @implement_for("gymnasium", "0.27.0", None)
+    @implement_for("gymnasium")
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
         compatibility = gym_backend("wrappers.compatibility")
         pixel_observation = gym_backend("wrappers.pixel_observation")
@@ -913,7 +913,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self._seed_calls_reset = False
             self._env.seed(seed=seed)
 
-    @implement_for("gymnasium", "0.27.0", None)
+    @implement_for("gymnasium")
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
         try:
             self.reset(seed=seed)
