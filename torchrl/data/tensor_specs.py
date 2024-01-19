@@ -77,6 +77,7 @@ NOT_IMPLEMENTED_ERROR = NotImplementedError(
 
 NO_DEFAULT = object()
 
+
 def _default_dtype_and_device(
     dtype: Union[None, torch.dtype],
     device: Union[None, str, int, torch.device],

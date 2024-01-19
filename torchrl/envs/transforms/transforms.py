@@ -6947,7 +6947,9 @@ class RemoveEmptySpecs(Transform):
             is_shared=False)
         check_env_specs(env)
     """
+
     _has_empty_input = True
+
     @staticmethod
     def _sorter(key_val):
         key, _ = key_val
@@ -6960,15 +6962,21 @@ class RemoveEmptySpecs(Transform):
         full_reward_spec = output_spec["full_reward_spec"]
         full_observation_spec = output_spec["full_observation_spec"]
         # we reverse things to make sure we delete things from the back
-        for key, spec in reversed(sorted(full_done_spec.items(True), key=self._sorter)):
+        for key, spec in sorted(
+            full_done_spec.items(True), key=self._sorter, reverse=True
+        ):
             if isinstance(spec, CompositeSpec) and spec.is_empty():
                 del full_done_spec[key]
 
-        for key, spec in reversed(sorted(full_observation_spec.items(True), key=self._sorter)):
+        for key, spec in sorted(
+            full_observation_spec.items(True), key=self._sorter, reverse=True
+        ):
             if isinstance(spec, CompositeSpec) and spec.is_empty():
                 del full_observation_spec[key]
 
-        for key, spec in reversed(sorted(full_reward_spec.items(True), key=self._sorter)):
+        for key, spec in sorted(
+            full_reward_spec.items(True), key=self._sorter, reverse=True
+        ):
             if isinstance(spec, CompositeSpec) and spec.is_empty():
                 del full_reward_spec[key]
         return output_spec
@@ -6979,12 +6987,16 @@ class RemoveEmptySpecs(Transform):
         # we reverse things to make sure we delete things from the back
 
         self._has_empty_input = False
-        for key, spec in reversed(sorted(full_action_spec.items(True), key=self._sorter)):
+        for key, spec in sorted(
+            full_action_spec.items(True), key=self._sorter, reverse=True
+        ):
             if isinstance(spec, CompositeSpec) and spec.is_empty():
                 self._has_empty_input = True
                 del full_action_spec[key]
 
-        for key, spec in reversed(sorted(full_state_spec.items(True), key=self._sorter)):
+        for key, spec in sorted(
+            full_state_spec.items(True), key=self._sorter, reverse=True
+        ):
             if isinstance(spec, CompositeSpec) and spec.is_empty():
                 self._has_empty_input = True
                 del full_state_spec[key]
@@ -6992,7 +7004,7 @@ class RemoveEmptySpecs(Transform):
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self._has_empty_input:
-            input_spec = getattr(self.parent, 'input_spec', None)
+            input_spec = getattr(self.parent, "input_spec", None)
             if input_spec is None:
                 return tensordict
 
@@ -7000,17 +7012,31 @@ class RemoveEmptySpecs(Transform):
             full_state_spec = input_spec["full_state_spec"]
             # we reverse things to make sure we delete things from the back
 
-            for key, spec in reversed(sorted(full_action_spec.items(True), key=self._sorter)):
-                if isinstance(spec, CompositeSpec) and spec.is_empty() and key not in tensordict.keys(True):
+            for key, spec in sorted(
+                full_action_spec.items(True), key=self._sorter, reverse=True
+            ):
+                if (
+                    isinstance(spec, CompositeSpec)
+                    and spec.is_empty()
+                    and key not in tensordict.keys(True)
+                ):
                     tensordict.create_nested(key)
 
-            for key, spec in reversed(sorted(full_state_spec.items(True), key=self._sorter)):
-                if isinstance(spec, CompositeSpec) and spec.is_empty() and key not in tensordict.keys(True):
+            for key, spec in sorted(
+                full_state_spec.items(True), key=self._sorter, reverse=True
+            ):
+                if (
+                    isinstance(spec, CompositeSpec)
+                    and spec.is_empty()
+                    and key not in tensordict.keys(True)
+                ):
                     tensordict.create_nested(key)
         return tensordict
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for key, value in reversed(sorted(tensordict.items(True), key=self._sorter)):
+        for key, value in sorted(
+            tensordict.items(True), key=self._sorter, reverse=True
+        ):
             if (
                 is_tensor_collection(value)
                 and not isinstance(value, NonTensorData)

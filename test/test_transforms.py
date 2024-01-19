@@ -9796,7 +9796,12 @@ class TestRemoveEmptySpecs(TransformBase):
                 other_reward=CompositeSpec(shape=self.batch_size),
                 shape=self.batch_size,
             )
-            self.state_spec = CompositeSpec(state=CompositeSpec(sub=CompositeSpec(shape=self.batch_size),shape=self.batch_size),shape=self.batch_size)
+            self.state_spec = CompositeSpec(
+                state=CompositeSpec(
+                    sub=CompositeSpec(shape=self.batch_size), shape=self.batch_size
+                ),
+                shape=self.batch_size,
+            )
 
         def _reset(self, tensordict):
             return self.observation_spec.rand().update(self.full_done_spec.zero())
@@ -9830,11 +9835,15 @@ class TestRemoveEmptySpecs(TransformBase):
             env.close()
 
     def test_trans_serial_env_check(self):
-        with pytest.raises(RuntimeError, match="The environment passed to SerialEnv has empty specs"):
+        with pytest.raises(
+            RuntimeError, match="The environment passed to SerialEnv has empty specs"
+        ):
             env = TransformedEnv(SerialEnv(2, self.DummyEnv), RemoveEmptySpecs())
 
     def test_trans_parallel_env_check(self):
-        with pytest.raises(RuntimeError, match="The environment passed to ParallelEnv has empty specs"):
+        with pytest.raises(
+            RuntimeError, match="The environment passed to ParallelEnv has empty specs"
+        ):
             env = TransformedEnv(ParallelEnv(2, self.DummyEnv), RemoveEmptySpecs())
 
     def test_transform_no_env(self):
@@ -9879,9 +9888,8 @@ class TestRemoveEmptySpecs(TransformBase):
         rb.extend(td)
         td = rb.sample(1)
         if "index" in td.keys():
-            del td['index']
+            del td["index"]
         assert td.is_empty()
-
 
     def test_transform_inverse(self):
         td = TensorDict({"a": {"b": {"c": {}}}}, [])
@@ -9892,6 +9900,7 @@ class TestRemoveEmptySpecs(TransformBase):
         env = TransformedEnv(self.DummyEnv(), RemoveEmptySpecs())
         td2 = env.transform.inv(TensorDict({}, []))
         assert ("state", "sub") in td2.keys(True)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

@@ -23,8 +23,8 @@ from tensordict._tensordict import _unravel_key_to_tuple, unravel_key
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, VERBOSE
-from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.data.tensor_specs import CompositeSpec
+from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
@@ -275,9 +275,18 @@ class _BatchedEnv(EnvBase):
     def _set_properties(self):
 
         cls = type(self)
+
         def _check_for_empty_spec(specs: CompositeSpec):
-            for subspec in ("full_state_spec", "full_action_spec", "full_done_spec", "full_reward_spec", "full_observation_spec"):
-                for key, spec in reversed(list(specs.get(subspec, default=CompositeSpec()).items(True))):
+            for subspec in (
+                "full_state_spec",
+                "full_action_spec",
+                "full_done_spec",
+                "full_reward_spec",
+                "full_observation_spec",
+            ):
+                for key, spec in reversed(
+                    list(specs.get(subspec, default=CompositeSpec()).items(True))
+                ):
                     if isinstance(spec, CompositeSpec) and spec.is_empty():
                         raise RuntimeError(
                             f"The environment passed to {cls.__name__} has empty specs in {key}. Consider using "

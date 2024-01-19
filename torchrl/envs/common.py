@@ -1493,6 +1493,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 the observation keys.
                 This arg can be passed during a call to :func:`~gym.make` (see
                 example below).
+
+                .. warning::
+                  It may be the case that using ``info_keys`` makes a spec empty
+                  because the content has been moved to the info dictionary.
+                  Gym does not like empty ``Dict`` in the specs, so this empty
+                  content should be removed with :class:`~torchrl.envs.transforms.RemoveEmptySpecs`.
+
             backend (str, optional): the backend. Can be either `"gym"` or `"gymnasium"`
                 or any other backend compatible with :class:`~torchrl.envs.libs.gym.set_gym_backend`.
             to_numpy (bool, optional): if ``True``, the result of calls to `step` and
