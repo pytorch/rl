@@ -32,7 +32,11 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
-from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
+from torchrl.data.utils import (
+    _minmax_dtype,
+    numpy_to_torch_dtype_dict,
+    torch_to_numpy_dtype_dict,
+)
 from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
 
@@ -309,7 +313,7 @@ def _gym_to_torchrl_spec_transform(
         high = torch.tensor(spec.high, device=device, dtype=dtype)
         is_unbounded = low.isinf().all() and high.isinf().all()
 
-        minval, maxval = _minmax_dtype(dtype)
+        minval, maxval = _minmax_dtype(dtype, device)
         is_unbounded = is_unbounded or (
             torch.isclose(low, torch.tensor(minval, dtype=dtype)).all()
             and torch.isclose(high, torch.tensor(maxval, dtype=dtype)).all()
@@ -358,16 +362,6 @@ def _gym_to_torchrl_spec_transform(
         raise NotImplementedError(
             f"spec of type {type(spec).__name__} is currently unaccounted for"
         )
-
-
-def _minmax_dtype(dtype):
-    if dtype is torch.bool:
-        return torch.tensor(False), torch.tensor(True)
-    if dtype.is_floating_point:
-        info = torch.finfo(dtype)
-    else:
-        info = torch.iinfo(dtype)
-    return info.min, info.max
 
 
 @implement_for("gym", None, "0.18")
@@ -437,7 +431,7 @@ def _torchrl_to_gym_spec_transform(
     if isinstance(spec, OneHotDiscreteTensorSpec):
         return gym_spaces.discrete.Discrete(spec.n)
     if isinstance(spec, UnboundedContinuousTensorSpec):
-        minval, maxval = _minmax_dtype(spec.dtype)
+        minval, maxval = _minmax_dtype(spec.dtype, spec.device)
         return gym_spaces.Box(
             low=minval,
             high=maxval,
@@ -445,7 +439,7 @@ def _torchrl_to_gym_spec_transform(
             dtype=torch_to_numpy_dtype_dict[spec.dtype],
         )
     if isinstance(spec, UnboundedDiscreteTensorSpec):
-        minval, maxval = _minmax_dtype(spec.dtype)
+        minval, maxval = _minmax_dtype(spec.dtype, spec.device)
         return gym_spaces.Box(
             low=minval,
             high=maxval,

@@ -37,6 +37,8 @@ from tensordict.utils import _getitem_batch_size, NestedKey
 
 from torchrl._utils import get_binary_env_var
 
+from torchrl.data.utils import _minmax_dtype
+
 DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
@@ -426,9 +428,8 @@ class ContinuousBox(Box):
 
     def __eq__(self, other):
         if other is None:
-            from torchrl.envs.libs.gym import _minmax_dtype
 
-            minval, maxval = _minmax_dtype(self.low.dtype)
+            minval, maxval = _minmax_dtype(self.low.dtype, self.low.device)
             if (
                 torch.isclose(self.low, minval).all()
                 and torch.isclose(self.high, maxval).all()
@@ -1906,9 +1907,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
                 == other
             )
         if isinstance(other, BoundedTensorSpec):
-            from torchrl.envs.libs.gym import _minmax_dtype
-
-            minval, maxval = _minmax_dtype(self.dtype)
+            minval, maxval = _minmax_dtype(self.dtype, self.device)
             return (
                 BoundedTensorSpec(
                     shape=self.shape,
