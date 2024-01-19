@@ -75,6 +75,7 @@ NOT_IMPLEMENTED_ERROR = NotImplementedError(
     " an issue at https://github.com/pytorch/rl/issues"
 )
 
+NO_DEFAULT = object()
 
 def _default_dtype_and_device(
     dtype: Union[None, torch.dtype],
@@ -3438,6 +3439,19 @@ class CompositeSpec(TensorSpec):
             device=device,
         )
 
+    def get(self, item, default=NO_DEFAULT):
+        """Gets an item from the CompositeSpec.
+
+        If the item is absent, a default value can be passed.
+
+        """
+        try:
+            return self[item]
+        except KeyError:
+            if item is not NO_DEFAULT:
+                return default
+            raise
+
     def __setitem__(self, key, value):
         if isinstance(key, tuple) and len(key) > 1:
             if key[0] not in self.keys(True):
@@ -3482,7 +3496,8 @@ class CompositeSpec(TensorSpec):
 
     def __delitem__(self, key: str) -> None:
         if isinstance(key, tuple) and len(key) > 1:
-            del self._specs[key[0]][key[1:]]
+            spec = self[key[:-1]]
+            del spec[key[-1]]
             return
         elif isinstance(key, tuple):
             del self._specs[key[0]]

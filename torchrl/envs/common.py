@@ -1339,7 +1339,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         for i, (key, item) in enumerate(done_spec.items()):  # noqa: B007
             val = data.get(key, None)
             if isinstance(item, CompositeSpec):
-                cls._complete_done(item, val)
+                if val is not None:
+                    cls._complete_done(item, val)
                 continue
             shape = (*leading_dim, *item.shape)
             if val is not None:

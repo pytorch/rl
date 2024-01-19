@@ -32,6 +32,7 @@ from .transforms import (
     PermuteTransform,
     PinMemoryTransform,
     RandomCropTensorDict,
+    RemoveEmptySpecs,
     RenameTransform,
     Resize,
     Reward2GoTransform,

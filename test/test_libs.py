@@ -78,6 +78,7 @@ from torchrl.envs import (
     EnvBase,
     EnvCreator,
     ParallelEnv,
+    RemoveEmptySpecs,
     RenameTransform,
 )
 from torchrl.envs.batched_envs import SerialEnv
@@ -148,6 +149,11 @@ if _has_vmas:
 if _has_envpool:
     import envpool
 
+_has_pytree = True
+try:
+    from torch.utils._pytree import tree_flatten
+except ImportError:
+    _has_pytree = False
 IS_OSX = platform == "darwin"
 RTOL = 1e-1
 ATOL = 1e-1
@@ -164,7 +170,10 @@ class TestGym:
 
             self.observation_spec = CompositeSpec(
                 observation=UnboundedContinuousTensorSpec((*self.batch_size, 3)),
-                other=UnboundedContinuousTensorSpec((*self.batch_size, 3)),
+                other=CompositeSpec(
+                    another_other=UnboundedContinuousTensorSpec((*self.batch_size, 3)),
+                    shape=self.batch_size,
+                ),
                 shape=self.batch_size,
             )
             self.action_spec = UnboundedContinuousTensorSpec((*self.batch_size, 3))
@@ -181,7 +190,7 @@ class TestGym:
             return TensorDict(
                 {
                     "observation": action.clone(),
-                    "other": torch.zeros_like(action),
+                    "other": {"another_other": torch.zeros_like(action)},
                     "reward": action.sum(-1, True),
                     "done": ~action.any(-1, True),
                     "terminated": ~action.any(-1, True),
@@ -273,6 +282,7 @@ class TestGym:
     if _has_gym_regular:
         _BACKENDS += ["gym"]
 
+    @pytest.mark.skipif(not _has_pytree, reason="pytree needed for torchrl_to_gym test")
     @pytest.mark.parametrize("backend", _BACKENDS)
     @pytest.mark.parametrize("numpy", [True, False])
     def test_torchrl_to_gym(self, backend, numpy):
@@ -294,14 +304,20 @@ class TestGym:
             assert "observation" in obs
             assert "other" in obs
             if numpy:
-                assert all(isinstance(val, np.ndarray) for val in obs.values())
+                assert all(isinstance(val, np.ndarray) for val in tree_flatten(obs)[0])
             else:
-                assert all(isinstance(val, torch.Tensor) for val in obs.values())
+                assert all(
+                    isinstance(val, torch.Tensor) for val in tree_flatten(obs)[0]
+                )
 
             # with a transform
+            transform = Compose(
+                CatTensors(["observation", ("other", "another_other")]),
+                RemoveEmptySpecs(),
+            )
             envgym = gym_backend().make(
                 f"Dummy-{numpy}-{backend}-v0",
-                transform=CatTensors(["observation", "other"]),
+                transform=transform,
             )
             envgym.reset()
             obs, *_ = envgym.step(envgym.action_space.sample())
@@ -309,11 +325,16 @@ class TestGym:
             assert "observation" not in obs
             assert "other" not in obs
             if numpy:
-                assert all(isinstance(val, np.ndarray) for val in obs.values())
+                assert all(isinstance(val, np.ndarray) for val in tree_flatten(obs)[0])
             else:
-                assert all(isinstance(val, torch.Tensor) for val in obs.values())
+                assert all(
+                    isinstance(val, torch.Tensor) for val in tree_flatten(obs)[0]
+                )
 
         # register with transform
+        transform = Compose(
+            CatTensors(["observation", ("other", "another_other")]), RemoveEmptySpecs()
+        )
         EnvBase.register_gym(
             f"Dummy-{numpy}-{backend}-transform-v0",
             entry_point=self.DummyEnv,
@@ -321,7 +342,7 @@ class TestGym:
             to_numpy=numpy,
             arg1=1,
             arg2=2,
-            transform=CatTensors(["observation", "other"]),
+            transform=transform,
         )
 
         with set_gym_backend(backend) if backend is not None else nullcontext():
@@ -332,9 +353,11 @@ class TestGym:
             assert "observation" not in obs
             assert "other" not in obs
             if numpy:
-                assert all(isinstance(val, np.ndarray) for val in obs.values())
+                assert all(isinstance(val, np.ndarray) for val in tree_flatten(obs)[0])
             else:
-                assert all(isinstance(val, torch.Tensor) for val in obs.values())
+                assert all(
+                    isinstance(val, torch.Tensor) for val in tree_flatten(obs)[0]
+                )
 
         # register with transform
         EnvBase.register_gym(
@@ -351,6 +374,118 @@ class TestGym:
             envgym = gym_backend().make(
                 f"Dummy-{numpy}-{backend}-noarg-v0", arg1=1, arg2=2
             )
+
+        # Get info dict
+        gym_info_at_reset = version.parse(gym_backend().__version__) >= version.parse(
+            "0.26.0"
+        )
+        with set_gym_backend(backend) if backend is not None else nullcontext():
+            envgym = gym_backend().make(
+                f"Dummy-{numpy}-{backend}-noarg-v0",
+                arg1=1,
+                arg2=2,
+                info_keys=("other",),
+            )
+            if gym_info_at_reset:
+                out, info = envgym.reset()
+                if numpy:
+                    assert all(
+                        isinstance(val, np.ndarray)
+                        for val in tree_flatten((obs, info))[0]
+                    )
+                else:
+                    assert all(
+                        isinstance(val, torch.Tensor)
+                        for val in tree_flatten((obs, info))[0]
+                    )
+            else:
+                out = envgym.reset()
+                info = {}
+                if numpy:
+                    assert all(
+                        isinstance(val, np.ndarray)
+                        for val in tree_flatten((obs, info))[0]
+                    )
+                else:
+                    assert all(
+                        isinstance(val, torch.Tensor)
+                        for val in tree_flatten((obs, info))[0]
+                    )
+            assert "observation" in out
+            assert "other" not in out
+
+            if gym_info_at_reset:
+                assert "other" in info
+
+            out, *_, info = envgym.step(envgym.action_space.sample())
+            assert "observation" in out
+            assert "other" not in out
+            assert "other" in info
+            if numpy:
+                assert all(
+                    isinstance(val, np.ndarray) for val in tree_flatten((obs, info))[0]
+                )
+            else:
+                assert all(
+                    isinstance(val, torch.Tensor)
+                    for val in tree_flatten((obs, info))[0]
+                )
+
+        EnvBase.register_gym(
+            f"Dummy-{numpy}-{backend}-info-v0",
+            entry_point=self.DummyEnv,
+            backend=backend,
+            to_numpy=numpy,
+            info_keys=("other",),
+        )
+        with set_gym_backend(backend) if backend is not None else nullcontext():
+            envgym = gym_backend().make(
+                f"Dummy-{numpy}-{backend}-info-v0", arg1=1, arg2=2
+            )
+            if gym_info_at_reset:
+                out, info = envgym.reset()
+                if numpy:
+                    assert all(
+                        isinstance(val, np.ndarray)
+                        for val in tree_flatten((obs, info))[0]
+                    )
+                else:
+                    assert all(
+                        isinstance(val, torch.Tensor)
+                        for val in tree_flatten((obs, info))[0]
+                    )
+            else:
+                out = envgym.reset()
+                info = {}
+                if numpy:
+                    assert all(
+                        isinstance(val, np.ndarray)
+                        for val in tree_flatten((obs, info))[0]
+                    )
+                else:
+                    assert all(
+                        isinstance(val, torch.Tensor)
+                        for val in tree_flatten((obs, info))[0]
+                    )
+            assert "observation" in out
+            assert "other" not in out
+
+            if gym_info_at_reset:
+                assert "other" in info
+
+            out, *_, info = envgym.step(envgym.action_space.sample())
+            assert "observation" in out
+            assert "other" not in out
+            assert "other" in info
+            if numpy:
+                assert all(
+                    isinstance(val, np.ndarray) for val in tree_flatten((obs, info))[0]
+                )
+            else:
+                assert all(
+                    isinstance(val, torch.Tensor)
+                    for val in tree_flatten((obs, info))[0]
+                )
 
     @pytest.mark.parametrize(
         "env_name",
