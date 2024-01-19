@@ -20,6 +20,7 @@ env:
 # logger
 logger:
   backend: wandb
+  project_name: rl_examples_odt
   exp_name: oDT-HalfCheetah-medium-v2
   model_name: oDT
   pretrain_log_interval: 500 # record interval in frames

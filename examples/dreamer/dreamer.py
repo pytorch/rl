@@ -91,7 +91,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger_name="dreamer",
         experiment_name=exp_name,
         wandb_kwargs={
-            "project": "torchrl",
+            "project": cfg.project_name,
             "group": f"Dreamer_{cfg.env_name}",
             "offline": cfg.offline_logging,
         },

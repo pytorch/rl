@@ -24,6 +24,7 @@ collector:
 # Logger
 logger:
   backend: wandb
+  project_name: rl_examples_cql
   log_interval: 5000 # record interval in frames
   eval_steps: 200
   mode: online

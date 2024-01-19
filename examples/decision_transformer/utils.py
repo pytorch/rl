@@ -496,7 +496,7 @@ def make_logger(cfg):
         cfg.logger.backend,
         logger_name=cfg.logger.model_name,
         experiment_name=exp_name,
-        wandb_kwargs={"config": OmegaConf.to_container(cfg)},
+        wandb_kwargs={"config": dict(cfg), "project": cfg.logger.project_name},
     )
     return logger
 

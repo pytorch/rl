@@ -8,7 +8,7 @@
 #SBATCH --output=redq_output_%j.txt
 #SBATCH --error=redq_error_%j.txt
 
-CUDA_VISIBLE_DEVICES=1 python ../../examples/redq/redq.py \
+python ../../examples/redq/redq.py \
   num_workers=2 \
   collector.total_frames=48 \
   collector.init_random_frames=10 \

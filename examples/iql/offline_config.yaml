@@ -10,6 +10,7 @@ env:
 # logger
 logger:
   backend: wandb
+  project_name: rl_examples_iql
   eval_iter: 500
   eval_steps: 1000
   mode: online

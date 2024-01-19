@@ -18,7 +18,6 @@ python ../../examples/td3/td3.py \
   collector.device=cuda:0 \
   collector.device=cuda:0 \
   network.device=cuda:0 \
-  logger.mode=offline \
   env.name=Pendulum-v1 \
   logger.backend=wandb \
   logger.project_name="sota-check"

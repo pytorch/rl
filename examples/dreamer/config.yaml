@@ -32,6 +32,7 @@ init_env_steps: 1000
 init_random_frames: 5000
 logger: csv
 offline_logging: False
+project_name: rl_examples_dreamer
 normalize_rewards_online: True
 normalize_rewards_online_scale: 5.0
 normalize_rewards_online_decay: 0.99999
