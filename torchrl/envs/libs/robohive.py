@@ -145,15 +145,23 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             raise RuntimeError("did not load any environment.")
 
     @implement_for(
+        "gymnasium",
+    )  # make sure gym 0.13 is installed, otherwise raise an exception
+    def _build_env(self, *args, **kwargs):  # noqa: F811
+        raise NotImplementedError(
+            "Your gym version is too recent, RoboHiveEnv is only compatible with gym==0.13."
+        )
+
+    @implement_for(
         "gym", "0.14", None
     )  # make sure gym 0.13 is installed, otherwise raise an exception
-    def _build_env(self, *args, **kwargs):
+    def _build_env(self, *args, **kwargs):  # noqa: F811
         raise NotImplementedError(
             "Your gym version is too recent, RoboHiveEnv is only compatible with gym 0.13."
         )
 
     @implement_for(
-        "gym", "0.13", "0.14"
+        "gym", None, "0.14"
     )  # make sure gym 0.13 is installed, otherwise raise an exception
     def _build_env(  # noqa: F811
         self,

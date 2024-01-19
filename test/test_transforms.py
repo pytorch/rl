@@ -51,6 +51,7 @@ from torchrl._utils import _replace_last, prod
 from torchrl.data import (
     BoundedTensorSpec,
     CompositeSpec,
+    DiscreteTensorSpec,
     LazyTensorStorage,
     ReplayBuffer,
     TensorDictReplayBuffer,
@@ -87,6 +88,7 @@ from torchrl.envs import (
     PinMemoryTransform,
     R3MTransform,
     RandomCropTensorDict,
+    RemoveEmptySpecs,
     RenameTransform,
     Resize,
     Reward2GoTransform,
@@ -9770,6 +9772,134 @@ class TestSignTransform(TransformBase):
             ),
         )
         check_env_specs(env)
+
+
+class TestRemoveEmptySpecs(TransformBase):
+    class DummyEnv(EnvBase):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.observation_spec = CompositeSpec(
+                observation=UnboundedContinuousTensorSpec((*self.batch_size, 3)),
+                other=CompositeSpec(
+                    another_other=CompositeSpec(shape=self.batch_size),
+                    shape=self.batch_size,
+                ),
+                shape=self.batch_size,
+            )
+            self.action_spec = UnboundedContinuousTensorSpec((*self.batch_size, 3))
+            self.done_spec = DiscreteTensorSpec(
+                2, (*self.batch_size, 1), dtype=torch.bool
+            )
+            self.full_done_spec["truncated"] = self.full_done_spec["terminated"].clone()
+            self.reward_spec = CompositeSpec(
+                reward=UnboundedContinuousTensorSpec(*self.batch_size, 1),
+                other_reward=CompositeSpec(shape=self.batch_size),
+                shape=self.batch_size,
+            )
+            self.state_spec = CompositeSpec(
+                state=CompositeSpec(
+                    sub=CompositeSpec(shape=self.batch_size), shape=self.batch_size
+                ),
+                shape=self.batch_size,
+            )
+
+        def _reset(self, tensordict):
+            return self.observation_spec.rand().update(self.full_done_spec.zero())
+
+        def _step(self, tensordict):
+            return (
+                TensorDict({}, batch_size=[])
+                .update(self.observation_spec.rand())
+                .update(self.full_done_spec.zero())
+                .update(self.full_reward_spec.rand())
+            )
+
+        def _set_seed(self, seed):
+            return seed + 1
+
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(self.DummyEnv(), RemoveEmptySpecs())
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(2, lambda: TransformedEnv(self.DummyEnv(), RemoveEmptySpecs()))
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        env = ParallelEnv(
+            2, lambda: TransformedEnv(self.DummyEnv(), RemoveEmptySpecs())
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            env.close()
+
+    def test_trans_serial_env_check(self):
+        with pytest.raises(
+            RuntimeError, match="The environment passed to SerialEnv has empty specs"
+        ):
+            env = TransformedEnv(SerialEnv(2, self.DummyEnv), RemoveEmptySpecs())
+
+    def test_trans_parallel_env_check(self):
+        with pytest.raises(
+            RuntimeError, match="The environment passed to ParallelEnv has empty specs"
+        ):
+            env = TransformedEnv(ParallelEnv(2, self.DummyEnv), RemoveEmptySpecs())
+
+    def test_transform_no_env(self):
+        td = TensorDict({"a": {"b": {"c": {}}}}, [])
+        assert not td.is_empty()
+        t = RemoveEmptySpecs()
+        t._call(td)
+        assert td.is_empty()
+
+    def test_transform_compose(self):
+        td = TensorDict({"a": {"b": {"c": {}}}}, [])
+        assert not td.is_empty()
+        t = Compose(RemoveEmptySpecs())
+        t._call(td)
+        assert td.is_empty()
+
+    def test_transform_env(self):
+        base_env = self.DummyEnv()
+        r = base_env.rollout(2)
+        assert ("next", "other", "another_other") in r.keys(True)
+        env = TransformedEnv(base_env, RemoveEmptySpecs())
+        r = env.rollout(2)
+        assert ("other", "another_other") not in r.keys(True)
+        assert "other" not in r.keys(True)
+
+    def test_transform_model(self):
+        td = TensorDict({"a": {"b": {"c": {}}}}, [])
+        t = nn.Sequential(Compose(RemoveEmptySpecs()))
+        td = t(td)
+        assert td.is_empty(), td
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
+        t = Compose(RemoveEmptySpecs())
+
+        batch = (20,)
+        td = TensorDict({"a": {"b": {"c": {}}}}, batch)
+
+        torch.manual_seed(0)
+        rb = rbclass(storage=LazyTensorStorage(20))
+        rb.append_transform(t)
+        rb.extend(td)
+        td = rb.sample(1)
+        if "index" in td.keys():
+            del td["index"]
+        assert td.is_empty()
+
+    def test_transform_inverse(self):
+        td = TensorDict({"a": {"b": {"c": {}}}}, [])
+        assert not td.is_empty()
+        t = RemoveEmptySpecs()
+        t.inv(td)
+        assert not td.is_empty()
+        env = TransformedEnv(self.DummyEnv(), RemoveEmptySpecs())
+        td2 = env.transform.inv(TensorDict({}, []))
+        assert ("state", "sub") in td2.keys(True)
 
 
 if __name__ == "__main__":

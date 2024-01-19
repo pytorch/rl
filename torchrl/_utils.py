@@ -182,15 +182,11 @@ class _Dynamic_CKPT_BACKEND:
         if backend == "torchsnapshot":
             try:
                 import torchsnapshot  # noqa: F401
-
-                _has_ts = True
-            except ImportError:
-                _has_ts = False
-            if not _has_ts:
+            except ImportError as err:
                 raise ImportError(
                     f"torchsnapshot not found, but the backend points to this library. "
                     f"Consider installing torchsnapshot or choose another backend (available backends: {self.backends})"
-                )
+                ) from err
         return backend
 
     def __getattr__(self, item):
@@ -226,6 +222,10 @@ class implement_for:
         from_version: version from which implementation is compatible. Can be open (None).
         to_version: version from which implementation is no longer compatible. Can be open (None).
 
+    Keyword Args:
+        class_method (bool, optional): if ``True``, the function will be written as a class method.
+            Defaults to ``False``.
+
     Examples:
         >>> @implement_for("gym", "0.13", "0.14")
         >>> def fun(self, x):
@@ -242,7 +242,7 @@ class implement_for:
         ...     # More recent gym versions will return x + 2
         ...     return x + 2
         ...
-        >>> @implement_for("gymnasium", "0.27", None)
+        >>> @implement_for("gymnasium")
         >>> def fun(self, x):
         ...     # If gymnasium is to be used instead of gym, x+3 will be returned
         ...     return x + 3
@@ -261,10 +261,13 @@ class implement_for:
         module_name: Union[str, Callable],
         from_version: str = None,
         to_version: str = None,
+        *,
+        class_method: bool = False,
     ):
         self.module_name = module_name
         self.from_version = from_version
         self.to_version = to_version
+        self.class_method = class_method
         implement_for._setters.append(self)
 
     @staticmethod
@@ -282,8 +285,14 @@ class implement_for:
     @classmethod
     def get_func_name(cls, fn):
         # produces a name like torchrl.module.Class.method or torchrl.module.function
-        first = str(fn).split(".")[0][len("<function ") :]
-        last = str(fn).split(".")[1:]
+        fn_str = str(fn).split(".")
+        if fn_str[0].startswith("<bound method "):
+            first = fn_str[0][len("<bound method ") :]
+        elif fn_str[0].startswith("<function "):
+            first = fn_str[0][len("<function ") :]
+        else:
+            raise RuntimeError(f"Unkown func representation {fn}")
+        last = fn_str[1:]
         if last:
             first = [first]
             last[-1] = last[-1].split(" ")[0]
@@ -314,7 +323,10 @@ class implement_for:
         else:
             # class not yet defined
             return
-        setattr(cls, self.fn.__name__, self.fn)
+        if self.class_method:
+            setattr(cls, self.fn.__name__, classmethod(self.fn))
+        else:
+            setattr(cls, self.fn.__name__, self.fn)
 
     @classmethod
     def import_module(cls, module_name: Union[Callable, str]) -> str:
@@ -349,7 +361,12 @@ class implement_for:
         def _lazy_call_fn(*args, **kwargs):
             # first time we call the function, we also do the replacement.
             # This will cause the imports to occur only during the first call to fn
-            return self._delazify(self.func_name)(*args, **kwargs)
+
+            result = self._delazify(self.func_name)(*args, **kwargs)
+            return result
+
+        if self.class_method:
+            return classmethod(_lazy_call_fn)
 
         return _lazy_call_fn
 
