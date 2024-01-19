@@ -184,13 +184,11 @@ class _Dynamic_CKPT_BACKEND:
                 import torchsnapshot  # noqa: F401
 
                 _has_ts = True
-            except ImportError:
-                _has_ts = False
-            if not _has_ts:
+            except ImportError as err:
                 raise ImportError(
                     f"torchsnapshot not found, but the backend points to this library. "
                     f"Consider installing torchsnapshot or choose another backend (available backends: {self.backends})"
-                )
+                ) from err
         return backend
 
     def __getattr__(self, item):
