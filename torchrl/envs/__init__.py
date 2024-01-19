@@ -64,6 +64,7 @@ from .transforms import (
     PinMemoryTransform,
     R3MTransform,
     RandomCropTensorDict,
+    RemoveEmptySpecs,
     RenameTransform,
     Resize,
     Reward2GoTransform,

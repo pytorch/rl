@@ -186,9 +186,9 @@ def test_implement_for_check_versions(
 @pytest.mark.parametrize(
     "gymnasium_version, expected_from_version_gymnasium, expected_to_version_gymnasium",
     [
-        ("0.27.0", "0.27.0", None),
-        ("0.27.2", "0.27.0", None),
-        ("5.1.77", "0.27.0", None),
+        ("0.27.0", None, None),
+        ("0.27.2", None, None),
+        ("5.1.77", None, None),
     ],
 )
 @pytest.mark.parametrize(

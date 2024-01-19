@@ -513,38 +513,6 @@ class TensorStorage(Storage):
                 )
         self._storage[cursor] = data
 
-    @implement_for("torch", None, "2.0")
-    def set(  # noqa: F811
-        self,
-        cursor: Union[int, Sequence[int], slice],
-        data: Union[TensorDictBase, torch.Tensor],
-    ):
-        if isinstance(cursor, INT_CLASSES):
-            self._len = max(self._len, cursor + 1)
-        else:
-            self._len = max(self._len, max(cursor) + 1)
-
-        if not self.initialized:
-            if not isinstance(cursor, INT_CLASSES):
-                self._init(data[0])
-            else:
-                self._init(data)
-        if not isinstance(cursor, (*INT_CLASSES, slice)):
-            if not isinstance(cursor, torch.Tensor):
-                cursor = torch.tensor(cursor, dtype=torch.long, device=self.device)
-            elif cursor.dtype != torch.long:
-                cursor = cursor.to(dtype=torch.long, device=self.device)
-            if len(cursor) > len(self._storage):
-                warnings.warn(
-                    "A cursor of length superior to the storage capacity was provided. "
-                    "To accomodate for this, the cursor will be truncated to its last "
-                    "element such that its length matched the length of the storage. "
-                    "This may **not** be the optimal behaviour for your application! "
-                    "Make sure that the storage capacity is big enough to support the "
-                    "batch size provided."
-                )
-        self._storage[cursor] = data
-
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         if self._len < self.max_size:
             storage = self._storage[: self._len]
