@@ -305,7 +305,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         else:
             self.metadata = {}
         dataset.rename_key_("observations", "observation")
-        dataset.set("next", dataset.select())
+        dataset.create_nested("next")
         dataset.rename_key_("next_observations", ("next", "observation"))
         dataset.rename_key_("terminals", "terminated")
         if "timeouts" in dataset.keys():

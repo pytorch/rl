@@ -216,6 +216,7 @@ def _main(argv):
         "offline-data": [
             "huggingface_hub",  # for roboset
             "minari",
+            "requests",
             "tqdm",
             "torchvision",
             "scikit-learn",
@@ -238,9 +239,18 @@ def _main(argv):
         url="https://github.com/pytorch/rl",
         long_description=long_description,
         long_description_content_type="text/markdown",
-        license="BSD",
+        license="MIT",
         # Package info
-        packages=find_packages(exclude=("test", "tutorials")),
+        packages=find_packages(
+            exclude=(
+                "test",
+                "tutorials",
+                "docs",
+                "examples",
+                "knowledge_base",
+                "packaging",
+            )
+        ),
         ext_modules=get_extensions(),
         cmdclass={
             "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),

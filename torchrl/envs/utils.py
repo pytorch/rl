@@ -187,7 +187,7 @@ def step_mdp(
             next_tensordicts = next_tensordict.unbind(tensordict.stack_dim)
         else:
             next_tensordicts = [None] * len(tensordict.tensordicts)
-        out = torch.stack(
+        out = LazyStackedTensorDict.lazy_stack(
             [
                 step_mdp(
                     td,

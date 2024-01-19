@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import collections
 import importlib
 import warnings
 from copy import copy
@@ -20,6 +21,7 @@ from tensordict import TensorDictBase
 
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
+    _minmax_dtype,
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
@@ -29,16 +31,13 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
 )
-from torchrl.data.utils import numpy_to_torch_dtype_dict
+from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
 from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
 
-from torchrl.envs.gym_like import (
-    BaseInfoDictReader,
-    default_info_dict_reader,
-    GymLikeEnv,
-)
+from torchrl.envs.gym_like import BaseInfoDictReader, GymLikeEnv
 
 from torchrl.envs.utils import _classproperty
 
@@ -108,7 +107,7 @@ class set_gym_backend(_DecoratorContextManager):
         """Sets the backend as default."""
         global DEFAULT_GYM
         DEFAULT_GYM = self.backend
-        found_setter = False
+        found_setters = collections.defaultdict(lambda: False)
         for setter in copy(implement_for._setters):
             check_module = (
                 callable(setter.module_name)
@@ -120,13 +119,22 @@ class set_gym_backend(_DecoratorContextManager):
             if check_module and check_version:
                 setter.module_set()
                 found_setter = True
+            elif check_module:
+                found_setter = False
+            else:
+                found_setter = None
+            if found_setter is not None:
+                found_setters[setter.func_name] = (
+                    found_setters[setter.func_name] or found_setter
+                )
         # we keep only the setters we need. This is safe because a copy is saved under self._setters_saved
-        if not found_setter:
-            raise ImportError(
-                f"could not set anything related to gym backend "
-                f"{self.backend.__name__} with version={self.backend.__version__}. "
-                f"Check that the gym versions match!"
-            )
+        for func_name, found_setter in found_setters.items():
+            if not found_setter:
+                raise ImportError(
+                    f"could not set anything related to gym backend "
+                    f"{self.backend.__name__} with version={self.backend.__version__} for the function with name {func_name}. "
+                    f"Check that the gym versions match!"
+                )
 
     def set(self):
         """Irreversibly sets the gym backend in the script."""
@@ -207,18 +215,33 @@ def _gym_to_torchrl_spec_transform(
     device="cpu",
     categorical_action_encoding=False,
     remap_state_to_observation: bool = True,
+    batch_size: tuple = (),
 ) -> TensorSpec:
     """Maps the gym specs to the TorchRL specs.
 
     Args:
-        spec: the gym space to transform
-        dtype: a dtype to use for the spec. Defaults to`spec.dtype`.
-        device: the device for the spec. Defaults to "cpu".
-        categorical_action_encoding: whether discrete spaces should be mapped to categorical or one-hot.
-            Defaults to one-hot.
-        remap_state_to_observation: whether to rename the 'state' key of Dict specs to "observation". Default is true.
+        spec (gym.spaces member): the gym space to transform.
+        dtype (torch.dtype): a dtype to use for the spec.
+            Defaults to`spec.dtype`.
+        device (torch.device): the device for the spec.
+            Defaults to ``"cpu"``.
+        categorical_action_encoding (bool): whether discrete spaces should be mapped to categorical or one-hot.
+            Defaults to ``False`` (one-hot).
+        remap_state_to_observation (bool): whether to rename the 'state' key of
+            Dict specs to "observation". Default is true.
+        batch_size (torch.Size): batch size to which expand the spec. Defaults to
+            ``torch.Size([])``.
 
     """
+    if batch_size:
+        return _gym_to_torchrl_spec_transform(
+            spec,
+            dtype=dtype,
+            device=device,
+            categorical_action_encoding=categorical_action_encoding,
+            remap_state_to_observation=remap_state_to_observation,
+            batch_size=None,
+        ).expand(batch_size)
     gym_spaces = gym_backend("spaces")
     if isinstance(spec, gym_spaces.tuple.Tuple):
         return torch.stack(
@@ -286,6 +309,14 @@ def _gym_to_torchrl_spec_transform(
         low = torch.tensor(spec.low, device=device, dtype=dtype)
         high = torch.tensor(spec.high, device=device, dtype=dtype)
         is_unbounded = low.isinf().all() and high.isinf().all()
+
+        minval, maxval = _minmax_dtype(dtype)
+        minval = torch.as_tensor(minval).to(low.device, dtype)
+        maxval = torch.as_tensor(maxval).to(low.device, dtype)
+        is_unbounded = is_unbounded or (
+            torch.isclose(low, torch.tensor(minval, dtype=dtype)).all()
+            and torch.isclose(high, torch.tensor(maxval, dtype=dtype)).all()
+        )
         return (
             UnboundedContinuousTensorSpec(shape, device=device, dtype=dtype)
             if is_unbounded
@@ -332,6 +363,109 @@ def _gym_to_torchrl_spec_transform(
         )
 
 
+@implement_for("gym", None, "0.18")
+def _box_convert(spec, gym_spaces, shape):
+    low = spec.low.detach().unique().cpu().item()
+    high = spec.high.detach().unique().cpu().item()
+    return gym_spaces.Box(low=low, high=high, shape=shape)
+
+
+@implement_for("gym", "0.18")
+def _box_convert(spec, gym_spaces, shape):  # noqa: F811
+    low = spec.low.detach().cpu().numpy()
+    high = spec.high.detach().cpu().numpy()
+    return gym_spaces.Box(low=low, high=high, shape=shape)
+
+
+@implement_for("gymnasium")
+def _box_convert(spec, gym_spaces, shape):  # noqa: F811
+    low = spec.low.detach().cpu().numpy()
+    high = spec.high.detach().cpu().numpy()
+    return gym_spaces.Box(low=low, high=high, shape=shape)
+
+
+@implement_for("gym", "0.21", None)
+def _multidiscrete_convert(gym_spaces, spec):
+    return gym_spaces.multi_discrete.MultiDiscrete(
+        spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
+    )
+
+
+@implement_for("gymnasium")
+def _multidiscrete_convert(gym_spaces, spec):  # noqa: F811
+    return gym_spaces.multi_discrete.MultiDiscrete(
+        spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
+    )
+
+
+@implement_for("gym", None, "0.21")
+def _multidiscrete_convert(gym_spaces, spec):  # noqa: F811
+    return gym_spaces.multi_discrete.MultiDiscrete(spec.nvec)
+
+
+def _torchrl_to_gym_spec_transform(
+    spec,
+    categorical_action_encoding=False,
+) -> TensorSpec:
+    """Maps TorchRL specs to gym spaces.
+
+    Args:
+        spec: the torchrl spec to transform.
+        categorical_action_encoding: whether discrete spaces should be mapped to categorical or one-hot.
+            Defaults to one-hot.
+
+    """
+    gym_spaces = gym_backend("spaces")
+    shape = spec.shape
+    if isinstance(spec, MultiDiscreteTensorSpec):
+        return _multidiscrete_convert(gym_spaces, spec)
+    if isinstance(spec, MultiOneHotDiscreteTensorSpec):
+        return gym_spaces.multi_discrete.MultiDiscrete(spec.nvec)
+    if isinstance(spec, BinaryDiscreteTensorSpec):
+        return gym_spaces.multi_binary.MultiBinary(spec.shape[-1])
+    if isinstance(spec, DiscreteTensorSpec):
+        return gym_spaces.discrete.Discrete(
+            spec.n
+        )  # dtype=torch_to_numpy_dtype_dict[spec.dtype])
+    if isinstance(spec, OneHotDiscreteTensorSpec):
+        return gym_spaces.discrete.Discrete(spec.n)
+    if isinstance(spec, UnboundedContinuousTensorSpec):
+        minval, maxval = _minmax_dtype(spec.dtype)
+        return gym_spaces.Box(
+            low=minval,
+            high=maxval,
+            shape=shape,
+            dtype=torch_to_numpy_dtype_dict[spec.dtype],
+        )
+    if isinstance(spec, UnboundedDiscreteTensorSpec):
+        minval, maxval = _minmax_dtype(spec.dtype)
+        return gym_spaces.Box(
+            low=minval,
+            high=maxval,
+            shape=shape,
+            dtype=torch_to_numpy_dtype_dict[spec.dtype],
+        )
+    if isinstance(spec, BoundedTensorSpec):
+        return _box_convert(spec, gym_spaces, shape)
+    if isinstance(spec, CompositeSpec):
+        # remove batch size
+        while spec.shape:
+            spec = spec[0]
+        return gym_spaces.Dict(
+            **{
+                key: _torchrl_to_gym_spec_transform(
+                    val,
+                    categorical_action_encoding=categorical_action_encoding,
+                )
+                for key, val in spec.items()
+            }
+        )
+    else:
+        raise NotImplementedError(
+            f"spec of type {type(spec).__name__} is currently unaccounted for"
+        )
+
+
 def _get_envs(to_dict=False) -> List:
     if not _has_gym:
         raise ImportError("Gym(nasium) could not be found in your virtual environment.")
@@ -353,7 +487,7 @@ def _get_gym_envs():  # noqa: F811
     return gym.envs.registration.registry.keys()
 
 
-@implement_for("gymnasium", "0.27.0", None)
+@implement_for("gymnasium")
 def _get_gym_envs():  # noqa: F811
     gym = gym_backend()
     return gym.envs.registration.registry.keys()
@@ -520,7 +654,8 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     .. note::
         info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
         if no other reader is provided. To provide another reader, refer to
-        :meth:`~.set_info_dict_reader`.
+        :meth:`~.set_info_dict_reader`. To automatically register the info_dict
+        content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
 
     """
 
@@ -614,7 +749,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self._env, tuple_of_classes + (gym_backend("vector").VectorEnv,)
         )
 
-    @implement_for("gym", None, "0.27")
+    @implement_for("gym")
     def _get_batch_size(self, env):
         if hasattr(env, "num_envs"):
             batch_size = torch.Size([env.num_envs, *self.batch_size])
@@ -622,7 +757,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             batch_size = self.batch_size
         return batch_size
 
-    @implement_for("gymnasium", "0.27", None)  # gymnasium wants the unwrapped env
+    @implement_for("gymnasium")  # gymnasium wants the unwrapped env
     def _get_batch_size(self, env):  # noqa: F811
         if hasattr(env, "num_envs"):
             batch_size = torch.Size([env.unwrapped.num_envs, *self.batch_size])
@@ -709,7 +844,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
-    @implement_for("gymnasium", "0.27.0", None)
+    @implement_for("gymnasium")
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
         compatibility = gym_backend("wrappers.compatibility")
         pixel_observation = gym_backend("wrappers.pixel_observation")
@@ -771,7 +906,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self._seed_calls_reset = False
             self._env.seed(seed=seed)
 
-    @implement_for("gymnasium", "0.27.0", None)
+    @implement_for("gymnasium")
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
         try:
             self.reset(seed=seed)
@@ -981,8 +1116,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @property
     def info_dict_reader(self):
-        if not self._info_dict_reader:
-            self._info_dict_reader.append(default_info_dict_reader())
         return self._info_dict_reader
 
     @info_dict_reader.setter
@@ -1107,7 +1240,8 @@ class GymEnv(GymWrapper):
     .. note::
         info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
         if no other reader is provided. To provide another reader, refer to
-        :meth:`~.set_info_dict_reader`.
+        :meth:`~.set_info_dict_reader`. To automatically register the info_dict
+        content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
 
     """
 

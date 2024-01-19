@@ -604,7 +604,9 @@ to be able to create this other composition:
     RewardScaling
     RewardSum
     Reward2GoTransform
+    RemoveEmptySpecs
     SelectTransform
+    SignTransform
     SqueezeTransform
     StepCounter
     TargetReturn

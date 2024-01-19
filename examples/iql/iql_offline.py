@@ -34,7 +34,6 @@ from utils import (
 @set_gym_backend("gym")
 @hydra.main(config_path=".", config_name="offline_config")
 def main(cfg: "DictConfig"):  # noqa: F821
-
     # Create logger
     exp_name = generate_exp_name("IQL-offline", cfg.env.exp_name)
     logger = None
@@ -64,7 +63,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module, target_net_updater = make_loss(cfg.loss, model)
 
     # Create optimizer
-    optimizer = make_iql_optimizer(cfg.optim, loss_module)
+    optimizer_actor, optimizer_critic, optimizer_value = make_iql_optimizer(
+        cfg.optim, loss_module
+    )
 
     pbar = tqdm.tqdm(total=cfg.optim.gradient_steps)
 
@@ -78,18 +79,29 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(i)
         # sample data
         data = replay_buffer.sample()
-        # compute loss
-        loss_vals = loss_module(data.clone().to(device))
 
-        actor_loss = loss_vals["loss_actor"]
-        q_loss = loss_vals["loss_qvalue"]
-        value_loss = loss_vals["loss_value"]
-        loss_val = actor_loss + q_loss + value_loss
+        if data.device != device:
+            data = data.to(device, non_blocking=True)
 
-        # update model
-        optimizer.zero_grad()
-        loss_val.backward()
-        optimizer.step()
+        # compute losses
+        loss_info = loss_module(data)
+        actor_loss = loss_info["loss_actor"]
+        value_loss = loss_info["loss_value"]
+        q_loss = loss_info["loss_qvalue"]
+
+        optimizer_actor.zero_grad()
+        actor_loss.backward()
+        optimizer_actor.step()
+
+        optimizer_value.zero_grad()
+        value_loss.backward()
+        optimizer_value.step()
+
+        optimizer_critic.zero_grad()
+        q_loss.backward()
+        optimizer_critic.step()
+
+        # update qnet_target params
         target_net_updater.step()
 
         # log metrics
