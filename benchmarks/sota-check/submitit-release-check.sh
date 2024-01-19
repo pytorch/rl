@@ -4,7 +4,8 @@
 display_usage() {
     echo "Usage: ./submitit-release-check.sh [--partition PARTITION]"
     echo "  --partition: (Optional) Specify the Slurm partition for the job."
-    echo "  PARTITION: Specify the Slurm partition if --partition is used."
+    echo "  PARTITION: Specify the Slurm partition if --partition is used. "
+    echo "  --n_runs: (Optional) Specify the number of runs for each script. Default is 1."
     return 1
 }
 
@@ -13,12 +14,23 @@ if [ "$1" == "--help" ]; then
     display_usage
 fi
 
-slurm_partition=""
-# Check if the script is called with --partition and a subsequent argument
-if [ "$1" == "--partition" ] && [ -n "$2" ]; then
-    slurm_partition="$2"
-    shift 2  # Consume the --partition option and its argument
-fi
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --n_runs)
+      n_runs="$2"
+      shift 2
+      ;;
+    --partition)
+      slurm_partition="$2"
+      shift 2
+      ;;
+    *)
+      echo "Invalid argument: $1"
+      return 0
+      ;;
+  esac
+done
 
 scripts=(
     run_a2c_atari.sh
@@ -48,9 +60,17 @@ scripts=(
     # run_rlhf.sh
 )
 
-# Submit jobs with the specified partition or empty string
+# Submit jobs with the specified partition the specified number of times
 if [ -z "$slurm_partition" ]; then
-    sbatch "$script"
+    for script in "${scripts[@]}"; do
+        for ((i=1; i<=$n_runs; i++)); do
+            sbatch "$script"
+        done
+    done
 else
-   sbatch --partition="$slurm_partition" "$script"
+  for script in "${scripts[@]}"; do
+      for ((i=1; i<=$n_runs; i++)); do
+          sbatch --partition="$slurm_partition" "$script"
+      done
+  done
 fi
