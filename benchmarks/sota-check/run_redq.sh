@@ -1,13 +1,14 @@
 #!/bin/bash
 
 #SBATCH --job-name=redq
-#SBATCH --partition=test
 #SBATCH --ntasks=32
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
 #SBATCH --output=redq_output_%j.txt
 #SBATCH --error=redq_error_%j.txt
 
+current_commit=$(git rev-parse HEAD)
+project_name="sota-check_$current_commit"
 python ../../examples/redq/redq.py \
   num_workers=2 \
   collector.total_frames=48 \
@@ -20,4 +21,4 @@ python ../../examples/redq/redq.py \
   logger.record_frames=4 \
   buffer.size=120 \
   logger.backend=wandb \
-  logger.project_name="sota-check"
+  logger.project_name="$project_name"

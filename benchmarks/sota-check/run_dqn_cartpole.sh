@@ -1,13 +1,14 @@
 #!/bin/bash
 
 #SBATCH --job-name=dqn_cartpole
-#SBATCH --partition=test
 #SBATCH --ntasks=32
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
 #SBATCH --output=dqn_cartpole_output_%j.txt
 #SBATCH --error=dqn_cartpole_error_%j.txt
 
+current_commit=$(git rev-parse HEAD)
+project_name="sota-check_$current_commit"
 python ../../examples/dqn/dqn_cartpole.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -17,4 +18,4 @@ python ../../examples/dqn/dqn_cartpole.py \
   loss.num_updates=1 \
   buffer.buffer_size=120 \
   logger.backend=wandb \
-  logger.project_name="sota-check"
+  logger.project_name="$project_name"

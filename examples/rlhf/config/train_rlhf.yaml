@@ -3,6 +3,7 @@ io:
   log_interval: 1
   eval_iters: 10
   logger: wandb
+  project_name: rl_examples_rlhf
 data:
   batch_size: 4 # if gradient_accumulation_steps > 1, this is the micro-batch size
   block_size: 550

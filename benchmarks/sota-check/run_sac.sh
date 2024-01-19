@@ -1,13 +1,14 @@
 #!/bin/bash
 
 #SBATCH --job-name=sac
-#SBATCH --partition=test
 #SBATCH --ntasks=32
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
 #SBATCH --output=sac_output_%j.txt
 #SBATCH --error=sac_error_%j.txt
 
+current_commit=$(git rev-parse HEAD)
+project_name="sota-check_$current_commit"
 python ../../examples/sac/sac.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -20,4 +21,4 @@ python ../../examples/sac/sac.py \
   env.name=Pendulum-v1 \
   network.device=cuda:0 \
   logger.backend=wandb \
-  logger.project_name="sota-check"
+  logger.project_name="$project_name"
