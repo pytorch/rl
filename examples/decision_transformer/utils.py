@@ -489,7 +489,6 @@ def make_logger(cfg):
     if not cfg.logger.backend:
         return None
     exp_name = generate_exp_name(cfg.logger.model_name, cfg.logger.exp_name)
-    cfg.logger.exp_name = exp_name
     logger = get_logger(
         cfg.logger.backend,
         logger_name=cfg.logger.model_name,
