@@ -16,10 +16,10 @@ python ../../examples/redq/redq.py \
   collector.frames_per_batch=16 \
   collector.env_per_collector=1 \
   buffer.batch_size=10 \
+  buffer.size=120 \
   collector.device=cuda:0 \
   optim.steps_per_batch=1 \
   logger.record_frames=4 \
-  buffer.size=120 \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="redq"

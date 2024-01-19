@@ -52,8 +52,6 @@ scripts=(
     run_discrete_sac.sh
     run_dqn_atari.sh
     run_dqn_cartpole.sh
-    run_dt.sh
-    run_dt_online.sh
     run_impala_single_node.sh
     run_iql_offline.sh
     run_iql_online.sh
@@ -64,11 +62,15 @@ scripts=(
     run_multiagent_sac.sh
     run_ppo_atari.sh
     run_ppo_mujoco.sh
-    run_redq.sh
     run_sac.sh
     run_td3.sh
-    #run_bandits.sh
-    run_rlhf.sh
+
+    # run_redq.sh # only logs video
+    # run_bandits.sh # no logging
+    # run_dreamer.sh # needs update
+    # run_rlhf.sh # can not run
+    # run_dt.sh # error to be fixed
+    # run_dt_online.sh # error to be fixed
 )
 
 # Submit jobs with the specified partition the specified number of times
