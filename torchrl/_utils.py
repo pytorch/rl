@@ -182,8 +182,6 @@ class _Dynamic_CKPT_BACKEND:
         if backend == "torchsnapshot":
             try:
                 import torchsnapshot  # noqa: F401
-
-                _has_ts = True
             except ImportError as err:
                 raise ImportError(
                     f"torchsnapshot not found, but the backend points to this library. "
