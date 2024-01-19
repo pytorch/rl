@@ -228,7 +228,8 @@ class ReplayBuffer:
             if not is_tensor_collection(data):
                 data = TensorDict({"data": data}, [])
                 is_td = False
-            data = self._transform(data)
+            with data.unlock_():
+                data = self._transform(data)
             if not is_td:
                 data = data["data"]
 

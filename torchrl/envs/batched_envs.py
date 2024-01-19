@@ -23,6 +23,7 @@ from tensordict._tensordict import _unravel_key_to_tuple, unravel_key
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, VERBOSE
+from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
@@ -272,6 +273,27 @@ class _BatchedEnv(EnvBase):
         return self._cache_in_keys
 
     def _set_properties(self):
+
+        cls = type(self)
+
+        def _check_for_empty_spec(specs: CompositeSpec):
+            for subspec in (
+                "full_state_spec",
+                "full_action_spec",
+                "full_done_spec",
+                "full_reward_spec",
+                "full_observation_spec",
+            ):
+                for key, spec in reversed(
+                    list(specs.get(subspec, default=CompositeSpec()).items(True))
+                ):
+                    if isinstance(spec, CompositeSpec) and spec.is_empty():
+                        raise RuntimeError(
+                            f"The environment passed to {cls.__name__} has empty specs in {key}. Consider using "
+                            f"torchrl.envs.transforms.RemoveEmptySpecs to remove the empty specs."
+                        )
+            return specs
+
         meta_data = self.meta_data
         self._properties_set = True
         if self._single_task:
@@ -280,8 +302,10 @@ class _BatchedEnv(EnvBase):
             if self._device is None:
                 self._device = device
 
-            input_spec = meta_data.specs["input_spec"].to(device)
-            output_spec = meta_data.specs["output_spec"].to(device)
+            input_spec = _check_for_empty_spec(meta_data.specs["input_spec"].to(device))
+            output_spec = _check_for_empty_spec(
+                meta_data.specs["output_spec"].to(device)
+            )
 
             self.action_spec = input_spec["full_action_spec"]
             self.state_spec = input_spec["full_state_spec"]
@@ -309,11 +333,11 @@ class _BatchedEnv(EnvBase):
 
             input_spec = []
             for md in meta_data:
-                input_spec.append(md.specs["input_spec"])
+                input_spec.append(_check_for_empty_spec(md.specs["input_spec"]))
             input_spec = torch.stack(input_spec, 0)
             output_spec = []
             for md in meta_data:
-                output_spec.append(md.specs["output_spec"])
+                output_spec.append(_check_for_empty_spec(md.specs["output_spec"]))
             output_spec = torch.stack(output_spec, 0)
 
             self.action_spec = input_spec["full_action_spec"]

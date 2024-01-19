@@ -67,7 +67,7 @@ def _ndarray_to_tensor(
 def _tensor_to_ndarray(value: torch.Tensor) -> "jnp.ndarray":  # noqa: F821
     from jax import dlpack as jax_dlpack
 
-    return jax_dlpack.from_dlpack(torch_dlpack.to_dlpack(value))
+    return jax_dlpack.from_dlpack(torch_dlpack.to_dlpack(value.contiguous()))
 
 
 def _get_object_fields(obj) -> dict:
