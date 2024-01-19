@@ -471,7 +471,7 @@ class PPOLoss(LossModule):
 
     @property
     @_cache_values
-    def _cached_critic_params_detached(self):
+    def _cached_critic_network_params_detached(self):
         if not self.functional:
             return None
         return self.critic_network_params.detach()
