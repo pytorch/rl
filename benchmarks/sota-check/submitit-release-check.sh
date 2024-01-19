@@ -21,6 +21,10 @@ if [ "$1" == "--help" ]; then
     display_usage
 fi
 
+# Initialize variables with default values
+n_runs="1"
+partition=""
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
