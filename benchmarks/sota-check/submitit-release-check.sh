@@ -2,10 +2,17 @@
 
 # Function to display script usage
 display_usage() {
-    echo "Usage: ./submitit-release-check.sh [--partition PARTITION]"
-    echo "  --partition: (Optional) Specify the Slurm partition for the job."
-    echo "  PARTITION: Specify the Slurm partition if --partition is used. "
-    echo "  --n_runs: (Optional) Specify the number of runs for each script. Default is 1."
+    cat <<EOF
+Usage: ./submitit-release-check.sh [OPTIONS]
+
+OPTIONS:
+  --partition PARTITION   Specify the Slurm partition for the job.
+  --n_runs N_RUNS         Specify the number of runs for each script. Default is 1.
+
+EXAMPLES:
+  ./submitit-release-check.sh --partition <PARTITION_NAME> --n_runs 5
+
+EOF
     return 1
 }
 
@@ -26,7 +33,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     *)
-      echo "Invalid argument: $1"
+      echo "$1 is not a valid argument. See './submitit-release-check.sh --help'."
       return 0
       ;;
   esac
