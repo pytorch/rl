@@ -3719,7 +3719,7 @@ class CompositeSpec(TensorSpec):
         return (
             type(self) is type(other)
             and self.shape == other.shape
-            and self.device == other.device
+            and self._device == other._device
             and set(self._specs.keys()) == set(other._specs.keys())
             and all((self._specs[key] == spec) for (key, spec) in other._specs.items())
         )
