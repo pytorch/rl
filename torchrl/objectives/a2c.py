@@ -9,12 +9,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict.nn import (
-    dispatch,
-    ProbabilisticTensorDictSequential,
-    repopulate_module,
-    TensorDictModule,
-)
+from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -69,6 +64,10 @@ class A2CLoss(LossModule):
             The input tensordict key where the advantage is expected to be written.  default: "advantage"
         value_target_key (str): [Deprecated, use set_keys() instead] the input
             tensordict key where the target state value is expected to be written. Defaults to ``"value_target"``.
+        functional (bool, optional): whether modules should be functionalized.
+            Functionalizing permits features like meta-RL, but makes it
+            impossible to use distributed models (DDP, FSDP, ...) and comes
+            with a little cost. Defaults to ``True``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -222,8 +221,8 @@ class A2CLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticTensorDictSequential,
-        critic_network: TensorDictModule,
+        actor_network: ProbabilisticTensorDictSequential = None,
+        critic_network: TensorDictModule = None,
         *,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
@@ -244,14 +243,18 @@ class A2CLoss(LossModule):
         if critic is not None:
             critic_network = critic
             del critic
+        if actor_network is None or critic_network is None:
+            raise TypeError(
+                "Missing positional arguments actor_network or critic_network."
+            )
 
+        self._functional = functional
         self._out_keys = None
         super().__init__()
         self._set_deprecated_ctor_keys(
             advantage=advantage_key, value_target=value_target_key
         )
 
-        self.functional = functional
         if functional:
             self.convert_to_functional(
                 actor_network, "actor_network", funs_to_decorate=["forward", "get_dist"]
@@ -262,7 +265,7 @@ class A2CLoss(LossModule):
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
             # params of critic must be refs to actor if they're shared
-            policy_params = list(actor.parameters())
+            policy_params = list(actor_network.parameters())
         else:
             policy_params = None
         if functional:
@@ -271,6 +274,7 @@ class A2CLoss(LossModule):
             )
         else:
             self.critic_network = critic_network
+            self.target_critic_network_params = None
 
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_coef
@@ -288,8 +292,16 @@ class A2CLoss(LossModule):
         self.loss_critic_type = loss_critic_type
 
     @property
+    def functional(self):
+        return self._functional
+
+    @property
     def actor(self):
         return self.actor_network
+
+    @property
+    def critic(self):
+        return self.critic_network
 
     @property
     def in_keys(self):
@@ -367,7 +379,7 @@ class A2CLoss(LossModule):
             # overhead that we could easily reduce.
             target_return = tensordict.get(self.tensor_keys.value_target)
             tensordict_select = tensordict.select(*self.critic.in_keys)
-            with self.critic_params.to_module(
+            with self.critic_network_params.to_module(
                 self.critic
             ) if self.functional else contextlib.nullcontext():
                 state_value = self.critic(
@@ -390,8 +402,10 @@ class A2CLoss(LossModule):
 
     @property
     @_cache_values
-    def _cached_detach_critic_params(self):
-        return self.critic_params.detach()
+    def _cached_detach_critic_network_params(self):
+        if not self.functional:
+            return None
+        return self.critic_network_params.detach()
 
     @dispatch()
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -400,8 +414,8 @@ class A2CLoss(LossModule):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self._cached_detach_critic_params,
-                target_params=self.target_critic_params,
+                params=self._cached_detach_critic_network_params,
+                target_params=self.target_critic_network_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         assert not advantage.requires_grad
@@ -436,11 +450,13 @@ class A2CLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.VTrace:
             # VTrace currently does not support functional call on the actor
-            actor_with_params = repopulate_module(
-                deepcopy(self.actor_network), self.actor_network_params
-            )
+            if self.functional:
+                actor_with_params = deepcopy(self.actor_network)
+                self.actor_network_params.to_module(actor_with_params)
+            else:
+                actor_with_params = self.actor_network
             self._value_estimator = VTrace(
-                value_network=self.critic, actor_network=actor_with_params, **hp
+                value_network=self.critic_network, actor_network=actor_with_params, **hp
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
