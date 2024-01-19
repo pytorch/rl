@@ -21,6 +21,7 @@ from tensordict import TensorDictBase
 
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
+    _minmax_dtype,
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
@@ -32,11 +33,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
-from torchrl.data.utils import (
-    _minmax_dtype,
-    numpy_to_torch_dtype_dict,
-    torch_to_numpy_dtype_dict,
-)
+from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
 from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
 

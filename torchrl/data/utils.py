@@ -324,18 +324,3 @@ def _find_action_space(action_space):
             f"action_space was not specified/not compatible and could not be retrieved from the value network. Got action_space={action_space}."
         )
     return action_space
-
-
-def _minmax_dtype(dtype, device=None):
-    if dtype is torch.bool:
-        return torch.tensor(False, device=device), torch.tensor(True, device=device)
-    if dtype.is_floating_point:
-        info = torch.finfo(dtype)
-    else:
-        info = torch.iinfo(dtype)
-    if device is None:
-        return torch.as_tensor(info.min), torch.as_tensor(info.max)
-    else:
-        return torch.as_tensor(info.min).to(device), torch.as_tensor(info.max).to(
-            device
-        )

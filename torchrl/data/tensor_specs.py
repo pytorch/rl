@@ -37,8 +37,6 @@ from tensordict.utils import _getitem_batch_size, NestedKey
 
 from torchrl._utils import get_binary_env_var
 
-from torchrl.data.utils import _minmax_dtype
-
 DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
@@ -4352,3 +4350,18 @@ class _CompositeSpecKeysView:
                 return True
         else:
             return False
+
+
+def _minmax_dtype(dtype, device=None):
+    if dtype is torch.bool:
+        return torch.tensor(False, device=device), torch.tensor(True, device=device)
+    if dtype.is_floating_point:
+        info = torch.finfo(dtype)
+    else:
+        info = torch.iinfo(dtype)
+    if device is None:
+        return torch.as_tensor(info.min), torch.as_tensor(info.max)
+    else:
+        return torch.as_tensor(info.min).to(device), torch.as_tensor(info.max).to(
+            device
+        )
