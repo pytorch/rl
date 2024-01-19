@@ -151,16 +151,11 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
         and hasattr(policy, "in_keys")
         and hasattr(policy, "out_keys")
     ):
-        warnings.warn(
-            "Passing a policy that is not a TensorDictModuleBase subclass but has in_keys and out_keys "
-            "will soon be deprecated. We'd like to motivate our users to inherit from this class (which "
+        raise RuntimeError(
+            "Passing a policy that is not a tensordict.nn.TensorDictModuleBase subclass but has in_keys and out_keys "
+            "is deprecated. Users should inherit from this class (which "
             "has very few restrictions) to make the experience smoother.",
-            category=DeprecationWarning,
         )
-        # if the policy is a TensorDictModule or takes a single argument and defines
-        # in_keys and out_keys then we assume it can already deal with TensorDict input
-        # to forward and we return True
-        return True
     elif not hasattr(policy, "in_keys") and not hasattr(policy, "out_keys"):
         # if it's not a TensorDictModule, and in_keys and out_keys are not defined then
         # we assume no TensorDict compatibility and will try to wrap it.

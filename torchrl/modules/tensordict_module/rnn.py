@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import warnings
 from typing import Optional, Tuple
 
 import torch
@@ -555,11 +554,9 @@ class LSTMModule(ModuleBase):
 
     @property
     def temporal_mode(self):
-        warnings.warn(
+        raise RuntimeError(
             "temporal_mode is deprecated, use recurrent_mode instead.",
-            category=DeprecationWarning,
         )
-        return self.recurrent_mode
 
     def set_recurrent_mode(self, mode: bool = True):
         """Returns a new copy of the module that shares the same lstm model but with a different ``recurrent_mode`` attribute (if it differs).
@@ -1255,11 +1252,9 @@ class GRUModule(ModuleBase):
 
     @property
     def temporal_mode(self):
-        warnings.warn(
+        raise RuntimeError(
             "temporal_mode is deprecated, use recurrent_mode instead.",
-            category=DeprecationWarning,
         )
-        return self.recurrent_mode
 
     def set_recurrent_mode(self, mode: bool = True):
         """Returns a new copy of the module that shares the same gru model but with a different ``recurrent_mode`` attribute (if it differs).

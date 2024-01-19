@@ -521,7 +521,7 @@ class GymLikeEnv(_EnvWrapper):
         warnings.warn(
             f"Please use {type(self)}.set_info_dict_reader method to set a new info reader. "
             f"This method will append a reader to the list of existing readers (if any). "
-            f"Setting info_dict_reader directly will be soon deprecated.",
+            f"Setting info_dict_reader directly will be deprecated in v0.4.0.",
             category=DeprecationWarning,
         )
         self._info_dict_reader.append(value)

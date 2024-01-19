@@ -17,7 +17,7 @@ from torchrl.data.utils import _find_action_space
 from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -285,22 +285,15 @@ class IQLLoss(LossModule):
 
         self.loss_function = loss_function
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self._vmap_qvalue_networkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
 
     @property
     def device(self) -> torch.device:
-        warnings.warn(
-            "The device attributes of the looses will be deprecated in v0.3.",
-            category=DeprecationWarning,
-        )
-        for p in self.parameters():
-            return p.device
         raise RuntimeError(
-            "At least one of the networks of SACLoss must have trainable " "parameters."
+            "The device attributes of the looses is deprecated since v0.3.",
         )
 
     def _set_in_keys(self):

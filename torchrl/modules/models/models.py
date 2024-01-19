@@ -872,9 +872,6 @@ class DistributionalDQNnet(TensorDictModuleBase):
     """Distributional Deep Q-Network.
 
     Args:
-        DQNet (nn.Module): (deprecated) Q-Network with output length equal
-            to the number of atoms:
-            output.shape = [*batch, atoms, actions].
         in_keys (list of str or tuples of str): input keys to the log-softmax
             operation. Defaults to ``["action_value"]``.
         out_keys (list of str or tuples of str): output keys to the log-softmax
@@ -888,11 +885,11 @@ class DistributionalDQNnet(TensorDictModuleBase):
         "instead."
     )
 
-    def __init__(self, DQNet: nn.Module = None, in_keys=None, out_keys=None):
+    def __init__(self, *, in_keys=None, out_keys=None, DQNet: nn.Module = None):
         super().__init__()
         if DQNet is not None:
             warnings.warn(
-                f"Passing a network to {type(self)} is going to be deprecated.",
+                f"Passing a network to {type(self)} is going to be deprecated in v0.4.0.",
                 category=DeprecationWarning,
             )
             if not (
@@ -1280,7 +1277,7 @@ class LSTMNet(nn.Module):
         device: Optional[DEVICE_TYPING] = None,
     ) -> None:
         warnings.warn(
-            "LSTMNet is being deprecated in favour of torchrl.modules.LSTMModule, and will be removed soon.",
+            "LSTMNet is being deprecated in favour of torchrl.modules.LSTMModule, and will be removed in v0.4.0.",
             category=DeprecationWarning,
         )
         super().__init__()

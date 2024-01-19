@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
@@ -21,7 +20,7 @@ from torch import distributions as d
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -261,8 +260,7 @@ class A2CLoss(LossModule):
         self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
         self.register_buffer("critic_coef", torch.tensor(critic_coef, device=device))
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.loss_critic_type = loss_critic_type
 
     @property

@@ -667,9 +667,11 @@ class ReplayBufferTrainer(TrainerHookBase):
         self.device = device
         if flatten_tensordicts is None:
             warnings.warn(
-                "flatten_tensordicts default value will soon be changed "
+                "flatten_tensordicts default value has now changed "
                 "to False for a faster execution. Make sure your "
-                "code is robust to this change.",
+                "code is robust to this change. To silence this warning, "
+                "pass flatten_tensordicts=<value> in your code. "
+                "This warning will be removed in v0.4.",
                 category=DeprecationWarning,
             )
             flatten_tensordicts = True
