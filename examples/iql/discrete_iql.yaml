@@ -22,7 +22,7 @@ collector:
 logger:
   backend: wandb
   project_name: torchrl_example_discrete_iql
-  exp_name: iql_${replay_buffer.dataset}
+  exp_name: iql_${env.name}
   group_name: null
   log_interval: 5000 # record interval in frames
   eval_steps: 200

@@ -10,8 +10,6 @@
 current_commit=$(git rev-parse HEAD)
 project_name="torchrl-example-check-$current_commit"
 python ../../examples/iql/iql_offline.py \
-  optim.gradient_steps=55 \
-  optim.device=cuda:0 \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="iql_offline"

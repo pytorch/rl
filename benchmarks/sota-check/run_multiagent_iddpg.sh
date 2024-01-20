@@ -10,10 +10,6 @@
 current_commit=$(git rev-parse HEAD)
 project_name="torchrl-example-check-$current_commit"
 python ../../examples/multiagent/maddpg_iddpg.py \
-  collector.n_iters=2 \
-  collector.frames_per_batch=200 \
-  train.num_epochs=3 \
-  train.minibatch_size=100 \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="marl_iddpg"
