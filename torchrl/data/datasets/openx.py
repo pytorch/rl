@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Dict, Tuple
 
 import torch
 
@@ -34,6 +35,12 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
     The Open X-Embodiment Dataset contains 1M+ real robot trajectories
     spanning 22 robot embodiments, collected through a collaboration between
     21 institutions, demonstrating 527 skills (160266 tasks).
+
+    Website: https://robotics-transformer-x.github.io/
+
+    GitHub: https://github.com/google-deepmind/open_x_embodiment
+
+    Paper: https://arxiv.org/abs/2310.08864
 
     .. note::
         Non-tensor data will be written in the tensordict data using the
@@ -66,7 +73,7 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
               sampler is set to ``False`` if they wish to enjoy the two different
               behaviours (shuffled and not) within the same code base.
 
-        num_slice (int, optional): the number of slices in a batch. This
+        num_slices (int, optional): the number of slices in a batch. This
             corresponds to the number of trajectories present in a batch.
             Once collected, the batch is presented as a concatenation of
             sub-trajectories that can be recovered through `batch.reshape(num_slices, -1)`.
@@ -527,22 +534,31 @@ class _StreamingStorage(Storage):
         slice_len=None,
         pad=None,
     ):
-        if not _has_datasets:
-            raise ImportError(
-                f"the `datasets` library is required for the dataset {dataset_id}."
-            )
-        import datasets
-
-        dataset = datasets.load_dataset(repo, dataset_id, streaming=True, split=split)
-        if shuffle:
-            dataset = dataset.shuffle()
-        self.dataset = dataset
-        self.dataset_iter = iter(dataset)
+        self.shuffle = shuffle
+        self.dataset_id = dataset_id
+        self.repo = repo
+        self.split = split
+        self._init()
         self.base_path = base_path
         self.truncate = truncate
         self.num_slices = num_slices
         self.slice_len = slice_len
         self.pad = pad
+
+    def _init(self):
+        if not _has_datasets:
+            raise ImportError(
+                f"the `datasets` library is required for the dataset {self.dataset_id}."
+            )
+        import datasets
+
+        dataset = datasets.load_dataset(
+            self.repo, self.dataset_id, streaming=True, split=self.split
+        )
+        if self.shuffle:
+            dataset = dataset.shuffle()
+        self.dataset = dataset
+        self.dataset_iter = iter(dataset)
 
     def __iter__(self):
         episode = 0
@@ -558,10 +574,12 @@ class _StreamingStorage(Storage):
             else:
                 yield data
 
-    def get(self, index: int) -> Any:
+    def get(self, index: range | torch.Tensor) -> Any:
         if not isinstance(index, range):
-            # we use a range to indicate how much data we want
-            raise RuntimeError("iterable datasets do not support indexing.")
+            if (index[1:] != index[:-1] + 1).any():
+                # we use a range to indicate how much data we want
+                raise RuntimeError("iterable datasets do not support indexing.")
+            index = range(index.shape[0])
         total = 0
         data_list = []
         episode = 0
@@ -606,6 +624,34 @@ class _StreamingStorage(Storage):
         if self.truncate:
             return data[: index.stop]
         return data
+
+    def dumps(self, path):
+        path = Path(path)
+        state_dict = self.state_dict()
+        json.dump(state_dict, path / "state_dict.json")
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "repo": self.repo,
+            "split": self.split,
+            "dataset_id": self.dataset_id,
+            "shuffle": self.shuffle,
+            "base_path": self.base_path,
+            "truncated": self.truncate,
+            "num_slices": self.num_slices,
+            "slice_len": self.slice_len,
+            "pad": self.pad,
+        }
+
+    def loads(self, path):
+        path = Path(path)
+        state_dict = json.load(path / "state_dict.json")
+        self.load_state_dict(state_dict)
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        for key, val in state_dict.items():
+            setattr(self, key, val)
+        self._init()
 
     def __len__(self):
         raise RuntimeError(
@@ -660,6 +706,12 @@ class _StreamingSampler(Sampler):
         ...
 
     def loads(self, path):
+        ...
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         ...
 
 

@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import logging
 from copy import copy
 from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
@@ -393,7 +394,7 @@ def get_stats_random_rollout(
         )()
 
     if VERBOSE:
-        print("computing state stats")
+        logging.info("computing state stats")
     if not hasattr(cfg, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
@@ -426,7 +427,7 @@ def get_stats_random_rollout(
     s[s == 0] = 1.0
 
     if VERBOSE:
-        print(
+        logging.info(
             f"stats computed for {val_stats.numel()} steps. Got: \n"
             f"loc = {m}, \n"
             f"scale = {s}"

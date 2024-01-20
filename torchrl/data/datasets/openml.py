@@ -2,16 +2,23 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
-from typing import Callable, Optional
+import os
+from pathlib import Path
+from typing import Callable
 
 import numpy as np
 from tensordict.tensordict import TensorDict
-from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
-from torchrl.data.replay_buffers.samplers import Sampler, SamplerWithoutReplacement
 
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.data.replay_buffers.writers import Writer
+from torchrl.data.datasets.utils import _get_root_dir
+from torchrl.data.replay_buffers import (
+    Sampler,
+    SamplerWithoutReplacement,
+    TensorDictReplayBuffer,
+    TensorStorage,
+    Writer,
+)
 
 
 class OpenMLExperienceReplay(TensorDictReplayBuffer):
@@ -52,23 +59,32 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
         self,
         name: str,
         batch_size: int,
-        sampler: Optional[Sampler] = None,
-        writer: Optional[Writer] = None,
-        collate_fn: Optional[Callable] = None,
+        root: Path | None = None,
+        sampler: Sampler | None = None,
+        writer: Writer | None = None,
+        collate_fn: Callable | None = None,
         pin_memory: bool = False,
-        prefetch: Optional[int] = None,
-        transform: Optional["Transform"] = None,  # noqa-F821
+        prefetch: int | None = None,
+        transform: "Transform" | None = None,  # noqa-F821
     ):
 
         if sampler is None:
             sampler = SamplerWithoutReplacement()
+        if root is None:
+            root = _get_root_dir("openml")
+        self.root = Path(root)
+        self.dataset_id = name
 
-        dataset = self._get_data(
-            name,
-        )
+        if not self._is_downloaded():
+            dataset = self._get_data(
+                name,
+            )
+            storage = TensorStorage(dataset.memmap(self._dataset_path))
+        else:
+            dataset = TensorDict.load_memmap(self._dataset_path)
+            storage = TensorStorage(dataset)
+
         self.max_outcome_val = dataset["y"].max().item()
-
-        storage = LazyMemmapStorage(dataset.shape[0])
         super().__init__(
             batch_size=batch_size,
             storage=storage,
@@ -79,7 +95,13 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
             prefetch=prefetch,
             transform=transform,
         )
-        self.extend(dataset)
+
+    @property
+    def _dataset_path(self):
+        return self.root / self.dataset_id
+
+    def _is_downloaded(self):
+        return os.path.exists(self._dataset_path)
 
     @classmethod
     def _get_data(cls, dataset_name):
@@ -112,7 +134,9 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
                 X[col] = encoder.fit_transform(X[col])
             y = encoder.fit_transform(y)
             if dataset_name == "adult_onehot":
-                cat_features = OneHotEncoder(sparse=False).fit_transform(X[cat_ix])
+                cat_features = OneHotEncoder(sparse_output=False).fit_transform(
+                    X[cat_ix]
+                )
                 num_features = StandardScaler().fit_transform(X[num_ix])
                 X = np.concatenate((num_features, cat_features), axis=1)
             else:
@@ -126,7 +150,7 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
             # X = X.drop(["veil-type"],axis=1)
             y = encoder.fit_transform(y)
             if dataset_name == "mushroom_onehot":
-                X = OneHotEncoder(sparse=False).fit_transform(X)
+                X = OneHotEncoder(sparse_output=False).fit_transform(X)
             else:
                 X = StandardScaler().fit_transform(X)
         elif dataset_name == "covertype":

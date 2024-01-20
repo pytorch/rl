@@ -5,6 +5,7 @@
 
 import abc
 import json
+import logging
 import os
 import textwrap
 import warnings
@@ -512,38 +513,6 @@ class TensorStorage(Storage):
                 )
         self._storage[cursor] = data
 
-    @implement_for("torch", None, "2.0")
-    def set(  # noqa: F811
-        self,
-        cursor: Union[int, Sequence[int], slice],
-        data: Union[TensorDictBase, torch.Tensor],
-    ):
-        if isinstance(cursor, INT_CLASSES):
-            self._len = max(self._len, cursor + 1)
-        else:
-            self._len = max(self._len, max(cursor) + 1)
-
-        if not self.initialized:
-            if not isinstance(cursor, INT_CLASSES):
-                self._init(data[0])
-            else:
-                self._init(data)
-        if not isinstance(cursor, (*INT_CLASSES, slice)):
-            if not isinstance(cursor, torch.Tensor):
-                cursor = torch.tensor(cursor, dtype=torch.long, device=self.device)
-            elif cursor.dtype != torch.long:
-                cursor = cursor.to(dtype=torch.long, device=self.device)
-            if len(cursor) > len(self._storage):
-                warnings.warn(
-                    "A cursor of length superior to the storage capacity was provided. "
-                    "To accomodate for this, the cursor will be truncated to its last "
-                    "element such that its length matched the length of the storage. "
-                    "This may **not** be the optimal behaviour for your application! "
-                    "Make sure that the storage capacity is big enough to support the "
-                    "batch size provided."
-                )
-        self._storage[cursor] = data
-
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         if self._len < self.max_size:
             storage = self._storage[: self._len]
@@ -640,7 +609,7 @@ class LazyTensorStorage(TensorStorage):
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         if VERBOSE:
-            print("Creating a TensorStorage...")
+            logging.info("Creating a TensorStorage...")
         if self.device == "auto":
             self.device = data.device
         if isinstance(data, torch.Tensor):
@@ -800,7 +769,7 @@ class LazyMemmapStorage(LazyTensorStorage):
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         if VERBOSE:
-            print("Creating a MemmapStorage...")
+            logging.info("Creating a MemmapStorage...")
         if self.device == "auto":
             self.device = data.device
         if self.device.type != "cpu":
@@ -819,7 +788,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             ):
                 if VERBOSE:
                     filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                    print(
+                    logging.info(
                         f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
                     )
         else:
@@ -834,7 +803,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             )
             if VERBOSE:
                 filesize = os.path.getsize(out.filename) / 1024 / 1024
-                print(
+                logging.info(
                     f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
                 )
         self._storage = out

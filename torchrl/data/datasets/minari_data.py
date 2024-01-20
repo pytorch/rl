@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import logging
 import os.path
 import shutil
 import tempfile
@@ -24,7 +25,7 @@ from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
-from torchrl.data.replay_buffers.writers import Writer
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
@@ -34,6 +35,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.utils import _classproperty
 
 _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
+_has_minari = importlib.util.find_spec("minari", None) is not None
 
 _NAME_MATCH = KeyDependentDefaultDict(lambda key: key)
 _NAME_MATCH["observations"] = "observation"
@@ -106,7 +108,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         >>> from torchrl.data.datasets.minari_data import MinariExperienceReplay
         >>> data = MinariExperienceReplay("door-human-v1", batch_size=32, download="force")
         >>> for sample in data:
-        ...     print(sample)
+        ...     logging.info(sample)
         ...     break
         TensorDict(
             fields={
@@ -193,6 +195,10 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         else:
             storage = self._load()
         storage = TensorStorage(storage)
+
+        if writer is None:
+            writer = ImmutableDatasetWriter()
+
         super().__init__(
             storage=storage,
             sampler=sampler,
@@ -206,6 +212,8 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
 
     @_classproperty
     def available_datasets(self):
+        if not _has_minari:
+            raise ImportError("minari library not found.")
         import minari
 
         return minari.list_remote_datasets().keys()
@@ -228,6 +236,8 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         return Path(self.root) / self.dataset_id / "env_metadata.json"
 
     def _download_and_preproc(self):
+        if not _has_minari:
+            raise ImportError("minari library not found.")
         import minari
 
         if _has_tqdm:
@@ -240,7 +250,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
 
             td_data = TensorDict({}, [])
             total_steps = 0
-            print("first read through data to create data structure...")
+            logging.info("first read through data to create data structure...")
             h5_data = PersistentTensorDict.from_h5(parent_dir / "main_data.hdf5")
             # populate the tensordict
             episode_dict = {}
@@ -279,11 +289,13 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
                 td_data["done"] = td_data["truncated"] | td_data["terminated"]
             td_data = td_data.expand(total_steps)
             # save to designated location
-            print(f"creating tensordict data in {self.data_path_root}: ", end="\t")
+            logging.info(
+                f"creating tensordict data in {self.data_path_root}: ", end="\t"
+            )
             td_data = td_data.memmap_like(self.data_path_root)
-            print("tensordict structure:", td_data)
+            logging.info("tensordict structure:", td_data)
 
-            print(f"Reading data from {max(*episode_dict) + 1} episodes")
+            logging.info(f"Reading data from {max(*episode_dict) + 1} episodes")
             index = 0
             with tqdm(total=total_steps) if _has_tqdm else nullcontext() as pbar:
                 # iterate over episodes and populate the tensordict

@@ -11,14 +11,13 @@ It works across Gym and MuJoCo over a variety of tasks.
 The helper functions are coded in the utils.py associated with this script.
 
 """
-
+import logging
 import time
 
 import hydra
 import numpy as np
 import torch
 import tqdm
-from tensordict import TensorDict
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
 
@@ -81,7 +80,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module, target_net_updater = make_loss(cfg.loss, model)
 
     # Create optimizer
-    optimizer = make_iql_optimizer(cfg.optim, loss_module)
+    optimizer_actor, optimizer_critic, optimizer_value = make_iql_optimizer(
+        cfg.optim, loss_module
+    )
 
     # Main loop
     collected_frames = 0
@@ -113,8 +114,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # optimization steps
         training_start = time.time()
         if collected_frames >= init_random_frames:
-            log_loss_td = TensorDict({}, [num_updates])
-            for j in range(num_updates):
+            for _ in range(num_updates):
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample().clone()
                 if sampled_tensordict.device != device:
@@ -123,20 +123,23 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     )
                 else:
                     sampled_tensordict = sampled_tensordict
-                # compute loss
-                loss_td = loss_module(sampled_tensordict)
+                # compute losses
+                loss_info = loss_module(sampled_tensordict)
+                actor_loss = loss_info["loss_actor"]
+                value_loss = loss_info["loss_value"]
+                q_loss = loss_info["loss_qvalue"]
 
-                actor_loss = loss_td["loss_actor"]
-                q_loss = loss_td["loss_qvalue"]
-                value_loss = loss_td["loss_value"]
-                loss = actor_loss + q_loss + value_loss
+                optimizer_actor.zero_grad()
+                actor_loss.backward()
+                optimizer_actor.step()
 
-                # update model
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                optimizer_value.zero_grad()
+                value_loss.backward()
+                optimizer_value.step()
 
-                log_loss_td[j] = loss_td.detach()
+                optimizer_critic.zero_grad()
+                q_loss.backward()
+                optimizer_critic.step()
 
                 # update qnet_target params
                 target_net_updater.step()
@@ -160,10 +163,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 episode_length
             )
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/q_loss"] = log_loss_td.get("loss_qvalue").detach()
-            metrics_to_log["train/actor_loss"] = log_loss_td.get("loss_actor").detach()
-            metrics_to_log["train/value_loss"] = log_loss_td.get("loss_value").detach()
-            metrics_to_log["train/entropy"] = log_loss_td.get("entropy").detach()
+            metrics_to_log["train/q_loss"] = q_loss.detach()
+            metrics_to_log["train/actor_loss"] = actor_loss.detach()
+            metrics_to_log["train/value_loss"] = value_loss.detach()
+            metrics_to_log["train/entropy"] = loss_info.get("entropy").detach()
             metrics_to_log["train/sampling_time"] = sampling_time
             metrics_to_log["train/training_time"] = training_time
 
@@ -188,7 +191,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    print(f"Training took {execution_time:.2f} seconds to finish")
+    logging.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

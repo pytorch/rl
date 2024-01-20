@@ -10,7 +10,12 @@ from lamb import Lamb
 from tensordict.nn import TensorDictModule
 
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+from torchrl.data import (
+    LazyMemmapStorage,
+    RoundRobinWriter,
+    TensorDictReplayBuffer,
+    TensorStorage,
+)
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.replay_buffers import RandomSampler
 from torchrl.envs import (
@@ -234,33 +239,35 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         exclude,
     )
     data = D4RLExperienceReplay(
-        rb_cfg.dataset,
+        dataset_id=rb_cfg.dataset,
         split_trajs=True,
         batch_size=rb_cfg.batch_size,
         sampler=RandomSampler(),  # SamplerWithoutReplacement(drop_last=False),
-        transform=transforms,
+        transform=None,
         use_truncated_as_done=True,
         direct_download=True,
         prefetch=4,
+        writer=RoundRobinWriter(),
     )
-    loc = (
-        data._storage._storage.get(("_data", "observation"))
-        .flatten(0, -2)
-        .mean(axis=0)
-        .float()
-    )
-    std = (
-        data._storage._storage.get(("_data", "observation"))
-        .flatten(0, -2)
-        .std(axis=0)
-        .float()
-    )
+
+    # since we're not extending the data, adding keys can only be done via
+    # the creation of a new storage
+    data_memmap = data[:]
+    with data_memmap.unlock_():
+        data_memmap = r2g.inv(data_memmap)
+        data._storage = TensorStorage(data_memmap)
+
+    loc = data[:]["observation"].flatten(0, -2).mean(axis=0).float()
+    std = data[:]["observation"].flatten(0, -2).std(axis=0).float()
+
     obsnorm = ObservationNorm(
         loc=loc,
         scale=std,
         in_keys=["observation_cat", ("next", "observation_cat")],
         standard_normal=True,
     )
+    for t in transforms:
+        data.append_transform(t)
     data.append_transform(obsnorm)
     return data, loc, std
 
@@ -300,7 +307,7 @@ def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
         batch_size=rb_cfg.batch_size,
     )
     # init buffer with offline data
-    offline_data = offline_buffer.sample(100000)
+    offline_data = offline_buffer[:100000]
     offline_data.del_("index")
     replay_buffer.extend(offline_data.clone().detach().to_tensordict())
     # add transforms after offline data extension to not trigger reward-to-go calculation

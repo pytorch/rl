@@ -23,6 +23,7 @@ from the jump host and pass the slurm specs to submitit.
   and DEFAULT_SLURM_CONF_MAIN dictionaries below).
 
 """
+import logging
 import time
 from argparse import ArgumentParser
 
@@ -147,7 +148,7 @@ def main():
         if i == 10:
             t0 = time.time()
     t1 = time.time()
-    print(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    logging.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
     collector.shutdown()
     exit()
 

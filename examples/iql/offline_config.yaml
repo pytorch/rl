@@ -3,6 +3,7 @@ env:
   name: HalfCheetah-v2
   task: ""
   library: gym
+  exp_name: iql_${replay_buffer.dataset}
   n_samples_stats: 1000
   seed: 0
 

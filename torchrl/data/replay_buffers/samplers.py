@@ -8,6 +8,7 @@ import json
 import textwrap
 import warnings
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from copy import copy, deepcopy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
@@ -159,22 +160,14 @@ class SamplerWithoutReplacement(Sampler):
 
         with open(path / "sampler_metadata.json", "w") as file:
             json.dump(
-                {
-                    "len_storage": self.len_storage,
-                    "_sample_list": self._sample_list,
-                    "drop_last": self.drop_last,
-                    "_ran_out": self._ran_out,
-                },
+                self.state_dict(),
                 file,
             )
 
     def loads(self, path):
         with open(path / "sampler_metadata.json", "r") as file:
             metadata = json.load(file)
-        self._sample_list = metadata["_sample_list"]
-        self.len_storage = metadata["len_storage"]
-        self.drop_last = metadata["drop_last"]
-        self._ran_out = metadata["_ran_out"]
+        self.load_state_dict(metadata)
 
     def _get_sample_list(self, storage: Storage, len_storage: int):
         if storage is None:
@@ -240,10 +233,18 @@ class SamplerWithoutReplacement(Sampler):
         self._ran_out = False
 
     def state_dict(self) -> Dict[str, Any]:
-        raise NotImplementedError
+        return OrderedDict(
+            len_storage=self.len_storage,
+            _sample_list=self._sample_list,
+            drop_last=self.drop_last,
+            _ran_out=self._ran_out,
+        )
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        raise NotImplementedError
+        self.len_storage = state_dict["len_storage"]
+        self._sample_list = state_dict["_sample_list"]
+        self.drop_last = state_dict["drop_last"]
+        self._ran_out = state_dict["_ran_out"]
 
 
 class PrioritizedSampler(Sampler):
@@ -373,6 +374,7 @@ class PrioritizedSampler(Sampler):
         super().extend(index)
         if index is not None:
             # some writers don't systematically write data and can return None
+            index = index.cpu()
             self._add_or_extend(index)
 
     def update_priority(
@@ -1102,6 +1104,10 @@ class SamplerEnsemble(Sampler):
                     for i in buffer_ids.tolist()
                 ]
             )
+        samples = [
+            sample if isinstance(sample, torch.Tensor) else torch.tensor(sample)
+            for sample in samples
+        ]
         if all(samples[0].shape == sample.shape for sample in samples[1:]):
             samples_stack = torch.stack(samples)
         else:
@@ -1116,7 +1122,9 @@ class SamplerEnsemble(Sampler):
         )
         infos = torch.stack(
             [
-                TensorDict.from_dict(info) if info else TensorDict({}, [])
+                TensorDict.from_dict(info, batch_dims=samples.ndim - 1)
+                if info
+                else TensorDict({}, [])
                 for info in infos
             ]
         )
@@ -1133,10 +1141,14 @@ class SamplerEnsemble(Sampler):
             sampler.loads(path / str(i))
 
     def state_dict(self) -> Dict[str, Any]:
-        raise NotImplementedError
+        state_dict = OrderedDict()
+        for i, sampler in enumerate(self._samplers):
+            state_dict[str(i)] = sampler.state_dict()
+        return state_dict
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        raise NotImplementedError
+        for i, sampler in enumerate(self._samplers):
+            sampler.load_state_dict(state_dict[str(i)])
 
     def _empty(self):
         raise NotImplementedError

@@ -7,7 +7,7 @@
 DQN: Reproducing experimental results from Mnih et al. 2015 for the
 Deep Q-Learning Algorithm on Atari Environments.
 """
-
+import logging
 import tempfile
 import time
 
@@ -215,7 +215,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    print(f"Training took {execution_time:.2f} seconds to finish")
+    logging.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

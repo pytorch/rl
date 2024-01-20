@@ -33,7 +33,6 @@ Call times:
         out_str += f"\t{key}{spaces}{item: 4.4f}s\n"
         if i == maxprint - 1:
             break
-    print(out_str)
 
 
 @pytest.fixture(autouse=True)

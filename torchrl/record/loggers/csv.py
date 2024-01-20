@@ -86,7 +86,6 @@ class CSVLogger(Logger):
         super().__init__(exp_name=exp_name, log_dir=log_dir)
 
         self._has_imported_moviepy = False
-        print(f"self.log_dir: {self.experiment.log_dir}")
 
     def _create_experiment(self) -> "CSVExperiment":
         """Creates a CSV experiment."""

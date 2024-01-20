@@ -107,10 +107,29 @@ def _vmas_to_torchrl_spec_transform(
 class VmasWrapper(_EnvWrapper):
     """Vmas environment wrapper.
 
+    GitHub: https://github.com/proroklab/VectorizedMultiAgentSimulator
+
+    Paper: https://arxiv.org/abs/2207.03530
+
     Args:
         env (``vmas.simulator.environment.environment.Environment``): the vmas environment to wrap.
+
+    Keyword Args:
+        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulations using PyTorch.
+            This argument indicates the number of vectorized environments that should be simulated in a batch. It will also
+            determine the batch size of the environment.
+        device (torch.device, optional): Device for simulation. Defaults to the default device. All the tensors created by VMAS
+            will be placed on this device.
+        continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions
+            will be discrete. The number of actions and their size will depend on the chosen scenario.
+            See the VMAS repository for more info.
+        max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
+            be terminating or not. If ``max_steps`` is specified,
+            the scenario is also terminated (and the ``"terminated"`` flag is set) whenever this horizon is reached.
+            Unlike gym's ``TimeLimit`` transform or torchrl's :class:`~torchrl.envs.transforms.StepCounter`,
+            this argument will not set the ``"truncated"`` entry in the tensordict.
         categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
-            them to categorical or one-hot.
+            them to categorical or one-hot. Defaults to ``True``.
         group_map (MarlGroupMapType or Dict[str, List[str]], optional): how to group agents in tensordicts for
             input/output. By default, if the agent names follow the ``"<name>_<int>"``
             convention, they will be grouped by ``"<name>"``. If they do not follow this convention, they will be all put
@@ -128,6 +147,13 @@ class VmasWrapper(_EnvWrapper):
         unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension
         het_specs (bool): whether the enviornment has any lazy spec
         het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs
+        available_envs (List[str]): the list of the scenarios available to build.
+
+    .. warning::
+        VMAS returns a single ``done`` flag which does not distinguish between
+        when the env reached ``max_steps`` and termination.
+        If you deem the ``truncation`` signal necessary, set ``max_steps`` to
+        ``None`` and use a :class:`~torchrl.envs.transforms.StepCounter` transform.
 
     Examples:
         >>>  env = VmasWrapper(
@@ -199,8 +225,8 @@ class VmasWrapper(_EnvWrapper):
     @_classproperty
     def available_envs(cls):
         if not _has_vmas:
-            return
-        yield from _get_envs()
+            return []
+        return list(_get_envs())
 
     def __init__(
         self,
@@ -604,6 +630,62 @@ class VmasWrapper(_EnvWrapper):
 class VmasEnv(VmasWrapper):
     """Vmas environment wrapper.
 
+    GitHub: https://github.com/proroklab/VectorizedMultiAgentSimulator
+
+    Paper: https://arxiv.org/abs/2207.03530
+
+    Args:
+        scenario (str or vmas.simulator.scenario.BaseScenario): the vmas scenario to build.
+            Must be one of :attr:`~.available_envs`. For a description and rendering of available scenarios see
+            `the README <https://github.com/proroklab/VectorizedMultiAgentSimulator/tree/VMAS-1.3.3?tab=readme-ov-file#main-scenarios>`__.
+
+
+    Keyword Args:
+        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulations using PyTorch.
+            This argument indicates the number of vectorized environments that should be simulated in a batch. It will also
+            determine the batch size of the environment.
+        device (torch.device, optional): Device for simulation. Defaults to the defaultt device. All the tensors created by VMAS
+            will be placed on this device.
+        continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions
+            will be discrete. The number of actions and their size will depend on the chosen scenario.
+            See the VMAS repositiory for more info.
+        max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
+            be terminating or not. If ``max_steps`` is specified,
+            the scenario is also terminated (and the ``"terminated"`` flag is set) whenever this horizon is reached.
+            Unlike gym's ``TimeLimit`` transform or torchrl's :class:`~torchrl.envs.transforms.StepCounter`,
+            this argument will not set the ``"truncated"`` entry in the tensordict.
+        categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
+            them to categorical or one-hot. Defaults to ``True``.
+        group_map (MarlGroupMapType or Dict[str, List[str]], optional): how to group agents in tensordicts for
+            input/output. By default, if the agent names follow the ``"<name>_<int>"``
+            convention, they will be grouped by ``"<name>"``. If they do not follow this convention, they will be all put
+            in one group named ``"agents"``.
+            Otherwise, a group map can be specified or selected from some premade options.
+            See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
+        **kwargs (Dict, optional): These are additional arguments that can be passed to the VMAS scenario constructor.
+            (e.g., number of agents, reward sparsity). The available arguments will vary based on the chosen scenario.
+            To see the available arguments for a specific scenario, see the constructor in its file from
+            `the scenario folder <https://github.com/proroklab/VectorizedMultiAgentSimulator/tree/VMAS-1.3.3/vmas/scenarios>`__.
+
+
+    Attributes:
+        group_map (Dict[str, List[str]]): how to group agents in tensordicts for
+            input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
+        agent_names (list of str): names of the agent in the environment
+        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the enviornment
+        unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension
+        unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension
+        unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension
+        het_specs (bool): whether the enviornment has any lazy spec
+        het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs
+        available_envs (List[str]): the list of the scenarios available to build.
+
+    .. warning::
+        VMAS returns a single ``done`` flag which does not distinguish between
+        when the env reached ``max_steps`` and termination.
+        If you deem the ``truncation`` signal necessary, set ``max_steps`` to
+        ``None`` and use a :class:`~torchrl.envs.transforms.StepCounter` transform.
+
     Examples:
         >>>  env = VmasEnv(
         ...      scenario="flocking",
@@ -663,6 +745,7 @@ class VmasEnv(VmasWrapper):
     def __init__(
         self,
         scenario: Union[str, "vmas.simulator.scenario.BaseScenario"],  # noqa
+        *,
         num_envs: int,
         continuous_actions: bool = True,
         max_steps: Optional[int] = None,
@@ -676,14 +759,16 @@ class VmasEnv(VmasWrapper):
                 f"vmas python package was not found. Please install this dependency. "
                 f"More info: {self.git_url}."
             )
-        kwargs["scenario"] = scenario
-        kwargs["num_envs"] = num_envs
-        kwargs["continuous_actions"] = continuous_actions
-        kwargs["max_steps"] = max_steps
-        kwargs["seed"] = seed
-        kwargs["categorical_actions"] = categorical_actions
-        kwargs["group_map"] = group_map
-        super().__init__(**kwargs)
+        super().__init__(
+            scenario=scenario,
+            num_envs=num_envs,
+            continuous_actions=continuous_actions,
+            max_steps=max_steps,
+            seed=seed,
+            categorical_actions=categorical_actions,
+            group_map=group_map,
+            **kwargs,
+        )
 
     def _check_kwargs(self, kwargs: Dict):
         if "scenario" not in kwargs:

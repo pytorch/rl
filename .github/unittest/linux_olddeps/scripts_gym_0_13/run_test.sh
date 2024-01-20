@@ -18,6 +18,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 #export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/work/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/pytorch/rl/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin
 export MKL_THREADING_LAYER=GNU
+export BATCHED_PIPE_TIMEOUT=60
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control'

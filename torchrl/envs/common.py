@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import functools
 import warnings
 from copy import deepcopy
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
@@ -16,7 +17,7 @@ import torch.nn as nn
 from tensordict import unravel_key
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
-from torchrl._utils import _replace_last, prod, seed_generator
+from torchrl._utils import _replace_last, implement_for, prod, seed_generator
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -1338,7 +1339,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         for i, (key, item) in enumerate(done_spec.items()):  # noqa: B007
             val = data.get(key, None)
             if isinstance(item, CompositeSpec):
-                cls._complete_done(item, val)
+                if val is not None:
+                    cls._complete_done(item, val)
                 continue
             shape = (*leading_dim, *item.shape)
             if val is not None:
@@ -1440,6 +1442,497 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             )
         return self._cache_in_keys
 
+    @classmethod
+    def register_gym(
+        cls,
+        id: str,
+        *,
+        entry_point: Callable | None = None,
+        transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
+        backend: str = None,
+        to_numpy: bool = False,
+        reward_threshold: float | None = None,
+        nondeterministic: bool = False,
+        max_episode_steps: int | None = None,
+        order_enforce: bool = True,
+        autoreset: bool = False,
+        disable_env_checker: bool = False,
+        apply_api_compatibility: bool = False,
+        **kwargs,
+    ):
+        """Registers an environment in gym(nasium).
+
+        This method is designed with the following scopes in mind:
+
+          - Incorporate a TorchRL-first environment in a framework that uses Gym;
+          - Incorporate another environment (eg, DeepMind Control, Brax, Jumanji, ...)
+            in a framework that uses Gym.
+
+        Args:
+            id (str): the name of the environment. Should follow the
+                `gym naming convention <https://www.gymlibrary.dev/content/environment_creation/#registering-envs>`_.
+
+        Keyword Args:
+            entry_point (callable, optional): the entry point to build the environment.
+                If none is passed, the parent class will be used as entry point.
+                Typically, this is used to register an environment that does not
+                necessarily inherit from the base being used:
+
+                    >>> from torchrl.envs import DMControlEnv
+                    >>> DMControlEnv.register_gym("DMC-cheetah-v0", env_name="cheetah", task="run")
+                    >>> # equivalently
+                    >>> EnvBase.register_gym("DMC-cheetah-v0", entry_point=DMControlEnv, env_name="cheetah", task="run")
+
+            transform (torchrl.envs.Transform): a transform (or list of transforms
+                within a :class:`torchrl.envs.Compose` instance) to be used with the env.
+                This arg can be passed during a call to :func:`~gym.make` (see
+                example below).
+            info_keys (List[NestedKey], optional): if provided, these keys will
+                be used to build the info dictionary and will be excluded from
+                the observation keys.
+                This arg can be passed during a call to :func:`~gym.make` (see
+                example below).
+
+                .. warning::
+                  It may be the case that using ``info_keys`` makes a spec empty
+                  because the content has been moved to the info dictionary.
+                  Gym does not like empty ``Dict`` in the specs, so this empty
+                  content should be removed with :class:`~torchrl.envs.transforms.RemoveEmptySpecs`.
+
+            backend (str, optional): the backend. Can be either `"gym"` or `"gymnasium"`
+                or any other backend compatible with :class:`~torchrl.envs.libs.gym.set_gym_backend`.
+            to_numpy (bool, optional): if ``True``, the result of calls to `step` and
+                `reset` will be mapped to numpy arrays. Defaults to ``False``
+                (results are tensors).
+                This arg can be passed during a call to :func:`~gym.make` (see
+                example below).
+            reward_threshold (float, optional): [Gym kwarg] The reward threshold
+                considered to have learnt an environment.
+            nondeterministic (bool, optional): [Gym kwarg If the environment is nondeterministic
+                (even with knowledge of the initial seed and all actions). Defaults to
+                ``False``.
+            max_episode_steps (int, optional): [Gym kwarg] The maximum number
+                of episodes steps before truncation. Used by the Time Limit wrapper.
+            order_enforce (bool, optional): [Gym >= 0.14] Whether the order
+                enforcer wrapper should be applied to ensure users run functions
+                in the correct order.
+                Defaults to ``True``.
+            autoreset (bool, optional): [Gym >= 0.14] Whether the autoreset wrapper
+                should be added such that reset does not need to be called.
+                Defaults to ``False``.
+            disable_env_checker: [Gym >= 0.14] Whether the environment
+                checker should be disabled for the environment. Defaults to ``False``.
+            apply_api_compatibility: [Gym >= 0.26] If to apply the `StepAPICompatibility` wrapper.
+                Defaults to ``False``.
+            **kwargs: arbitrary keyword arguments which are passed to the environment constructor.
+
+        .. note::
+            TorchRL's environment do not have the concept of an ``"info"`` dictionary,
+            as ``TensorDict`` offers all the storage requirements deemed necessary
+            in most training settings. Still, you can use the ``info_keys`` argument to
+            have a fine grained control over what is deemed to be considered
+            as an observation and what should be seen as info.
+
+        Examples:
+            >>> # Register the "cheetah" env from DMControl with the "run" task
+            >>> from torchrl.envs import DMControlEnv
+            >>> import torch
+            >>> DMControlEnv.register_gym("DMC-cheetah-v0", to_numpy=False, backend="gym", env_name="cheetah", task_name="run")
+            >>> import gym
+            >>> envgym = gym.make("DMC-cheetah-v0")
+            >>> envgym.seed(0)
+            >>> torch.manual_seed(0)
+            >>> envgym.reset()
+            ({'position': tensor([-0.0855,  0.0215, -0.0881, -0.0412, -0.1101,  0.0080,  0.0254,  0.0424],
+                   dtype=torch.float64), 'velocity': tensor([ 1.9609e-02, -1.9776e-04, -1.6347e-03,  3.3842e-02,  2.5338e-02,
+                     3.3064e-02,  1.0381e-04,  7.6656e-05,  1.0204e-02],
+                   dtype=torch.float64)}, {})
+            >>> envgym.step(envgym.action_space.sample())
+            ({'position': tensor([-0.0833,  0.0275, -0.0612, -0.0770, -0.1256,  0.0082,  0.0186,  0.0476],
+                   dtype=torch.float64), 'velocity': tensor([ 0.2221,  0.2256,  0.5930,  2.6937, -3.5865, -1.5479,  0.0187, -0.6825,
+                     0.5224], dtype=torch.float64)}, tensor([0.0018], dtype=torch.float64), tensor([False]), tensor([False]), {})
+            >>> # same environment with observation stacked
+            >>> from torchrl.envs import CatTensors
+            >>> envgym = gym.make("DMC-cheetah-v0", transform=CatTensors(in_keys=["position", "velocity"], out_key="observation"))
+            >>> envgym.reset()
+            ({'observation': tensor([-0.1005,  0.0335, -0.0268,  0.0133, -0.0627,  0.0074, -0.0488, -0.0353,
+                    -0.0075, -0.0069,  0.0098, -0.0058,  0.0033, -0.0157, -0.0004, -0.0381,
+                    -0.0452], dtype=torch.float64)}, {})
+            >>> # same environment with numpy observations
+            >>> envgym = gym.make("DMC-cheetah-v0", transform=CatTensors(in_keys=["position", "velocity"], out_key="observation"), to_numpy=True)
+            >>> envgym.reset()
+            ({'observation': array([-0.11355747,  0.04257728,  0.00408397,  0.04155852, -0.0389733 ,
+                   -0.01409826, -0.0978704 , -0.08808327,  0.03970837,  0.00535434,
+                   -0.02353762,  0.05116226,  0.02788907,  0.06848346,  0.05154399,
+                    0.0371798 ,  0.05128025])}, {})
+            >>> # If gymnasium is installed, we can register the environment there too.
+            >>> DMControlEnv.register_gym("DMC-cheetah-v0", to_numpy=False, backend="gymnasium", env_name="cheetah", task_name="run")
+            >>> import gymnasium
+            >>> envgym = gymnasium.make("DMC-cheetah-v0")
+            >>> envgym.seed(0)
+            >>> torch.manual_seed(0)
+            >>> envgym.reset()
+            ({'position': tensor([-0.0855,  0.0215, -0.0881, -0.0412, -0.1101,  0.0080,  0.0254,  0.0424],
+                   dtype=torch.float64), 'velocity': tensor([ 1.9609e-02, -1.9776e-04, -1.6347e-03,  3.3842e-02,  2.5338e-02,
+                     3.3064e-02,  1.0381e-04,  7.6656e-05,  1.0204e-02],
+                   dtype=torch.float64)}, {})
+
+        .. note::
+            This feature also works for stateless environments (eg, :class:`~torchrl.envs.BraxEnv`).
+
+                >>> import gymnasium
+                >>> import torch
+                >>> from tensordict import TensorDict
+                >>> from torchrl.envs import BraxEnv, SelectTransform
+                >>>
+                >>> # get action for dydactic purposes
+                >>> env = BraxEnv("ant", batch_size=[2])
+                >>> env.set_seed(0)
+                >>> torch.manual_seed(0)
+                >>> td = env.rollout(10)
+                >>>
+                >>> actions = td.get("action")
+                >>>
+                >>> # register env
+                >>> env.register_gym("Brax-Ant-v0", env_name="ant", batch_size=[2], info_keys=["state"])
+                >>> gym_env = gymnasium.make("Brax-Ant-v0")
+                >>> gym_env.seed(0)
+                >>> torch.manual_seed(0)
+                >>>
+                >>> gym_env.reset()
+                >>> obs = []
+                >>> for i in range(10):
+                ...     obs, reward, terminated, truncated, info = gym_env.step(td[..., i].get("action"))
+
+
+        """
+        from torchrl.envs.libs.gym import gym_backend, set_gym_backend
+
+        if backend is None:
+            backend = gym_backend()
+
+        with set_gym_backend(backend):
+            return cls._register_gym(
+                id=id,
+                entry_point=entry_point,
+                transform=transform,
+                info_keys=info_keys,
+                to_numpy=to_numpy,
+                reward_threshold=reward_threshold,
+                nondeterministic=nondeterministic,
+                max_episode_steps=max_episode_steps,
+                order_enforce=order_enforce,
+                autoreset=autoreset,
+                disable_env_checker=disable_env_checker,
+                apply_api_compatibility=apply_api_compatibility,
+                **kwargs,
+            )
+
+    _GYM_UNRECOGNIZED_KWARG = (
+        "The keyword argument {} is not compatible with gym version {}"
+    )
+
+    @implement_for("gym", "0.26", None, class_method=True)
+    def _register_gym(
+        cls,
+        id,
+        entry_point: Callable | None = None,
+        transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
+        to_numpy: bool = False,
+        reward_threshold: float | None = None,
+        nondeterministic: bool = False,
+        max_episode_steps: int | None = None,
+        order_enforce: bool = True,
+        autoreset: bool = False,
+        disable_env_checker: bool = False,
+        apply_api_compatibility: bool = False,
+        **kwargs,
+    ):
+        import gym
+        from torchrl.envs.libs._gym_utils import _TorchRLGymWrapper
+
+        if entry_point is None:
+            entry_point = cls
+        entry_point = functools.partial(
+            _TorchRLGymWrapper,
+            entry_point=entry_point,
+            info_keys=info_keys,
+            to_numpy=to_numpy,
+            transform=transform,
+            **kwargs,
+        )
+        return gym.register(
+            id=id,
+            entry_point=entry_point,
+            reward_threshold=reward_threshold,
+            nondeterministic=nondeterministic,
+            max_episode_steps=max_episode_steps,
+            order_enforce=order_enforce,
+            autoreset=autoreset,
+            disable_env_checker=disable_env_checker,
+            apply_api_compatibility=apply_api_compatibility,
+        )
+
+    @implement_for("gym", "0.25", "0.26", class_method=True)
+    def _register_gym(  # noqa: F811
+        cls,
+        id,
+        entry_point: Callable | None = None,
+        transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
+        to_numpy: bool = False,
+        reward_threshold: float | None = None,
+        nondeterministic: bool = False,
+        max_episode_steps: int | None = None,
+        order_enforce: bool = True,
+        autoreset: bool = False,
+        disable_env_checker: bool = False,
+        apply_api_compatibility: bool = False,
+        **kwargs,
+    ):
+        import gym
+
+        if apply_api_compatibility is not False:
+            raise TypeError(
+                cls._GYM_UNRECOGNIZED_KWARG.format(
+                    "apply_api_compatibility", gym.__version__
+                )
+            )
+        from torchrl.envs.libs._gym_utils import _TorchRLGymWrapper
+
+        if entry_point is None:
+            entry_point = cls
+        entry_point = functools.partial(
+            _TorchRLGymWrapper,
+            entry_point=entry_point,
+            info_keys=info_keys,
+            to_numpy=to_numpy,
+            transform=transform,
+            **kwargs,
+        )
+        return gym.register(
+            id=id,
+            entry_point=entry_point,
+            reward_threshold=reward_threshold,
+            nondeterministic=nondeterministic,
+            max_episode_steps=max_episode_steps,
+            order_enforce=order_enforce,
+            autoreset=autoreset,
+            disable_env_checker=disable_env_checker,
+        )
+
+    @implement_for("gym", "0.24", "0.25", class_method=True)
+    def _register_gym(  # noqa: F811
+        cls,
+        id,
+        entry_point: Callable | None = None,
+        transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
+        to_numpy: bool = False,
+        reward_threshold: float | None = None,
+        nondeterministic: bool = False,
+        max_episode_steps: int | None = None,
+        order_enforce: bool = True,
+        autoreset: bool = False,
+        disable_env_checker: bool = False,
+        apply_api_compatibility: bool = False,
+        **kwargs,
+    ):
+        import gym
+
+        if apply_api_compatibility is not False:
+            raise TypeError(
+                cls._GYM_UNRECOGNIZED_KWARG.format(
+                    "apply_api_compatibility", gym.__version__
+                )
+            )
+        if disable_env_checker is not False:
+            raise TypeError(
+                cls._GYM_UNRECOGNIZED_KWARG.format(
+                    "disable_env_checker", gym.__version__
+                )
+            )
+        from torchrl.envs.libs._gym_utils import _TorchRLGymWrapper
+
+        if entry_point is None:
+            entry_point = cls
+        entry_point = functools.partial(
+            _TorchRLGymWrapper,
+            entry_point=entry_point,
+            info_keys=info_keys,
+            to_numpy=to_numpy,
+            transform=transform,
+            **kwargs,
+        )
+        return gym.register(
+            id=id,
+            entry_point=entry_point,
+            reward_threshold=reward_threshold,
+            nondeterministic=nondeterministic,
+            max_episode_steps=max_episode_steps,
+            order_enforce=order_enforce,
+            autoreset=autoreset,
+        )
+
+    @implement_for("gym", "0.21", "0.24", class_method=True)
+    def _register_gym(  # noqa: F811
+        cls,
+        id,
+        entry_point: Callable | None = None,
+        transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
+        to_numpy: bool = False,
+        reward_threshold: float | None = None,
+        nondeterministic: bool = False,
+        max_episode_steps: int | None = None,
+        order_enforce: bool = True,
+        autoreset: bool = False,
+        disable_env_checker: bool = False,
+        apply_api_compatibility: bool = False,
+        **kwargs,
+    ):
+        import gym
+
+        if apply_api_compatibility is not False:
+            raise TypeError(
+                cls._GYM_UNRECOGNIZED_KWARG.format(
+                    "apply_api_compatibility", gym.__version__
+                )
+            )
+        if disable_env_checker is not False:
+            raise TypeError(
+                cls._GYM_UNRECOGNIZED_KWARG.format(
+                    "disable_env_checker", gym.__version__
+                )
+            )
+        if autoreset is not False:
+            raise TypeError(
+                cls._GYM_UNRECOGNIZED_KWARG.format("autoreset", gym.__version__)
+            )
+        from torchrl.envs.libs._gym_utils import _TorchRLGymWrapper
+
+        if entry_point is None:
+            entry_point = cls
+        entry_point = functools.partial(
+            _TorchRLGymWrapper,
+            entry_point=entry_point,
+            info_keys=info_keys,
+            to_numpy=to_numpy,
+            transform=transform,
+            **kwargs,
+        )
+        return gym.register(
+            id=id,
+            entry_point=entry_point,
+            reward_threshold=reward_threshold,
+            nondeterministic=nondeterministic,
+            max_episode_steps=max_episode_steps,
+            order_enforce=order_enforce,
+        )
+
+    @implement_for("gym", None, "0.21", class_method=True)
+    def _register_gym(  # noqa: F811
+        cls,
+        id,
+        entry_point: Callable | None = None,
+        transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
+        to_numpy: bool = False,
+        reward_threshold: float | None = None,
+        nondeterministic: bool = False,
+        max_episode_steps: int | None = None,
+        order_enforce: bool = True,
+        autoreset: bool = False,
+        disable_env_checker: bool = False,
+        apply_api_compatibility: bool = False,
+        **kwargs,
+    ):
+        import gym
+        from torchrl.envs.libs._gym_utils import _TorchRLGymWrapper
+
+        if order_enforce is not True:
+            raise TypeError(
+                cls._GYM_UNRECOGNIZED_KWARG.format("order_enforce", gym.__version__)
+            )
+        if disable_env_checker is not False:
+            raise TypeError(
+                cls._GYM_UNRECOGNIZED_KWARG.format(
+                    "disable_env_checker", gym.__version__
+                )
+            )
+        if autoreset is not False:
+            raise TypeError(
+                cls._GYM_UNRECOGNIZED_KWARG.format("autoreset", gym.__version__)
+            )
+        if apply_api_compatibility is not False:
+            raise TypeError(
+                cls._GYM_UNRECOGNIZED_KWARG.format(
+                    "apply_api_compatibility", gym.__version__
+                )
+            )
+        if entry_point is None:
+            entry_point = cls
+        entry_point = functools.partial(
+            _TorchRLGymWrapper,
+            entry_point=entry_point,
+            info_keys=info_keys,
+            to_numpy=to_numpy,
+            transform=transform,
+            **kwargs,
+        )
+        return gym.register(
+            id=id,
+            entry_point=entry_point,
+            reward_threshold=reward_threshold,
+            nondeterministic=nondeterministic,
+            max_episode_steps=max_episode_steps,
+        )
+
+    @implement_for("gymnasium", class_method=True)
+    def _register_gym(  # noqa: F811
+        cls,
+        id,
+        entry_point: Callable | None = None,
+        transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
+        to_numpy: bool = False,
+        reward_threshold: float | None = None,
+        nondeterministic: bool = False,
+        max_episode_steps: int | None = None,
+        order_enforce: bool = True,
+        autoreset: bool = False,
+        disable_env_checker: bool = False,
+        apply_api_compatibility: bool = False,
+        **kwargs,
+    ):
+        import gymnasium
+        from torchrl.envs.libs._gym_utils import _TorchRLGymnasiumWrapper
+
+        if entry_point is None:
+            entry_point = cls
+
+        entry_point = functools.partial(
+            _TorchRLGymnasiumWrapper,
+            entry_point=entry_point,
+            info_keys=info_keys,
+            to_numpy=to_numpy,
+            transform=transform,
+            **kwargs,
+        )
+        return gymnasium.register(
+            id=id,
+            entry_point=entry_point,
+            reward_threshold=reward_threshold,
+            nondeterministic=nondeterministic,
+            max_episode_steps=max_episode_steps,
+            order_enforce=order_enforce,
+            autoreset=autoreset,
+            disable_env_checker=disable_env_checker,
+            apply_api_compatibility=apply_api_compatibility,
+        )
+
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         raise NotImplementedError("EnvBase.forward is not implemented")
 
@@ -1483,8 +1976,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if tensordict_reset is tensordict:
             raise RuntimeError(
                 "EnvBase._reset should return outplace changes to the input "
-                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
-                "tensordict.select()) inside _reset before writing new tensors onto this new instance."
+                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty())"
+                "inside _reset before writing new tensors onto this new instance."
             )
         if not isinstance(tensordict_reset, TensorDictBase):
             raise RuntimeError(

@@ -5,6 +5,7 @@
 
 r"""Generic distributed data-collector using torch.distributed.rpc backend."""
 import collections
+import logging
 import os
 import socket
 import time
@@ -74,7 +75,7 @@ def _rpc_init_collection_node(
         **tensorpipe_options,
     )
     if verbose:
-        print(
+        logging.info(
             f"init rpc with master addr: {os.environ['MASTER_ADDR']}:{os.environ['MASTER_PORT']}"
         )
     rpc.init_rpc(
@@ -344,7 +345,7 @@ class RPCDataCollector(DataCollectorBase):
                         f"COLLECTOR_NODE_{rank}", {0: self.visible_devices[i]}
                     )
         if self._VERBOSE:
-            print("init rpc")
+            logging.info("init rpc")
         rpc.init_rpc(
             "TRAINER_NODE",
             rank=0,
@@ -375,7 +376,7 @@ class RPCDataCollector(DataCollectorBase):
                 time.sleep(time_interval)
                 try:
                     if self._VERBOSE:
-                        print(f"trying to connect to collector node {i + 1}")
+                        logging.info(f"trying to connect to collector node {i + 1}")
                     collector_info = rpc.get_worker_info(f"COLLECTOR_NODE_{i + 1}")
                     break
                 except RuntimeError as err:
@@ -390,7 +391,7 @@ class RPCDataCollector(DataCollectorBase):
             if not isinstance(env_make, (EnvBase, EnvCreator)):
                 env_make = CloudpickleWrapper(env_make)
             if self._VERBOSE:
-                print("Making collector in remote node")
+                logging.info("Making collector in remote node")
             collector_rref = rpc.remote(
                 collector_infos[i],
                 collector_class,
@@ -414,7 +415,7 @@ class RPCDataCollector(DataCollectorBase):
         if not self._sync:
             for i in range(num_workers):
                 if self._VERBOSE:
-                    print("Asking for the first batch")
+                    logging.info("Asking for the first batch")
                 future = rpc.rpc_async(
                     collector_infos[i],
                     collector_class.next,
@@ -444,7 +445,7 @@ class RPCDataCollector(DataCollectorBase):
                 self._VERBOSE,
             )
             if self._VERBOSE:
-                print("job id", job.job_id)  # ID of your job
+                logging.info("job id", job.job_id)  # ID of your job
             return job
         elif self.launcher == "mp":
             job = _ProcessNoWarn(
@@ -488,7 +489,7 @@ class RPCDataCollector(DataCollectorBase):
         self.jobs = []
         for i in range(self.num_workers):
             if self._VERBOSE:
-                print(f"Submitting job {i}")
+                logging.info(f"Submitting job {i}")
             job = self._init_worker_rpc(
                 executor,
                 i,
@@ -545,7 +546,7 @@ class RPCDataCollector(DataCollectorBase):
         futures = []
         for i in workers:
             if self._VERBOSE:
-                print(f"calling update on worker {i}")
+                logging.info(f"calling update on worker {i}")
             futures.append(
                 rpc.rpc_async(
                     self.collector_infos[i],
@@ -556,14 +557,14 @@ class RPCDataCollector(DataCollectorBase):
         if wait:
             for i in workers:
                 if self._VERBOSE:
-                    print(f"waiting for worker {i}")
+                    logging.info(f"waiting for worker {i}")
                 futures[i].wait()
                 if self._VERBOSE:
-                    print("got it!")
+                    logging.info("got it!")
 
     def _next_async_rpc(self):
         if self._VERBOSE:
-            print("next async")
+            logging.info("next async")
         if not len(self.futures):
             raise StopIteration(
                 f"The queue is empty, the collector has ran out of data after {self._collected_frames} collected frames."
@@ -574,7 +575,7 @@ class RPCDataCollector(DataCollectorBase):
                 if self.update_after_each_batch:
                     self.update_policy_weights_(workers=(i,), wait=False)
                 if self._VERBOSE:
-                    print(f"future {i} is done")
+                    logging.info(f"future {i} is done")
                 data = future.value()
                 self._collected_frames += data.numel()
                 if self._collected_frames < self.total_frames:
@@ -589,7 +590,7 @@ class RPCDataCollector(DataCollectorBase):
 
     def _next_sync_rpc(self):
         if self._VERBOSE:
-            print("next sync: futures")
+            logging.info("next sync: futures")
         if self.update_after_each_batch:
             self.update_policy_weights_()
         for i in range(self.num_workers):
@@ -606,7 +607,7 @@ class RPCDataCollector(DataCollectorBase):
             if future.done():
                 data += [future.value()]
                 if self._VERBOSE:
-                    print(
+                    logging.info(
                         f"got data from {i} // data has len {len(data)} / {self.num_workers}"
                     )
             else:
@@ -637,15 +638,15 @@ class RPCDataCollector(DataCollectorBase):
         if self._shutdown:
             return
         if self._VERBOSE:
-            print("shutting down")
+            logging.info("shutting down")
         for future, i in self.futures:
             # clear the futures
             while future is not None and not future.done():
-                print(f"waiting for proc {i} to clear")
+                logging.info(f"waiting for proc {i} to clear")
                 future.wait()
         for i in range(self.num_workers):
             if self._VERBOSE:
-                print(f"shutting down {i}")
+                logging.info(f"shutting down {i}")
             rpc.rpc_sync(
                 self.collector_infos[i],
                 self.collector_class.shutdown,
@@ -653,7 +654,7 @@ class RPCDataCollector(DataCollectorBase):
                 timeout=int(IDLE_TIMEOUT),
             )
         if self._VERBOSE:
-            print("rpc shutdown")
+            logging.info("rpc shutdown")
         rpc.shutdown(timeout=int(IDLE_TIMEOUT))
         if self.launcher == "mp":
             for job in self.jobs:
