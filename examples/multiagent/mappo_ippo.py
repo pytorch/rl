@@ -137,8 +137,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
 
     # Loss
     loss_module = ClipPPOLoss(
-        actor=policy,
-        critic=value_module,
+        actor_network=policy,
+        critic_network=value_module,
         clip_epsilon=cfg.loss.clip_epsilon,
         entropy_coef=cfg.loss.entropy_eps,
         normalize_advantage=False,

@@ -70,8 +70,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     loss_module = ClipPPOLoss(
-        actor=actor,
-        critic=critic,
+        actor_network=actor,
+        critic_network=critic,
         clip_epsilon=cfg.loss.clip_epsilon,
         loss_critic_type=cfg.loss.loss_critic_type,
         entropy_coef=cfg.loss.entropy_coef,

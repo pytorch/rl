@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import contextlib
 
 import math
@@ -260,8 +262,8 @@ class PPOLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticTensorDictSequential = None,
-        critic_network: TensorDictModule = None,
+        actor_network: ProbabilisticTensorDictSequential | None = None,
+        critic_network: TensorDictModule | None = None,
         *,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
@@ -643,8 +645,8 @@ class ClipPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor_network: ProbabilisticTensorDictSequential,
-        critic_network: TensorDictModule,
+        actor_network: ProbabilisticTensorDictSequential | None = None,
+        critic_network: TensorDictModule | None = None,
         *,
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
@@ -842,8 +844,8 @@ class KLPENPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor_network: ProbabilisticTensorDictSequential,
-        critic_network: TensorDictModule,
+        actor_network: ProbabilisticTensorDictSequential | None = None,
+        critic_network: TensorDictModule | None = None,
         *,
         dtarg: float = 0.01,
         beta: float = 1.0,
