@@ -10,7 +10,7 @@
 current_commit=$(git rev-parse HEAD)
 project_name="torchrl-example-check-$current_commit"
 python ../../examples/impala/impala_single_node.py \
-  collector.total_frames=1000 \
+  collector.total_frames=10000 \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="impala_1node"

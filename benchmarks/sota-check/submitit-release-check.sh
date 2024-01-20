@@ -55,6 +55,7 @@ scripts=(
     run_impala_single_node.sh
     run_iql_offline.sh
     run_iql_online.sh
+    run_iql_discrete.sh
     run_multiagent_iddpg.sh
     run_multiagent_ippo.sh
     run_multiagent_iql.sh
@@ -64,7 +65,7 @@ scripts=(
     run_ppo_mujoco.sh
     run_sac.sh
     run_td3.sh
-    run_redq.sh
+#    run_redq.sh # no logging?
 #    run_dt.sh # seems broken
 #    run_dt_online.sh # seems broken
 #    run_rlhf.sh # can not run
