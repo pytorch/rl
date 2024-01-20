@@ -35,7 +35,7 @@ from utils import (
 @hydra.main(config_path=".", config_name="discrete_iql")
 def main(cfg: "DictConfig"):  # noqa: F821
     # Create logger
-    exp_name = generate_exp_name("Discrete-IQL-online", cfg.env.exp_name)
+    exp_name = generate_exp_name("Discrete-IQL-online", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:
         logger = get_logger(

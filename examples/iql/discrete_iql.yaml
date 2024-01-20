@@ -2,7 +2,6 @@
 env:
   name: CartPole-v1
   task: ""
-  exp_name: iql_${env.name}
   n_samples_stats: 1000
   seed: 0
   train_num_envs: 1
@@ -22,6 +21,9 @@ collector:
 # logger
 logger:
   backend: wandb
+  project_name: torchrl_example_discrete_iql
+  exp_name: iql_${replay_buffer.dataset}
+  group_name: null
   log_interval: 5000 # record interval in frames
   eval_steps: 200
   mode: online
