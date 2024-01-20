@@ -9,7 +9,7 @@
 
 current_commit=$(git rev-parse HEAD)
 project_name="torchrl-example-check-$current_commit"
-python ../../examples/multiagent/maddpg_ippo.py \
+python ../../examples/multiagent/mappo_ippo.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \
   train.num_epochs=3 \

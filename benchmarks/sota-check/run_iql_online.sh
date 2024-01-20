@@ -16,7 +16,6 @@ python ../../examples/iql/iql_online.py \
   env.train_num_envs=1 \
   optim.device=cuda:0 \
   collector.device=cuda:0 \
-  logger.mode=offline \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="iql_online"

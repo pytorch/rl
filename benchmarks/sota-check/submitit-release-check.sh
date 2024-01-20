@@ -64,13 +64,12 @@ scripts=(
     run_ppo_mujoco.sh
     run_sac.sh
     run_td3.sh
-
-    # run_redq.sh # only logs video
-    # run_bandits.sh # no logging
-    # run_dreamer.sh # needs update
-    # run_rlhf.sh # can not run
-    # run_dt.sh # error to be fixed
-    # run_dt_online.sh # error to be fixed
+    run_redq.sh
+#    run_dt.sh # seems broken
+#    run_dt_online.sh # seems broken
+#    run_rlhf.sh # can not run
+#    run_bandits.sh # no logging
+#    run_dreamer.sh # needs update
 )
 
 # Submit jobs with the specified partition the specified number of times
