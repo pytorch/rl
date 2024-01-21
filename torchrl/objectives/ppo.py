@@ -440,8 +440,8 @@ class PPOLoss(LossModule):
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean().item()
-            scale = advantage.std().clamp_min(1e-6).item()
+            loc = advantage.mean()
+            scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
         log_weight, dist = self._log_weight(tensordict)
@@ -647,8 +647,8 @@ class ClipPPOLoss(PPOLoss):
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean().item()
-            scale = advantage.std().clamp_min(1e-6).item()
+            loc = advantage.mean()
+            scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
         log_weight, dist = self._log_weight(tensordict)
@@ -853,8 +853,8 @@ class KLPENPPOLoss(PPOLoss):
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean().item()
-            scale = advantage.std().clamp_min(1e-6).item()
+            loc = advantage.mean()
+            scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
         log_weight, dist = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage

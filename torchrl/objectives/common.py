@@ -16,10 +16,10 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
 from torch import nn
 from torch.nn import Parameter
-
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.objectives.utils import ValueEstimators
+
+from torchrl.objectives.utils import RANDOM_MODULE_LIST, ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
 
@@ -81,6 +81,7 @@ class LossModule(TensorDictModuleBase):
 
         pass
 
+    _vmap_randomness = None
     default_value_estimator: ValueEstimators = None
     SEP = "."
     TARGET_NET_WARNING = (
@@ -428,6 +429,28 @@ class LossModule(TensorDictModuleBase):
             raise NotImplementedError(f"Unknown value type {value_type}")
 
         return self
+
+    @property
+    def vmap_randomness(self):
+        if self._vmap_randomness is None:
+            do_break = False
+            for val in self.__dict__.values():
+                if isinstance(val, torch.nn.Module):
+                    for module in val.modules():
+                        if isinstance(module, RANDOM_MODULE_LIST):
+                            self._vmap_randomness = "different"
+                            do_break = True
+                            break
+                if do_break:
+                    # double break
+                    break
+            else:
+                self._vmap_randomness = "error"
+
+        return self._vmap_randomness
+
+    def set_vmap_randomness(self, value):
+        self._vmap_randomness = value
 
     @staticmethod
     def _make_meta_params(param):

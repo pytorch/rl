@@ -8,6 +8,7 @@ import contextlib
 import functools
 import itertools
 import operator
+import re
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass
@@ -100,6 +101,7 @@ from torchrl.objectives import (
     CQLLoss,
     DDPGLoss,
     DiscreteCQLLoss,
+    DiscreteIQLLoss,
     DiscreteSACLoss,
     DistributionalDQNLoss,
     DQNLoss,
@@ -120,6 +122,7 @@ from torchrl.objectives.deprecated import DoubleREDQLoss_deprecated, REDQLoss_de
 from torchrl.objectives.redq import REDQLoss
 from torchrl.objectives.reinforce import ReinforceLoss
 from torchrl.objectives.utils import (
+    _vmap_func,
     HardUpdate,
     hold_out_net,
     SoftUpdate,
@@ -231,6 +234,52 @@ class LossModuleTestBase:
             assert (
                 getattr(test_fn.value_estimator.tensor_keys, advantage_key) == new_key
             )
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("vmap_randomness", (None, "different", "same", "error"))
+@pytest.mark.parametrize("dropout", (0.0, 0.1))
+def test_loss_vmap_random(device, vmap_randomness, dropout):
+    class VmapTestLoss(LossModule):
+        def __init__(self):
+            super().__init__()
+            layers = [nn.Linear(4, 4), nn.ReLU()]
+            if dropout > 0.0:
+                layers.append(nn.Dropout(dropout))
+            layers.append(nn.Linear(4, 4))
+            net = nn.Sequential(*layers).to(device)
+            model = TensorDictModule(net, in_keys=["obs"], out_keys=["action"])
+            self.convert_to_functional(model, "model", expand_dim=4)
+            self.vmap_model = _vmap_func(
+                self.model,
+                (None, 0),
+                randomness="error"
+                if vmap_randomness == "error"
+                else self.vmap_randomness,
+            )
+
+        def forward(self, td):
+            out = self.vmap_model(td, self.model_params)
+            return {"loss": out["action"].mean()}
+
+    loss_module = VmapTestLoss()
+    td = TensorDict({"obs": torch.randn(3, 4).to(device)}, [3])
+
+    # If user sets vmap randomness to a specific value
+    if vmap_randomness in ("different", "same") and dropout > 0.0:
+        loss_module.set_vmap_randomness(vmap_randomness)
+    # Fail case
+    elif vmap_randomness == "error" and dropout > 0.0:
+        with pytest.raises(RuntimeError) as exc_info:
+            loss_module(td)["loss"]
+
+        # Accessing cause of the caught exception
+        cause = exc_info.value.__cause__
+        assert re.match(
+            r"vmap: called random operation while in randomness error mode", str(cause)
+        )
+        return
+    loss_module(td)["loss"]
 
 
 class TestDQN(LossModuleTestBase):
@@ -1803,12 +1852,17 @@ class TestTD3(LossModuleTestBase):
         device="cpu",
         in_keys=None,
         out_keys=None,
+        dropout=0.0,
     ):
         # Actor
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        module = nn.Linear(obs_dim, action_dim)
+        module = nn.Sequential(
+            nn.Linear(obs_dim, obs_dim),
+            nn.Dropout(dropout),
+            nn.Linear(obs_dim, action_dim),
+        )
         actor = Actor(
             spec=action_spec, module=module, in_keys=in_keys, out_keys=out_keys
         )
@@ -1984,6 +2038,7 @@ class TestTD3(LossModuleTestBase):
     @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("use_action_spec", [True, False])
+    @pytest.mark.parametrize("dropout", [0.0, 0.1])
     def test_td3(
         self,
         delay_actor,
@@ -1993,9 +2048,10 @@ class TestTD3(LossModuleTestBase):
         noise_clip,
         td_est,
         use_action_spec,
+        dropout,
     ):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(device=device, dropout=dropout)
         value = self._create_mock_value(device=device)
         td = self._create_mock_data_td3(device=device)
         if use_action_spec:
@@ -4876,7 +4932,6 @@ class TestCQL(LossModuleTestBase):
         device,
         td_est,
     ):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_cql(device=device)
 
@@ -6075,7 +6130,7 @@ class TestPPO(LossModuleTestBase):
             p.grad = None
         loss_objective.backward()
         named_parameters = loss_fn.named_parameters()
-        for (name, other_p) in named_parameters:
+        for name, other_p in named_parameters:
             p = params.get(tuple(name.split(".")))
             assert other_p.shape == p.shape
             assert other_p.dtype == p.dtype
@@ -8896,6 +8951,768 @@ class TestIQL(LossModuleTestBase):
             assert loss_value == loss_val_td["loss_value"]
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
+class TestDiscreteIQL(LossModuleTestBase):
+    seed = 0
+
+    def _create_mock_actor(
+        self,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        observation_key="observation",
+        action_key="action",
+    ):
+        # Actor
+        action_spec = OneHotDiscreteTensorSpec(action_dim)
+        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
+        actor = ProbabilisticActor(
+            spec=action_spec,
+            module=module,
+            in_keys=["logits"],
+            out_keys=[action_key],
+            distribution_class=OneHotCategorical,
+            return_log_prob=False,
+        )
+        return actor.to(device)
+
+    def _create_mock_qvalue(
+        self,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        out_keys=None,
+        observation_key="observation",
+    ):
+        class ValueClass(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(obs_dim, action_dim)
+
+            def forward(self, obs):
+                return self.linear(obs)
+
+        module = ValueClass()
+        qvalue = ValueOperator(
+            module=module, in_keys=[observation_key], out_keys=["state_action_value"]
+        )
+        return qvalue.to(device)
+
+    def _create_mock_value(
+        self,
+        batch=2,
+        obs_dim=3,
+        device="cpu",
+        out_keys=None,
+        observation_key="observation",
+    ):
+        module = nn.Linear(obs_dim, 1)
+        value = ValueOperator(
+            module=module, in_keys=[observation_key], out_keys=out_keys
+        )
+        return value.to(device)
+
+    def _create_mock_common_layer_setup(
+        self, n_obs=3, n_act=4, ncells=4, batch=2, n_hidden=2, T=10
+    ):
+        common_net = MLP(
+            num_cells=ncells,
+            in_features=n_obs,
+            depth=3,
+            out_features=n_hidden,
+        )
+        actor_net = MLP(
+            num_cells=ncells,
+            in_features=n_hidden,
+            depth=1,
+            out_features=2 * n_act,
+        )
+        value_net = MLP(
+            in_features=n_hidden,
+            num_cells=ncells,
+            depth=1,
+            out_features=1,
+        )
+        qvalue_net = MLP(
+            in_features=n_hidden,
+            num_cells=ncells,
+            depth=1,
+            out_features=n_act,
+        )
+        batch = [batch, T]
+        td = TensorDict(
+            {
+                "obs": torch.randn(*batch, n_obs),
+                "action": torch.randn(*batch, n_act),
+                "sample_log_prob": torch.randn(*batch),
+                "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
+                "next": {
+                    "obs": torch.randn(*batch, n_obs),
+                    "reward": torch.randn(*batch, 1),
+                    "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
+                },
+            },
+            batch,
+            names=[None, "time"],
+        )
+        common = Mod(common_net, in_keys=["obs"], out_keys=["hidden"])
+        actor = ProbSeq(
+            common,
+            Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
+            Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["logits"]),
+            ProbMod(
+                in_keys=["logits"],
+                out_keys=["action"],
+                distribution_class=OneHotCategorical,
+            ),
+        )
+        value = Seq(
+            common, Mod(value_net, in_keys=["hidden"], out_keys=["state_value"])
+        )
+        qvalue = Seq(
+            common,
+            Mod(
+                qvalue_net,
+                in_keys=["hidden"],
+                out_keys=["state_action_value"],
+            ),
+        )
+        qvalue(actor(td.clone()))
+        value(td.clone())
+        return actor, value, qvalue, common, td
+
+    def _create_mock_distributional_actor(
+        self, batch=2, obs_dim=3, action_dim=4, atoms=5, vmin=1, vmax=5
+    ):
+        raise NotImplementedError
+
+    def _create_mock_data_discrete_iql(
+        self,
+        batch=16,
+        obs_dim=3,
+        action_dim=4,
+        atoms=None,
+        device="cpu",
+        observation_key="observation",
+        action_key="action",
+        done_key="done",
+        terminated_key="terminated",
+        reward_key="reward",
+    ):
+        # create a tensordict
+        obs = torch.randn(batch, obs_dim, device=device)
+        next_obs = torch.randn(batch, obs_dim, device=device)
+        if atoms:
+            raise NotImplementedError
+        else:
+            action_value = torch.randn(batch, action_dim, device=device)
+            action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
+        reward = torch.randn(batch, 1, device=device)
+        done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        td = TensorDict(
+            batch_size=(batch,),
+            source={
+                observation_key: obs,
+                "next": {
+                    observation_key: next_obs,
+                    done_key: done,
+                    terminated_key: terminated,
+                    reward_key: reward,
+                },
+                action_key: action,
+            },
+            device=device,
+        )
+        return td
+
+    def _create_seq_mock_data_discrete_iql(
+        self, batch=8, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+    ):
+        # create a tensordict
+        total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
+        obs = total_obs[:, :T]
+        next_obs = total_obs[:, 1:]
+        if atoms:
+            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+                -1, 1
+            )
+        else:
+            action_value = torch.randn(batch, T, action_dim, device=device)
+            action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
+
+        reward = torch.randn(batch, T, 1, device=device)
+        done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = torch.ones(batch, T, dtype=torch.bool, device=device)
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "terminated": terminated,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                },
+                "collector": {"mask": mask},
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+            },
+            names=[None, "time"],
+            device=device,
+        )
+        return td
+
+    @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
+    @pytest.mark.parametrize("expectile", [0.1, 0.5])
+    @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    def test_discrete_iql(
+        self,
+        num_qvalue,
+        device,
+        temperature,
+        expectile,
+        td_est,
+    ):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_discrete_iql(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        value = self._create_mock_value(device=device)
+
+        loss_fn = DiscreteIQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            temperature=temperature,
+            expectile=expectile,
+            loss_function="l2",
+        )
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+            with pytest.raises(NotImplementedError):
+                loss_fn.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn.make_value_estimator(td_est)
+
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            loss = loss_fn(td)
+        assert loss_fn.tensor_keys.priority in td.keys()
+
+        # check that losses are independent
+        for k in loss.keys():
+            if not k.startswith("loss"):
+                continue
+            loss[k].sum().backward(retain_graph=True)
+            if k == "loss_actor":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.value_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+            elif k == "loss_value":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.value_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+            elif k == "loss_qvalue":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.value_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+            else:
+                raise NotImplementedError(k)
+            loss_fn.zero_grad()
+
+        sum([item for _, item in loss.items()]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
+
+    @pytest.mark.parametrize("num_qvalue", [2])
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("temperature", [0.0])
+    @pytest.mark.parametrize("expectile", [0.1])
+    def test_discrete_iql_state_dict(
+        self,
+        num_qvalue,
+        device,
+        temperature,
+        expectile,
+    ):
+        torch.manual_seed(self.seed)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        value = self._create_mock_value(device=device)
+
+        loss_fn = DiscreteIQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            temperature=temperature,
+            expectile=expectile,
+            loss_function="l2",
+        )
+        sd = loss_fn.state_dict()
+        loss_fn2 = DiscreteIQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            temperature=temperature,
+            expectile=expectile,
+            loss_function="l2",
+        )
+        loss_fn2.load_state_dict(sd)
+
+    @pytest.mark.parametrize("separate_losses", [False, True])
+    def test_discrete_iql_separate_losses(self, separate_losses):
+        torch.manual_seed(self.seed)
+        actor, value, qvalue, common, td = self._create_mock_common_layer_setup()
+        loss_fn = DiscreteIQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            loss_function="l2",
+            separate_losses=separate_losses,
+        )
+        with pytest.warns(UserWarning, match="No target network updater has been"):
+            loss = loss_fn(td)
+
+            assert loss_fn.tensor_keys.priority in td.keys()
+
+            # check that losses are independent
+            for k in loss.keys():
+                if not k.startswith("loss"):
+                    continue
+                loss[k].sum().backward(retain_graph=True)
+                common_layers_no = len(list(common.parameters()))
+                if k == "loss_actor":
+                    if separate_losses:
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in loss_fn.value_network_params.values(
+                                include_nested=True, leaves_only=True
+                            )
+                        )
+                    else:
+                        common_layers = itertools.islice(
+                            loss_fn.value_network_params.values(True, True),
+                            common_layers_no,
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in common_layers
+                        )
+                        value_layers = itertools.islice(
+                            loss_fn.value_network_params.values(True, True),
+                            common_layers_no,
+                            None,
+                        )
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in value_layers
+                        )
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+                elif k == "loss_value":
+                    if separate_losses:
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in loss_fn.actor_network_params.values(
+                                include_nested=True, leaves_only=True
+                            )
+                        )
+                    else:
+                        common_layers = itertools.islice(
+                            loss_fn.actor_network_params.values(True, True),
+                            common_layers_no,
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in common_layers
+                        )
+                        actor_layers = itertools.islice(
+                            loss_fn.actor_network_params.values(True, True),
+                            common_layers_no,
+                            None,
+                        )
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in actor_layers
+                        )
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+                    if separate_losses:
+                        common_layers = itertools.islice(
+                            loss_fn.value_network_params.values(True, True),
+                            common_layers_no,
+                        )
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in common_layers
+                        )
+                        value_layers = itertools.islice(
+                            loss_fn.value_network_params.values(True, True),
+                            common_layers_no,
+                            None,
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in value_layers
+                        )
+                    else:
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in loss_fn.value_network_params.values(
+                                include_nested=True, leaves_only=True
+                            )
+                        )
+                elif k == "loss_qvalue":
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.value_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+                    if separate_losses:
+                        common_layers = itertools.islice(
+                            loss_fn.qvalue_network_params.values(True, True),
+                            common_layers_no,
+                        )
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in common_layers
+                        )
+                        qvalue_layers = itertools.islice(
+                            loss_fn.qvalue_network_params.values(True, True),
+                            common_layers_no,
+                            None,
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in qvalue_layers
+                        )
+                    else:
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in loss_fn.qvalue_network_params.values(
+                                include_nested=True, leaves_only=True
+                            )
+                        )
+                else:
+                    raise NotImplementedError(k)
+                loss_fn.zero_grad()
+
+    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
+    @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
+    @pytest.mark.parametrize("expectile", [0.1, 0.5])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_discrete_iql_batcher(
+        self,
+        n,
+        num_qvalue,
+        temperature,
+        expectile,
+        device,
+        gamma=0.9,
+    ):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_discrete_iql(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        value = self._create_mock_value(device=device)
+
+        loss_fn = DiscreteIQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            temperature=temperature,
+            expectile=expectile,
+            loss_function="l2",
+        )
+
+        ms = MultiStep(gamma=gamma, n_steps=n).to(device)
+
+        td_clone = td.clone()
+        ms_td = ms(td_clone)
+
+        torch.manual_seed(0)
+        np.random.seed(0)
+        with _check_td_steady(ms_td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            loss_ms = loss_fn(ms_td)
+        assert loss_fn.tensor_keys.priority in ms_td.keys()
+
+        with torch.no_grad():
+            torch.manual_seed(0)  # log-prob is computed with a random action
+            np.random.seed(0)
+            loss = loss_fn(td)
+        if n == 0:
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
+            _loss = sum([item for _, item in loss.items()])
+            _loss_ms = sum([item for _, item in loss_ms.items()])
+            assert (
+                abs(_loss - _loss_ms) < 1e-3
+            ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
+        else:
+            with pytest.raises(AssertionError):
+                assert_allclose_td(loss, loss_ms)
+        sum([item for _, item in loss_ms.items()]).backward()
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
+
+        # Check param update effect on targets
+        target_qvalue = [
+            p.clone()
+            for p in loss_fn.target_qvalue_network_params.values(
+                include_nested=True, leaves_only=True
+            )
+        ]
+        for p in loss_fn.parameters():
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
+        target_qvalue2 = [
+            p.clone()
+            for p in loss_fn.target_qvalue_network_params.values(
+                include_nested=True, leaves_only=True
+            )
+        ]
+        if loss_fn.delay_qvalue:
+            assert all(
+                (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
+            )
+        else:
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
+            )
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_discrete_iql_tensordict_keys(self, td_est):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        value = self._create_mock_value()
+
+        loss_fn = DiscreteIQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            loss_function="l2",
+        )
+
+        default_keys = {
+            "priority": "td_error",
+            "log_prob": "_log_prob",
+            "action": "action",
+            "state_action_value": "state_action_value",
+            "value": "state_value",
+            "reward": "reward",
+            "done": "done",
+            "terminated": "terminated",
+        }
+
+        self.tensordict_keys_test(
+            loss_fn,
+            default_keys=default_keys,
+            td_est=td_est,
+        )
+
+        value = self._create_mock_value(out_keys=["value_test"])
+        loss_fn = DiscreteIQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            loss_function="l2",
+        )
+
+        key_mapping = {
+            "value": ("value", "value_test"),
+            "done": ("done", "done_test"),
+            "terminated": ("terminated", "terminated_test"),
+            "reward": ("reward", ("reward", "test")),
+        }
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
+
+    @pytest.mark.parametrize("action_key", ["action", "action2"])
+    @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
+    @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
+    @pytest.mark.parametrize("done_key", ["done", "done2"])
+    @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
+    def test_discrete_iql_notensordict(
+        self, action_key, observation_key, reward_key, done_key, terminated_key
+    ):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_discrete_iql(
+            action_key=action_key,
+            observation_key=observation_key,
+            reward_key=reward_key,
+            done_key=done_key,
+            terminated_key=terminated_key,
+        )
+
+        actor = self._create_mock_actor(observation_key=observation_key)
+        qvalue = self._create_mock_qvalue(
+            observation_key=observation_key,
+            out_keys=["state_action_value"],
+        )
+        value = self._create_mock_value(observation_key=observation_key)
+
+        loss = DiscreteIQLLoss(
+            actor_network=actor, qvalue_network=qvalue, value_network=value
+        )
+        loss.set_keys(
+            action=action_key,
+            reward=reward_key,
+            done=done_key,
+            terminated=terminated_key,
+        )
+
+        kwargs = {
+            action_key: td.get(action_key),
+            observation_key: td.get(observation_key),
+            f"next_{reward_key}": td.get(("next", reward_key)),
+            f"next_{done_key}": td.get(("next", done_key)),
+            f"next_{terminated_key}": td.get(("next", terminated_key)),
+            f"next_{observation_key}": td.get(("next", observation_key)),
+        }
+        td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
+
+        with pytest.warns(
+            UserWarning,
+            match="No target network updater has been associated with this loss module",
+        ):
+            loss_val = loss(**kwargs)
+            loss_val_td = loss(td)
+            assert len(loss_val) == 4
+            torch.testing.assert_close(loss_val_td.get("loss_actor"), loss_val[0])
+            torch.testing.assert_close(loss_val_td.get("loss_qvalue"), loss_val[1])
+            torch.testing.assert_close(loss_val_td.get("loss_value"), loss_val[2])
+            torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[3])
+            # test select
+            torch.manual_seed(self.seed)
+            loss.select_out_keys("loss_actor", "loss_value")
+            if torch.__version__ >= "2.0.0":
+                loss_actor, loss_value = loss(**kwargs)
+            else:
+                with pytest.raises(
+                    RuntimeError,
+                    match="You are likely using tensordict.nn.dispatch with keyword arguments",
+                ):
+                    loss_actor, loss_value = loss(**kwargs)
+                return
+            assert loss_actor == loss_val_td["loss_actor"]
+            assert loss_value == loss_val_td["loss_value"]
+
+
 @pytest.mark.parametrize("create_target_params", [True, False])
 @pytest.mark.parametrize(
     "cast", [None, torch.float, torch.double, *get_default_devices()]
@@ -11137,7 +11954,6 @@ class TestAdv:
         )
 
         with pytest.warns(DeprecationWarning):
-
             if adv is VTrace:
                 actor_net = TensorDictModule(
                     nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]

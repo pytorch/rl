@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import logging
 import time
 from argparse import ArgumentParser
 
@@ -121,5 +122,5 @@ if __name__ == "__main__":
             t0 = time.time()
     collector.shutdown()
     t1 = time.time()
-    print(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    logging.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
     exit()

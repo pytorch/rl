@@ -38,6 +38,7 @@ from .model_based import ModelBasedEnvBase
 from .transforms import (
     ActionMask,
     BinarizeReward,
+    BurnInTransform,
     CatFrames,
     CatTensors,
     CenterCrop,
@@ -63,6 +64,7 @@ from .transforms import (
     PinMemoryTransform,
     R3MTransform,
     RandomCropTensorDict,
+    RemoveEmptySpecs,
     RenameTransform,
     Resize,
     Reward2GoTransform,
@@ -70,6 +72,7 @@ from .transforms import (
     RewardScaling,
     RewardSum,
     SelectTransform,
+    SignTransform,
     SqueezeTransform,
     StepCounter,
     TargetReturn,

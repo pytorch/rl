@@ -4,11 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 import torch.nn
 import torch.optim
-from tensordict.nn import TensorDictModule
+from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
+    CompositeSpec,
     LazyMemmapStorage,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
@@ -16,7 +17,9 @@ from torchrl.data import (
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
+    CatTensors,
     Compose,
+    DMControlEnv,
     DoubleToFloat,
     EnvCreator,
     InitTracker,
@@ -24,10 +27,18 @@ from torchrl.envs import (
     RewardSum,
     TransformedEnv,
 )
+
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
-from torchrl.objectives import IQLLoss, SoftUpdate
+from torchrl.modules import (
+    MLP,
+    OneHotCategorical,
+    ProbabilisticActor,
+    SafeModule,
+    TanhNormal,
+    ValueOperator,
+)
+from torchrl.objectives import DiscreteIQLLoss, HardUpdate, IQLLoss, SoftUpdate
 
 from torchrl.trainers.helpers.models import ACTIVATIONS
 
@@ -37,9 +48,21 @@ from torchrl.trainers.helpers.models import ACTIVATIONS
 # -----------------
 
 
-def env_maker(task, device="cpu", from_pixels=False):
-    with set_gym_backend("gym"):
-        return GymEnv(task, device=device, from_pixels=from_pixels)
+def env_maker(cfg, device="cpu"):
+    lib = cfg.env.backend
+    if lib in ("gym", "gymnasium"):
+        with set_gym_backend(lib):
+            return GymEnv(
+                cfg.env.name,
+                device=device,
+            )
+    elif lib == "dm_control":
+        env = DMControlEnv(cfg.env.name, cfg.env.task)
+        return TransformedEnv(
+            env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
+        )
+    else:
+        raise NotImplementedError(f"Unknown lib {lib}.")
 
 
 def apply_env_transforms(
@@ -60,7 +83,7 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         train_num_envs,
-        EnvCreator(lambda: env_maker(task=cfg.env.name)),
+        EnvCreator(lambda: env_maker(cfg)),
     )
     parallel_env.set_seed(cfg.env.seed)
 
@@ -69,7 +92,7 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1):
     eval_env = TransformedEnv(
         ParallelEnv(
             eval_num_envs,
-            EnvCreator(lambda: env_maker(task=cfg.env.name)),
+            EnvCreator(lambda: env_maker(cfg)),
         ),
         train_env.transform.clone(),
     )
@@ -133,7 +156,7 @@ def make_replay_buffer(
 
 def make_offline_replay_buffer(rb_cfg):
     data = D4RLExperienceReplay(
-        name=rb_cfg.dataset,
+        dataset_id=rb_cfg.dataset,
         split_trajs=False,
         batch_size=rb_cfg.batch_size,
         sampler=SamplerWithoutReplacement(drop_last=False),
@@ -247,6 +270,82 @@ def make_iql_modules_state(model_cfg, proof_environment):
     return actor_net, q_net, value_net
 
 
+def make_discrete_iql_model(cfg, train_env, eval_env, device):
+    """Make discrete IQL agent."""
+    # Define Actor Network
+    in_keys = ["observation"]
+    action_spec = train_env.action_spec
+    if train_env.batch_size:
+        action_spec = action_spec[(0,) * len(train_env.batch_size)]
+    # Define Actor Network
+    in_keys = ["observation"]
+
+    actor_net_kwargs = {
+        "num_cells": cfg.model.hidden_sizes,
+        "out_features": action_spec.shape[-1],
+        "activation_class": ACTIVATIONS[cfg.model.activation],
+    }
+
+    actor_net = MLP(**actor_net_kwargs)
+
+    actor_module = SafeModule(
+        module=actor_net,
+        in_keys=in_keys,
+        out_keys=["logits"],
+    )
+    actor = ProbabilisticActor(
+        spec=CompositeSpec(action=eval_env.action_spec),
+        module=actor_module,
+        in_keys=["logits"],
+        out_keys=["action"],
+        distribution_class=OneHotCategorical,
+        distribution_kwargs={},
+        default_interaction_type=InteractionType.RANDOM,
+        return_log_prob=False,
+    )
+
+    # Define Critic Network
+    qvalue_net_kwargs = {
+        "num_cells": cfg.model.hidden_sizes,
+        "out_features": action_spec.shape[-1],
+        "activation_class": ACTIVATIONS[cfg.model.activation],
+    }
+    qvalue_net = MLP(
+        **qvalue_net_kwargs,
+    )
+
+    qvalue = TensorDictModule(
+        in_keys=["observation"],
+        out_keys=["state_action_value"],
+        module=qvalue_net,
+    )
+
+    # Define Value Network
+    value_net_kwargs = {
+        "num_cells": cfg.model.hidden_sizes,
+        "out_features": 1,
+        "activation_class": ACTIVATIONS[cfg.model.activation],
+    }
+    value_net = MLP(**value_net_kwargs)
+    value_net = TensorDictModule(
+        in_keys=["observation"],
+        out_keys=["state_value"],
+        module=value_net,
+    )
+
+    model = torch.nn.ModuleList([actor, qvalue, value_net]).to(device)
+    # init nets
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
+        td = eval_env.reset()
+        td = td.to(device)
+        for net in model:
+            net(td)
+    del td
+    eval_env.close()
+
+    return model
+
+
 # ====================================================================
 # IQL Loss
 # ---------
@@ -267,13 +366,44 @@ def make_loss(loss_cfg, model):
     return loss_module, target_net_updater
 
 
+def make_discrete_loss(loss_cfg, model):
+    loss_module = DiscreteIQLLoss(
+        model[0],
+        model[1],
+        value_network=model[2],
+        loss_function=loss_cfg.loss_function,
+        temperature=loss_cfg.temperature,
+        expectile=loss_cfg.expectile,
+    )
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
+    target_net_updater = HardUpdate(
+        loss_module, value_network_update_interval=loss_cfg.hard_update_interval
+    )
+
+    return loss_module, target_net_updater
+
+
 def make_iql_optimizer(optim_cfg, loss_module):
-    optim = torch.optim.Adam(
-        loss_module.parameters(),
+    critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
+    actor_params = list(loss_module.actor_network_params.flatten_keys().values())
+    value_params = list(loss_module.value_network_params.flatten_keys().values())
+
+    optimizer_actor = torch.optim.Adam(
+        actor_params,
         lr=optim_cfg.lr,
         weight_decay=optim_cfg.weight_decay,
     )
-    return optim
+    optimizer_critic = torch.optim.Adam(
+        critic_params,
+        lr=optim_cfg.lr,
+        weight_decay=optim_cfg.weight_decay,
+    )
+    optimizer_value = torch.optim.Adam(
+        value_params,
+        lr=optim_cfg.lr,
+        weight_decay=optim_cfg.weight_decay,
+    )
+    return optimizer_actor, optimizer_critic, optimizer_value
 
 
 # ====================================================================

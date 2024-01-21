@@ -219,7 +219,6 @@ class TD3Loss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
     ) -> None:
-
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
@@ -296,8 +295,12 @@ class TD3Loss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
-        self._vmap_qvalue_network00 = _vmap_func(self.qvalue_network)
-        self._vmap_actor_network00 = _vmap_func(self.actor_network)
+        self._vmap_qvalue_network00 = _vmap_func(
+            self.qvalue_network, randomness=self.vmap_randomness
+        )
+        self._vmap_actor_network00 = _vmap_func(
+            self.actor_network, randomness=self.vmap_randomness
+        )
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:

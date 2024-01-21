@@ -63,7 +63,6 @@ if __name__ == "__main__":
                 global_step = 0
                 times = []
                 start = time.time()
-                print("Timer started.")
                 for _ in tqdm.tqdm(range(total_frames // num_workers)):
                     env.step(env.action_space.sample())
                     global_step += num_workers

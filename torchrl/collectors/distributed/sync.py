@@ -5,6 +5,7 @@
 
 r"""Generic distributed data-collector using torch.distributed backend."""
 
+import logging
 import os
 import socket
 from copy import copy, deepcopy
@@ -63,7 +64,9 @@ def _distributed_init_collection_node(
     os.environ["MASTER_PORT"] = str(tcpport)
 
     if verbose:
-        print(f"node with rank {rank} -- creating collector of type {collector_class}")
+        logging.info(
+            f"node with rank {rank} -- creating collector of type {collector_class}"
+        )
     if not issubclass(collector_class, SyncDataCollector):
         env_make = [env_make] * num_workers
     else:
@@ -96,9 +99,9 @@ def _distributed_init_collection_node(
         **collector_kwargs,
     )
 
-    print("IP address:", rank0_ip, "\ttcp port:", tcpport)
+    logging.info("IP address:", rank0_ip, "\ttcp port:", tcpport)
     if verbose:
-        print(f"node with rank {rank} -- launching distributed")
+        logging.info(f"node with rank {rank} -- launching distributed")
     torch.distributed.init_process_group(
         backend,
         rank=rank,
@@ -107,9 +110,9 @@ def _distributed_init_collection_node(
         # init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
     if verbose:
-        print(f"node with rank {rank} -- creating store")
+        logging.info(f"node with rank {rank} -- creating store")
     if verbose:
-        print(f"node with rank {rank} -- loop")
+        logging.info(f"node with rank {rank} -- loop")
     policy_weights.irecv(0)
     frames = 0
     for i, data in enumerate(collector):
@@ -329,7 +332,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
         backend,
     ):
         TCP_PORT = self.tcp_port
-        print("init master...", end="\t")
+        logging.info("init master...", end="\t")
         torch.distributed.init_process_group(
             backend,
             rank=0,
@@ -337,7 +340,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
             timeout=timedelta(MAX_TIME_TO_CONNECT),
             init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
-        print("done")
+        logging.info("done")
 
     def _make_container(self):
         env_constructor = self.env_constructors[0]
@@ -422,7 +425,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
 
         hostname = socket.gethostname()
         IPAddr = socket.gethostbyname(hostname)
-        print("Server IP address:", IPAddr)
+        logging.info("Server IP address:", IPAddr)
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = str(self.tcp_port)
@@ -434,18 +437,18 @@ class DistributedSyncDataCollector(DataCollectorBase):
             executor = submitit.AutoExecutor(folder="log_test")
             executor.update_parameters(**self.slurm_kwargs)
         for i in range(self.num_workers):
-            print("Submitting job")
+            logging.info("Submitting job")
             if self.launcher == "submitit":
                 job = self._init_worker_dist_submitit(
                     executor,
                     i,
                 )
-                print("job id", job.job_id)  # ID of your job
+                logging.info("job id", job.job_id)  # ID of your job
             elif self.launcher == "mp":
                 job = self._init_worker_dist_mp(
                     i,
                 )
-                print("job launched")
+                logging.info("job launched")
             self.jobs.append(job)
         self._init_master_dist(self.num_workers + 1, self.backend)
 

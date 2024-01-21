@@ -7,6 +7,7 @@ from .replay_buffers import (
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
+    ReplayBufferEnsemble,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
@@ -14,6 +15,7 @@ from .samplers import (
     PrioritizedSampler,
     RandomSampler,
     Sampler,
+    SamplerEnsemble,
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
@@ -23,11 +25,14 @@ from .storages import (
     LazyTensorStorage,
     ListStorage,
     Storage,
+    StorageEnsemble,
     TensorStorage,
 )
 from .writers import (
+    ImmutableDatasetWriter,
     RoundRobinWriter,
     TensorDictMaxValueWriter,
     TensorDictRoundRobinWriter,
     Writer,
+    WriterEnsemble,
 )

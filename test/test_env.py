@@ -58,7 +58,6 @@ from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator, ParallelEnv, SerialEnv
@@ -1242,7 +1241,7 @@ class TestStepMdp:
         obs_key = "state"
         if nested_obs:
             obs_key = nested_key + (obs_key,)
-        other_key = "beatles"
+        other_key = "other"
         if nested_other:
             other_key = nested_key + (other_key,)
 
@@ -1310,7 +1309,7 @@ class TestStepMdp:
         else:
             assert done_key not in td_nested_keys
         if keep_other:
-            assert other_key in td_nested_keys
+            assert other_key in td_nested_keys, other_key
             assert (td[other_key] == 0).all()
         else:
             assert other_key not in td_nested_keys
@@ -1608,42 +1607,102 @@ def test_batch_unlocked_with_batch_size(device):
         env.step(td_expanded)
 
 
-@pytest.mark.skipif(not _has_gym, reason="no gym")
-@pytest.mark.skipif(
-    gym_version is None or gym_version < version.parse("0.20.0"),
-    reason="older versions of half-cheetah do not have 'x_position' info key.",
-)
-@pytest.mark.parametrize("device", get_default_devices())
-def test_info_dict_reader(device, seed=0):
-    try:
-        import gymnasium as gym
-    except ModuleNotFoundError:
-        import gym
+class TestInfoDict:
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.skipif(
+        gym_version is None or gym_version < version.parse("0.20.0"),
+        reason="older versions of half-cheetah do not have 'x_position' info key.",
+    )
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_info_dict_reader(self, device, seed=0):
+        try:
+            import gymnasium as gym
+        except ModuleNotFoundError:
+            import gym
 
-    env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED), device=device)
-    env.set_info_dict_reader(default_info_dict_reader(["x_position"]))
+        env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED), device=device)
+        env.set_info_dict_reader(default_info_dict_reader(["x_position"]))
 
-    assert "x_position" in env.observation_spec.keys()
-    assert isinstance(env.observation_spec["x_position"], UnboundedContinuousTensorSpec)
-
-    tensordict = env.reset()
-    tensordict = env.rand_step(tensordict)
-
-    assert env.observation_spec["x_position"].is_in(tensordict[("next", "x_position")])
-
-    env2 = GymWrapper(gym.make("HalfCheetah-v4"))
-    env2.set_info_dict_reader(
-        default_info_dict_reader(
-            ["x_position"], spec={"x_position": OneHotDiscreteTensorSpec(5)}
+        assert "x_position" in env.observation_spec.keys()
+        assert isinstance(
+            env.observation_spec["x_position"], UnboundedContinuousTensorSpec
         )
-    )
 
-    tensordict2 = env2.reset()
-    tensordict2 = env2.rand_step(tensordict2)
+        tensordict = env.reset()
+        tensordict = env.rand_step(tensordict)
 
-    assert not env2.observation_spec["x_position"].is_in(
-        tensordict2[("next", "x_position")]
+        assert env.observation_spec["x_position"].is_in(
+            tensordict[("next", "x_position")]
+        )
+
+        for spec in (
+            {"x_position": UnboundedContinuousTensorSpec(10)},
+            None,
+            CompositeSpec(x_position=UnboundedContinuousTensorSpec(10), shape=[]),
+            [UnboundedContinuousTensorSpec(10)],
+        ):
+            env2 = GymWrapper(gym.make("HalfCheetah-v4"))
+            env2.set_info_dict_reader(
+                default_info_dict_reader(["x_position"], spec=spec)
+            )
+
+            tensordict2 = env2.reset()
+            tensordict2 = env2.rand_step(tensordict2)
+
+            assert env2.observation_spec["x_position"].is_in(
+                tensordict2[("next", "x_position")]
+            )
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.skipif(
+        gym_version is None or gym_version < version.parse("0.20.0"),
+        reason="older versions of half-cheetah do not have 'x_position' info key.",
     )
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_auto_register(self, device):
+        try:
+            import gymnasium as gym
+        except ModuleNotFoundError:
+            import gym
+
+        env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED), device=device)
+        check_env_specs(env)
+        env.set_info_dict_reader()
+        with pytest.raises(
+            AssertionError, match="The keys of the specs and data do not match"
+        ):
+            check_env_specs(env)
+
+        env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED), device=device)
+        env = env.auto_register_info_dict()
+        check_env_specs(env)
+
+        # check that the env can be executed in parallel
+        penv = ParallelEnv(
+            2,
+            lambda: GymWrapper(
+                gym.make(HALFCHEETAH_VERSIONED), device=device
+            ).auto_register_info_dict(),
+        )
+        senv = ParallelEnv(
+            2,
+            lambda: GymWrapper(
+                gym.make(HALFCHEETAH_VERSIONED), device=device
+            ).auto_register_info_dict(),
+        )
+        try:
+            torch.manual_seed(0)
+            penv.set_seed(0)
+            rolp = penv.rollout(10)
+            torch.manual_seed(0)
+            senv.set_seed(0)
+            rols = senv.rollout(10)
+            assert_allclose_td(rolp, rols)
+        finally:
+            penv.close()
+            del penv
+            senv.close()
+            del senv
 
 
 def test_make_spec_from_td():
@@ -1800,9 +1859,6 @@ class TestConcurrentEnvs:
                 s = ""
                 for key, item in td_equals.items(True, True):
                     if not item.all():
-                        print(key, "failed")
-                        print("r_p", r_p.get(key)[~item])
-                        print("r_s", r_s.get(key)[~item])
                         s = s + f"\t{key}"
                 q.put((f"failed: {s}", j))
             else:

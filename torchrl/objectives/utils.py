@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
+import re
 import warnings
 from enum import Enum
 from typing import Iterable, Optional, Union
@@ -13,6 +14,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
+from torch.nn.modules import dropout
 
 try:
     from torch import vmap
@@ -28,6 +30,8 @@ _GAMMA_LMBDA_DEPREC_WARNING = (
     "is deprecated and will be removed soon. To customize your value function, "
     "run `loss_module.make_value_estimator(ValueEstimators.<value_fun>, gamma=val)`."
 )
+
+RANDOM_MODULE_LIST = (dropout._DropoutNd,)
 
 
 class ValueEstimators(Enum):
@@ -478,13 +482,23 @@ def _cache_values(fun):
 
 
 def _vmap_func(module, *args, func=None, **kwargs):
-    def decorated_module(*module_args_params):
-        params = module_args_params[-1]
-        module_args = module_args_params[:-1]
-        with params.to_module(module):
-            if func is None:
-                return module(*module_args)
-            else:
-                return getattr(module, func)(*module_args)
+    try:
 
-    return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
+        def decorated_module(*module_args_params):
+            params = module_args_params[-1]
+            module_args = module_args_params[:-1]
+            with params.to_module(module):
+                if func is None:
+                    return module(*module_args)
+                else:
+                    return getattr(module, func)(*module_args)
+
+        return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
+
+    except RuntimeError as err:
+        if re.match(
+            r"vmap: called random operation while in randomness error mode", str(err)
+        ):
+            raise RuntimeError(
+                "Please use <loss_module>.set_vmap_randomness('different') to handle random operations during vmap."
+            ) from err

@@ -349,8 +349,12 @@ class CQLLoss(LossModule):
                 torch.nn.Parameter(torch.tensor(math.log(1.0), device=device)),
             )
 
-        self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
-        self._vmap_qvalue_network00 = _vmap_func(self.qvalue_network)
+        self._vmap_qvalue_networkN0 = _vmap_func(
+            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+        )
+        self._vmap_qvalue_network00 = _vmap_func(
+            self.qvalue_network, randomness=self.vmap_randomness
+        )
 
     @property
     def target_entropy(self):

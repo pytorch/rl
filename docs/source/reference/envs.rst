@@ -572,6 +572,7 @@ to be able to create this other composition:
     TransformedEnv
     ActionMask
     BinarizeReward
+    BurnInTransform
     CatFrames
     CatTensors
     CenterCrop
@@ -603,7 +604,9 @@ to be able to create this other composition:
     RewardScaling
     RewardSum
     Reward2GoTransform
+    RemoveEmptySpecs
     SelectTransform
+    SignTransform
     SqueezeTransform
     StepCounter
     TargetReturn

@@ -2,14 +2,18 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import collections
 import json
+import textwrap
 import threading
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
+
+import numpy as np
 
 import torch
 
@@ -20,21 +24,24 @@ from tensordict.tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.utils import expand_as_right
+from tensordict.utils import expand_as_right, expand_right
+from torch import Tensor
 
 from torchrl._utils import accept_remote_rref_udf_invocation
-
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
     Sampler,
+    SamplerEnsemble,
 )
 from torchrl.data.replay_buffers.storages import (
     _get_default_collate,
     ListStorage,
     Storage,
+    StorageEnsemble,
 )
 from torchrl.data.replay_buffers.utils import (
+    _reduce,
     _to_numpy,
     _to_torch,
     INT_CLASSES,
@@ -44,8 +51,8 @@ from torchrl.data.replay_buffers.writers import (
     RoundRobinWriter,
     TensorDictRoundRobinWriter,
     Writer,
+    WriterEnsemble,
 )
-
 from torchrl.data.utils import DEVICE_TYPING
 
 
@@ -135,14 +142,14 @@ class ReplayBuffer:
     def __init__(
         self,
         *,
-        storage: Optional[Storage] = None,
-        sampler: Optional[Sampler] = None,
-        writer: Optional[Writer] = None,
-        collate_fn: Optional[Callable] = None,
+        storage: Storage | None = None,
+        sampler: Sampler | None = None,
+        writer: Writer | None = None,
+        collate_fn: Callable | None = None,
         pin_memory: bool = False,
-        prefetch: Optional[int] = None,
-        transform: Optional["Transform"] = None,  # noqa-F821
-        batch_size: Optional[int] = None,
+        prefetch: int | None = None,
+        transform: "Transform" | None = None,  # noqa-F821
+        batch_size: int | None = None,
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
         self._storage.attach(self)
@@ -221,7 +228,8 @@ class ReplayBuffer:
             if not is_tensor_collection(data):
                 data = TensorDict({"data": data}, [])
                 is_td = False
-            data = self._transform(data)
+            with data.unlock_():
+                data = self._transform(data)
             if not is_td:
                 data = data["data"]
 
@@ -372,7 +380,7 @@ class ReplayBuffer:
         with self._replay_lock:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
-            data = self._storage[index]
+            data = self._storage.get(index)
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
@@ -397,9 +405,7 @@ class ReplayBuffer:
         self._sampler._empty()
         self._storage._empty()
 
-    def sample(
-        self, batch_size: Optional[int] = None, return_info: bool = False
-    ) -> Any:
+    def sample(self, batch_size: int | None = None, return_info: bool = False) -> Any:
         """Samples a batch of data from the replay buffer.
 
         Uses Sampler to sample indices, and retrieves them from Storage.
@@ -597,12 +603,12 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         beta: float,
         eps: float = 1e-8,
         dtype: torch.dtype = torch.float,
-        storage: Optional[Storage] = None,
-        collate_fn: Optional[Callable] = None,
+        storage: Storage | None = None,
+        collate_fn: Callable | None = None,
         pin_memory: bool = False,
-        prefetch: Optional[int] = None,
-        transform: Optional["Transform"] = None,  # noqa-F821
-        batch_size: Optional[int] = None,
+        prefetch: int | None = None,
+        transform: "Transform" | None = None,  # noqa-F821
+        batch_size: int | None = None,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -848,7 +854,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
     def sample(
         self,
-        batch_size: Optional[int] = None,
+        batch_size: int | None = None,
         return_info: bool = False,
         include_info: bool = None,
     ) -> TensorDictBase:
@@ -881,7 +887,10 @@ class TensorDictReplayBuffer(ReplayBuffer):
             if is_locked:
                 data.unlock_()
             for k, v in info.items():
-                data.set(k, expand_as_right(_to_torch(v, data.device), data))
+                v = _to_torch(v, data.device)
+                if v.shape[: data.batch_dims] != data.batch_size:
+                    v = expand_as_right(v, data)
+                data.set(k, v)
             if is_locked:
                 data.lock_()
         if return_info:
@@ -1005,13 +1014,13 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         beta: float,
         priority_key: str = "td_error",
         eps: float = 1e-8,
-        storage: Optional[Storage] = None,
-        collate_fn: Optional[Callable] = None,
+        storage: Storage | None = None,
+        collate_fn: Callable | None = None,
         pin_memory: bool = False,
-        prefetch: Optional[int] = None,
-        transform: Optional["Transform"] = None,  # noqa-F821
-        reduction: Optional[str] = "max",
-        batch_size: Optional[int] = None,
+        prefetch: int | None = None,
+        transform: "Transform" | None = None,  # noqa-F821
+        reduction: str = "max",
+        batch_size: int | None = None,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -1039,7 +1048,7 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
 
     def sample(
         self,
-        batch_size: Optional[int] = None,
+        batch_size: int | None = None,
         include_info: bool = None,
         return_info: bool = False,
     ) -> TensorDictBase:
@@ -1070,7 +1079,7 @@ class InPlaceSampler:
 
     """
 
-    def __init__(self, device: Optional[DEVICE_TYPING] = None):
+    def __init__(self, device: DEVICE_TYPING | None = None):
         self.out = None
         if device is None:
             device = "cpu"
@@ -1084,25 +1093,6 @@ class InPlaceSampler:
         else:
             torch.stack(list_of_tds, 0, out=self.out)
         return self.out
-
-
-def _reduce(
-    tensor: torch.Tensor, reduction: str, dim: Optional[int] = None
-) -> Union[float, torch.Tensor]:
-    """Reduces a tensor given the reduction method."""
-    if reduction == "max":
-        result = tensor.max(dim=dim)
-    elif reduction == "min":
-        result = tensor.min(dim=dim)
-    elif reduction == "mean":
-        result = tensor.mean(dim=dim)
-    elif reduction == "median":
-        result = tensor.median(dim=dim)
-    else:
-        raise NotImplementedError(f"Unknown reduction method {reduction}")
-    if isinstance(result, tuple):
-        result = result[0]
-    return result.item() if dim is None else result
 
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
@@ -1133,3 +1123,318 @@ def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
 
     """
     return tuple(torch.stack(tensors, 0) for tensors in zip(*list_of_tensor_iterators))
+
+
+class ReplayBufferEnsemble(ReplayBuffer):
+    """An ensemble of replay buffers.
+
+    This class allows to read and sample from multiple replay buffers at once.
+    It automatically composes ensemble of storages (:class:`~torchrl.data.replay_buffers.storages.StorageEnsemble`),
+    writers (:class:`~torchrl.data.replay_buffers.writers.WriterEnsemble`) and
+    samplers (:class:`~torchrl.data.replay_buffers.samplers.SamplerEnsemble`).
+
+    .. note::
+      Writing directly to this class is forbidden, but it can be indexed to retrieve
+      the nested nested-buffer and extending it.
+
+    There are two distinct ways of constructing a :class:`~torchrl.data.ReplayBufferEnsemble`:
+    one can either pass a list of replay buffers, or directly pass the components
+    (storage, writers and samplers) like it is done for other replay buffer subclasses.
+
+    Args:
+        rbs (sequence of ReplayBuffer instances, optional): the replay buffers to ensemble.
+        storages (StorageEnsemble, optional): the ensemble of storages, if the replay
+            buffers are not passed.
+        samplers (SamplerEnsemble, optional): the ensemble of samplers, if the replay
+            buffers are not passed.
+        writers (WriterEnsemble, optional): the ensemble of writers, if the replay
+            buffers are not passed.
+        transform (Transform, optional): if passed, this will be the transform
+            of the ensemble of replay buffers. Individual transforms for each
+            replay buffer is retrieved from its parent replay buffer, or directly
+            written in the :class:`~torchrl.data.replay_buffers.storages.StorageEnsemble`
+            object.
+        batch_size (int, optional): the batch-size to use during sampling.
+        collate_fn (callable, optional): the function to use to collate the
+            data after each individual collate_fn has been called and the data
+            is placed in a list (along with the buffer id).
+        collate_fns (list of callables, optional): collate_fn of each nested
+            replay buffer. Retrieved from the :class:`~ReplayBuffer` instances
+            if not provided.
+        p (list of float or Tensor, optional): a list of floating numbers
+            indicating the relative weight of each replay buffer. Can also
+            be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
+            if the buffer is built explicitely.
+        sample_from_all (bool, optional): if ``True``, each dataset will be sampled
+            from. This is not compatible with the ``p`` argument. Defaults to ``False``.
+            Can also be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
+            if the buffer is built explicitely.
+        num_buffer_sampled (int, optional): the number of buffers to sample.
+            if ``sample_from_all=True``, this has no effect, as it defaults to the
+            number of buffers. If ``sample_from_all=False``, buffers will be
+            sampled according to the probabilities ``p``. Can also
+            be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
+            if the buffer is built explicitely.
+
+    Examples:
+        >>> from torchrl.envs import Compose, ToTensorImage, Resize, RenameTransform
+        >>> from torchrl.data import TensorDictReplayBuffer, ReplayBufferEnsemble, LazyMemmapStorage
+        >>> from tensordict import TensorDict
+        >>> import torch
+        >>> rb0 = TensorDictReplayBuffer(
+        ...     storage=LazyMemmapStorage(10),
+        ...     transform=Compose(
+        ...         ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
+        ...         Resize(32, in_keys=["pixels", ("next", "pixels")]),
+        ...         RenameTransform([("some", "key")], ["renamed"]),
+        ...     ),
+        ... )
+        >>> rb1 = TensorDictReplayBuffer(
+        ...     storage=LazyMemmapStorage(10),
+        ...     transform=Compose(
+        ...         ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
+        ...         Resize(32, in_keys=["pixels", ("next", "pixels")]),
+        ...         RenameTransform(["another_key"], ["renamed"]),
+        ...     ),
+        ... )
+        >>> rb = ReplayBufferEnsemble(
+        ...     rb0,
+        ...     rb1,
+        ...     p=[0.5, 0.5],
+        ...     transform=Resize(33, in_keys=["pixels"], out_keys=["pixels33"]),
+        ... )
+        >>> print(rb)
+        ReplayBufferEnsemble(
+            storages=StorageEnsemble(
+                storages=(<torchrl.data.replay_buffers.storages.LazyMemmapStorage object at 0x13a2ef430>, <torchrl.data.replay_buffers.storages.LazyMemmapStorage object at 0x13a2f9310>),
+                transforms=[Compose(
+                        ToTensorImage(keys=['pixels', ('next', 'pixels')]),
+                        Resize(w=32, h=32, interpolation=InterpolationMode.BILINEAR, keys=['pixels', ('next', 'pixels')]),
+                        RenameTransform(keys=[('some', 'key')])), Compose(
+                        ToTensorImage(keys=['pixels', ('next', 'pixels')]),
+                        Resize(w=32, h=32, interpolation=InterpolationMode.BILINEAR, keys=['pixels', ('next', 'pixels')]),
+                        RenameTransform(keys=['another_key']))]),
+            samplers=SamplerEnsemble(
+                samplers=(<torchrl.data.replay_buffers.samplers.RandomSampler object at 0x13a2f9220>, <torchrl.data.replay_buffers.samplers.RandomSampler object at 0x13a2f9f70>)),
+            writers=WriterEnsemble(
+                writers=(<torchrl.data.replay_buffers.writers.TensorDictRoundRobinWriter object at 0x13a2d9b50>, <torchrl.data.replay_buffers.writers.TensorDictRoundRobinWriter object at 0x13a2f95b0>)),
+        batch_size=None,
+        transform=Compose(
+                Resize(w=33, h=33, interpolation=InterpolationMode.BILINEAR, keys=['pixels'])),
+        collate_fn=<built-in method stack of type object at 0x128648260>)
+        >>> data0 = TensorDict(
+        ...     {
+        ...         "pixels": torch.randint(255, (10, 244, 244, 3)),
+        ...         ("next", "pixels"): torch.randint(255, (10, 244, 244, 3)),
+        ...         ("some", "key"): torch.randn(10),
+        ...     },
+        ...     batch_size=[10],
+        ... )
+        >>> data1 = TensorDict(
+        ...     {
+        ...         "pixels": torch.randint(255, (10, 64, 64, 3)),
+        ...         ("next", "pixels"): torch.randint(255, (10, 64, 64, 3)),
+        ...         "another_key": torch.randn(10),
+        ...     },
+        ...     batch_size=[10],
+        ... )
+        >>> rb[0].extend(data0)
+        >>> rb[1].extend(data1)
+        >>> for _ in range(2):
+        ...     sample = rb.sample(10)
+        ...     assert sample["next", "pixels"].shape == torch.Size([2, 5, 3, 32, 32])
+        ...     assert sample["pixels"].shape == torch.Size([2, 5, 3, 32, 32])
+        ...     assert sample["pixels33"].shape == torch.Size([2, 5, 3, 33, 33])
+        ...     assert sample["renamed"].shape == torch.Size([2, 5])
+
+    """
+
+    def __init__(
+        self,
+        *rbs,
+        storages: StorageEnsemble | None = None,
+        samplers: SamplerEnsemble | None = None,
+        writers: WriterEnsemble | None = None,
+        transform: "Transform" | None = None,  # noqa: F821
+        batch_size: int | None = None,
+        collate_fn: Callable | None = None,
+        collate_fns: List[Callable] | None = None,
+        p: Tensor = None,
+        sample_from_all: bool = False,
+        num_buffer_sampled: int | None = None,
+        **kwargs,
+    ):
+        if collate_fn is None:
+            collate_fn = torch.stack
+        if rbs:
+            if storages is not None or samplers is not None or writers is not None:
+                raise RuntimeError
+            storages = StorageEnsemble(
+                *[rb._storage for rb in rbs], transforms=[rb._transform for rb in rbs]
+            )
+            samplers = SamplerEnsemble(
+                *[rb._sampler for rb in rbs],
+                p=p,
+                sample_from_all=sample_from_all,
+                num_buffer_sampled=num_buffer_sampled,
+            )
+            writers = WriterEnsemble(*[rb._writer for rb in rbs])
+            if collate_fns is None:
+                collate_fns = [rb._collate_fn for rb in rbs]
+        else:
+            rbs = None
+            if collate_fns is None:
+                collate_fns = [
+                    _get_default_collate(storage) for storage in storages._storages
+                ]
+        self._rbs = rbs
+        self._collate_fns = collate_fns
+        super().__init__(
+            storage=storages,
+            sampler=samplers,
+            writer=writers,
+            transform=transform,
+            batch_size=batch_size,
+            collate_fn=collate_fn,
+            **kwargs,
+        )
+
+    def _sample(self, *args, **kwargs):
+        sample, info = super()._sample(*args, **kwargs)
+        if isinstance(sample, TensorDictBase):
+            buffer_ids = info.get(("index", "buffer_ids"))
+            info.set(
+                ("index", "buffer_ids"), expand_right(buffer_ids, sample.batch_size)
+            )
+            if isinstance(info, LazyStackedTensorDict):
+                for _info, _sample in zip(
+                    info.unbind(info.stack_dim), sample.unbind(info.stack_dim)
+                ):
+                    _info.batch_size = _sample.batch_size
+                info = torch.stack(info.tensordicts, info.stack_dim)
+            else:
+                info.batch_size = sample.batch_size
+            sample.update(info)
+
+        return sample, info
+
+    @property
+    def _collate_fn(self):
+        def new_collate(samples):
+            samples = [self._collate_fns[i](sample) for (i, sample) in samples]
+            return self._collate_fn_val(samples)
+
+        return new_collate
+
+    @_collate_fn.setter
+    def _collate_fn(self, value):
+        self._collate_fn_val = value
+
+    _INDEX_ERROR = "Expected an index of type torch.Tensor, range, np.ndarray, int, slice or ellipsis, got {} instead."
+
+    def __getitem__(
+        self, index: Union[int, torch.Tensor, Tuple, np.ndarray, List, slice, Ellipsis]
+    ) -> Any:
+        # accepts inputs:
+        # (int | 1d tensor | 1d list | 1d array | slice | ellipsis | range, int | tensor | list | array | slice | ellipsis | range)
+        # tensor
+        if isinstance(index, tuple):
+            if index[0] is Ellipsis:
+                index = (slice(None), index[1:])
+            rb = self[index[0]]
+            if len(index) > 1:
+                if rb is self:
+                    # then index[0] is an ellipsis/slice(None)
+                    sample = [
+                        (i, storage[index[1:]])
+                        for i, storage in enumerate(self._storage._storages)
+                    ]
+                    return self._collate_fn(sample)
+                if isinstance(rb, ReplayBufferEnsemble):
+                    new_index = (slice(None), *index[1:])
+                    return rb[new_index]
+                return rb[index[1:]]
+            return rb
+        if isinstance(index, slice) and index == slice(None):
+            return self
+        if isinstance(index, (list, range, np.ndarray)):
+            index = torch.tensor(index)
+        if isinstance(index, torch.Tensor):
+            if index.ndim > 1:
+                raise RuntimeError(
+                    f"Cannot index a {type(self)} with tensor indices that have more than one dimension."
+                )
+            if index.is_floating_point():
+                raise TypeError(
+                    "A floating point index was recieved when an integer dtype was expected."
+                )
+        if self._rbs is not None and (
+            isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0)
+        ):
+            try:
+                index = int(index)
+            except Exception:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+            try:
+                return self._rbs[index]
+            except IndexError:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+
+        if self._rbs is not None:
+            if isinstance(index, torch.Tensor):
+                index = index.tolist()
+                rbs = [self._rbs[i] for i in index]
+                _collate_fns = [self._collate_fns[i] for i in index]
+            else:
+                try:
+                    # slice
+                    rbs = self._rbs[index]
+                    _collate_fns = self._collate_fns[index]
+                except IndexError:
+                    raise IndexError(self._INDEX_ERROR.format(type(index)))
+            p = self._sampler._p[index] if self._sampler._p is not None else None
+            return ReplayBufferEnsemble(
+                *rbs,
+                transform=self._transform,
+                batch_size=self._batch_size,
+                collate_fn=self._collate_fn_val,
+                collate_fns=_collate_fns,
+                sample_from_all=self._sampler.sample_from_all,
+                num_buffer_sampled=self._sampler.num_buffer_sampled,
+                p=p,
+            )
+
+        try:
+            samplers = self._sampler[index]
+            writers = self._writer[index]
+            storages = self._storage[index]
+            if isinstance(index, torch.Tensor):
+                _collate_fns = [self._collate_fns[i] for i in index.tolist()]
+            else:
+                _collate_fns = self._collate_fns[index]
+            p = self._sampler._p[index] if self._sampler._p is not None else None
+
+        except IndexError:
+            raise IndexError(self._INDEX_ERROR.format(type(index)))
+
+        return ReplayBufferEnsemble(
+            samplers=samplers,
+            writers=writers,
+            storages=storages,
+            transform=self._transform,
+            batch_size=self._batch_size,
+            collate_fn=self._collate_fn_val,
+            collate_fns=_collate_fns,
+            sample_from_all=self._sampler.sample_from_all,
+            num_buffer_sampled=self._sampler.num_buffer_sampled,
+            p=p,
+        )
+
+    def __len__(self):
+        return len(self._storage)
+
+    def __repr__(self):
+        storages = textwrap.indent(f"storages={self._storage}", " " * 4)
+        writers = textwrap.indent(f"writers={self._writer}", " " * 4)
+        samplers = textwrap.indent(f"samplers={self._sampler}", " " * 4)
+        return f"ReplayBufferEnsemble(\n{storages}, \n{samplers}, \n{writers}, \nbatch_size={self._batch_size}, \ntransform={self._transform}, \ncollate_fn={self._collate_fn_val})"

@@ -9,6 +9,7 @@ from .rlhf import KLRewardTransform
 from .transforms import (
     ActionMask,
     BinarizeReward,
+    BurnInTransform,
     CatFrames,
     CatTensors,
     CenterCrop,
@@ -31,6 +32,7 @@ from .transforms import (
     PermuteTransform,
     PinMemoryTransform,
     RandomCropTensorDict,
+    RemoveEmptySpecs,
     RenameTransform,
     Resize,
     Reward2GoTransform,
@@ -38,6 +40,7 @@ from .transforms import (
     RewardScaling,
     RewardSum,
     SelectTransform,
+    SignTransform,
     SqueezeTransform,
     StepCounter,
     TargetReturn,

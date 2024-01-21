@@ -7,6 +7,8 @@
 This script reproduces the IMPALA Algorithm
 results from Espeholt et al. 2018 for the on Atari Environments.
 """
+import logging
+
 import hydra
 
 
@@ -241,7 +243,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    print(f"Training took {execution_time:.2f} seconds to finish")
+    logging.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

@@ -10,6 +10,11 @@ In this folder we provide a set of multi-agent example scripts using the [VMAS](
 
 For more details on the experiment setup and the environments please refer to the corresponding section of the appendix in the [TorchRL paper](https://arxiv.org/abs/2306.00577).
 
+> [!NOTE]  
+> If you are interested in Multi-Agent Reinforcement Learning (MARL) in TorchRL, check out [BenchMARL](https://github.com/facebookresearch/BenchMARL):
+> a benchmarking library where you 
+> can train and compare MARL algorithms, tasks, and models using TorchRL!
+
 ## Using the scripts
 
 ### Install

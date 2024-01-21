@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import logging
 
 import sys
 
@@ -38,7 +39,7 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.tensordict import assert_allclose_td, TensorDict
 
 from torch import nn
-from torchrl._utils import prod, seed_generator
+from torchrl._utils import _replace_last, prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
     _Interruptor,
@@ -60,7 +61,6 @@ from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
-    _replace_last,
     check_env_specs,
     PARTIAL_MISSING_ERR,
 )
@@ -2081,7 +2081,7 @@ def test_num_threads():
             c.shutdown()
             del c
         except Exception:
-            print("Failed to shut down collector")
+            logging.info("Failed to shut down collector")
         # reset vals
         collectors._main_async_collector = _main_async_collector_saved
         torch.set_num_threads(num_threads)
