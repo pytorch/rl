@@ -9425,7 +9425,7 @@ class TestHistory(TransformBase):
             else:
                 obs_h = td["next", "observation_h"]
             steps = td["step_count"]
-            dones = td[("next", "done")].squeeze().nonzero().squeeze(-1)
+            dones = td["next", "done"].squeeze().nonzero().squeeze(-1)
             start = 0
             for done in dones:
                 done = done.item()
