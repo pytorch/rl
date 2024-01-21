@@ -9423,7 +9423,7 @@ class TestHistory(TransformBase):
             if include_last:
                 obs_h = td["observation_h"]
             else:
-                obs_h = td[("next", "observation_h")]
+                obs_h = td["next", "observation_h"]
             steps = td["step_count"]
             dones = td[("next", "done")].squeeze().nonzero().squeeze(-1)
             start = 0
