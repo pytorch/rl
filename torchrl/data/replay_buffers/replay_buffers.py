@@ -208,11 +208,11 @@ class ReplayBuffer:
         """Sets a new storage in the replay buffer and returns the previous storage.
 
         Args:
+            storage (Storage): the new storage for the buffer.
             collate_fn (callable, optional): if provided, the collate_fn is set to this
                 value. Otherwise it is reset to a default value.
 
         """
-
         prev_storage = self._storage
         self._storage = storage
         self._get_collate_fn(collate_fn)

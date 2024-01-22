@@ -400,7 +400,7 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
         download: bool | str = True,
         sampler=None,
         writer=None,
-        transform: "Transform" | None = None,
+        transform: "Transform" | None = None,  # noqa: F821
         num_procs: int = 0,
         num_slices: int | None = None,
         slice_len: int | None = None,
@@ -492,11 +492,6 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
         with tempfile.TemporaryDirectory() as tempdir:
             if self.tmpdir is not None:
                 tempdir = self.tmpdir
-            try:
-                shutil.rmtree(tempdir)
-                os.makedirs(tempdir, exist_ok=True)
-            except:
-                os.makedirs(tempdir, exist_ok=True)
             if not os.listdir(tempdir):
                 os.makedirs(tempdir, exist_ok=True)
                 # get the list of runs
@@ -505,7 +500,7 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
                     command, shell=True, capture_output=True
                 )  # , stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 files = [
-                    file.decode("utf-8").replace("$", "\$")
+                    file.decode("utf-8").replace("$", "\$")  # noqa: W605
                     for file in output.stdout.splitlines()
                     if file.endswith(b".gz")
                 ]
@@ -628,7 +623,7 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
         path = download_path
         if gz_files is None:
             gz_files = []
-            for root, dirs, files in os.walk(path):
+            for root, _, files in os.walk(path):
                 for file in files:
                     if file.endswith(".gz"):
                         gz_files.append(os.path.join(root, file))
@@ -763,34 +758,3 @@ class _AtariStorage(Storage):
             step = index.step if index.step is not None else 1
             return self.get(torch.arange(start, stop, step))
         return self[torch.arange(len(self))[index]]
-
-
-if __name__ == "__main__":
-    # import logging
-    # logging.getLogger().setLevel(logging.INFO)
-    # AtariDQNExperienceReplay._max_runs = 3
-    # dataset = AtariDQNExperienceReplay("Pong/5", num_procs=4, num_slices=4, batch_size=128, replacement=False)
-    # torch.manual_seed(0)
-    # for i, data in enumerate(dataset):
-    #     print(data)
-    #     if i == 10:
-    #         break
-
-    from torchrl.data.datasets import AtariDQNExperienceReplay
-    from torchrl.data.replay_buffers import ReplayBufferEnsemble
-
-    # we change this parameter for quick experimentation, in practice it should be left untouched
-    AtariDQNExperienceReplay._max_runs = 2
-    dataset_asterix = AtariDQNExperienceReplay(
-        "Asterix/5", batch_size=128, slice_len=64, num_procs=4
-    )
-    dataset_pong = AtariDQNExperienceReplay(
-        "Pong/5", batch_size=128, slice_len=64, num_procs=4
-    )
-    dataset = ReplayBufferEnsemble(
-        dataset_pong, dataset_asterix, batch_size=128, sample_from_all=True
-    )
-    sample = dataset.sample()
-    print("first sample, Asterix", sample[0])
-    print("second sample, Pong", sample[1])
-    print("Aggregate (metadata hidden)", sample)
