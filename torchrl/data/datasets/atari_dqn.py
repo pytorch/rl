@@ -386,7 +386,6 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
         ]
         return ["/".join((game, str(loop))) for game in games for loop in range(1, 6)]
 
-
     # If we want to keep track of the original atari files
     tmpdir = None
     # use _max_runs for debugging, avoids downloading the entire dataset
