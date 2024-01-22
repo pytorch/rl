@@ -255,7 +255,6 @@ class REDQLoss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
     ):
-
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority_key=priority_key)
@@ -318,8 +317,12 @@ class REDQLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-        self._vmap_qvalue_network00 = _vmap_func(self.qvalue_network)
-        self._vmap_getdist = _vmap_func(self.actor_network, func="get_dist_params")
+        self._vmap_qvalue_network00 = _vmap_func(
+            self.qvalue_network, randomness=self.vmap_randomness
+        )
+        self._vmap_getdist = _vmap_func(
+            self.actor_network, func="get_dist_params", randomness=self.vmap_randomness
+        )
 
     @property
     def target_entropy(self):

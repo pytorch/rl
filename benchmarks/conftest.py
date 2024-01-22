@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import logging
 import os
 import time
 import warnings
@@ -32,7 +32,7 @@ Call times:
         out_str += f"\t{key}{spaces}{item: 4.4f}s\n"
         if i == maxprint - 1:
             break
-    print(out_str)
+    logging.info(out_str)
 
 
 @pytest.fixture(autouse=True)

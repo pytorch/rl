@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import logging
 import os
 import pathlib
 import shutil
@@ -25,7 +26,7 @@ from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
-from torchrl.data.replay_buffers.writers import Writer
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
 
 from torchrl.envs.transforms import Compose, Resize, ToTensorImage
 from torchrl.envs.utils import _classproperty
@@ -220,6 +221,10 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
                 transform, Resize(image_size, in_keys=["pixels", ("next", "pixels")])
             )
         storage = TensorStorage(storage)
+
+        if writer is None:
+            writer = ImmutableDatasetWriter()
+
         super().__init__(
             storage=storage,
             sampler=sampler,
@@ -276,7 +281,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
                     zip(paths_to_proc, files_to_proc),
                 )
                 files = list(files)
-            print("Downloaded, processing files")
+            logging.info("Downloaded, processing files")
             if _has_tqdm:
                 import tqdm
 
@@ -304,7 +309,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
 
         # From this point, the local paths are non needed anymore
         td_save = td_save.expand(total_steps).memmap_like(data_path, num_threads=32)
-        print("Saved tensordict:", td_save)
+        logging.info("Saved tensordict:", td_save)
         idx0 = 0
         idx1 = 0
         while len(files):

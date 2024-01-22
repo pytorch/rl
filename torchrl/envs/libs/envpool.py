@@ -26,7 +26,46 @@ _has_envpool = importlib.util.find_spec("envpool") is not None
 
 
 class MultiThreadedEnvWrapper(_EnvWrapper):
-    """Wrapper for envpool-based multithreaded environments."""
+    """Wrapper for envpool-based multithreaded environments.
+
+    GitHub: https://github.com/sail-sg/envpool
+
+    Paper: https://arxiv.org/abs/2206.10558
+
+    Args:
+        env (envpool.python.envpool.EnvPoolMixin): the envpool to wrap.
+        categorical_action_encoding (bool, optional): if ``True``, categorical
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            Defaults to ``False``.
+
+    Keyword Args:
+        disable_env_checker (bool, optional): for gym > 0.24 only. If ``True`` (default
+            for these versions), the environment checker won't be run.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+
+    Attributes:
+        batch_size: The number of envs run simultaneously.
+
+    Examples:
+        >>> import envpool
+        >>> from torchrl.envs import MultiThreadedEnvWrapper
+        >>> env_base = envpool.make(
+        ...     task_id="Pong-v5", env_type="gym", num_envs=4, gym_reset_return_info=True
+        ... )
+        >>> env = MultiThreadedEnvWrapper(envpool_env)
+        >>> env.reset()
+        >>> env.rand_step()
+
+    """
 
     _verbose: bool = False
 
@@ -269,7 +308,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _set_seed(self, seed: Optional[int]):
         if seed is not None:
-            print(
+            logging.info(
                 "MultiThreadedEnvWrapper._set_seed ignored, as setting seed in an existing envorinment is not\
                    supported by envpool. Please create a new environment, passing the seed to the constructor."
             )
@@ -278,27 +317,53 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 class MultiThreadedEnv(MultiThreadedEnvWrapper):
     """Multithreaded execution of environments based on EnvPool.
 
+    GitHub: https://github.com/sail-sg/envpool
+
+    Paper: https://arxiv.org/abs/2206.10558
+
     An alternative to ParallelEnv based on multithreading. It's faster, as it doesn't require new process spawning, but
     less flexible, as it only supports environments implemented in EnvPool library.
-    Currently only supports synchronous execution mode, when the batch size is equal to the number of workers, see
+    Currently, only supports synchronous execution mode, when the batch size is equal to the number of workers, see
     https://envpool.readthedocs.io/en/latest/content/python_interface.html#batch-size.
 
-    >>> env = MultiThreadedEnv(num_workers=3, env_name="Pendulum-v1")
-    >>> env.reset()
-    >>> env.rand_step()
-    >>> env.rollout(5)
-    >>> env.close()
-
     Args:
-        num_workers: number of worker threads to create.
-        env_name: name of the environment, corresponding to task_id in EnvPool.
-        create_env_kwargs: additional arguments which will be passed to envpool.make.
+        num_workers (int): The number of envs to run simultaneously. Will be
+            identical to the content of `~.batch_size`.
+        env_name (str): name of the environment to build.
+
+    Keyword Args:
+        create_env_kwargs (Dict[str, Any], optional): kwargs to be passed to envpool
+            environment constructor.
+        categorical_action_encoding (bool, optional): if ``True``, categorical
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            Defaults to ``False``.
+        disable_env_checker (bool, optional): for gym > 0.24 only. If ``True`` (default
+            for these versions), the environment checker won't be run.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+
+    Examples:
+        >>> env = MultiThreadedEnv(num_workers=3, env_name="Pendulum-v1")
+        >>> env.reset()
+        >>> env.rand_step()
+        >>> env.rollout(5)
+        >>> env.close()
+
     """
 
     def __init__(
         self,
         num_workers: int,
         env_name: str,
+        *,
         create_env_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):

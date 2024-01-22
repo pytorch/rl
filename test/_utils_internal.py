@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import contextlib
+import logging
 import os
 
 import os.path
@@ -62,7 +63,7 @@ def _set_gym_environments():  # noqa: F811
     PONG_VERSIONED = "ALE/Pong-v5"
 
 
-@implement_for("gymnasium", "0.27.0", None)
+@implement_for("gymnasium")
 def _set_gym_environments():  # noqa: F811
     global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
 
@@ -119,7 +120,7 @@ def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
                     return f(*args, **kwargs)
                 except ExceptionToCheck as e:
                     msg = "%s, Retrying in %d seconds..." % (str(e), mdelay)
-                    print(msg)
+                    logging.info(msg)
                     time.sleep(mdelay)
                     mtries -= 1
             try:

@@ -5,6 +5,7 @@
 
 r"""Generic distributed data-collector using torch.distributed backend."""
 
+import logging
 import os
 import socket
 import warnings
@@ -50,10 +51,10 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
     os.environ["MASTER_PORT"] = str(tcpport)
 
     if verbose:
-        print(
+        logging.info(
             f"Rank0 IP address: '{rank0_ip}' \ttcp port: '{tcpport}', backend={backend}."
         )
-        print(
+        logging.info(
             f"node with rank {rank} with world_size {world_size} -- launching distributed"
         )
     torch.distributed.init_process_group(
@@ -64,7 +65,7 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
         init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
     if verbose:
-        print(f"Connected!\nNode with rank {rank} -- creating store")
+        logging.info(f"Connected!\nNode with rank {rank} -- creating store")
     # The store carries instructions for the node
     _store = torch.distributed.TCPStore(
         host_name=rank0_ip,
@@ -158,7 +159,9 @@ def _run_collector(
 ):
     rank = torch.distributed.get_rank()
     if verbose:
-        print(f"node with rank {rank} -- creating collector of type {collector_class}")
+        logging.info(
+            f"node with rank {rank} -- creating collector of type {collector_class}"
+        )
     if not issubclass(collector_class, SyncDataCollector):
         env_make = [env_make] * num_workers
     else:
@@ -192,30 +195,30 @@ def _run_collector(
     )
     total_frames = 0
     if verbose:
-        print(f"node with rank {rank} -- loop")
+        logging.info(f"node with rank {rank} -- loop")
     while True:
         instruction = _store.get(f"NODE_{rank}_in")
         if verbose:
-            print(f"node with rank {rank} -- new instruction: {instruction}")
+            logging.info(f"node with rank {rank} -- new instruction: {instruction}")
         _store.delete_key(f"NODE_{rank}_in")
         if instruction == b"continue":
             _store.set(f"NODE_{rank}_status", b"busy")
             if verbose:
-                print(f"node with rank {rank} -- new data")
+                logging.info(f"node with rank {rank} -- new data")
             data = collector.next()
             total_frames += data.numel()
             if verbose:
-                print(f"got data, total frames = {total_frames}")
-                print(f"node with rank {rank} -- sending {data}")
+                logging.info(f"got data, total frames = {total_frames}")
+                logging.info(f"node with rank {rank} -- sending {data}")
             if _store.get("TRAINER_status") == b"alive":
                 data.isend(dst=0)
                 if verbose:
-                    print(f"node with rank {rank} -- setting to 'done'")
+                    logging.info(f"node with rank {rank} -- setting to 'done'")
                 if not sync:
                     _store.set(f"NODE_{rank}_status", b"done")
         elif instruction == b"shutdown":
             if verbose:
-                print(f"node with rank {rank} -- shutting down")
+                logging.info(f"node with rank {rank} -- shutting down")
             try:
                 collector.shutdown()
             except Exception:
@@ -483,7 +486,7 @@ class DistributedDataCollector(DataCollectorBase):
         backend,
     ):
         if self._VERBOSE:
-            print(
+            logging.info(
                 f"launching main node with tcp port '{self.tcp_port}' and "
                 f"IP '{self.IPAddr}'. rank: 0, world_size: {world_size}, backend={backend}."
             )
@@ -499,7 +502,7 @@ class DistributedDataCollector(DataCollectorBase):
             init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
         if self._VERBOSE:
-            print("main initiated! Launching store...", end="\t")
+            logging.info("main initiated! Launching store...", end="\t")
         self._store = torch.distributed.TCPStore(
             host_name=self.IPAddr,
             port=int(TCP_PORT) + 1,
@@ -508,12 +511,12 @@ class DistributedDataCollector(DataCollectorBase):
             timeout=timedelta(10),
         )
         if self._VERBOSE:
-            print("done. Setting status to 'alive'")
+            logging.info("done. Setting status to 'alive'")
         self._store.set("TRAINER_status", b"alive")
 
     def _make_container(self):
         if self._VERBOSE:
-            print("making container")
+            logging.info("making container")
         env_constructor = self.env_constructors[0]
         pseudo_collector = SyncDataCollector(
             env_constructor,
@@ -525,8 +528,8 @@ class DistributedDataCollector(DataCollectorBase):
         for _data in pseudo_collector:
             break
         if self._VERBOSE:
-            print("got data", _data)
-            print("expanding...")
+            logging.info("got data", _data)
+            logging.info("expanding...")
         if not issubclass(self.collector_class, SyncDataCollector):
             # Multi-data collectors
             self._tensordict_out = (
@@ -542,7 +545,7 @@ class DistributedDataCollector(DataCollectorBase):
                 .to(self.storing_device)
             )
         if self._VERBOSE:
-            print("locking")
+            logging.info("locking")
         if self._sync:
             self._tensordict_out.lock_()
             self._tensordict_out_unbind = self._tensordict_out.unbind(0)
@@ -553,11 +556,11 @@ class DistributedDataCollector(DataCollectorBase):
             for td in self._tensordict_out:
                 td.lock_()
         if self._VERBOSE:
-            print("storage created:")
-            print("shutting down...")
+            logging.info("storage created:")
+            logging.info("shutting down...")
         pseudo_collector.shutdown()
         if self._VERBOSE:
-            print("dummy collector shut down!")
+            logging.info("dummy collector shut down!")
         del pseudo_collector
 
     def _init_worker_dist_submitit(self, executor, i):
@@ -640,7 +643,7 @@ class DistributedDataCollector(DataCollectorBase):
         else:
             IPAddr = "localhost"
         if self._VERBOSE:
-            print("Server IP address:", IPAddr)
+            logging.info("Server IP address:", IPAddr)
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = str(self.tcp_port)
@@ -656,20 +659,20 @@ class DistributedDataCollector(DataCollectorBase):
         else:
             for i in range(self.num_workers):
                 if self._VERBOSE:
-                    print("Submitting job")
+                    logging.info("Submitting job")
                 if self.launcher == "submitit":
                     job = self._init_worker_dist_submitit(
                         executor,
                         i,
                     )
                     if self._VERBOSE:
-                        print("job id", job.job_id)  # ID of your job
+                        logging.info("job id", job.job_id)  # ID of your job
                 elif self.launcher == "mp":
                     job = self._init_worker_dist_mp(
                         i,
                     )
                     if self._VERBOSE:
-                        print("job launched")
+                        logging.info("job launched")
                 self.jobs.append(job)
             self._init_master_dist(self.num_workers + 1, self.backend)
 
@@ -678,13 +681,13 @@ class DistributedDataCollector(DataCollectorBase):
 
     def _iterator_dist(self):
         if self._VERBOSE:
-            print("iterating...")
+            logging.info("iterating...")
 
         total_frames = 0
         if not self._sync:
             for rank in range(1, self.num_workers + 1):
                 if self._VERBOSE:
-                    print(f"sending 'continue' to {rank}")
+                    logging.info(f"sending 'continue' to {rank}")
                 self._store.set(f"NODE_{rank}_in", b"continue")
             trackers = []
             for i in range(self.num_workers):
@@ -729,7 +732,7 @@ class DistributedDataCollector(DataCollectorBase):
         if total_frames < self.total_frames:
             for rank in range(1, self.num_workers + 1):
                 if self._VERBOSE:
-                    print(f"sending 'continue' to {rank}")
+                    logging.info(f"sending 'continue' to {rank}")
                 self._store.set(f"NODE_{rank}_in", b"continue")
         trackers = []
         for i in range(self.num_workers):
@@ -763,7 +766,7 @@ class DistributedDataCollector(DataCollectorBase):
                     total_frames += data.numel()
                     if total_frames < self.total_frames:
                         if self._VERBOSE:
-                            print(f"sending 'continue' to {rank}")
+                            logging.info(f"sending 'continue' to {rank}")
                         self._store.set(f"NODE_{rank}_in", b"continue")
                     trackers[i] = self._tensordict_out[i].irecv(
                         src=i + 1, return_premature=True
@@ -786,7 +789,7 @@ class DistributedDataCollector(DataCollectorBase):
         for i in workers:
             rank = i + 1
             if self._VERBOSE:
-                print(f"updating weights of {rank}")
+                logging.info(f"updating weights of {rank}")
             self._store.set(f"NODE_{rank}_in", b"update_weights")
             if self._sync:
                 self.policy_weights.send(rank)
@@ -822,12 +825,12 @@ class DistributedDataCollector(DataCollectorBase):
         for i in range(self.num_workers):
             rank = i + 1
             if self._VERBOSE:
-                print(f"shutting down node with rank={rank}")
+                logging.info(f"shutting down node with rank={rank}")
             self._store.set(f"NODE_{rank}_in", b"shutdown")
         for i in range(self.num_workers):
             rank = i + 1
             if self._VERBOSE:
-                print(f"getting status of node {rank}", end="\t")
+                logging.info(f"getting status of node {rank}", end="\t")
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"down":
                 raise RuntimeError(f"Expected 'down' but got status {status}.")
@@ -842,4 +845,4 @@ class DistributedDataCollector(DataCollectorBase):
             elif self.launcher == "submitit_delayed":
                 pass
         if self._VERBOSE:
-            print("collector shut down")
+            logging.info("collector shut down")

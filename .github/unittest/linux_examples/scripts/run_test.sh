@@ -148,6 +148,20 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   env.name=Pendulum-v1 \
   network.device=cuda:0 \
   logger.backend=
+python .github/unittest/helpers/coverage_run_parallel.py examples/discrete_sac/discrete_sac.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=1 \
+  collector.device=cuda:0 \
+  optim.batch_size=10 \
+  optim.utd_ratio=1 \
+  network.device=cuda:0 \
+  optim.batch_size=10 \
+  optim.utd_ratio=1 \
+  replay_buffer.size=120 \
+  env.name=CartPole-v1 \
+  logger.backend=
 #  logger.record_video=True \
 #  logger.record_frames=4 \
 python .github/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
@@ -178,6 +192,15 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   env.name=Pendulum-v1 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
+  collector.total_frames=48 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  env.train_num_envs=2 \
+  optim.device=cuda:0 \
+  collector.device=cuda:0 \
+  logger.mode=offline \
+  logger.backend=
+python .github/unittest/helpers/coverage_run_parallel.py examples/iql/discrete_iql.py \
   collector.total_frames=48 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
@@ -245,20 +268,6 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py \
   logger.record_video=True \
   logger.record_frames=4 \
   buffer.size=120 \
-  logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
-  collector.total_frames=48 \
-  collector.init_random_frames=10 \
-  collector.frames_per_batch=16 \
-  collector.env_per_collector=1 \
-  collector.device=cuda:0 \
-  optim.batch_size=10 \
-  optim.utd_ratio=1 \
-  network.device=cuda:0 \
-  optim.batch_size=10 \
-  optim.utd_ratio=1 \
-  replay_buffer.size=120 \
-  env.name=Pendulum-v1 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
   collector.total_frames=48 \

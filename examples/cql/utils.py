@@ -152,7 +152,7 @@ def make_replay_buffer(
 
 def make_offline_replay_buffer(rb_cfg):
     data = D4RLExperienceReplay(
-        rb_cfg.dataset,
+        dataset_id=rb_cfg.dataset,
         split_trajs=False,
         batch_size=rb_cfg.batch_size,
         sampler=SamplerWithoutReplacement(drop_last=False),

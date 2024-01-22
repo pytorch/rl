@@ -5,13 +5,15 @@
 
 import abc
 import json
+import logging
 import os
+import textwrap
 import warnings
 from collections import OrderedDict
 from copy import copy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
-from typing import Any, Dict, Sequence, Union
+from typing import Any, Dict, List, Sequence, Union
 
 import numpy as np
 import torch
@@ -511,38 +513,6 @@ class TensorStorage(Storage):
                 )
         self._storage[cursor] = data
 
-    @implement_for("torch", None, "2.0")
-    def set(  # noqa: F811
-        self,
-        cursor: Union[int, Sequence[int], slice],
-        data: Union[TensorDictBase, torch.Tensor],
-    ):
-        if isinstance(cursor, INT_CLASSES):
-            self._len = max(self._len, cursor + 1)
-        else:
-            self._len = max(self._len, max(cursor) + 1)
-
-        if not self.initialized:
-            if not isinstance(cursor, INT_CLASSES):
-                self._init(data[0])
-            else:
-                self._init(data)
-        if not isinstance(cursor, (*INT_CLASSES, slice)):
-            if not isinstance(cursor, torch.Tensor):
-                cursor = torch.tensor(cursor, dtype=torch.long, device=self.device)
-            elif cursor.dtype != torch.long:
-                cursor = cursor.to(dtype=torch.long, device=self.device)
-            if len(cursor) > len(self._storage):
-                warnings.warn(
-                    "A cursor of length superior to the storage capacity was provided. "
-                    "To accomodate for this, the cursor will be truncated to its last "
-                    "element such that its length matched the length of the storage. "
-                    "This may **not** be the optimal behaviour for your application! "
-                    "Make sure that the storage capacity is big enough to support the "
-                    "batch size provided."
-                )
-        self._storage[cursor] = data
-
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         if self._len < self.max_size:
             storage = self._storage[: self._len]
@@ -639,7 +609,7 @@ class LazyTensorStorage(TensorStorage):
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         if VERBOSE:
-            print("Creating a TensorStorage...")
+            logging.info("Creating a TensorStorage...")
         if self.device == "auto":
             self.device = data.device
         if isinstance(data, torch.Tensor):
@@ -799,7 +769,7 @@ class LazyMemmapStorage(LazyTensorStorage):
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         if VERBOSE:
-            print("Creating a MemmapStorage...")
+            logging.info("Creating a MemmapStorage...")
         if self.device == "auto":
             self.device = data.device
         if self.device.type != "cpu":
@@ -818,7 +788,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             ):
                 if VERBOSE:
                     filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                    print(
+                    logging.info(
                         f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
                     )
         else:
@@ -833,7 +803,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             )
             if VERBOSE:
                 filesize = os.path.getsize(out.filename) / 1024 / 1024
-                print(
+                logging.info(
                     f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
                 )
         self._storage = out
@@ -845,6 +815,165 @@ class LazyMemmapStorage(LazyTensorStorage):
         if result.device != self.device:
             return result.to(self.device, non_blocking=True)
         return result
+
+
+class StorageEnsemble(Storage):
+    """An ensemble of storages.
+
+    This class is designed to work with :class:`~torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble`.
+
+    Args:
+        storages (sequence of Storage): the storages to make the composite storage.
+
+    Keyword Args:
+        transforms (list of :class:`~torchrl.envs.Transform`, optional): a list of
+            transforms of the same length as storages.
+
+    .. warning::
+      This class signatures for :meth:`~.get` does not match other storages, as
+      it will return a tuple ``(buffer_id, samples)`` rather than just the samples.
+
+    .. warning::
+       This class does not support writing (similarly to :class:`~torchrl.data.replay_buffers.writers.WriterEnsemble`).
+       To extend one of the replay buffers, simply index the parent
+       :class:`~torchrl.data.ReplayBufferEnsemble` object.
+
+    """
+
+    def __init__(
+        self,
+        *storages: Storage,
+        transforms: List["Transform"] = None,  # noqa: F821
+    ):
+        self._storages = storages
+        self._transforms = transforms
+        if transforms is not None and len(transforms) != len(storages):
+            raise TypeError(
+                "transforms must have the same length as the storages " "provided."
+            )
+
+    @property
+    def _attached_entities(self):
+        return set()
+
+    def extend(self, value):
+        raise RuntimeError
+
+    def add(self, value):
+        raise RuntimeError
+
+    def get(self, item):
+        # we return the buffer id too to be able to track the appropriate collate_fn
+        buffer_ids = item.get("buffer_ids")
+        index = item.get("index")
+        results = []
+        for (buffer_id, sample) in zip(buffer_ids, index):
+            buffer_id = self._convert_id(buffer_id)
+            results.append((buffer_id, self._get_storage(buffer_id).get(sample)))
+        if self._transforms is not None:
+            results = [
+                (buffer_id, self._transforms[buffer_id](result))
+                if self._transforms[buffer_id] is not None
+                else (buffer_id, result)
+                for buffer_id, result in results
+            ]
+        return results
+
+    def _convert_id(self, sub):
+        if isinstance(sub, torch.Tensor):
+            sub = sub.item()
+        return sub
+
+    def _get_storage(self, sub):
+        return self._storages[sub]
+
+    def dumps(self, path: Path):
+        path = Path(path).absolute()
+        for i, storage in enumerate(self._storages):
+            storage.dumps(path / str(i))
+        if self._transforms is not None:
+            for i, transform in enumerate(self._transforms):
+                torch.save(transform.state_dict(), path / f"{i}_transform.pt")
+
+    def loads(self, path: Path):
+        path = Path(path).absolute()
+        for i, storage in enumerate(self._storages):
+            storage.loads(path / str(i))
+        if self._transforms is not None:
+            for i, transform in enumerate(self._transforms):
+                transform.load_state_dict(torch.load(path / f"{i}_transform.pt"))
+
+    def state_dict(self) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    _INDEX_ERROR = "Expected an index of type torch.Tensor, range, np.ndarray, int, slice or ellipsis, got {} instead."
+
+    def __getitem__(self, index):
+        if isinstance(index, tuple):
+            if index[0] is Ellipsis:
+                index = (slice(None), index[1:])
+            result = self[index[0]]
+            if len(index) > 1:
+                if result is self:
+                    # then index[0] is an ellipsis/slice(None)
+                    sample = [storage[index[1:]] for storage in self._storages]
+                    return sample
+                if isinstance(result, StorageEnsemble):
+                    new_index = (slice(None), *index[1:])
+                    return result[new_index]
+                return result[index[1:]]
+            return result
+        if isinstance(index, slice) and index == slice(None):
+            return self
+        if isinstance(index, (list, range, np.ndarray)):
+            index = torch.tensor(index)
+        if isinstance(index, torch.Tensor):
+            if index.ndim > 1:
+                raise RuntimeError(
+                    f"Cannot index a {type(self)} with tensor indices that have more than one dimension."
+                )
+            if index.is_floating_point():
+                raise TypeError(
+                    "A floating point index was recieved when an integer dtype was expected."
+                )
+        if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
+            try:
+                index = int(index)
+            except Exception:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+            try:
+                return self._storages[index]
+            except IndexError:
+                raise IndexError(self._INDEX_ERROR.format(type(index)))
+        if isinstance(index, torch.Tensor):
+            index = index.tolist()
+            storages = [self._storages[i] for i in index]
+            transforms = (
+                [self._transforms[i] for i in index]
+                if self._transforms is not None
+                else [None] * len(index)
+            )
+        else:
+            # slice
+            storages = self._storages[index]
+            transforms = (
+                self._transforms[index]
+                if self._transforms is not None
+                else [None] * len(storages)
+            )
+
+        return StorageEnsemble(*storages, transforms=transforms)
+
+    def __len__(self):
+        return len(self._storages)
+
+    def __repr__(self):
+        storages = textwrap.indent(f"storages={self._storages}", " " * 4)
+        transforms = textwrap.indent(f"transforms={self._transforms}", " " * 4)
+        return f"StorageEnsemble(\n{storages}, \n{transforms})"
 
 
 # Utils

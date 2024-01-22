@@ -196,10 +196,14 @@ Datasets
 --------
 
 TorchRL provides wrappers around offline RL datasets.
-These data are presented a :class:`~torchrl.data.ReplayBuffer` instances, which
+These data are presented as :class:`~torchrl.data.ReplayBuffer` instances, which
 means that they can be customized at will with transforms, samplers and storages.
+For instance, entries can be filtered in or out of a dataset with :class:`~torchrl.envs.SelectTransform`
+or :class:`~torchrl.envs.ExcludeTransform`.
+
 By default, datasets are stored as memory mapped tensors, allowing them to be
 promptly sampled with virtually no memory footprint.
+
 Here's an example:
 
 .. code::Python
@@ -278,11 +282,91 @@ Here's an example:
 
 
     D4RLExperienceReplay
+    GenDGRLExperienceReplay
     MinariExperienceReplay
     OpenMLExperienceReplay
     OpenXExperienceReplay
     RobosetExperienceReplay
     VD4RLExperienceReplay
+
+Composing datasets
+~~~~~~~~~~~~~~~~~~
+
+In offline RL, it is customary to work with more than one dataset at the same time.
+Moreover, TorchRL usually has a fine-grained dataset nomenclature, where
+each task is represented separately when other libraries will represent these
+datasets in a more compact way. To allow users to compose multiple datasets
+together, we propose a :class:`~torchrl.data.replay_buffers.ReplayBufferEnsemble`
+primitive that allows users to sample from multiple datasets at once.
+
+If the individual dataset formats differ, :class:`~torchrl.envs.Transform` instances
+can be used. In the following example, we create two dummy datasets with semantically
+identical entries that differ in names (``("some", "key")`` and ``"another_key"``)
+and show how they can be renamed to have a matching name. We also resize images
+such that they can be stacked together during sampling.
+
+    >>> from torchrl.envs import Comopse, ToTensorImage, Resize, RenameTransform
+    >>> from torchrl.data import TensorDictReplayBuffer, ReplayBufferEnsemble, LazyMemmapStorage
+    >>> from tensordict import TensorDict
+    >>> import torch
+    >>> rb0 = TensorDictReplayBuffer(
+    ...     storage=LazyMemmapStorage(10),
+    ...     transform=Compose(
+    ...         ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
+    ...         Resize(32, in_keys=["pixels", ("next", "pixels")]),
+    ...         RenameTransform([("some", "key")], ["renamed"]),
+    ...     ),
+    ... )
+    >>> rb1 = TensorDictReplayBuffer(
+    ...     storage=LazyMemmapStorage(10),
+    ...     transform=Compose(
+    ...         ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
+    ...         Resize(32, in_keys=["pixels", ("next", "pixels")]),
+    ...         RenameTransform(["another_key"], ["renamed"]),
+    ...     ),
+    ... )
+    >>> rb = ReplayBufferEnsemble(
+    ...     rb0,
+    ...     rb1,
+    ...     p=[0.5, 0.5],
+    ...     transform=Resize(33, in_keys=["pixels"], out_keys=["pixels33"]),
+    ... )
+    >>> data0 = TensorDict(
+    ...     {
+    ...         "pixels": torch.randint(255, (10, 244, 244, 3)),
+    ...         ("next", "pixels"): torch.randint(255, (10, 244, 244, 3)),
+    ...         ("some", "key"): torch.randn(10),
+    ...     },
+    ...     batch_size=[10],
+    ... )
+    >>> data1 = TensorDict(
+    ...     {
+    ...         "pixels": torch.randint(255, (10, 64, 64, 3)),
+    ...         ("next", "pixels"): torch.randint(255, (10, 64, 64, 3)),
+    ...         "another_key": torch.randn(10),
+    ...     },
+    ...     batch_size=[10],
+    ... )
+    >>> rb[0].extend(data0)
+    >>> rb[1].extend(data1)
+    >>> for _ in range(2):
+    ...     sample = rb.sample(10)
+    ...     assert sample["next", "pixels"].shape == torch.Size([2, 5, 3, 32, 32])
+    ...     assert sample["pixels"].shape == torch.Size([2, 5, 3, 32, 32])
+    ...     assert sample["pixels33"].shape == torch.Size([2, 5, 3, 33, 33])
+    ...     assert sample["renamed"].shape == torch.Size([2, 5])
+
+.. currentmodule:: torchrl.data.replay_buffers
+
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    ReplayBufferEnsemble
+    SamplerEnsemble
+    StorageEnsemble
+    WriterEnsemble
 
 TensorSpec
 ----------

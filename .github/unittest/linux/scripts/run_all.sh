@@ -143,7 +143,11 @@ fi
 python -c "import functorch"
 
 # install snapshot
-pip3 install git+https://github.com/pytorch/torchsnapshot
+if [[ "$TORCH_VERSION" == "nightly" ]]; then
+  pip3 install git+https://github.com/pytorch/torchsnapshot
+else
+  pip3 install torchsnapshot
+fi
 
 # install tensordict
 pip3 install git+https://github.com/pytorch/tensordict.git
@@ -179,6 +183,7 @@ python -m torch.utils.collect_env
 export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
 export MAX_IDLE_COUNT=100
+export BATCHED_PIPE_TIMEOUT=60
 
 pytest test/smoke_test.py -v --durations 200
 pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'

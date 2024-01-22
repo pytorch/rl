@@ -17,7 +17,12 @@ import numpy as np
 
 import torch
 
-from tensordict import unravel_key, unravel_key_list
+from tensordict import (
+    is_tensor_collection,
+    NonTensorData,
+    unravel_key,
+    unravel_key_list,
+)
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.nn import dispatch, TensorDictModuleBase
 from tensordict.tensordict import TensorDict, TensorDictBase
@@ -572,7 +577,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             env = env.to(device)
         else:
             device = env.device
-        super().__init__(device=None, **kwargs)
+        super().__init__(device=None, allow_done_after_reset=None, **kwargs)
 
         if isinstance(env, TransformedEnv):
             self._set_env(env.base_env, device)
@@ -677,6 +682,18 @@ but got an object of type {type(transform)}."""
     def run_type_checks(self, value):
         raise RuntimeError(
             "run_type_checks is a read-only property for TransformedEnvs"
+        )
+
+    @property
+    def _allow_done_after_reset(self) -> bool:
+        return self.base_env._allow_done_after_reset
+
+    @_allow_done_after_reset.setter
+    def _allow_done_after_reset(self, value):
+        if value is None:
+            return
+        raise RuntimeError(
+            "_allow_done_after_reset is a read-only property for TransformedEnvs"
         )
 
     @property
@@ -1640,7 +1657,15 @@ class RewardClipping(Transform):
 
 
 class BinarizeReward(Transform):
-    """Maps the reward to a binary value (0 or 1) if the reward is null or non-null, respectively."""
+    """Maps the reward to a binary value (0 or 1) if the reward is null or non-null, respectively.
+
+    Args:
+        in_keys (List[NestedKey]): input keys
+        out_keys (List[NestedKey], optional): output keys. Defaults to value
+            of ``in_keys``.
+        dtype (torch.dtype, optional): the dtype of the binerized reward.
+            Defaults to ``torch.int8``.
+    """
 
     def __init__(
         self,
@@ -1658,12 +1683,14 @@ class BinarizeReward(Transform):
             raise RuntimeError(
                 f"Reward shape last dimension must be singleton, got reward of shape {reward.shape}"
             )
-        return (reward > 0.0).to(torch.long)
+        return (reward > 0.0).to(torch.int8)
 
     @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         return BinaryDiscreteTensorSpec(
-            n=1, device=reward_spec.device, shape=reward_spec.shape
+            n=1,
+            device=reward_spec.device,
+            shape=reward_spec.shape,
         )
 
 
@@ -3119,7 +3146,7 @@ class DTypeCastTransform(Transform):
         ...         obs = self.observation_spec.rand()
         ...         assert reward.dtype == torch.float64
         ...         assert obs["obs"].dtype == torch.float64
-        ...         return obs.select().set("next", obs.update({"reward": reward, "done": done}))
+        ...         return obs.empty().set("next", obs.update({"reward": reward, "done": done}))
         ...     def _set_seed(self, seed):
         ...         pass
         >>> env = TransformedEnv(MyEnv(), DTypeCastTransform(torch.double, torch.float))
@@ -3480,7 +3507,7 @@ class DoubleToFloat(DTypeCastTransform):
         ...         obs = self.observation_spec.rand()
         ...         assert reward.dtype == torch.float64
         ...         assert obs["obs"].dtype == torch.float64
-        ...         return obs.select().set("next", obs.update({"reward": reward, "done": done}))
+        ...         return obs.empty().set("next", obs.update({"reward": reward, "done": done}))
         ...     def _set_seed(self, seed):
         ...         pass
         >>> env = TransformedEnv(MyEnv(), DoubleToFloat())
@@ -4918,8 +4945,8 @@ class RewardSum(Transform):
 class StepCounter(Transform):
     """Counts the steps from a reset and optionally sets the truncated state to ``True`` after a certain number of steps.
 
-    The ``"done"`` state is also adaptec accordingly (as done is the intersection
-    of task completetion and early truncation).
+    The ``"done"`` state is also adapted accordingly (as done is the disjunction
+    of task completion and early truncation).
 
     Args:
         max_steps (int, optional): a positive integer that indicates the
@@ -5419,7 +5446,12 @@ class SelectTransform(Transform):
 
     """
 
-    def __init__(self, *selected_keys, keep_rewards=True, keep_dones=True):
+    def __init__(
+        self,
+        *selected_keys: NestedKey,
+        keep_rewards: bool = True,
+        keep_dones: bool = True,
+    ):
         super().__init__()
         try:
             selected_keys = unravel_key_list(selected_keys)
@@ -5433,7 +5465,7 @@ class SelectTransform(Transform):
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.parent is not None:
-            input_keys = self.parent.input_spec.keys(True, True)
+            input_keys = self.parent.state_spec.keys(True, True)
         else:
             input_keys = []
         if self.keep_reward_keys:
@@ -5454,7 +5486,7 @@ class SelectTransform(Transform):
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         if self.parent is not None:
-            input_keys = self.parent.input_spec.keys(True, True)
+            input_keys = self.parent.state_spec.keys(True, True)
         else:
             input_keys = []
         if self.keep_reward_keys:
@@ -6708,3 +6740,299 @@ class BurnInTransform(Transform):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(burn_in={self.burn_in}, in_keys={self.in_keys}, out_keys={self.out_keys})"
+
+
+class SignTransform(Transform):
+    """A transform to compute the signs of TensorDict values.
+
+    This transform reads the tensors in ``in_keys`` and ``in_keys_inv``, computes the
+    signs of their elements and writes the resulting sign tensors to ``out_keys`` and
+    ``out_keys_inv`` respectively.
+
+    Args:
+        in_keys (list of NestedKeys): input entries (read)
+        out_keys (list of NestedKeys): input entries (write)
+        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
+
+    Examples:
+        >>> from torchrl.envs import GymEnv, TransformedEnv, SignTransform
+        >>> base_env = GymEnv("Pendulum-v1")
+        >>> env = TransformedEnv(base_env, SignTransform(in_keys=['observation']))
+        >>> r = env.rollout(100)
+        >>> obs = r["observation"]
+        >>> assert (torch.logical_or(torch.logical_or(obs == -1, obs == 1), obs == 0.0)).all()
+    """
+
+    def __init__(
+        self,
+        in_keys=None,
+        out_keys=None,
+        in_keys_inv=None,
+        out_keys_inv=None,
+    ):
+        if in_keys is None:
+            in_keys = []
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        if in_keys_inv is None:
+            in_keys_inv = []
+        if out_keys_inv is None:
+            out_keys_inv = copy(in_keys_inv)
+        super().__init__(in_keys, out_keys, in_keys_inv, out_keys_inv)
+
+    def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+        return obs.sign()
+
+    def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
+        return state.sign()
+
+    @_apply_to_composite
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        return BoundedTensorSpec(
+            shape=observation_spec.shape,
+            device=observation_spec.device,
+            dtype=observation_spec.dtype,
+            high=1.0,
+            low=-1.0,
+        )
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        for key in self.in_keys:
+            if key in self.parent.reward_keys:
+                spec = self.parent.output_spec["full_reward_spec"][key]
+                self.parent.output_spec["full_reward_spec"][key] = BoundedTensorSpec(
+                    shape=spec.shape,
+                    device=spec.device,
+                    dtype=spec.dtype,
+                    high=1.0,
+                    low=-1.0,
+                )
+        return self.parent.output_spec["full_reward_spec"]
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
+
+class RemoveEmptySpecs(Transform):
+    """Removes empty specs and content from an environment.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, \
+        ...     DiscreteTensorSpec
+        >>> from torchrl.envs import EnvBase, TransformedEnv, RemoveEmptySpecs
+        >>>
+        >>>
+        >>> class DummyEnv(EnvBase):
+        ...     def __init__(self, *args, **kwargs):
+        ...         super().__init__(*args, **kwargs)
+        ...         self.observation_spec = CompositeSpec(
+        ...             observation=UnboundedContinuousTensorSpec((*self.batch_size, 3)),
+        ...             other=CompositeSpec(
+        ...                 another_other=CompositeSpec(shape=self.batch_size),
+        ...                 shape=self.batch_size,
+        ...             ),
+        ...             shape=self.batch_size,
+        ...         )
+        ...         self.action_spec = UnboundedContinuousTensorSpec((*self.batch_size, 3))
+        ...         self.done_spec = DiscreteTensorSpec(
+        ...             2, (*self.batch_size, 1), dtype=torch.bool
+        ...         )
+        ...         self.full_done_spec["truncated"] = self.full_done_spec[
+        ...             "terminated"].clone()
+        ...         self.reward_spec = CompositeSpec(
+        ...             reward=UnboundedContinuousTensorSpec(*self.batch_size, 1),
+        ...             other_reward=CompositeSpec(shape=self.batch_size),
+        ...             shape=self.batch_size
+        ...             )
+        ...
+        ...     def _reset(self, tensordict):
+        ...         return self.observation_spec.rand().update(self.full_done_spec.zero())
+        ...
+        ...     def _step(self, tensordict):
+        ...         return TensorDict(
+        ...             {},
+        ...             batch_size=[]
+        ...         ).update(self.observation_spec.rand()).update(
+        ...             self.full_done_spec.zero()
+        ...             ).update(self.full_reward_spec.rand())
+        ...
+        ...     def _set_seed(self, seed):
+        ...         return seed + 1
+        >>>
+        >>>
+        >>> base_env = DummyEnv()
+        >>> print(base_env.rollout(2))
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        other: TensorDict(
+                            fields={
+                                another_other: TensorDict(
+                                    fields={
+                                    },
+                                    batch_size=torch.Size([2]),
+                                    device=cpu,
+                                    is_shared=False)},
+                            batch_size=torch.Size([2]),
+                            device=cpu,
+                            is_shared=False),
+                        other_reward: TensorDict(
+                            fields={
+                            },
+                            batch_size=torch.Size([2]),
+                            device=cpu,
+                            is_shared=False),
+                        reward: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([2]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([2]),
+            device=cpu,
+            is_shared=False)
+        >>> check_env_specs(base_env)
+        >>> env = TransformedEnv(base_env, RemoveEmptySpecs())
+        >>> print(env.rollout(2))
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([2]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([2]),
+            device=cpu,
+            is_shared=False)
+        check_env_specs(env)
+    """
+
+    _has_empty_input = True
+
+    @staticmethod
+    def _sorter(key_val):
+        key, _ = key_val
+        if isinstance(key, str):
+            return 0
+        return len(key)
+
+    def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
+        full_done_spec = output_spec["full_done_spec"]
+        full_reward_spec = output_spec["full_reward_spec"]
+        full_observation_spec = output_spec["full_observation_spec"]
+        # we reverse things to make sure we delete things from the back
+        for key, spec in sorted(
+            full_done_spec.items(True), key=self._sorter, reverse=True
+        ):
+            if isinstance(spec, CompositeSpec) and spec.is_empty():
+                del full_done_spec[key]
+
+        for key, spec in sorted(
+            full_observation_spec.items(True), key=self._sorter, reverse=True
+        ):
+            if isinstance(spec, CompositeSpec) and spec.is_empty():
+                del full_observation_spec[key]
+
+        for key, spec in sorted(
+            full_reward_spec.items(True), key=self._sorter, reverse=True
+        ):
+            if isinstance(spec, CompositeSpec) and spec.is_empty():
+                del full_reward_spec[key]
+        return output_spec
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        full_action_spec = input_spec["full_action_spec"]
+        full_state_spec = input_spec["full_state_spec"]
+        # we reverse things to make sure we delete things from the back
+
+        self._has_empty_input = False
+        for key, spec in sorted(
+            full_action_spec.items(True), key=self._sorter, reverse=True
+        ):
+            if isinstance(spec, CompositeSpec) and spec.is_empty():
+                self._has_empty_input = True
+                del full_action_spec[key]
+
+        for key, spec in sorted(
+            full_state_spec.items(True), key=self._sorter, reverse=True
+        ):
+            if isinstance(spec, CompositeSpec) and spec.is_empty():
+                self._has_empty_input = True
+                del full_state_spec[key]
+        return input_spec
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._has_empty_input:
+            input_spec = getattr(self.parent, "input_spec", None)
+            if input_spec is None:
+                return tensordict
+
+            full_action_spec = input_spec["full_action_spec"]
+            full_state_spec = input_spec["full_state_spec"]
+            # we reverse things to make sure we delete things from the back
+
+            for key, spec in sorted(
+                full_action_spec.items(True), key=self._sorter, reverse=True
+            ):
+                if (
+                    isinstance(spec, CompositeSpec)
+                    and spec.is_empty()
+                    and key not in tensordict.keys(True)
+                ):
+                    tensordict.create_nested(key)
+
+            for key, spec in sorted(
+                full_state_spec.items(True), key=self._sorter, reverse=True
+            ):
+                if (
+                    isinstance(spec, CompositeSpec)
+                    and spec.is_empty()
+                    and key not in tensordict.keys(True)
+                ):
+                    tensordict.create_nested(key)
+        return tensordict
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for key, value in sorted(
+            tensordict.items(True), key=self._sorter, reverse=True
+        ):
+            if (
+                is_tensor_collection(value)
+                and not isinstance(value, NonTensorData)
+                and value.is_empty()
+            ):
+                del tensordict[key]
+        return tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        """Resets a transform if it is stateful."""
+        return self._call(tensordict_reset)
+
+    forward = _call

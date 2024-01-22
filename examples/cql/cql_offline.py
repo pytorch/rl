@@ -9,7 +9,7 @@ This is a self-contained example of an offline CQL training script.
 The helper functions are coded in the utils.py associated with this script.
 
 """
-
+import logging
 import time
 
 import hydra
@@ -145,7 +145,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         log_metrics(logger, to_log, i)
 
     pbar.close()
-    print(f"Training time: {time.time() - start_time}")
+    logging.info(f"Training time: {time.time() - start_time}")
 
 
 if __name__ == "__main__":

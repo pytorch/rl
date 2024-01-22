@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import abc
 import itertools
+import logging
 import warnings
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -15,7 +16,11 @@ import torch
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
 
-from torchrl.data.tensor_specs import TensorSpec, UnboundedContinuousTensorSpec
+from torchrl.data.tensor_specs import (
+    CompositeSpec,
+    TensorSpec,
+    UnboundedContinuousTensorSpec,
+)
 from torchrl.envs.common import _EnvWrapper
 
 
@@ -36,6 +41,15 @@ class BaseInfoDictReader(metaclass=abc.ABCMeta):
 class default_info_dict_reader(BaseInfoDictReader):
     """Default info-key reader.
 
+    Args:
+        keys (list of keys, optional): If provided, the list of keys to get from
+            the info dictionary. Defaults to all keys.
+        spec (List[TensorSpec], Dict[str, TensorSpec] or CompositeSpec, optional):
+            If a list of specs is provided, each spec will be matched to its
+            correspondent key to form a :class:`torchrl.data.CompositeSpec`.
+            If not provided, a composite spec with :class:`~torchrl.data.UnboundedContinuousTensorSpec`
+            specs will lazyly be created.
+
     In cases where keys can be directly written to a tensordict (mostly if they abide to the
     tensordict shape), one simply needs to indicate the keys to be registered during
     instantiation.
@@ -55,27 +69,38 @@ class default_info_dict_reader(BaseInfoDictReader):
 
     def __init__(
         self,
-        keys: List[str] = None,
-        spec: Union[Sequence[TensorSpec], Dict[str, TensorSpec]] = None,
+        keys: List[str] | None = None,
+        spec: Sequence[TensorSpec]
+        | Dict[str, TensorSpec]
+        | CompositeSpec
+        | None = None,
     ):
+        self._lazy = False
         if keys is None:
-            keys = []
+            self._lazy = True
         self.keys = keys
 
-        if isinstance(spec, Sequence):
-            if len(spec) != len(self.keys):
+        if spec is None and keys is None:
+            _info_spec = None
+        elif spec is None:
+            _info_spec = CompositeSpec(
+                {key: UnboundedContinuousTensorSpec() for key in keys}, shape=[]
+            )
+        elif not isinstance(spec, CompositeSpec):
+            if self.keys is not None and len(spec) != len(self.keys):
                 raise ValueError(
                     "If specifying specs for info keys with a sequence, the "
                     "length of the sequence must match the number of keys"
                 )
-            self._info_spec = dict(zip(self.keys, spec))
+            if isinstance(spec, dict):
+                _info_spec = CompositeSpec(spec, shape=[])
+            else:
+                _info_spec = CompositeSpec(
+                    {key: spec for key, spec in zip(keys, spec)}, shape=[]
+                )
         else:
-            if spec is None:
-                spec = {}
-
-            self._info_spec = {
-                key: spec.get(key, UnboundedContinuousTensorSpec()) for key in self.keys
-            }
+            _info_spec = spec.clone()
+        self._info_spec = _info_spec
 
     def __call__(
         self, info_dict: Dict[str, Any], tensordict: TensorDictBase
@@ -85,10 +110,28 @@ class default_info_dict_reader(BaseInfoDictReader):
                 f"Found an info_dict of type {type(info_dict)} "
                 f"but expected type or subtype `dict`."
             )
-        for key in self.keys:
+        keys = self.keys
+        if keys is None:
+            keys = info_dict.keys()
+            self.keys = keys
+        info_spec = None if self.info_spec is not None else CompositeSpec()
+        for key in keys:
             if key in info_dict:
-                tensordict[key] = info_dict[key]
+                tensordict.set(key, info_dict[key])
+                if info_spec is not None:
+                    val = tensordict.get(key)
+                    info_spec[key] = UnboundedContinuousTensorSpec(
+                        val.shape, device=val.device, dtype=val.dtype
+                    )
+        if info_spec is not None:
+            if tensordict.device is not None:
+                info_spec = info_spec.to(tensordict.device)
+            self._info_spec = info_spec
         return tensordict
+
+    def reset(self):
+        self.keys = None
+        self._info_spec = None
 
     @property
     def info_spec(self) -> Dict[str, TensorSpec]:
@@ -106,7 +149,7 @@ class GymLikeEnv(_EnvWrapper):
 
     where the outputs are the observation, reward and done state respectively.
     In this implementation, the info output is discarded (but specific keys can be read
-    by updating info_dict_reader, see :obj:`set_info_dict_reader` class method).
+    by updating info_dict_reader, see :meth:`~.set_info_dict_reader` method).
 
     By default, the first output is written at the "observation" key-value pair in the output tensordict, unless
     the first output is a dictionary. In that case, each observation output will be put at the corresponding
@@ -180,9 +223,9 @@ class GymLikeEnv(_EnvWrapper):
             if truncated is not None:
                 truncated = [truncated]
         return (
-            terminated,
-            truncated,
-            done,
+            torch.as_tensor(terminated),
+            torch.as_tensor(truncated),
+            torch.as_tensor(done),
             do_break.any() if not isinstance(do_break, bool) else do_break,
         )
 
@@ -227,9 +270,14 @@ class GymLikeEnv(_EnvWrapper):
 
         reward = 0
         for _ in range(self.wrapper_frame_skip):
-            obs, _reward, terminated, truncated, done, info = self._output_transform(
-                self._env.step(action_np)
-            )
+            (
+                obs,
+                _reward,
+                terminated,
+                truncated,
+                done,
+                info_dict,
+            ) = self._output_transform(self._env.step(action_np))
             if isinstance(obs, list) and len(obs) == 1:
                 # Until gym 0.25.2 we had rendered frames returned in lists of length 1
                 obs = obs[0]
@@ -261,23 +309,41 @@ class GymLikeEnv(_EnvWrapper):
             obs_dict["truncated"] = truncated
         obs_dict["done"] = done
         obs_dict["terminated"] = terminated
+        validated = self.validated
+        if not validated:
+            tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
+            if validated is None:
+                # check if any value has to be recast to something else. If not, we can safely
+                # build the tensordict without running checks
+                self.validated = all(
+                    val is tensordict_out.get(key)
+                    for key, val in TensorDict(obs_dict, []).items(True, True)
+                )
+        else:
+            tensordict_out = TensorDict(
+                obs_dict, batch_size=tensordict.batch_size, _run_checks=False
+            )
+        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
 
-        tensordict_out = TensorDict(
-            obs_dict, batch_size=tensordict.batch_size, device=self.device
-        )
-
-        if self.info_dict_reader and info is not None:
-            if not isinstance(info, dict):
+        if self.info_dict_reader and (info_dict is not None):
+            if not isinstance(info_dict, dict):
                 warnings.warn(
-                    f"Expected info to be a dictionary but got a {type(info)} with values {str(info)[:100]}."
+                    f"Expected info to be a dictionary but got a {type(info_dict)} with values {str(info_dict)[:100]}."
                 )
             else:
                 for info_dict_reader in self.info_dict_reader:
-                    out = info_dict_reader(info, tensordict_out)
+                    out = info_dict_reader(info_dict, tensordict_out)
                     if out is not None:
                         tensordict_out = out
-        # tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
+
+    @property
+    def validated(self):
+        return self.__dict__.get("_validated", None)
+
+    @validated.setter
+    def validated(self, value):
+        self.__dict__["_validated"] = value
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
@@ -289,6 +355,7 @@ class GymLikeEnv(_EnvWrapper):
         tensordict_out = TensorDict(
             source=source,
             batch_size=self.batch_size,
+            _run_checks=not self.validated,
         )
         if self.info_dict_reader and info is not None:
             for info_dict_reader in self.info_dict_reader:
@@ -344,7 +411,9 @@ class GymLikeEnv(_EnvWrapper):
     def _reset_output_transform(self, reset_outputs_tuple: Tuple) -> Tuple:
         ...
 
-    def set_info_dict_reader(self, info_dict_reader: BaseInfoDictReader) -> GymLikeEnv:
+    def set_info_dict_reader(
+        self, info_dict_reader: BaseInfoDictReader | None = None
+    ) -> GymLikeEnv:
         """Sets an info_dict_reader function.
 
         This function should take as input an
@@ -352,11 +421,18 @@ class GymLikeEnv(_EnvWrapper):
         write values in an ad-hoc manner from one to the other.
 
         Args:
-            info_dict_reader (callable): a callable taking a input dictionary and
-                output tensordict as arguments. This function should modify the
-                tensordict in-place.
+            info_dict_reader (Callable[[Dict], TensorDict], optional): a callable
+                taking a input dictionary and output tensordict as arguments.
+                This function should modify the tensordict in-place. If none is
+                provided, :class:`~torchrl.envs.gym_like.default_info_dict_reader`
+                will be used.
 
         Returns: the same environment with the dict_reader registered.
+
+        .. note::
+          Automatically registering an info_dict reader should be done via
+          :meth:`~.auto_register_info_dict`, which will ensure that the env
+          specs are properly constructed.
 
         Examples:
             >>> from torchrl.envs import default_info_dict_reader
@@ -369,13 +445,67 @@ class GymLikeEnv(_EnvWrapper):
             >>> assert "my_info_key" in tensordict.keys()
 
         """
+        if info_dict_reader is None:
+            info_dict_reader = default_info_dict_reader()
         self.info_dict_reader.append(info_dict_reader)
         if isinstance(info_dict_reader, BaseInfoDictReader):
             # if we have a BaseInfoDictReader, we know what the specs will be
             # In other cases (eg, RoboHive) we will need to figure it out empirically.
+            if (
+                isinstance(info_dict_reader, default_info_dict_reader)
+                and info_dict_reader.info_spec is None
+            ):
+                logging.info(
+                    "The info_dict_reader does not have specs. The only way to palliate to this issue automatically "
+                    "is to run a dummy rollout and gather the specs automatically. "
+                    "To silence this message, provide the specs directly to your spec reader."
+                )
+                # Gym does not guarantee that reset passes all info
+                self.reset()
+                info_dict_reader.reset()
+                self.rand_step()
+                self.reset()
+
             for info_key, spec in info_dict_reader.info_spec.items():
                 self.observation_spec[info_key] = spec.to(self.device)
+
         return self
+
+    def auto_register_info_dict(self):
+        """Automatically registers the info dict.
+
+        It is assumed that all the information contained in the info dict can be registered as numerical values
+        within the tensordict.
+
+        This method returns a (possibly transformed) environment where we make sure that
+        the :func:`torchrl.envs.utils.check_env_specs` succeeds, whether or not
+        the info is filled at reset time.
+
+        This method requires running a few iterations in the environment to
+        manually check that the behaviour matches expectations.
+
+        Examples:
+            >>> from torchrl.envs import GymEnv
+            >>> env = GymEnv("HalfCheetah-v4")
+            >>> env.register_info_dict()
+            >>> env.rollout(3)
+        """
+        from torchrl.envs import check_env_specs, TensorDictPrimer, TransformedEnv
+
+        if self.info_dict_reader:
+            raise RuntimeError("The environment already has an info-dict reader.")
+        self.set_info_dict_reader()
+        try:
+            check_env_specs(self)
+            return self
+        except AssertionError as err:
+            if "The keys of the specs and data do not match" in str(err):
+                result = TransformedEnv(
+                    self, TensorDictPrimer(self.info_dict_reader[0].info_spec)
+                )
+                check_env_specs(result)
+                return result
+            raise err
 
     def __repr__(self) -> str:
         return (
