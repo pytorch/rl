@@ -2523,6 +2523,7 @@ class TestAtariDQN:
         ):
             assert key in sample.keys(True)
         assert sample.shape == (64,)
+        assert sample.get_non_tensor("metadata")["dataset_id"] == dataset
 
     @pytest.mark.parametrize(
         "num_slices,slice_len", [[None, None], [None, 8], [2, None]]
@@ -2539,8 +2540,8 @@ class TestAtariDQN:
         )
         sample = dataset.sample()
         assert sample.shape == (2, 64)
-        assert sample[0]["metadata"]["dataset_id"] == "Pong/4"
-        assert sample[0]["metadata"]["dataset_id"] == "Asterix/1"
+        assert sample[0].get_non_tensor("metadata")["dataset_id"] == "Pong/4"
+        assert sample[0].get_non_tensor("metadata")["dataset_id"] == "Asterix/1"
 
 
 @pytest.mark.slow

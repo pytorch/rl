@@ -750,7 +750,12 @@ class SliceSampler(Sampler):
                         and self._used_traj_key[0] == "_data"
                     )
                 else:
-                    trajectory = storage[:].get(self.traj_key)
+                    try:
+                        trajectory = storage[:].get(self.traj_key)
+                    except Exception:
+                        raise RuntimeError(
+                            "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
+                        )
                 vals = self._find_start_stop_traj(trajectory=trajectory[: len(storage)])
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals
@@ -779,7 +784,12 @@ class SliceSampler(Sampler):
                         and self._used_end_key[0] == "_data"
                     )
                 else:
-                    done = storage[:].get(self.end_key)
+                    try:
+                        done = storage[:].get(self.end_key)
+                    except Exception:
+                        raise RuntimeError(
+                            "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
+                        )
                 vals = self._find_start_stop_traj(end=done.squeeze())[: len(storage)]
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals
