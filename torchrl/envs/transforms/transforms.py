@@ -1163,7 +1163,7 @@ class ToTensorImage(ObservationTransform):
         from_int (bool, optional): if ``True``, the tensor will be scaled from
             the range [0, 255] to the range [0.0, 1.0]. if `False``, the tensor
             will not be scaled. if `None`, the tensor will be scaled if
-            it's a floating-point tensor. default=None.
+            it's not a floating-point tensor. default=None.
         unsqueeze (bool): if ``True``, the observation tensor is unsqueezed
             along the first dimension. default=False.
         dtype (torch.dtype, optional): dtype to use for the resulting
