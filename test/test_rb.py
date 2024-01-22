@@ -1808,7 +1808,8 @@ class TestSamplers:
         storage.set(range(100), data)
         sampler = SliceSampler(num_slices=num_slices)
         with pytest.raises(
-            RuntimeError, match="can only sample from TensorStorage subclasses"
+            RuntimeError,
+            match="Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories.",
         ):
             index, _ = sampler.sample(storage, batch_size=batch_size)
 

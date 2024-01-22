@@ -42,7 +42,7 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
-            a default RoundRobinWriter() will be used.
+            a default :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter` will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset.
@@ -51,7 +51,7 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.transforms.transforms.Compose` class.
 
     """
 

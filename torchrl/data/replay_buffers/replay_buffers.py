@@ -157,13 +157,7 @@ class ReplayBuffer:
         self._writer = writer if writer is not None else RoundRobinWriter()
         self._writer.register_storage(self._storage)
 
-        self._collate_fn = (
-            collate_fn
-            if collate_fn is not None
-            else _get_default_collate(
-                self._storage, _is_tensordict=isinstance(self, TensorDictReplayBuffer)
-            )
-        )
+        self._get_collate_fn(collate_fn)
         self._pin_memory = pin_memory
 
         self._prefetch = bool(prefetch)
@@ -200,6 +194,43 @@ class ReplayBuffer:
                 "Please pass the batch-size to the ReplayBuffer constructor."
             )
         self._batch_size = batch_size
+
+    def _get_collate_fn(self, collate_fn):
+        self._collate_fn = (
+            collate_fn
+            if collate_fn is not None
+            else _get_default_collate(
+                self._storage, _is_tensordict=isinstance(self, TensorDictReplayBuffer)
+            )
+        )
+
+    def set_storage(self, storage: Storage, collate_fn: Callable | None = None):
+        """Sets a new storage in the replay buffer and returns the previous storage.
+
+        Args:
+            storage (Storage): the new storage for the buffer.
+            collate_fn (callable, optional): if provided, the collate_fn is set to this
+                value. Otherwise it is reset to a default value.
+
+        """
+        prev_storage = self._storage
+        self._storage = storage
+        self._get_collate_fn(collate_fn)
+
+        return prev_storage
+
+    def set_writer(self, writer: Writer):
+        """Sets a new writer in the replay buffer and returns the previous writer."""
+        prev_writer = self._writer
+        self._writer = writer
+        self._writer.register_storage(self._storage)
+        return prev_writer
+
+    def set_sampler(self, sampler: Sampler):
+        """Sets a new sampler in the replay buffer and returns the previous sampler."""
+        prev_sampler = self._sampler
+        self._sampler = sampler
+        return prev_sampler
 
     def __len__(self) -> int:
         with self._replay_lock:
