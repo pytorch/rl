@@ -8,25 +8,30 @@ import functools
 import gzip
 import io
 import json
-import shutil
+import logging
 
 import os
+import shutil
 import subprocess
-from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter
 import tempfile
 from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 import torch
-from tensordict import TensorDict, MemoryMappedTensor
+from tensordict import MemoryMappedTensor, TensorDict
+from torch import multiprocessing as mp
 
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
+from torchrl.data.replay_buffers.samplers import (
+    SamplerWithoutReplacement,
+    SliceSampler,
+    SliceSamplerWithoutReplacement,
+)
 from torchrl.data.replay_buffers.storages import Storage
-from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement, \
-    SliceSampler, SliceSamplerWithoutReplacement
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter
 from torchrl.envs.utils import _classproperty
-from torch import multiprocessing as mp
+
 
 class AtariDQNExperienceReplay(TensorDictReplayBuffer):
     """Atari DQN Experience replay class.
@@ -55,6 +60,9 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
             ``~/.cache/torchrl/atari`.
+        num_procs (int, optional): number of processes to launch for preprocessing.
+            Has no effect whenever the data is already downloaded. Defaults to 0
+            (no multiprocessing used).
         download (bool or str, optional): Whether the dataset should be downloaded if
             not found. Defaults to ``True``. Download can also be passed as "force",
             in which case the downloaded data will be overwritten.
@@ -109,7 +117,7 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
                 done: Tensor(shape=torch.Size([128]), device=cpu, dtype=torch.uint8, is_shared=False),
                 index: Tensor(shape=torch.Size([128]), device=cpu, dtype=torch.int64, is_shared=False),
                 metadata: NonTensorData(
-                    data={'invalid_range': MemoryMappedTensor([999998, 999999,      0,      1,      2]), 'add_count': MemoryMappedTensor(999999), 'info': {'episode': 0, 'path': PosixPath('/Users/vmoens/.cache/torchrl/atari/Pong/5/0')}},
+                    data={'invalid_range': MemoryMappedTensor([999998, 999999,      0,      1,      2]), 'add_count': MemoryMappedTensor(999999), 'dataset_id': 'Pong/5'}},
                     batch_size=torch.Size([128]),
                     device=None,
                     is_shared=False),
@@ -159,7 +167,7 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
                 done: Tensor(shape=torch.Size([128]), device=cpu, dtype=torch.uint8, is_shared=False),
                 index: Tensor(shape=torch.Size([128]), device=cpu, dtype=torch.int64, is_shared=False),
                 metadata: NonTensorData(
-                    data={'invalid_range': MemoryMappedTensor([999998, 999999,      0,      1,      2]), 'add_count': MemoryMappedTensor(999999), 'info': {'episode': 0, 'path': PosixPath('/Users/vmoens/.cache/torchrl/atari/Pong/5/0')}},
+                    data={'invalid_range': MemoryMappedTensor([999998, 999999,      0,      1,      2]), 'add_count': MemoryMappedTensor(999999), 'dataset_id': 'Pong/5'}},
                     batch_size=torch.Size([128]),
                     device=None,
                     is_shared=False),
@@ -197,9 +205,131 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
                 1995743, 1995744, 1995745, 1995746, 1995747, 1995748, 1995749, 1995750])
 
     .. note::
-      As always, datasets should be composed using :class:`~torchrl.data.replay_buffers.ReplayBufferEnsemble`
+      As always, datasets should be composed using :class:`~torchrl.data.replay_buffers.ReplayBufferEnsemble`:
+
+        >>> from torchrl.data.datasets import AtariDQNExperienceReplay
+        >>> from torchrl.data.replay_buffers import ReplayBufferEnsemble
+        >>> # we change this parameter for quick experimentation, in practice it should be left untouched
+        >>> AtariDQNExperienceReplay._max_runs = 2
+        >>> dataset_asterix = AtariDQNExperienceReplay("Asterix/5", batch_size=128, slice_len=64, num_procs=4)
+        >>> dataset_pong = AtariDQNExperienceReplay("Pong/5", batch_size=128, slice_len=64, num_procs=4)
+        >>> dataset = ReplayBufferEnsemble(dataset_pong, dataset_asterix, batch_size=128, sample_from_all=True)
+        >>> sample = dataset.sample()
+        >>> print("first sample, Asterix", sample[0])
+        first sample, Asterix TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int32, is_shared=False),
+                done: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                index: TensorDict(
+                    fields={
+                        buffer_ids: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=False),
+                        index: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([64]),
+                    device=None,
+                    is_shared=False),
+                metadata: NonTensorData(
+                    data={'invalid_range': MemoryMappedTensor([999998, 999999,      0,      1,      2]), 'add_count': MemoryMappedTensor(999999), 'dataset_id': 'Pong/5'},
+                    batch_size=torch.Size([64]),
+                    device=None,
+                    is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([64, 84, 84]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        reward: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([64, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([64]),
+                    device=None,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([64, 84, 84]), device=cpu, dtype=torch.uint8, is_shared=False),
+                terminated: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                truncated: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.uint8, is_shared=False)},
+            batch_size=torch.Size([64]),
+            device=None,
+            is_shared=False)
+        >>> print("second sample, Pong", sample[1])
+        second sample, Pong TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int32, is_shared=False),
+                done: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                index: TensorDict(
+                    fields={
+                        buffer_ids: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=False),
+                        index: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([64]),
+                    device=None,
+                    is_shared=False),
+                metadata: NonTensorData(
+                    data={'invalid_range': MemoryMappedTensor([999998, 999999,      0,      1,      2]), 'add_count': MemoryMappedTensor(999999), 'dataset_id': 'Asterix/5'},
+                    batch_size=torch.Size([64]),
+                    device=None,
+                    is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([64, 84, 84]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        reward: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([64, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([64]),
+                    device=None,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([64, 84, 84]), device=cpu, dtype=torch.uint8, is_shared=False),
+                terminated: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                truncated: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.uint8, is_shared=False)},
+            batch_size=torch.Size([64]),
+            device=None,
+            is_shared=False)
+        >>> print("Aggregate (metadata hidden)", sample)
+        Aggregate (metadata hidden) LazyStackedTensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.int32, is_shared=False),
+                done: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                index: LazyStackedTensorDict(
+                    fields={
+                        buffer_ids: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.int64, is_shared=False),
+                        index: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    exclusive_fields={
+                    },
+                    batch_size=torch.Size([2, 64]),
+                    device=None,
+                    is_shared=False,
+                    stack_dim=0),
+                metadata: LazyStackedTensorDict(
+                    fields={
+                    },
+                    exclusive_fields={
+                    },
+                    batch_size=torch.Size([2, 64]),
+                    device=None,
+                    is_shared=False,
+                    stack_dim=0),
+                next: LazyStackedTensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([2, 64, 84, 84]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        reward: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    exclusive_fields={
+                    },
+                    batch_size=torch.Size([2, 64]),
+                    device=None,
+                    is_shared=False,
+                    stack_dim=0),
+                observation: Tensor(shape=torch.Size([2, 64, 84, 84]), device=cpu, dtype=torch.uint8, is_shared=False),
+                terminated: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                truncated: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.uint8, is_shared=False)},
+            exclusive_fields={
+            },
+            batch_size=torch.Size([2, 64]),
+            device=None,
+            is_shared=False,
+            stack_dim=0)
 
     """
+
     @_classproperty
     def available_datasets(cls):
         games = [
@@ -261,13 +391,32 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
     # use _max_runs for debugging, avoids downloading the entire dataset
     _max_runs = None
 
-    def __init__(self, dataset_id:str, batch_size:int|None=None, *, root: str | Path | None = None, download: bool|str=True, sampler=None, writer=None, transform: "Transform" | None=None, num_procs: int=0, num_slices: int|None=None, slice_len: int|None=None, strict_len: bool=True, replacement: bool=True, **kwargs):
+    def __init__(
+        self,
+        dataset_id: str,
+        batch_size: int | None = None,
+        *,
+        root: str | Path | None = None,
+        download: bool | str = True,
+        sampler=None,
+        writer=None,
+        transform: "Transform" | None = None,
+        num_procs: int = 0,
+        num_slices: int | None = None,
+        slice_len: int | None = None,
+        strict_len: bool = True,
+        replacement: bool = True,
+        **kwargs,
+    ):
         if dataset_id not in self.available_datasets:
-            raise ValueError("The dataseet_id is not part of the available datasets. The dataset should be named <game_name>/<run> "
-                             "where <game_name> is one of the Atari 2600 games and the run is a number betweeen 1 and 5. "
-                             "The full list of accepted dataset_ids is available under AtariDQNExperienceReplay.available_datasets.")
+            raise ValueError(
+                "The dataseet_id is not part of the available datasets. The dataset should be named <game_name>/<run> "
+                "where <game_name> is one of the Atari 2600 games and the run is a number betweeen 1 and 5. "
+                "The full list of accepted dataset_ids is available under AtariDQNExperienceReplay.available_datasets."
+            )
         self.dataset_id = dataset_id
         from torchrl.data.datasets.utils import _get_root_dir
+
         if root is None:
             root = _get_root_dir("atari")
         self.root = root
@@ -286,27 +435,47 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
         if sampler is None:
             if num_slices is not None or slice_len is not None:
                 if not replacement:
-                    sampler = SliceSamplerWithoutReplacement(num_slices=num_slices, slice_len=slice_len, trajectories=storage.episodes)
+                    sampler = SliceSamplerWithoutReplacement(
+                        num_slices=num_slices,
+                        slice_len=slice_len,
+                        trajectories=storage.episodes,
+                    )
                 else:
-                    sampler = SliceSampler(num_slices=num_slices, slice_len=slice_len, trajectories=storage.episodes, cache_values=True)
+                    sampler = SliceSampler(
+                        num_slices=num_slices,
+                        slice_len=slice_len,
+                        trajectories=storage.episodes,
+                        cache_values=True,
+                    )
             elif not replacement:
                 sampler = SamplerWithoutReplacement()
 
-        super().__init__(storage=storage, batch_size=batch_size, writer=writer, sampler=sampler, collate_fn=lambda x: x, transform=transform, **kwargs)
+        super().__init__(
+            storage=storage,
+            batch_size=batch_size,
+            writer=writer,
+            sampler=sampler,
+            collate_fn=lambda x: x,
+            transform=transform,
+            **kwargs,
+        )
 
     @property
     def episodes(self):
         return self._storage.episodes
 
     @property
-    def root(self)->Path:
+    def root(self) -> Path:
         return self._root
+
     @root.setter
     def root(self, value):
         self._root = Path(value)
+
     @property
     def dataset_path(self) -> Path:
         return self._root / self.dataset_id
+
     @property
     def _is_downloaded(self):
         if os.path.exists(self.dataset_path / "processed.json"):
@@ -315,7 +484,9 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
         return False
 
     def _download_and_preproc(self):
-        logging.info(f"Downloading and preprocessing dataset {self.dataset_id} with {self.num_procs} processes. This may take a while...")
+        logging.info(
+            f"Downloading and preprocessing dataset {self.dataset_id} with {self.num_procs} processes. This may take a while..."
+        )
         if os.path.exists(self.dataset_path):
             shutil.rmtree(self.dataset_path)
         with tempfile.TemporaryDirectory() as tempdir:
@@ -329,21 +500,39 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
             if not os.listdir(tempdir):
                 os.makedirs(tempdir, exist_ok=True)
                 # get the list of runs
-                command = f"gsutil -m ls -R gs://atari-replay-datasets/dqn/Pong/1/replay_logs"
+                command = f"gsutil -m ls -R gs://atari-replay-datasets/dqn/{self.dataset_id}/replay_logs"
                 output = subprocess.run(
-                    command,
-                    shell=True, capture_output=True
+                    command, shell=True, capture_output=True
                 )  # , stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                files = [file.decode("utf-8").replace('$', '\$') for file in output.stdout.splitlines() if
-                         file.endswith(b'.gz')]
+                files = [
+                    file.decode("utf-8").replace("$", "\$")
+                    for file in output.stdout.splitlines()
+                    if file.endswith(b".gz")
+                ]
                 self.remote_gz_files = self._list_runs(None, files)
                 total_runs = list(self.remote_gz_files)[-1]
                 if self.num_procs == 0:
                     for run, run_files in self.remote_gz_files.items():
-                        self._download_and_proc_split(run, run_files, tempdir=tempdir, dataset_path=self.dataset_path, total_episodes=total_runs)
+                        self._download_and_proc_split(
+                            run,
+                            run_files,
+                            tempdir=tempdir,
+                            dataset_path=self.dataset_path,
+                            total_episodes=total_runs,
+                            max_runs=self._max_runs,
+                        )
                 else:
-                    func = functools.partial(self._download_and_proc_split, tempdir=tempdir, dataset_path=self.dataset_path, total_episodes=total_runs)
-                    args = [(run, run_files) for (run, run_files) in self.remote_gz_files.items()]
+                    func = functools.partial(
+                        self._download_and_proc_split,
+                        tempdir=tempdir,
+                        dataset_path=self.dataset_path,
+                        total_episodes=total_runs,
+                        max_runs=self._max_runs,
+                    )
+                    args = [
+                        (run, run_files)
+                        for (run, run_files) in self.remote_gz_files.items()
+                    ]
                     with mp.Pool(self.num_procs) as pool:
                         pool.starmap(func, args)
         with open(self.dataset_path / "processed.json", "w") as file:
@@ -352,17 +541,18 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
             json.dump({"processed": self._max_runs}, file)
 
     @classmethod
-    def _download_and_proc_split(cls, run, run_files, *, tempdir, dataset_path, total_episodes):
-        if cls._max_runs is not None and run >= cls._max_runs:
+    def _download_and_proc_split(
+        cls, run, run_files, *, tempdir, dataset_path, total_episodes, max_runs
+    ):
+        if (max_runs is not None) and (run >= max_runs):
             return
         tempdir = Path(tempdir)
         os.makedirs(tempdir / str(run))
-        files_str = ' '.join(run_files)  # .decode("utf-8")
+        files_str = " ".join(run_files)  # .decode("utf-8")
         logging.info("downloading", files_str)
         command = f"gsutil -m cp {files_str} {tempdir}/{run}"
         subprocess.run(
-            command,
-            shell=True
+            command, shell=True
         )  # , stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         local_gz_files = cls._list_runs(tempdir / str(run))
         # we iterate over the dict but this one has length 1
@@ -374,7 +564,7 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
                 shutil.rmtree(path)
                 raise
         shutil.rmtree(tempdir / str(run))
-        logging.info(f'Concluded run {run} out of {total_episodes}')
+        logging.info(f"Concluded run {run} out of {total_episodes}")
 
     @classmethod
     def _preproc_run(cls, path, gz_files, run):
@@ -400,7 +590,11 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
                 td[key] = mmap
                 # td["data", "next", key[1:]] = mmap[1:]
             else:
-                if key in (("data", "reward"), ("data", "done"), ("data", "terminated")):
+                if key in (
+                    ("data", "reward"),
+                    ("data", "done"),
+                    ("data", "terminated"),
+                ):
                     filename = path / "data" / "next" / (key[-1] + ".memmap")
                     os.makedirs(filename.parent, exist_ok=True)
                     mmap = MemoryMappedTensor.from_tensor(t, filename=filename)
@@ -452,8 +646,11 @@ class _AtariStorage(Storage):
         self.path = Path(path)
 
         def get_folders(path):
-            return [name for name in os.listdir(path) if
-                    os.path.isdir(os.path.join(path, name))]
+            return [
+                name
+                for name in os.listdir(path)
+                if os.path.isdir(os.path.join(path, name))
+            ]
 
         # Usage
         self.splits = []
@@ -467,14 +664,25 @@ class _AtariStorage(Storage):
             path = self.path / str(split)
             self._split_tds.append(self._load_split(path))
             # take away 1 because we padded with 1 empty val
-            frames_per_split[split] = self._split_tds[-1].get(("data", "observation")).shape[0] - 1
+            frames_per_split[split] = (
+                self._split_tds[-1].get(("data", "observation")).shape[0] - 1
+            )
 
-        frames_per_split = torch.tensor([[split, length] for (split, length) in frames_per_split.items()])
+        frames_per_split = torch.tensor(
+            [[split, length] for (split, length) in frames_per_split.items()]
+        )
         frames_per_split[:, 1] = frames_per_split[:, 1].cumsum(0)
-        self.frames_per_split = torch.cat([torch.tensor([[-1, 0]]), frames_per_split], 0)
+        self.frames_per_split = torch.cat(
+            [torch.tensor([[-1, 0]]), frames_per_split], 0
+        )
 
         # retrieve episodes
-        self.episodes = torch.cumsum(torch.cat([td.get(("data", "next", "terminated")) for td in self._split_tds], 0), 0)
+        self.episodes = torch.cumsum(
+            torch.cat(
+                [td.get(("data", "next", "terminated")) for td in self._split_tds], 0
+            ),
+            0,
+        )
 
     def __len__(self):
         return self.frames_per_split[-1, 1].item()
@@ -484,13 +692,15 @@ class _AtariStorage(Storage):
         # We don't assume each storage has the same size (too expensive to test)
         # so we keep a map of each storage cumulative length and retrieve the
         # storages one after the other.
-        split = (item < self.frames_per_split[1:, 1].unsqueeze(1)) & (item >= self.frames_per_split[:-1, 1].unsqueeze(1))
+        split = (item < self.frames_per_split[1:, 1].unsqueeze(1)) & (
+            item >= self.frames_per_split[:-1, 1].unsqueeze(1)
+        )
         split_tmp, idx = split.squeeze().nonzero().unbind(-1)
         split = torch.zeros_like(split_tmp)
         split[idx] = split_tmp
         split = self.frames_per_split[split + 1, 0]
         item = item - self.frames_per_split[split, 1]
-        assert (item>=0).all()
+        assert (item >= 0).all()
         if isinstance(item, int):
             unique_splits = (split,)
             split_inverse = None
@@ -500,7 +710,7 @@ class _AtariStorage(Storage):
         out = []
         for i, split in enumerate(unique_splits):
             _item = item[split_inverse == i] if split_inverse is not None else item
-            out.append( self._proc_td(self._split_tds[split], _item))
+            out.append(self._proc_td(self._split_tds[split], _item))
         return torch.cat(out, 0)
 
     def _load_split(self, path):
@@ -554,13 +764,33 @@ class _AtariStorage(Storage):
             return self.get(torch.arange(start, stop, step))
         return self[torch.arange(len(self))[index]]
 
-if __name__ == '__main__':
-    import logging
-    logging.getLogger().setLevel(logging.INFO)
-    AtariDQNExperienceReplay._max_runs = 3
-    dataset = AtariDQNExperienceReplay("Pong/5", num_procs=4, num_slices=4, batch_size=128, replacement=False)
-    torch.manual_seed(0)
-    for i, data in enumerate(dataset):
-        print(data)
-        if i == 10:
-            break
+
+if __name__ == "__main__":
+    # import logging
+    # logging.getLogger().setLevel(logging.INFO)
+    # AtariDQNExperienceReplay._max_runs = 3
+    # dataset = AtariDQNExperienceReplay("Pong/5", num_procs=4, num_slices=4, batch_size=128, replacement=False)
+    # torch.manual_seed(0)
+    # for i, data in enumerate(dataset):
+    #     print(data)
+    #     if i == 10:
+    #         break
+
+    from torchrl.data.datasets import AtariDQNExperienceReplay
+    from torchrl.data.replay_buffers import ReplayBufferEnsemble
+
+    # we change this parameter for quick experimentation, in practice it should be left untouched
+    AtariDQNExperienceReplay._max_runs = 2
+    dataset_asterix = AtariDQNExperienceReplay(
+        "Asterix/5", batch_size=128, slice_len=64, num_procs=4
+    )
+    dataset_pong = AtariDQNExperienceReplay(
+        "Pong/5", batch_size=128, slice_len=64, num_procs=4
+    )
+    dataset = ReplayBufferEnsemble(
+        dataset_pong, dataset_asterix, batch_size=128, sample_from_all=True
+    )
+    sample = dataset.sample()
+    print("first sample, Asterix", sample[0])
+    print("second sample, Pong", sample[1])
+    print("Aggregate (metadata hidden)", sample)
