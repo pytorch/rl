@@ -2500,13 +2500,13 @@ class TestAtariDQN:
         yield
         AtariDQNExperienceReplay._max_runs = prev_val
 
-    @pytest.mark.parametrize("dataset", ["Asterix/1", "Pong/4"])
+    @pytest.mark.parametrize("dataset_id", ["Asterix/1", "Pong/4"])
     @pytest.mark.parametrize(
         "num_slices,slice_len", [[None, None], [None, 8], [2, None]]
     )
-    def test_single_dataset(self, dataset, slice_len, num_slices, limit_max_runs):
+    def test_single_dataset(self, dataset_id, slice_len, num_slices, limit_max_runs):
         dataset = AtariDQNExperienceReplay(
-            dataset, slice_len=slice_len, num_slices=num_slices
+            dataset_id, slice_len=slice_len, num_slices=num_slices
         )
         sample = dataset.sample(64)
         for key in (
@@ -2523,7 +2523,7 @@ class TestAtariDQN:
         ):
             assert key in sample.keys(True)
         assert sample.shape == (64,)
-        assert sample.get_non_tensor("metadata")["dataset_id"] == dataset
+        assert sample.get_non_tensor("metadata")["dataset_id"] == dataset_id
 
     @pytest.mark.parametrize(
         "num_slices,slice_len", [[None, None], [None, 8], [2, None]]
@@ -2541,7 +2541,7 @@ class TestAtariDQN:
         sample = dataset.sample()
         assert sample.shape == (2, 64)
         assert sample[0].get_non_tensor("metadata")["dataset_id"] == "Pong/4"
-        assert sample[0].get_non_tensor("metadata")["dataset_id"] == "Asterix/1"
+        assert sample[1].get_non_tensor("metadata")["dataset_id"] == "Asterix/1"
 
 
 @pytest.mark.slow
