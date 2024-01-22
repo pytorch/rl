@@ -174,7 +174,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         with torch.no_grad():
             loss_module.value_estimator(
                 tensordict_data,
-                params=loss_module.critic_params,
+                params=loss_module.critic_network_params,
                 target_params=loss_module.target_critic_params,
             )
         current_frames = tensordict_data.numel()

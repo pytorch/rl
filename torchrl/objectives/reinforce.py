@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
@@ -289,11 +290,43 @@ class ReinforceLoss(LossModule):
 
     @property
     def actor(self):
+        logging.warning(
+            f"{self.__class__.__name__}.actor is deprecated, use {self.__class__.__name__}.actor_network instead. This "
+            "link will be removed in v0.4."
+        )
         return self.actor_network
 
     @property
     def critic(self):
+        logging.warning(
+            f"{self.__class__.__name__}.critic is deprecated, use {self.__class__.__name__}.critic_network instead. This "
+            "link will be removed in v0.4."
+        )
         return self.critic_network
+
+    @property
+    def actor_params(self):
+        logging.warning(
+            f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
+            "link will be removed in v0.4."
+        )
+        return self.actor_network_params
+
+    @property
+    def critic_params(self):
+        logging.warning(
+            f"{self.__class__.__name__}.critic_params is deprecated, use {self.__class__.__name__}.critic_network_params instead. This "
+            "link will be removed in v0.4."
+        )
+        return self.critic_network_params
+
+    @property
+    def target_critic_params(self):
+        logging.warning(
+            f"{self.__class__.__name__}.target_critic_params is deprecated, use {self.__class__.__name__}.target_critic_network_params instead. This "
+            "link will be removed in v0.4."
+        )
+        return self.target_critic_network_params
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:

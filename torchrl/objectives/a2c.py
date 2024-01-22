@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import contextlib
+import logging
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
@@ -297,11 +298,43 @@ class A2CLoss(LossModule):
 
     @property
     def actor(self):
+        logging.warning(
+            f"{self.__class__.__name__}.actor is deprecated, use {self.__class__.__name__}.actor_network instead. This "
+            "link will be removed in v0.4."
+        )
         return self.actor_network
 
     @property
     def critic(self):
+        logging.warning(
+            f"{self.__class__.__name__}.critic is deprecated, use {self.__class__.__name__}.critic_network instead. This "
+            "link will be removed in v0.4."
+        )
         return self.critic_network
+
+    @property
+    def actor_params(self):
+        logging.warning(
+            f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
+            "link will be removed in v0.4."
+        )
+        return self.actor_network_params
+
+    @property
+    def critic_params(self):
+        logging.warning(
+            f"{self.__class__.__name__}.critic_params is deprecated, use {self.__class__.__name__}.critic_network_params instead. This "
+            "link will be removed in v0.4."
+        )
+        return self.critic_network_params
+
+    @property
+    def target_critic_params(self):
+        logging.warning(
+            f"{self.__class__.__name__}.target_critic_params is deprecated, use {self.__class__.__name__}.target_critic_network_params instead. This "
+            "link will be removed in v0.4."
+        )
+        return self.target_critic_network_params
 
     @property
     def in_keys(self):
