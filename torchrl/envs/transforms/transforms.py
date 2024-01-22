@@ -5151,6 +5151,8 @@ class StepCounter(Transform):
             step_count = tensordict.get(step_count_key, default=None)
             if step_count is None:
                 step_count = self.container.observation_spec[step_count_key].zero()
+                if step_count.device != reset.device:
+                    step_count = step_count.to(reset.device, non_blocking=True)
 
             # zero the step count if reset is needed
             step_count = torch.where(~expand_as_right(reset, step_count), step_count, 0)
@@ -6413,7 +6415,7 @@ class ActionMask(Transform):
             raise ValueError(
                 self.SPEC_TYPE_ERROR.format(self.ACCEPTED_SPECS, type(action_spec))
             )
-        action_spec.update_mask(mask)
+        action_spec.update_mask(mask.to(action_spec.device))
         return tensordict
 
     def _reset(
@@ -6424,7 +6426,10 @@ class ActionMask(Transform):
             raise ValueError(
                 self.SPEC_TYPE_ERROR.format(self.ACCEPTED_SPECS, type(action_spec))
             )
-        action_spec.update_mask(tensordict.get(self.in_keys[1], None))
+        mask = tensordict.get(self.in_keys[1], None)
+        if mask is not None:
+            mask = mask.to(action_spec.device)
+        action_spec.update_mask(mask)
 
         # TODO: Check that this makes sense
         with _set_missing_tolerance(self, True):
