@@ -1,4 +1,4 @@
-# Bandits example
+# REDQ example
 
 ## Note:
 This example is not included in the benchmarked results of the current release. The intention is to include it in the

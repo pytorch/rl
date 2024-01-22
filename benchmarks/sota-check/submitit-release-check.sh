@@ -67,7 +67,6 @@ scripts=(
     run_td3.sh
     run_dt.sh
     run_dt_online.sh
-#    run_redq.sh
 )
 
 # Submit jobs with the specified partition the specified number of times
