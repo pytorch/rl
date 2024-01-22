@@ -280,7 +280,7 @@ Here's an example:
     :toctree: generated/
     :template: rl_template.rst
 
-
+    AtariDQNExperienceReplay
     D4RLExperienceReplay
     GenDGRLExperienceReplay
     MinariExperienceReplay
