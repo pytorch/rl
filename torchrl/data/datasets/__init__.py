@@ -4,3 +4,4 @@ from .openml import OpenMLExperienceReplay
 from .openx import OpenXExperienceReplay
 from .roboset import RobosetExperienceReplay
 from .vd4rl import VD4RLExperienceReplay
+from .atari_dqn import AtariDQNExperienceReplay

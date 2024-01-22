@@ -4,14 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import functools
 import gzip
 import io
+import json
 import pathlib
 import shutil
 
 import mmap
 import os
 import subprocess
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter
 import tempfile
 import time
 from collections import defaultdict
@@ -22,11 +25,68 @@ import numpy as np
 import torch
 import tqdm
 from tensordict import NonTensorData, TensorDict, MemoryMappedTensor
+from tensordict.utils import expand_right
 
 from torchrl.data import LazyMemmapStorage, Storage, TensorDictReplayBuffer
 from torchrl.envs.utils import _classproperty
+from torch import multiprocessing as mp
 
 class AtariDQNExperienceReplay(TensorDictReplayBuffer):
+    """Atari DQN Experience replay class.
+
+    The Atari DQN dataset (https://offline-rl.github.io/) is a collection of 5 training
+    iterations of DQN over each of the Arari 2600 games for a total of 200 million frames.
+    The sub-sampling rate (frame-skip) is equal to 4, meaning that each game dataset
+    has 50 million steps in total.
+
+    The data format follows the TED convention. Since the dataset is quite heavy,
+    the data formatting is done on-line, at sampling time.
+
+    To make training more modular, we split the dataset in each of the Atari games
+    and separate each training round. Consequently, each dataset is presented as
+    a Storage of length 50x10^6 elements. Under the hood, this dataset is split
+    in 50 memory-mapped tensordicts of length 1 million each.
+
+    Args:
+        dataset_id (str): The dataset to be downloaded.
+            Must be part of ``AtariDQNExperienceReplay.available_datasets``.
+        batch_size (int): Batch-size used during sampling.
+            Can be overridden by `data.sample(batch_size)` if necessary.
+
+    Keyword Args:
+        root (Path or str, optional): The AtariDQN dataset root directory.
+            The actual dataset memory-mapped files will be saved under
+            `<root>/<dataset_id>`. If none is provided, it defaults to
+            ``~/.cache/torchrl/atari`.
+        download (bool or str, optional): Whether the dataset should be downloaded if
+            not found. Defaults to ``True``. Download can also be passed as "force",
+            in which case the downloaded data will be overwritten.
+        sampler (Sampler, optional): the sampler to be used. If none is provided
+            a default RandomSampler() will be used.
+        writer (Writer, optional): the writer to be used. If none is provided
+            a default :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter` will be used.
+        collate_fn (callable, optional): merges a list of samples to form a
+            mini-batch of Tensor(s)/outputs. Used when using batched
+            loading from a map-style dataset.
+        pin_memory (bool): whether pin_memory() should be called on the rb
+            samples.
+        prefetch (int, optional): number of next batches to be prefetched
+            using multithreading.
+        transform (Transform, optional): Transform to be executed when sample() is called.
+            To chain transforms use the :class:`~torchrl.envs.transforms.transforms.Compose` class.
+
+    Examples:
+        >>> from torchrl.data.datasets import AtariDQNExperienceReplay
+        >>> from torchrl.data.replay_buffers import SliceSampler
+        >>> sampler = SliceSampler()
+        >>> dataset = AtariDQNExperienceReplay("Pong/5", batch_size=128, sampler=sampler)
+        >>> for data in dataset:
+        ...     print(data)
+        ...     break
+
+    As always, datasets should be composed using :class:`~torchrl.data.replay_buffers.ReplayBufferEnsemble`
+
+    """
     @_classproperty
     def available_datasets(cls):
         games = [
@@ -84,29 +144,54 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
         return ["/".join((game, str(loop))) for game in games for loop in range(1, 6)]
 
     tmpdir = "/Users/vmoens/.cache/atari_root"
-    max_ep = 3
 
-    def __init__(self, dataset_id):
+    # use _max_episodes for debugging, avoids downloading the entire dataset
+    _max_episodes = 4
+
+    def __init__(self, dataset_id:str, batch_size:int|None=None, *, root: str | Path | None = None, download: bool|str=True, sampler=None, writer=None, transform: "Transform" | None=None, num_procs: int=0, **kwargs):
+        if dataset_id not in self.available_datasets:
+            raise ValueError("The dataseet_id is not part of the available datasets. The dataset should be named <game_name>/<run> "
+                             "where <game_name> is one of the Atari 2600 games and the run is a number betweeen 1 and 5. "
+                             "The full list of accepted dataset_ids is available under AtariDQNExperienceReplay.available_datasets.")
         self.dataset_id = dataset_id
         from torchrl.data.datasets.utils import _get_root_dir
-        self.root = Path(_get_root_dir("atari"))
-        self._download_and_preproc()
+        if root is None:
+            root = _get_root_dir("atari")
+        self.root = root
+        self.num_procs = num_procs
+        if download == "force" or (download and not self._is_downloaded):
+            try:
+                self._download_and_preproc()
+            except Exception:
+                # remove temporary data
+                if os.path.exists(self.dataset_path):
+                    shutil.rmtree(self.dataset_path)
+                raise
         storage = _AtariStorage(self.dataset_path)
-        super().__init__(storage=storage, collate_fn=lambda x: x)
+        if writer is None:
+            writer = ImmutableDatasetWriter()
+        super().__init__(storage=storage, batch_size=batch_size, writer=writer, sampler=sampler, collate_fn=lambda x: x, transform=transform, **kwargs)
 
     @property
-    def root(self):
+    def root(self)->Path:
         return self._root
     @root.setter
     def root(self, value):
         self._root = Path(value)
     @property
-    def dataset_path(self):
+    def dataset_path(self) -> Path:
         return self._root / self.dataset_id
+    @property
+    def _is_downloaded(self):
+        if os.path.exists(self.dataset_path / "processed.json"):
+            with open(self.dataset_path / "processed.json", "r") as jsonfile:
+                return json.load(jsonfile).get("processed", False)
+        return False
+
     def _download_and_preproc(self):
+        logging.info(f"Downloading and preprocessing dataset {self.dataset_id} with {self.num_procs} processes. This may take a while...")
         if os.path.exists(self.dataset_path):
-            # TODO: better check
-            return
+            shutil.rmtree(self.dataset_path)
         with tempfile.TemporaryDirectory() as tempdir:
             if self.tmpdir is not None:
                 tempdir = self.tmpdir
@@ -126,12 +211,21 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
                 files = [file.decode("utf-8").replace('$', '\$') for file in output.stdout.splitlines() if
                          file.endswith(b'.gz')]
                 self.remote_gz_files = self._list_episodes(None, files)
-                for episode, episode_files in self.remote_gz_files.items():
-                    self._download_and_proc_episode(episode, episode_files, tempdir, self.dataset_path)
+                total_episodes = list(self.remote_gz_files)[-1]
+                if self.num_procs == 0:
+                    for episode, episode_files in self.remote_gz_files.items():
+                        self._download_and_proc_episode(episode, episode_files, tempdir=tempdir, dataset_path=self.dataset_path, total_episodes=total_episodes)
+                else:
+                    func = functools.partial(self._download_and_proc_episode, tempdir=tempdir, dataset_path=self.dataset_path, total_episodes=total_episodes)
+                    args = [(episode, episode_files) for (episode, episode_files) in self.remote_gz_files.items()]
+                    with mp.Pool(self.num_procs) as pool:
+                        pool.starmap(func, args)
+        with open(self.dataset_path / "processed.json", "w") as file:
+            json.dump({"processed": True}, file)
 
     @classmethod
-    def _download_and_proc_episode(cls, episode, episode_files, tempdir, dataset_path):
-        if episode >= 3:
+    def _download_and_proc_episode(cls, episode, episode_files, *, tempdir, dataset_path, total_episodes):
+        if cls._max_episodes is not None and episode >= cls._max_episodes:
             return
         tempdir = Path(tempdir)
         os.makedirs(tempdir/str(episode))
@@ -152,6 +246,7 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
                 shutil.rmtree(path)
                 raise
         shutil.rmtree(tempdir / str(episode))
+        print(f'Concluded episode {episode} out of {total_episodes}')
 
     @classmethod
     def _preproc_episode(cls, path, gz_files, episode):
@@ -237,64 +332,73 @@ class _AtariStorage(Storage):
         folders = get_folders(path)
         for folder in folders:
             self.episodes.append(int(Path(folder).parts[-1]))
-        self.frames_per_ep = 1000000
         self._episode_tds = []
+        frames_per_ep = {}
         for episode in self.episodes:
             path = self.path / str(episode)
             self._episode_tds.append(self._load_episode(path))
+            # take away 1 because we padded with 1 empty val
+            frames_per_ep[episode] = self._episode_tds[-1].get(("data", "observation")).shape[0] - 1
+
+        frames_per_ep = torch.tensor([[episode, length] for (episode, length) in frames_per_ep.items()])
+        frames_per_ep[:, 1] = frames_per_ep[:, 1].cumsum(0)
+        self.frames_per_ep = torch.cat([torch.tensor([[-1, 0]]), frames_per_ep], 0)
 
     def __len__(self):
-        return len(self.episodes) * self.frames_per_ep
+        return self.frames_per_ep[-1, 1].item()
 
-    def _get_episode(self, item: int | torch.Tensor):
-        # print('get episode', item)
-        episode = item // self.frames_per_ep
-        item = item % self.frames_per_ep
+    def _read_from_episodes(self, item: int | torch.Tensor):
+        # We need to allocate each item to its storage.
+        # We don't assume each storage has the same size (too expensive to test)
+        # so we keep a map of each storage cumulative length and retrieve the
+        # storages one after the other.
+        episode = (item < self.frames_per_ep[1:, 1].unsqueeze(1)) & (item >= self.frames_per_ep[:-1, 1].unsqueeze(1))
+        episode = episode.squeeze().nonzero()[:, 0]
+        episode = self.frames_per_ep[episode+1, 0]
+        item = item - self.frames_per_ep[episode, 1]
         if isinstance(item, int):
             unique_episodes = (episode,)
             episode_inverse = None
         else:
             unique_episodes, episode_inverse = torch.unique(episode, return_inverse=True)
-        # print('unique_episodes, episode_inverse', unique_episodes, episode_inverse)
+            unique_episodes = unique_episodes.tolist()
         out = []
         for i, episode in enumerate(unique_episodes):
-            episode = int(episode)
             _item = item[episode_inverse == i] if episode_inverse is not None else item
-            # print('_item', _item)
-            path = self.path / str(episode)
-            if os.path.exists(path):
-                out.append( self._proc_td(self._episode_tds[episode], _item))
-            else:
-                raise RuntimeError
-        # print('out', out)
+            out.append( self._proc_td(self._episode_tds[episode], _item))
         return torch.cat(out, 0)
 
     def _load_episode(self, path):
         return TensorDict.load_memmap(path)
 
     def _proc_td(self, td, index):
-        obs_ = td["data", "observation"][index + 1]
-        done = td["data", "next", "terminated"][index].bool()
+        td_data = td.get("data")
+        obs_ = td_data.get(("observation"))[index + 1]
+        done = td_data.get(("next", "terminated"))[index].squeeze(-1).bool()
         if done.ndim and done.any():
-            obs_ = torch.masked_fill(obs_, done, 0)
+            obs_ = torch.index_fill(obs_, 0, done.nonzero().squeeze(), 0)
+            # obs_ = torch.masked_fill(obs_, done, 0)
+            # obs_ = torch.masked_fill(obs_, expand_right(done, obs_.shape), 0)
+            # obs_ = torch.where(~expand_right(done, obs_.shape), obs_, 0)
         td_idx = td.empty()
-        td_idx["next", "observation"] = obs_
+        td_idx.set(("next", "observation"), obs_)
         non_tensor = td.exclude("data").to_dict()
-        td_idx.update(td["data"].apply(lambda x: x[index]))
-        td_idx.auto_batch_size_(1)
+        td_idx.update(td_data.apply(lambda x: x[index]))
+        if isinstance(index, torch.Tensor):
+            td_idx.batch_size = [len(index)]
         td_idx.set_non_tensor("metadata", non_tensor)
         return td_idx
 
     def get(self, index):
         if isinstance(index, int):
-            return self._get_episode(index)
+            return self._read_from_episodes(index)
         if isinstance(index, tuple):
             if len(index) == 1:
                 return self.get(index[0])
             return self.get(index[0])[(Ellipsis, *index[1:])]
         if isinstance(index, torch.Tensor):
             if index.ndim <= 1:
-                return self._get_episode(index)
+                return self._read_from_episodes(index)
             else:
                 raise RuntimeError("Only 1d tensors are accepted")
             # with ThreadPoolExecutor(16) as pool:
@@ -310,24 +414,8 @@ class _AtariStorage(Storage):
         return self[torch.arange(len(self))[index]]
 
 if __name__ == '__main__':
-    # command = f"gsutil -m ls -R gs://atari-replay-datasets/dqn/Pong/1/replay_logs"
-    # output = subprocess.run(
-    #     command,
-    #     shell=True, capture_output=True
-    #     )  # , stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    # print(output.stdout.splitlines(), type(output.stdout))
-    # files = [file for file in output.stdout.splitlines() if file.endswith(b'.gz') and int(file.split(b'.')[-2]) <= 3]
-    # files_str = b' '.join(files)
-    # command = f"gsutil -m cp -R {files_str} {tempdir}"
-    # subprocess.run(
-    #     command,
-    #     shell=True
-    #     )  # , stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
     import logging
     logging.getLogger().setLevel(logging.INFO)
-    dataset = AtariDQNExperienceReplay("Pong/5")
-    # t0 = time.time()
-    for _ in range(200):
-        dataset[slice(0, 3000000, 50000)]
-    # print(time.time() - t0)
+    dataset = AtariDQNExperienceReplay("Pong/5", num_procs=4)
+    for _ in range(100):
+        out = dataset[slice(0, 3000000, 10000)]
