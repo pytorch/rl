@@ -1,0 +1,24 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - gsutil
+  - pip:
+    - hypothesis
+    - future
+    - cloudpickle
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - pytest-error-for-skips
+    - expecttest
+    - pyyaml
+    - scipy
+    - hydra-core
+    - tqdm
+    - h5py
+    - datasets
+    - pillow

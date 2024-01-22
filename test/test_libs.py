@@ -58,7 +58,7 @@ from torchrl.data import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
-    MultiDiscreteTensorSpec,
+    MultiDiscreteTensorSpec,ReplayBufferEnsemble,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
@@ -70,6 +70,7 @@ from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.datasets.openx import OpenXExperienceReplay
 from torchrl.data.datasets.roboset import RobosetExperienceReplay
 from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
+from torchrl.data.datasets.atari_dqn import AtariDQNExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
     CatTensors,
@@ -2487,6 +2488,35 @@ class TestVD4RL:
                 t0 = time.time()
                 if i == 10:
                     break
+
+
+@pytest.mark.slow
+class TestAtariDQN:
+    @pytest.fixture(scope="class")
+    def limit_max_runs(self):
+        prev_val = AtariDQNExperienceReplay._max_runs
+        AtariDQNExperienceReplay._max_runs = 3
+        yield
+        AtariDQNExperienceReplay._max_runs = prev_val
+
+    @pytest.mark.parametrize("dataset", ["Asterix/1", "Pong/4"])
+    @pytest.mark.parametrize("num_slices,slice_len",[[None, None], [None, 8], [2, None]])
+    def test_single_dataset(self, dataset, slice_len, num_slices, limit_max_runs):
+        dataset = AtariDQNExperienceReplay(dataset, slice_len=slice_len, num_slices=num_slices)
+        sample = dataset.sample(64)
+        for key in (("next", "observation"), ("next", "truncated"), ("next", "terminated"), ("next", "done"), ("next", "reward"), "observation", "action", "done", "truncated", "terminated"):
+            assert key in sample.keys(True)
+        assert sample.shape == (64,)
+
+    @pytest.mark.parametrize("num_slices,slice_len",[[None, None], [None, 8], [2, None]])
+    def test_double_dataset(self, slice_len, num_slices, limit_max_runs):
+        dataset_pong = AtariDQNExperienceReplay("Pong/4", slice_len=slice_len, num_slices=num_slices)
+        dataset_asterix = AtariDQNExperienceReplay("Asterix/1", slice_len=slice_len, num_slices=num_slices)
+        dataset = ReplayBufferEnsemble(dataset_pong, dataset_asterix, sample_from_all=True, batch_size=128)
+        sample = dataset.sample()
+        assert sample.shape == (2, 64)
+        assert sample[0]["metadata"]["dataset_id"] == "Pong/4"
+        assert sample[0]["metadata"]["dataset_id"] == "Asterix/1"
 
 
 @pytest.mark.slow
