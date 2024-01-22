@@ -65,12 +65,10 @@ scripts=(
     run_ppo_mujoco.sh
     run_sac.sh
     run_td3.sh
-#    run_redq.sh # no logging?
-#    run_dt.sh # seems broken
-#    run_dt_online.sh # seems broken
-#    run_rlhf.sh # can not run: RuntimeError: Current CUDA Device does not support bfloat16. Please switch dtype to float16.
-#    run_bandits.sh # no logging
-#    run_dreamer.sh # needs update
+    run_dt.sh
+    run_dt_online.sh
+#    run_redq.sh
+#    run_dreamer.sh
 )
 
 # Submit jobs with the specified partition the specified number of times

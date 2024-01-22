@@ -10,12 +10,6 @@
 current_commit=$(git rev-parse HEAD)
 project_name="torchrl-example-check-$current_commit"
 python ../../examples/decision_transformer/dt.py \
-  optim.pretrain_gradient_steps=55 \
-  optim.updates_per_episode=3 \
-  optim.warmup_steps=10 \
-  optim.device=cuda:0 \
-  env.backend=gymnasium \
-  env.name=HalfCheetah-v4 \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="dt_offline"
