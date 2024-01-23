@@ -178,8 +178,7 @@ class PPOLoss(LossModule):
     the expected keyword arguments are:
     ``["action", "sample_log_prob", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and value network.
     The return value is a tuple of tensors in the following order:
-    ``["loss_objective"]`` + ``["entropy", "loss_entropy"]`` if entropy_bonus is set
-                           + ``"loss_critic"`` if critic_coef is not None.
+    ``["loss_objective"]`` + ``["entropy", "loss_entropy"]`` if entropy_bonus is set + ``"loss_critic"`` if critic_coef is not ``None``.
     The output keys can also be filtered using :meth:`PPOLoss.select_out_keys` method.
 
     Examples:

@@ -130,9 +130,7 @@ class A2CLoss(LossModule):
     the expected keyword arguments are:
     ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and critic.
     The return value is a tuple of tensors in the following order:
-    ``["loss_objective"]``
-        + ``["loss_critic"]`` if critic_coef is not None
-        + ``["entropy", "loss_entropy"]`` if entropy_bonus is True and critic_coef is not None
+    ``["loss_objective"]`` + ``["loss_critic"]`` if critic_coef is not None + ``["entropy", "loss_entropy"]`` if entropy_bonus is True and critic_coef is not None
 
     Examples:
         >>> import torch

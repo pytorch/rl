@@ -30,7 +30,8 @@ class VideoRecorder(ObservationTransform):
 
     Args:
         logger (Logger): a Logger instance where the video
-            should be written.
+            should be written. To save the video under a memmap tensor or an mp4 file, use
+            the :class:`~torchrl.record.loggers.CSVLogger` class.
         tag (str): the video tag in the logger.
         in_keys (Sequence of NestedKey, optional): keys to be read to produce the video.
             Default is :obj:`"pixels"`.
@@ -42,6 +43,28 @@ class VideoRecorder(ObservationTransform):
             size. Default is True.
         out_keys (sequence of NestedKey, optional): destination keys. Defaults
             to ``in_keys`` if not provided.
+
+    The following example shows how to save a rollout under a video. First a few imports:
+        >>> from torchrl.record import VideoRecorder
+        >>> from torchrl.record.loggers.csv import CSVLogger
+        >>> from torchrl.envs import TransformedEnv, DMControlEnv
+
+    The video format is chosen in the logger. Wandb and tensorboard will take care of that
+    on their own, CSV accepts various video formats.
+        >>> logger = CSVLogger(exp_name="cheetah", log_dir="cheetah_videos", video_format="mp4")
+
+    Some envs (eg, Atari games) natively return images, some require the user to ask for them.
+    Check :class:`~torchrl.env.GymEnv` or :class:`~torchrl.envs.DMControlEnv` to see how to render images
+    in these contexts.
+        >>> base_env = DMControlEnv("cheetah", "run", from_pixels=True)
+        >>> env = TransformedEnv(base_env, VideoRecorder(logger=logger, tag="run_video"))
+        >>> env.rollout(100)
+
+    All transforms have a dump function, mostly a no-op except for ``VideoRecorder``, and :class:`~torchrl.envs.transforms.Composite`
+    which will dispatch the `dumps` to all its members.
+        >>> env.transform.dump()
+
+    Our video is available under ``./cheetah_videos/cheetah/videos/run_video_0.mp4``!
 
     """
 
