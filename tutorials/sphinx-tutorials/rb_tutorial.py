@@ -262,6 +262,49 @@ print("sample:", sample)
 ######################################################################
 # As expected. the data has the proper class and shape!
 #
+# Integration with PyTree
+# ~~~~~~~~~~~~~~~~~~~~~~~
+#
+# TorchRL's replay buffers also work with any pytree data structure,
+# meaning that one can store in contiguous memory any tree structure composed of
+# dictionaries, lists, tuples etc.
+# Various storages can be used:
+# :class:`~torchrl.data.replay_buffers.TensorStorage`, :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`
+# or :class:`~torchrl.data.replay_buffers.LazyTensorStorage` all accept this kind of data.
+#
+# Here is a bried demonstration of what this feature looks like:
+#
+
+from torch.utils._pytree import tree_map
+
+
+# With pytrees, any callable can be used as a transform:
+def transform(x):
+    # Zeros all the data in the pytree
+    return tree_map(lambda y: y * 0, x)
+
+
+# Let's build our replay buffer on disk:
+rb = ReplayBuffer(storage=LazyMemmapStorage(100), transform=transform)
+data = {
+    "a": torch.randn(3),
+    "b": {"c": (torch.zeros(2), [torch.ones(1)])},
+    30: -torch.ones(()),  # non-string keys also work
+}
+rb.add(data)
+
+# The sample has a similar structure to the data (with a leading dimension of 10 for each tensor)
+sample = rb.sample(10)
+
+
+# let's check that our transform did its job:
+def assert0(x):
+    assert (x == 0).all()
+
+
+tree_map(assert0, sample)
+
+
 # Sampling and iterating over buffers
 # -----------------------------------
 #

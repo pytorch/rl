@@ -14,9 +14,11 @@ from typing import Any, Dict, Sequence
 
 import numpy as np
 import torch
+
 from tensordict import is_tensor_collection, MemoryMappedTensor
 from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
+from torch.utils._pytree import tree_flatten
 
 from torchrl.data.replay_buffers.storages import Storage
 from torchrl.data.replay_buffers.utils import _reduce
@@ -118,7 +120,12 @@ class RoundRobinWriter(Writer):
 
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
-        batch_size = len(data)
+        if is_tensor_collection(data) or isinstance(data, torch.Tensor):
+            batch_size = len(data)
+        else:
+            batch_size = len(tree_flatten(data)[0][0])
+        if batch_size == 0:
+            raise RuntimeError("Expected at least one element in extend.")
         device = data.device if hasattr(data, "device") else None
         index = (
             torch.arange(

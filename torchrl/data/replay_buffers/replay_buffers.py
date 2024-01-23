@@ -18,6 +18,7 @@ import numpy as np
 import torch
 
 from tensordict import is_tensorclass
+from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
@@ -78,12 +79,11 @@ class ReplayBuffer:
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading. Defaults to None (no prefetching).
         transform (Transform, optional): Transform to be executed when
-            sample() is called.
+            :meth:`~.sample` is called.
             To chain transforms use the :class:`~torchrl.envs.Compose` class.
             Transforms should be used with :class:`tensordict.TensorDict`
-            content. If used with other structures, the transforms should be
-            encoded with a ``"data"`` leading key that will be used to
-            construct a tensordict from the non-tensordict content.
+            content. A generic callable can also be passed if the replay buffer
+            is used with PyTree structures (see example below).
         batch_size (int, optional): the batch size to be used when sample() is
             called.
             .. note::
@@ -129,7 +129,7 @@ class ReplayBuffer:
 
     Replay buffers accept *any* kind of data. Not all storage types
     will work, as some expect numerical data only, but the default
-    :class:`torchrl.data.ListStorage` will:
+    :class:`~torchrl.data.ListStorage` will:
 
     Examples:
         >>> torch.manual_seed(0)
@@ -137,6 +137,30 @@ class ReplayBuffer:
         >>> indices = buffer.extend(["a", 1, None])
         >>> buffer.sample(3)
         [None, 'a', None]
+
+    The :class:`~torchrl.data.replay_buffers.TensorStorage`, :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`
+    and :class:`~torchrl.data.replay_buffers.LazyTensorStorage` also work
+    with any PyTree structure provided that it only contains tensor data.
+
+    Examples:
+        >>> from torch.utils._pytree import tree_map
+        >>> def transform(x):
+        ...     # Zeros all the data in the pytree
+        ...     return tree_map(lambda y: y * 0, x)
+        >>> rb = ReplayBuffer(storage=LazyMemmapStorage(100), transform=transform)
+        >>> data = {
+        ...     "a": torch.randn(3),
+        ...     "b": {"c": (torch.zeros(2), [torch.ones(1)])},
+        ...     30: -torch.ones(()),
+        ... }
+        >>> rb.add(data)
+        >>> # The sample has a similar structure to the data (with a leading dimension of 10 for each tensor)
+        >>> s = rb.sample(10)
+        >>> # let's check that our transform did its job:
+        >>> def assert0(x):
+        >>>     assert (x == 0).all()
+        >>> tree_map(assert0, s)
+
     """
 
     def __init__(
@@ -168,11 +192,18 @@ class ReplayBuffer:
 
         self._replay_lock = threading.RLock()
         self._futures_lock = threading.RLock()
-        from torchrl.envs.transforms.transforms import Compose
+        from torchrl.data.replay_buffers.transforms import _CallableTransform
+        from torchrl.envs.transforms.transforms import Compose, Transform
 
         if transform is None:
             transform = Compose()
         elif not isinstance(transform, Compose):
+            if not isinstance(transform, Transform) and callable(transform):
+                transform = _CallableTransform(transform)
+            elif not isinstance(transform, Transform):
+                raise RuntimeError(
+                    "transform must be either a Transform instance or a callable."
+                )
             transform = Compose(transform)
         transform.eval()
         self._transform = transform
@@ -362,10 +393,9 @@ class ReplayBuffer:
         Returns:
             index where the data lives in the replay buffer.
         """
-        if self._transform is not None and (
-            is_tensor_collection(data) or len(self._transform)
-        ):
-            data = self._transform.inv(data)
+        if self._transform is not None and len(self._transform):
+            with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
+                data = self._transform.inv(data)
         return self._add(data)
 
     def _add(self, data):
@@ -392,10 +422,9 @@ class ReplayBuffer:
         Returns:
             Indices of the data added to the replay buffer.
         """
-        if self._transform is not None and (
-            is_tensor_collection(data) or len(self._transform)
-        ):
-            data = self._transform.inv(data)
+        if self._transform is not None and len(self._transform):
+            with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
+                data = self._transform.inv(data)
         return self._extend(data)
 
     def update_priority(
@@ -415,18 +444,16 @@ class ReplayBuffer:
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
-            is_td = True
-            if not is_tensor_collection(data):
-                data = TensorDict({"data": data}, [])
-                is_td = False
-            is_locked = data.is_locked
-            if is_locked:
-                data.unlock_()
-            data = self._transform(data)
-            if is_locked:
-                data.lock_()
-            if not is_td:
-                data = data["data"]
+            is_td = is_tensor_collection(data)
+            if is_td:
+                is_locked = data.is_locked
+                if is_locked:
+                    data.unlock_()
+            with _set_dispatch_td_nn_modules(is_td):
+                data = self._transform(data)
+            if is_td:
+                if is_locked:
+                    data.lock_()
 
         return data, info
 
@@ -497,6 +524,11 @@ class ReplayBuffer:
         Args:
             transform (Transform): The transform to be appended
         """
+        from torchrl.data.replay_buffers.transforms import _CallableTransform
+        from torchrl.envs.transforms.transforms import Transform
+
+        if not isinstance(transform, Transform) and callable(transform):
+            transform = _CallableTransform(transform)
         transform.eval()
         self._transform.append(transform)
 
@@ -807,7 +839,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
     def add(self, data: TensorDictBase) -> int:
         if self._transform is not None:
-            data = self._transform.inv(data)
+            with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
+                data = self._transform.inv(data)
 
         if is_tensor_collection(data):
             data_add = TensorDict(
@@ -913,7 +946,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
             )
 
         data, info = super().sample(batch_size, return_info=True)
-        if not is_tensorclass(data) and include_info in (True, None):
+        is_tc = is_tensor_collection(data)
+        if is_tc and not is_tensorclass(data) and include_info in (True, None):
             is_locked = data.is_locked
             if is_locked:
                 data.unlock_()
@@ -924,6 +958,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 data.set(k, v)
             if is_locked:
                 data.lock_()
+        elif not is_tc and include_info in (True, None):
+            raise RuntimeError("Cannot include info in non-tensordict data")
         if return_info:
             return data, info
         return data

@@ -28,6 +28,7 @@ from tensordict.nn import dispatch, TensorDictModuleBase
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn, Tensor
+from torch.utils._pytree import tree_map
 from torchrl._utils import _replace_last
 
 from torchrl.data.tensor_specs import (
@@ -346,7 +347,16 @@ class Transform(nn.Module):
 
     @dispatch(source="in_keys_inv", dest="out_keys_inv")
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
-        out = self._inv_call(tensordict.clone(False))
+        def clone(data):
+            try:
+                # we priviledge speed for tensordicts
+                return data.clone(recurse=False)
+            except AttributeError:
+                return tree_map(lambda x: x, data)
+            except TypeError:
+                return tree_map(lambda x: x, data)
+
+        out = self._inv_call(clone(tensordict))
         return out
 
     def transform_env_device(self, device: torch.device):
