@@ -138,8 +138,7 @@ class REDQLoss(LossModule):
     the expected keyword arguments are:
     ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and qvalue network
     The return value is a tuple of tensors in the following order:
-    ``["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy",
-        "state_action_value_actor", "action_log_prob_actor", "next.state_value", "target_value",]``.
+    ``["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy", "state_action_value_actor", "action_log_prob_actor", "next.state_value", "target_value",]``.
 
     Examples:
         >>> import torch
