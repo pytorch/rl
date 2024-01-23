@@ -178,7 +178,7 @@ class _Dynamic_CKPT_BACKEND:
     backends = ["torch", "torchsnapshot"]
 
     def _get_backend(self):
-        backend = os.environ.get("CKPT_BACKEND", "torchsnapshot")
+        backend = os.environ.get("CKPT_BACKEND", "torch")
         if backend == "torchsnapshot":
             try:
                 import torchsnapshot  # noqa: F401
