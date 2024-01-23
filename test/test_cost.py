@@ -5820,7 +5820,10 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_ppo(self, loss_class, device, gradient_mode, advantage, td_est):
+    @pytest.mark.parametrize("functional", [True, False])
+    def test_ppo(
+        self, loss_class, device, gradient_mode, advantage, td_est, functional
+    ):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
 
@@ -5850,7 +5853,7 @@ class TestPPO(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(actor, value, loss_critic_type="l2")
+        loss_fn = loss_class(actor, value, loss_critic_type="l2", functional=functional)
         if advantage is not None:
             advantage(td)
         else:
@@ -6328,7 +6331,7 @@ class TestPPO(LossModuleTestBase):
         )
         value = self._create_mock_value(observation_key=observation_key)
 
-        loss = loss_class(actor=actor, critic=value)
+        loss = loss_class(actor_network=actor, critic_network=value)
         loss.set_keys(
             action=action_key,
             reward=reward_key,
@@ -6537,7 +6540,8 @@ class TestA2C(LossModuleTestBase):
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_a2c(self, device, gradient_mode, advantage, td_est):
+    @pytest.mark.parametrize("functional", (True, False))
+    def test_a2c(self, device, gradient_mode, advantage, td_est, functional):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_a2c(device=device)
 
@@ -6567,7 +6571,7 @@ class TestA2C(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
+        loss_fn = A2CLoss(actor, value, loss_critic_type="l2", functional=functional)
 
         # Check error is raised when actions require grads
         td["action"].requires_grad = True
@@ -6629,7 +6633,9 @@ class TestA2C(LossModuleTestBase):
     def test_a2c_separate_losses(self, separate_losses):
         torch.manual_seed(self.seed)
         actor, critic, common, td = self._create_mock_common_layer_setup()
-        loss_fn = A2CLoss(actor=actor, critic=critic, separate_losses=separate_losses)
+        loss_fn = A2CLoss(
+            actor_network=actor, critic_network=critic, separate_losses=separate_losses
+        )
 
         # Check error is raised when actions require grads
         td["action"].requires_grad = True
@@ -6966,7 +6972,6 @@ class TestA2C(LossModuleTestBase):
 class TestReinforce(LossModuleTestBase):
     seed = 0
 
-    @pytest.mark.parametrize("delay_value", [True, False])
     @pytest.mark.parametrize("gradient_mode", [True, False])
     @pytest.mark.parametrize("advantage", ["gae", "td", "td_lambda", None])
     @pytest.mark.parametrize(
@@ -6979,7 +6984,12 @@ class TestReinforce(LossModuleTestBase):
             None,
         ],
     )
-    def test_reinforce_value_net(self, advantage, gradient_mode, delay_value, td_est):
+    @pytest.mark.parametrize(
+        "delay_value,functional", [[False, True], [False, False], [True, True]]
+    )
+    def test_reinforce_value_net(
+        self, advantage, gradient_mode, delay_value, td_est, functional
+    ):
         n_obs = 3
         n_act = 5
         batch = 4
@@ -7023,8 +7033,9 @@ class TestReinforce(LossModuleTestBase):
 
         loss_fn = ReinforceLoss(
             actor_net,
-            critic=value_net,
+            critic_network=value_net,
             delay_value=delay_value,
+            functional=functional,
         )
 
         td = TensorDict(
@@ -7049,7 +7060,7 @@ class TestReinforce(LossModuleTestBase):
             if advantage is not None:
                 params = TensorDict.from_module(value_net)
                 if delay_value:
-                    target_params = loss_fn.target_critic_params
+                    target_params = loss_fn.target_critic_network_params
                 else:
                     target_params = None
                 advantage(td, params=params, target_params=target_params)
@@ -7108,7 +7119,7 @@ class TestReinforce(LossModuleTestBase):
 
         loss_fn = ReinforceLoss(
             actor_net,
-            critic=value_net,
+            critic_network=value_net,
         )
 
         default_keys = {
@@ -7133,7 +7144,7 @@ class TestReinforce(LossModuleTestBase):
 
         loss_fn = ReinforceLoss(
             actor_net,
-            critic=value_net,
+            critic_network=value_net,
         )
 
         key_mapping = {
@@ -7207,14 +7218,14 @@ class TestReinforce(LossModuleTestBase):
         torch.manual_seed(self.seed)
         actor, critic, common, td = self._create_mock_common_layer_setup()
         loss_fn = ReinforceLoss(
-            actor=actor, critic=critic, separate_losses=separate_losses
+            actor_network=actor, critic_network=critic, separate_losses=separate_losses
         )
 
         loss = loss_fn(td)
 
         assert all(
             (p.grad is None) or (p.grad == 0).all()
-            for p in loss_fn.critic_params.values(True, True)
+            for p in loss_fn.critic_network_params.values(True, True)
         )
         assert all(
             (p.grad is None) or (p.grad == 0).all()
@@ -7234,14 +7245,14 @@ class TestReinforce(LossModuleTestBase):
                         for p in loss_fn.actor_network_params.values(True, True)
                     )
                     common_layers = itertools.islice(
-                        loss_fn.critic_params.values(True, True),
+                        loss_fn.critic_network_params.values(True, True),
                         common_layers_no,
                     )
                     assert all(
                         (p.grad is None) or (p.grad == 0).all() for p in common_layers
                     )
                     critic_layers = itertools.islice(
-                        loss_fn.critic_params.values(True, True),
+                        loss_fn.critic_network_params.values(True, True),
                         common_layers_no,
                         None,
                     )
@@ -7250,7 +7261,7 @@ class TestReinforce(LossModuleTestBase):
                     )
                 else:
                     common_layers = itertools.islice(
-                        loss_fn.critic_params.values(True, True),
+                        loss_fn.critic_network_params.values(True, True),
                         common_layers_no,
                     )
                     assert not any(
@@ -7266,7 +7277,7 @@ class TestReinforce(LossModuleTestBase):
                     )
                     assert not any(
                         (p.grad is None) or (p.grad == 0).all()
-                        for p in loss_fn.critic_params.values(True, True)
+                        for p in loss_fn.critic_network_params.values(True, True)
                     )
 
             else:
@@ -7297,7 +7308,7 @@ class TestReinforce(LossModuleTestBase):
             in_keys=["loc", "scale"],
             spec=UnboundedContinuousTensorSpec(n_act),
         )
-        loss = ReinforceLoss(actor=actor_net, critic=value_net)
+        loss = ReinforceLoss(actor_network=actor_net, critic_network=value_net)
         loss.set_keys(
             reward=reward_key,
             done=done_key,
