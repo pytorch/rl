@@ -8,7 +8,6 @@ import contextlib
 import functools
 import itertools
 import operator
-import re
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass
@@ -270,14 +269,11 @@ def test_loss_vmap_random(device, vmap_randomness, dropout):
         loss_module.set_vmap_randomness(vmap_randomness)
     # Fail case
     elif vmap_randomness == "error" and dropout > 0.0:
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(
+            RuntimeError,
+            match="vmap: called random operation while in randomness error mode",
+        ):
             loss_module(td)["loss"]
-
-        # Accessing cause of the caught exception
-        cause = exc_info.value.__cause__
-        assert re.match(
-            r"vmap: called random operation while in randomness error mode", str(cause)
-        )
         return
     loss_module(td)["loss"]
 
@@ -1238,7 +1234,7 @@ class TestQMixer(LossModuleTestBase):
 
         # Wthout etting the keys
         if mixer_local_chosen_action_value_key != ("agents", "chosen_action_value"):
-            with pytest.raises(RuntimeError):
+            with pytest.raises(KeyError):
                 loss(td)
         elif unravel_key(mixer_global_chosen_action_value_key) != "chosen_action_value":
             with pytest.raises(
@@ -1253,7 +1249,7 @@ class TestQMixer(LossModuleTestBase):
         loss.set_keys(global_value=mixer_global_chosen_action_value_key)
         if mixer_local_chosen_action_value_key != ("agents", "chosen_action_value"):
             with pytest.raises(
-                RuntimeError
+                KeyError
             ):  # The mixer in key still does not match the actor out_key
                 loss(td)
         else:
