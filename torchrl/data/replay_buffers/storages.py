@@ -1183,18 +1183,57 @@ def _path2str(path, default_name=None):
 @implement_for("torch", None, "2.3")
 def _path2str(path, default_name=None):
     raise RuntimeError
+
 def get_paths(spec, cumulpath=""):
     if isinstance(spec, LeafSpec):
-        yield cumulpath
+        yield cumulpath if cumulpath else SINGLE_TENSOR_BUFFER_NAME
+
     contexts = spec.context
     children_specs = spec.children_specs
     if contexts is None:
         contexts = range(len(children_specs))
+
     for context, spec in zip(contexts, children_specs):
         cpath = ".".join(
             (cumulpath, str(context))
-            ) if cumulpath else context
+            ) if cumulpath else str(context)
         yield from get_paths(spec, cpath)
+
+
+def _save_pytree_common(tensor_path, path, tensor, metadata):
+    if "." in tensor_path:
+        tensor_path.replace(".", "_<dot>_")
+    total_tensor_path = path / (tensor_path + ".memmap")
+    if os.path.exists(total_tensor_path):
+        MemoryMappedTensor.from_filename(
+            shape=tensor.shape,
+            filename=total_tensor_path,
+            dtype=tensor.dtype,
+        ).copy_(tensor)
+    else:
+        os.makedirs(total_tensor_path.parent, exist_ok=True)
+        MemoryMappedTensor.from_tensor(
+            tensor,
+            filename=total_tensor_path,
+            copy_existing=True,
+            copy_data=True,
+        )
+        t = MemoryMappedTensor.from_filename(
+            filename=total_tensor_path,
+            dtype=tensor.dtype,
+            shape=tensor.shape,
+        )
+        assert (t == tensor).all()
+    key = tensor_path.replace("/", ".")
+    if key in metadata:
+        raise KeyError(
+            "At least two values have conflicting representations in "
+            f"the data structure to be serialized: {key}."
+        )
+    metadata[key] = {
+        "dtype": str(tensor.dtype),
+        "shape": list(tensor.shape),
+    }
 
 
 @implement_for("torch", "2.3", None)
@@ -1202,57 +1241,12 @@ def _save_pytree(_storage, metadata, path):
     from torch.utils._pytree import tree_map_with_path
 
     def save_tensor(
-        tensor_path: tuple, tensor: torch.Tensor, metadata=metadata
+        tensor_path: tuple, tensor: torch.Tensor, metadata=metadata, path=path
     ):
         tensor_path = _path2str(tensor_path)
-        if "." in tensor_path:
-            tensor_path.replace(".", "_<dot>_")
-        total_tensor_path = path / (tensor_path + ".memmap")
-        if os.path.exists(total_tensor_path):
-            MemoryMappedTensor.from_filename(
-                shape=tensor.shape,
-                filename=total_tensor_path,
-                dtype=tensor.dtype,
-            ).copy_(tensor)
-        else:
-            os.makedirs(total_tensor_path.parent, exist_ok=True)
-            MemoryMappedTensor.from_tensor(
-                tensor,
-                filename=total_tensor_path,
-                copy_existing=True,
-                copy_data=True,
-            )
-            t = MemoryMappedTensor.from_filename(
-                filename=total_tensor_path,
-                dtype=tensor.dtype,
-                shape=tensor.shape,
-            )
-            assert (t == tensor).all()
-        key = tensor_path.replace("/", ".")
-        if key in metadata:
-            raise KeyError(
-                "At least two values have conflicting representations in "
-                f"the data structure to be serialized: {key}."
-            )
-        metadata[key] = {
-            "dtype": str(tensor.dtype),
-            "shape": list(tensor.shape),
-        }
+        _save_pytree_common(tensor_path, path, tensor, metadata)
 
     tree_map_with_path(save_tensor, _storage)
-
-def get_paths(spec, cumulpath=""):
-    if isinstance(spec, LeafSpec):
-        yield cumulpath
-    contexts = spec.context
-    children_specs = spec.children_specs
-    if contexts is None:
-        contexts = range(len(children_specs))
-    for context, spec in zip(contexts, children_specs):
-        cpath = "/".join(
-            (cumulpath, str(context))
-            ) if cumulpath else context
-        yield from get_paths(spec, cpath)
 
 @implement_for("torch", None, "2.3")
 def _save_pytree(_storage, metadata, path):
@@ -1261,44 +1255,41 @@ def _save_pytree(_storage, metadata, path):
     storage_paths = get_paths(storage_specs)
 
     def save_tensor(
-        tensor_path: str, tensor: torch.Tensor, metadata=metadata
+        tensor_path: str, tensor: torch.Tensor, metadata=metadata, path=path
     ):
-        if "." in tensor_path:
-            tensor_path.replace(".", "_<dot>_")
-        total_tensor_path = path / (tensor_path + ".memmap")
-        if os.path.exists(total_tensor_path):
-            MemoryMappedTensor.from_filename(
-                shape=tensor.shape,
-                filename=total_tensor_path,
-                dtype=tensor.dtype,
-            ).copy_(tensor)
-        else:
-            os.makedirs(total_tensor_path.parent, exist_ok=True)
-            MemoryMappedTensor.from_tensor(
-                tensor,
-                filename=total_tensor_path,
-                copy_existing=True,
-                copy_data=True,
-            )
-            t = MemoryMappedTensor.from_filename(
-                filename=total_tensor_path,
-                dtype=tensor.dtype,
-                shape=tensor.shape,
-            )
-            assert (t == tensor).all()
-        key = tensor_path.replace("/", ".")
-        if key in metadata:
-            raise KeyError(
-                "At least two values have conflicting representations in "
-                f"the data structure to be serialized: {key}."
-            )
-        metadata[key] = {
-            "dtype": str(tensor.dtype),
-            "shape": list(tensor.shape),
-        }
+        _save_pytree_common(tensor_path, path, tensor, metadata)
 
-    for tensor, path in flat_storage, storage_paths:
-        save_tensor(path, tensor)
+    for tensor, tensor_path in zip(flat_storage, storage_paths):
+        save_tensor(tensor_path, tensor)
+
+def _init_pytree_common(tensor_path, scratch_dir, max_size, tensor):
+    if "." in tensor_path:
+        tensor_path.replace(".", "_<dot>_")
+    if scratch_dir is not None:
+        total_tensor_path = Path(scratch_dir) / (
+            tensor_path + ".memmap"
+        )
+        if os.path.exists(total_tensor_path):
+            raise RuntimeError(
+                f"The storage of tensor {total_tensor_path} already exists. "
+                f"To load an existing replay buffer, use storage.loads. "
+                f"Choose a different path to store your buffer or delete the existing files."
+            )
+        os.makedirs(total_tensor_path.parent, exist_ok=True)
+    else:
+        total_tensor_path = None
+    out = MemoryMappedTensor.empty(
+        shape=(max_size, *tensor.shape),
+        filename=total_tensor_path,
+        dtype=tensor.dtype,
+    )
+    if VERBOSE:
+        filesize = os.path.getsize(out.filename) / 1024 / 1024
+        logging.info(
+            f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
+        )
+    return out
+
 
 @implement_for("torch", "2.3", None)
 def _init_pytree(scratch_dir, max_size, data):
@@ -1308,33 +1299,7 @@ def _init_pytree(scratch_dir, max_size, data):
     # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
     def save_tensor(tensor_path: tuple, tensor: torch.Tensor):
         tensor_path = _path2str(tensor_path)
-        if "." in tensor_path:
-            tensor_path.replace(".", "_<dot>_")
-        if scratch_dir is not None:
-            total_tensor_path = Path(scratch_dir) / (
-                tensor_path + ".memmap"
-            )
-            if os.path.exists(total_tensor_path):
-                raise RuntimeError(
-                    f"The storage of tensor {total_tensor_path} already exists. "
-                    f"To load an existing replay buffer, use storage.loads. "
-                    f"Choose a different path to store your buffer or delete the existing files."
-                )
-            os.makedirs(total_tensor_path.parent, exist_ok=True)
-        else:
-            total_tensor_path = None
-        out = MemoryMappedTensor.empty(
-            shape=(max_size, *tensor.shape),
-            filename=total_tensor_path,
-            dtype=tensor.dtype,
-        )
-        if VERBOSE:
-            filesize = os.path.getsize(out.filename) / 1024 / 1024
-            logging.info(
-                f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
-            )
-        return out
-
+        return _init_pytree_common(tensor_path, scratch_dir, max_size, tensor)
     out = tree_map_with_path(save_tensor, data)
     return out
 
@@ -1344,38 +1309,15 @@ def _init_pytree(scratch_dir, max_size, data):
 
     flat_data, data_specs = tree_flatten(data)
     data_paths = get_paths(data_specs)
+    data_paths = list(data_paths)
 
     # If not a tensorclass/tensordict, it must be a tensor(-like) or a PyTree
     # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
     def save_tensor(tensor_path: str, tensor: torch.Tensor):
-        if "." in tensor_path:
-            tensor_path.replace(".", "_<dot>_")
-        if scratch_dir is not None:
-            total_tensor_path = Path(scratch_dir) / (
-                tensor_path + ".memmap"
-            )
-            if os.path.exists(total_tensor_path):
-                raise RuntimeError(
-                    f"The storage of tensor {total_tensor_path} already exists. "
-                    f"To load an existing replay buffer, use storage.loads. "
-                    f"Choose a different path to store your buffer or delete the existing files."
-                )
-            os.makedirs(total_tensor_path.parent, exist_ok=True)
-        else:
-            total_tensor_path = None
-        out = MemoryMappedTensor.empty(
-            shape=(max_size, *tensor.shape),
-            filename=total_tensor_path,
-            dtype=tensor.dtype,
-        )
-        if VERBOSE:
-            filesize = os.path.getsize(out.filename) / 1024 / 1024
-            logging.info(
-                f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
-            )
-        return out
-    out = []
-    for tensor, path in flat_data, data_paths:
-        out.append(save_tensor(path, tensor))
+        return _init_pytree_common(tensor_path, scratch_dir, max_size, tensor)
 
-    return tree_flatten(out, data_specs)
+    out = []
+    for tensor, tensor_path in zip(flat_data, data_paths):
+        out.append(save_tensor(tensor_path, tensor))
+
+    return tree_unflatten(out, data_specs)
