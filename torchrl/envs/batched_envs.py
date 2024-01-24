@@ -463,7 +463,7 @@ class _BatchedEnv(EnvBase):
                 )
                 for tensordict in shared_tensordict_parent
             ]
-            shared_tensordict_parent = torch.stack(
+            shared_tensordict_parent = LazyStackedTensorDict.lazy_stack(
                 shared_tensordict_parent,
                 0,
             )
