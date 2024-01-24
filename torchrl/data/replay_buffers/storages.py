@@ -1212,12 +1212,6 @@ def _save_pytree_common(tensor_path, path, tensor, metadata):
             copy_existing=True,
             copy_data=True,
         )
-        t = MemoryMappedTensor.from_filename(
-            filename=total_tensor_path,
-            dtype=tensor.dtype,
-            shape=tensor.shape,
-        )
-        assert (t == tensor).all()
     key = tensor_path.replace("/", ".")
     if key in metadata:
         raise KeyError(
