@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Sequence, Union
 
 import numpy as np
+import tensordict
 import torch
 from tensordict import is_tensorclass
 from tensordict.memmap import MemmapTensor, MemoryMappedTensor
@@ -131,6 +132,10 @@ class Storage:
 class ListStorage(Storage):
     """A storage stored in a list.
 
+    This class cannot be extended with PyTrees, the data provided during calls to
+    :meth:`~torchrl.data.replay_buffers.ReplayBuffer.extend` should be iterables
+    (like lists, tuples, tensors or tensordicts with non-empty batch-size).
+
     Args:
         max_size (int): the maximum number of elements stored in the storage.
 
@@ -160,8 +165,26 @@ class ListStorage(Storage):
             if isinstance(cursor, slice):
                 self._storage[cursor] = data
                 return
-            for _cursor, _data in zip(cursor, data):
-                self.set(_cursor, _data)
+            if isinstance(
+                data,
+                (
+                    list,
+                    tuple,
+                    torch.Tensor,
+                    TensorDictBase,
+                    *tensordict.base._ACCEPTED_CLASSES,
+                    range,
+                    set,
+                    np.ndarray,
+                ),
+            ):
+                for _cursor, _data in zip(cursor, data):
+                    self.set(_cursor, _data)
+            else:
+                raise TypeError(
+                    f"Cannot extend a {type(self)} with data of type {type(data)}. "
+                    f"Provide a list, tuple, set, range, np.ndarray, tensor or tensordict subclass instead."
+                )
             return
         else:
             if cursor > len(self._storage):
@@ -330,7 +353,7 @@ class TensorStorage(Storage):
             self._storage.memmap(
                 path, copy_existing=True, num_threads=torch.get_num_threads()
             )
-            is_pyree = False
+            is_pytree = False
         else:
 
             def save_tensor(
@@ -372,13 +395,13 @@ class TensorStorage(Storage):
                 }
 
             tree_map_with_path(save_tensor, self._storage)
-            is_pyree = True
+            is_pytree = True
 
         with open(path / "storage_metadata.json", "w") as file:
             json.dump(
                 {
                     "metadata": metadata,
-                    "is_pyree": is_pyree,
+                    "is_pytree": is_pytree,
                     "len": self._len,
                 },
                 file,
@@ -387,9 +410,9 @@ class TensorStorage(Storage):
     def loads(self, path):
         with open(path / "storage_metadata.json", "r") as file:
             metadata = json.load(file)
-        is_pyree = metadata["is_pyree"]
+        is_pytree = metadata["is_pytree"]
         _len = metadata["len"]
-        if is_pyree:
+        if is_pytree:
             path = Path(path)
             for local_path, md in metadata["metadata"].items():
                 # load tensor
@@ -426,7 +449,7 @@ class TensorStorage(Storage):
         else:
             _storage = TensorDict.load_memmap(path)
             if not self.initialized:
-                # this should not be reached if is_pyree=True
+                # this should not be reached if is_pytree=True
                 self._storage = _storage
                 self.initialized = True
             else:

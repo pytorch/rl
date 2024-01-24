@@ -17,7 +17,7 @@ import numpy as np
 
 import torch
 
-from tensordict import is_tensorclass
+from tensordict import is_tensorclass, unravel_key
 from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.tensordict import (
     is_tensor_collection,
@@ -280,6 +280,8 @@ class ReplayBuffer:
 
     @pin_memory_output
     def __getitem__(self, index: Union[int, torch.Tensor]) -> Any:
+        if isinstance(index, str) or (isinstance(index, tuple) and unravel_key(index)):
+            return self[:][index]
         index = _to_numpy(index)
         with self._replay_lock:
             data = self._storage[index]
@@ -423,6 +425,17 @@ class ReplayBuffer:
 
         Returns:
             Indices of the data added to the replay buffer.
+
+        .. warning:: :meth:`~torchrl.data.replay_buffers.ReplayBuffer.extend` can have an
+          ambiguous signature when dealing with lists of values, which should be interpreted
+          either as PyTree (in which case all elements in the list will be put in a slice
+          in the stored PyTree in the storage) or a list of values to add one at a time.
+          To solve this, TorchRL makes the clear-cut distinction between list and tuple:
+          a tuple will be viewed as a PyTree, a list (at the root level) will be interpreted
+          as a stack of values to add one at a time to the buffer.
+          For :class:`~torchrl.data.replay_buffers.ListStorage` instances, only
+          unbound elements can be provided (no PyTrees).
+
         """
         if self._transform is not None and len(self._transform):
             with _set_dispatch_td_nn_modules(is_tensor_collection(data)):

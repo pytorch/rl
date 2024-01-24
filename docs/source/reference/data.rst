@@ -30,7 +30,91 @@ several sampling strategies; usage of transforms etc.
 Supported data types and choosing a storage
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+In theory, replay buffers support any data type but we can't guarantee that each
+component will support any data type. The most crude replay buffer implementation
+is made of a :class:`~torchrl.data.replay_buffers.ReplayBuffer` base with a
+:class:`~torchrl.data.replay_buffers.ListStorage` storage. This is very inefficient
+but it will allow you to store complex data structures with non-tensor data.
+Storages in contiguous memory include :class:`~torchrl.data.replay_buffers.TensorStorage`,
+:class:`~torchrl.data.replay_buffers.LazyTensorStorage` and
+:class:`~torchrl.data.replay_buffers.LazyMemmapStorage`.
+These classes of course support :class:`~tensordict.TensorDict` data, but also
+any PyTree data structure (eg, tuples, lists, dictionaries and nested versions
+of these). The :class:`~torchrl.data.replay_buffers.TensorStorage` storage requires
+you to provide the storage at construction time, whereas :class:`~torchrl.data.replay_buffers.TensorStorage`
+(RAM, CUDA) and :class:`~torchrl.data.replay_buffers.LazyMemmapStorage` (physical memory)
+will preallocate the storage for you after they've been extended the first time.
 
+Here are a few examples, starting with the generic :class:`~torchrl.data.replay_buffers.ListStorage`:
+
+    >>> from torchrl.data.replay_buffers import ReplayBuffer, ListStorage
+    >>> rb = ReplayBuffer(storage=ListStorage(10))
+    >>> rb.add("a string!") # first element will be a string
+    >>> rb.extend([30, None])  # element [1] is an int, [2] is None
+
+Using a :class:`~torchrl.data.replay_buffers.TensorStorage` we tell our RB that
+we want the storage to be contiguous, which is by far more efficient but also
+more restrictive:
+
+    >>> import torch
+    >>> from torchrl.data.replay_buffers import ReplayBuffer, TensorStorage
+    >>> container = torch.empty(10, 3, 64, 64, dtype=torch.unit8)
+    >>> rb = ReplayBuffer(storage=TensorStorage(container))
+    >>> img = torch.randint(255, (3, 64, 64), dtype=torch.uint8)
+    >>> rb.add(img)
+
+Next we can avoid creating the container and ask the storage to do it automatically.
+This is very useful when using PyTrees and tensordicts!
+
+    >>> import torch
+    >>> from tensordict import TensorDict
+    >>> from torchrl.data.replay_buffers import ReplayBuffer, LazyMemmapStorage
+    >>> rb_td = ReplayBuffer(storage=LazyMemmapStorage(10), batch_size=1)  # max 10 elements stored
+    >>> rb_td.add(TensorDict({"img": torch.randint(255, (3, 64, 64), dtype=torch.unit8),
+    ...     "labels": torch.randint(100, ())}, batch_size=[]))
+    >>> rb_pytree = ReplayBuffer(storage=LazyMemmapStorage(10))  # max 10 elements stored
+    >>> # extend with a PyTree where all tensors have the same leading dim
+    >>> rb_pytree.extend({"a": {"b": torch.randn(3), "c": [torch.zeros(3, 2), (torch.ones(3, 10),)]}})
+
+.. note:: :meth:`~torchrl.data.replay_buffers.ReplayBuffer.extend` can have an
+  ambiguous signature when dealing with lists of values, which should be interpreted
+  either as PyTree (in which case all elements in the list will be put in a slice
+  in the stored PyTree in the storage) or a list of values to add one at a time.
+  To solve this, TorchRL makes the clear-cut distinction between list and tuple:
+  a tuple will be viewed as a PyTree, a list (at the root level) will be interpreted
+  as a stack of values to add one at a time to the buffer.
+
+Sampling and indexing
+~~~~~~~~~~~~~~~~~~~~~
+
+Replay buffers can be indexed and sampled.
+Indexing and sampling collect data at given indices in the storage and then process them
+through a series of transforms and ``collate_fn`` that can be passed to the `__init__`
+function of the replay buffer. ``collate_fn`` comes with default values that should
+match user expectations in the majority of cases, such that you should not have
+to worry about it most of the time. Transforms are usually instances of :class:`~torchrl.envs.transforms.Transform`
+even though regular functions will work too (in the latter case, the :meth:`~torchrl.envs.transforms.Transform.inv`
+method will obviously be ignored, whereas in the first case it can be used to
+preprocess the data before it is passed to the buffer).
+Finally, sampling can be achieved using multithreading by passing the number of threads
+to the constructor through the ``prefetch`` keyword argument. We advise users to
+benchmark this technique in real life settings before adopting it, as there is
+no guarantee that it will lead to a faster throughput in practice depending on
+the machine and setting where it is used.
+
+When sampling, the ``batch_size`` can be either passed during construction
+(e.g., if it's constant throughout training) or
+to the :meth:`~torchrl.data.replay_buffers.ReplayBuffer.sample` method.
+
+To further refine the sampling strategy, we advise you to look into our samplers!
+
+Here are a couple of examples of how to get data out of a replay buffer:
+
+    >>> first_elt = rb_td[0]
+    >>> storage = rb_td[:] # returns all valid elements from the buffer
+    >>> sample = rb_td.sample(128)
+    >>> for data in rb_td:  # iterate over the buffer using the sampler -- batch-size was set in the constructor to 1
+    ...     print(data)
 
 using the following components:
 
