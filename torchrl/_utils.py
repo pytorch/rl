@@ -271,7 +271,7 @@ class implement_for:
         implement_for._setters.append(self)
 
     @staticmethod
-    def check_version(version:str, from_version:str|None, to_version:str|None):
+    def check_version(version: str, from_version: str | None, to_version: str | None):
         version = parse(".".join([str(v) for v in parse(version).release]))
         return (from_version is None or version >= parse(from_version)) and (
             to_version is None or version < parse(to_version)

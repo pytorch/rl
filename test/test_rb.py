@@ -6,7 +6,6 @@
 import argparse
 import contextlib
 import importlib
-import logging
 import os
 import pickle
 import sys
@@ -16,9 +15,9 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
-from packaging import version
 
 from _utils_internal import get_default_devices, make_tc
+from packaging import version
 from packaging.version import parse
 from tensordict import is_tensor_collection, is_tensorclass, tensorclass
 from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
@@ -84,9 +83,9 @@ _has_tv = importlib.util.find_spec("torchvision") is not None
 _has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
 
-torch_2_3 = (version.parse(
+torch_2_3 = version.parse(
     ".".join([str(s) for s in version.parse(str(torch.__version__)).release])
-) >= version.parse("2.3.0"))
+) >= version.parse("2.3.0")
 
 
 @pytest.mark.parametrize(
@@ -729,7 +728,6 @@ class TestStorages:
                 storage_recover.set(range(3), tree_map(lambda x: x.cpu().zero_(), data))
             else:
                 storage_recover.set(range(3), data.cpu().zero_())
-        import logging
 
         if data_type in ("tensor", "pytree") and not isinit:
             with pytest.raises(

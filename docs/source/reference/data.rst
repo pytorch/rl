@@ -38,7 +38,7 @@ but it will allow you to store complex data structures with non-tensor data.
 Storages in contiguous memory include :class:`~torchrl.data.replay_buffers.TensorStorage`,
 :class:`~torchrl.data.replay_buffers.LazyTensorStorage` and
 :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`.
-These classes of course support :class:`~tensordict.TensorDict` data, but also
+These classes support :class:`~tensordict.TensorDict` data as first-class citizens, but also
 any PyTree data structure (eg, tuples, lists, dictionaries and nested versions
 of these). The :class:`~torchrl.data.replay_buffers.TensorStorage` storage requires
 you to provide the storage at construction time, whereas :class:`~torchrl.data.replay_buffers.TensorStorage`
@@ -64,7 +64,13 @@ more restrictive:
     >>> rb.add(img)
 
 Next we can avoid creating the container and ask the storage to do it automatically.
-This is very useful when using PyTrees and tensordicts!
+This is very useful when using PyTrees and tensordicts! For PyTrees as other data
+structures, :meth:`~torchrl.data.replay_buffers.ReplayBuffer.add` considers the sampled
+passed to it as a single instance of the type. :meth:`~torchrl.data.replay_buffers.ReplayBuffer.extend`
+on the other hand will consider that the data is an iterable. For tensors, tensordicts
+and lists (see below), the iterable is looked for at the root level. For PyTrees,
+we assume that the leading dimension of all the leaves (tensors) in the tree
+match. If they don't, ``extend`` will throw an exception.
 
     >>> import torch
     >>> from tensordict import TensorDict
@@ -73,8 +79,9 @@ This is very useful when using PyTrees and tensordicts!
     >>> rb_td.add(TensorDict({"img": torch.randint(255, (3, 64, 64), dtype=torch.unit8),
     ...     "labels": torch.randint(100, ())}, batch_size=[]))
     >>> rb_pytree = ReplayBuffer(storage=LazyMemmapStorage(10))  # max 10 elements stored
-    >>> # extend with a PyTree where all tensors have the same leading dim
+    >>> # extend with a PyTree where all tensors have the same leading dim (3)
     >>> rb_pytree.extend({"a": {"b": torch.randn(3), "c": [torch.zeros(3, 2), (torch.ones(3, 10),)]}})
+    >>> assert len(rb_pytree) == 3  # the replay buffer has 3 elements!
 
 .. note:: :meth:`~torchrl.data.replay_buffers.ReplayBuffer.extend` can have an
   ambiguous signature when dealing with lists of values, which should be interpreted

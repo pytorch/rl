@@ -13,7 +13,7 @@ from collections import OrderedDict
 from copy import copy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Union, Callable
+from typing import Any, Dict, List, Sequence, Union
 
 import numpy as np
 import tensordict
@@ -23,16 +23,11 @@ from tensordict.memmap import MemmapTensor, MemoryMappedTensor
 from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.utils import _STRDTYPE2DTYPE, expand_right
 from torch import multiprocessing as mp
-from packaging import version
+
+from torch.utils._pytree import LeafSpec, tree_flatten, tree_map, tree_unflatten
 
 from torchrl._utils import _CKPT_BACKEND, implement_for, VERBOSE
 from torchrl.data.replay_buffers.utils import INT_CLASSES
-
-from torch.utils._pytree import (
-    tree_flatten,
-    tree_map,tree_unflatten,
-    LeafSpec,
-)
 
 try:
     from torchsnapshot.serialization import tensor_from_memoryview
@@ -1155,10 +1150,8 @@ def _make_empty_memmap(shape, dtype, path):
 
 @implement_for("torch", "2.3", None)
 def _path2str(path, default_name=None):
-    from torch.utils._pytree import (
-        MappingKey,
-        SequenceKey,
-    )
+    # Uses the Keys defined in pytree to build a path
+    from torch.utils._pytree import MappingKey, SequenceKey
 
     if default_name is None:
         default_name = SINGLE_TENSOR_BUFFER_NAME
@@ -1180,11 +1173,14 @@ def _path2str(path, default_name=None):
     if isinstance(path, SequenceKey):
         return str(path.idx)
 
+
 @implement_for("torch", None, "2.3")
-def _path2str(path, default_name=None):
+def _path2str(path, default_name=None):  # noqa: F811
     raise RuntimeError
 
-def get_paths(spec, cumulpath=""):
+
+def _get_paths(spec, cumulpath=""):
+    # alternative way to build a path without the keys
     if isinstance(spec, LeafSpec):
         yield cumulpath if cumulpath else SINGLE_TENSOR_BUFFER_NAME
 
@@ -1194,10 +1190,8 @@ def get_paths(spec, cumulpath=""):
         contexts = range(len(children_specs))
 
     for context, spec in zip(contexts, children_specs):
-        cpath = "/".join(
-            (cumulpath, str(context))
-            ) if cumulpath else str(context)
-        yield from get_paths(spec, cpath)
+        cpath = "/".join((cumulpath, str(context))) if cumulpath else str(context)
+        yield from _get_paths(spec, cpath)
 
 
 def _save_pytree_common(tensor_path, path, tensor, metadata):
@@ -1248,11 +1242,12 @@ def _save_pytree(_storage, metadata, path):
 
     tree_map_with_path(save_tensor, _storage)
 
+
 @implement_for("torch", None, "2.3")
-def _save_pytree(_storage, metadata, path):
+def _save_pytree(_storage, metadata, path):  # noqa: F811
 
     flat_storage, storage_specs = tree_flatten(_storage)
-    storage_paths = get_paths(storage_specs)
+    storage_paths = _get_paths(storage_specs)
 
     def save_tensor(
         tensor_path: str, tensor: torch.Tensor, metadata=metadata, path=path
@@ -1262,13 +1257,12 @@ def _save_pytree(_storage, metadata, path):
     for tensor, tensor_path in zip(flat_storage, storage_paths):
         save_tensor(tensor_path, tensor)
 
+
 def _init_pytree_common(tensor_path, scratch_dir, max_size, tensor):
     if "." in tensor_path:
         tensor_path.replace(".", "_<dot>_")
     if scratch_dir is not None:
-        total_tensor_path = Path(scratch_dir) / (
-            tensor_path + ".memmap"
-        )
+        total_tensor_path = Path(scratch_dir) / (tensor_path + ".memmap")
         if os.path.exists(total_tensor_path):
             raise RuntimeError(
                 f"The storage of tensor {total_tensor_path} already exists. "
@@ -1300,15 +1294,16 @@ def _init_pytree(scratch_dir, max_size, data):
     def save_tensor(tensor_path: tuple, tensor: torch.Tensor):
         tensor_path = _path2str(tensor_path)
         return _init_pytree_common(tensor_path, scratch_dir, max_size, tensor)
+
     out = tree_map_with_path(save_tensor, data)
     return out
 
 
 @implement_for("torch", None, "2.3")
-def _init_pytree(scratch_dir, max_size, data):
+def _init_pytree(scratch_dir, max_size, data):  # noqa: F811
 
     flat_data, data_specs = tree_flatten(data)
-    data_paths = get_paths(data_specs)
+    data_paths = _get_paths(data_specs)
     data_paths = list(data_paths)
 
     # If not a tensorclass/tensordict, it must be a tensor(-like) or a PyTree
