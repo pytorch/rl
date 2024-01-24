@@ -119,7 +119,7 @@ from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal
-
+from tensordict.utils import assert_allclose_td
 TIMEOUT = 100.0
 
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
@@ -797,7 +797,7 @@ class TestCatFrames(TransformBase):
         v1 = model(tdbase0)
         v2 = model(tdbase0_copy)
         # check that swapping dims and names leads to same result
-        assert (v1 == v2.transpose(0, 1)).all()
+        assert_allclose_td(v1, v2.transpose(0, 1))
 
     @pytest.mark.parametrize("dim", [-2, -1])
     @pytest.mark.parametrize("N", [3, 4])
