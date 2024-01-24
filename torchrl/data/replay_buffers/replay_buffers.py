@@ -140,7 +140,9 @@ class ReplayBuffer:
 
     The :class:`~torchrl.data.replay_buffers.TensorStorage`, :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`
     and :class:`~torchrl.data.replay_buffers.LazyTensorStorage` also work
-    with any PyTree structure provided that it only contains tensor data.
+    with any PyTree structure (a PyTree is a nested structure of arbitrary depth made of dicts,
+    lists or tuples where the leaves are tensors) provided that it only contains
+    tensor data.
 
     Examples:
         >>> from torch.utils._pytree import tree_map

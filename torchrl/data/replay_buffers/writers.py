@@ -5,6 +5,7 @@
 
 import heapq
 import json
+import logging
 import textwrap
 from abc import ABC, abstractmethod
 from copy import copy
@@ -121,6 +122,16 @@ class RoundRobinWriter(Writer):
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
         if is_tensor_collection(data) or isinstance(data, torch.Tensor):
+            batch_size = len(data)
+        elif isinstance(data, list):
+            logging.warning(
+                f"Passing a list to {type(self)}.extend is intepreted as "
+                f"adding each element of the list independently for backward compatibility. "
+                f"If you wish to use that list as a PyTree (ie, extend each element of the "
+                f"list) we advise you to transform that list in a tuple. "
+                f"This behaviour will be deprecated in v0.5 and all non-tensor(dict) input "
+                f"will be considered as PyTrees."
+            )
             batch_size = len(data)
         else:
             batch_size = len(tree_flatten(data)[0][0])

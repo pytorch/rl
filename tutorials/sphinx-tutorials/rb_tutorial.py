@@ -265,9 +265,10 @@ print("sample:", sample)
 # Integration with PyTree
 # ~~~~~~~~~~~~~~~~~~~~~~~
 #
-# TorchRL's replay buffers also work with any pytree data structure,
-# meaning that one can store in contiguous memory any tree structure composed of
-# dictionaries, lists, tuples etc.
+# TorchRL's replay buffers also work with any pytree data structure.
+# A PyTree is a nested structure of arbitrary depth made of dicts, lists and/or
+# tuples where the leaves are tensors.
+# This means that one can store in contiguous memory any such tree structure!
 # Various storages can be used:
 # :class:`~torchrl.data.replay_buffers.TensorStorage`, :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`
 # or :class:`~torchrl.data.replay_buffers.LazyTensorStorage` all accept this kind of data.

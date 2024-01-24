@@ -1021,7 +1021,7 @@ class TestBuffers:
         ) if cond else contextlib.nullcontext():
             rb.extend(batch1)
 
-        # Added less data than storage max size
+        # Added fewer data than storage max size
         if size > 5 or storage is None:
             assert rb._writer._cursor == 5
         # Added more data than storage max size

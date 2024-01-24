@@ -22,7 +22,17 @@ widely used replay buffers:
 Composable Replay Buffers
 -------------------------
 
-We also give users the ability to compose a replay buffer using the following components:
+We also give users the ability to compose a replay buffer.
+We provide a wide panel of solutions for replay buffer usage, including support for
+almost any data type; storage in memory, on device or on physical memory;
+several sampling strategies; usage of transforms etc.
+
+Supported data types and choosing a storage
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+using the following components:
 
 .. currentmodule:: torchrl.data.replay_buffers
 
@@ -48,9 +58,14 @@ We also give users the ability to compose a replay buffer using the following co
     TensorDictRoundRobinWriter
     TensorDictMaxValueWriter
 
-Storage choice is very influential on replay buffer sampling latency, especially in distributed reinforcement learning settings with larger data volumes.
-:class:`LazyMemmapStorage` is highly advised in distributed settings with shared storage due to the lower serialisation cost of MemmapTensors as well as the ability to specify file storage locations for improved node failure recovery.
-The following mean sampling latency improvements over using ListStorage were found from rough benchmarking in https://github.com/pytorch/rl/tree/main/benchmarks/storage.
+Storage choice is very influential on replay buffer sampling latency, especially
+in distributed reinforcement learning settings with larger data volumes.
+:class:`~torchrl.data.replay_buffers.storages.LazyMemmapStorage` is highly
+advised in distributed settings with shared storage due to the lower serialisation
+cost of MemoryMappedTensors as well as the ability to specify file storage locations
+for improved node failure recovery.
+The following mean sampling latency improvements over using :class:`~torchrl.data.replay_buffers.ListStorage`
+were found from rough benchmarking in https://github.com/pytorch/rl/tree/main/benchmarks/storage.
 
 +-------------------------------+-----------+
 | Storage Type                  | Speed up  |
