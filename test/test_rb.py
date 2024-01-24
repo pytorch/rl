@@ -6,6 +6,7 @@
 import argparse
 import contextlib
 import importlib
+import logging
 import os
 import pickle
 import sys
@@ -15,6 +16,7 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
+from packaging import version
 
 from _utils_internal import get_default_devices, make_tc
 from packaging.version import parse
@@ -81,6 +83,10 @@ OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
 _has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
+
+torch_2_3 = (version.parse(
+    ".".join([str(s) for s in version.parse(str(torch.__version__)).release])
+) >= version.parse("2.3.0"))
 
 
 @pytest.mark.parametrize(
@@ -723,6 +729,8 @@ class TestStorages:
                 storage_recover.set(range(3), tree_map(lambda x: x.cpu().zero_(), data))
             else:
                 storage_recover.set(range(3), data.cpu().zero_())
+        import logging
+
         if data_type in ("tensor", "pytree") and not isinit:
             with pytest.raises(
                 RuntimeError,
@@ -731,14 +739,16 @@ class TestStorages:
                 storage_recover.loads(dir_save)
             return
         storage_recover.loads(dir_save)
-        if data_type in ("tensor", "pytree"):
-            tree_map(
-                torch.testing.assert_close,
-                tree_flatten(storage._storage)[0],
-                tree_flatten(storage_recover._storage)[0],
-            )
-        else:
-            assert_allclose_td(storage._storage, storage_recover._storage)
+        # tree_map with more than one pytree is only available in torch >= 2.3
+        if torch_2_3:
+            if data_type in ("tensor", "pytree"):
+                tree_map(
+                    torch.testing.assert_close,
+                    tree_flatten(storage._storage)[0],
+                    tree_flatten(storage_recover._storage)[0],
+                )
+            else:
+                assert_allclose_td(storage._storage, storage_recover._storage)
         if data == "tc":
             assert storage._storage.text == storage_recover._storage.text
 

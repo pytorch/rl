@@ -1194,7 +1194,7 @@ def get_paths(spec, cumulpath=""):
         contexts = range(len(children_specs))
 
     for context, spec in zip(contexts, children_specs):
-        cpath = ".".join(
+        cpath = "/".join(
             (cumulpath, str(context))
             ) if cumulpath else str(context)
         yield from get_paths(spec, cpath)
