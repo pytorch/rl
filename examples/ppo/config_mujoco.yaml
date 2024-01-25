@@ -1,6 +1,6 @@
 # task and env
 env:
-  env_name: HalfCheetah-v3
+  env_name: HalfCheetah-v4
 
 # collector
 collector:

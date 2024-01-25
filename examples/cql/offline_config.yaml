@@ -1,6 +1,6 @@
 # env and task
 env:
-  name: Hopper-v2
+  name: Hopper-v4
   task: ""
   library: gym
   n_samples_stats: 1000

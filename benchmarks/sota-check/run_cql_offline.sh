@@ -9,7 +9,19 @@
 
 current_commit=$(git rev-parse HEAD)
 project_name="torchrl-example-check-$current_commit"
+group_name="cql_offline"
+
 python ../../examples/cql/cql_offline.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
-  logger.group_name="cql_offline"
+  logger.group_name="$group_name"
+
+# Capture the exit status of the Python command
+exit_status=$?
+# Write the exit status to a file
+if [ $exit_status -eq 0 ]; then
+  echo "$group_name=1" > report.log
+else
+  echo "$group_name=0" > report.log
+fi
+

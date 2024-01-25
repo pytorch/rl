@@ -23,7 +23,7 @@ fi
 
 # Initialize variables with default values
 n_runs="1"
-partition=""
+slurm_partition=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do

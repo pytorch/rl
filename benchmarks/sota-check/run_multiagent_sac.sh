@@ -9,7 +9,21 @@
 
 current_commit=$(git rev-parse HEAD)
 project_name="torchrl-example-check-$current_commit"
+group_name="marl_sac"
+
 python ../../examples/multiagent/sac.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="marl_sac"
+
+
+
+# Capture the exit status of the Python command
+exit_status=$?
+# Write the exit status to a file
+if [ $exit_status -eq 0 ]; then
+  echo "$group_name=1" > report.log
+else
+  echo "$group_name=0" > report.log
+fi
+
