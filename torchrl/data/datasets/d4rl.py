@@ -38,6 +38,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
     To install D4RL, follow the instructions on the
     `official repo <https://github.com/Farama-Foundation/D4RL>`__.
 
+    The data format follows the :ref:`TED convention <TED-format>`.
     The replay buffer contains the env specs under D4RLExperienceReplay.specs.
 
     If present, metadata will be written in ``D4RLExperienceReplay.metadata``

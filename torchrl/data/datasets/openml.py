@@ -27,6 +27,8 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
     This class provides an easy entry point for public datasets.
     See "Dua, D. and Graff, C. (2017) UCI Machine Learning Repository. http://archive.ics.uci.edu/ml"
 
+    The data format follows the :ref:`TED convention <TED-format>`.
+
     The data is accessed via scikit-learn. Make sure sklearn and pandas are
     installed before retrieving the data:
 
