@@ -298,8 +298,8 @@ before calling :meth:`~torchrl.data.ReplayBuffer.load_state_dict`. The drawback
 of this method is that it will struggle to save big data structures, which is a
 common setting when using replay buffers.
 
-Understanding the TorchRL Episode Data Format (TED)
----------------------------------------------------
+TorchRL Episode Data Format (TED)
+---------------------------------
 
 In TorchRL, sequential data is consistently presented in a specific format, known
 as the TorchRL Episode Data Format (TED). This format is crucial for the seamless
@@ -398,7 +398,7 @@ During a rollout (either using :class:`~torchrl.envs.EnvBase` or
 :class:`~torchrl.collectors.SyncDataCollector`), the content of the ``"next"``
 tensordict is brought to the root through the :func:`~torchrl.envs.utils.step_mdp`
 function when the agent resets its step count: ``t <- t+1``. You can read more
-about the environment API :ref:`here <env API>`.
+about the environment API :ref:`Environment API`.
 
 In most cases, there is no `True`-valued ``"done"`` state at the root since any
 done state will trigger a (partial) reset which will turn the ``"done"`` to ``False``.
@@ -429,8 +429,7 @@ Special cases and footnotes
 Multi-Agent data presentation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The multi-agent data formatting can be accessed in the :ref:`environment API reference
-page <MARL env>`.
+The multi-agent data formatting can be accessed in the :ref:`MARL environment API`.
 
 Memory-based policies (RNNs and Transformers)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
