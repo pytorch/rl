@@ -4,8 +4,8 @@
 #SBATCH --ntasks=32
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
-#SBATCH --output=slurm_logs/ppo_atari_output_%j.txt
-#SBATCH --error=slurm_errors/ppo_atari_error_%j.txt
+#SBATCH --output=slurm_logs/ppo_atari_%j.txt
+#SBATCH --error=slurm_errors/ppo_atari_%j.txt
 
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"

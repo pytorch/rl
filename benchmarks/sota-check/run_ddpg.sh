@@ -4,8 +4,8 @@
 #SBATCH --ntasks=32
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
-#SBATCH --output=slurm_logs/ddpg_output_%j.txt
-#SBATCH --error=slurm_errors/ddpg_error_%j.txt
+#SBATCH --output=slurm_logs/ddpg_%j.txt
+#SBATCH --error=slurm_errors/ddpg_%j.txt
 
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
