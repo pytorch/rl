@@ -14,3 +14,14 @@ To display the script usage, you can use the `--help` option:
 
 ```bash
 ./submitit-release-check.sh --help
+```
+
+## Setup
+
+```bash
+conda create -n rl-sota-bench python=3.10 -y 
+
+cd /path/to/tensordict
+python setup.py develop
+cd /path/to/torchrl
+```
