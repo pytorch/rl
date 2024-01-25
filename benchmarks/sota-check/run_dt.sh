@@ -9,7 +9,7 @@
 
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
-group_name="$dt_offline"
+group_name="dt_offline"
 export PYTHONPATH=$(dirname $(dirname $PWD))
 python $PYTHONPATH/examples/decision_transformer/dt.py \
   logger.backend=wandb \

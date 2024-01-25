@@ -9,7 +9,7 @@
 
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
-group_name="$cql_online"
+group_name="cql_online"
 export PYTHONPATH=$(dirname $(dirname $PWD))
 python $PYTHONPATH/examples/cql/cql_online.py \
   logger.backend=wandb \
