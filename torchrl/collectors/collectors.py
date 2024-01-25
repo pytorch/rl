@@ -784,7 +784,8 @@ class SyncDataCollector(DataCollectorBase):
         Yields: TensorDictBase objects containing (chunks of) trajectories
 
         """
-        if self.storing_device.type == "cuda":
+        # TODO: we need to check if any of the tensors is on cuda here
+        if self.storing_device and self.storing_device.type == "cuda":
             stream = torch.cuda.Stream(self.storing_device, priority=-1)
             event = stream.record_event()
         else:
