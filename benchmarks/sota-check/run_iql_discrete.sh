@@ -10,7 +10,8 @@
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="iql_discrete"
-PYTHONPATH=$(dirname $(dirname $PWD)) python ../../examples/iql/discrete_iql.py \
+export PYTHONPATH=$(dirname $(dirname $PWD))
+python $PYTHONPATH/examples/iql/discrete_iql.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"
