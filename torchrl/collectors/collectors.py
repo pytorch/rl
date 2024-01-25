@@ -697,7 +697,7 @@ class SyncDataCollector(DataCollectorBase):
             # erase all devices
             for td in self._tensordict_out.values(True):
                 if is_tensor_collection(td):
-                    td.device = None
+                    td.clear_device_()
 
         self._tensordict_out = (
             self._tensordict_out.unsqueeze(-1)
