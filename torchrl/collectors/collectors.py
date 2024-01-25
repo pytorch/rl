@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import _pickle
 import abc
+
+import contextlib
 import inspect
 import logging
 import os
@@ -24,6 +26,7 @@ from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Uni
 import numpy as np
 import torch
 import torch.nn as nn
+from tensordict import is_tensor_collection
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
@@ -49,7 +52,6 @@ from torchrl.envs.utils import (
     ExplorationType,
     set_exploration_type,
 )
-from tensordict import is_tensor_collection
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
@@ -61,7 +63,7 @@ DEFAULT_EXPLORATION_TYPE: ExplorationType = ExplorationType.RANDOM
 _is_osx = sys.platform.startswith("darwin")
 
 
-class RandomPolicy:
+class RandomPolicy(nn.Module):
     """A random policy for data collectors.
 
     This is a wrapper around the action_spec.rand method.
@@ -78,6 +80,7 @@ class RandomPolicy:
     """
 
     def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
+        super().__init__()
         self.action_spec = action_spec
         self.action_key = action_key
 
@@ -279,6 +282,7 @@ behaviour and more control you can consider writing your own TensorDictModule.
                 if is_param:
                     pd = nn.Parameter(pd, requires_grad=False)
                 return pd
+
             with param_and_buf.apply(_make_meta_params).to_module(policy):
                 policy = deepcopy(policy)
             param_and_buf.to(self.policy_device, non_blocking=True).to_module(policy)
@@ -784,14 +788,22 @@ class SyncDataCollector(DataCollectorBase):
         Yields: TensorDictBase objects containing (chunks of) trajectories
 
         """
-        # TODO: we need to check if any of the tensors is on cuda here
         if self.storing_device and self.storing_device.type == "cuda":
             stream = torch.cuda.Stream(self.storing_device, priority=-1)
             event = stream.record_event()
+            streams = [stream]
+            events = [event]
         else:
-            event = None
-            stream = None
-        with torch.cuda.stream(stream):
+            streams = []
+            events = []
+            for value in self._tensordict_out.values(True, True):
+                if value.device.type == "cuda":
+                    streams.append(torch.cuda.Stream(value.device, priority=-1))
+                    events.append(streams[-1].record_event())
+        with contextlib.ExitStack() as stack:
+            for stream in streams:
+                stack.enter_context(torch.cuda.stream(stream))
+
             total_frames = self.total_frames
 
             while self._frames < self.total_frames:
@@ -827,9 +839,10 @@ class SyncDataCollector(DataCollectorBase):
                 if self.return_same_td:
                     # This is used with multiprocessed collectors to use the buffers
                     # stored in the tensordict.
-                    if event is not None:
-                        event.record()
-                        event.synchronize()
+                    if events:
+                        for event in events:
+                            event.record()
+                            event.synchronize()
                     yield tensordict_out
                 else:
                     # we must clone the values, as the tensordict is updated in-place.
@@ -1040,7 +1053,7 @@ class _MultiDataCollector(DataCollectorBase):
         policy (Callable, optional): Instance of TensorDictModule class.
             Must accept TensorDictBase object as input.
             If ``None`` is provided, the policy used will be a
-            :class:`RandomPolicy` instance with the environment
+            :class:`~torchrl.collectors.RandomPolicy` instance with the environment
             ``action_spec``.
         frames_per_batch (int): A keyword-only argument representing the
             total number of elements in a batch.
@@ -1185,9 +1198,16 @@ class _MultiDataCollector(DataCollectorBase):
         if devices is not None:
             raise RuntimeError("devices is deprecated, use `device` instead.")
         if storing_devices is not None:
-            raise RuntimeError("storing_devices is deprecated, use `storing_device` instead.")
+            raise RuntimeError(
+                "storing_devices is deprecated, use `storing_device` instead."
+            )
 
-        storing_devices, policy_devices, env_devices = self._get_devices(storing_device=storing_device, env_device=env_device, policy_device=policy_device, device=device)
+        storing_devices, policy_devices, env_devices = self._get_devices(
+            storing_device=storing_device,
+            env_device=env_device,
+            policy_device=policy_device,
+            device=device,
+        )
 
         # to avoid confusion
         self.storing_device = storing_devices
@@ -1216,7 +1236,7 @@ class _MultiDataCollector(DataCollectorBase):
         with policy_weights.apply(_make_meta_params).to_module(policy):
             self.policy = deepcopy(policy)
 
-        for i, policy_device in enumerate(policy_devices):
+        for policy_device in policy_devices:
             # if we have already mapped onto that device, get that value
             if policy_device in _policy_weights_dict:
                 continue
@@ -1225,7 +1245,9 @@ class _MultiDataCollector(DataCollectorBase):
             if policy_device is None:
                 with policy_weights.unlock_():
                     local_policy_weights = policy_weights.apply(
-                        lambda weight: weight.share_memory_() if weight.device.type in ("cpu", "mps") else weight
+                        lambda weight: weight.share_memory_()
+                        if weight.device.type in ("cpu", "mps")
+                        else weight
                     )
 
                 def _get_weight_fn(weights=policy_weights):
@@ -1233,30 +1255,41 @@ class _MultiDataCollector(DataCollectorBase):
                     # there is no need to update them.
                     # see self.update_policy_weights_ to see how this is used
                     return None
+
             # in other cases, we need to cast the policy if and only if not all the weights
             # are on the appropriate device
             else:
                 # check the weights devices
                 has_different_device = [False]
-                def map_weight(weight):
+
+                def map_weight(
+                    weight,
+                    policy_device=policy_device,
+                    has_different_device=has_different_device,
+                ):
                     if weight.device != policy_device:
                         has_different_device[0] = True
                         return weight.to(policy_device)
                     elif weight.device.type in ("cpu", "mps"):
                         weight = weight.share_memory_()
                     return weight
+
                 local_policy_weights = policy_weights.apply(map_weight)
                 if has_different_device[0]:
+
                     def _get_weight_fn(weights=policy_weights):
                         # This function will give the local_policy_weight the original weights.
                         # see self.update_policy_weights_ to see how this is used
                         return weights.data
+
                 else:
+
                     def _get_weight_fn(weights=policy_weights):
                         # The original policy weights and these weights match in identity,
                         # there is no need to update them.
                         # see self.update_policy_weights_ to see how this is used
                         return None
+
             # We lock the weights to be able to cache a bunch of ops and to avoid modifying it
             _policy_weights_dict[policy_device] = local_policy_weights.lock_()
             _get_weights_fn_dict[policy_device] = _get_weight_fn
@@ -1324,16 +1357,44 @@ class _MultiDataCollector(DataCollectorBase):
     ):
         # convert all devices to lists
         if not isinstance(storing_device, (list, tuple)):
-            storing_device = [storing_device,] * self.num_workers
+            storing_device = [
+                storing_device,
+            ] * self.num_workers
         if not isinstance(policy_device, (list, tuple)):
-            policy_device = [policy_device,] * self.num_workers
+            policy_device = [
+                policy_device,
+            ] * self.num_workers
         if not isinstance(env_device, (list, tuple)):
-            env_device = [env_device,] * self.num_workers
+            env_device = [
+                env_device,
+            ] * self.num_workers
         if not isinstance(device, (list, tuple)):
-            device = [device,] * self.num_workers
-        if not (len(device) == len(storing_device) == len(policy_device) == len(env_device) == self.num_workers):
-            raise RuntimeError(f"THe length of the devices does not match the number of workers: {self.num_workers}.")
-        storing_device, policy_device, env_device = zip(*[SyncDataCollector._get_devices(storing_device=storing_device, policy_device=policy_device, env_device=env_device, device=device) for (storing_device, policy_device, env_device, device) in zip(storing_device, policy_device, env_device, device)])
+            device = [
+                device,
+            ] * self.num_workers
+        if not (
+            len(device)
+            == len(storing_device)
+            == len(policy_device)
+            == len(env_device)
+            == self.num_workers
+        ):
+            raise RuntimeError(
+                f"THe length of the devices does not match the number of workers: {self.num_workers}."
+            )
+        storing_device, policy_device, env_device = zip(
+            *[
+                SyncDataCollector._get_devices(
+                    storing_device=storing_device,
+                    policy_device=policy_device,
+                    env_device=env_device,
+                    device=device,
+                )
+                for (storing_device, policy_device, env_device, device) in zip(
+                    storing_device, policy_device, env_device, device
+                )
+            ]
+        )
         return storing_device, policy_device, env_device
 
     @property
@@ -1349,9 +1410,7 @@ class _MultiDataCollector(DataCollectorBase):
                 if original_weights is None:
                     # if the weights match in identity, we can spare a call to update_
                     continue
-                self._policy_weights_dict[_device].data.update_(
-                    original_weights
-                )
+                self._policy_weights_dict[_device].data.update_(original_weights)
 
     @property
     def _queue_len(self) -> int:
@@ -1387,7 +1446,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "max_frames_per_traj": self.max_frames_per_traj,
                     "frames_per_batch": self.frames_per_batch_worker,
                     "reset_at_each_iter": self.reset_at_each_iter,
-                    "policy_device": policy_device ,
+                    "policy_device": policy_device,
                     "storing_device": storing_device,
                     "env_device": env_device,
                     "exploration_type": self.exploration_type,
@@ -2343,6 +2402,7 @@ def _main_async_collector(
         else:
             raise Exception(f"Unrecognized message {msg}")
 
+
 class _PolicyMetaClass(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
         # no kwargs
@@ -2350,8 +2410,10 @@ class _PolicyMetaClass(abc.ABCMeta):
             return args[0]
         return super().__call__(*args)
 
+
 class _NonParametricPolicyWrapper(nn.Module, metaclass=_PolicyMetaClass):
     """A wrapper for non-parametric policies."""
+
     def __init__(self, policy):
         super().__init__()
         self.policy = policy
