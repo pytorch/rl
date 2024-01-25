@@ -301,6 +301,8 @@ common setting when using replay buffers.
 TorchRL Episode Data Format (TED)
 ---------------------------------
 
+.. _TED-format:
+
 In TorchRL, sequential data is consistently presented in a specific format, known
 as the TorchRL Episode Data Format (TED). This format is crucial for the seamless
 integration and functioning of various components within TorchRL.
