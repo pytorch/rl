@@ -7,11 +7,10 @@
 #SBATCH --output=slurm_logs/cql_online_output_%j.txt
 #SBATCH --error=slurm_errors/cql_online_error_%j.txt
 
-export PYTHONPATH=$(dirname $(dirname $PWD))
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="$cql_online"
-python ../../examples/cql/cql_online.py \
+PYTHONPATH=$(dirname $(dirname $PWD)) python ../../examples/cql/cql_online.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"

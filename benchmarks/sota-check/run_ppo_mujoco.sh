@@ -7,11 +7,10 @@
 #SBATCH --output=slurm_logs/ppo_mujoco_output_%j.txt
 #SBATCH --error=slurm_errors/ppo_mujoco_error_%j.txt
 
-export PYTHONPATH=$(dirname $(dirname $PWD))
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="ppo_mujoco"
-python ../../examples/ppo/ppo_mujoco.py  \
+PYTHONPATH=$(dirname $(dirname $PWD)) python ../../examples/ppo/ppo_mujoco.py  \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"

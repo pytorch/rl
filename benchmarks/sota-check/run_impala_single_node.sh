@@ -7,11 +7,10 @@
 #SBATCH --output=slurm_logs/impala_1node_output_%j.txt
 #SBATCH --error=slurm_errors/impala_1node_error_%j.txt
 
-export PYTHONPATH=$(dirname $(dirname $PWD))
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="impala_1node"
-python ../../examples/impala/impala_single_node.py \
+PYTHONPATH=$(dirname $(dirname $PWD)) python ../../examples/impala/impala_single_node.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"

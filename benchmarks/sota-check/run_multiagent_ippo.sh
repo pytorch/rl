@@ -7,11 +7,10 @@
 #SBATCH --output=slurm_logs/marl_ippo_output_%j.txt
 #SBATCH --error=slurm_errors/marl_ippo_error_%j.txt
 
-export PYTHONPATH=$(dirname $(dirname $PWD))
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="mappo_ippo"
-python ../../examples/multiagent/mappo_ippo.py \
+PYTHONPATH=$(dirname $(dirname $PWD)) python ../../examples/multiagent/mappo_ippo.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"

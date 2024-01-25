@@ -7,11 +7,10 @@
 #SBATCH --output=slurm_logs/dt_offline_output_%j.txt
 #SBATCH --error=slurm_errors/dt_offline_error_%j.txt
 
-export PYTHONPATH=$(dirname $(dirname $PWD))
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="$dt_offline"
-python ../../examples/decision_transformer/dt.py \
+PYTHONPATH=$(dirname $(dirname $PWD)) python ../../examples/decision_transformer/dt.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"

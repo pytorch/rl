@@ -7,11 +7,10 @@
 #SBATCH --output=slurm_logs/iql_offline_output_%j.txt
 #SBATCH --error=slurm_errors/iql_offline_error_%j.txt
 
-export PYTHONPATH=$(dirname $(dirname $PWD))
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="iql_offline"
-python ../../examples/iql/iql_offline.py \
+PYTHONPATH=$(dirname $(dirname $PWD)) python ../../examples/iql/iql_offline.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"

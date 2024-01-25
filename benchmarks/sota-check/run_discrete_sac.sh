@@ -7,11 +7,10 @@
 #SBATCH --output=slurm_logs/discrete_sac_output_%j.txt
 #SBATCH --error=slurm_errors/discrete_sac_error_%j.txt
 
-export PYTHONPATH=$(dirname $(dirname $PWD))
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="discrete_sac"
-python ../../examples/discrete_sac/discrete_sac.py \
+PYTHONPATH=$(dirname $(dirname $PWD)) python ../../examples/discrete_sac/discrete_sac.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"
