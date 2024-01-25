@@ -49,8 +49,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
-        device=device,
-        storing_device=device,
+        device="cpu",
+        storing_device="cpu",
         max_frames_per_traj=-1,
     )
 
