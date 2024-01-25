@@ -1480,12 +1480,18 @@ class TestStepCounter(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="no gym detected")
     def test_step_count_gym_doublecount(self):
         # tests that 2 truncations can be used together
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), Compose(
-            StepCounter(max_steps=2),
-            StepCounter(max_steps=3) # this one will be ignored
-        ))
+        env = TransformedEnv(
+            GymEnv(PENDULUM_VERSIONED),
+            Compose(
+                StepCounter(max_steps=2),
+                StepCounter(max_steps=3),  # this one will be ignored
+            ),
+        )
         r = env.rollout(10, break_when_any_done=False)
-        assert (r.get(("next", "truncated")).squeeze().nonzero().squeeze(-1) == torch.arange(1, 10, 2)).all()
+        assert (
+            r.get(("next", "truncated")).squeeze().nonzero().squeeze(-1)
+            == torch.arange(1, 10, 2)
+        ).all()
 
     @pytest.mark.skipif(not _has_dm_control, reason="no dm_control detected")
     def test_step_count_dmc(self):
