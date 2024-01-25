@@ -5169,6 +5169,7 @@ class StepCounter(Transform):
             tensordict_reset.set(step_count_key, step_count)
             if self.max_steps is not None:
                 truncated = step_count >= self.max_steps
+                truncated = truncated | tensordict_reset.get(truncated_key, truncated)
                 if self.update_done:
                     # we assume no done after reset
                     tensordict_reset.set(done_key, truncated)
@@ -5187,8 +5188,10 @@ class StepCounter(Transform):
             step_count = tensordict.get(step_count_key)
             next_step_count = step_count + 1
             next_tensordict.set(step_count_key, next_step_count)
+
             if self.max_steps is not None:
                 truncated = next_step_count >= self.max_steps
+                truncated = truncated | next_tensordict.get(truncated_key, truncated)
                 if self.update_done:
                     done = next_tensordict.get(done_key, None)
                     terminated = next_tensordict.get(terminated_key, None)
