@@ -59,6 +59,10 @@ _DTYPE_DIR = {
 class MinariExperienceReplay(TensorDictReplayBuffer):
     """Minari Experience replay dataset.
 
+    Learn more about Minari on their website: https://minari.farama.org/
+
+    The data format follows the :ref:`TED convention <TED-format>`.
+
     Args:
         dataset_id (str): The dataset to be downloaded. Must be part of MinariExperienceReplay.available_datasets
         batch_size (int): Batch-size used during sampling. Can be overridden by `data.sample(batch_size)` if

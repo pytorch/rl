@@ -298,6 +298,177 @@ before calling :meth:`~torchrl.data.ReplayBuffer.load_state_dict`. The drawback
 of this method is that it will struggle to save big data structures, which is a
 common setting when using replay buffers.
 
+TorchRL Episode Data Format (TED)
+---------------------------------
+
+.. _TED-format:
+
+In TorchRL, sequential data is consistently presented in a specific format, known
+as the TorchRL Episode Data Format (TED). This format is crucial for the seamless
+integration and functioning of various components within TorchRL.
+
+Some components, such as replay buffers, are somewhat indifferent to the data
+format. However, others, particularly environments, heavily depend on it for smooth operation.
+
+Therefore, it's essential to understand the TED, its purpose, and how to interact
+with it. This guide will provide a clear explanation of the TED, why it's used,
+and how to effectively work with it.
+
+The Rationale Behind TED
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Formatting sequential data can be a complex task, especially in the realm of
+Reinforcement Learning (RL). As practitioners, we often encounter situations
+where data is delivered at the reset time (though not always), and sometimes data
+is provided or discarded at the final step of the trajectory.
+
+This variability means that we can observe data of different lengths in a dataset,
+and it's not always immediately clear how to match each time step across the
+various elements of this dataset. Consider the following ambiguous dataset structure:
+
+    >>> observation.shape
+    [200, 3]
+    >>> action.shape
+    [199, 4]
+    >>> info.shape
+    [200, 3]
+
+At first glance, it seems that the info and observation were delivered
+together (one of each at reset + one of each at each step call), as suggested by
+the action having one less element. However, if info has one less element, we
+must assume that it was either omitted at reset time or not delivered or recorded
+for the last step of the trajectory. Without proper documentation of the data
+structure, it's impossible to determine which info corresponds to which time step.
+
+Complicating matters further, some datasets provide inconsistent data formats,
+where ``observations`` or ``infos`` are missing at the start or end of the
+rollout, and this behavior is often not documented.
+The primary aim of TED is to eliminate these ambiguities by providing a clear
+and consistent data representation.
+
+The structure of TED
+~~~~~~~~~~~~~~~~~~~~
+
+TED is built upon the canonical definition of a Markov Decision Process (MDP) in RL contexts.
+At each step, an observation conditions an action that results in (1) a new
+observation, (2) an indicator of task completion (terminated, truncated, done),
+and (3) a reward signal.
+
+Some elements may be missing (for example, the reward is optional in imitation
+learning contexts), or additional information may be passed through a state or
+info container. In some cases, additional information is required to get the
+observation during a call to ``step`` (for instance, in stateless environment simulators). Furthermore,
+in certain scenarios, an "action" (or any other data) cannot be represented as a
+single tensor and needs to be organized differently. For example, in Multi-Agent RL
+settings, actions, observations, rewards, and completion signals may be composite.
+
+TED accommodates all these scenarios with a single, uniform, and unambiguous
+format. We distinguish what happens at time step ``t`` and ``t+1`` by setting a
+limit at the time the action is executed. In other words, everything that was
+present before ``env.step`` was called belongs to ``t``, and everything that
+comes after belongs to ``t+1``.
+
+The general rule is that everything that belongs to time step ``t`` is stored
+at the root of the tensordict, while everything that belongs to ``t+1`` is stored
+in the ``"next"`` entry of the tensordict. Here's an example:
+
+    >>> data = env.reset()
+    >>> data = policy(data)
+    >>> print(env.step(data))
+    TensorDict(
+        fields={
+            action: Tensor(...),  # The action taken at time t
+            done: Tensor(...),  # The done state when the action was taken (at reset)
+            next: TensorDict(  # all of this content comes from the call to `step`
+                fields={
+                    done: Tensor(...),  # The done state after the action has been taken
+                    observation: Tensor(...),  # The observation resulting from the action
+                    reward: Tensor(...),  # The reward resulting from the action
+                    terminated: Tensor(...),  # The terminated state after the action has been taken
+                    truncated: Tensor(...),  # The truncated state after the action has been taken
+                batch_size=torch.Size([]),
+                device=cpu,
+                is_shared=False),
+            observation: Tensor(...),  # the observation at reset
+            terminated: Tensor(...),  # the terminated at reset
+            truncated: Tensor(...),  # the truncated at reset
+        batch_size=torch.Size([]),
+        device=cpu,
+        is_shared=False)
+
+During a rollout (either using :class:`~torchrl.envs.EnvBase` or
+:class:`~torchrl.collectors.SyncDataCollector`), the content of the ``"next"``
+tensordict is brought to the root through the :func:`~torchrl.envs.utils.step_mdp`
+function when the agent resets its step count: ``t <- t+1``. You can read more
+about the environment API :ref:`here <Environment-API>`.
+
+In most cases, there is no `True`-valued ``"done"`` state at the root since any
+done state will trigger a (partial) reset which will turn the ``"done"`` to ``False``.
+However, this is only true as long as resets are automatically performed. In some
+cases, partial resets will not trigger a reset, so we retain these data, which
+should have a considerably lower memory footprint than observations, for instance.
+
+This format eliminates any ambiguity regarding the matching of an observation with
+its action, info, or done state.
+
+Dimensionality of the Tensordict
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+During a rollout, all collected tensordicts will be stacked along a new dimension
+positioned at the end. Both collectors and environments will label this dimension
+with the ``"time"`` name. Here's an example:
+
+    >>> rollout = env.rollout(10, policy)
+    >>> assert rollout.shape[-1] == 10
+    >>> assert rollout.names[-1] == "time"
+
+This ensures that the time dimension is clearly marked and easily identifiable
+in the data structure.
+
+Special cases and footnotes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Multi-Agent data presentation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The multi-agent data formatting documentation can be accessed in the :ref:`MARL environment API <MARL-environment-API>` section.
+
+Memory-based policies (RNNs and Transformers)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In the examples provided above, only ``env.step(data)`` generates data that
+needs to be read in the next step. However, in some cases, the policy also
+outputs information that will be required in the next step. This is typically
+the case for RNN-based policies, which output an action as well as a recurrent
+state that needs to be used in the next step.
+To accommodate this, we recommend users to adjust their RNN policy to write this
+data under the ``"next"`` entry of the tensordict. This ensures that this content
+will be brought to the root in the next step. More information can be found in
+:class:`~torchrl.modules.GRUModule` and :class:`~torchrl.modules.LSTMModule`.
+
+Multi-step
+^^^^^^^^^^
+
+Collectors allow users to skip steps when reading the data, accumulating reward
+for the upcoming n steps. This technique is popular in DQN-like algorithms like Rainbow.
+The :class:`~torchrl.data.postprocs.MultiStep` class performs this data transformation
+on batches coming out of collectors. In these cases, a check like the following
+will fail since the next observation is shifted by n steps:
+
+    >>> assert (data[..., 1:]["observation"] == data[..., :-1]["next", "observation"]).all()
+
+What about memory requirements?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Implemented naively, this data format consumes approximately twice the memory
+that a flat representation would. In some memory-intensive settings
+(for example, in the :class:`~torchrl.data.datasets.AtariDQNExperienceReplay` dataset),
+we store only the ``T+1`` observation on disk and perform the formatting online at get time.
+In other cases, we assume that the 2x memory cost is a small price to pay for a
+clearer representation. However, generalizing the lazy representation for offline
+datasets would certainly be a beneficial feature to have, and we welcome
+contributions in this direction!
+
 Datasets
 --------
 

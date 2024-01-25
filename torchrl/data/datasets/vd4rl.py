@@ -50,6 +50,8 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
     that is not reward, done-state, action or pixels is moved under a `"state"`
     node.
 
+    The data format follows the :ref:`TED convention <TED-format>`.
+
     Args:
         dataset_id (str): the dataset to be downloaded. Must be part of
             VD4RLExperienceReplay.available_datasets.

@@ -41,7 +41,7 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
     The sub-sampling rate (frame-skip) is equal to 4, meaning that each game dataset
     has 50 million steps in total.
 
-    The data format follows the TED convention. Since the dataset is quite heavy,
+    The data format follows the :ref:`TED convention <TED-format>`. Since the dataset is quite heavy,
     the data formatting is done on-line, at sampling time.
 
     To make training more modular, we split the dataset in each of the Atari games
