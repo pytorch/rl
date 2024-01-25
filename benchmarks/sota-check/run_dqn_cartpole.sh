@@ -7,7 +7,7 @@
 #SBATCH --output=slurm_logs/dqn_cartpole_output_%j.txt
 #SBATCH --error=slurm_errors/dqn_cartpole_error_%j.txt
 
-current_commit=$(git rev-parse HEAD)
+current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="dqn_cartpole"
 python ../../examples/dqn/dqn_cartpole.py \
@@ -19,7 +19,7 @@ python ../../examples/dqn/dqn_cartpole.py \
 exit_status=$?
 # Write the exit status to a file
 if [ $exit_status -eq 0 ]; then
-  echo "$group_name_$SLURM_JOB_ID=success" > report.log
+  echo "${group_name}_${SLURM_JOB_ID}=success" >> report.log
 else
-  echo "$group_name_$SLURM_JOB_ID=error" > report.log
+  echo "${group_name}_${SLURM_JOB_ID}=error" >> report.log
 fi
