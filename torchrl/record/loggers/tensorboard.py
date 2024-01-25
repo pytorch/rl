@@ -20,7 +20,7 @@ class TensorboardLogger(Logger):
 
     Args:
         exp_name (str): The name of the experiment.
-        log_dir (str): the tensorboard log_dir.
+        log_dir (str): the tensorboard log_dir. Defaults to ``td_logs``.
 
     """
 

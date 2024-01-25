@@ -59,7 +59,7 @@ class RobosetExperienceReplay(TensorDictReplayBuffer):
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
-            a default RoundRobinWriter() will be used.
+            a default :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter` will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset.
@@ -68,15 +68,13 @@ class RobosetExperienceReplay(TensorDictReplayBuffer):
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.transforms.transforms.Compose` class.
         split_trajs (bool, optional): if ``True``, the trajectories will be split
             along the first dimension and padded to have a matching shape.
             To split the trajectories, the ``"done"`` signal will be used, which
             is recovered via ``done = truncated | terminated``. In other words,
             it is assumed that any ``truncated`` or ``terminated`` signal is
-            equivalent to the end of a trajectory. For some datasets from
-            ``D4RL``, this may not be true. It is up to the user to make
-            accurate choices regarding this usage of ``split_trajs``.
+            equivalent to the end of a trajectory.
             Defaults to ``False``.
 
     Attributes:

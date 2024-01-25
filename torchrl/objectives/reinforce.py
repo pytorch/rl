@@ -2,19 +2,17 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+import contextlib
+import logging
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 
-from tensordict.nn import (
-    dispatch,
-    ProbabilisticTensorDictSequential,
-    repopulate_module,
-    TensorDictModule,
-)
+from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torchrl.objectives.common import LossModule
@@ -41,10 +39,12 @@ class ReinforceLoss(LossModule):
 
 
     Args:
-        actor (ProbabilisticTensorDictSequential): policy operator.
-        critic (ValueOperator): value operator.
+        actor_network (ProbabilisticTensorDictSequential): policy operator.
+        critic_network (ValueOperator): value operator.
+
+    Keyword Args:
         delay_value (bool, optional): if ``True``, a target network is needed
-            for the critic. Defaults to ``False``.
+            for the critic. Defaults to ``False``. Incompatible with ``functional=False``.
         loss_critic_type (str): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
         advantage_key (str): [Deprecated, use .set_keys(advantage_key=advantage_key) instead]
@@ -57,6 +57,10 @@ class ReinforceLoss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        functional (bool, optional): whether modules should be functionalized.
+            Functionalizing permits features like meta-RL, but makes it
+            impossible to use distributed models (DDP, FSDP, ...) and comes
+            with a little cost. Defaults to ``True``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -208,8 +212,8 @@ class ReinforceLoss(LossModule):
 
     def __init__(
         self,
-        actor: ProbabilisticTensorDictSequential,
-        critic: Optional[TensorDictModule] = None,
+        actor_network: ProbabilisticTensorDictSequential,
+        critic_network: TensorDictModule | None = None,
         *,
         delay_value: bool = False,
         loss_critic_type: str = "smooth_l1",
@@ -217,7 +221,27 @@ class ReinforceLoss(LossModule):
         advantage_key: str = None,
         value_target_key: str = None,
         separate_losses: bool = False,
+        functional: bool = True,
+        actor: ProbabilisticTensorDictSequential = None,
+        critic: ProbabilisticTensorDictSequential = None,
     ) -> None:
+        if actor is not None:
+            actor_network = actor
+        del actor
+        if critic is not None:
+            critic_network = critic
+        del critic
+        if actor_network is None or critic_network is None:
+            raise TypeError(
+                "Missing positional arguments actor_network or critic_network."
+            )
+        if not functional and delay_value:
+            raise RuntimeError(
+                "delay_value and ~functional are incompatible, as delayed value currently relies on functional calls."
+            )
+
+        self._functional = functional
+
         super().__init__()
         self.in_keys = None
         self._set_deprecated_ctor_keys(
@@ -228,28 +252,81 @@ class ReinforceLoss(LossModule):
         self.loss_critic_type = loss_critic_type
 
         # Actor
-        self.convert_to_functional(
-            actor,
-            "actor_network",
-            create_target_params=False,
-        )
+        if self.functional:
+            self.convert_to_functional(
+                actor_network,
+                "actor_network",
+                create_target_params=False,
+            )
+        else:
+            self.actor_network = actor_network
+
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
             # params of critic must be refs to actor if they're shared
-            policy_params = list(actor.parameters())
+            policy_params = list(actor_network.parameters())
         else:
             policy_params = None
         # Value
-        if critic is not None:
-            self.convert_to_functional(
-                critic,
-                "critic",
-                create_target_params=self.delay_value,
-                compare_against=policy_params,
-            )
+        if critic_network is not None:
+            if self.functional:
+                self.convert_to_functional(
+                    critic_network,
+                    "critic_network",
+                    create_target_params=self.delay_value,
+                    compare_against=policy_params,
+                )
+            else:
+                self.critic_network = critic_network
+                self.target_critic_network_params = None
+
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+
+    @property
+    def functional(self):
+        return self._functional
+
+    @property
+    def actor(self):
+        logging.warning(
+            f"{self.__class__.__name__}.actor is deprecated, use {self.__class__.__name__}.actor_network instead. This "
+            "link will be removed in v0.4."
+        )
+        return self.actor_network
+
+    @property
+    def critic(self):
+        logging.warning(
+            f"{self.__class__.__name__}.critic is deprecated, use {self.__class__.__name__}.critic_network instead. This "
+            "link will be removed in v0.4."
+        )
+        return self.critic_network
+
+    @property
+    def actor_params(self):
+        logging.warning(
+            f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
+            "link will be removed in v0.4."
+        )
+        return self.actor_network_params
+
+    @property
+    def critic_params(self):
+        logging.warning(
+            f"{self.__class__.__name__}.critic_params is deprecated, use {self.__class__.__name__}.critic_network_params instead. This "
+            "link will be removed in v0.4."
+        )
+        return self.critic_network_params
+
+    @property
+    def target_critic_params(self):
+        logging.warning(
+            f"{self.__class__.__name__}.target_critic_params is deprecated, use {self.__class__.__name__}.target_critic_network_params instead. This "
+            "link will be removed in v0.4."
+        )
+        return self.target_critic_network_params
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -291,13 +368,17 @@ class ReinforceLoss(LossModule):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self.critic_params.detach(),
-                target_params=self.target_critic_params,
+                params=self.critic_network_params.detach() if self.functional else None,
+                target_params=self.target_critic_network_params
+                if self.functional
+                else None,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
 
         # compute log-prob
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network
+        ) if self.functional else contextlib.nullcontext():
             tensordict = self.actor_network(tensordict)
 
         log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
@@ -315,7 +396,9 @@ class ReinforceLoss(LossModule):
         try:
             target_return = tensordict.get(self.tensor_keys.value_target)
             tensordict_select = tensordict.select(*self.critic.in_keys)
-            with self.critic_params.to_module(self.critic):
+            with self.critic_network_params.to_module(
+                self.critic
+            ) if self.functional else contextlib.nullcontext():
                 state_value = self.critic(tensordict_select).get(self.tensor_keys.value)
             loss_value = distance_loss(
                 target_return,
@@ -350,11 +433,13 @@ class ReinforceLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.VTrace:
             # VTrace currently does not support functional call on the actor
-            actor_with_params = repopulate_module(
-                deepcopy(self.actor), self.actor_params
-            )
+            if self.functional:
+                actor_with_params = deepcopy(self.actor_network)
+                self.actor_network_params.to_module(actor_with_params)
+            else:
+                actor_with_params = self.actor_network
             self._value_estimator = VTrace(
-                value_network=self.critic, actor_network=actor_with_params, **hp
+                value_network=self.critic_network, actor_network=actor_with_params, **hp
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")

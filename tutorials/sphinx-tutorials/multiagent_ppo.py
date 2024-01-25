@@ -595,8 +595,8 @@ replay_buffer = ReplayBuffer(
 #
 
 loss_module = ClipPPOLoss(
-    actor=policy,
-    critic=critic,
+    actor_network=policy,
+    critic_network=critic,
     clip_epsilon=clip_epsilon,
     entropy_coef=entropy_eps,
     normalize_advantage=False,  # Important to avoid normalizing across the agent dimension

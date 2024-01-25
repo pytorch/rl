@@ -45,7 +45,7 @@ from mocking_classes import (
 from tensordict import unravel_key
 from tensordict.nn import TensorDictSequential
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import _unravel_key_to_tuple
+from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
 from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import _replace_last, prod
 from torchrl.data import (
@@ -797,7 +797,7 @@ class TestCatFrames(TransformBase):
         v1 = model(tdbase0)
         v2 = model(tdbase0_copy)
         # check that swapping dims and names leads to same result
-        assert (v1 == v2.transpose(0, 1)).all()
+        assert_allclose_td(v1, v2.transpose(0, 1))
 
     @pytest.mark.parametrize("dim", [-2, -1])
     @pytest.mark.parametrize("N", [3, 4])

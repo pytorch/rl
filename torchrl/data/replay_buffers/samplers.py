@@ -524,6 +524,14 @@ class SliceSampler(Sampler):
             trajectory (or episode). Defaults to ``("next", "done")``.
         traj_key (NestedKey, optional): the key indicating the trajectories.
             Defaults to ``"episode"`` (commonly used across datasets in TorchRL).
+        ends (torch.Tensor, optional): a 1d boolean tensor containing the end of run signals.
+            To be used whenever the ``end_key`` or ``traj_key`` is expensive to get,
+            or when this signal is readily available. Must be used with ``cache_values=True``
+            and cannot be used in conjunction with ``end_key`` or ``traj_key``.
+        trajectories (torch.Tensor, optional): a 1d integer tensor containing the run ids.
+            To be used whenever the ``end_key`` or ``traj_key`` is expensive to get,
+            or when this signal is readily available. Must be used with ``cache_values=True``
+            and cannot be used in conjunction with ``end_key`` or ``traj_key``.
         cache_values (bool, optional): to be used with static datasets.
             Will cache the start and end signal of the trajectory.
         truncated_key (NestedKey, optional): If not ``None``, this argument
@@ -612,19 +620,12 @@ class SliceSampler(Sampler):
         slice_len: int = None,
         end_key: NestedKey | None = None,
         traj_key: NestedKey | None = None,
+        ends: torch.Tensor | None = None,
+        trajectories: torch.Tensor | None = None,
         cache_values: bool = False,
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
     ) -> object:
-        if end_key is None:
-            end_key = ("next", "done")
-        if traj_key is None:
-            traj_key = "episode"
-        if not ((num_slices is None) ^ (slice_len is None)):
-            raise TypeError(
-                "Either num_slices or slice_len must be not None, and not both. "
-                f"Got num_slices={num_slices} and slice_len={slice_len}."
-            )
         self.num_slices = num_slices
         self.slice_len = slice_len
         self.end_key = end_key
@@ -635,6 +636,47 @@ class SliceSampler(Sampler):
         self._uses_data_prefix = False
         self.strict_length = strict_length
         self._cache = {}
+        if trajectories is not None:
+            if traj_key is not None or end_key:
+                raise RuntimeError(
+                    "`trajectories` and `end_key` or `traj_key` are exclusive arguments."
+                )
+            if ends is not None:
+                raise RuntimeError("trajectories and ends are exclusive arguments.")
+            if not cache_values:
+                raise RuntimeError(
+                    "To be used, trajectories requires `cache_values` to be set to `True`."
+                )
+            vals = self._find_start_stop_traj(trajectory=trajectories)
+            self._cache["stop-and-length"] = vals
+
+        elif ends is not None:
+            if traj_key is not None or end_key:
+                raise RuntimeError(
+                    "`ends` and `end_key` or `traj_key` are exclusive arguments."
+                )
+            if trajectories is not None:
+                raise RuntimeError("trajectories and ends are exclusive arguments.")
+            if not cache_values:
+                raise RuntimeError(
+                    "To be used, ends requires `cache_values` to be set to `True`."
+                )
+            vals = self._find_start_stop_traj(end=ends)
+            self._cache["stop-and-length"] = vals
+
+        else:
+            if end_key is None:
+                end_key = ("next", "done")
+            if traj_key is None:
+                traj_key = "run"
+            self.end_key = end_key
+            self.traj_key = traj_key
+
+        if not ((num_slices is None) ^ (slice_len is None)):
+            raise TypeError(
+                "Either num_slices or slice_len must be not None, and not both. "
+                f"Got num_slices={num_slices} and slice_len={slice_len}."
+            )
 
     @staticmethod
     def _find_start_stop_traj(*, trajectory=None, end=None):
@@ -696,16 +738,24 @@ class SliceSampler(Sampler):
                 # In the future, this may be deprecated, and we don't want to mess
                 # with the keys provided by the user so we fall back on a proxy to
                 # the traj key.
-                try:
-                    trajectory = storage._storage.get(self._used_traj_key)
-                except KeyError:
-                    trajectory = storage._storage.get(("_data", self.traj_key))
-                    # cache that value for future use
-                    self._used_traj_key = ("_data", self.traj_key)
-                self._uses_data_prefix = (
-                    isinstance(self._used_traj_key, tuple)
-                    and self._used_traj_key[0] == "_data"
-                )
+                if isinstance(storage, TensorStorage):
+                    try:
+                        trajectory = storage._storage.get(self._used_traj_key)
+                    except KeyError:
+                        trajectory = storage._storage.get(("_data", self.traj_key))
+                        # cache that value for future use
+                        self._used_traj_key = ("_data", self.traj_key)
+                    self._uses_data_prefix = (
+                        isinstance(self._used_traj_key, tuple)
+                        and self._used_traj_key[0] == "_data"
+                    )
+                else:
+                    try:
+                        trajectory = storage[:].get(self.traj_key)
+                    except Exception:
+                        raise RuntimeError(
+                            "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
+                        )
                 vals = self._find_start_stop_traj(trajectory=trajectory[: len(storage)])
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals
@@ -722,16 +772,24 @@ class SliceSampler(Sampler):
                 # In the future, this may be deprecated, and we don't want to mess
                 # with the keys provided by the user so we fall back on a proxy to
                 # the traj key.
-                try:
-                    done = storage._storage.get(self._used_end_key)
-                except KeyError:
-                    done = storage._storage.get(("_data", self.end_key))
-                    # cache that value for future use
-                    self._used_end_key = ("_data", self.end_key)
-                self._uses_data_prefix = (
-                    isinstance(self._used_end_key, tuple)
-                    and self._used_end_key[0] == "_data"
-                )
+                if isinstance(storage, TensorStorage):
+                    try:
+                        done = storage._storage.get(self._used_end_key)
+                    except KeyError:
+                        done = storage._storage.get(("_data", self.end_key))
+                        # cache that value for future use
+                        self._used_end_key = ("_data", self.end_key)
+                    self._uses_data_prefix = (
+                        isinstance(self._used_end_key, tuple)
+                        and self._used_end_key[0] == "_data"
+                    )
+                else:
+                    try:
+                        done = storage[:].get(self.end_key)
+                    except Exception:
+                        raise RuntimeError(
+                            "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
+                        )
                 vals = self._find_start_stop_traj(end=done.squeeze())[: len(storage)]
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals
@@ -760,11 +818,6 @@ class SliceSampler(Sampler):
         return seq_length, num_slices
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
-        if not isinstance(storage, TensorStorage):
-            raise RuntimeError(
-                f"{type(self)} can only sample from TensorStorage subclasses, got {type(storage)} instead."
-            )
-
         # pick up as many trajs as we need
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
@@ -889,6 +942,14 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             trajectory (or episode). Defaults to ``("next", "done")``.
         traj_key (NestedKey, optional): the key indicating the trajectories.
             Defaults to ``"episode"`` (commonly used across datasets in TorchRL).
+        ends (torch.Tensor, optional): a 1d boolean tensor containing the end of run signals.
+            To be used whenever the ``end_key`` or ``traj_key`` is expensive to get,
+            or when this signal is readily available. Must be used with ``cache_values=True``
+            and cannot be used in conjunction with ``end_key`` or ``traj_key``.
+        trajectories (torch.Tensor, optional): a 1d integer tensor containing the run ids.
+            To be used whenever the ``end_key`` or ``traj_key`` is expensive to get,
+            or when this signal is readily available. Must be used with ``cache_values=True``
+            and cannot be used in conjunction with ``end_key`` or ``traj_key``.
         truncated_key (NestedKey, optional): If not ``None``, this argument
             indicates where a truncated signal should be written in the output
             data. This is used to indicate to value estimators where the provided
@@ -973,6 +1034,8 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         drop_last: bool = False,
         end_key: NestedKey | None = None,
         traj_key: NestedKey | None = None,
+        ends: torch.Tensor | None = None,
+        trajectories: torch.Tensor | None = None,
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
         shuffle: bool = True,
@@ -986,6 +1049,8 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             cache_values=True,
             truncated_key=truncated_key,
             strict_length=strict_length,
+            ends=ends,
+            trajectories=trajectories,
         )
         SamplerWithoutReplacement.__init__(self, drop_last=drop_last, shuffle=shuffle)
 
