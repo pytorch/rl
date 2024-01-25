@@ -828,7 +828,8 @@ class GRU(GRUBase):
     """A PyTorch module for executing multiple steps of a multi-layer GRU. The module behaves exactly like :class:`torch.nn.GRU`, but this implementation is exclusively coded in Python.
 
     .. note::
-        This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap` and :func:`torch.compile`.
+        This class is implemented without relying on CuDNN, which makes it
+        compatible with :func:`torch.vmap` and :func:`torch.compile`.
 
     Examples:
         >>> import torch
@@ -1031,7 +1032,6 @@ class GRUModule(ModuleBase):
         dropout: If non-zero, introduces a `Dropout` layer on the outputs of each
             GRU layer except the last layer, with dropout probability equal to
             :attr:`dropout`. Default: 0
-        proj_size: If ``> 0``, will use GRU with projections of corresponding size. Default: 0
         python_based: If ``True``, will use a full Python implementation of the GRU cell. Default: ``False``
 
     Keyword Args:
