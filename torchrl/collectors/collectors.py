@@ -1244,7 +1244,7 @@ class _MultiDataCollector(DataCollectorBase):
             # make sure that the weights are shared.
             if policy_device is None:
                 with policy_weights.unlock_():
-                    local_policy_weights = policy_weights.apply(
+                    local_policy_weights = policy_weights.data.apply(
                         lambda weight: weight.share_memory_()
                         if weight.device.type in ("cpu", "mps")
                         else weight
@@ -1274,7 +1274,7 @@ class _MultiDataCollector(DataCollectorBase):
                         weight = weight.share_memory_()
                     return weight
 
-                local_policy_weights = policy_weights.apply(map_weight)
+                local_policy_weights = policy_weights.data.apply(map_weight)
                 if has_different_device[0]:
 
                     def _get_weight_fn(weights=policy_weights):
