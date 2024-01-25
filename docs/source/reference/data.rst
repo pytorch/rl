@@ -398,7 +398,7 @@ During a rollout (either using :class:`~torchrl.envs.EnvBase` or
 :class:`~torchrl.collectors.SyncDataCollector`), the content of the ``"next"``
 tensordict is brought to the root through the :func:`~torchrl.envs.utils.step_mdp`
 function when the agent resets its step count: ``t <- t+1``. You can read more
-about the environment API :ref:`Environment API`.
+about the environment API :ref:`Environment API <Environment-API>`.
 
 In most cases, there is no `True`-valued ``"done"`` state at the root since any
 done state will trigger a (partial) reset which will turn the ``"done"`` to ``False``.
@@ -429,7 +429,7 @@ Special cases and footnotes
 Multi-Agent data presentation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The multi-agent data formatting can be accessed in the :ref:`MARL environment API`.
+The multi-agent data formatting can be accessed in the :ref:`MARL environment API <MARL-environment-API>`.
 
 Memory-based policies (RNNs and Transformers)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

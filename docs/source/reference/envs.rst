@@ -3,7 +3,7 @@
 torchrl.envs package
 ====================
 
-.. Environment API:
+.. _Environment-API:
 
 TorchRL offers an API to handle environments of different backends, such as gym,
 dm-control, dm-lab, model-based environments as well as custom environments.
@@ -335,7 +335,7 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
 Multi-agent environments
 ------------------------
 
-.. MARL environment API:
+.. _MARL-environment-API:
 
 .. currentmodule:: torchrl.envs
 
