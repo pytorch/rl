@@ -45,7 +45,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create collector
     collector = SyncDataCollector(
-        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device),
+        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, "cpu"),
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
