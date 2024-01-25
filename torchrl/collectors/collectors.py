@@ -192,22 +192,15 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 Callable[[TensorDictBase], TensorDictBase],
             ]
         ] = None,
-        device: Optional[DEVICE_TYPING] = None,
         observation_spec: TensorSpec = None,
-    ) -> Tuple[TensorDictModule, torch.device, Union[None, Callable[[], dict]]]:
+    ) -> Tuple[TensorDictModule, Union[None, Callable[[], dict]]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
-
-        From a policy and a device, assigns the self.device attribute to
-        the desired device and maps the policy onto it or (if the device is
-        ommitted) assigns the self.device attribute to the policy device.
 
         Args:
             create_env_fn (Callable or list of callables): an env creator
                 function (or a list of creators)
             create_env_kwargs (dictionary): kwargs for the env creator
             policy (TensorDictModule, optional): a policy to be used
-            device (int, str or torch.device, optional): device where to place
-                the policy
             observation_spec (TensorSpec, optional): spec of the observations
 
         """
@@ -270,32 +263,15 @@ in env.observation_spec that are prefixed with 'next_'. For more complex
 behaviour and more control you can consider writing your own TensorDictModule.
 """
                     )
+        param_and_buf = TensorDict.from_module(policy, as_module=True)
 
-        try:
-            policy_device = next(policy.parameters()).device
-        except Exception:
-            policy_device = (
-                torch.device(device) if device is not None else torch.device("cpu")
-            )
+        def get_weights_fn(param_and_buf=param_and_buf):
+            return param_and_buf.data
 
-        device = torch.device(device) if device is not None else policy_device
-        get_weights_fn = None
-        if policy_device != device:
-            param_and_buf = TensorDict.from_module(policy, as_module=True)
+        if self.policy_device:
+            policy = policy.to(self.policy_device, non_blocking=True)
 
-            def get_weights_fn(param_and_buf=param_and_buf):
-                return param_and_buf.data
-
-            policy_cast = deepcopy(policy).requires_grad_(False).to(device)
-            # here things may break bc policy.to("cuda") gives us weights on cuda:0 (same
-            # but different)
-            try:
-                device = next(policy_cast.parameters()).device
-            except StopIteration:  # noqa
-                pass
-        else:
-            policy_cast = policy
-        return policy_cast, device, get_weights_fn
+        return policy_cast, get_weights_fn
 
     def update_policy_weights_(
         self, policy_weights: Optional[TensorDictBase] = None
@@ -499,6 +475,8 @@ class SyncDataCollector(DataCollectorBase):
         total_frames: int,
         device: DEVICE_TYPING = None,
         storing_device: DEVICE_TYPING = None,
+        policy_device: DEVICE_TYPING = None,
+        env_device: DEVICE_TYPING = None,
         create_env_kwargs: dict | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
@@ -532,19 +510,27 @@ class SyncDataCollector(DataCollectorBase):
                     )
                 env.update_kwargs(create_env_kwargs)
 
-        if storing_device is None:
-            if device is not None:
-                storing_device = device
-            elif policy is not None:
-                try:
-                    policy_device = next(policy.parameters()).device
-                except (AttributeError, StopIteration):
-                    policy_device = torch.device("cpu")
-                storing_device = policy_device
-            else:
-                storing_device = torch.device("cpu")
+        ##########################
+        # Setting devices:
+        # The rule is the following:
+        # - If no device is passed, all devices are assumed to work OOB.
+        #   The tensordict used for output is not on any device (ie, actions and observations
+        #   can be on a different device).
+        # - If the ``device`` is passed, it is used for all devices (storing, env and policy)
+        #   unless overridden by another kwarg.
+        # - The rest of the kwargs control the respective device.
+        storing_device, policy_device, env_device = self._get_devices(
+            storing_device=storing_device,
+            policy_device=policy_device,
+            env_device=env_device,
+            device=device,
+        )
 
-        self.storing_device = torch.device(storing_device)
+        self.storing_device = storing_device
+        self.env_device = env_device
+        self.policy_device = policy_device
+        self.device = device
+
         self.env: EnvBase = env
         self.closed = False
         if not reset_when_done:
@@ -552,9 +538,9 @@ class SyncDataCollector(DataCollectorBase):
         self.reset_when_done = reset_when_done
         self.n_env = self.env.batch_size.numel()
 
-        (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
+        (self.policy, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,
-            device=device,
+            device=policy_device,
             observation_spec=self.env.observation_spec,
         )
 
@@ -563,7 +549,12 @@ class SyncDataCollector(DataCollectorBase):
         else:
             self.policy_weights = TensorDict({}, [])
 
-        self.env: EnvBase = self.env.to(self.device)
+        if self.env_device:
+            self.env: EnvBase = self.env.to(self.env_device)
+        elif self.env.device is not None:
+            # we we did not receive an env device, we use the device of the env
+            self.env_device = self.env.device
+
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
         )
@@ -614,7 +605,11 @@ class SyncDataCollector(DataCollectorBase):
             )
 
         self.postproc = postproc
-        if self.postproc is not None and hasattr(self.postproc, "to"):
+        if (
+            self.postproc is not None
+            and hasattr(self.postproc, "to")
+            and self.storing_device
+        ):
             self.postproc.to(self.storing_device)
         if frames_per_batch % self.n_env != 0 and RL_WARNINGS:
             warnings.warn(
@@ -631,7 +626,9 @@ class SyncDataCollector(DataCollectorBase):
         self.return_same_td = return_same_td
 
         self._tensordict = env.reset()
-        traj_ids = torch.arange(self.n_env, device=env.device).view(self.env.batch_size)
+        traj_ids = torch.arange(self.n_env, device=self.env_device).view(
+            self.env.batch_size
+        )
         self._tensordict.set(
             ("collector", "traj_ids"),
             traj_ids,
@@ -639,6 +636,7 @@ class SyncDataCollector(DataCollectorBase):
 
         with torch.no_grad():
             self._tensordict_out = self.env.fake_tensordict()
+
         # If the policy has a valid spec, we use it
         if (
             hasattr(self.policy, "spec")
@@ -668,7 +666,27 @@ class SyncDataCollector(DataCollectorBase):
             # See #505 for additional context.
             self._tensordict_out.update(self._tensordict)
             with torch.no_grad():
-                self._tensordict_out = self.policy(self._tensordict_out.to(self.device))
+                input = self._tensordict_out
+                if self.policy_device:
+                    input = input.to(self.policy_device)
+                # we cast to policy device, we'll deal with the device later
+                self._tensordict_out = self.policy(input)
+
+        # If storing device is not None, we use this to cast the storage.
+        # If it is None and the env and policy are on the same device,
+        # the storing device is already the same as those, so we don't need
+        # to consider this use case.
+        # In all other cases, we can't really put a device on the storage,
+        # since at least one data source has a device that is not clear.
+        if self.storing_device:
+            self._tensordict_out = self._tensordict_out.to(
+                self.storing_device, non_blocking=True
+            )
+        else:
+            # erase all devices
+            for td in self._tensordict_out.values(True):
+                if is_tensor_collection(td):
+                    td.device = None
 
         self._tensordict_out = (
             self._tensordict_out.unsqueeze(-1)
@@ -678,7 +696,6 @@ class SyncDataCollector(DataCollectorBase):
         )
         # in addition to outputs of the policy, we add traj_ids to
         # _tensordict_out which will be collected during rollout
-        self._tensordict_out = self._tensordict_out.to(self.storing_device)
         self._tensordict_out.set(
             ("collector", "traj_ids"),
             torch.zeros(
@@ -696,6 +713,22 @@ class SyncDataCollector(DataCollectorBase):
         self.interruptor = interruptor
         self._frames = 0
         self._iter = -1
+
+    def _get_devices(
+        self,
+        *,
+        storing_device: torch.device,
+        policy_device: torch.device,
+        env_device: torch.device,
+        device: torch.device,
+    ):
+        device = torch.device(device) if device else device
+        storing_device = torch.device(storing_device) if storing_device else device
+        policy_device = torch.device(policy_device) if policy_device else device
+        env_device = torch.device(env_device) if env_device else device
+        if storing_device is None and (env_device == policy_device):
+            storing_device = env_device
+        return storing_device, policy_device, env_device
 
     # for RPC
     def next(self):
@@ -2190,7 +2223,26 @@ def _main_async_collector(
                     raise RuntimeError(
                         f"expected device to be {storing_device} but got {tensordict.device}"
                     )
-                tensordict.share_memory_()
+                # If policy and env are on cpu, we put in shared mem,
+                # if policy is on cuda and env on cuda, we are fine with this
+                # If policy is on cuda and env on cpu (or opposite) we put tensors that
+                # are on cpu in shared mem.
+                if tensordict.device is not None:
+                    if tensordict.device.type in ("cpu", "mps"):
+                        tensordict.share_memory_()
+                    elif tensordict.device.type == "cuda":
+                        tensordict.share_memory_()
+                    else:
+                        raise NotImplementedError(
+                            f"Device {tensordict.device} is not supported in multi-collectors yet."
+                        )
+                else:
+                    # make sure each cpu tensor is shared - assuming non-cpu devices are shared
+                    tensordict.apply(
+                        lambda x: x.share_memory_()
+                        if x.device.type in ("cpu", "mps")
+                        else x
+                    )
                 data = (tensordict, idx)
             else:
                 if d is not tensordict:
