@@ -49,6 +49,7 @@ from torchrl.envs.utils import (
     ExplorationType,
     set_exploration_type,
 )
+from tensordict import is_tensor_collection
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
@@ -271,7 +272,7 @@ behaviour and more control you can consider writing your own TensorDictModule.
         if self.policy_device:
             policy = policy.to(self.policy_device, non_blocking=True)
 
-        return policy_cast, get_weights_fn
+        return policy, get_weights_fn
 
     def update_policy_weights_(
         self, policy_weights: Optional[TensorDictBase] = None
