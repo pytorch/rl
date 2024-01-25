@@ -270,7 +270,18 @@ behaviour and more control you can consider writing your own TensorDictModule.
             return param_and_buf.data
 
         if self.policy_device:
-            policy = policy.to(self.policy_device, non_blocking=True)
+            # create a stateless policy and populate it with params
+            def _make_meta_params(param):
+                is_param = isinstance(param, nn.Parameter)
+
+                pd = param.detach().to("meta")
+
+                if is_param:
+                    pd = nn.Parameter(pd, requires_grad=False)
+                return pd
+            with param_and_buf.apply(_make_meta_params).to_module(policy):
+                policy = deepcopy(policy)
+            param_and_buf.to(self.policy_device, non_blocking=True).to_module(policy)
 
         return policy, get_weights_fn
 
@@ -541,7 +552,6 @@ class SyncDataCollector(DataCollectorBase):
 
         (self.policy, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,
-            device=policy_device,
             observation_spec=self.env.observation_spec,
         )
 
@@ -715,8 +725,9 @@ class SyncDataCollector(DataCollectorBase):
         self._frames = 0
         self._iter = -1
 
+    @classmethod
     def _get_devices(
-        self,
+        cls,
         *,
         storing_device: torch.device,
         policy_device: torch.device,
@@ -1124,8 +1135,10 @@ class _MultiDataCollector(DataCollectorBase):
         *,
         frames_per_batch: int = 200,
         total_frames: Optional[int] = -1,
-        device: DEVICE_TYPING = None,
-        storing_device: Optional[Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]]] = None,
+        device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
+        env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
+        policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
+        storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         create_env_kwargs: Optional[Sequence[dict]] = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
@@ -1169,98 +1182,85 @@ class _MultiDataCollector(DataCollectorBase):
         # (this object) to each possible device, and send to all the
         # processes their copy of the policy.
         if devices is not None:
-            if device is not None:
-                raise ValueError("Cannot pass both devices and device")
-            warnings.warn(
-                "`devices` keyword argument will soon be deprecated from multiprocessed collectors. "
-                "Please use `device` instead."
-            )
-            device = devices
+            raise RuntimeError("devices is deprecated, use `device` instead.")
         if storing_devices is not None:
-            if storing_device is not None:
-                raise ValueError("Cannot pass both storing_devices and storing_device")
-            warnings.warn(
-                "`storing_devices` keyword argument will soon be deprecated from multiprocessed collectors. "
-                "Please use `storing_device` instead."
-            )
-            storing_device = storing_devices
+            raise RuntimeError("storing_devices is deprecated, use `storing_device` instead.")
 
-        def device_err_msg(device_name, devices_list):
-            return (
-                f"The length of the {device_name} argument should match the "
-                f"number of workers of the collector. Got len("
-                f"create_env_fn)={self.num_workers} and len("
-                f"storing_device)={len(devices_list)}"
-            )
+        storing_devices, policy_devices, env_devices = self._get_devices(storing_device=storing_device, env_device=env_device, policy_device=policy_device, device=device)
 
-        if isinstance(device, (str, int, torch.device)):
-            device = [torch.device(device) for _ in range(self.num_workers)]
-        elif device is None:
-            device = [None for _ in range(self.num_workers)]
-        elif isinstance(device, Sequence):
-            if len(device) != self.num_workers:
-                raise RuntimeError(device_err_msg("devices", device))
-            device = [torch.device(_device) for _device in device]
-        else:
-            raise ValueError(
-                "devices should be either None, a torch.device or equivalent "
-                "or an iterable of devices. "
-                f"Found {type(device)} instead."
-            )
-        self._policy_dict = {}
-        self._policy_weights_dict = {}
-        self._get_weights_fn_dict = {}
+        # to avoid confusion
+        self.storing_device = storing_devices
+        self.policy_device = policy_devices
+        self.env_device = env_devices
 
-        for i, (_device, create_env, kwargs) in enumerate(
-            zip(device, self.create_env_fn, self.create_env_kwargs)
-        ):
-            if _device in self._policy_dict:
-                device[i] = _device
+        del storing_device, env_device, policy_device, device
+
+        _policy_weights_dict = {}
+        _get_weights_fn_dict = {}
+
+        _policy_weights_dict = {}
+        policy_weights = TensorDict.from_module(policy, as_module=True)
+
+        # store a stateless policy
+        def _make_meta_params(param):
+            is_param = isinstance(param, nn.Parameter)
+
+            pd = param.detach().to("meta")
+
+            if is_param:
+                pd = nn.Parameter(pd, requires_grad=False)
+            return pd
+
+        with policy_weights.apply(_make_meta_params).to_module(policy):
+            self.policy = deepcopy(policy)
+
+        for i, policy_device in enumerate(policy_devices):
+            # if we have already mapped onto that device, get that value
+            if policy_device in _policy_weights_dict:
                 continue
-
-            if hasattr(create_env, "observation_spec"):
-                observation_spec = create_env.observation_spec
-            else:
-                try:
-                    observation_spec = create_env(**kwargs).observation_spec
-                except:  # noqa
-                    observation_spec = None
-
-            _policy, _device, _get_weight_fn = self._get_policy_and_device(
-                policy=policy, device=_device, observation_spec=observation_spec
-            )
-            self._policy_dict[_device] = _policy
-            if isinstance(_policy, nn.Module):
-                self._policy_weights_dict[_device] = TensorDict.from_module(
-                    _policy, as_module=True
-                )
-            else:
-                self._policy_weights_dict[_device] = TensorDict({}, [])
-
-            self._get_weights_fn_dict[_device] = _get_weight_fn
-            device[i] = _device
-        self.device = device
-
-        if storing_device is None:
-            self.storing_device = self.device
-        else:
-            if isinstance(storing_device, (str, int, torch.device)):
-                self.storing_device = [
-                    torch.device(storing_device) for _ in range(self.num_workers)
-                ]
-            elif isinstance(storing_device, Sequence):
-                if len(storing_device) != self.num_workers:
-                    raise RuntimeError(
-                        device_err_msg("storing_devices", storing_device)
+            # If policy device is None, the only thing we need to do is
+            # make sure that the weights are shared.
+            if policy_device is None:
+                with policy_weights.unlock_():
+                    local_policy_weights = policy_weights.apply(
+                        lambda weight: weight.share_memory_() if weight.device.type in ("cpu", "mps") else weight
                     )
-                self.storing_device = [
-                    torch.device(_storing_device) for _storing_device in storing_device
-                ]
+
+                def _get_weight_fn(weights=policy_weights):
+                    # The original policy weights and these weights match in identity,
+                    # there is no need to update them.
+                    # see self.update_policy_weights_ to see how this is used
+                    return None
+            # in other cases, we need to cast the policy if and only if not all the weights
+            # are on the appropriate device
             else:
-                raise ValueError(
-                    "storing_devices should be either a torch.device or equivalent or an iterable of devices. "
-                    f"Found {type(storing_device)} instead."
-                )
+                # check the weights devices
+                has_different_device = [False]
+                def map_weight(weight):
+                    if weight.device != policy_device:
+                        has_different_device[0] = True
+                        return weight.to(policy_device)
+                    elif weight.device.type in ("cpu", "mps"):
+                        weight = weight.share_memory_()
+                    return weight
+                local_policy_weights = policy_weights.apply(map_weight)
+                if has_different_device[0]:
+                    def _get_weight_fn(weights=policy_weights):
+                        # This function will give the local_policy_weight the original weights.
+                        # see self.update_policy_weights_ to see how this is used
+                        return weights.data
+                else:
+                    def _get_weight_fn(weights=policy_weights):
+                        # The original policy weights and these weights match in identity,
+                        # there is no need to update them.
+                        # see self.update_policy_weights_ to see how this is used
+                        return None
+            # We lock the weights to be able to cache a bunch of ops and to avoid modifying it
+            _policy_weights_dict[policy_device] = local_policy_weights.lock_()
+            _get_weights_fn_dict[policy_device] = _get_weight_fn
+
+        self._policy_weights_dict = _policy_weights_dict
+        self._get_weights_fn_dict = _get_weights_fn_dict
 
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
@@ -1312,17 +1312,43 @@ class _MultiDataCollector(DataCollectorBase):
         self._frames = 0
         self._iter = -1
 
+    def _get_devices(
+        self,
+        *,
+        storing_device: torch.device,
+        policy_device: torch.device,
+        env_device: torch.device,
+        device: torch.device,
+    ):
+        # convert all devices to lists
+        if not isinstance(storing_device, (list, tuple)):
+            storing_device = [storing_device,] * self.num_workers
+        if not isinstance(policy_device, (list, tuple)):
+            policy_device = [policy_device,] * self.num_workers
+        if not isinstance(env_device, (list, tuple)):
+            env_device = [env_device,] * self.num_workers
+        if not isinstance(device, (list, tuple)):
+            device = [device,] * self.num_workers
+        if not (len(device) == len(storing_device) == len(policy_device) == len(env_device) == self.num_workers):
+            raise RuntimeError(f"THe length of the devices does not match the number of workers: {self.num_workers}.")
+        storing_device, policy_device, env_device = zip(*[SyncDataCollector._get_devices(storing_device=storing_device, policy_device=policy_device, env_device=env_device, device=device) for (storing_device, policy_device, env_device, device) in zip(storing_device, policy_device, env_device, device)])
+        return storing_device, policy_device, env_device
+
     @property
     def frames_per_batch_worker(self):
         raise NotImplementedError
 
     def update_policy_weights_(self, policy_weights=None) -> None:
-        for _device in self._policy_dict:
+        for _device in self._policy_weights_dict:
             if policy_weights is not None:
                 self._policy_weights_dict[_device].data.update_(policy_weights)
             elif self._get_weights_fn_dict[_device] is not None:
+                original_weights = self._get_weights_fn_dict[_device]()
+                if original_weights is None:
+                    # if the weights match in identity, we can spare a call to update_
+                    continue
                 self._policy_weights_dict[_device].data.update_(
-                    self._get_weights_fn_dict[_device]()
+                    original_weights
                 )
 
     @property
@@ -1337,53 +1363,58 @@ class _MultiDataCollector(DataCollectorBase):
         for i, (env_fun, env_fun_kwargs) in enumerate(
             zip(self.create_env_fn, self.create_env_kwargs)
         ):
-            _device = self.device[i]
-            _storing_device = self.storing_device[i]
             pipe_parent, pipe_child = mp.Pipe()  # send messages to procs
             if env_fun.__class__.__name__ != "EnvCreator" and not isinstance(
                 env_fun, EnvBase
             ):  # to avoid circular imports
                 env_fun = CloudpickleWrapper(env_fun)
 
-            kwargs = {
-                "pipe_parent": pipe_parent,
-                "pipe_child": pipe_child,
-                "queue_out": queue_out,
-                "create_env_fn": env_fun,
-                "create_env_kwargs": env_fun_kwargs,
-                "policy": self._policy_dict[_device],
-                "max_frames_per_traj": self.max_frames_per_traj,
-                "frames_per_batch": self.frames_per_batch_worker,
-                "reset_at_each_iter": self.reset_at_each_iter,
-                "device": _device,
-                "storing_device": _storing_device,
-                "exploration_type": self.exploration_type,
-                "reset_when_done": self.reset_when_done,
-                "idx": i,
-                "interruptor": self.interruptor,
-            }
-            proc = _ProcessNoWarn(
-                target=_main_async_collector,
-                num_threads=self.num_sub_threads,
-                kwargs=kwargs,
-            )
-            # proc.daemon can't be set as daemonic processes may be launched by the process itself
-            try:
-                proc.start()
-            except _pickle.PicklingError as err:
-                if "<lambda>" in str(err):
-                    raise RuntimeError(
-                        """Can't open a process with doubly cloud-pickled lambda function.
+            # Create a policy on the right device
+            policy_device = self.policy_device[i]
+            storing_device = self.storing_device[i]
+            env_device = self.env_device[i]
+            policy = self.policy
+            with self._policy_weights_dict[policy_device].to_module(policy):
+                kwargs = {
+                    "pipe_parent": pipe_parent,
+                    "pipe_child": pipe_child,
+                    "queue_out": queue_out,
+                    "create_env_fn": env_fun,
+                    "create_env_kwargs": env_fun_kwargs,
+                    "policy": policy,
+                    "max_frames_per_traj": self.max_frames_per_traj,
+                    "frames_per_batch": self.frames_per_batch_worker,
+                    "reset_at_each_iter": self.reset_at_each_iter,
+                    "policy_device": policy_device ,
+                    "storing_device": storing_device,
+                    "env_device": env_device,
+                    "exploration_type": self.exploration_type,
+                    "reset_when_done": self.reset_when_done,
+                    "idx": i,
+                    "interruptor": self.interruptor,
+                }
+                proc = _ProcessNoWarn(
+                    target=_main_async_collector,
+                    num_threads=self.num_sub_threads,
+                    kwargs=kwargs,
+                )
+                # proc.daemon can't be set as daemonic processes may be launched by the process itself
+                try:
+                    proc.start()
+                except _pickle.PicklingError as err:
+                    if "<lambda>" in str(err):
+                        raise RuntimeError(
+                            """Can't open a process with doubly cloud-pickled lambda function.
 This error is likely due to an attempt to use a ParallelEnv in a
 multiprocessed data collector. To do this, consider wrapping your
 lambda function in an `torchrl.envs.EnvCreator` wrapper as follows:
 `env = ParallelEnv(N, EnvCreator(my_lambda_function))`.
 This will not only ensure that your lambda function is cloud-pickled once, but
 also that the state dict is synchronised across processes if needed."""
-                    ) from err
-            pipe_child.close()
-            self.procs.append(proc)
-            self.pipes.append(pipe_parent)
+                        ) from err
+                pipe_child.close()
+                self.procs.append(proc)
+                self.pipes.append(pipe_parent)
         for pipe_parent in self.pipes:
             msg = pipe_parent.recv()
             if msg != "instantiated":
@@ -2067,8 +2098,10 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         reset_at_each_iter: bool = False,
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: Optional[bool] = None,
-        device: Optional[Union[int, str, torch.device]] = None,
-        storing_device: Optional[Union[int, str, torch.device]] = None,
+        device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
+        policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
+        env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
+        storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
         **kwargs,
@@ -2084,8 +2117,10 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             init_random_frames=init_random_frames,
             postproc=postproc,
             split_trajs=split_trajs,
-            devices=[device] if device is not None else None,
-            storing_devices=[storing_device] if storing_device is not None else None,
+            device=device,
+            policy_device=policy_device,
+            env_device=env_device,
+            storing_device=storing_device,
             **kwargs,
         )
 
@@ -2120,8 +2155,9 @@ def _main_async_collector(
     max_frames_per_traj: int,
     frames_per_batch: int,
     reset_at_each_iter: bool,
-    device: Optional[Union[torch.device, str, int]],
     storing_device: Optional[Union[torch.device, str, int]],
+    env_device: Optional[Union[torch.device, str, int]],
+    policy_device: Optional[Union[torch.device, str, int]],
     idx: int = 0,
     exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
     reset_when_done: bool = True,
@@ -2132,15 +2168,6 @@ def _main_async_collector(
     # init variables that will be cleared when closing
     tensordict = data = d = data_in = inner_collector = dc_iter = None
 
-    # send the policy to device
-    try:
-        policy = policy.to(device)
-    except Exception:
-        if RL_WARNINGS:
-            warnings.warn(
-                "Couldn't cast the policy onto the desired device on remote process. "
-                "If your policy is not a nn.Module instance you can probably ignore this warning."
-            )
     inner_collector = SyncDataCollector(
         create_env_fn,
         create_env_kwargs=create_env_kwargs,
@@ -2151,8 +2178,9 @@ def _main_async_collector(
         reset_at_each_iter=reset_at_each_iter,
         postproc=None,
         split_trajs=False,
-        device=device,
         storing_device=storing_device,
+        policy_device=policy_device,
+        env_device=env_device,
         exploration_type=exploration_type,
         reset_when_done=reset_when_done,
         return_same_td=True,
@@ -2229,6 +2257,7 @@ def _main_async_collector(
                 # If policy is on cuda and env on cpu (or opposite) we put tensors that
                 # are on cpu in shared mem.
                 if tensordict.device is not None:
+                    # placehoder in case we need different behaviours
                     if tensordict.device.type in ("cpu", "mps"):
                         tensordict.share_memory_()
                     elif tensordict.device.type == "cuda":
