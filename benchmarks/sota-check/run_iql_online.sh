@@ -7,6 +7,7 @@
 #SBATCH --output=slurm_logs/iql_online_output_%j.txt
 #SBATCH --error=slurm_errors/iql_online_error_%j.txt
 
+export PYTHONPATH=$(dirname $(dirname $PWD))
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="iql_online"

@@ -7,6 +7,7 @@
 #SBATCH --output=slurm_logs/ppo_atari_output_%j.txt
 #SBATCH --error=slurm_errors/ppo_atari_error_%j.txt
 
+export PYTHONPATH=$(dirname $(dirname $PWD))
 current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="ppo_atari"

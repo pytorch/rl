@@ -72,6 +72,9 @@ scripts=(
 mkdir -p "slurm_errors"
 mkdir -p "slurm_logs"
 
+# remove the previous report
+rm -f report.log
+
 # Submit jobs with the specified partition the specified number of times
 if [ -z "$slurm_partition" ]; then
     for script in "${scripts[@]}"; do
@@ -86,6 +89,3 @@ else
       done
   done
 fi
-
-# remove the previous report
-rm report.log
