@@ -24,13 +24,3 @@ if [ $exit_status -eq 0 ]; then
 else
   echo "$group_name_$SLURM_JOB_ID=error" > report.log
 fi
-
-
-# Capture the exit status of the Python command
-exit_status=$?
-# Write the exit status to a file
-if [ $exit_status -eq 0 ]; then
-  echo "$group_name_$SLURM_JOB_ID=success" > report.log
-else
-  echo "$group_name_$SLURM_JOB_ID=error" > report.log
-fi

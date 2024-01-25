@@ -86,3 +86,6 @@ else
       done
   done
 fi
+
+# remove the previous report
+rm report.log
