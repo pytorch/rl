@@ -69,6 +69,9 @@ scripts=(
     run_dt_online.sh
 )
 
+mkdir -p "slurm_errors"
+mkdir -p "slurm_logs"
+
 # Submit jobs with the specified partition the specified number of times
 if [ -z "$slurm_partition" ]; then
     for script in "${scripts[@]}"; do

@@ -4,12 +4,22 @@
 #SBATCH --ntasks=32
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
-#SBATCH --output=marl_ippo_output_%j.txt
-#SBATCH --error=marl_ippo_error_%j.txt
+#SBATCH --output=slurm_logs/marl_ippo_output_%j.txt
+#SBATCH --errors=slurm_errors/marl_ippo_error_%j.txt
 
 current_commit=$(git rev-parse HEAD)
 project_name="torchrl-example-check-$current_commit"
+group_name="mappo_ippo"
 python ../../examples/multiagent/mappo_ippo.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
-  logger.group_name="marl_ippo"
+  logger.group_name="$group_name"
+
+# Capture the exit status of the Python command
+exit_status=$?
+# Write the exit status to a file
+if [ $exit_status -eq 0 ]; then
+  echo "$group_name=success" > report.log
+else
+  echo "$group_name=error" > report.log
+fi
