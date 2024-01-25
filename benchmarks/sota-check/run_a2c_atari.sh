@@ -20,7 +20,7 @@ python ../../examples/a2c/a2c_atari.py \
 exit_status=$?
 # Write the exit status to a file
 if [ $exit_status -eq 0 ]; then
-  echo "$group_name=success" > report.log
+  echo "$group_name_$SLURM_JOB_ID=success" > report.log
 else
-  echo "$group_name=error" > report.log
+  echo "$group_name_$SLURM_JOB_ID=error" > report.log
 fi
