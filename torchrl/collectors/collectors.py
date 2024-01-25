@@ -211,9 +211,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
             policy = RandomPolicy(self.env.input_spec["full_action_spec"])
-        elif isinstance(policy, nn.Module):
-            # TODO: revisit these checks when we have determined whether arbitrary
-            # callables should be supported as policies.
+        else:
+            # make sure policy is an nn.Module
+            policy = _NonParametricPolicyWrapper(policy)
             if not _policy_is_tensordict_compatible(policy):
                 # policy is a nn.Module that doesn't operate on tensordicts directly
                 # so we attempt to auto-wrap policy with TensorDictModule
@@ -1199,6 +1199,7 @@ class _MultiDataCollector(DataCollectorBase):
         _get_weights_fn_dict = {}
 
         _policy_weights_dict = {}
+        policy = _NonParametricPolicyWrapper(policy)
         policy_weights = TensorDict.from_module(policy, as_module=True)
 
         # store a stateless policy
@@ -2340,3 +2341,42 @@ def _main_async_collector(
 
         else:
             raise Exception(f"Unrecognized message {msg}")
+
+class _PolicyMetaClass(abc.ABCMeta):
+    def __call__(cls, *args, **kwargs):
+        # no kwargs
+        if isinstance(args[0], nn.Module):
+            return args[0]
+        return super().__call__(*args)
+
+class _NonParametricPolicyWrapper(nn.Module, metaclass=_PolicyMetaClass):
+    """A wrapper for non-parametric policies."""
+    def __init__(self, policy):
+        super().__init__()
+        self.policy = policy
+
+    def __call__(self, *args, **kwargs):
+        return self.policy(*args, **kwargs)
+
+    def __getattr__(self, attr: str) -> Any:
+        if attr in self.__dir__():
+            return self.__getattribute__(
+                attr
+            )  # make sure that appropriate exceptions are raised
+
+        elif attr.startswith("__"):
+            raise AttributeError(
+                "passing built-in private methods is "
+                f"not permitted with type {type(self)}. "
+                f"Got attribute {attr}."
+            )
+
+        elif "policy" in self.__dir__():
+            policy = self.__getattribute__("policy")
+            return getattr(policy, attr)
+        try:
+            super().__getattr__(attr)
+        except Exception:
+            raise AttributeError(
+                f"policy not set in {self.__class__.__name__}, cannot access {attr}."
+            )
