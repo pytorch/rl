@@ -14,7 +14,7 @@ export PYTHONPATH=$(dirname $(dirname $PWD))
 python $PYTHONPATH/examples/iql/iql_online.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
-  logger.group_name="iql_online"
+  logger.group_name="$group_name"
 
 # Capture the exit status of the Python command
 exit_status=$?
