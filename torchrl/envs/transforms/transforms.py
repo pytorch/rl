@@ -20,6 +20,7 @@ import torch
 from tensordict import (
     is_tensor_collection,
     NonTensorData,
+    set_lazy_lagacy,
     unravel_key,
     unravel_key_list,
 )
@@ -2883,6 +2884,7 @@ class CatFrames(ObservationTransform):
         else:
             return self.unfolding(tensordict)
 
+    @set_lazy_lagacy(False)
     def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
         if not tensordict.ndim:
@@ -2972,6 +2974,8 @@ class CatFrames(ObservationTransform):
                 *range(data.ndim + self.dim, data.ndim - 1),
             )
             tensordict.set(out_key, data)
+        if tensordict_orig is not tensordict:
+            tensordict_orig = tensordict.transpose(tensordict.ndim - 1, i)
         return tensordict_orig
 
     def __repr__(self) -> str:
