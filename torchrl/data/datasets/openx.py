@@ -42,6 +42,8 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
 
     Paper: https://arxiv.org/abs/2310.08864
 
+    The data format follows the :ref:`TED convention <TED-format>`.
+
     .. note::
         Non-tensor data will be written in the tensordict data using the
         :class:`~tensordict.tensorclass.NonTensorData` primitive.

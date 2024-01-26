@@ -45,7 +45,7 @@ from mocking_classes import (
 from tensordict import unravel_key
 from tensordict.nn import TensorDictSequential
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import _unravel_key_to_tuple
+from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
 from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import _replace_last, prod
 from torchrl.data import (
@@ -797,7 +797,7 @@ class TestCatFrames(TransformBase):
         v1 = model(tdbase0)
         v2 = model(tdbase0_copy)
         # check that swapping dims and names leads to same result
-        assert (v1 == v2.transpose(0, 1)).all()
+        assert_allclose_td(v1, v2.transpose(0, 1))
 
     @pytest.mark.parametrize("dim", [-2, -1])
     @pytest.mark.parametrize("N", [3, 4])
@@ -1476,6 +1476,22 @@ class TestStepCounter(TransformBase):
         env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), StepCounter(max_steps=30))
         env.rollout(1000)
         check_env_specs(env)
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym detected")
+    def test_step_count_gym_doublecount(self):
+        # tests that 2 truncations can be used together
+        env = TransformedEnv(
+            GymEnv(PENDULUM_VERSIONED),
+            Compose(
+                StepCounter(max_steps=2),
+                StepCounter(max_steps=3),  # this one will be ignored
+            ),
+        )
+        r = env.rollout(10, break_when_any_done=False)
+        assert (
+            r.get(("next", "truncated")).squeeze().nonzero().squeeze(-1)
+            == torch.arange(1, 10, 2)
+        ).all()
 
     @pytest.mark.skipif(not _has_dm_control, reason="no dm_control detected")
     def test_step_count_dmc(self):
