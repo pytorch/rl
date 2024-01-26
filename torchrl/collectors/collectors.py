@@ -841,7 +841,7 @@ class SyncDataCollector(DataCollectorBase):
                     "collector", tensordict.get("collector").clone(False)
                 )
                 tensordicts.append(
-                    tensordict.to(self.storing_device, non_blocking=True)
+                    tensordict.to(self.storing_device, non_blocking=False)
                 )
 
                 self._update_traj_ids(tensordict)

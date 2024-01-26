@@ -1972,7 +1972,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict_reset = self._reset(tensordict, **kwargs)
         #        We assume that this is done properly
         #        if tensordict_reset.device != self.device:
-        #            tensordict_reset = tensordict_reset.to(self.device, non_blocking=True)
+        #            tensordict_reset = tensordict_reset.to(self.device, non_blocking=False)
         if tensordict_reset is tensordict:
             raise RuntimeError(
                 "EnvBase._reset should return outplace changes to the input "
@@ -2327,10 +2327,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordicts = []
         for i in range(max_steps):
             if auto_cast_to_device:
-                tensordict = tensordict.to(policy_device, non_blocking=True)
+                tensordict = tensordict.to(policy_device, non_blocking=False)
             tensordict = policy(tensordict)
             if auto_cast_to_device:
-                tensordict = tensordict.to(env_device, non_blocking=True)
+                tensordict = tensordict.to(env_device, non_blocking=False)
             tensordict = self.step(tensordict)
             tensordicts.append(tensordict.clone(False))
 
@@ -2375,10 +2375,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict_ = tensordict
         for i in range(max_steps):
             if auto_cast_to_device:
-                tensordict_ = tensordict_.to(policy_device, non_blocking=True)
+                tensordict_ = tensordict_.to(policy_device, non_blocking=False)
             tensordict_ = policy(tensordict_)
             if auto_cast_to_device:
-                tensordict_ = tensordict_.to(env_device, non_blocking=True)
+                tensordict_ = tensordict_.to(env_device, non_blocking=False)
             tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
             tensordicts.append(tensordict)
             if i == max_steps - 1:
