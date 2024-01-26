@@ -2884,7 +2884,7 @@ class CatFrames(ObservationTransform):
         else:
             return self.unfolding(tensordict)
 
-    @set_lazy_lagacy(False)
+    @set_lazy_legacy(False)
     def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
         if not tensordict.ndim:
