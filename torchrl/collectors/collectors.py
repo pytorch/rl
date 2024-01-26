@@ -9,7 +9,6 @@ import abc
 
 import contextlib
 
-import functools
 import inspect
 import logging
 import os
