@@ -1449,6 +1449,8 @@ class TestAutoWrap:
             out_features=env_maker().action_spec.shape[-1],
             multiple_outputs=multiple_outputs,
         )
+        # init lazy params
+        policy(env_maker().reset())
         collector = collector_class(
             **self._create_collector_kwargs(env_maker, collector_class, policy)
         )
