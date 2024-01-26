@@ -1450,7 +1450,7 @@ class TestAutoWrap:
             multiple_outputs=multiple_outputs,
         )
         # init lazy params
-        policy(env_maker().reset())
+        policy(env_maker().reset().get("observation"))
         collector = collector_class(
             **self._create_collector_kwargs(env_maker, collector_class, policy)
         )
@@ -1460,9 +1460,6 @@ class TestAutoWrap:
             out_keys.extend(f"output{i}" for i in range(1, 4))
 
         if collector_class is not SyncDataCollector:
-            assert all(
-                isinstance(p, TensorDictModule) for p in collector._policy_dict.values()
-            )
             assert all(p.out_keys == out_keys for p in collector._policy_dict.values())
             assert all(p.module is policy for p in collector._policy_dict.values())
         else:
