@@ -1420,7 +1420,7 @@ def test_collector_device_combinations(device, storing_device):
     ],
 )
 class TestAutoWrap:
-    num_envs = 2
+    num_envs = 1
 
     @pytest.fixture
     def env_maker(self):
@@ -1443,29 +1443,44 @@ class TestAutoWrap:
 
         return collector_kwargs
 
-    @pytest.mark.parametrize("multiple_outputs", [False, True])
-    def test_auto_wrap_modules(self, collector_class, multiple_outputs, env_maker):
+    @pytest.mark.parametrize("multiple_outputs", [True, False])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_auto_wrap_modules(
+        self, collector_class, multiple_outputs, env_maker, device
+    ):
         policy = WrappablePolicy(
             out_features=env_maker().action_spec.shape[-1],
             multiple_outputs=multiple_outputs,
         )
         # init lazy params
         policy(env_maker().reset().get("observation"))
+
         collector = collector_class(
-            **self._create_collector_kwargs(env_maker, collector_class, policy)
+            **self._create_collector_kwargs(env_maker, collector_class, policy),
+            device=device,
         )
 
         out_keys = ["action"]
         if multiple_outputs:
             out_keys.extend(f"output{i}" for i in range(1, 4))
 
-        if collector_class is not SyncDataCollector:
-            assert all(p.out_keys == out_keys for p in collector._policy_dict.values())
-            assert all(p.module is policy for p in collector._policy_dict.values())
-        else:
+        if collector_class is SyncDataCollector:
             assert isinstance(collector.policy, TensorDictModule)
             assert collector.policy.out_keys == out_keys
-            assert collector.policy.module is policy
+            # this does not work now that we force the device of the policy
+            # assert collector.policy.module is policy
+
+        for i, data in enumerate(collector):
+            if i == 0:
+                assert (data["action"] != 0).any()
+                for p in policy.parameters():
+                    p.data.zero_()
+                    assert p.device == torch.device("cpu")
+                collector.update_policy_weights_()
+            elif i == 4:
+                assert (data["action"] == 0).all()
+                break
+
         collector.shutdown()
         del collector
 

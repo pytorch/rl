@@ -27,6 +27,8 @@ from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Uni
 import numpy as np
 import torch
 import torch.nn as nn
+
+from tensordict import TensorDictParams
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
@@ -81,7 +83,7 @@ class RandomPolicy:
 
     def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
         super().__init__()
-        self.action_spec = action_spec
+        self.action_spec = action_spec.clone()
         self.action_key = action_key
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
@@ -194,26 +196,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
     _iterator = None
 
-    def _get_policy_and_device(
-        self,
-        policy: Optional[
-            Union[
-                TensorDictModule,
-                Callable[[TensorDictBase], TensorDictBase],
-            ]
-        ] = None,
-        observation_spec: TensorSpec = None,
-    ) -> Tuple[TensorDictModule, Union[None, Callable[[], dict]]]:
-        """Util method to get a policy and its device given the collector __init__ inputs.
-
-        Args:
-            create_env_fn (Callable or list of callables): an env creator
-                function (or a list of creators)
-            create_env_kwargs (dictionary): kwargs for the env creator
-            policy (TensorDictModule, optional): a policy to be used
-            observation_spec (TensorSpec, optional): spec of the observations
-
-        """
+    def _make_compatible_policy(self, policy, observation_spec=None):
         if policy is None:
             if not hasattr(self, "env") or self.env is None:
                 raise ValueError(
@@ -254,11 +237,13 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                     if not hasattr(self, "env") or self.env is None:
                         out_keys = ["action"]
                     else:
-                        out_keys = self.env.action_keys
+                        out_keys = list(self.env.action_keys)
                     output = policy(**next_observation)
 
                     if isinstance(output, tuple):
-                        out_keys.extend(f"output{i+1}" for i in range(len(output) - 1))
+                        out_keys.extend(
+                            f"output{i + 1}" for i in range(len(output) - 1)
+                        )
 
                     policy = TensorDictModule(
                         policy, in_keys=in_keys, out_keys=out_keys
@@ -266,13 +251,36 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 else:
                     raise TypeError(
                         f"""Arguments to policy.forward are incompatible with entries in
-env.observation_spec (got incongruent signatures: fun signature is {set(sig.parameters)} vs specs {set(next_observation)}).
-If you want TorchRL to automatically wrap your policy with a TensorDictModule
-then the arguments to policy.forward must correspond one-to-one with entries
-in env.observation_spec that are prefixed with 'next_'. For more complex
-behaviour and more control you can consider writing your own TensorDictModule.
-"""
+        env.observation_spec (got incongruent signatures: fun signature is {set(sig.parameters)} vs specs {set(next_observation)}).
+        If you want TorchRL to automatically wrap your policy with a TensorDictModule
+        then the arguments to policy.forward must correspond one-to-one with entries
+        in env.observation_spec that are prefixed with 'next_'. For more complex
+        behaviour and more control you can consider writing your own TensorDictModule.
+        """
                     )
+        return policy
+
+    def _get_policy_and_device(
+        self,
+        policy: Optional[
+            Union[
+                TensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
+        ] = None,
+        observation_spec: TensorSpec = None,
+    ) -> Tuple[TensorDictModule, Union[None, Callable[[], dict]]]:
+        """Util method to get a policy and its device given the collector __init__ inputs.
+
+        Args:
+            create_env_fn (Callable or list of callables): an env creator
+                function (or a list of creators)
+            create_env_kwargs (dictionary): kwargs for the env creator
+            policy (TensorDictModule, optional): a policy to be used
+            observation_spec (TensorSpec, optional): spec of the observations
+
+        """
+        policy = self._make_compatible_policy(policy, observation_spec)
         param_and_buf = TensorDict.from_module(policy, as_module=True)
 
         def get_weights_fn(param_and_buf=param_and_buf):
@@ -1245,19 +1253,10 @@ class _MultiDataCollector(DataCollectorBase):
         _policy_weights_dict = {}
         _get_weights_fn_dict = {}
 
-        _policy_weights_dict = {}
         policy = _NonParametricPolicyWrapper(policy)
         policy_weights = TensorDict.from_module(policy, as_module=True)
 
         # store a stateless policy
-        def _make_meta_params(param):
-            is_param = isinstance(param, nn.Parameter)
-
-            pd = param.detach().to("meta")
-
-            if is_param:
-                pd = nn.Parameter(pd, requires_grad=False)
-            return pd
 
         with policy_weights.apply(_make_meta_params).to_module(policy):
             self.policy = deepcopy(policy)
@@ -1269,18 +1268,17 @@ class _MultiDataCollector(DataCollectorBase):
             # If policy device is None, the only thing we need to do is
             # make sure that the weights are shared.
             if policy_device is None:
-                with policy_weights.unlock_():
-                    local_policy_weights = policy_weights.data.apply(
-                        lambda weight: weight.share_memory_()
-                        if weight.device.type in ("cpu", "mps")
-                        else weight
-                    )
 
-                def _get_weight_fn(weights=policy_weights):
-                    # The original policy weights and these weights match in identity,
-                    # there is no need to update them.
-                    # see self.update_policy_weights_ to see how this is used
-                    return None
+                def map_weight(
+                    weight,
+                ):
+                    is_param = isinstance(weight, nn.Parameter)
+                    weight = weight.data
+                    if weight.device.type in ("cpu", "mps"):
+                        weight = weight.share_memory_()
+                    if is_param:
+                        weight = nn.Parameter(weight, requires_grad=False)
+                    return weight
 
             # in other cases, we need to cast the policy if and only if not all the weights
             # are on the appropriate device
@@ -1293,28 +1291,23 @@ class _MultiDataCollector(DataCollectorBase):
                     policy_device=policy_device,
                     has_different_device=has_different_device,
                 ):
+                    is_param = isinstance(weight, nn.Parameter)
+                    weight = weight.data
                     if weight.device != policy_device:
                         has_different_device[0] = True
-                        return weight.to(policy_device)
+                        weight = weight.to(policy_device)
                     elif weight.device.type in ("cpu", "mps"):
                         weight = weight.share_memory_()
+                    if is_param:
+                        weight = nn.Parameter(weight, requires_grad=False)
                     return weight
 
-                local_policy_weights = policy_weights.data.apply(map_weight)
-                if has_different_device[0]:
+            local_policy_weights = TensorDictParams(policy_weights.apply(map_weight))
 
-                    def _get_weight_fn(weights=policy_weights):
-                        # This function will give the local_policy_weight the original weights.
-                        # see self.update_policy_weights_ to see how this is used
-                        return weights.data
-
-                else:
-
-                    def _get_weight_fn(weights=policy_weights):
-                        # The original policy weights and these weights match in identity,
-                        # there is no need to update them.
-                        # see self.update_policy_weights_ to see how this is used
-                        return None
+            def _get_weight_fn(weights=policy_weights):
+                # This function will give the local_policy_weight the original weights.
+                # see self.update_policy_weights_ to see how this is used
+                return weights
 
             # We lock the weights to be able to cache a bunch of ops and to avoid modifying it
             _policy_weights_dict[policy_device] = local_policy_weights.lock_()
@@ -1430,13 +1423,13 @@ class _MultiDataCollector(DataCollectorBase):
     def update_policy_weights_(self, policy_weights=None) -> None:
         for _device in self._policy_weights_dict:
             if policy_weights is not None:
-                self._policy_weights_dict[_device].data.update_(policy_weights)
+                self._policy_weights_dict[_device].data.update_(policy_weights.data)
             elif self._get_weights_fn_dict[_device] is not None:
                 original_weights = self._get_weights_fn_dict[_device]()
                 if original_weights is None:
                     # if the weights match in identity, we can spare a call to update_
                     continue
-                self._policy_weights_dict[_device].data.update_(original_weights)
+                self._policy_weights_dict[_device].data.update_(original_weights.data)
 
     @property
     def _queue_len(self) -> int:
@@ -2470,3 +2463,13 @@ class _NonParametricPolicyWrapper(nn.Module, metaclass=_PolicyMetaClass):
             raise AttributeError(
                 f"policy not set in {self.__class__.__name__}, cannot access {attr}."
             )
+
+
+def _make_meta_params(param):
+    is_param = isinstance(param, nn.Parameter)
+
+    pd = param.detach().to("meta")
+
+    if is_param:
+        pd = nn.Parameter(pd, requires_grad=False)
+    return pd
