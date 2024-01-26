@@ -15,7 +15,7 @@ export PYTHONPATH=$(dirname $(dirname $PWD))
 python $PYTHONPATH/examples/multiagent/sac.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
-  logger.group_name="marl_sac"
+  logger.group_name="$group_name"
 
 # Capture the exit status of the Python command
 exit_status=$?
