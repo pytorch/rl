@@ -203,61 +203,60 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
             policy = RandomPolicy(self.env.input_spec["full_action_spec"])
-        else:
-            # make sure policy is an nn.Module
-            policy = _NonParametricPolicyWrapper(policy)
-            if not _policy_is_tensordict_compatible(policy):
-                # policy is a nn.Module that doesn't operate on tensordicts directly
-                # so we attempt to auto-wrap policy with TensorDictModule
-                if observation_spec is None:
-                    raise ValueError(
-                        "Unable to read observation_spec from the environment. This is "
-                        "required to check compatibility of the environment and policy "
-                        "since the policy is a nn.Module that operates on tensors "
-                        "rather than a TensorDictModule or a nn.Module that accepts a "
-                        "TensorDict as input and defines in_keys and out_keys."
-                    )
+        # make sure policy is an nn.Module
+        policy = _NonParametricPolicyWrapper(policy)
+        if not _policy_is_tensordict_compatible(policy):
+            # policy is a nn.Module that doesn't operate on tensordicts directly
+            # so we attempt to auto-wrap policy with TensorDictModule
+            if observation_spec is None:
+                raise ValueError(
+                    "Unable to read observation_spec from the environment. This is "
+                    "required to check compatibility of the environment and policy "
+                    "since the policy is a nn.Module that operates on tensors "
+                    "rather than a TensorDictModule or a nn.Module that accepts a "
+                    "TensorDict as input and defines in_keys and out_keys."
+                )
 
-                try:
-                    # signature modified by make_functional
-                    sig = policy.forward.__signature__
-                except AttributeError:
-                    sig = inspect.signature(policy.forward)
-                required_params = {
-                    str(k)
-                    for k, p in sig.parameters.items()
-                    if p.default is inspect._empty
-                }
-                next_observation = {
-                    key: value for key, value in observation_spec.rand().items()
-                }
-                # we check if all the mandatory params are there
-                if not required_params.difference(set(next_observation)):
-                    in_keys = [str(k) for k in sig.parameters if k in next_observation]
-                    if not hasattr(self, "env") or self.env is None:
-                        out_keys = ["action"]
-                    else:
-                        out_keys = list(self.env.action_keys)
-                    output = policy(**next_observation)
-
-                    if isinstance(output, tuple):
-                        out_keys.extend(
-                            f"output{i + 1}" for i in range(len(output) - 1)
-                        )
-
-                    policy = TensorDictModule(
-                        policy, in_keys=in_keys, out_keys=out_keys
-                    )
+            try:
+                # signature modified by make_functional
+                sig = policy.forward.__signature__
+            except AttributeError:
+                sig = inspect.signature(policy.forward)
+            required_params = {
+                str(k)
+                for k, p in sig.parameters.items()
+                if p.default is inspect._empty
+            }
+            next_observation = {
+                key: value for key, value in observation_spec.rand().items()
+            }
+            # we check if all the mandatory params are there
+            if not required_params.difference(set(next_observation)):
+                in_keys = [str(k) for k in sig.parameters if k in next_observation]
+                if not hasattr(self, "env") or self.env is None:
+                    out_keys = ["action"]
                 else:
-                    raise TypeError(
-                        f"""Arguments to policy.forward are incompatible with entries in
-        env.observation_spec (got incongruent signatures: fun signature is {set(sig.parameters)} vs specs {set(next_observation)}).
-        If you want TorchRL to automatically wrap your policy with a TensorDictModule
-        then the arguments to policy.forward must correspond one-to-one with entries
-        in env.observation_spec that are prefixed with 'next_'. For more complex
-        behaviour and more control you can consider writing your own TensorDictModule.
-        """
+                    out_keys = list(self.env.action_keys)
+                output = policy(**next_observation)
+
+                if isinstance(output, tuple):
+                    out_keys.extend(
+                        f"output{i + 1}" for i in range(len(output) - 1)
                     )
+
+                policy = TensorDictModule(
+                    policy, in_keys=in_keys, out_keys=out_keys
+                )
+            else:
+                raise TypeError(
+                    f"""Arguments to policy.forward are incompatible with entries in
+env.observation_spec (got incongruent signatures: fun signature is {set(sig.parameters)} vs specs {set(next_observation)}).
+If you want TorchRL to automatically wrap your policy with a TensorDictModule
+then the arguments to policy.forward must correspond one-to-one with entries
+in env.observation_spec that are prefixed with 'next_'. For more complex
+behaviour and more control you can consider writing your own TensorDictModule.
+"""
+                )
         return policy
 
     def _get_policy_and_device(
