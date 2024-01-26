@@ -20,7 +20,7 @@ import torch
 from tensordict import (
     is_tensor_collection,
     NonTensorData,
-    set_lazy_lagacy,
+    set_lazy_legacy,
     unravel_key,
     unravel_key_list,
 )
