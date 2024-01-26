@@ -8,6 +8,8 @@ import _pickle
 import abc
 
 import contextlib
+
+import functools
 import inspect
 import logging
 import os
@@ -62,7 +64,7 @@ DEFAULT_EXPLORATION_TYPE: ExplorationType = ExplorationType.RANDOM
 _is_osx = sys.platform.startswith("darwin")
 
 
-class RandomPolicy(nn.Module):
+class RandomPolicy:
     """A random policy for data collectors.
 
     This is a wrapper around the action_spec.rand method.
@@ -145,10 +147,16 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
 
 
 def _policy_is_tensordict_compatible(policy: nn.Module):
-    sig = inspect.signature(policy.forward)
+    if isinstance(policy, _NonParametricPolicyWrapper) and isinstance(
+        policy.policy, RandomPolicy
+    ):
+        return True
 
     if isinstance(policy, TensorDictModuleBase):
         return True
+
+    sig = inspect.signature(policy.forward)
+
     if (
         len(sig.parameters) == 1
         and hasattr(policy, "in_keys")
@@ -2437,8 +2445,9 @@ class _NonParametricPolicyWrapper(nn.Module, metaclass=_PolicyMetaClass):
         super().__init__()
         self.policy = policy
 
-    def __call__(self, *args, **kwargs):
-        return self.policy(*args, **kwargs)
+    @property
+    def forward(self):
+        return self.policy.__call__
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
