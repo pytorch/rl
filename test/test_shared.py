@@ -9,7 +9,7 @@ import warnings
 
 import pytest
 import torch
-from tensordict import TensorDict
+from tensordict import TensorDict, LazyStackedTensorDict
 from torch import multiprocessing as mp
 
 
@@ -81,7 +81,7 @@ class TestStack:
         command_pipe_parent.close()
         assert isinstance(tensordict, TensorDict), f"td is of type {type(tensordict)}"
         assert tensordict.is_shared() or tensordict.is_memmap()
-        new_tensordict = torch.stack(
+        new_tensordict = LazyStackedTensorDict.lazy_stack(
             [
                 tensordict[i].contiguous().clone().zero_()
                 for i in range(tensordict.shape[0])
