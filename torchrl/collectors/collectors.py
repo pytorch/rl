@@ -9,6 +9,8 @@ import abc
 
 import contextlib
 
+import functools
+
 import inspect
 import logging
 import os
@@ -223,9 +225,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             except AttributeError:
                 sig = inspect.signature(policy.forward)
             required_params = {
-                str(k)
-                for k, p in sig.parameters.items()
-                if p.default is inspect._empty
+                str(k) for k, p in sig.parameters.items() if p.default is inspect._empty
             }
             next_observation = {
                 key: value for key, value in observation_spec.rand().items()
@@ -240,13 +240,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 output = policy(**next_observation)
 
                 if isinstance(output, tuple):
-                    out_keys.extend(
-                        f"output{i + 1}" for i in range(len(output) - 1)
-                    )
+                    out_keys.extend(f"output{i + 1}" for i in range(len(output) - 1))
 
-                policy = TensorDictModule(
-                    policy, in_keys=in_keys, out_keys=out_keys
-                )
+                policy = TensorDictModule(policy, in_keys=in_keys, out_keys=out_keys)
             else:
                 raise TypeError(
                     f"""Arguments to policy.forward are incompatible with entries in
@@ -287,18 +283,24 @@ behaviour and more control you can consider writing your own TensorDictModule.
 
         if self.policy_device:
             # create a stateless policy and populate it with params
-            def _make_meta_params(param):
+            def _map_to_device_params(param, device):
                 is_param = isinstance(param, nn.Parameter)
 
-                pd = param.detach().to("meta")
+                pd = param.detach().to(device, non_blocking=True)
 
                 if is_param:
                     pd = nn.Parameter(pd, requires_grad=False)
                 return pd
 
-            with param_and_buf.apply(_make_meta_params).to_module(policy):
+            # Create a stateless policy, then populate this copy with params on device
+            with param_and_buf.apply(
+                functools.partial(_map_to_device_params, device="meta")
+            ).to_module(policy):
                 policy = deepcopy(policy)
-            param_and_buf.to(self.policy_device, non_blocking=True).to_module(policy)
+
+            param_and_buf.apply(
+                functools.partial(_map_to_device_params, device=self.policy_device)
+            ).to_module(policy)
 
         return policy, get_weights_fn
 
