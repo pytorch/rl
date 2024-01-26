@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import logging
@@ -11,6 +12,7 @@ import sys
 import numpy as np
 import pytest
 import torch
+
 from _utils_internal import (
     check_rollout_consistency_multikey_env,
     decorate_thread_sub_func,
@@ -35,7 +37,7 @@ from mocking_classes import (
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
-from tensordict.nn import TensorDictModule, TensorDictSequential
+from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 from tensordict.tensordict import assert_allclose_td, TensorDict
 
 from torch import nn
@@ -162,110 +164,359 @@ def make_policy(env):
         raise NotImplementedError
 
 
-def _is_consistent_device_type(
-    device_type, policy_device_type, storing_device_type, tensordict_device_type
-):
-    if storing_device_type is None:
-        if device_type is None:
-            if policy_device_type is None:
-                return tensordict_device_type == "cpu"
+# def _is_consistent_device_type(
+#     device_type, policy_device_type, storing_device_type, tensordict_device_type
+# ):
+#     if storing_device_type is None:
+#         if device_type is None:
+#             if policy_device_type is None:
+#                 return tensordict_device_type == "cpu"
+#
+#             return tensordict_device_type == policy_device_type
+#
+#         return tensordict_device_type == device_type
+#
+#     return tensordict_device_type == storing_device_type
 
-            return tensordict_device_type == policy_device_type
 
-        return tensordict_device_type == device_type
-
-    return tensordict_device_type == storing_device_type
-
-
-@pytest.mark.skipif(
-    IS_WINDOWS and PYTHON_3_10,
-    reason="Windows Access Violation in torch.multiprocessing / BrokenPipeError in multiprocessing.connection",
-)
-@pytest.mark.parametrize("num_env", [2])
-@pytest.mark.parametrize("device", ["cuda", "cpu", None])
-@pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
-@pytest.mark.parametrize("storing_device", ["cuda", "cpu", None])
-def test_output_device_consistency(
-    num_env, device, policy_device, storing_device, seed=40
-):
-    if (
-        device == "cuda" or policy_device == "cuda" or storing_device == "cuda"
-    ) and not torch.cuda.is_available():
-        pytest.skip("cuda is not available")
-
-    if IS_WINDOWS and PYTHON_3_7:
-        if device == "cuda" and policy_device == "cuda" and device is None:
-            pytest.skip(
-                "BrokenPipeError in multiprocessing.connection with Python 3.7 on Windows"
+class TestCollectorDevices:
+    class DeviceLessEnv(EnvBase):
+        # receives data on cpu, outputs on gpu -- tensordict has no device
+        def __init__(self, default_device):
+            self.default_device = default_device
+            super().__init__(device=None)
+            self.observation_spec = CompositeSpec(
+                observation=UnboundedContinuousTensorSpec((), device=default_device)
             )
-
-    _device = "cuda:0" if device == "cuda" else device
-    _policy_device = "cuda:0" if policy_device == "cuda" else policy_device
-    _storing_device = "cuda:0" if storing_device == "cuda" else storing_device
-
-    if num_env == 1:
-
-        def env_fn(seed):
-            env = make_make_env("vec")()
-            env.set_seed(seed)
-            return env
-
-    else:
-
-        def env_fn(seed):
-            # 1226: faster execution
-            # env = ParallelEnv(
-            env = SerialEnv(
-                num_workers=num_env,
-                create_env_fn=make_make_env("vec"),
-                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+            self.reward_spec = UnboundedContinuousTensorSpec(1, device=default_device)
+            self.full_done_spec = CompositeSpec(
+                done=UnboundedContinuousTensorSpec(
+                    1, dtype=torch.bool, device=self.default_device
+                ),
+                truncated=UnboundedContinuousTensorSpec(
+                    1, dtype=torch.bool, device=self.default_device
+                ),
+                terminated=UnboundedContinuousTensorSpec(
+                    1, dtype=torch.bool, device=self.default_device
+                ),
             )
-            return env
+            self.action_spec = UnboundedContinuousTensorSpec((), device=None)
+            assert self.device is None
+            assert self.full_observation_spec is not None
+            assert self.full_done_spec is not None
+            assert self.full_state_spec is not None
+            assert self.full_action_spec is not None
+            assert self.full_reward_spec is not None
 
-    if _policy_device is None:
-        policy = make_policy("vec")
-    else:
-        policy = ParametricPolicy().to(torch.device(_policy_device))
+        def _step(self, tensordict):
+            assert tensordict.device is None
+            with torch.device(self.default_device):
+                return TensorDict(
+                    {
+                        "observation": torch.zeros(()),
+                        "reward": torch.zeros((1,)),
+                        "done": torch.zeros((1,), dtype=torch.bool),
+                        "terminated": torch.zeros((1,), dtype=torch.bool),
+                        "truncated": torch.zeros((1,), dtype=torch.bool),
+                    },
+                    batch_size=[],
+                    device=None,
+                )
 
-    collector = SyncDataCollector(
-        create_env_fn=env_fn,
-        create_env_kwargs={"seed": seed},
-        policy=policy,
-        frames_per_batch=20,
-        max_frames_per_traj=2000,
-        total_frames=20000,
-        device=_device,
-        storing_device=_storing_device,
-    )
-    for _, d in enumerate(collector):
-        assert _is_consistent_device_type(
-            device, policy_device, storing_device, d.device.type
+        def _reset(self, tensordict=None):
+            with torch.device(self.default_device):
+                return TensorDict(
+                    {
+                        "observation": torch.zeros(()),
+                        "done": torch.zeros((1,), dtype=torch.bool),
+                        "terminated": torch.zeros((1,), dtype=torch.bool),
+                        "truncated": torch.zeros((1,), dtype=torch.bool),
+                    },
+                    batch_size=[],
+                    device=None,
+                )
+
+        def _set_seed(self, seed: int | None = None):
+            return seed
+
+    class EnvWithDevice(EnvBase):
+        def __init__(self, default_device):
+            self.default_device = default_device
+            super().__init__(device=self.default_device)
+            self.observation_spec = CompositeSpec(
+                observation=UnboundedContinuousTensorSpec(
+                    (), device=self.default_device
+                )
+            )
+            self.reward_spec = UnboundedContinuousTensorSpec(
+                1, device=self.default_device
+            )
+            self.full_done_spec = CompositeSpec(
+                done=UnboundedContinuousTensorSpec(
+                    1, dtype=torch.bool, device=self.default_device
+                ),
+                truncated=UnboundedContinuousTensorSpec(
+                    1, dtype=torch.bool, device=self.default_device
+                ),
+                terminated=UnboundedContinuousTensorSpec(
+                    1, dtype=torch.bool, device=self.default_device
+                ),
+                device=self.default_device,
+            )
+            self.action_spec = UnboundedContinuousTensorSpec(
+                (), device=self.default_device
+            )
+            assert self.device == torch.device(self.default_device)
+            assert self.full_observation_spec is not None
+            assert self.full_done_spec is not None
+            assert self.full_state_spec is not None
+            assert self.full_action_spec is not None
+            assert self.full_reward_spec is not None
+
+        def _step(self, tensordict):
+            assert tensordict.device == torch.device(self.default_device)
+            with torch.device(self.default_device):
+                return TensorDict(
+                    {
+                        "observation": torch.zeros(()),
+                        "reward": torch.zeros((1,)),
+                        "done": torch.zeros((1,), dtype=torch.bool),
+                        "terminated": torch.zeros((1,), dtype=torch.bool),
+                        "truncated": torch.zeros((1,), dtype=torch.bool),
+                    },
+                    batch_size=[],
+                    device=self.default_device,
+                )
+
+        def _reset(self, tensordict=None):
+            with torch.device(self.default_device):
+                return TensorDict(
+                    {
+                        "observation": torch.zeros(()),
+                        "done": torch.zeros((1,), dtype=torch.bool),
+                        "terminated": torch.zeros((1,), dtype=torch.bool),
+                        "truncated": torch.zeros((1,), dtype=torch.bool),
+                    },
+                    batch_size=[],
+                    device=self.default_device,
+                )
+
+        def _set_seed(self, seed: int | None = None):
+            return seed
+
+    class DeviceLessPolicy(TensorDictModuleBase):
+        in_keys = ["observation"]
+        out_keys = ["action"]
+
+        # receives data on gpu and outputs on cpu
+        def forward(self, tensordict):
+            assert tensordict.device is None
+            return tensordict.set("action", torch.zeros((), device="cpu"))
+
+    class PolicyWithDevice(TensorDictModuleBase):
+        in_keys = ["observation"]
+        out_keys = ["action"]
+        # receives and sends data on gpu
+        default_device = "cuda" if torch.cuda.device_count() else "cpu"
+
+        def forward(self, tensordict):
+            assert tensordict.device == torch.device(self.default_device)
+            return tensordict.set("action", torch.zeros((), device=self.default_device))
+
+    @pytest.mark.parametrize("main_device", get_default_devices())
+    @pytest.mark.parametrize("storing_device", [None, *get_default_devices()])
+    def test_output_device(self, main_device, storing_device):
+
+        # env has no device, policy is strictly on GPU
+        device = None
+        env_device = None
+        policy_device = main_device
+        env = self.DeviceLessEnv(main_device)
+        policy = self.PolicyWithDevice()
+        collector = SyncDataCollector(
+            env,
+            policy,
+            device=device,
+            storing_device=storing_device,
+            policy_device=policy_device,
+            env_device=env_device,
+            frames_per_batch=1,
+            total_frames=10,
         )
-        break
-    assert d.names[-1] == "time"
+        for data in collector:  # noqa: B007
+            break
+        assert data.device == storing_device
 
-    collector.shutdown()
-
-    ccollector = aSyncDataCollector(
-        create_env_fn=env_fn,
-        create_env_kwargs={"seed": seed},
-        policy=policy,
-        frames_per_batch=20,
-        max_frames_per_traj=2000,
-        total_frames=20000,
-        device=_device,
-        storing_device=_storing_device,
-    )
-
-    for _, d in enumerate(ccollector):
-        assert _is_consistent_device_type(
-            device, policy_device, storing_device, d.device.type
+        # env is on cuda, policy has no device
+        device = None
+        env_device = main_device
+        policy_device = None
+        env = self.EnvWithDevice(main_device)
+        policy = self.DeviceLessPolicy()
+        collector = SyncDataCollector(
+            env,
+            policy,
+            device=device,
+            storing_device=storing_device,
+            policy_device=policy_device,
+            env_device=env_device,
+            frames_per_batch=1,
+            total_frames=10,
         )
-        break
-    assert d.names[-1] == "time"
+        for data in collector:  # noqa: B007
+            break
+        assert data.device == storing_device
 
-    ccollector.shutdown()
-    del ccollector
+        # env and policy are on device
+        device = main_device
+        env_device = None
+        policy_device = None
+        env = self.EnvWithDevice(main_device)
+        policy = self.PolicyWithDevice()
+        collector = SyncDataCollector(
+            env,
+            policy,
+            device=device,
+            storing_device=storing_device,
+            policy_device=policy_device,
+            env_device=env_device,
+            frames_per_batch=1,
+            total_frames=10,
+        )
+        for data in collector:  # noqa: B007
+            break
+        assert data.device == main_device
+
+        # same but more specific
+        device = None
+        env_device = main_device
+        policy_device = main_device
+        env = self.EnvWithDevice(main_device)
+        policy = self.PolicyWithDevice()
+        collector = SyncDataCollector(
+            env,
+            policy,
+            device=device,
+            storing_device=storing_device,
+            policy_device=policy_device,
+            env_device=env_device,
+            frames_per_batch=1,
+            total_frames=10,
+        )
+        for data in collector:  # noqa: B007
+            break
+        assert data.device == main_device
+
+        # none has a device
+        device = None
+        env_device = None
+        policy_device = None
+        env = self.DeviceLessEnv(main_device)
+        policy = self.DeviceLessPolicy()
+        collector = SyncDataCollector(
+            env,
+            policy,
+            device=device,
+            storing_device=storing_device,
+            policy_device=policy_device,
+            env_device=env_device,
+            frames_per_batch=1,
+            total_frames=10,
+        )
+        for data in collector:  # noqa: B007
+            break
+        assert data.device == storing_device
+
+
+# @pytest.mark.skipif(
+#     IS_WINDOWS and PYTHON_3_10,
+#     reason="Windows Access Violation in torch.multiprocessing / BrokenPipeError in multiprocessing.connection",
+# )
+# @pytest.mark.parametrize("num_env", [2])
+# @pytest.mark.parametrize("device", ["cuda", "cpu", None])
+# @pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
+# @pytest.mark.parametrize("storing_device", ["cuda", "cpu", None])
+# def test_output_device_consistency(
+#     num_env, device, policy_device, storing_device, seed=40
+# ):
+#     if (
+#         device == "cuda" or policy_device == "cuda" or storing_device == "cuda"
+#     ) and not torch.cuda.is_available():
+#         pytest.skip("cuda is not available")
+#
+#     if IS_WINDOWS and PYTHON_3_7:
+#         if device == "cuda" and policy_device == "cuda" and device is None:
+#             pytest.skip(
+#                 "BrokenPipeError in multiprocessing.connection with Python 3.7 on Windows"
+#             )
+#
+#     _device = "cuda:0" if device == "cuda" else device
+#     _policy_device = "cuda:0" if policy_device == "cuda" else policy_device
+#     _storing_device = "cuda:0" if storing_device == "cuda" else storing_device
+#
+#     if num_env == 1:
+#
+#         def env_fn(seed):
+#             env = make_make_env("vec")()
+#             env.set_seed(seed)
+#             return env
+#
+#     else:
+#
+#         def env_fn(seed):
+#             # 1226: faster execution
+#             # env = ParallelEnv(
+#             env = SerialEnv(
+#                 num_workers=num_env,
+#                 create_env_fn=make_make_env("vec"),
+#                 create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+#             )
+#             return env
+#
+#     if _policy_device is None:
+#         policy = make_policy("vec")
+#     else:
+#         policy = ParametricPolicy().to(torch.device(_policy_device))
+#
+#     collector = SyncDataCollector(
+#         create_env_fn=env_fn,
+#         create_env_kwargs={"seed": seed},
+#         policy=policy,
+#         frames_per_batch=20,
+#         max_frames_per_traj=2000,
+#         total_frames=20000,
+#         device=_device,
+#         storing_device=_storing_device,
+#     )
+#     for _, d in enumerate(collector):
+#         assert _is_consistent_device_type(
+#             device, policy_device, storing_device, d.device.type
+#         )
+#         break
+#     assert d.names[-1] == "time"
+#
+#     collector.shutdown()
+#
+#     ccollector = aSyncDataCollector(
+#         create_env_fn=env_fn,
+#         create_env_kwargs={"seed": seed},
+#         policy=policy,
+#         frames_per_batch=20,
+#         max_frames_per_traj=2000,
+#         total_frames=20000,
+#         device=_device,
+#         storing_device=_storing_device,
+#     )
+#
+#     for _, d in enumerate(ccollector):
+#         assert _is_consistent_device_type(
+#             device, policy_device, storing_device, d.device.type
+#         )
+#         break
+#     assert d.names[-1] == "time"
+#
+#     ccollector.shutdown()
+#     del ccollector
 
 
 @pytest.mark.parametrize("num_env", [1, 2])

@@ -918,6 +918,8 @@ class _LazyStackedMixin(Generic[T]):
         return torch.stack([spec.rand(shape) for spec in self._specs], dim)
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> T:
+        if dest is None:
+            return self
         return torch.stack([spec.to(dest) for spec in self._specs], self.dim)
 
     def unbind(self, dim: int):
@@ -1205,6 +1207,8 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         self.mask = mask
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+        if dest is None:
+            return self
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
@@ -1750,6 +1754,8 @@ class BoundedTensorSpec(TensorSpec):
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
+        elif dest is None:
+            return self
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
@@ -1845,6 +1851,8 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
+        elif dest is None:
+            return self
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
@@ -1979,6 +1987,8 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
+        elif dest is None:
+            return self
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
@@ -2167,6 +2177,8 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
+        elif dest is None:
+            return self
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
@@ -2690,6 +2702,8 @@ class DiscreteTensorSpec(TensorSpec):
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
+        elif dest is None:
+            return self
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
@@ -2796,6 +2810,8 @@ class BinaryDiscreteTensorSpec(DiscreteTensorSpec):
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
+        elif dest is None:
+            return self
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
@@ -2908,6 +2924,8 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
+        elif dest is None:
+            return self
         else:
             dest_dtype = self.dtype
             dest_device = torch.device(dest)
@@ -3668,6 +3686,8 @@ class CompositeSpec(TensorSpec):
         return len(self.keys())
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+        if dest is None:
+            return self
         if not isinstance(dest, (str, int, torch.device)):
             raise ValueError(
                 "Only device casting is allowed with specs of type CompositeSpec."

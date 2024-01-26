@@ -244,8 +244,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         run_type_checks: bool = False,
         allow_done_after_reset: bool = False,
     ):
-        if device is None:
-            device = torch.device("cpu")
         self.__dict__.setdefault("_batch_size", None)
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
@@ -360,8 +358,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     @property
     def device(self) -> torch.device:
         device = self.__dict__.get("_device", None)
-        if device is None:
-            device = self.__dict__["_device"] = torch.device("cpu")
         return device
 
     @device.setter
@@ -618,7 +614,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def action_spec(self, value: TensorSpec) -> None:
         try:
             self.input_spec.unlock_()
-            device = self.input_spec.device
+            device = self.input_spec._device
             try:
                 delattr(self, "_action_keys")
             except AttributeError:
@@ -806,7 +802,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def reward_spec(self, value: TensorSpec) -> None:
         try:
             self.output_spec.unlock_()
-            device = self.output_spec.device
+            device = self.output_spec._device
             try:
                 delattr(self, "_reward_keys")
             except AttributeError:
@@ -1168,7 +1164,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def observation_spec(self, value: TensorSpec) -> None:
         try:
             self.output_spec.unlock_()
-            device = self.output_spec.device
             if not isinstance(value, CompositeSpec):
                 raise TypeError("The type of an observation_spec must be Composite.")
             elif value.shape[: len(self.batch_size)] != self.batch_size:
@@ -1179,6 +1174,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 raise ValueError(
                     f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
+            device = self.output_spec._device
             self.output_spec["full_observation_spec"] = value.to(device)
         finally:
             self.output_spec.lock_()

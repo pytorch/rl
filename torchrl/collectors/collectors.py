@@ -26,7 +26,6 @@ from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Uni
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict import is_tensor_collection
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
@@ -546,6 +545,12 @@ class SyncDataCollector(DataCollectorBase):
         self.env_device = env_device
         self.policy_device = policy_device
         self.device = device
+        # Check if we need to cast things from device to device
+        # If the policy has a None device and the env too, no need to cast (we don't know
+        # and assume the user knows what she's doing).
+        # If the devices match we're happy too.
+        # Only if the values differ we need to cast
+        self._cast_to_policy_device = self.policy_device != self.env_device
 
         self.env: EnvBase = env
         self.closed = False
@@ -684,6 +689,8 @@ class SyncDataCollector(DataCollectorBase):
                 input = self._tensordict_out
                 if self.policy_device:
                     input = input.to(self.policy_device)
+                elif self._cast_to_policy_device and input.device is not None:
+                    input.clear_device_()
                 # we cast to policy device, we'll deal with the device later
                 self._tensordict_out = self.policy(input)
 
@@ -699,9 +706,7 @@ class SyncDataCollector(DataCollectorBase):
             )
         else:
             # erase all devices
-            for td in self._tensordict_out.values(True):
-                if is_tensor_collection(td):
-                    td.clear_device_()
+            self._tensordict_out.clear_device_()
 
         self._tensordict_out = (
             self._tensordict_out.unsqueeze(-1)
@@ -892,7 +897,21 @@ class SyncDataCollector(DataCollectorBase):
                 ):
                     self.env.rand_action(self._tensordict)
                 else:
+                    if self._cast_to_policy_device:
+                        if self.policy_device is not None:
+                            self._tensordict = self._tensordict.to(self.policy_device)
+                        elif self.policy_device is None:
+                            # we know the tensordict has a device otherwise we would not be here
+                            self._tensordict.clear_device_()
                     self.policy(self._tensordict)
+
+                if self._cast_to_policy_device:
+                    if self.env_device is not None:
+                        self._tensordict = self._tensordict.to(self.env_device)
+                    elif self.env_device is None:
+                        # we know the tensordict has a device otherwise we would not be here
+                        self._tensordict.clear_device_()
+
                 tensordict, tensordict_ = self.env.step_and_maybe_reset(
                     self._tensordict
                 )
