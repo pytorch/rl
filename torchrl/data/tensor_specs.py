@@ -3497,34 +3497,20 @@ class CompositeSpec(TensorSpec):
             raise TypeError(f"Got key of type {type(key)} when a string was expected.")
         if key in {"shape", "device", "dtype", "space"}:
             raise AttributeError(f"CompositeSpec[{key}] cannot be set")
-        try:
-            if value is not None and value.device != self.device:
-                raise RuntimeError(
-                    f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "
-                    f"All devices of CompositeSpec must match."
-                )
-        except RuntimeError as err:
-            cond1 = DEVICE_ERR_MSG in str(err)
-            cond2 = self._device is None
-            if cond1 and cond2:
-                try:
-                    device_val = value.device
-                    self.to(device_val)
-                except RuntimeError as suberr:
-                    if DEVICE_ERR_MSG in str(suberr):
-                        pass
-                    else:
-                        raise suberr
-            elif cond1:
-                pass
-            else:
-                raise err
+        if (
+            value is not None
+            and self.device is not None
+            and value.device != self.device
+        ):
+            raise RuntimeError(
+                f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "
+                f"All devices of CompositeSpec must match."
+            )
 
         self.set(key, value)
 
     def __iter__(self):
-        for k in self._specs:
-            yield k
+        yield from self._specs
 
     def __delitem__(self, key: str) -> None:
         if isinstance(key, tuple) and len(key) > 1:
