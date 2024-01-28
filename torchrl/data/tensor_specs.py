@@ -81,12 +81,14 @@ NO_DEFAULT = object()
 def _default_dtype_and_device(
     dtype: Union[None, torch.dtype],
     device: Union[None, str, int, torch.device],
-) -> Tuple[torch.dtype, torch.device]:
+    allow_none_device: bool=False,
+) -> Tuple[torch.dtype, torch.device | None]:
     if dtype is None:
         dtype = torch.get_default_dtype()
-    if device is None:
-        device = torch.device("cpu")
-    device = torch.device(device)
+    if device is not None:
+        device = torch.device(device)
+    else:
+        device = torch.zeros(()).device
     return dtype, device
 
 
@@ -522,7 +524,7 @@ class TensorSpec:
 
     shape: torch.Size
     space: Union[None, Box]
-    device: torch.device = torch.device("cpu")
+    device: torch.device | None = None
     dtype: torch.dtype = torch.float
     domain: str = ""
 
@@ -538,6 +540,10 @@ class TensorSpec:
             return func
 
         return decorator
+
+    def clear_device_(self):
+        """A no-op for all leaf specs (which must have a device)."""
+        pass
 
     def encode(
         self, val: Union[np.ndarray, torch.Tensor], *, ignore_device=False
@@ -808,6 +814,11 @@ class _LazyStackedMixin(Generic[T]):
         self.dim = dim
         if self.dim < 0:
             self.dim = len(self.shape) + self.dim
+
+    def clear_device_(self):
+        """Clears the device of the CompositeSpec"""
+        for spec in self._specs:
+            spec.clear_device_()
 
     def __getitem__(self, item):
         is_key = isinstance(item, str) or (
@@ -1533,8 +1544,6 @@ class BoundedTensorSpec(TensorSpec):
         dtype, device = _default_dtype_and_device(dtype, device)
         if dtype is None:
             dtype = torch.get_default_dtype()
-        if device is None:
-            device = torch._get_default_device()
 
         if not isinstance(low, torch.Tensor):
             low = torch.tensor(low, dtype=dtype, device=device)
@@ -3223,6 +3232,15 @@ class CompositeSpec(TensorSpec):
             to be ``True`` for the corresponding tensors, and :obj:`project()` will have no
             effect. `spec.encode` cannot be used with missing values.
 
+    Attributes:
+        device (torch.device or None): if not specified, the device of the composite
+            spec is ``None`` (as it is the case for TensorDicts). A non-none device
+            constraints all leaves to be of the same device. On the other hand,
+            a ``None`` device allows leaves to have different devices. Defaults
+            to ``None``.
+        shape (torch.Size): the leading shape of all the leaves. Equivalent
+            to the batch-size of the corresponding tensordicts.
+
     Examples:
         >>> pixels_spec = BoundedTensorSpec(
         ...    torch.zeros(3,32,32),
@@ -3254,7 +3272,6 @@ class CompositeSpec(TensorSpec):
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
-
 
     Examples:
         >>> # we can build a nested composite spec using unnamed arguments
@@ -3393,25 +3410,20 @@ class CompositeSpec(TensorSpec):
 
     @property
     def device(self) -> DEVICE_TYPING:
-        if self._device is None:
-            # try to replace device by the true device
-            _device = None
-            for value in self.values():
-                if value is not None:
-                    _device = value.device
-            if _device is None:
-                raise RuntimeError(
-                    "device of empty CompositeSpec is not defined. "
-                    "You can set it directly by calling "
-                    "`spec.device = device`."
-                )
-            self._device = _device
         return self._device
 
     @device.setter
     def device(self, device: DEVICE_TYPING):
+        if device is None:
+            raise RuntimeError("To erase the device of a composite spec, call "
+                               "spec.clear_device_().")
         device = torch.device(device)
         self.to(device)
+
+    def clear_device_(self):
+        """Clears the device of the CompositeSpec."""
+        for spec in self._specs:
+            spec.clear_device_()
 
     def __getitem__(self, idx):
         """Indexes the current CompositeSpec based on the provided index."""
@@ -3474,7 +3486,7 @@ class CompositeSpec(TensorSpec):
     def __setitem__(self, key, value):
         if isinstance(key, tuple) and len(key) > 1:
             if key[0] not in self.keys(True):
-                self[key[0]] = CompositeSpec(shape=self.shape)
+                self[key[0]] = CompositeSpec(shape=self.shape, device=self.device)
             self[key[0]][key[1:]] = value
             return
         elif isinstance(key, tuple):

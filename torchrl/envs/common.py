@@ -171,6 +171,51 @@ class _EnvPostInit(abc.ABCMeta):
 class EnvBase(nn.Module, metaclass=_EnvPostInit):
     """Abstract environment parent class.
 
+    Keyword Args:
+        device (torch.device): The device of the environment. Deviceless environments
+            are allowed (device=None). If not ``None``, all specs will be cast
+            on that device and it is expected that all inputs and outputs will
+            live on that device.
+            Defaults to ``None``.
+        dtype (deprecated): dtype of the observations. Will be deprecated in v0.4.
+        batch_size (torch.Size or equivalent, optional): batch-size of the environment.
+            Corresponds to the leading dimension of all the input and output
+            tensordicts the environment reads and writes. Defaults to an empty batch-size.
+        run_type_checks (bool, optional): If ``True``, type-checks will occur
+            at every reset and every step. Defaults to ``False``.
+        allow_done_after_reset (bool, optional): if ``True``, an environment can
+            be done after a call to :meth:`~.reset` is made. Defaults to ``False``.
+
+    Attributes:
+        done_spec (CompositeSpec): equivalent to ``full_done_spec`` as all
+            ``done_specs`` contain at least a ``"done"`` and a ``"terminated"`` entry
+        action_spec (TensorSpec): the spec of the action. Links to the spec of the leaf
+            action if only one action tensor is to be expected. Otherwise links to
+            ``full_action_spec``.
+        observation_spec (CompositeSpec): equivalent to ``full_observation_spec``.
+        reward_spec (TensorSpec): the spec of the reward. Links to the spec of the leaf
+            reward if only one reward tensor is to be expected. Otherwise links to
+            ``full_reward_spec``.
+        state_spec (CompositeSpec): equivalent to ``full_state_spec``.
+        full_done_spec (CompositeSpec): a composite spec such that ``full_done_spec.zero()``
+            returns a tensordict containing only the leaves encoding the done status of the
+            environment.
+        full_action_spec (CompositeSpec): a composite spec such that ``full_action_spec.zero()``
+            returns a tensordict containing only the leaves encoding the action of the
+            environment.
+        full_observation_spec (CompositeSpec): a composite spec such that ``full_observation_spec.zero()``
+            returns a tensordict containing only the leaves encoding the observation of the
+            environment.
+        full_reward_spec (CompositeSpec): a composite spec such that ``full_reward_spec.zero()``
+            returns a tensordict containing only the leaves encoding the reward of the
+            environment.
+        full_state_spec (CompositeSpec): a composite spec such that ``full_state_spec.zero()``
+            returns a tensordict containing only the leaves encoding the inputs (actions
+            excluded) of the environment.
+        batch_size (torch.Size): The batch-size of the environment.
+        device (torch.device): the device where the input/outputs of the environment
+            are to be expected. Can be ``None``.
+
     Methods:
         step (TensorDictBase -> TensorDictBase): step in the environment
         reset (TensorDictBase, optional -> TensorDictBase): reset the environment
@@ -180,6 +225,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             steps if no policy is provided)
 
     Examples:
+        >>> from torchrl.envs import EnvBase
+        >>> class CounterEnv(EnvBase):
+        ...     def __init__(self, batch_size=(), device=None, **kwargs):
+        ...         self.observation_spec = CompositeSpec(
+        ...             count=UnboundedContinuousTensorSpec(batch_size, device=device, dtype=torch.int64))
+        ...         self.action_spec = UnboundedContinuousTensorSpec(batch_size, device=device, dtype=torch.int8)
+        ...         # done spec and reward spec are set automatically
+        ...     def _step(self, tensordict):
+        ...
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> env = GymEnv("Pendulum-v1")
         >>> env.batch_size  # how many envs are run at once
@@ -260,6 +314,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     def __init__(
         self,
+        *,
         device: DEVICE_TYPING = None,
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
