@@ -474,7 +474,9 @@ class _BatchedEnv(EnvBase):
                 self.shared_tensordicts = [
                     td.clone() for td in self.shared_tensordict_parent.unbind(0)
                 ]
-                self.shared_tensordict_parent = LazyStackedTensorDict.lazy_stack(self.shared_tensordicts, 0)
+                self.shared_tensordict_parent = LazyStackedTensorDict.lazy_stack(
+                    self.shared_tensordicts, 0
+                )
             else:
                 # Multi-task: we share tensordict that *may* have different keys
                 # LazyStacked already stores this so we don't need to do anything
