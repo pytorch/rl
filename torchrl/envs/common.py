@@ -59,6 +59,7 @@ class EnvMetaData:
         env_str: str,
         device: torch.device,
         batch_locked: bool = True,
+        device_map: dict = None,
     ):
         self.device = device
         self.tensordict = tensordict
@@ -66,6 +67,7 @@ class EnvMetaData:
         self.batch_size = batch_size
         self.env_str = env_str
         self.batch_locked = batch_locked
+        self.device_map = device_map
 
     @property
     def tensordict(self):
@@ -100,7 +102,16 @@ class EnvMetaData:
         device = env.device
         specs = specs.to("cpu")
         batch_locked = env.batch_locked
-        return EnvMetaData(tensordict, specs, batch_size, env_str, device, batch_locked)
+        # we need to save the device map, as the tensordict will be placed on cpu
+        device_map = {}
+
+        def fill_device_map(name, val, device_map=device_map):
+            device_map[name] = val.device
+
+        tensordict.named_apply(fill_device_map, nested_keys=True)
+        return EnvMetaData(
+            tensordict, specs, batch_size, env_str, device, batch_locked, device_map
+        )
 
     def expand(self, *size: int) -> EnvMetaData:
         tensordict = self.tensordict.expand(*size).clone()
@@ -112,6 +123,7 @@ class EnvMetaData:
             self.env_str,
             self.device,
             self.batch_locked,
+            self.device_map,
         )
 
     def clone(self):
@@ -122,13 +134,23 @@ class EnvMetaData:
             deepcopy(self.env_str),
             self.device,
             self.batch_locked,
+            self.device_map,
         )
 
     def to(self, device: DEVICE_TYPING) -> EnvMetaData:
+        if device is not None:
+            device = torch.device(device)
+            device_map = {key: device for key in self.device_map}
         tensordict = self.tensordict.contiguous().to(device)
         specs = self.specs.to(device)
         return EnvMetaData(
-            tensordict, specs, self.batch_size, self.env_str, device, self.batch_locked
+            tensordict,
+            specs,
+            self.batch_size,
+            self.env_str,
+            device,
+            self.batch_locked,
+            device_map,
         )
 
 
@@ -2270,10 +2292,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             [None, 'time']
 
         """
-        try:
-            policy_device = next(policy.parameters()).device
-        except (StopIteration, AttributeError):
-            policy_device = self.device
+        if auto_cast_to_device:
+            try:
+                policy_device = next(policy.parameters()).device
+            except (StopIteration, AttributeError):
+                policy_device = None
+        else:
+            policy_device = None
 
         env_device = self.device
 
@@ -2323,10 +2348,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordicts = []
         for i in range(max_steps):
             if auto_cast_to_device:
-                tensordict = tensordict.to(policy_device, non_blocking=True)
+                if policy_device is not None:
+                    tensordict = tensordict.to(policy_device, non_blocking=True)
+                else:
+                    tensordict.clear_device_()
             tensordict = policy(tensordict)
             if auto_cast_to_device:
-                tensordict = tensordict.to(env_device, non_blocking=True)
+                if env_device is not None:
+                    tensordict = tensordict.to(env_device, non_blocking=True)
+                else:
+                    tensordict.clear_device_()
             tensordict = self.step(tensordict)
             tensordicts.append(tensordict.clone(False))
 
@@ -2371,10 +2402,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict_ = tensordict
         for i in range(max_steps):
             if auto_cast_to_device:
-                tensordict_ = tensordict_.to(policy_device, non_blocking=True)
+                if policy_device is not None:
+                    tensordict_ = tensordict_.to(policy_device, non_blocking=True)
+                else:
+                    tensordict_.clear_device_()
             tensordict_ = policy(tensordict_)
             if auto_cast_to_device:
-                tensordict_ = tensordict_.to(env_device, non_blocking=True)
+                if env_device is not None:
+                    tensordict_ = tensordict_.to(env_device, non_blocking=True)
+                else:
+                    tensordict_.clear_device_()
             tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
             tensordicts.append(tensordict)
             if i == max_steps - 1:

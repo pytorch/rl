@@ -315,6 +315,15 @@ class _BatchedEnv(EnvBase):
 
             self._dummy_env_str = meta_data.env_str
             self._env_tensordict = meta_data.tensordict
+            if device is None:  # In other cases, the device will be mapped later
+                self._env_tensordict.clear_device_()
+                device_map = meta_data.device_map
+
+                def map_device(key, value, device_map=device_map):
+                    return value.to(device_map[key])
+
+                self._env_tensordict.named_apply(map_device, nested_keys=True)
+
             self._batch_locked = meta_data.batch_locked
         else:
             self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
@@ -474,16 +483,17 @@ class _BatchedEnv(EnvBase):
                 self.shared_tensordicts = [
                     td.clone() for td in self.shared_tensordict_parent.unbind(0)
                 ]
-                self.shared_tensordict_parent = torch.stack(self.shared_tensordicts, 0)
+                self.shared_tensordict_parent = LazyStackedTensorDict.lazy_stack(
+                    self.shared_tensordicts, 0
+                )
             else:
                 # Multi-task: we share tensordict that *may* have different keys
                 # LazyStacked already stores this so we don't need to do anything
                 self.shared_tensordicts = self.shared_tensordict_parent
-            if self.shared_tensordict_parent.device.type == "cpu":
-                if self._share_memory:
-                    self.shared_tensordict_parent.share_memory_()
-                elif self._memmap:
-                    self.shared_tensordict_parent.memmap_()
+            if self._share_memory:
+                self.shared_tensordict_parent.share_memory_()
+            elif self._memmap:
+                self.shared_tensordict_parent.memmap_()
         else:
             if self._share_memory:
                 self.shared_tensordict_parent.share_memory_()
@@ -909,7 +919,17 @@ class ParallelEnv(_BatchedEnv):
         self.parent_channels = []
         self._workers = []
         func = _run_worker_pipe_shared_mem
-        if self.shared_tensordict_parent.device.type == "cuda":
+        # We look for cuda tensors through the leaves
+        # because the shared tensordict could be partially on cuda
+        # and some leaves may be inaccessible through get (e.g., LazyStacked)
+        has_cuda = [False]
+
+        def look_for_cuda(tensor, has_cuda=has_cuda):
+            has_cuda[0] = has_cuda[0] or tensor.is_cuda
+
+        self.shared_tensordict_parent.apply(look_for_cuda)
+        has_cuda = has_cuda[0]
+        if has_cuda:
             self.event = torch.cuda.Event()
         else:
             self.event = None
@@ -1026,9 +1046,12 @@ class ParallelEnv(_BatchedEnv):
         if self.shared_tensordict_parent.device == device:
             next_td = next_td.clone()
             tensordict_ = tensordict_.clone()
-        else:
+        elif device is not None:
             next_td = next_td.to(device, non_blocking=True)
             tensordict_ = tensordict_.to(device, non_blocking=True)
+        else:
+            next_td = next_td.clone().clear_device_()
+            tensordict_ = tensordict_.clone().clear_device_()
         tensordict.set("next", next_td)
         return tensordict, tensordict_
 
@@ -1282,7 +1305,18 @@ def _run_worker_pipe_shared_mem(
     verbose: bool = False,
 ) -> None:
     device = shared_tensordict.device
-    if device.type == "cuda":
+    if device is None or device.type != "cuda":
+        # Check if some tensors are shared on cuda
+        has_cuda = [device]
+
+        def look_for_cuda(tensor, has_cuda=has_cuda):
+            has_cuda[0] = has_cuda[0] or tensor.is_cuda
+
+        shared_tensordict.apply(look_for_cuda)
+        has_cuda = has_cuda[0]
+    else:
+        has_cuda = device.type == "cuda"
+    if has_cuda:
         event = torch.cuda.Event()
     else:
         event = None
