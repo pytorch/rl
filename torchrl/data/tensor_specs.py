@@ -81,7 +81,7 @@ NO_DEFAULT = object()
 def _default_dtype_and_device(
     dtype: Union[None, torch.dtype],
     device: Union[None, str, int, torch.device],
-    allow_none_device: bool=False,
+    allow_none_device: bool = False,
 ) -> Tuple[torch.dtype, torch.device | None]:
     if dtype is None:
         dtype = torch.get_default_dtype()
@@ -816,7 +816,7 @@ class _LazyStackedMixin(Generic[T]):
             self.dim = len(self.shape) + self.dim
 
     def clear_device_(self):
-        """Clears the device of the CompositeSpec"""
+        """Clears the device of the CompositeSpec."""
         for spec in self._specs:
             spec.clear_device_()
 
@@ -3415,8 +3415,9 @@ class CompositeSpec(TensorSpec):
     @device.setter
     def device(self, device: DEVICE_TYPING):
         if device is None:
-            raise RuntimeError("To erase the device of a composite spec, call "
-                               "spec.clear_device_().")
+            raise RuntimeError(
+                "To erase the device of a composite spec, call " "spec.clear_device_()."
+            )
         device = torch.device(device)
         self.to(device)
 
