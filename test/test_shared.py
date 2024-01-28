@@ -9,7 +9,7 @@ import warnings
 
 import pytest
 import torch
-from tensordict import TensorDict, LazyStackedTensorDict
+from tensordict import LazyStackedTensorDict, TensorDict
 from torch import multiprocessing as mp
 
 

@@ -348,7 +348,7 @@ class _BatchedEnv(EnvBase):
             self.done_spec = output_spec["full_done_spec"]
 
             self._dummy_env_str = str(meta_data[0])
-            self._env_tensordict = torch.stack(
+            self._env_tensordict = LazyStackedTensorDict.lazy_stack(
                 [meta_data.tensordict for meta_data in meta_data], 0
             )
             self._batch_locked = meta_data[0].batch_locked
@@ -474,7 +474,7 @@ class _BatchedEnv(EnvBase):
                 self.shared_tensordicts = [
                     td.clone() for td in self.shared_tensordict_parent.unbind(0)
                 ]
-                self.shared_tensordict_parent = torch.stack(self.shared_tensordicts, 0)
+                self.shared_tensordict_parent = LazyStackedTensorDict.lazy_stack(self.shared_tensordicts, 0)
             else:
                 # Multi-task: we share tensordict that *may* have different keys
                 # LazyStacked already stores this so we don't need to do anything
