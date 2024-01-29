@@ -106,7 +106,6 @@ We will cover six crucial components of TorchRL:
 
 # sphinx_gallery_start_ignore
 import warnings
-from typing import Tuple
 
 warnings.filterwarnings("ignore")
 from torch import multiprocessing

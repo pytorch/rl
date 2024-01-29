@@ -70,7 +70,6 @@ Recurrent DQN: Training recurrent policies
 
 # sphinx_gallery_start_ignore
 import warnings
-from typing import Tuple
 
 warnings.filterwarnings("ignore")
 from torch import multiprocessing

@@ -16,7 +16,6 @@ This tutorial explains how to use pretrained models in TorchRL.
 
 # sphinx_gallery_start_ignore
 import warnings
-from typing import Tuple
 
 warnings.filterwarnings("ignore")
 from torch import multiprocessing
