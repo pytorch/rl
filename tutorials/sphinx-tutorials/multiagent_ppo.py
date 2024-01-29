@@ -659,8 +659,8 @@ for tensordict_data in collector:
     with torch.no_grad():
         GAE(
             tensordict_data,
-            params=loss_module.critic_params,
-            target_params=loss_module.target_critic_params,
+            params=loss_module.critic_network_params,
+            target_params=loss_module.target_critic_network_params,
         )  # Compute GAE and add it to the data
 
     data_view = tensordict_data.reshape(-1)  # Flatten the batch size to shuffle data

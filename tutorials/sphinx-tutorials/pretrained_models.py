@@ -13,6 +13,24 @@ This tutorial explains how to use pretrained models in TorchRL.
 # in one or the other context. In this tutorial, we will be using R3M (https://arxiv.org/abs/2203.12601),
 # but other models (e.g. VIP) will work equally well.
 #
+
+# sphinx_gallery_start_ignore
+import warnings
+from typing import Tuple
+
+warnings.filterwarnings("ignore")
+from torch import multiprocessing
+
+# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
+# `__main__` method call, but for the easy of reading the code switch to fork
+# which is also a default spawn method in Google's Colaboratory
+try:
+    multiprocessing.set_start_method("fork")
+except RuntimeError:
+    assert multiprocessing.get_start_method() == "fork"
+
+# sphinx_gallery_end_ignore
+
 import torch.cuda
 from tensordict.nn import TensorDictSequential
 from torch import nn
