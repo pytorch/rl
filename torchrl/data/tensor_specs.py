@@ -3365,19 +3365,13 @@ class CompositeSpec(TensorSpec):
             for key, item in self.items():
                 if item is None:
                     continue
-
-                try:
-                    item_device = item.device
-                except RuntimeError as err:
-                    cond1 = DEVICE_ERR_MSG in str(err)
-                    if cond1:
-                        item_device = _device
-                    else:
-                        raise err
-
-                if _device is None:
-                    _device = item_device
-                elif item_device != _device:
+                if (
+                    isinstance(item, CompositeSpec)
+                    and item.device is None
+                    and _device is not None
+                ):
+                    item = item.clone().to(_device)
+                elif (_device is not None) and (item.device != _device):
                     raise RuntimeError(
                         f"Setting a new attribute ({key}) on another device "
                         f"({item.device} against {_device}). All devices of "
@@ -3502,10 +3496,13 @@ class CompositeSpec(TensorSpec):
             and self.device is not None
             and value.device != self.device
         ):
-            raise RuntimeError(
-                f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "
-                f"All devices of CompositeSpec must match."
-            )
+            if isinstance(value, CompositeSpec) and value.device is None:
+                value = value.clone().to(self.device)
+            else:
+                raise RuntimeError(
+                    f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "
+                    f"All devices of CompositeSpec must match."
+                )
 
         self.set(key, value)
 

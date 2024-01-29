@@ -326,10 +326,18 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self.__dict__["_device"] = torch.device(device)
             output_spec = self.__dict__.get("_output_spec", None)
             if output_spec is not None:
-                self.__dict__["_output_spec"] = output_spec.to(self.device)
+                self.__dict__["_output_spec"] = (
+                    output_spec.to(self.device)
+                    if self.device is not None
+                    else output_spec
+                )
             input_spec = self.__dict__.get("_input_spec", None)
             if input_spec is not None:
-                self.__dict__["_input_spec"] = input_spec.to(self.device)
+                self.__dict__["_input_spec"] = (
+                    input_spec.to(self.device)
+                    if self.device is not None
+                    else input_spec
+                )
 
         super().__init__()
         self.dtype = dtype_map.get(dtype, dtype)
@@ -946,7 +954,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @full_reward_spec.setter
     def full_reward_spec(self, spec: CompositeSpec) -> None:
-        self.reward_spec = spec
+        self.reward_spec = spec.to(self.device) if self.device is not None else spec
 
     # done spec
     @property
@@ -1011,7 +1019,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @full_done_spec.setter
     def full_done_spec(self, spec: CompositeSpec) -> None:
-        self.done_spec = spec
+        self.done_spec = spec.to(self.device) if self.device is not None else spec
 
     # Done spec: done specs belong to output_spec
     @property
@@ -1252,7 +1260,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
             device = self.output_spec._device
-            self.output_spec["full_observation_spec"] = value.to(device)
+            self.output_spec["full_observation_spec"] = (
+                value.to(device) if device is not None else value
+            )
         finally:
             self.output_spec.lock_()
 
@@ -1326,7 +1336,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     raise ValueError(
                         f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                     )
-                self.input_spec["full_state_spec"] = value.to(device)
+                self.input_spec["full_state_spec"] = (
+                    value.to(device) if device is not None else value
+                )
         finally:
             self.input_spec.lock_()
 
