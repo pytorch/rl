@@ -8,6 +8,7 @@ conda activate ./env
 apt-get update && apt-get remove swig -y && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0
 ln -s /usr/bin/swig3.0 /usr/bin/swig
 
+export LAZY_LEGACY_OP=False
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"

@@ -357,7 +357,7 @@ class _BatchedEnv(EnvBase):
             self.done_spec = output_spec["full_done_spec"]
 
             self._dummy_env_str = str(meta_data[0])
-            self._env_tensordict = torch.stack(
+            self._env_tensordict = LazyStackedTensorDict.lazy_stack(
                 [meta_data.tensordict for meta_data in meta_data], 0
             )
             self._batch_locked = meta_data[0].batch_locked
@@ -472,7 +472,7 @@ class _BatchedEnv(EnvBase):
                 )
                 for tensordict in shared_tensordict_parent
             ]
-            shared_tensordict_parent = torch.stack(
+            shared_tensordict_parent = LazyStackedTensorDict.lazy_stack(
                 shared_tensordict_parent,
                 0,
             )

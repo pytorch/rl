@@ -7,7 +7,11 @@ from warnings import warn
 
 import torch
 
+from tensordict import set_lazy_legacy
+
 from torch import multiprocessing as mp
+
+set_lazy_legacy(False).set()
 
 if torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1

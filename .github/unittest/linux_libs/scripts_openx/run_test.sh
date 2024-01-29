@@ -9,6 +9,7 @@ apt-get update && apt-get remove swig -y && apt-get install -y git gcc patchelf 
 ln -s /usr/bin/swig3.0 /usr/bin/swig
 
 export PYTORCH_TEST_WITH_SLOW='1'
+export LAZY_LEGACY_OP=False
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'

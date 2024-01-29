@@ -34,6 +34,8 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
 
     GitHub: https://github.com/facebookresearch/gen_dgrl
 
+    The data format follows the :ref:`TED convention <TED-format>`.
+
     This class gives you access to the ProcGen dataset. Each `dataset_id` registered
     in `GenDGRLExperienceReplay.available_datasets` consists in a particular task
     (`"bigfish"`, `"bossfight"`, ...) separated from a category (`"1M_E"`, `"1M_S"`, ...)

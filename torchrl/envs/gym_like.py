@@ -84,7 +84,7 @@ class default_info_dict_reader(BaseInfoDictReader):
             _info_spec = None
         elif spec is None:
             _info_spec = CompositeSpec(
-                {key: UnboundedContinuousTensorSpec() for key in keys}, shape=[]
+                {key: UnboundedContinuousTensorSpec(()) for key in keys}, shape=[]
             )
         elif not isinstance(spec, CompositeSpec):
             if self.keys is not None and len(spec) != len(self.keys):

@@ -37,6 +37,7 @@ from mocking_classes import (
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
+from tensordict import LazyStackedTensorDict
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 from tensordict.tensordict import assert_allclose_td, TensorDict
 
@@ -2161,7 +2162,7 @@ class TestAggregateReset:
             },
             [1, 2],
         )
-        td = torch.stack([td0, td1], 0)
+        td = LazyStackedTensorDict.lazy_stack([td0, td1], 0)
         assert _aggregate_end_of_traj(td).all()
 
     def test_aggregate_reset_to_root_keys(self):
@@ -2256,7 +2257,7 @@ class TestAggregateReset:
             },
             [1, 2],
         )
-        td = torch.stack([td0, td1], 0)
+        td = LazyStackedTensorDict.lazy_stack([td0, td1], 0)
         assert _aggregate_end_of_traj(td, reset_keys=["_reset", ("a", "_reset")]).all()
 
     def test_aggregate_reset_to_root_errors(self):

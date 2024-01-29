@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict import unravel_key
+from tensordict import LazyStackedTensorDict, unravel_key
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 from torchrl._utils import _replace_last, implement_for, prod, seed_generator
@@ -2395,9 +2395,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         else:
             tensordicts = self._rollout_nonstop(**kwargs)
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
-        out_td = torch.stack(tensordicts, len(batch_size), out=out)
         if return_contiguous:
-            out_td = out_td.contiguous()
+            out_td = torch.stack(tensordicts, len(batch_size), out=out)
+        else:
+            out_td = LazyStackedTensorDict.lazy_stack(
+                tensordicts, len(batch_size), out=out
+            )
         out_td.refine_names(..., "time")
         return out_td
 
@@ -2508,7 +2511,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             ...     for i in range(n):
             ...         data, data_ = env.step_and_maybe_reset(data_)
             ...         result.append(data)
-            ...     return torch.stack(result).contiguous()
+            ...     return torch.stack(result)
             >>> env = ParallelEnv(2, lambda: GymEnv("CartPole-v1"))
             >>> print(rollout(env, 2))
             TensorDict(

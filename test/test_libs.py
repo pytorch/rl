@@ -555,7 +555,7 @@ class TestGym:
             env_type = type(env0._env)
 
         assert_allclose_td(*tdreset, rtol=RTOL, atol=ATOL)
-        tdrollout = torch.stack(tdrollout, 0).contiguous()
+        tdrollout = torch.stack(tdrollout, 0)
 
         # custom filtering of non-null obs: mujoco rendering sometimes fails
         # and renders black images. To counter this in the tests, we select
@@ -597,7 +597,7 @@ class TestGym:
         assert_allclose_td(tdreset[0], tdreset2, rtol=RTOL, atol=ATOL)
         assert final_seed0 == final_seed2
         # same magic trick for mujoco as above
-        tdrollout = torch.stack([tdrollout[0], rollout2], 0).contiguous()
+        tdrollout = torch.stack([tdrollout[0], rollout2], 0)
         idx = non_null_obs(tdrollout)
         assert_allclose_td(
             tdrollout[0][..., idx], tdrollout[1][..., idx], rtol=RTOL, atol=ATOL

@@ -20,6 +20,7 @@ import torch
 from tensordict import (
     is_tensor_collection,
     NonTensorData,
+    set_lazy_legacy,
     unravel_key,
     unravel_key_list,
 )
@@ -2883,6 +2884,7 @@ class CatFrames(ObservationTransform):
         else:
             return self.unfolding(tensordict)
 
+    @set_lazy_legacy(False)
     def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
         if not tensordict.ndim:
@@ -2972,6 +2974,8 @@ class CatFrames(ObservationTransform):
                 *range(data.ndim + self.dim, data.ndim - 1),
             )
             tensordict.set(out_key, data)
+        if tensordict_orig is not tensordict:
+            tensordict_orig = tensordict.transpose(tensordict.ndim - 1, i)
         return tensordict_orig
 
     def __repr__(self) -> str:
@@ -5169,6 +5173,7 @@ class StepCounter(Transform):
             tensordict_reset.set(step_count_key, step_count)
             if self.max_steps is not None:
                 truncated = step_count >= self.max_steps
+                truncated = truncated | tensordict_reset.get(truncated_key, False)
                 if self.update_done:
                     # we assume no done after reset
                     tensordict_reset.set(done_key, truncated)
@@ -5187,8 +5192,10 @@ class StepCounter(Transform):
             step_count = tensordict.get(step_count_key)
             next_step_count = step_count + 1
             next_tensordict.set(step_count_key, next_step_count)
+
             if self.max_steps is not None:
                 truncated = next_step_count >= self.max_steps
+                truncated = truncated | next_tensordict.get(truncated_key, False)
                 if self.update_done:
                     done = next_tensordict.get(done_key, None)
                     terminated = next_tensordict.get(terminated_key, None)

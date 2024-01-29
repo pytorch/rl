@@ -791,7 +791,7 @@ class TestCatFrames(TransformBase):
             model(tdbase0)
         tdbase0.batch_size = [10]
         tdbase0 = tdbase0.expand(5, 10)
-        tdbase0_copy = tdbase0.transpose(0, 1).to_tensordict()
+        tdbase0_copy = tdbase0.transpose(0, 1)
         tdbase0.refine_names("time", None)
         tdbase0_copy.names = [None, "time"]
         v1 = model(tdbase0)
@@ -1476,6 +1476,22 @@ class TestStepCounter(TransformBase):
         env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), StepCounter(max_steps=30))
         env.rollout(1000)
         check_env_specs(env)
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym detected")
+    def test_step_count_gym_doublecount(self):
+        # tests that 2 truncations can be used together
+        env = TransformedEnv(
+            GymEnv(PENDULUM_VERSIONED),
+            Compose(
+                StepCounter(max_steps=2),
+                StepCounter(max_steps=3),  # this one will be ignored
+            ),
+        )
+        r = env.rollout(10, break_when_any_done=False)
+        assert (
+            r.get(("next", "truncated")).squeeze().nonzero().squeeze(-1)
+            == torch.arange(1, 10, 2)
+        ).all()
 
     @pytest.mark.skipif(not _has_dm_control, reason="no dm_control detected")
     def test_step_count_dmc(self):

@@ -43,6 +43,8 @@ class RobosetExperienceReplay(TensorDictReplayBuffer):
 
     Learn more about roboset here: https://sites.google.com/view/robohive/roboset
 
+    The data format follows the :ref:`TED convention <TED-format>`.
+
     Args:
         dataset_id (str): the dataset to be downloaded. Must be part of RobosetExperienceReplay.available_datasets.
         batch_size (int): Batch-size used during sampling. Can be overridden by `data.sample(batch_size)` if
