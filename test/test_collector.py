@@ -96,16 +96,15 @@ class TensorDictCompatiblePolicy(nn.Module):
         self.linear = nn.LazyLinear(out_features)
 
     def forward(self, tensordict):
-        return TensorDict(
-            {self.out_keys[0]: self.linear(tensordict.get(self.in_keys[0]))},
-            [],
+        return tensordict.set(
+            self.out_keys[0], self.linear(tensordict.get(self.in_keys[0]))
         )
 
 
 class UnwrappablePolicy(nn.Module):
     def __init__(self, out_features: int):
         super().__init__()
-        self.linear = nn.LazyLinear(out_features)
+        self.linear = nn.Linear(2, out_features)
 
     def forward(self, observation, other_stuff):
         return self.linear(observation), other_stuff.sum()
@@ -1495,28 +1494,33 @@ class TestAutoWrap:
         )
 
         if collector_class is not SyncDataCollector:
-            assert all(
-                isinstance(p, TensorDictCompatiblePolicy)
-                for p in collector._policy_dict.values()
-            )
-            assert all(
-                p.out_keys == ["action"] for p in collector._policy_dict.values()
-            )
-            assert all(p is policy for p in collector._policy_dict.values())
+            # We now do the casting only on the remote workers
+            pass
         else:
             assert isinstance(collector.policy, TensorDictCompatiblePolicy)
             assert collector.policy.out_keys == ["action"]
             assert collector.policy is policy
+
+        for i, data in enumerate(collector):
+            if i == 0:
+                assert (data["action"] != 0).any()
+                for p in policy.parameters():
+                    p.data.zero_()
+                    assert p.device == torch.device("cpu")
+                collector.update_policy_weights_()
+            elif i == 4:
+                assert (data["action"] == 0).all()
+                break
+
         collector.shutdown()
         del collector
 
     def test_auto_wrap_error(self, collector_class, env_maker):
         policy = UnwrappablePolicy(out_features=env_maker().action_spec.shape[-1])
-
         with pytest.raises(
             TypeError,
             match=(r"Arguments to policy.forward are incompatible with entries in"),
-        ):
+        ) if collector_class is SyncDataCollector else pytest.raises(EOFError):
             collector_class(
                 **self._create_collector_kwargs(env_maker, collector_class, policy)
             )
@@ -1631,8 +1635,7 @@ class TestPreemptiveThreshold:
             frames_per_batch=frames_per_batch,
             init_random_frames=-1,
             reset_at_each_iter=False,
-            devices=get_default_devices()[0],
-            storing_devices=get_default_devices()[0],
+            device=get_default_devices()[0],
             split_trajs=False,
             preemptive_threshold=0.0,  # stop after one iteration
         )
@@ -1818,7 +1821,7 @@ class TestNestedEnvsCollector:
         )
 
 
-class TestHetEnvsCollector:
+class TestHeterogeneousEnvsCollector:
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
     @pytest.mark.parametrize("frames_per_batch", [4, 8, 16])
     def test_collector_heterogeneous_env(

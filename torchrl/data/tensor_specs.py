@@ -1889,7 +1889,9 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         shape = [*shape, *self.shape]
-        return torch.randn(shape, device=self.device, dtype=self.dtype)
+        if self.dtype.is_floating_point:
+            return torch.randn(shape, device=self.device, dtype=self.dtype)
+        return torch.empty(shape, device=self.device, dtype=self.dtype).random_()
 
     def is_in(self, val: torch.Tensor) -> bool:
         return True

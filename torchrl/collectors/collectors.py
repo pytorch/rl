@@ -223,14 +223,16 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 sig = policy.forward.__signature__
             except AttributeError:
                 sig = inspect.signature(policy.forward)
-            required_params = {
+            required_kwargs = {
                 str(k) for k, p in sig.parameters.items() if p.default is inspect._empty
             }
             next_observation = {
                 key: value for key, value in observation_spec.rand().items()
             }
             # we check if all the mandatory params are there
-            if not required_params.difference(set(next_observation)):
+            if set(sig.parameters) == {"tensordict"} or set(sig.parameters) == {"td"}:
+                pass
+            elif not required_kwargs.difference(set(next_observation)):
                 in_keys = [str(k) for k in sig.parameters if k in next_observation]
                 if not hasattr(self, "env") or self.env is None:
                     out_keys = ["action"]
@@ -369,6 +371,8 @@ class SyncDataCollector(DataCollectorBase):
             If ``None`` is provided, the policy used will be a
             :class:`~torchrl.collectors.RandomPolicy` instance with the environment
             ``action_spec``.
+
+    Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
         total_frames (int): A keyword-only argument representing the total
@@ -376,28 +380,47 @@ class SyncDataCollector(DataCollectorBase):
             during its lifespan. If the ``total_frames`` is not divisible by
             ``frames_per_batch``, an exception is raised.
              Endless collectors can be created by passing ``total_frames=-1``.
-        device (int, str or torch.device, optional): The device on which the
-            policy will be placed.
-            If it differs from the input policy device, the
-            :meth:`~.update_policy_weights_` method should be queried
-            at appropriate times during the training loop to accommodate for
-            the lag between parameter configuration at various times.
-            Defaults to ``None`` (i.e. policy is kept on its original device).
+             Defaults to ``-1`` (endless collector).
+        device (int, str or torch.device, optional): The generic device of the
+            collector. The ``device`` args fills any non-specified device: if
+            ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or
+            ``env_device`` is not specified, its value will be set to ``device``.
+            Defaults to ``None`` (No default device).
         storing_device (int, str or torch.device, optional): The device on which
-            the output :class:`tensordict.TensorDict` will be stored. For long
-            trajectories, it may be necessary to store the data on a different
+            the output :class:`~tensordict.TensorDict` will be stored.
+            If ``device`` is passed and ``storing_device`` is ``None``, it will
+            default to the value indicated by ``device``.
+            For long trajectories, it may be necessary to store the data on a different
             device than the one where the policy and env are executed.
-            Defaults to ``"cpu"``.
+            Defaults to ``None`` (the output tensordict isn't on a specific device,
+            leaf tensors sit on the device where they were created).
+        env_device (int, str or torch.device, optional): The device on which
+            the environment should be cast (or executed if that functionality is
+            supported). If not specified and the env has a non-``None`` device,
+            ``env_device`` will default to that value. If ``device`` is passed
+            and ``env_device=None``, it will default to ``device``. If the value
+            as such specified of ``env_device`` differs from ``policy_device``
+            and one of them is not ``None``, the data will be cast to ``env_device``
+            before being passed to the env (i.e., passing different devices to
+            policy and env is supported). Defaults to ``None``.
+        policy_device (int, str or torch.device, optional): The device on which
+            the policy should be cast.
+            If ``device`` is passed and ``policy_device=None``, it will default
+            to ``device``. If the value as such specified of ``policy_device``
+            differs from ``env_device`` and one of them is not ``None``,
+            the data will be cast to ``policy_device`` before being passed to
+            the policy (i.e., passing different devices to policy and env is
+            supported). Defaults to ``None``.
         create_env_kwargs (dict, optional): Dictionary of kwargs for
             ``create_env_fn``.
         max_frames_per_traj (int, optional): Maximum steps per trajectory.
-            Note that a trajectory can span over multiple batches (unless
+            Note that a trajectory can span across multiple batches (unless
             ``reset_at_each_iter`` is set to ``True``, see below).
             Once a trajectory reaches ``n_steps``, the environment is reset.
             If the environment wraps multiple environments together, the number
             of steps is tracked for each environment independently. Negative
             values are allowed, in which case this argument is ignored.
-            Defaults to ``None`` (i.e. no maximum number of steps).
+            Defaults to ``None`` (i.e., no maximum number of steps).
         init_random_frames (int, optional): Number of frames for which the
             policy is ignored before it is called. This feature is mainly
             intended to be used in offline/model-based settings, where a
@@ -417,15 +440,15 @@ class SyncDataCollector(DataCollectorBase):
             information.
             Defaults to ``False``.
         exploration_type (ExplorationType, optional): interaction mode to be used when
-            collecting data. Must be one of ``ExplorationType.RANDOM``, ``ExplorationType.MODE`` or
-            ``ExplorationType.MEAN``.
-            Defaults to ``ExplorationType.RANDOM``
+            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.RANDOM``,
+            ``torchrl.envs.utils.ExplorationType.MODE`` or ``torchrl.envs.utils.ExplorationType.MEAN``.
+            Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.
         return_same_td (bool, optional): if ``True``, the same TensorDict
             will be returned at each iteration, with its values
             updated. This feature should be used cautiously: if the same
             tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
-            Default is False.
+            Default is ``False``.
         interruptor (_Interruptor, optional):
             An _Interruptor object that can be used from outside the class to control rollout collection.
             The _Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
@@ -502,7 +525,7 @@ class SyncDataCollector(DataCollectorBase):
         ],
         *,
         frames_per_batch: int,
-        total_frames: int,
+        total_frames: int = -1,
         device: DEVICE_TYPING = None,
         storing_device: DEVICE_TYPING = None,
         policy_device: DEVICE_TYPING = None,
@@ -813,13 +836,23 @@ class SyncDataCollector(DataCollectorBase):
             event = stream.record_event()
             streams = [stream]
             events = [event]
+        elif self.storing_device is None:
+            streams = []
+            events = []
+            # this way of checking cuda is robust to lazy stacks with mismatching shapes
+            cuda_devices = set()
+
+            def cuda_check(tensor: torch.Tensor):
+                if tensor.is_cuda:
+                    cuda_devices.add(tensor.device)
+
+            self._tensordict_out.apply(cuda_check)
+            for device in cuda_devices:
+                streams.append(torch.cuda.Stream(device, priority=-1))
+                events.append(streams[-1].record_event())
         else:
             streams = []
             events = []
-            for value in self._tensordict_out.values(True, True):
-                if value.device.type == "cuda":
-                    streams.append(torch.cuda.Stream(value.device, priority=-1))
-                    events.append(streams[-1].record_event())
         with contextlib.ExitStack() as stack:
             for stream in streams:
                 stack.enter_context(torch.cuda.stream(stream))
@@ -918,7 +951,11 @@ class SyncDataCollector(DataCollectorBase):
                         elif self.policy_device is None:
                             # we know the tensordict has a device otherwise we would not be here
                             self._tensordict.clear_device_()
-                    self.policy(self._tensordict)
+                    # we still do the assignment for security
+                    _tensordict_in = self._tensordict
+                    _tensordict_out = self.policy(_tensordict_in)
+                    if _tensordict_out is not _tensordict_in:
+                        self._tensordict.update(_tensordict_out)
 
                 if self._cast_to_policy_device:
                     if self.env_device is not None:
@@ -1089,36 +1126,59 @@ class _MultiDataCollector(DataCollectorBase):
             If ``None`` is provided, the policy used will be a
             :class:`~torchrl.collectors.RandomPolicy` instance with the environment
             ``action_spec``.
+
+    Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the
             total number of elements in a batch.
-        total_frames (int): A keyword-only argument representing the
+        total_frames (int, optional): A keyword-only argument representing the
             total number of frames returned by the collector
             during its lifespan. If the ``total_frames`` is not divisible by
             ``frames_per_batch``, an exception is raised.
              Endless collectors can be created by passing ``total_frames=-1``.
-        device (int, str, torch.device or sequence of such, optional):
-            The device on which the policy will be placed.
-            If it differs from the input policy device, the
-            :meth:`~.update_policy_weights_` method should be queried
-            at appropriate times during the training loop to accommodate for
-            the lag between parameter configuration at various times.
-            If necessary, a list of devices can be passed in which case each
-            element will correspond to the designated device of a sub-collector.
-            Defaults to ``None`` (i.e. policy is kept on its original device).
-        storing_device (int, str, torch.device or sequence of such, optional):
-            The device on which the output :class:`tensordict.TensorDict` will
-            be stored. For long trajectories, it may be necessary to store the
-            data on a different device than the one where the policy and env
-            are executed.
-            If necessary, a list of devices can be passed in which case each
-            element will correspond to the designated storing device of a
-            sub-collector.
-            Defaults to ``"cpu"``.
+             Defaults to ``-1`` (never ending collector).
+        device (int, str or torch.device, optional): The generic device of the
+            collector. The ``device`` args fills any non-specified device: if
+            ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or
+            ``env_device`` is not specified, its value will be set to ``device``.
+            Defaults to ``None`` (No default device).
+            Supports a list of devices if one wishes to indicate a different device
+            for each worker. The list must be as long as the number of workers.
+        storing_device (int, str or torch.device, optional): The device on which
+            the output :class:`~tensordict.TensorDict` will be stored.
+            If ``device`` is passed and ``storing_device`` is ``None``, it will
+            default to the value indicated by ``device``.
+            For long trajectories, it may be necessary to store the data on a different
+            device than the one where the policy and env are executed.
+            Defaults to ``None`` (the output tensordict isn't on a specific device,
+            leaf tensors sit on the device where they were created).
+            Supports a list of devices if one wishes to indicate a different device
+            for each worker. The list must be as long as the number of workers.
+        env_device (int, str or torch.device, optional): The device on which
+            the environment should be cast (or executed if that functionality is
+            supported). If not specified and the env has a non-``None`` device,
+            ``env_device`` will default to that value. If ``device`` is passed
+            and ``env_device=None``, it will default to ``device``. If the value
+            as such specified of ``env_device`` differs from ``policy_device``
+            and one of them is not ``None``, the data will be cast to ``env_device``
+            before being passed to the env (i.e., passing different devices to
+            policy and env is supported). Defaults to ``None``.
+            Supports a list of devices if one wishes to indicate a different device
+            for each worker. The list must be as long as the number of workers.
+        policy_device (int, str or torch.device, optional): The device on which
+            the policy should be cast.
+            If ``device`` is passed and ``policy_device=None``, it will default
+            to ``device``. If the value as such specified of ``policy_device``
+            differs from ``env_device`` and one of them is not ``None``,
+            the data will be cast to ``policy_device`` before being passed to
+            the policy (i.e., passing different devices to policy and env is
+            supported). Defaults to ``None``.
+            Supports a list of devices if one wishes to indicate a different device
+            for each worker. The list must be as long as the number of workers.
         create_env_kwargs (dict, optional): A dictionary with the
             keyword arguments used to create an environment. If a list is
             provided, each of its elements will be assigned to a sub-collector.
         max_frames_per_traj (int, optional): Maximum steps per trajectory.
-            Note that a trajectory can span over multiple batches (unless
+            Note that a trajectory can span across multiple batches (unless
             ``reset_at_each_iter`` is set to ``True``, see below).
             Once a trajectory reaches ``n_steps``, the environment is reset.
             If the environment wraps multiple environments together, the number
@@ -1144,15 +1204,9 @@ class _MultiDataCollector(DataCollectorBase):
             information.
             Defaults to ``False``.
         exploration_type (ExplorationType, optional): interaction mode to be used when
-            collecting data. Must be one of ``ExplorationType.RANDOM``, ``ExplorationType.MODE`` or
-            ``ExplorationType.MEAN``.
-            Defaults to ``ExplorationType.RANDOM``
-        return_same_td (bool, optional): if ``True``, the same TensorDict
-            will be returned at each iteration, with its values
-            updated. This feature should be used cautiously: if the same
-            tensordict is added to a replay buffer for instance,
-            the whole content of the buffer will be identical.
-            Default is ``False``.
+            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.RANDOM``,
+            ``torchrl.envs.utils.ExplorationType.MODE`` or ``torchrl.envs.utils.ExplorationType.MEAN``.
+            Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
@@ -1181,12 +1235,12 @@ class _MultiDataCollector(DataCollectorBase):
             ]
         ],
         *,
-        frames_per_batch: int = 200,
+        frames_per_batch: int,
         total_frames: Optional[int] = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
+        storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
-        storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         create_env_kwargs: Optional[Sequence[dict]] = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
@@ -1196,10 +1250,8 @@ class _MultiDataCollector(DataCollectorBase):
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
         exploration_mode=None,
         reset_when_done: bool = True,
-        preemptive_threshold: float = None,
         update_at_each_batch: bool = False,
-        devices=None,
-        storing_devices=None,
+        preemptive_threshold: float = None,
         num_threads: int = None,
         num_sub_threads: int = 1,
     ):
@@ -1229,12 +1281,6 @@ class _MultiDataCollector(DataCollectorBase):
         # To go around this, we do the copies of the policy in the server
         # (this object) to each possible device, and send to all the
         # processes their copy of the policy.
-        if devices is not None:
-            raise RuntimeError("devices is deprecated, use `device` instead.")
-        if storing_devices is not None:
-            raise RuntimeError(
-                "storing_devices is deprecated, use `storing_device` instead."
-            )
 
         storing_devices, policy_devices, env_devices = self._get_devices(
             storing_device=storing_device,
@@ -2116,48 +2162,102 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         create_env_fn (Callabled): Callable returning an instance of EnvBase
         policy (Callable, optional): Instance of TensorDictModule class.
             Must accept TensorDictBase object as input.
-        total_frames (int): lower bound of the total number of frames returned
-            by the collector. In parallel settings, the actual number of
-            frames may well be greater than this as the closing signals are
-            sent to the workers only once the total number of frames has
-            been collected on the server.
-        create_env_kwargs (dict, optional): A dictionary with the arguments
-            used to create an environment
-        max_frames_per_traj: Maximum steps per trajectory. Note that a
-            trajectory can span over multiple batches (unless
-            reset_at_each_iter is set to True, see below). Once a trajectory
-            reaches n_steps, the environment is reset. If the
-            environment wraps multiple environments together, the number of
-            steps is tracked for each environment independently. Negative
+
+    Keyword Args:
+        frames_per_batch (int): A keyword-only argument representing the
+            total number of elements in a batch.
+        total_frames (int, optional): A keyword-only argument representing the
+            total number of frames returned by the collector
+            during its lifespan. If the ``total_frames`` is not divisible by
+            ``frames_per_batch``, an exception is raised.
+             Endless collectors can be created by passing ``total_frames=-1``.
+             Defaults to ``-1`` (never ending collector).
+        device (int, str or torch.device, optional): The generic device of the
+            collector. The ``device`` args fills any non-specified device: if
+            ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or
+            ``env_device`` is not specified, its value will be set to ``device``.
+            Defaults to ``None`` (No default device).
+            Supports a list of devices if one wishes to indicate a different device
+            for each worker. The list must be as long as the number of workers.
+        storing_device (int, str or torch.device, optional): The device on which
+            the output :class:`~tensordict.TensorDict` will be stored.
+            If ``device`` is passed and ``storing_device`` is ``None``, it will
+            default to the value indicated by ``device``.
+            For long trajectories, it may be necessary to store the data on a different
+            device than the one where the policy and env are executed.
+            Defaults to ``None`` (the output tensordict isn't on a specific device,
+            leaf tensors sit on the device where they were created).
+            Supports a list of devices if one wishes to indicate a different device
+            for each worker. The list must be as long as the number of workers.
+        env_device (int, str or torch.device, optional): The device on which
+            the environment should be cast (or executed if that functionality is
+            supported). If not specified and the env has a non-``None`` device,
+            ``env_device`` will default to that value. If ``device`` is passed
+            and ``env_device=None``, it will default to ``device``. If the value
+            as such specified of ``env_device`` differs from ``policy_device``
+            and one of them is not ``None``, the data will be cast to ``env_device``
+            before being passed to the env (i.e., passing different devices to
+            policy and env is supported). Defaults to ``None``.
+            Supports a list of devices if one wishes to indicate a different device
+            for each worker. The list must be as long as the number of workers.
+        policy_device (int, str or torch.device, optional): The device on which
+            the policy should be cast.
+            If ``device`` is passed and ``policy_device=None``, it will default
+            to ``device``. If the value as such specified of ``policy_device``
+            differs from ``env_device`` and one of them is not ``None``,
+            the data will be cast to ``policy_device`` before being passed to
+            the policy (i.e., passing different devices to policy and env is
+            supported). Defaults to ``None``.
+            Supports a list of devices if one wishes to indicate a different device
+            for each worker. The list must be as long as the number of workers.
+        create_env_kwargs (dict, optional): A dictionary with the
+            keyword arguments used to create an environment. If a list is
+            provided, each of its elements will be assigned to a sub-collector.
+        max_frames_per_traj (int, optional): Maximum steps per trajectory.
+            Note that a trajectory can span across multiple batches (unless
+            ``reset_at_each_iter`` is set to ``True``, see below).
+            Once a trajectory reaches ``n_steps``, the environment is reset.
+            If the environment wraps multiple environments together, the number
+            of steps is tracked for each environment independently. Negative
             values are allowed, in which case this argument is ignored.
-            Defaults to ``None`` (i.e. no maximum number of steps)
-        frames_per_batch (int): Time-length of a batch.
-            reset_at_each_iter and frames_per_batch == n_steps are equivalent configurations.
-            Defaults to ``200``
-        init_random_frames (int): Number of frames for which the policy is ignored before it is called.
-            This feature is mainly intended to be used in offline/model-based settings, where a batch of random
-            trajectories can be used to initialize training.
-            Defaults to ``None`` (i.e. no random frames)
-        reset_at_each_iter (bool): Whether or not environments should be reset for each batch.
-            default=False.
-        postproc (callable, optional): A PostProcessor is an object that will read a batch of data and process it in a
-            useful format for training.
-            default: None.
-        split_trajs (bool): Boolean indicating whether the resulting TensorDict should be split according to the trajectories.
-            See utils.split_trajectories for more information.
-        device (int, str, torch.device, optional): The device on which the
-            policy will be placed. If it differs from the input policy
-            device, the update_policy_weights_() method should be queried
-            at appropriate times during the training loop to accommodate for
-            the lag between parameter configuration at various times.
-            Default is `None` (i.e. policy is kept on its original device)
-        storing_device (int, str, torch.device, optional): The device on which
-            the output TensorDict will be stored. For long trajectories,
-            it may be necessary to store the data on a different.
-            device than the one where the policy is stored. Default is None.
-        update_at_each_batch (bool): if ``True``, the policy weights will be updated every time a batch of trajectories
-            is collected.
-            default=False
+            Defaults to ``None`` (i.e. no maximum number of steps).
+        init_random_frames (int, optional): Number of frames for which the
+            policy is ignored before it is called. This feature is mainly
+            intended to be used in offline/model-based settings, where a
+            batch of random trajectories can be used to initialize training.
+            If provided, it will be rounded up to the closest multiple of frames_per_batch.
+            Defaults to ``None`` (i.e. no random frames).
+        reset_at_each_iter (bool, optional): Whether environments should be reset
+            at the beginning of a batch collection.
+            Defaults to ``False``.
+        postproc (Callable, optional): A post-processing transform, such as
+            a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
+            instance.
+            Defaults to ``None``.
+        split_trajs (bool, optional): Boolean indicating whether the resulting
+            TensorDict should be split according to the trajectories.
+            See :func:`~torchrl.collectors.utils.split_trajectories` for more
+            information.
+            Defaults to ``False``.
+        exploration_type (ExplorationType, optional): interaction mode to be used when
+            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.RANDOM``,
+            ``torchrl.envs.utils.ExplorationType.MODE`` or ``torchrl.envs.utils.ExplorationType.MEAN``.
+            Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.
+        reset_when_done (bool, optional): if ``True`` (default), an environment
+            that return a ``True`` value in its ``"done"`` or ``"truncated"``
+            entry will be reset at the corresponding indices.
+        update_at_each_batch (boolm optional): if ``True``, :meth:`~.update_policy_weight_()`
+            will be called before (sync) or after (async) each data collection.
+            Defaults to ``False``.
+        preemptive_threshold (float, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
+            that will be allowed to finished collecting their rollout before the rest are forced to end early.
+        num_threads (int, optional): number of threads for this process.
+            Defaults to the number of workers.
+        num_sub_threads (int, optional): number of threads of the subprocesses.
+            Should be equal to one plus the number of processes launched within
+            each subprocess (or one if a single process is launched).
+            Defaults to 1 for safety: if none is indicated, launching multiple
+            workers may charge the cpu load too much and harm performance.
 
     """
 
@@ -2169,21 +2269,27 @@ class aSyncDataCollector(MultiaSyncDataCollector):
                 TensorDictModule,
                 Callable[[TensorDictBase], TensorDictBase],
             ]
-        ] = None,
+        ],
+        *,
+        frames_per_batch: int,
         total_frames: Optional[int] = -1,
-        create_env_kwargs: Optional[dict] = None,
+        device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
+        storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
+        env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
+        policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
+        create_env_kwargs: Optional[Sequence[dict]] = None,
         max_frames_per_traj: int | None = None,
-        frames_per_batch: int = 200,
         init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: Optional[bool] = None,
-        device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
-        policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
-        env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
-        storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
-        seed: Optional[int] = None,
-        pin_memory: bool = False,
+        exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
+        exploration_mode=None,
+        reset_when_done: bool = True,
+        update_at_each_batch: bool = False,
+        preemptive_threshold: float = None,
+        num_threads: int = None,
+        num_sub_threads: int = 1,
         **kwargs,
     ):
         super().__init__(
@@ -2201,7 +2307,13 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             policy_device=policy_device,
             env_device=env_device,
             storing_device=storing_device,
-            **kwargs,
+            exploration_type=exploration_type,
+            exploration_mode=exploration_mode,
+            reset_when_done=reset_when_done,
+            update_at_each_batch=update_at_each_batch,
+            preemptive_threshold=preemptive_threshold,
+            num_threads=num_threads,
+            num_sub_threads=num_sub_threads,
         )
 
     # for RPC
@@ -2439,7 +2551,15 @@ class _NonParametricPolicyWrapper(nn.Module, metaclass=_PolicyMetaClass):
 
     @property
     def forward(self):
-        return self.policy.__call__
+        forward = self.__dict__.get("_forward", None)
+        if forward is None:
+
+            @functools.wraps(self.policy)
+            def forward(*input, **kwargs):
+                return self.policy.__call__(*input, **kwargs)
+
+            self.__dict__["_forward"] = forward
+        return forward
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
