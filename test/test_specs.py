@@ -2362,7 +2362,7 @@ class TestLazyStackedCompositeSpecs:
             ),
         ]
 
-        return torch.stack(spec_list, dim=stack_dim)
+        return torch.stack(spec_list, dim=stack_dim).cpu()
 
     def test_stack_index(self):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec())
@@ -2998,8 +2998,8 @@ class TestLazyStackedCompositeSpecs:
             stack_dim,
         )
         spec["comp"] = comp
-        assert spec["comp"] == comp
-        assert spec["comp", "a"] == new
+        assert spec["comp"] == comp.to(spec.device)
+        assert spec["comp", "a"] == new.to(spec.device)
 
 
 # MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.

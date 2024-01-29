@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import gc
 import logging
 
 import os
@@ -1307,7 +1308,7 @@ def _run_worker_pipe_shared_mem(
     device = shared_tensordict.device
     if device is None or device.type != "cuda":
         # Check if some tensors are shared on cuda
-        has_cuda = [device]
+        has_cuda = [False]
 
         def look_for_cuda(tensor, has_cuda=has_cuda):
             has_cuda[0] = has_cuda[0] or tensor.is_cuda
@@ -1340,7 +1341,7 @@ def _run_worker_pipe_shared_mem(
     initialized = False
 
     child_pipe.send("started")
-
+    next_shared_tensordict, root_shared_tensordict = (None,) * 2
     while True:
         try:
             if child_pipe.poll(_timeout):
@@ -1389,42 +1390,49 @@ def _run_worker_pipe_shared_mem(
                 event.record()
                 event.synchronize()
             mp_event.set()
+            del cur_td
 
         elif cmd == "step":
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            env_input = shared_tensordict
-            next_td = env._step(env_input)
+            next_td = env._step(shared_tensordict)
             next_shared_tensordict.update_(next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
             mp_event.set()
+            del next_td
 
         elif cmd == "step_and_maybe_reset":
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            env_input = shared_tensordict
-            td, root_next_td = env.step_and_maybe_reset(env_input)
+            td, root_next_td = env.step_and_maybe_reset(shared_tensordict)
             next_shared_tensordict.update_(td.get("next"))
             root_shared_tensordict.update_(root_next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
             mp_event.set()
+            del td, root_next_td
 
         elif cmd == "close":
-            del shared_tensordict, data
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
             env.close()
-            del env
+            del (
+                env,
+                shared_tensordict,
+                data,
+                next_shared_tensordict,
+                root_shared_tensordict,
+            )
             mp_event.set()
             child_pipe.close()
             if verbose:
                 logging.info(f"{pid} closed")
+            gc.collect()
             break
 
         elif cmd == "load_state_dict":
@@ -1435,6 +1443,7 @@ def _run_worker_pipe_shared_mem(
             state_dict = _recursively_strip_locks_from_state_dict(env.state_dict())
             msg = "state_dict"
             child_pipe.send((msg, state_dict))
+            del state_dict
 
         else:
             err_msg = f"{cmd} from env"

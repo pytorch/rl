@@ -767,6 +767,14 @@ class TensorSpec:
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> "TensorSpec":
         raise NotImplementedError
 
+    def cpu(self):
+        return self.to("cpu")
+
+    def cuda(self, device=None):
+        if device is None:
+            return self.to("cuda")
+        return self.to(f"cuda:{device}")
+
     @abc.abstractmethod
     def clone(self) -> "TensorSpec":
         raise NotImplementedError
@@ -4140,7 +4148,23 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
 
     @property
     def device(self) -> DEVICE_TYPING:
-        return self._specs[0].device
+        device = self.__dict__.get("_device", NO_DEFAULT)
+        if device is NO_DEFAULT:
+            devices = {spec.device for spec in self._specs}
+            if len(devices) == 1:
+                device = list(devices)[0]
+            elif len(devices) == 2:
+                device0, device1 = devices
+                if device0 is None:
+                    device = device1
+                elif device1 is None:
+                    device = device0
+                else:
+                    device = None
+            else:
+                device = None
+            self.__dict__["_device"] = device
+        return device
 
     @property
     def ndim(self):
@@ -4249,7 +4273,18 @@ def _stack_composite_specs(list_of_spec, dim, out=None):
         raise ValueError("Cannot stack an empty list of specs.")
     spec0 = list_of_spec[0]
     if isinstance(spec0, CompositeSpec):
-        device = spec0.device
+        devices = {spec.device for spec in list_of_spec}
+        if len(devices) == 1:
+            device = list(devices)[0]
+        elif len(devices) == 2:
+            device0, device1 = devices
+            if device0 is None:
+                device = device1
+            elif device1 is None:
+                device = device0
+            else:
+                device = None
+
         all_equal = True
         for spec in list_of_spec[1:]:
             if not isinstance(spec, CompositeSpec):
@@ -4257,8 +4292,9 @@ def _stack_composite_specs(list_of_spec, dim, out=None):
                     "Stacking specs cannot occur: Found more than one type of spec in "
                     "the list."
                 )
-            if device != spec.device:
-                raise RuntimeError(f"Devices differ, got {device} and {spec.device}")
+            if device != spec.device and device is not None:
+                # spec.device must be None
+                spec = spec.to(device)
             if spec.shape != spec0.shape:
                 raise RuntimeError(f"Shapes differ, got {spec.shape} and {spec0.shape}")
             all_equal = all_equal and spec == spec0
