@@ -147,7 +147,7 @@ class PPOLossConfig:
     lmbda: float = 0.95
     # lambda factor in GAE (using 'lambda' as attribute is prohibited in python, hence the misspelling)
     entropy_bonus: bool = True
-    # Whether or not to add an entropy term to the PPO loss.
+    # whether to add an entropy term to the PPO loss.
     entropy_coef: float = 1e-3
     # Entropy factor for the PPO loss
     samples_mc_entropy: int = 1

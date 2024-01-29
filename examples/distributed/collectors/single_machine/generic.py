@@ -100,7 +100,11 @@ if __name__ == "__main__":
     if args.worker_parallelism == "collector" or num_workers == 1:
         action_spec = make_env().action_spec
     else:
-        make_env = ParallelEnv(num_workers, make_env, serial_for_single=True,)
+        make_env = ParallelEnv(
+            num_workers,
+            make_env,
+            serial_for_single=True,
+        )
         action_spec = make_env.action_spec
 
     if args.worker_parallelism == "collector" and num_workers > 1:
