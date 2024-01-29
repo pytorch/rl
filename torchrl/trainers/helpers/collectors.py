@@ -412,7 +412,7 @@ class OffPolicyCollectorConfig(OnPolicyCollectorConfig):
     """Off-policy collector config struct."""
 
     multi_step: bool = False
-    # whether or not multi-step rewards should be used.
+    # whether multi-step rewards should be used.
     n_steps_return: int = 3
     # If multi_step is set to True, this value defines the number of steps to look ahead for the reward computation.
     init_random_frames: int = 50000
