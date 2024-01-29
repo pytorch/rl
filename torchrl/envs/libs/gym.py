@@ -306,16 +306,16 @@ def _gym_to_torchrl_spec_transform(
             shape = torch.Size([1])
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        low = torch.tensor(spec.low, device=device, dtype=dtype)
-        high = torch.tensor(spec.high, device=device, dtype=dtype)
+        low = torch.as_tensor(spec.low, device=device, dtype=dtype)
+        high = torch.as_tensor(spec.high, device=device, dtype=dtype)
         is_unbounded = low.isinf().all() and high.isinf().all()
 
         minval, maxval = _minmax_dtype(dtype)
         minval = torch.as_tensor(minval).to(low.device, dtype)
         maxval = torch.as_tensor(maxval).to(low.device, dtype)
         is_unbounded = is_unbounded or (
-            torch.isclose(low, torch.tensor(minval, dtype=dtype)).all()
-            and torch.isclose(high, torch.tensor(maxval, dtype=dtype)).all()
+            torch.isclose(low, torch.as_tensor(minval, dtype=dtype)).all()
+            and torch.isclose(high, torch.as_tensor(maxval, dtype=dtype)).all()
         )
         return (
             UnboundedContinuousTensorSpec(shape, device=device, dtype=dtype)
@@ -1480,7 +1480,7 @@ class terminal_obs_reader(BaseInfoDictReader):
             # Simplest case: there is one observation,
             # presented as a np.ndarray. The key should be pixels or observation.
             # We just write that value at its location in the tensor
-            tensor[index] = torch.tensor(obs, device=tensor.device)
+            tensor[index] = torch.as_tensor(obs, device=tensor.device)
         elif isinstance(obs, dict):
             if key not in obs:
                 raise KeyError(
@@ -1491,13 +1491,13 @@ class terminal_obs_reader(BaseInfoDictReader):
                 # if the obs is a dict, we expect that the key points also to
                 # a value in the obs. We retrieve this value and write it in the
                 # tensor
-                tensor[index] = torch.tensor(subobs, device=tensor.device)
+                tensor[index] = torch.as_tensor(subobs, device=tensor.device)
 
         elif isinstance(obs, (list, tuple)):
             # tuples are stacked along the first dimension when passing gym spaces
             # to torchrl specs. As such, we can simply stack the tuple and set it
             # at the relevant index (assuming stacking can be achieved)
-            tensor[index] = torch.tensor(obs, device=tensor.device)
+            tensor[index] = torch.as_tensor(obs, device=tensor.device)
         else:
             raise NotImplementedError(
                 f"Observations of type {type(obs)} are not supported yet."

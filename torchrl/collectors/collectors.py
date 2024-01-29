@@ -1112,12 +1112,18 @@ class _MultiDataCollector(DataCollectorBase):
             exploration_mode=exploration_mode, exploration_type=exploration_type
         )
         self.closed = True
+        self.num_workers = len(create_env_fn)
+
         if num_threads is None:
-            num_threads = len(create_env_fn) + 1  # 1 more thread for this proc
+            import torchrl
+            # TODO: account for parallel/batched envs here
+            num_threads = max(
+                1, torchrl._THREAD_POOL - self.num_workers
+            )  # 1 more thread for this proc
+
         self.num_sub_threads = num_sub_threads
         self.num_threads = num_threads
         self.create_env_fn = create_env_fn
-        self.num_workers = len(create_env_fn)
         self.create_env_kwargs = (
             create_env_kwargs
             if create_env_kwargs is not None
@@ -1297,6 +1303,9 @@ class _MultiDataCollector(DataCollectorBase):
 
     def _run_processes(self) -> None:
         torch.set_num_threads(self.num_threads)
+        import torchrl
+
+        torchrl._THREAD_POOL = self.num_threads
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
@@ -1398,6 +1407,11 @@ also that the state dict is synchronised across processes if needed."""
                 for proc in self.procs:
                     proc.join(1.0)
         finally:
+            import torchrl
+
+            torchrl._THREAD_POOL = min(os.cpu_count(), self.num_workers)
+            torch.set_num_threads(torchrl._THREAD_POOL)
+
             for proc in self.procs:
                 if proc.is_alive():
                     proc.terminate()
