@@ -16,6 +16,7 @@ conda env config vars set LD_PRELOAD=$LD_PRELOAD:$STDC_LOC
 STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)
 
 export PYTORCH_TEST_WITH_SLOW='1'
+export LAZY_LEGACY_OP=False
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'

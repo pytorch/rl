@@ -791,7 +791,7 @@ class TestCatFrames(TransformBase):
             model(tdbase0)
         tdbase0.batch_size = [10]
         tdbase0 = tdbase0.expand(5, 10)
-        tdbase0_copy = tdbase0.transpose(0, 1).to_tensordict()
+        tdbase0_copy = tdbase0.transpose(0, 1)
         tdbase0.refine_names("time", None)
         tdbase0_copy.names = [None, "time"]
         v1 = model(tdbase0)

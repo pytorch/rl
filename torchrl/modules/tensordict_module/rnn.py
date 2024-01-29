@@ -12,7 +12,7 @@ from tensordict import TensorDictBase, unravel_key_list
 from tensordict.nn import TensorDictModuleBase as ModuleBase
 
 from tensordict.tensordict import NO_DEFAULT
-from tensordict.utils import expand_as_right, prod
+from tensordict.utils import expand_as_right, prod, set_lazy_legacy
 
 from torch import nn, Tensor
 from torch.nn.modules.rnn import RNNCellBase
@@ -1297,6 +1297,7 @@ class GRUModule(ModuleBase):
         out._recurrent_mode = mode
         return out
 
+    @set_lazy_legacy(False)
     def forward(self, tensordict: TensorDictBase):
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None]
@@ -1318,8 +1319,6 @@ class GRUModule(ModuleBase):
                 )
         else:
             tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)
-        # TODO: replace by contiguous, or ultimately deprecate the default lazy unsqueeze
-        tensordict_shaped = tensordict_shaped.to_tensordict()
 
         is_init = tensordict_shaped.get("is_init").squeeze(-1)
         splits = None

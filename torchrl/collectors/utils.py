@@ -6,6 +6,8 @@
 from typing import Callable
 
 import torch
+
+from tensordict import set_lazy_legacy
 from tensordict.tensordict import pad, TensorDictBase
 
 
@@ -25,6 +27,7 @@ def _stack_output_zip(fun) -> Callable:
     return stacked_output_fun
 
 
+@set_lazy_legacy(False)
 def split_trajectories(
     rollout_tensordict: TensorDictBase, prefix=None
 ) -> TensorDictBase:
@@ -88,7 +91,7 @@ def split_trajectories(
             ),
         )
         if rollout_tensordict.ndimension() == 1:
-            rollout_tensordict = rollout_tensordict.unsqueeze(0).to_tensordict()
+            rollout_tensordict = rollout_tensordict.unsqueeze(0)
         return rollout_tensordict.unflatten_keys(sep)
     out_splits = rollout_tensordict.view(-1).split(splits, 0)
 

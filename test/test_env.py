@@ -1141,10 +1141,12 @@ class TestStepMdp:
             tds[0]["this", "one"] = torch.zeros(2)
             tds[1]["but", "not", "this", "one"] = torch.ones(2)
             tds[0]["next", "this", "one"] = torch.ones(2) * 2
-            tensordict = torch.stack(tds, 0)
+            tensordict = LazyStackedTensorDict.lazy_stack(tds, 0)
         next_tensordict = TensorDict({}, [4]) if has_out else None
         if has_out and lazy_stack:
-            next_tensordict = torch.stack(next_tensordict.unbind(0), 0)
+            next_tensordict = LazyStackedTensorDict.lazy_stack(
+                next_tensordict.unbind(0), 0
+            )
         out = step_mdp(
             tensordict.lock_(),
             keep_other=keep_other,
@@ -1498,8 +1500,7 @@ class TestStepMdp:
                     [td_batch_size],
                 )
             )
-        lazy_td = torch.stack(tds, dim=1)
-        input_td = lazy_td
+        lazy_td = LazyStackedTensorDict.lazy_stack(tds, dim=1)
 
         td = step_mdp(
             lazy_td.lock_(),
@@ -1785,7 +1786,7 @@ class TestConcurrentEnvs:
                 r_p.append(env_s.rollout(100, break_when_any_done=False, policy=policy))
                 r_s.append(env_p.rollout(100, break_when_any_done=False, policy=policy))
 
-        td_equals = torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()
+        td_equals = torch.stack(r_p) == torch.stack(r_s)
         if td_equals.all():
             if q is not None:
                 q.put(("passed", j))

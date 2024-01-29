@@ -167,8 +167,8 @@ class VC1Transform(Transform):
                 if in_key != out_key
             ]
             saved_td = tensordict.select(*in_keys)
-        tensordict_view = tensordict.view(-1)
-        super()._call(self.model_transforms(tensordict_view))
+        with tensordict.view(-1) as tensordict_view:
+            super()._call(self.model_transforms(tensordict_view))
         if self.del_keys:
             tensordict.exclude(*self.in_keys, inplace=True)
         else:
