@@ -30,6 +30,14 @@ TorchRL envs
 import warnings
 
 warnings.filterwarnings("ignore")
+
+from torch import multiprocessing
+
+# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
+# `__main__` method call, but for the easy of reading the code switch to fork
+# which is also a default spawn method in Google's Colaboratory
+multiprocessing.set_start_method("fork")
+
 # sphinx_gallery_end_ignore
 
 import torch
