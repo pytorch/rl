@@ -478,7 +478,7 @@ class GymLikeEnv(_EnvWrapper):
         within the tensordict.
 
         This method returns a (possibly transformed) environment where we make sure that
-        the :func:`torchrl.envs.utils.check_env_specs` succeeds, whether or not
+        the :func:`torchrl.envs.utils.check_env_specs` succeeds, whether
         the info is filled at reset time.
 
         This method requires running a few iterations in the environment to

@@ -76,6 +76,7 @@ def make_environment(cfg):
     parallel_env = ParallelEnv(
         cfg.collector.env_per_collector,
         EnvCreator(lambda cfg=cfg: env_maker(cfg)),
+        serial_for_single=True,
     )
     parallel_env.set_seed(cfg.env.seed)
 
@@ -87,6 +88,7 @@ def make_environment(cfg):
         ParallelEnv(
             cfg.collector.env_per_collector,
             EnvCreator(lambda cfg=cfg: env_maker(cfg)),
+            serial_for_single=True,
         ),
         train_env.transform.clone(),
     )
