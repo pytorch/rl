@@ -18,9 +18,8 @@ from typing import Any, Dict, List, Sequence, Union
 import numpy as np
 import tensordict
 import torch
-from tensordict import is_tensorclass
+from tensordict import is_tensor_collection, is_tensorclass, TensorDict, TensorDictBase
 from tensordict.memmap import MemmapTensor, MemoryMappedTensor
-from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.utils import _STRDTYPE2DTYPE, expand_right
 from torch import multiprocessing as mp
 

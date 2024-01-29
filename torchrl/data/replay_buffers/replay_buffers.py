@@ -17,14 +17,15 @@ import numpy as np
 
 import torch
 
-from tensordict import is_tensorclass, unravel_key
-from tensordict.nn.utils import _set_dispatch_td_nn_modules
-from tensordict.tensordict import (
+from tensordict import (
     is_tensor_collection,
+    is_tensorclass,
     LazyStackedTensorDict,
     TensorDict,
     TensorDictBase,
+    unravel_key,
 )
+from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
 

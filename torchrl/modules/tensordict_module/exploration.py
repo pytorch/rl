@@ -7,13 +7,13 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
+from tensordict import TensorDictBase
 
 from tensordict.nn import (
     TensorDictModule,
     TensorDictModuleBase,
     TensorDictModuleWrapper,
 )
-from tensordict.tensordict import TensorDictBase
 from tensordict.utils import expand_as_right, expand_right, NestedKey
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec

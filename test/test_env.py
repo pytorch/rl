@@ -48,9 +48,13 @@ from mocking_classes import (
     NestedCountingEnv,
 )
 from packaging import version
-from tensordict import dense_stack_tds
+from tensordict import (
+    assert_allclose_td,
+    dense_stack_tds,
+    LazyStackedTensorDict,
+    TensorDict,
+)
 from tensordict.nn import TensorDictModuleBase
-from tensordict.tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
 from tensordict.utils import _unravel_key_to_tuple
 from torch import nn
 

@@ -6,7 +6,8 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import expand_right, NestedKey
 
 from torchrl.data.tensor_specs import (
@@ -1569,13 +1570,14 @@ class HeteroCountingEnv(EnvBase):
         torch.manual_seed(seed)
 
 
-class MultiKeyCountingEnvPolicy:
+class MultiKeyCountingEnvPolicy(TensorDictModuleBase):
     def __init__(
         self,
         full_action_spec: TensorSpec,
         count: bool = True,
         deterministic: bool = False,
     ):
+        super().__init__()
         if not deterministic and not count:
             raise ValueError("Not counting policy is always deterministic")
 

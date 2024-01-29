@@ -30,9 +30,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from tensordict import TensorDictParams
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset

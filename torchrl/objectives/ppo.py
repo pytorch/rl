@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
@@ -136,7 +136,7 @@ class PPOLoss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.ppo import PPOLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> base_layer = nn.Linear(n_obs, 5)

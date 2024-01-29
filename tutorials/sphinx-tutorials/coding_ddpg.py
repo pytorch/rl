@@ -330,7 +330,7 @@ def _loss_value(
 # value and actor loss, collect the cost values and write them in a tensordict
 # delivered to the user.
 
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 
 
 def _forward(self, input_tensordict: TensorDictBase) -> TensorDict:

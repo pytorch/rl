@@ -37,9 +37,8 @@ from mocking_classes import (
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
-from tensordict import LazyStackedTensorDict
+from tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
-from tensordict.tensordict import assert_allclose_td, TensorDict
 
 from torch import nn
 from torchrl._utils import _replace_last, prod, seed_generator

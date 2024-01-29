@@ -47,11 +47,11 @@ from _utils_internal import (  # noqa
     get_default_devices,
 )
 from mocking_classes import ContinuousActionConvMockEnv
-from tensordict.nn import NormalParamExtractor, TensorDictModule
-from tensordict.nn.utils import Buffer
 
 # from torchrl.data.postprocs.utils import expand_as_right
-from tensordict.tensordict import assert_allclose_td, TensorDict
+from tensordict import assert_allclose_td, TensorDict
+from tensordict.nn import NormalParamExtractor, TensorDictModule
+from tensordict.nn.utils import Buffer
 from tensordict.utils import unravel_key
 from torch import autograd, nn
 from torchrl.data import (

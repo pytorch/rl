@@ -19,9 +19,8 @@ from warnings import warn
 
 import torch
 
-from tensordict import TensorDict
+from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple, unravel_key
-from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, VERBOSE
 from torchrl.data.tensor_specs import CompositeSpec
@@ -680,6 +679,8 @@ class SerialEnv(_BatchedEnv):
             )
             if out.device == device:
                 out = out.clone()
+            elif device is None:
+                out = out.clone().clear_device_()
             else:
                 out = out.to(device, non_blocking=True)
         return out
@@ -721,6 +722,8 @@ class SerialEnv(_BatchedEnv):
             out = next_td.select(*self._selected_step_keys, strict=False)
             if out.device == device:
                 out = out.clone()
+            elif device is None:
+                out = out.clone().clear_device_()
             else:
                 out = out.to(device, non_blocking=True)
         return out
@@ -1182,6 +1185,8 @@ class ParallelEnv(_BatchedEnv):
             )
             if out.device == device:
                 out = out.clone()
+            elif device is None:
+                out = out.clear_device_().clone()
             else:
                 out = out.to(device, non_blocking=True)
         return out

@@ -42,9 +42,8 @@ from mocking_classes import (
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
-from tensordict import unravel_key
+from tensordict import TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import TensorDictSequential
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
 from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import _replace_last, prod

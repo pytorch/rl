@@ -10,7 +10,7 @@ import torch
 import torchrl.data.tensor_specs
 from _utils_internal import get_available_devices, get_default_devices, set_global_var
 from scipy.stats import chisquare
-from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.utils import _unravel_key_to_tuple
 
 from torchrl.data.tensor_specs import (
@@ -682,9 +682,12 @@ def test_create_composite_nested(shape, device):
         c = CompositeSpec(_d, shape=shape)
         assert isinstance(c["a", "b"], UnboundedContinuousTensorSpec)
         assert c["a"].shape == torch.Size(shape)
+        assert c.device is None  # device not explicitly passed
+        assert c["a"].device is None  # device not explicitly passed
+        assert c["a", "b"].device == device
+        c = c.to(device)
         assert c.device == device
         assert c["a"].device == device
-        assert c["a", "b"].device == device
 
 
 @pytest.mark.parametrize("recurse", [True, False])

@@ -14,8 +14,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict import LazyStackedTensorDict, unravel_key
-from tensordict.tensordict import TensorDictBase
+from tensordict import LazyStackedTensorDict, TensorDictBase, unravel_key
 from tensordict.utils import NestedKey
 from torchrl._utils import _replace_last, implement_for, prod, seed_generator
 

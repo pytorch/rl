@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 
 from torchrl.envs.common import EnvBase
 from torchrl.modules.planners.common import MPCPlannerBase

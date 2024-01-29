@@ -10,7 +10,7 @@ from collections import OrderedDict
 from typing import Callable, Dict, Optional, Union
 
 import torch
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDictBase
 
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase, EnvMetaData
