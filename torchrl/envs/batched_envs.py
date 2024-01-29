@@ -25,7 +25,7 @@ from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, VERBOSE
 from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
-from torchrl.envs.common import EnvBase
+from torchrl.envs.common import EnvBase, _EnvPostInit
 from torchrl.envs.env_creator import get_env_metadata
 
 # legacy
@@ -103,6 +103,18 @@ def lazy(fun):
 
     return new_fun
 
+class _PEnvMeta(_EnvPostInit):
+    def __call__(cls, *args, **kwargs):
+        serial_for_single = kwargs.get("serial_for_single", False)
+        if serial_for_single:
+            num_workers = kwargs.get("num_workers", None)
+            if num_workers is None:
+                num_workers = args[0]
+            if num_workers == 1:
+                # We still use a serial to keep the shape unchanged
+                return SerialEnv(*args, **kwargs)
+        instance: EnvBase = super().__call__(*args, **kwargs)
+
 
 class _BatchedEnv(EnvBase):
     """Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.
@@ -120,6 +132,8 @@ class _BatchedEnv(EnvBase):
             If a single task is used, a callable should be used and not a list of identical callables:
             if a list of callable is provided, the environment will be executed as if multiple, diverse tasks were
             needed, which comes with a slight compute overhead;
+
+    Keyword Args:
         create_env_kwargs (dict or list of dicts, optional): kwargs to be used with the environments being created;
         share_individual_td (bool, optional): if ``True``, a different tensordict is created for every process/worker and a lazy
             stack is returned.
@@ -147,7 +161,9 @@ class _BatchedEnv(EnvBase):
             Defaults to 1 for safety: if none is indicated, launching multiple
             workers may charge the cpu load too much and harm performance.
             This parameter has no effect for the :class:`~SerialEnv` class.
-
+        serial_for_single (bool, optional): if ``True``, creating a parallel environment
+            with a single worker will return a :class:`~SerialEnv` instead.
+            This option has no effect with :class:`~SerialEnv`. Defaults to ``False``.
     """
 
     _verbose: bool = VERBOSE
@@ -162,6 +178,7 @@ class _BatchedEnv(EnvBase):
         self,
         num_workers: int,
         create_env_fn: Union[Callable[[], EnvBase], Sequence[Callable[[], EnvBase]]],
+        *,
         create_env_kwargs: Union[dict, Sequence[dict]] = None,
         pin_memory: bool = False,
         share_individual_td: Optional[bool] = None,
@@ -172,8 +189,10 @@ class _BatchedEnv(EnvBase):
         allow_step_when_done: bool = False,
         num_threads: int = None,
         num_sub_threads: int = 1,
+        serial_for_single: bool = False,
     ):
         super().__init__(device=device)
+        self.serial_for_single = serial_for_single
         self.is_closed = True
         if num_threads is None:
             num_threads = num_workers + 1  # 1 more thread for this proc
@@ -760,7 +779,7 @@ class SerialEnv(_BatchedEnv):
         return self
 
 
-class ParallelEnv(_BatchedEnv):
+class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
     """Creates one environment per process.
 
     TensorDicts are passed via shared memory or memory map.

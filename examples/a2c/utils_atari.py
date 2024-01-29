@@ -61,7 +61,7 @@ def make_base_env(
 
 def make_parallel_env(env_name, num_envs, device, is_test=False):
     env = ParallelEnv(
-        num_envs, EnvCreator(lambda: make_base_env(env_name, device=device))
+        num_envs, EnvCreator(lambda: make_base_env(env_name, device=device)), serial_for_single=True,
     )
     env = TransformedEnv(env)
     env.append_transform(ToTensorImage())

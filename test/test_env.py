@@ -395,6 +395,17 @@ class TestParallel:
                 env.shared_tensordict_parent.device.type == torch.device(edevice).type
             )
 
+    def test_serial_for_single(self):
+        env = ParallelEnv(1, lambda: ContinuousActionVecMockEnv, serial_for_single=True)
+        assert isinstance(env, SerialEnv)
+        env.close()
+        env = ParallelEnv(1, lambda: ContinuousActionVecMockEnv)
+        assert isinstance(env, ParallelEnv)
+        env.close()
+        env = ParallelEnv(2, lambda: ContinuousActionVecMockEnv, serial_for_single=True)
+        assert isinstance(env, ParallelEnv)
+        env.close()
+
     @pytest.mark.parametrize("num_parallel_env", [1, 10])
     @pytest.mark.parametrize("env_batch_size", [[], (32,), (32, 1), (32, 0)])
     def test_env_with_batch_size(self, num_parallel_env, env_batch_size):
