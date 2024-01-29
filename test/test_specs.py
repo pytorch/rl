@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import contextlib
 
 import numpy as np
 import pytest
@@ -392,14 +393,23 @@ class TestComposite:
         ts = self._composite_spec(shape, is_complete, device, dtype)
 
         ts["good"] = UnboundedContinuousTensorSpec(
-            shape=shape, device=dest, dtype=dtype
+            shape=shape, device=device, dtype=dtype
         )
-        assert ts["good"].device == dest
-        # auto-casting is introduced since v0.3
-        ts["bad"] = UnboundedContinuousTensorSpec(shape=shape, device=dest, dtype=dtype)
-        assert ts.device == device
-        assert ts["good"].device == (device if device is not None else dest)
-        assert ts["bad"].device == (device if device is not None else dest)
+        cm = (
+            contextlib.nullcontext()
+            if (device == dest) or (device is None)
+            else pytest.raises(
+                RuntimeError, match="All devices of CompositeSpec must match"
+            )
+        )
+        with cm:
+            # auto-casting is introduced since v0.3
+            ts["bad"] = UnboundedContinuousTensorSpec(
+                shape=shape, device=dest, dtype=dtype
+            )
+            assert ts.device == device
+            assert ts["good"].device == (device if device is not None else dest)
+            assert ts["bad"].device == (device if device is not None else dest)
 
     def test_del(self, shape, is_complete, device, dtype):
         ts = self._composite_spec(shape, is_complete, device, dtype)
