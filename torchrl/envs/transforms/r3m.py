@@ -6,7 +6,7 @@
 from typing import List, Optional, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import set_lazy_legacy, TensorDict, TensorDictBase
 from torch.hub import load_state_dict_from_url
 from torch.nn import Identity
 
@@ -84,9 +84,10 @@ class _R3MNet(Transform):
         self.convnet = convnet
         self.del_keys = del_keys
 
+    @set_lazy_legacy(False)
     def _call(self, tensordict):
-        tensordict_view = tensordict.view(-1)
-        super()._call(tensordict_view)
+        with tensordict.view(-1) as tensordict_view:
+            super()._call(tensordict_view)
         if self.del_keys:
             tensordict.exclude(*self.in_keys, inplace=True)
         return tensordict
