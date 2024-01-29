@@ -30,8 +30,8 @@ from mocking_classes import (
     DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
-    HeteroCountingEnv,
-    HeteroCountingEnvPolicy,
+    HeterogeneousCountingEnv,
+    HeterogeneousCountingEnvPolicy,
     MockSerialEnv,
     MultiKeyCountingEnv,
     MultiKeyCountingEnvPolicy,
@@ -1821,12 +1821,14 @@ class TestNestedEnvsCollector:
 class TestHetEnvsCollector:
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
     @pytest.mark.parametrize("frames_per_batch", [4, 8, 16])
-    def test_collector_het_env(self, batch_size, frames_per_batch, seed=1, max_steps=4):
+    def test_collector_heterogeneous_env(
+        self, batch_size, frames_per_batch, seed=1, max_steps=4
+    ):
         batch_size = torch.Size(batch_size)
-        env = HeteroCountingEnv(max_steps=max_steps - 1, batch_size=batch_size)
+        env = HeterogeneousCountingEnv(max_steps=max_steps - 1, batch_size=batch_size)
         torch.manual_seed(seed)
         device = get_default_devices()[0]
-        policy = HeteroCountingEnvPolicy(env.input_spec["full_action_spec"])
+        policy = HeterogeneousCountingEnvPolicy(env.input_spec["full_action_spec"])
         ccollector = SyncDataCollector(
             create_env_fn=env,
             policy=policy,
@@ -1854,14 +1856,14 @@ class TestHetEnvsCollector:
             assert (_td["lazy"][..., i]["action"] == 1).all()
         del ccollector
 
-    def test_multi_collector_het_env_consistency(
+    def test_multi_collector_heterogeneous_env_consistency(
         self, seed=1, frames_per_batch=20, batch_dim=10
     ):
-        env = HeteroCountingEnv(max_steps=3, batch_size=(batch_dim,))
+        env = HeterogeneousCountingEnv(max_steps=3, batch_size=(batch_dim,))
         torch.manual_seed(seed)
         env_fn = lambda: TransformedEnv(env, InitTracker())
         check_env_specs(env_fn(), return_contiguous=False)
-        policy = HeteroCountingEnvPolicy(env.input_spec["full_action_spec"])
+        policy = HeterogeneousCountingEnvPolicy(env.input_spec["full_action_spec"])
 
         ccollector = MultiaSyncDataCollector(
             create_env_fn=[env_fn],

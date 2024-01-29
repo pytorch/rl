@@ -2280,7 +2280,7 @@ class TestDenseStackedCompositeSpecs:
 
 
 class TestLazyStackedCompositeSpecs:
-    def _get_het_specs(
+    def _get_heterogeneous_specs(
         self,
         batch_size=(),
         stack_dim: int = 0,
@@ -2643,7 +2643,7 @@ class TestLazyStackedCompositeSpecs:
 
         assert c.squeeze().shape == torch.Size([2, 3])
 
-        c = self._get_het_specs()
+        c = self._get_heterogeneous_specs()
         cu = c.unsqueeze(0)
         assert cu.shape == torch.Size([1, 3])
         cus = cu.squeeze(0)
@@ -2651,14 +2651,14 @@ class TestLazyStackedCompositeSpecs:
 
     @pytest.mark.parametrize("batch_size", [(), (4,), (4, 2)])
     def test_len(self, batch_size):
-        c = self._get_het_specs(batch_size=batch_size)
+        c = self._get_heterogeneous_specs(batch_size=batch_size)
         assert len(c) == c.shape[0]
         assert len(c) == len(c.rand())
 
     @pytest.mark.parametrize("batch_size", [(), (4,), (4, 2)])
     def test_eq(self, batch_size):
-        c = self._get_het_specs(batch_size=batch_size)
-        c2 = self._get_het_specs(batch_size=batch_size)
+        c = self._get_heterogeneous_specs(batch_size=batch_size)
+        c2 = self._get_heterogeneous_specs(batch_size=batch_size)
 
         assert c == c2 and not c != c2
         assert c == c.clone() and not c != c.clone()
@@ -2666,12 +2666,12 @@ class TestLazyStackedCompositeSpecs:
         del c2["shared"]
         assert not c == c2 and c != c2
 
-        c2 = self._get_het_specs(batch_size=batch_size)
+        c2 = self._get_heterogeneous_specs(batch_size=batch_size)
         del c2[0]["lidar"]
 
         assert not c == c2 and c != c2
 
-        c2 = self._get_het_specs(batch_size=batch_size)
+        c2 = self._get_heterogeneous_specs(batch_size=batch_size)
         c2[0]["lidar"].space.low += 1
         assert not c == c2 and c != c2
 
@@ -2679,7 +2679,7 @@ class TestLazyStackedCompositeSpecs:
     @pytest.mark.parametrize("include_nested", [True, False])
     @pytest.mark.parametrize("leaves_only", [True, False])
     def test_del(self, batch_size, include_nested, leaves_only):
-        c = self._get_het_specs(batch_size=batch_size)
+        c = self._get_heterogeneous_specs(batch_size=batch_size)
         td_c = c.rand()
 
         keys = list(c.keys(include_nested=include_nested, leaves_only=leaves_only))
@@ -2712,7 +2712,7 @@ class TestLazyStackedCompositeSpecs:
 
     @pytest.mark.parametrize("batch_size", [(), (4,), (4, 2)])
     def test_is_in(self, batch_size):
-        c = self._get_het_specs(batch_size=batch_size)
+        c = self._get_heterogeneous_specs(batch_size=batch_size)
         td_c = c.rand()
         assert c.is_in(td_c)
 
@@ -2738,7 +2738,7 @@ class TestLazyStackedCompositeSpecs:
         assert c.is_in(td_c)
 
     def test_type_check(self):
-        c = self._get_het_specs()
+        c = self._get_heterogeneous_specs()
         td_c = c.rand()
 
         c.type_check(td_c)
@@ -2746,7 +2746,7 @@ class TestLazyStackedCompositeSpecs:
 
     @pytest.mark.parametrize("batch_size", [(), (4,), (4, 2)])
     def test_project(self, batch_size):
-        c = self._get_het_specs(batch_size=batch_size)
+        c = self._get_heterogeneous_specs(batch_size=batch_size)
         td_c = c.rand()
         assert c.is_in(td_c)
         val = c.project(td_c)
@@ -2778,7 +2778,7 @@ class TestLazyStackedCompositeSpecs:
         assert c.is_in(td_c)
 
     def test_repr(self):
-        c = self._get_het_specs()
+        c = self._get_heterogeneous_specs()
 
         expected = f"""LazyStackedCompositeSpec(
     fields={{
@@ -2872,7 +2872,7 @@ class TestLazyStackedCompositeSpecs:
 
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
     def test_consolidate_spec(self, batch_size):
-        spec = self._get_het_specs(batch_size)
+        spec = self._get_heterogeneous_specs(batch_size)
         spec_lazy = spec.clone()
 
         assert not check_no_exclusive_keys(spec_lazy)
@@ -2941,8 +2941,8 @@ class TestLazyStackedCompositeSpecs:
 
     @pytest.mark.parametrize("batch_size", [(2,), (2, 1)])
     def test_update(self, batch_size, stack_dim=0):
-        spec = self._get_het_specs(batch_size, stack_dim)
-        spec2 = self._get_het_specs(batch_size, stack_dim)
+        spec = self._get_heterogeneous_specs(batch_size, stack_dim)
+        spec2 = self._get_heterogeneous_specs(batch_size, stack_dim)
 
         del spec2["shared"]
         spec2["hetero"] = spec2["hetero"].unsqueeze(-1)
@@ -2967,7 +2967,7 @@ class TestLazyStackedCompositeSpecs:
     @pytest.mark.parametrize("batch_size", [(2,), (2, 1)])
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_set_item(self, batch_size, stack_dim):
-        spec = self._get_het_specs(batch_size, stack_dim)
+        spec = self._get_heterogeneous_specs(batch_size, stack_dim)
 
         new = torch.stack(
             [UnboundedContinuousTensorSpec(shape=(*batch_size, i)) for i in range(3)],

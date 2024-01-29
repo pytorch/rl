@@ -1375,8 +1375,9 @@ class CountingBatchedEnv(EnvBase):
         return tensordict
 
 
-class HeteroCountingEnvPolicy:
+class HeterogeneousCountingEnvPolicy(TensorDictModuleBase):
     def __init__(self, full_action_spec: TensorSpec, count: bool = True):
+        super().__init__()
         self.full_action_spec = full_action_spec
         self.count = count
 
@@ -1387,7 +1388,7 @@ class HeteroCountingEnvPolicy:
         return td.update(action_td)
 
 
-class HeteroCountingEnv(EnvBase):
+class HeterogeneousCountingEnv(EnvBase):
     """A heterogeneous, counting Env."""
 
     def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
