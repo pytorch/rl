@@ -87,7 +87,7 @@ def _default_dtype_and_device(
         dtype = torch.get_default_dtype()
     if device is not None:
         device = torch.device(device)
-    else:
+    elif not allow_none_device:
         device = torch.zeros(()).device
     return dtype, device
 
@@ -356,7 +356,7 @@ class ContinuousBox(Box):
 
     _low: torch.Tensor
     _high: torch.Tensor
-    device: torch.device = None
+    device: torch.device | None = None
 
     # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
     @property
@@ -1173,7 +1173,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
     shape: torch.Size
     space: DiscreteBox
-    device: torch.device = torch.device("cpu")
+    device: torch.device | None = None
     dtype: torch.dtype = torch.float
     domain: str = ""
 
@@ -1200,7 +1200,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
                     f"The last value of the shape must match n for transform of type {self.__class__}. "
                     f"Got n={space.n} and shape={shape}."
                 )
-        super().__init__(shape, space, device, dtype, "discrete")
+        super().__init__(
+            shape=shape, space=space, device=device, dtype=dtype, domain="discrete"
+        )
         self.update_mask(mask)
 
     @property
@@ -1605,7 +1607,11 @@ class BoundedTensorSpec(TensorSpec):
         self.shape = shape
 
         super().__init__(
-            shape, ContinuousBox(low, high, device=device), device, dtype, domain=domain
+            shape=shape,
+            space=ContinuousBox(low, high, device=device),
+            device=device,
+            dtype=dtype,
+            domain=domain,
         )
 
     def __eq__(self, other):
@@ -2495,7 +2501,7 @@ class DiscreteTensorSpec(TensorSpec):
 
     shape: torch.Size
     space: DiscreteBox
-    device: torch.device = torch.device("cpu")
+    device: torch.device | None = None
     dtype: torch.dtype = torch.float
     domain: str = ""
 
@@ -2513,7 +2519,9 @@ class DiscreteTensorSpec(TensorSpec):
             shape = torch.Size([])
         dtype, device = _default_dtype_and_device(dtype, device)
         space = DiscreteBox(n)
-        super().__init__(shape, space, device, dtype, domain="discrete")
+        super().__init__(
+            shape=shape, space=space, device=device, dtype=dtype, domain="discrete"
+        )
         self.update_mask(mask)
 
     @property
@@ -3299,7 +3307,7 @@ class CompositeSpec(TensorSpec):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._device = torch.device("cpu")
+        cls._device = None
         cls._locked = False
         return super().__new__(cls)
 
@@ -3390,16 +3398,7 @@ class CompositeSpec(TensorSpec):
                 )
             for k, item in argdict.items():
                 if isinstance(item, dict):
-                    item = CompositeSpec(item, shape=shape)
-                if item is not None:
-                    if self._device is None:
-                        try:
-                            self._device = item.device
-                        except RuntimeError as err:
-                            if DEVICE_ERR_MSG in str(err):
-                                self._device = item._device
-                            else:
-                                raise err
+                    item = CompositeSpec(item, shape=shape, device=_device)
                 self[k] = item
 
     @property
@@ -3408,7 +3407,7 @@ class CompositeSpec(TensorSpec):
 
     @device.setter
     def device(self, device: DEVICE_TYPING):
-        if device is None:
+        if device is None and self._device is not None:
             raise RuntimeError(
                 "To erase the device of a composite spec, call " "spec.clear_device_()."
             )
@@ -3491,6 +3490,8 @@ class CompositeSpec(TensorSpec):
             raise TypeError(f"Got key of type {type(key)} when a string was expected.")
         if key in {"shape", "device", "dtype", "space"}:
             raise AttributeError(f"CompositeSpec[{key}] cannot be set")
+        if isinstance(value, dict):
+            value = CompositeSpec(value, device=self._device, shape=self.shape)
         if (
             value is not None
             and self.device is not None

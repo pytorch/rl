@@ -212,7 +212,7 @@ __all__ = ["GymWrapper", "GymEnv"]
 def _gym_to_torchrl_spec_transform(
     spec,
     dtype=None,
-    device="cpu",
+    device=None,
     categorical_action_encoding=False,
     remap_state_to_observation: bool = True,
     batch_size: tuple = (),
@@ -224,7 +224,7 @@ def _gym_to_torchrl_spec_transform(
         dtype (torch.dtype): a dtype to use for the spec.
             Defaults to`spec.dtype`.
         device (torch.device): the device for the spec.
-            Defaults to ``"cpu"``.
+            Defaults to ``None`` (no device for composite and default device for specs).
         categorical_action_encoding (bool): whether discrete spaces should be mapped to categorical or one-hot.
             Defaults to ``False`` (one-hot).
         remap_state_to_observation (bool): whether to rename the 'state' key of
@@ -349,7 +349,7 @@ def _gym_to_torchrl_spec_transform(
                 remap_state_to_observation=remap_state_to_observation,
             )
         # the batch-size must be set later
-        return CompositeSpec(spec_out)
+        return CompositeSpec(spec_out, device=device)
     elif isinstance(spec, gym_spaces.dict.Dict):
         return _gym_to_torchrl_spec_transform(
             spec.spaces,
