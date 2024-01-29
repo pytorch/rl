@@ -354,7 +354,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
         )
 
         # update collector kwargs
-        for collector_kwarg in self.collector_kwargs:
+        for i, collector_kwarg in enumerate(self.collector_kwargs):
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (
                 init_random_frames // self.num_workers

@@ -32,7 +32,7 @@ from torchrl.collectors.distributed.default_configs import (
     TCP_PORT,
 )
 from torchrl.collectors.utils import split_trajectories
-from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
+from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.utils import _convert_exploration_type
