@@ -625,7 +625,7 @@ class _BatchedEnv(EnvBase):
         self.is_closed = True
         import torchrl
 
-        torchrl._THREAD_POOL = min(os.cpu_count(), self.num_workers)
+        torchrl._THREAD_POOL = min(os.cpu_count(), torchrl._THREAD_POOL+self.num_workers)
         torch.set_num_threads(torchrl._THREAD_POOL)
 
     def _shutdown_workers(self) -> None:
