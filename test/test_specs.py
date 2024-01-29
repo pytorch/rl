@@ -341,7 +341,7 @@ def test_multi_discrete_conversion(ns, shape, device):
 
 
 @pytest.mark.parametrize("is_complete", [True, False])
-@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("device", [None, *get_default_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
 @pytest.mark.parametrize("shape", [(), (2, 3)])
 class TestComposite:
@@ -368,6 +368,7 @@ class TestComposite:
             if is_complete
             else None,
             shape=shape,
+            device=device,
         )
 
     def test_getitem(self, shape, is_complete, device, dtype):
@@ -390,18 +391,15 @@ class TestComposite:
     def test_setitem_matches_device(self, shape, is_complete, device, dtype, dest):
         ts = self._composite_spec(shape, is_complete, device, dtype)
 
-        if dest == device:
-            ts["good"] = UnboundedContinuousTensorSpec(
-                shape=shape, device=dest, dtype=dtype
-            )
-            assert ts["good"].device == dest
-        else:
-            with pytest.raises(
-                RuntimeError, match="All devices of CompositeSpec must match"
-            ):
-                ts["bad"] = UnboundedContinuousTensorSpec(
-                    shape=shape, device=dest, dtype=dtype
-                )
+        ts["good"] = UnboundedContinuousTensorSpec(
+            shape=shape, device=dest, dtype=dtype
+        )
+        assert ts["good"].device == dest
+        # auto-casting is introduced since v0.3
+        ts["bad"] = UnboundedContinuousTensorSpec(shape=shape, device=dest, dtype=dtype)
+        assert ts.device == device
+        assert ts["good"].device == (device if device is not None else dest)
+        assert ts["bad"].device == (device if device is not None else dest)
 
     def test_del(self, shape, is_complete, device, dtype):
         ts = self._composite_spec(shape, is_complete, device, dtype)

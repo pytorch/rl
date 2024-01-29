@@ -1079,7 +1079,10 @@ def test_collector_vecnorm_envcreator(static_seed):
     policy = RandomPolicy(env_make.action_spec)
     num_data_collectors = 2
     c = MultiSyncDataCollector(
-        [env_make] * num_data_collectors, policy=policy, total_frames=int(1e6)
+        [env_make] * num_data_collectors,
+        policy=policy,
+        total_frames=int(1e6),
+        frames_per_batch=200,
     )
 
     init_seed = 0
@@ -1138,8 +1141,8 @@ def test_update_weights(use_async):
     collector = collector_class(
         [create_env] * 3,
         policy=policy,
-        devices=[torch.device("cuda:0")] * 3,
-        storing_devices=[torch.device("cuda:0")] * 3,
+        device=[torch.device("cuda:0")] * 3,
+        storing_device=[torch.device("cuda:0")] * 3,
     )
     # collect state_dict
     state_dict = collector.state_dict()
@@ -1374,10 +1377,10 @@ def test_collector_device_combinations(device, storing_device):
         frames_per_batch=20,
         max_frames_per_traj=2000,
         total_frames=20000,
-        devices=[
+        device=[
             device,
         ],
-        storing_devices=[
+        storing_device=[
             storing_device,
         ],
     )
@@ -1396,10 +1399,10 @@ def test_collector_device_combinations(device, storing_device):
         frames_per_batch=20,
         max_frames_per_traj=2000,
         total_frames=20000,
-        devices=[
+        device=[
             device,
         ],
-        storing_devices=[
+        storing_device=[
             storing_device,
         ],
     )
