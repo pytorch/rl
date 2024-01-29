@@ -747,6 +747,7 @@ def parallel_env_constructor(
         num_workers=cfg.collector.env_per_collector,
         create_env_fn=make_transformed_env,
         create_env_kwargs=None,
+        serial_for_single=True,
         pin_memory=False,
     )
     if batch_transform:

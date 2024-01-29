@@ -1993,7 +1993,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             This feature is mainly intended to be used in offline/model-based settings, where a batch of random
             trajectories can be used to initialize training.
             Defaults to ``None`` (i.e. no random frames)
-        reset_at_each_iter (bool): Whether or not environments should be reset for each batch.
+        reset_at_each_iter (bool): whether environments should be reset for each batch.
             default=False.
         postproc (callable, optional): A PostProcessor is an object that will read a batch of data and process it in a
             useful format for training.

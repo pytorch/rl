@@ -25,7 +25,7 @@ from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, VERBOSE
 from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
-from torchrl.envs.common import EnvBase
+from torchrl.envs.common import _EnvPostInit, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
 # legacy
@@ -104,6 +104,19 @@ def lazy(fun):
     return new_fun
 
 
+class _PEnvMeta(_EnvPostInit):
+    def __call__(cls, *args, **kwargs):
+        serial_for_single = kwargs.pop("serial_for_single", False)
+        if serial_for_single:
+            num_workers = kwargs.get("num_workers", None)
+            if num_workers is None:
+                num_workers = args[0]
+            if num_workers == 1:
+                # We still use a serial to keep the shape unchanged
+                return SerialEnv(*args, **kwargs)
+        return super().__call__(*args, **kwargs)
+
+
 class _BatchedEnv(EnvBase):
     """Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.
 
@@ -120,12 +133,14 @@ class _BatchedEnv(EnvBase):
             If a single task is used, a callable should be used and not a list of identical callables:
             if a list of callable is provided, the environment will be executed as if multiple, diverse tasks were
             needed, which comes with a slight compute overhead;
+
+    Keyword Args:
         create_env_kwargs (dict or list of dicts, optional): kwargs to be used with the environments being created;
         share_individual_td (bool, optional): if ``True``, a different tensordict is created for every process/worker and a lazy
             stack is returned.
             default = None (False if single task);
-        shared_memory (bool): whether or not the returned tensordict will be placed in shared memory;
-        memmap (bool): whether or not the returned tensordict will be placed in memory map.
+        shared_memory (bool): whether the returned tensordict will be placed in shared memory;
+        memmap (bool): whether the returned tensordict will be placed in memory map.
         policy_proof (callable, optional): if provided, it'll be used to get the list of
             tensors to return through the :obj:`step()` and :obj:`reset()` methods, such as :obj:`"hidden"` etc.
         device (str, int, torch.device): The device of the batched environment can be passed.
@@ -147,7 +162,84 @@ class _BatchedEnv(EnvBase):
             Defaults to 1 for safety: if none is indicated, launching multiple
             workers may charge the cpu load too much and harm performance.
             This parameter has no effect for the :class:`~SerialEnv` class.
+        serial_for_single (bool, optional): if ``True``, creating a parallel environment
+            with a single worker will return a :class:`~SerialEnv` instead.
+            This option has no effect with :class:`~SerialEnv`. Defaults to ``False``.
 
+    Examples:
+        >>> from torchrl.envs import GymEnv, ParallelEnv, SerialEnv, EnvCreator
+        >>> make_env = EnvCreator(lambda: GymEnv("Pendulum-v1")) # EnvCreator ensures that the env is sharable. Optional in most cases.
+        >>> env = SerialEnv(2, make_env)  # Makes 2 identical copies of the Pendulum env, runs them on the same process serially
+        >>> env = ParallelEnv(2, make_env)  # Makes 2 identical copies of the Pendulum env, runs them on dedicated processes
+        >>> from torchrl.envs import DMControlEnv
+        >>> env = ParallelEnv(2, [
+        ...     lambda: DMControlEnv("humanoid", "stand"),
+        ...     lambda: DMControlEnv("humanoid", "walk")])  # Creates two independent copies of Humanoid, one that walks one that stands
+        >>> r = env.rollout(10)  # executes 10 random steps in the environment
+        >>> r[0]  # data for Humanoid stand
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
+                com_velocity: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                extremities: Tensor(shape=torch.Size([10, 12]), device=cpu, dtype=torch.float64, is_shared=False),
+                head_height: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float64, is_shared=False),
+                joint_angles: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        com_velocity: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        extremities: Tensor(shape=torch.Size([10, 12]), device=cpu, dtype=torch.float64, is_shared=False),
+                        head_height: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float64, is_shared=False),
+                        joint_angles: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float64, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        torso_vertical: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        velocity: Tensor(shape=torch.Size([10, 27]), device=cpu, dtype=torch.float64, is_shared=False)},
+                    batch_size=torch.Size([10]),
+                    device=cpu,
+                    is_shared=False),
+                terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                torso_vertical: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                velocity: Tensor(shape=torch.Size([10, 27]), device=cpu, dtype=torch.float64, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=cpu,
+            is_shared=False)
+        >>> r[1]  # data for Humanoid walk
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
+                com_velocity: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                extremities: Tensor(shape=torch.Size([10, 12]), device=cpu, dtype=torch.float64, is_shared=False),
+                head_height: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float64, is_shared=False),
+                joint_angles: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        com_velocity: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        extremities: Tensor(shape=torch.Size([10, 12]), device=cpu, dtype=torch.float64, is_shared=False),
+                        head_height: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float64, is_shared=False),
+                        joint_angles: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float64, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        torso_vertical: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        velocity: Tensor(shape=torch.Size([10, 27]), device=cpu, dtype=torch.float64, is_shared=False)},
+                    batch_size=torch.Size([10]),
+                    device=cpu,
+                    is_shared=False),
+                terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                torso_vertical: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                velocity: Tensor(shape=torch.Size([10, 27]), device=cpu, dtype=torch.float64, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=cpu,
+            is_shared=False)
+        >>> env = ParallelEnv(1, make_env, serial_for_single=True)
+        >>> assert isinstance(env, SerialEnv)  # serial_for_single allows you to avoid creating parallel envs when not necessary
     """
 
     _verbose: bool = VERBOSE
@@ -162,6 +254,7 @@ class _BatchedEnv(EnvBase):
         self,
         num_workers: int,
         create_env_fn: Union[Callable[[], EnvBase], Sequence[Callable[[], EnvBase]]],
+        *,
         create_env_kwargs: Union[dict, Sequence[dict]] = None,
         pin_memory: bool = False,
         share_individual_td: Optional[bool] = None,
@@ -172,8 +265,10 @@ class _BatchedEnv(EnvBase):
         allow_step_when_done: bool = False,
         num_threads: int = None,
         num_sub_threads: int = 1,
+        serial_for_single: bool = False,
     ):
         super().__init__(device=device)
+        self.serial_for_single = serial_for_single
         self.is_closed = True
         if num_threads is None:
             num_threads = num_workers + 1  # 1 more thread for this proc
@@ -760,7 +855,7 @@ class SerialEnv(_BatchedEnv):
         return self
 
 
-class ParallelEnv(_BatchedEnv):
+class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
     """Creates one environment per process.
 
     TensorDicts are passed via shared memory or memory map.

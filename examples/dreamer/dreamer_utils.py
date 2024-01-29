@@ -270,6 +270,7 @@ def parallel_env_constructor(
         create_env_kwargs=None,
         pin_memory=cfg.pin_memory,
         device=cfg.collector_device,
+        serial_for_single=True,
     )
     if batch_transform:
         kwargs.update(
