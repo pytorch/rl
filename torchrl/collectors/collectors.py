@@ -1114,13 +1114,6 @@ class _MultiDataCollector(DataCollectorBase):
         self.closed = True
         self.num_workers = len(create_env_fn)
 
-        if num_threads is None:
-            import torchrl
-
-            total_workers = self._total_workers_from_env(create_env_fn)
-            num_threads = max(
-                1, torchrl._THREAD_POOL - total_workers
-            )  # 1 more thread for this proc
 
         self.num_sub_threads = num_sub_threads
         self.num_threads = num_threads
@@ -1315,6 +1308,17 @@ class _MultiDataCollector(DataCollectorBase):
         raise NotImplementedError
 
     def _run_processes(self) -> None:
+        if self.num_threads is None:
+            import torchrl
+
+            total_workers = self._total_workers_from_env(self.create_env_fn)
+            print("torchrl._THREAD_POOL", torchrl._THREAD_POOL)
+            print("total_workers", total_workers)
+            self.num_threads = max(
+                1, torchrl._THREAD_POOL - total_workers
+            )  # 1 more thread for this proc
+            print("self.num_threads", self.num_threads)
+
         torch.set_num_threads(self.num_threads)
         import torchrl
 
