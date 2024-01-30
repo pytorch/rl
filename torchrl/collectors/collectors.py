@@ -1005,6 +1005,7 @@ class SyncDataCollector(DataCollectorBase):
                     env_next_output.set(
                         "collector", env_output.get("collector").copy()
                     ),
+                    default=None,
                 )
 
                 self._update_traj_ids(env_output)
