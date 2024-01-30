@@ -979,8 +979,8 @@ class SyncDataCollector(DataCollectorBase):
         if traj_sop.any():
             traj_ids = self._shuttle.get(("collector", "traj_ids"))
             traj_ids = traj_ids.clone()
-            traj_ids[traj_sop] = int(traj_ids.max()) + torch.arange(
-                1, traj_sop.sum() + 1, device=self.storing_device
+            traj_ids[traj_sop] = traj_ids.max().item() + torch.arange(
+                1, traj_sop.sum().item() + 1, device=self.storing_device
             )
             self._shuttle.set(("collector", "traj_ids"), traj_ids)
 
