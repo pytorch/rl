@@ -10,8 +10,8 @@ from enum import Enum
 from typing import Iterable, Optional, Union
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
 from torch.nn.modules import dropout

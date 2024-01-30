@@ -13,7 +13,7 @@ import pytest
 import torch
 import torch.distributed.rpc as rpc
 import torch.multiprocessing as mp
-from tensordict.tensordict import TensorDict
+from tensordict import TensorDict
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage

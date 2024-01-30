@@ -21,12 +21,13 @@ from tensordict import (
     is_tensor_collection,
     NonTensorData,
     set_lazy_legacy,
+    TensorDict,
+    TensorDictBase,
     unravel_key,
     unravel_key_list,
 )
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.nn import dispatch, TensorDictModuleBase
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn, Tensor
 from torch.utils._pytree import tree_map

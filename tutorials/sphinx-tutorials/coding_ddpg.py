@@ -57,6 +57,16 @@ import warnings
 from typing import Tuple
 
 warnings.filterwarnings("ignore")
+from torch import multiprocessing
+
+# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
+# `__main__` method call, but for the easy of reading the code switch to fork
+# which is also a default spawn method in Google's Colaboratory
+try:
+    multiprocessing.set_start_method("fork")
+except RuntimeError:
+    assert multiprocessing.get_start_method() == "fork"
+
 # sphinx_gallery_end_ignore
 
 import torch.cuda
@@ -330,7 +340,7 @@ def _loss_value(
 # value and actor loss, collect the cost values and write them in a tensordict
 # delivered to the user.
 
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 
 
 def _forward(self, input_tensordict: TensorDictBase) -> TensorDict:

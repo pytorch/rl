@@ -11,9 +11,9 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -95,7 +95,7 @@ class ReinforceLoss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.reinforce import ReinforceLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_obs, n_act = 3, 5
         >>> value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
         >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))

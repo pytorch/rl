@@ -565,7 +565,7 @@ def context_decorator(ctx, func):
 
     if inspect.isclass(func):
         raise RuntimeError(
-            "Cannot decorate classes; it is ambiguous whether or not only the "
+            "Cannot decorate classes; it is ambiguous whether only the "
             "constructor or all methods should have the context manager applied; "
             "additionally, decorating a class at definition-site will prevent "
             "use of the identifier as a conventional type.  "

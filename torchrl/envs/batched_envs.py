@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import gc
 import logging
 
 import os
@@ -18,14 +19,13 @@ from warnings import warn
 
 import torch
 
-from tensordict import TensorDict
+from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple, unravel_key
-from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, VERBOSE
 from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
-from torchrl.envs.common import EnvBase
+from torchrl.envs.common import _EnvPostInit, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
 # legacy
@@ -104,6 +104,19 @@ def lazy(fun):
     return new_fun
 
 
+class _PEnvMeta(_EnvPostInit):
+    def __call__(cls, *args, **kwargs):
+        serial_for_single = kwargs.pop("serial_for_single", False)
+        if serial_for_single:
+            num_workers = kwargs.get("num_workers", None)
+            if num_workers is None:
+                num_workers = args[0]
+            if num_workers == 1:
+                # We still use a serial to keep the shape unchanged
+                return SerialEnv(*args, **kwargs)
+        return super().__call__(*args, **kwargs)
+
+
 class _BatchedEnv(EnvBase):
     """Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.
 
@@ -120,12 +133,14 @@ class _BatchedEnv(EnvBase):
             If a single task is used, a callable should be used and not a list of identical callables:
             if a list of callable is provided, the environment will be executed as if multiple, diverse tasks were
             needed, which comes with a slight compute overhead;
+
+    Keyword Args:
         create_env_kwargs (dict or list of dicts, optional): kwargs to be used with the environments being created;
         share_individual_td (bool, optional): if ``True``, a different tensordict is created for every process/worker and a lazy
             stack is returned.
             default = None (False if single task);
-        shared_memory (bool): whether or not the returned tensordict will be placed in shared memory;
-        memmap (bool): whether or not the returned tensordict will be placed in memory map.
+        shared_memory (bool): whether the returned tensordict will be placed in shared memory;
+        memmap (bool): whether the returned tensordict will be placed in memory map.
         policy_proof (callable, optional): if provided, it'll be used to get the list of
             tensors to return through the :obj:`step()` and :obj:`reset()` methods, such as :obj:`"hidden"` etc.
         device (str, int, torch.device): The device of the batched environment can be passed.
@@ -147,7 +162,84 @@ class _BatchedEnv(EnvBase):
             Defaults to 1 for safety: if none is indicated, launching multiple
             workers may charge the cpu load too much and harm performance.
             This parameter has no effect for the :class:`~SerialEnv` class.
+        serial_for_single (bool, optional): if ``True``, creating a parallel environment
+            with a single worker will return a :class:`~SerialEnv` instead.
+            This option has no effect with :class:`~SerialEnv`. Defaults to ``False``.
 
+    Examples:
+        >>> from torchrl.envs import GymEnv, ParallelEnv, SerialEnv, EnvCreator
+        >>> make_env = EnvCreator(lambda: GymEnv("Pendulum-v1")) # EnvCreator ensures that the env is sharable. Optional in most cases.
+        >>> env = SerialEnv(2, make_env)  # Makes 2 identical copies of the Pendulum env, runs them on the same process serially
+        >>> env = ParallelEnv(2, make_env)  # Makes 2 identical copies of the Pendulum env, runs them on dedicated processes
+        >>> from torchrl.envs import DMControlEnv
+        >>> env = ParallelEnv(2, [
+        ...     lambda: DMControlEnv("humanoid", "stand"),
+        ...     lambda: DMControlEnv("humanoid", "walk")])  # Creates two independent copies of Humanoid, one that walks one that stands
+        >>> r = env.rollout(10)  # executes 10 random steps in the environment
+        >>> r[0]  # data for Humanoid stand
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
+                com_velocity: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                extremities: Tensor(shape=torch.Size([10, 12]), device=cpu, dtype=torch.float64, is_shared=False),
+                head_height: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float64, is_shared=False),
+                joint_angles: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        com_velocity: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        extremities: Tensor(shape=torch.Size([10, 12]), device=cpu, dtype=torch.float64, is_shared=False),
+                        head_height: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float64, is_shared=False),
+                        joint_angles: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float64, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        torso_vertical: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        velocity: Tensor(shape=torch.Size([10, 27]), device=cpu, dtype=torch.float64, is_shared=False)},
+                    batch_size=torch.Size([10]),
+                    device=cpu,
+                    is_shared=False),
+                terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                torso_vertical: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                velocity: Tensor(shape=torch.Size([10, 27]), device=cpu, dtype=torch.float64, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=cpu,
+            is_shared=False)
+        >>> r[1]  # data for Humanoid walk
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
+                com_velocity: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                extremities: Tensor(shape=torch.Size([10, 12]), device=cpu, dtype=torch.float64, is_shared=False),
+                head_height: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float64, is_shared=False),
+                joint_angles: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        com_velocity: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        extremities: Tensor(shape=torch.Size([10, 12]), device=cpu, dtype=torch.float64, is_shared=False),
+                        head_height: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float64, is_shared=False),
+                        joint_angles: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float64, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        torso_vertical: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        velocity: Tensor(shape=torch.Size([10, 27]), device=cpu, dtype=torch.float64, is_shared=False)},
+                    batch_size=torch.Size([10]),
+                    device=cpu,
+                    is_shared=False),
+                terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                torso_vertical: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float64, is_shared=False),
+                truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                velocity: Tensor(shape=torch.Size([10, 27]), device=cpu, dtype=torch.float64, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=cpu,
+            is_shared=False)
+        >>> env = ParallelEnv(1, make_env, serial_for_single=True)
+        >>> assert isinstance(env, SerialEnv)  # serial_for_single allows you to avoid creating parallel envs when not necessary
     """
 
     _verbose: bool = VERBOSE
@@ -162,6 +254,7 @@ class _BatchedEnv(EnvBase):
         self,
         num_workers: int,
         create_env_fn: Union[Callable[[], EnvBase], Sequence[Callable[[], EnvBase]]],
+        *,
         create_env_kwargs: Union[dict, Sequence[dict]] = None,
         pin_memory: bool = False,
         share_individual_td: Optional[bool] = None,
@@ -172,8 +265,10 @@ class _BatchedEnv(EnvBase):
         allow_step_when_done: bool = False,
         num_threads: int = None,
         num_sub_threads: int = 1,
+        serial_for_single: bool = False,
     ):
         super().__init__(device=device)
+        self.serial_for_single = serial_for_single
         self.is_closed = True
         if num_threads is None:
             num_threads = num_workers + 1  # 1 more thread for this proc
@@ -315,6 +410,15 @@ class _BatchedEnv(EnvBase):
 
             self._dummy_env_str = meta_data.env_str
             self._env_tensordict = meta_data.tensordict
+            if device is None:  # In other cases, the device will be mapped later
+                self._env_tensordict.clear_device_()
+                device_map = meta_data.device_map
+
+                def map_device(key, value, device_map=device_map):
+                    return value.to(device_map[key])
+
+                self._env_tensordict.named_apply(map_device, nested_keys=True)
+
             self._batch_locked = meta_data.batch_locked
         else:
             self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
@@ -481,11 +585,10 @@ class _BatchedEnv(EnvBase):
                 # Multi-task: we share tensordict that *may* have different keys
                 # LazyStacked already stores this so we don't need to do anything
                 self.shared_tensordicts = self.shared_tensordict_parent
-            if self.shared_tensordict_parent.device.type == "cpu":
-                if self._share_memory:
-                    self.shared_tensordict_parent.share_memory_()
-                elif self._memmap:
-                    self.shared_tensordict_parent.memmap_()
+            if self._share_memory:
+                self.shared_tensordict_parent.share_memory_()
+            elif self._memmap:
+                self.shared_tensordict_parent.memmap_()
         else:
             if self._share_memory:
                 self.shared_tensordict_parent.share_memory_()
@@ -581,6 +684,8 @@ class SerialEnv(_BatchedEnv):
 
         for idx in range(_num_workers):
             env = self.create_env_fn[idx](**self.create_env_kwargs[idx])
+            if self.device is not None:
+                env = env.to(self.device)
             self._envs.append(env)
         self.is_closed = False
 
@@ -671,6 +776,8 @@ class SerialEnv(_BatchedEnv):
             )
             if out.device == device:
                 out = out.clone()
+            elif device is None:
+                out = out.clone().clear_device_()
             else:
                 out = out.to(device, non_blocking=False)
         return out
@@ -712,6 +819,8 @@ class SerialEnv(_BatchedEnv):
             out = next_td.select(*self._selected_step_keys, strict=False)
             if out.device == device:
                 out = out.clone()
+            elif device is None:
+                out = out.clone().clear_device_()
             else:
                 out = out.to(device, non_blocking=False)
         return out
@@ -755,12 +864,11 @@ class SerialEnv(_BatchedEnv):
             return self
         super().to(device)
         if not self.is_closed:
-            for env in self._envs:
-                env.to(device)
+            self._envs = [env.to(device) for env in self._envs]
         return self
 
 
-class ParallelEnv(_BatchedEnv):
+class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
     """Creates one environment per process.
 
     TensorDicts are passed via shared memory or memory map.
@@ -911,7 +1019,17 @@ class ParallelEnv(_BatchedEnv):
         self.parent_channels = []
         self._workers = []
         func = _run_worker_pipe_shared_mem
-        if self.shared_tensordict_parent.device.type == "cuda":
+        # We look for cuda tensors through the leaves
+        # because the shared tensordict could be partially on cuda
+        # and some leaves may be inaccessible through get (e.g., LazyStacked)
+        has_cuda = [False]
+
+        def look_for_cuda(tensor, has_cuda=has_cuda):
+            has_cuda[0] = has_cuda[0] or tensor.is_cuda
+
+        self.shared_tensordict_parent.apply(look_for_cuda)
+        has_cuda = has_cuda[0]
+        if has_cuda:
             self.event = torch.cuda.Event()
         else:
             self.event = None
@@ -1028,9 +1146,12 @@ class ParallelEnv(_BatchedEnv):
         if self.shared_tensordict_parent.device == device:
             next_td = next_td.clone()
             tensordict_ = tensordict_.clone()
-        else:
+        elif device is not None:
             next_td = next_td.to(device, non_blocking=False)
             tensordict_ = tensordict_.to(device, non_blocking=False)
+        else:
+            next_td = next_td.clone().clear_device_()
+            tensordict_ = tensordict_.clone().clear_device_()
         tensordict.set("next", next_td)
         return tensordict, tensordict_
 
@@ -1160,6 +1281,8 @@ class ParallelEnv(_BatchedEnv):
             )
             if out.device == device:
                 out = out.clone()
+            elif device is None:
+                out = out.clear_device_().clone()
             else:
                 out = out.to(device, non_blocking=False)
         return out
@@ -1284,7 +1407,18 @@ def _run_worker_pipe_shared_mem(
     verbose: bool = False,
 ) -> None:
     device = shared_tensordict.device
-    if device.type == "cuda":
+    if device is None or device.type != "cuda":
+        # Check if some tensors are shared on cuda
+        has_cuda = [False]
+
+        def look_for_cuda(tensor, has_cuda=has_cuda):
+            has_cuda[0] = has_cuda[0] or tensor.is_cuda
+
+        shared_tensordict.apply(look_for_cuda)
+        has_cuda = has_cuda[0]
+    else:
+        has_cuda = device.type == "cuda"
+    if has_cuda:
         event = torch.cuda.Event()
     else:
         event = None
@@ -1308,7 +1442,7 @@ def _run_worker_pipe_shared_mem(
     initialized = False
 
     child_pipe.send("started")
-
+    next_shared_tensordict, root_shared_tensordict = (None,) * 2
     while True:
         try:
             if child_pipe.poll(_timeout):
@@ -1357,42 +1491,49 @@ def _run_worker_pipe_shared_mem(
                 event.record()
                 event.synchronize()
             mp_event.set()
+            del cur_td
 
         elif cmd == "step":
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            env_input = shared_tensordict
-            next_td = env._step(env_input)
+            next_td = env._step(shared_tensordict)
             next_shared_tensordict.update_(next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
             mp_event.set()
+            del next_td
 
         elif cmd == "step_and_maybe_reset":
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            env_input = shared_tensordict
-            td, root_next_td = env.step_and_maybe_reset(env_input)
+            td, root_next_td = env.step_and_maybe_reset(shared_tensordict)
             next_shared_tensordict.update_(td.get("next"))
             root_shared_tensordict.update_(root_next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
             mp_event.set()
+            del td, root_next_td
 
         elif cmd == "close":
-            del shared_tensordict, data
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
             env.close()
-            del env
+            del (
+                env,
+                shared_tensordict,
+                data,
+                next_shared_tensordict,
+                root_shared_tensordict,
+            )
             mp_event.set()
             child_pipe.close()
             if verbose:
                 logging.info(f"{pid} closed")
+            gc.collect()
             break
 
         elif cmd == "load_state_dict":
@@ -1403,6 +1544,7 @@ def _run_worker_pipe_shared_mem(
             state_dict = _recursively_strip_locks_from_state_dict(env.state_dict())
             msg = "state_dict"
             child_pipe.send((msg, state_dict))
+            del state_dict
 
         else:
             err_msg = f"{cmd} from env"

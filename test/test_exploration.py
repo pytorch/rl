@@ -14,9 +14,9 @@ from mocking_classes import (
     NestedCountingEnv,
 )
 from scipy.stats import ttest_1samp
+from tensordict import TensorDict
 
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
-from tensordict.tensordict import TensorDict
 from torch import nn
 from torchrl._utils import _replace_last
 

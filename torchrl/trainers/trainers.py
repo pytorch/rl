@@ -16,8 +16,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, U
 
 import numpy as np
 import torch.nn
+from tensordict import pad, TensorDictBase
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import pad, TensorDictBase
 from tensordict.utils import expand_right
 from torch import nn, optim
 

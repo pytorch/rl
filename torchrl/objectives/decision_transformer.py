@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from typing import Union
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 
 from torch import distributions as d

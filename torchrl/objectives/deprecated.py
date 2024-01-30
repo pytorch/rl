@@ -11,9 +11,8 @@ from typing import Tuple, Union
 import numpy as np
 import torch
 
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
-from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 

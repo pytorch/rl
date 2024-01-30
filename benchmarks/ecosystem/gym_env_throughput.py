@@ -115,7 +115,6 @@ if __name__ == "__main__":
                         frames_per_batch=1024,
                         total_frames=num_workers * 10_000,
                         device=device,
-                        storing_device=device,
                     )
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0
@@ -178,7 +177,6 @@ if __name__ == "__main__":
                         frames_per_batch=1024,
                         total_frames=num_workers * 10_000,
                         device=device,
-                        storing_device=device,
                     )
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0
@@ -222,7 +220,6 @@ if __name__ == "__main__":
                         total_frames=num_workers * 10_000,
                         num_sub_threads=num_workers // num_collectors,
                         device=device,
-                        storing_device=device,
                     )
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0
@@ -260,7 +257,6 @@ if __name__ == "__main__":
                         frames_per_batch=1024,
                         total_frames=num_workers * 10_000,
                         device=device,
-                        storing_device=device,
                     )
                     pbar = tqdm.tqdm(total=num_workers * 10_000)
                     total_frames = 0

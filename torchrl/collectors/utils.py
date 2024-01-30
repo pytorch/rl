@@ -7,8 +7,7 @@ from typing import Callable
 
 import torch
 
-from tensordict import set_lazy_legacy
-from tensordict.tensordict import pad, TensorDictBase
+from tensordict import pad, set_lazy_legacy, TensorDictBase
 
 
 def _stack_output(fun) -> Callable:
