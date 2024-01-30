@@ -1423,7 +1423,7 @@ also that the state dict is synchronised across processes if needed."""
             import torchrl
 
             torchrl._THREAD_POOL = min(
-                os.cpu_count(),
+                torchrl._THREAD_POOL_INIT,
                 torchrl._THREAD_POOL + self._total_workers_from_env(self.create_env_fn),
             )
             torch.set_num_threads(torchrl._THREAD_POOL)

@@ -626,7 +626,7 @@ class _BatchedEnv(EnvBase):
         import torchrl
 
         torchrl._THREAD_POOL = min(
-            os.cpu_count(), torchrl._THREAD_POOL + self.num_workers
+            torchrl._THREAD_POOL_INIT, torchrl._THREAD_POOL + self.num_workers
         )
         torch.set_num_threads(torchrl._THREAD_POOL)
 

@@ -50,4 +50,6 @@ import torchrl.trainers
 # deps of the library. This can be turned on via `torchrl.filter_warnings_subprocess = False`.
 filter_warnings_subprocess = True
 
+_THREAD_POOL_INIT = torch.get_num_threads()
 _THREAD_POOL = torch.get_num_threads()
+
