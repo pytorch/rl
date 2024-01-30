@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
-from tensordict.tensordict import TensorDict
+from tensordict import TensorDict
 
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import (

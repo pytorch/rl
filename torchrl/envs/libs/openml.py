@@ -5,7 +5,7 @@
 import importlib.util
 
 import torch
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 

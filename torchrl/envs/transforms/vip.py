@@ -5,8 +5,7 @@
 from typing import List, Optional, Union
 
 import torch
-from tensordict import set_lazy_legacy, TensorDict
-from tensordict.tensordict import TensorDictBase
+from tensordict import set_lazy_legacy, TensorDict, TensorDictBase
 from torch.hub import load_state_dict_from_url
 
 from torchrl.data.tensor_specs import (

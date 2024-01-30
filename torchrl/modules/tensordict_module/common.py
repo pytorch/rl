@@ -13,10 +13,9 @@ from typing import Iterable, List, Optional, Type, Union
 
 import torch
 
-from tensordict import unravel_key_list
+from tensordict import TensorDictBase, unravel_key_list
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
-from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 
 from torch import nn

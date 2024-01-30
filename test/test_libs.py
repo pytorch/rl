@@ -43,13 +43,12 @@ from _utils_internal import (
     rollout_consistency_assertion,
 )
 from packaging import version
-from tensordict import LazyStackedTensorDict
+from tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
     TensorDictModule,
     TensorDictSequential,
 )
-from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl._utils import implement_for
 from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector

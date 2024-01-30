@@ -19,8 +19,14 @@ import torch
 from _utils_internal import get_default_devices, make_tc
 from packaging import version
 from packaging.version import parse
-from tensordict import is_tensor_collection, is_tensorclass, tensorclass
-from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
+from tensordict import (
+    assert_allclose_td,
+    is_tensor_collection,
+    is_tensorclass,
+    tensorclass,
+    TensorDict,
+    TensorDictBase,
+)
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
 from torchrl.data import (

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import gc
 import logging
 
 import os
@@ -18,9 +19,8 @@ from warnings import warn
 
 import torch
 
-from tensordict import TensorDict
+from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple, unravel_key
-from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, VERBOSE
 from torchrl.data.tensor_specs import CompositeSpec
@@ -410,6 +410,15 @@ class _BatchedEnv(EnvBase):
 
             self._dummy_env_str = meta_data.env_str
             self._env_tensordict = meta_data.tensordict
+            if device is None:  # In other cases, the device will be mapped later
+                self._env_tensordict.clear_device_()
+                device_map = meta_data.device_map
+
+                def map_device(key, value, device_map=device_map):
+                    return value.to(device_map[key])
+
+                self._env_tensordict.named_apply(map_device, nested_keys=True)
+
             self._batch_locked = meta_data.batch_locked
         else:
             self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
@@ -576,11 +585,10 @@ class _BatchedEnv(EnvBase):
                 # Multi-task: we share tensordict that *may* have different keys
                 # LazyStacked already stores this so we don't need to do anything
                 self.shared_tensordicts = self.shared_tensordict_parent
-            if self.shared_tensordict_parent.device.type == "cpu":
-                if self._share_memory:
-                    self.shared_tensordict_parent.share_memory_()
-                elif self._memmap:
-                    self.shared_tensordict_parent.memmap_()
+            if self._share_memory:
+                self.shared_tensordict_parent.share_memory_()
+            elif self._memmap:
+                self.shared_tensordict_parent.memmap_()
         else:
             if self._share_memory:
                 self.shared_tensordict_parent.share_memory_()
@@ -676,6 +684,8 @@ class SerialEnv(_BatchedEnv):
 
         for idx in range(_num_workers):
             env = self.create_env_fn[idx](**self.create_env_kwargs[idx])
+            if self.device is not None:
+                env = env.to(self.device)
             self._envs.append(env)
         self.is_closed = False
 
@@ -766,6 +776,8 @@ class SerialEnv(_BatchedEnv):
             )
             if out.device == device:
                 out = out.clone()
+            elif device is None:
+                out = out.clone().clear_device_()
             else:
                 out = out.to(device, non_blocking=True)
         return out
@@ -807,6 +819,8 @@ class SerialEnv(_BatchedEnv):
             out = next_td.select(*self._selected_step_keys, strict=False)
             if out.device == device:
                 out = out.clone()
+            elif device is None:
+                out = out.clone().clear_device_()
             else:
                 out = out.to(device, non_blocking=True)
         return out
@@ -850,8 +864,7 @@ class SerialEnv(_BatchedEnv):
             return self
         super().to(device)
         if not self.is_closed:
-            for env in self._envs:
-                env.to(device)
+            self._envs = [env.to(device) for env in self._envs]
         return self
 
 
@@ -1006,7 +1019,17 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
         self.parent_channels = []
         self._workers = []
         func = _run_worker_pipe_shared_mem
-        if self.shared_tensordict_parent.device.type == "cuda":
+        # We look for cuda tensors through the leaves
+        # because the shared tensordict could be partially on cuda
+        # and some leaves may be inaccessible through get (e.g., LazyStacked)
+        has_cuda = [False]
+
+        def look_for_cuda(tensor, has_cuda=has_cuda):
+            has_cuda[0] = has_cuda[0] or tensor.is_cuda
+
+        self.shared_tensordict_parent.apply(look_for_cuda)
+        has_cuda = has_cuda[0]
+        if has_cuda:
             self.event = torch.cuda.Event()
         else:
             self.event = None
@@ -1123,9 +1146,12 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
         if self.shared_tensordict_parent.device == device:
             next_td = next_td.clone()
             tensordict_ = tensordict_.clone()
-        else:
+        elif device is not None:
             next_td = next_td.to(device, non_blocking=True)
             tensordict_ = tensordict_.to(device, non_blocking=True)
+        else:
+            next_td = next_td.clone().clear_device_()
+            tensordict_ = tensordict_.clone().clear_device_()
         tensordict.set("next", next_td)
         return tensordict, tensordict_
 
@@ -1255,6 +1281,8 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
             )
             if out.device == device:
                 out = out.clone()
+            elif device is None:
+                out = out.clear_device_().clone()
             else:
                 out = out.to(device, non_blocking=True)
         return out
@@ -1379,7 +1407,18 @@ def _run_worker_pipe_shared_mem(
     verbose: bool = False,
 ) -> None:
     device = shared_tensordict.device
-    if device.type == "cuda":
+    if device is None or device.type != "cuda":
+        # Check if some tensors are shared on cuda
+        has_cuda = [False]
+
+        def look_for_cuda(tensor, has_cuda=has_cuda):
+            has_cuda[0] = has_cuda[0] or tensor.is_cuda
+
+        shared_tensordict.apply(look_for_cuda)
+        has_cuda = has_cuda[0]
+    else:
+        has_cuda = device.type == "cuda"
+    if has_cuda:
         event = torch.cuda.Event()
     else:
         event = None
@@ -1403,7 +1442,7 @@ def _run_worker_pipe_shared_mem(
     initialized = False
 
     child_pipe.send("started")
-
+    next_shared_tensordict, root_shared_tensordict = (None,) * 2
     while True:
         try:
             if child_pipe.poll(_timeout):
@@ -1452,42 +1491,49 @@ def _run_worker_pipe_shared_mem(
                 event.record()
                 event.synchronize()
             mp_event.set()
+            del cur_td
 
         elif cmd == "step":
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            env_input = shared_tensordict
-            next_td = env._step(env_input)
+            next_td = env._step(shared_tensordict)
             next_shared_tensordict.update_(next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
             mp_event.set()
+            del next_td
 
         elif cmd == "step_and_maybe_reset":
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            env_input = shared_tensordict
-            td, root_next_td = env.step_and_maybe_reset(env_input)
+            td, root_next_td = env.step_and_maybe_reset(shared_tensordict)
             next_shared_tensordict.update_(td.get("next"))
             root_shared_tensordict.update_(root_next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
             mp_event.set()
+            del td, root_next_td
 
         elif cmd == "close":
-            del shared_tensordict, data
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
             env.close()
-            del env
+            del (
+                env,
+                shared_tensordict,
+                data,
+                next_shared_tensordict,
+                root_shared_tensordict,
+            )
             mp_event.set()
             child_pipe.close()
             if verbose:
                 logging.info(f"{pid} closed")
+            gc.collect()
             break
 
         elif cmd == "load_state_dict":
@@ -1498,6 +1544,7 @@ def _run_worker_pipe_shared_mem(
             state_dict = _recursively_strip_locks_from_state_dict(env.state_dict())
             msg = "state_dict"
             child_pipe.send((msg, state_dict))
+            del state_dict
 
         else:
             err_msg = f"{cmd} from env"

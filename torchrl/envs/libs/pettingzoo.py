@@ -10,7 +10,7 @@ import warnings
 from typing import Dict, List, Tuple, Union
 
 import torch
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDictBase
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
