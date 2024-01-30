@@ -1143,6 +1143,7 @@ def test_update_weights(use_async):
         policy=policy,
         device=[torch.device("cuda:0")] * 3,
         storing_device=[torch.device("cuda:0")] * 3,
+        frames_per_batch=20,
     )
     # collect state_dict
     state_dict = collector.state_dict()
