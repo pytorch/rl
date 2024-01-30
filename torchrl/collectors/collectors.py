@@ -978,13 +978,9 @@ class SyncDataCollector(DataCollectorBase):
         )
         if traj_sop.any():
             traj_ids = self._shuttle.get(("collector", "traj_ids"))
-            device = self._final_rollout.get(("collector", "traj_ids")).device
-            if traj_ids.device == device:
-                traj_ids = traj_ids.clone()
-            else:
-                traj_ids = traj_ids.to(device, non_blocking=True)
+            traj_ids = traj_ids.clone()
             traj_ids[traj_sop] = traj_ids.max() + torch.arange(
-                1, traj_sop.sum().to(device) + 1, device=device,
+                1, traj_sop.sum() + 1, device=self.storing_device,
             )
             self._shuttle.set(("collector", "traj_ids"), traj_ids)
 
@@ -1050,7 +1046,7 @@ class SyncDataCollector(DataCollectorBase):
                     tensordicts.append(self._shuttle)
 
                 self._shuttle = env_next_output.set(
-                    "collector", env_output.get("collector").copy()
+                    "collector", self._shuttle.get("collector").copy()
                 )
                 if self._cast_to_policy_device:
                     self._shuttle.clear_device_()
