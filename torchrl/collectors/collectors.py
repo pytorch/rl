@@ -701,7 +701,11 @@ class SyncDataCollector(DataCollectorBase):
         # Shuttle is a deviceless tensordict that just carried data from env to policy and policy to env
         self._shuttle = self.env.reset()
         if self.policy_device != self.env_device or self.env_device is None:
+            self._shuttle_has_no_device = True
             self._shuttle.clear_device_()
+        else:
+            self._shuttle_has_no_device = False
+
         traj_ids = torch.arange(self.n_env, device=self.storing_device).view(
             self.env.batch_size
         )
@@ -994,7 +998,7 @@ class SyncDataCollector(DataCollectorBase):
 
         """
         if self.reset_at_each_iter:
-            self._shuttle.update(self.env.reset(), inplace=True)
+            self._shuttle.update(self.env.reset())
 
         # self._shuttle.fill_(("collector", "step_count"), 0)
         self._final_rollout.fill_(("collector", "traj_ids"), -1)
@@ -1014,7 +1018,9 @@ class SyncDataCollector(DataCollectorBase):
                             )
                         elif self.policy_device is None:
                             # we know the tensordict has a device otherwise we would not be here
-                            policy_input = self._shuttle.clear_device_()
+                            # we can pass this, clear_device_ must have been called earlier
+                            # policy_input = self._shuttle.clear_device_()
+                            policy_input = self._shuttle
                     else:
                         policy_input = self._shuttle
                     # we still do the assignment for security
@@ -1025,19 +1031,35 @@ class SyncDataCollector(DataCollectorBase):
                             policy_output, keys_to_update=self._policy_output_keys
                         )
 
+                if self._shuttle_has_no_device:
+                    assert self._shuttle.device is None
+                else:
+                    assert self._shuttle.device is not None
+
                 if self._cast_to_policy_device:
                     if self.env_device is not None:
                         env_input = self._shuttle.to(self.env_device, non_blocking=True)
                     elif self.env_device is None:
                         # we know the tensordict has a device otherwise we would not be here
-                        env_input = self._shuttle.clear_device_()
+                        # we can pass this, clear_device_ must have been called earlier
+                        # env_input = self._shuttle.clear_device_()
+                        env_input = self._shuttle
                 else:
                     env_input = self._shuttle
                 env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
                 if self._shuttle is not env_output:
                     # ad-hoc update shuttle
-                    self._shuttle.set("next", env_output.get("next"))
+                    next_data = env_output.get("next")
+                    if self._shuttle_has_no_device:
+                        # Make sure
+                        next_data.clear_device_()
+                    self._shuttle.set("next", next_data)
+
+                if self._shuttle_has_no_device:
+                    assert self._shuttle.device is None
+                else:
+                    assert self._shuttle.device is not None
 
                 if self.storing_device is not None:
                     tensordicts.append(
@@ -1046,13 +1068,14 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     tensordicts.append(self._shuttle)
 
-                self._shuttle = env_next_output.clear_device_().set(
+                self._shuttle = env_next_output.set(
                     "collector", self._shuttle.get("collector").copy()
                 )
-                if self._cast_to_policy_device:
+                if self._shuttle_has_no_device:
                     self._shuttle.clear_device_()
 
                 self._update_traj_ids(env_output)
+
                 if (
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
