@@ -18,6 +18,8 @@ import hydra
 import numpy as np
 import torch
 import tqdm
+
+from torchrl.envs import set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
 
@@ -34,6 +36,8 @@ from utils import (
 
 @hydra.main(config_path=".", config_name="discrete_iql")
 def main(cfg: "DictConfig"):  # noqa: F821
+    set_gym_backend(cfg.env.backend).set()
+
     # Create logger
     exp_name = generate_exp_name("Discrete-IQL-online", cfg.logger.exp_name)
     logger = None

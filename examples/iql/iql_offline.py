@@ -31,9 +31,10 @@ from utils import (
 )
 
 
-@set_gym_backend("gym")
 @hydra.main(config_path=".", config_name="offline_config")
 def main(cfg: "DictConfig"):  # noqa: F821
+    set_gym_backend(cfg.env.backend).set()
+
     # Create logger
     exp_name = generate_exp_name("IQL-offline", cfg.logger.exp_name)
     logger = None

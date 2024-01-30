@@ -49,7 +49,7 @@ from torchrl.trainers.helpers.models import ACTIVATIONS
 
 
 def env_maker(cfg, device="cpu"):
-    lib = cfg.env.library
+    lib = cfg.env.backend
     if lib in ("gym", "gymnasium"):
         with set_gym_backend(lib):
             return GymEnv(
