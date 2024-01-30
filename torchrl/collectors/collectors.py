@@ -1036,11 +1036,6 @@ class SyncDataCollector(DataCollectorBase):
                             policy_output, keys_to_update=self._policy_output_keys
                         )
 
-                if self._shuttle_has_no_device:
-                    assert self._shuttle.device is None
-                else:
-                    assert self._shuttle.device is not None
-
                 if self._cast_to_policy_device:
                     if self.env_device is not None:
                         env_input = self._shuttle.to(self.env_device, non_blocking=True)
@@ -1060,11 +1055,6 @@ class SyncDataCollector(DataCollectorBase):
                         # Make sure
                         next_data.clear_device_()
                     self._shuttle.set("next", next_data)
-
-                if self._shuttle_has_no_device:
-                    assert self._shuttle.device is None
-                else:
-                    assert self._shuttle.device is not None
 
                 if self.storing_device is not None:
                     tensordicts.append(
