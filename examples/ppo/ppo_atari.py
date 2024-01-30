@@ -160,13 +160,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             with torch.no_grad():
                 data = adv_module(data.to(device, non_blocking=True))
             data_reshape = data.reshape(-1)
-            print('reshaped')
             # Update the data buffer
             data_buffer.extend(data_reshape)
-            print('extended')
 
             for k, batch in enumerate(data_buffer):
-                print('iter', k)
 
                 # Linearly decrease the learning rate and clip epsilon
                 alpha = 1.0
@@ -177,7 +174,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if cfg_loss_anneal_clip_eps:
                     loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
                 num_network_updates += 1
-                print('batch to device')
                 # Get a data batch
                 batch = batch.to(device, non_blocking=True)
 
@@ -189,7 +185,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 loss_sum = (
                     loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
                 )
-                print('backward')
                 # Backward pass
                 loss_sum.backward()
                 torch.nn.utils.clip_grad_norm_(

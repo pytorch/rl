@@ -41,9 +41,7 @@ from torchrl.modules import (
 # --------------------------------------------------------------------
 
 
-def make_base_env(
-    env_name="BreakoutNoFrameskip-v4", frame_skip=4, is_test=False
-):
+def make_base_env(env_name="BreakoutNoFrameskip-v4", frame_skip=4, is_test=False):
     env = GymEnv(
         env_name,
         frame_skip=frame_skip,
