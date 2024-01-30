@@ -1945,7 +1945,9 @@ class TestMultiKeyEnvsCollector:
         env = MultiKeyCountingEnv(batch_size=batch_size, max_steps=max_steps)
         torch.manual_seed(seed)
         device = get_default_devices()[0]
-        policy = MultiKeyCountingEnvPolicy(env.input_spec["full_action_spec"].to(device))
+        policy = MultiKeyCountingEnvPolicy(
+            env.input_spec["full_action_spec"].to(device)
+        )
         ccollector = SyncDataCollector(
             create_env_fn=env,
             policy=policy,

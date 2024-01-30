@@ -770,6 +770,7 @@ class SyncDataCollector(DataCollectorBase):
                     policy_input.clone()
                 )  # to test if values have changed in-place
                 policy_output = self.policy(policy_input)
+
                 # check that we don't have exclusive keys, because they don't appear in keys
                 def check_exclusive(val):
                     if (
@@ -780,6 +781,7 @@ class SyncDataCollector(DataCollectorBase):
                             "LazyStackedTensorDict with exclusive keys are not permitted in collectors. "
                             "Consider using a placeholder for missing keys."
                         )
+
                 policy_output._fast_apply(check_exclusive, call_on_nested=True)
                 # Use apply, because it works well with lazy stacks
                 # Edge-case of this approach: the policy may change the values in-place and only by a tiny bit
@@ -986,7 +988,9 @@ class SyncDataCollector(DataCollectorBase):
             traj_sop = traj_sop.to(self.storing_device)
             traj_ids = traj_ids.clone().to(self.storing_device)
             traj_ids[traj_sop] = traj_ids.max() + torch.arange(
-                1, traj_sop.sum() + 1, device=self.storing_device,
+                1,
+                traj_sop.sum() + 1,
+                device=self.storing_device,
             )
             self._shuttle.set(("collector", "traj_ids"), traj_ids)
 

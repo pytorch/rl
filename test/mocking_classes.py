@@ -229,7 +229,7 @@ class MockSerialEnv(EnvBase):
                 "terminated": done.clone(),
                 "observation": n.clone(),
             },
-            batch_size=[],
+            batch_size=[], device=self.device,
         )
 
     def _reset(self, tensordict: TensorDictBase = None, **kwargs) -> TensorDictBase:
@@ -241,7 +241,7 @@ class MockSerialEnv(EnvBase):
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict(
-            {"done": done, "terminated": done.clone(), "observation": n}, []
+            {"done": done, "terminated": done.clone(), "observation": n}, [], device=self.device,
         )
 
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
