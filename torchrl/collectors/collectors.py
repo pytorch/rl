@@ -22,7 +22,6 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
-from torch.utils._pytree import tree_map
 from textwrap import indent
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
@@ -34,6 +33,7 @@ from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
+from torch.utils._pytree import tree_map
 from torch.utils.data import IterableDataset
 
 from torchrl._utils import (
@@ -244,7 +244,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 else:
                     policy_device = None
                 if policy_device:
-                    next_observation = tree_map(lambda x: x.to(policy_device), next_observation)
+                    next_observation = tree_map(
+                        lambda x: x.to(policy_device), next_observation
+                    )
                 output = policy(**next_observation)
 
                 if isinstance(output, tuple):
@@ -967,7 +969,9 @@ class SyncDataCollector(DataCollectorBase):
                     policy_output = self.policy(policy_input)
                     if self._shuttle is not policy_output:
                         # ad-hoc update shuttle
-                        self._shuttle = self._shuttle._fast_apply(self._update_device_wise, policy_output)
+                        self._shuttle = self._shuttle._fast_apply(
+                            self._update_device_wise, policy_output
+                        )
                     # # update is a no-op if identities match, so this is safe and efficient in all cases
                     # # We could remove the inplace and update just the keys that have been updated by
                     # # policy, but that would require some tricks to check if the policy
@@ -988,7 +992,9 @@ class SyncDataCollector(DataCollectorBase):
                 env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
                 if self._shuttle is not env_output:
                     # ad-hoc update shuttle
-                    self._shuttle = self._shuttle._fast_apply(self._update_device_wise, env_output)
+                    self._shuttle = self._shuttle._fast_apply(
+                        self._update_device_wise, env_output
+                    )
                 # # Here we could update only the leaves that are part of the env output
                 # # since we have access to them and update() supports lists of keys
                 # # to update.
