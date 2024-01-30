@@ -344,6 +344,7 @@ class TestCollectorDevices:
         )
         for data in collector:  # noqa: B007
             break
+
         assert data.device == storing_device
 
         # env is on cuda, policy has no device

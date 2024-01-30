@@ -695,6 +695,20 @@ class SyncDataCollector(DataCollectorBase):
         with torch.no_grad():
             self._tensordict_out = self.env.fake_tensordict()
 
+        # If storing device is not None, we use this to cast the storage.
+        # If it is None and the env and policy are on the same device,
+        # the storing device is already the same as those, so we don't need
+        # to consider this use case.
+        # In all other cases, we can't really put a device on the storage,
+        # since at least one data source has a device that is not clear.
+        if self.storing_device:
+            self._tensordict_out = self._tensordict_out.to(
+                self.storing_device, non_blocking=True
+            )
+        else:
+            # erase all devices
+            self._tensordict_out.clear_device_()
+
         # If the policy has a valid spec, we use it
         if (
             hasattr(self.policy, "spec")
@@ -730,21 +744,12 @@ class SyncDataCollector(DataCollectorBase):
                 elif self._cast_to_policy_device and input.device is not None:
                     input.clear_device_()
                 # we cast to policy device, we'll deal with the device later
-                self._tensordict_out = self.policy(input)
-
-        # If storing device is not None, we use this to cast the storage.
-        # If it is None and the env and policy are on the same device,
-        # the storing device is already the same as those, so we don't need
-        # to consider this use case.
-        # In all other cases, we can't really put a device on the storage,
-        # since at least one data source has a device that is not clear.
-        if self.storing_device:
-            self._tensordict_out = self._tensordict_out.to(
-                self.storing_device, non_blocking=True
-            )
-        else:
-            # erase all devices
-            self._tensordict_out.clear_device_()
+                _tensordict_out = self.policy(input)
+                if self.storing_device:
+                    _tensordict_out = _tensordict_out.to(self.storing_device, non_blocking=True)
+                else:
+                    _tensordict_out.clear_device_()
+                self._tensordict_out = _tensordict_out
 
         self._tensordict_out = (
             self._tensordict_out.unsqueeze(-1)
@@ -754,12 +759,20 @@ class SyncDataCollector(DataCollectorBase):
         )
         # in addition to outputs of the policy, we add traj_ids to
         # _tensordict_out which will be collected during rollout
+        print("env", self.env_device)
+        print("policy", self.policy_device)
+        print("traj ids", torch.zeros(
+                *self._tensordict_out.batch_size,
+                dtype=torch.int64,
+                device=self.env_device,  # will be cast to storing_device if needed
+            ))
+        print(self._tensordict_out)
         self._tensordict_out.set(
             ("collector", "traj_ids"),
             torch.zeros(
                 *self._tensordict_out.batch_size,
                 dtype=torch.int64,
-                device=self.storing_device,
+                device=self.env_device,  # will be cast to storing_device if needed
             ),
         )
         self._tensordict_out.refine_names(..., "time")
@@ -947,7 +960,7 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     if self._cast_to_policy_device:
                         if self.policy_device is not None:
-                            self._tensordict = self._tensordict.to(self.policy_device)
+                            self._tensordict = self._tensordict.to(self.policy_device, non_blocking=True)
                         elif self.policy_device is None:
                             # we know the tensordict has a device otherwise we would not be here
                             self._tensordict.clear_device_()
@@ -997,6 +1010,10 @@ class SyncDataCollector(DataCollectorBase):
                             )
                     break
             else:
+                print(tensordicts)
+                print("\n\n\n")
+                print("self._tensordict_out", self._tensordict_out)
+                print("\n\n\n")
                 try:
                     self._tensordict_out = torch.stack(
                         tensordicts,
