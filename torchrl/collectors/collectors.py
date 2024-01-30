@@ -771,7 +771,7 @@ class SyncDataCollector(DataCollectorBase):
                 )  # to test if values have changed in-place
                 policy_output = self.policy(policy_input)
                 # check that we don't have exclusive keys, because they don't appear in keys
-                for val in policy_output.values(True):
+                def check_exclusive(val):
                     if (
                         isinstance(val, LazyStackedTensorDict)
                         and val._has_exclusive_keys
@@ -780,6 +780,7 @@ class SyncDataCollector(DataCollectorBase):
                             "LazyStackedTensorDict with exclusive keys are not permitted in collectors. "
                             "Consider using a placeholder for missing keys."
                         )
+                policy_output._fast_apply(check_exclusive, call_on_nested=True)
                 # Use apply, because it works well with lazy stacks
                 # Edge-case of this approach: the policy may change the values in-place and only by a tiny bit
                 # or occasionally. In these cases, the keys will be missed (we can't detect if the policy has
