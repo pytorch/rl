@@ -797,7 +797,9 @@ class SyncDataCollector(DataCollectorBase):
                         set(filtered_policy_output.keys(True, True))
                     )
                 )
-                self._final_rollout.update(policy_output.select(*self._policy_output_keys))
+                self._final_rollout.update(
+                    policy_output.select(*self._policy_output_keys)
+                )
                 del filtered_policy_output, policy_output, policy_input
 
         _env_output_keys = []
@@ -977,7 +979,7 @@ class SyncDataCollector(DataCollectorBase):
         if traj_sop.any():
             traj_ids = self._shuttle.get(("collector", "traj_ids"))
             traj_ids = traj_ids.clone()
-            traj_ids[traj_sop] = traj_ids.max().to(self.storing_device) + torch.arange(
+            traj_ids[traj_sop] = int(traj_ids.max()) + torch.arange(
                 1, traj_sop.sum() + 1, device=self.storing_device
             )
             self._shuttle.set(("collector", "traj_ids"), traj_ids)
