@@ -966,7 +966,7 @@ class SyncDataCollector(DataCollectorBase):
 
                 if self._cast_to_policy_device:
                     if self.env_device is not None:
-                        env_input = self._shuttle.to(self.env_device)
+                        env_input = self._shuttle.to(self.env_device, non_blocking=True)
                     elif self.env_device is None:
                         # we know the tensordict has a device otherwise we would not be here
                         env_input = self._shuttle.copy().clear_device_()
