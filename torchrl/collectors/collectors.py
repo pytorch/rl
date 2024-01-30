@@ -1045,7 +1045,7 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     tensordicts.append(self._shuttle)
 
-                self._shuttle = env_next_output.set(
+                self._shuttle = env_next_output.clear_device_().set(
                     "collector", self._shuttle.get("collector").copy()
                 )
                 if self._cast_to_policy_device:
