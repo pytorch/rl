@@ -798,7 +798,7 @@ class SyncDataCollector(DataCollectorBase):
                         set(filtered_policy_output.keys(True, True))
                     )
                 )
-                self._final_rollout.update(policy_output)
+                self._final_rollout.update(policy_output.select(*self._policy_output_keys))
                 del filtered_policy_output, policy_output, policy_input
 
         _env_output_keys = []

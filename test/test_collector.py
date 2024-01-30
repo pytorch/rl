@@ -1672,9 +1672,15 @@ def test_maxframes_error():
 @pytest.mark.parametrize("policy_device", [None, *get_available_devices()])
 @pytest.mark.parametrize("env_device", [None, *get_available_devices()])
 @pytest.mark.parametrize("storing_device", [None, *get_available_devices()])
-def test_reset_heterogeneous_envs(policy_device: torch.device, env_device: torch.device, storing_device: torch.device):
-    if policy_device is not None and policy_device.type == "cuda" and env_device is None:
-        env_device = torch.device("cpu") # explicit mapping
+def test_reset_heterogeneous_envs(
+    policy_device: torch.device, env_device: torch.device, storing_device: torch.device
+):
+    if (
+        policy_device is not None
+        and policy_device.type == "cuda"
+        and env_device is None
+    ):
+        env_device = torch.device("cpu")  # explicit mapping
     elif env_device is not None and env_device.type == "cuda" and policy_device is None:
         policy_device = torch.device("cpu")
     env1 = lambda: TransformedEnv(CountingEnv(), StepCounter(2))
