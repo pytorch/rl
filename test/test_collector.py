@@ -17,6 +17,7 @@ from _utils_internal import (
     check_rollout_consistency_multikey_env,
     decorate_thread_sub_func,
     generate_seeds,
+    get_available_devices,
     get_default_devices,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
@@ -1668,23 +1669,37 @@ def test_maxframes_error():
         )
 
 
-def test_reset_heterogeneous_envs():
+@pytest.mark.parametrize("policy_device", [None, *get_available_devices()])
+@pytest.mark.parametrize("env_device", [None, *get_available_devices()])
+@pytest.mark.parametrize("storing_device", [None, *get_available_devices()])
+def test_reset_heterogeneous_envs(policy_device: torch.device, env_device: torch.device, storing_device: torch.device):
+    if policy_device is not None and policy_device.type == "cuda" and env_device is None:
+        env_device = torch.device("cpu") # explicit mapping
+    elif env_device is not None and env_device.type == "cuda" and policy_device is None:
+        policy_device = torch.device("cpu")
     env1 = lambda: TransformedEnv(CountingEnv(), StepCounter(2))
     env2 = lambda: TransformedEnv(CountingEnv(), StepCounter(3))
-    env = SerialEnv(2, [env1, env2])
+    env = SerialEnv(2, [env1, env2], device=env_device)
     collector = SyncDataCollector(
-        env, RandomPolicy(env.action_spec), total_frames=10_000, frames_per_batch=1000
+        env,
+        RandomPolicy(env.action_spec),
+        total_frames=10_000,
+        frames_per_batch=100,
+        policy_device=policy_device,
+        env_device=env_device,
+        storing_device=storing_device,
     )
     try:
         for data in collector:  # noqa: B007
             break
+        data_device = storing_device if storing_device is not None else env_device
         assert (
             data[0]["next", "truncated"].squeeze()
-            == torch.tensor([False, True]).repeat(250)[:500]
+            == torch.tensor([False, True], device=data_device).repeat(25)[:50]
         ).all(), data[0]["next", "truncated"][:10]
         assert (
             data[1]["next", "truncated"].squeeze()
-            == torch.tensor([False, False, True]).repeat(168)[:500]
+            == torch.tensor([False, False, True], device=data_device).repeat(17)[:50]
         ).all(), data[1]["next", "truncated"][:10]
     finally:
         collector.shutdown()

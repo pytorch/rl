@@ -29,7 +29,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict import (
+    LazyStackedTensorDict,
+    TensorDict,
+    TensorDictBase,
+    TensorDictParams,
+    unravel_key,
+)
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
@@ -600,6 +606,7 @@ class SyncDataCollector(DataCollectorBase):
         self._cast_to_policy_device = self.policy_device != self.env_device
 
         self.env: EnvBase = env
+        del env
         self.closed = False
         if not reset_when_done:
             raise ValueError("reset_when_done is deprectated.")
@@ -638,7 +645,7 @@ class SyncDataCollector(DataCollectorBase):
                         "Possible solutions: Set max_frames_per_traj to 0 or "
                         "remove the StepCounter limit from the environment transforms."
                     )
-            env = self.env = TransformedEnv(
+            self.env = TransformedEnv(
                 self.env, StepCounter(max_steps=self.max_frames_per_traj)
             )
 
@@ -693,7 +700,7 @@ class SyncDataCollector(DataCollectorBase):
         self.return_same_td = return_same_td
 
         # Shuttle is a deviceless tensordict that just carried data from env to policy and policy to env
-        self._shuttle = env.reset()
+        self._shuttle = self.env.reset()
         if self.policy_device != self.env_device or self.env_device is None:
             self._shuttle.clear_device_()
         traj_ids = torch.arange(self.n_env, device=self.storing_device).view(
@@ -751,35 +758,59 @@ class SyncDataCollector(DataCollectorBase):
             # See #505 for additional context.
             self._final_rollout.update(self._shuttle.copy())
             with torch.no_grad():
-                input = self._shuttle.copy()
+                policy_input = self._shuttle.copy()
                 if self.policy_device:
-                    input = input.to(self.policy_device)
+                    policy_input = policy_input.to(self.policy_device)
                 # we cast to policy device, we'll deal with the device later
-                input_copy = input.clone()
-                _tensordict_out = self.policy(input)
-                for key, value in _tensordict_out.items(True, True):
+                policy_input_copy = policy_input.copy()
+                policy_input_clone = (
+                    policy_input.clone()
+                )  # to test if values have changed in-place
+                policy_output = self.policy(policy_input)
+                # check that we don't have exclusive keys, because they don't appear in keys
+                for val in policy_output.values(True):
                     if (
-                        (key not in input.keys(True, True))
-                        or (value is not input.get(key))
-                        or (value != input_copy.get(key)).any()
+                        isinstance(val, LazyStackedTensorDict)
+                        and val._has_exclusive_keys
                     ):
-                        self._policy_output_keys.add(key)
-                self._final_rollout.update(_tensordict_out)
+                        raise RuntimeError(
+                            "LazyStackedTensorDict with exclusive keys are not permitted in collectors. "
+                            "Consider using a placeholder for missing keys."
+                        )
+                # Use apply, because it works well with lazy stacks
+                # Edge-case of this approach: the policy may change the values in-place and only by a tiny bit
+                # or occasionally. In these cases, the keys will be missed (we can't detect if the policy has
+                # changed them here).
+                # This will cause a failure to update entries when policy and env device mismatch and
+                # casting is necessary.
+                filtered_policy_output = policy_output.apply(
+                    lambda value_output, value_input, value_input_clone: value_output
+                    if (value_input is None)
+                    or (value_output is not value_input)
+                    or ~torch.isclose(value_output, value_input_clone).any()
+                    else None,
+                    policy_input_copy,
+                    policy_input_clone,
+                    default=None,
+                )
+                self._policy_output_keys = list(
+                    self._policy_output_keys.union(
+                        set(filtered_policy_output.keys(True, True))
+                    )
+                )
+                self._final_rollout.update(policy_output)
+                del filtered_policy_output, policy_output, policy_input
 
         _env_output_keys = []
         for spec in ["full_observation_spec", "full_done_spec", "full_reward_spec"]:
             _env_output_keys += list(self.env.output_spec[spec].keys(True, True))
-        self._env_output_keys = set(_env_output_keys)
+        self._env_output_keys = _env_output_keys
         self._final_rollout = (
             self._final_rollout.unsqueeze(-1)
-            .expand(*env.batch_size, self.frames_per_batch)
+            .expand(*self.env.batch_size, self.frames_per_batch)
             .clone()
             .zero_()
         )
-        if set(
-            self._final_rollout.exclude("collector").keys(True, True)
-        ) != self._env_output_keys.union(self._policy_output_keys):
-            raise RuntimeError("Mismatching key ensembles.")
 
         # in addition to outputs of the policy, we add traj_ids to
         # _final_rollout which will be collected during rollout
@@ -981,28 +1012,30 @@ class SyncDataCollector(DataCollectorBase):
                             )
                         elif self.policy_device is None:
                             # we know the tensordict has a device otherwise we would not be here
-                            policy_input = self._shuttle.copy().clear_device_()
+                            policy_input = self._shuttle.clear_device_()
                     else:
                         policy_input = self._shuttle
                     # we still do the assignment for security
                     policy_output = self.policy(policy_input)
                     if self._shuttle is not policy_output:
                         # ad-hoc update shuttle
-                        self._shuttle.update(policy_output, keys_to_update=self._policy_output_keys)
+                        self._shuttle.update(
+                            policy_output, keys_to_update=self._policy_output_keys
+                        )
 
                 if self._cast_to_policy_device:
                     if self.env_device is not None:
                         env_input = self._shuttle.to(self.env_device, non_blocking=True)
                     elif self.env_device is None:
                         # we know the tensordict has a device otherwise we would not be here
-                        env_input = self._shuttle.copy().clear_device_()
+                        env_input = self._shuttle.clear_device_()
                 else:
                     env_input = self._shuttle
                 env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
                 if self._shuttle is not env_output:
                     # ad-hoc update shuttle
-                    self._shuttle.update(env_output, keys_to_update=self._env_output_keys)
+                    self._shuttle.set("next", env_output.get("next"))
 
                 if self.storing_device is not None:
                     tensordicts.append(
@@ -1014,6 +1047,8 @@ class SyncDataCollector(DataCollectorBase):
                 self._shuttle = env_next_output.set(
                     "collector", env_output.get("collector").copy()
                 )
+                if self._cast_to_policy_device:
+                    self._shuttle.clear_device_()
 
                 self._update_traj_ids(env_output)
                 if (
