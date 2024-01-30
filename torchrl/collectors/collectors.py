@@ -1114,7 +1114,6 @@ class _MultiDataCollector(DataCollectorBase):
         self.closed = True
         self.num_workers = len(create_env_fn)
 
-
         self.num_sub_threads = num_sub_threads
         self.num_threads = num_threads
         self.create_env_fn = create_env_fn
@@ -1312,17 +1311,10 @@ class _MultiDataCollector(DataCollectorBase):
             import torchrl
 
             total_workers = self._total_workers_from_env(self.create_env_fn)
-            print("torchrl._THREAD_POOL", torchrl._THREAD_POOL)
-            print("total_workers", total_workers)
             self.num_threads = max(
                 1, torchrl._THREAD_POOL - total_workers
             )  # 1 more thread for this proc
-            print("self.num_threads", self.num_threads)
 
-        print(
-            "collectors.py:1323 torch.set_num_threads(self.num_threads)",
-            self.num_threads
-            )
         torch.set_num_threads(self.num_threads)
         assert torch.get_num_threads() == self.num_threads
         import torchrl
@@ -1434,10 +1426,6 @@ also that the state dict is synchronised across processes if needed."""
             torchrl._THREAD_POOL = min(
                 torchrl._THREAD_POOL_INIT,
                 torchrl._THREAD_POOL + self._total_workers_from_env(self.create_env_fn),
-            )
-            print(
-                "collectors.py:1439 torch.set_num_threads(torchrl._THREAD_POOL)",
-                torchrl._THREAD_POOL, self._total_workers_from_env(self.create_env_fn)
             )
             torch.set_num_threads(torchrl._THREAD_POOL)
 

@@ -628,10 +628,6 @@ class _BatchedEnv(EnvBase):
         torchrl._THREAD_POOL = min(
             torchrl._THREAD_POOL_INIT, torchrl._THREAD_POOL + self.num_workers
         )
-        print(
-            "batched_envs.py:631 torch.set_num_threads(torchrl._THREAD_POOL)",
-            torchrl._THREAD_POOL
-        )
         torch.set_num_threads(torchrl._THREAD_POOL)
 
     def _shutdown_workers(self) -> None:
@@ -1012,10 +1008,6 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
                 1, torchrl._THREAD_POOL - self.num_workers
             )  # 1 more thread for this proc
 
-        print(
-            "batched_envs.py:1016 torch.set_num_threads(self.num_threads)",
-            self.num_threads
-        )
         torch.set_num_threads(self.num_threads)
         import torchrl
 

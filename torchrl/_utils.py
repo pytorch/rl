@@ -630,7 +630,6 @@ class _ProcessNoWarn(mp.Process):
 
     def run(self, *args, **kwargs):
         if self.num_threads is not None:
-            print("_utils.py: torch.set_num_threads(self.num_threads)", self.num_threads)
             torch.set_num_threads(self.num_threads)
         if self.filter_warnings_subprocess:
             import warnings
