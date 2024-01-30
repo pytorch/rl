@@ -1068,11 +1068,12 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     tensordicts.append(self._shuttle)
 
-                self._shuttle = env_next_output.set(
-                    "collector", self._shuttle.get("collector").copy()
-                )
+                # carry over collector data without messing up devices
+                collector_data = self._shuttle.get("collector").copy()
+                self._shuttle = env_next_output
                 if self._shuttle_has_no_device:
                     self._shuttle.clear_device_()
+                self._shuttle.set("collector", collector_data)
 
                 self._update_traj_ids(env_output)
 
