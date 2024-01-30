@@ -22,7 +22,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
-
+from torch.utils._pytree import tree_map
 from textwrap import indent
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
@@ -238,6 +238,13 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                     out_keys = ["action"]
                 else:
                     out_keys = list(self.env.action_keys)
+                for p in policy.parameters():
+                    policy_device = p.device
+                    break
+                else:
+                    policy_device = None
+                if policy_device:
+                    next_observation = tree_map(lambda x: x.to(policy_device), next_observation)
                 output = policy(**next_observation)
 
                 if isinstance(output, tuple):
