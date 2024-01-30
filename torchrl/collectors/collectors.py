@@ -721,6 +721,7 @@ class SyncDataCollector(DataCollectorBase):
             self._final_rollout.clear_device_()
 
         # If the policy has a valid spec, we use it
+        self._policy_output_keys = set()
         if (
             hasattr(self.policy, "spec")
             and self.policy.spec is not None
@@ -737,6 +738,7 @@ class SyncDataCollector(DataCollectorBase):
                 if policy_spec.ndim < self._final_rollout.ndim:
                     policy_spec = policy_spec.expand(self._final_rollout.shape)
                 for key, spec in policy_spec.items(True, True):
+                    self._policy_output_keys.add(key)
                     if key in self._final_rollout.keys(True):
                         continue
                     self._final_rollout.set(key, spec.zero())
@@ -753,15 +755,32 @@ class SyncDataCollector(DataCollectorBase):
                 if self.policy_device:
                     input = input.to(self.policy_device)
                 # we cast to policy device, we'll deal with the device later
+                input_copy = input.clone()
                 _tensordict_out = self.policy(input)
+                for key, value in _tensordict_out.items(True, True):
+                    if (
+                        (key not in input.keys(True, True))
+                        or (value is not input.get(key))
+                        or (value != input_copy.get(key)).any()
+                    ):
+                        self._policy_output_keys.add(key)
                 self._final_rollout.update(_tensordict_out)
 
+        _env_output_keys = []
+        for spec in ["full_observation_spec", "full_done_spec", "full_reward_spec"]:
+            _env_output_keys += list(self.env.output_spec[spec].keys(True, True))
+        self._env_output_keys = set(_env_output_keys)
         self._final_rollout = (
             self._final_rollout.unsqueeze(-1)
             .expand(*env.batch_size, self.frames_per_batch)
             .clone()
             .zero_()
         )
+        if set(
+            self._final_rollout.exclude("collector").keys(True, True)
+        ) != self._env_output_keys.union(self._policy_output_keys):
+            raise RuntimeError("Mismatching key ensembles.")
+
         # in addition to outputs of the policy, we add traj_ids to
         # _final_rollout which will be collected during rollout
         self._final_rollout.set(
@@ -969,16 +988,7 @@ class SyncDataCollector(DataCollectorBase):
                     policy_output = self.policy(policy_input)
                     if self._shuttle is not policy_output:
                         # ad-hoc update shuttle
-                        self._shuttle = self._shuttle._fast_apply(
-                            self._update_device_wise, policy_output
-                        )
-                    # # update is a no-op if identities match, so this is safe and efficient in all cases
-                    # # We could remove the inplace and update just the keys that have been updated by
-                    # # policy, but that would require some tricks to check if the policy
-                    # # modifies a key or not. We should also make sure things are
-                    # # robust to in-place modifications by the policy (just checking if the
-                    # # tensor id matches or not isn't enough).
-                    # self._shuttle.update(policy_output, inplace=True)
+                        self._shuttle.update(policy_output, keys_to_update=self._policy_output_keys)
 
                 if self._cast_to_policy_device:
                     if self.env_device is not None:
@@ -988,17 +998,12 @@ class SyncDataCollector(DataCollectorBase):
                         env_input = self._shuttle.copy().clear_device_()
                 else:
                     env_input = self._shuttle
-
                 env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
+
                 if self._shuttle is not env_output:
                     # ad-hoc update shuttle
-                    self._shuttle = self._shuttle._fast_apply(
-                        self._update_device_wise, env_output
-                    )
-                # # Here we could update only the leaves that are part of the env output
-                # # since we have access to them and update() supports lists of keys
-                # # to update.
-                # self._shuttle.update(env_output, inplace=True)
+                    self._shuttle.update(env_output, keys_to_update=self._env_output_keys)
+
                 if self.storing_device is not None:
                     tensordicts.append(
                         self._shuttle.to(self.storing_device, non_blocking=True)
@@ -1006,12 +1011,8 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     tensordicts.append(self._shuttle)
 
-                self._shuttle = self._shuttle._fast_apply(
-                    self._update_device_wise,
-                    env_next_output.set(
-                        "collector", env_output.get("collector").copy()
-                    ),
-                    default=None,
+                self._shuttle = env_next_output.set(
+                    "collector", env_output.get("collector").copy()
                 )
 
                 self._update_traj_ids(env_output)
@@ -1053,9 +1054,7 @@ class SyncDataCollector(DataCollectorBase):
     def _update_device_wise(tensor0, tensor1):
         # given 2 tensors, returns tensor0 if their identity matches,
         # or a copy of tensor1 on the device of tensor0 otherwise
-        if tensor1 is None:
-            return tensor0
-        if tensor1 is tensor0:
+        if tensor1 is None or tensor1 is tensor0:
             return tensor0
         if tensor1.device == tensor0.device:
             return tensor1
