@@ -2329,30 +2329,60 @@ class TestTerminatedOrTruncated:
         assert not data["nested", "_reset"].any()
 
 
-@pytest.mark.skipif(
-    IS_OSX, reason="setting different threads across workeres can randomly fail on OSX."
-)
-def test_num_threads():
-    from torchrl.envs import batched_envs
-
-    _run_worker_pipe_shared_mem_save = batched_envs._run_worker_pipe_shared_mem
-    batched_envs._run_worker_pipe_shared_mem = decorate_thread_sub_func(
-        batched_envs._run_worker_pipe_shared_mem, num_threads=3
+class TestLibThreading:
+    @pytest.mark.skipif(
+        IS_OSX,
+        reason="setting different threads across workeres can randomly fail on OSX.",
     )
-    num_threads = torch.get_num_threads()
-    try:
-        env = ParallelEnv(
-            2, ContinuousActionVecMockEnv, num_sub_threads=3, num_threads=7
+    def test_num_threads(self):
+        from torchrl.envs import batched_envs
+
+        _run_worker_pipe_shared_mem_save = batched_envs._run_worker_pipe_shared_mem
+        batched_envs._run_worker_pipe_shared_mem = decorate_thread_sub_func(
+            batched_envs._run_worker_pipe_shared_mem, num_threads=3
         )
-        # We could test that the number of threads isn't changed until we start the procs.
-        # Even though it's unlikely that we have 7 threads, we still disable this for safety
-        # assert torch.get_num_threads() != 7
-        env.rollout(3)
-        assert torch.get_num_threads() == 7
-    finally:
-        # reset vals
-        batched_envs._run_worker_pipe_shared_mem = _run_worker_pipe_shared_mem_save
-        torch.set_num_threads(num_threads)
+        num_threads = torch.get_num_threads()
+        try:
+            env = ParallelEnv(
+                2, ContinuousActionVecMockEnv, num_sub_threads=3, num_threads=7
+            )
+            # We could test that the number of threads isn't changed until we start the procs.
+            # Even though it's unlikely that we have 7 threads, we still disable this for safety
+            # assert torch.get_num_threads() != 7
+            env.rollout(3)
+            assert torch.get_num_threads() == 7
+        finally:
+            # reset vals
+            batched_envs._run_worker_pipe_shared_mem = _run_worker_pipe_shared_mem_save
+            torch.set_num_threads(num_threads)
+
+    @pytest.mark.skipif(
+        IS_OSX,
+        reason="setting different threads across workeres can randomly fail on OSX.",
+    )
+    def test_auto_num_threads(self):
+        init_threads = torch.get_num_threads()
+
+        try:
+            env3 = ParallelEnv(3, lambda: GymEnv("Pendulum-v1"))
+            env3.rollout(2)
+
+            assert torch.get_num_threads() == max(1, init_threads - 3)
+
+            env2 = ParallelEnv(2, lambda: GymEnv("Pendulum-v1"))
+            env2.rollout(2)
+
+            assert torch.get_num_threads() == max(1, init_threads - 5)
+
+            env2.close()
+
+            assert torch.get_num_threads() == max(1, init_threads - 3)
+
+            env3.close()
+
+            assert torch.get_num_threads() == init_threads
+        finally:
+            torch.set_num_threads(init_threads)
 
 
 def test_run_type_checks():
