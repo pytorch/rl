@@ -15,7 +15,7 @@ import torch
 
 from tensordict import TensorDict, TensorDictBase
 
-from tensordict.tensordict import NestedKey
+from tensordict.utils import NestedKey
 from torchrl.data.replay_buffers import (
     SamplerWithoutReplacement,
     TensorDictReplayBuffer,

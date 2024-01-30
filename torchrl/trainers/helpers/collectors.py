@@ -6,8 +6,9 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
+from tensordict import TensorDictBase
+
 from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModuleWrapper
-from tensordict.tensordict import TensorDictBase
 
 from torchrl.collectors.collectors import (
     DataCollectorBase,

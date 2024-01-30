@@ -96,8 +96,8 @@ from typing import Optional
 import numpy as np
 import torch
 import tqdm
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn
 
 from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec

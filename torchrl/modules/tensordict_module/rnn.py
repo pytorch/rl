@@ -9,9 +9,9 @@ import torch
 import torch.nn.functional as F
 from tensordict import TensorDictBase, unravel_key_list
 
-from tensordict.nn import TensorDictModuleBase as ModuleBase
+from tensordict.base import NO_DEFAULT
 
-from tensordict.tensordict import NO_DEFAULT
+from tensordict.nn import TensorDictModuleBase as ModuleBase
 from tensordict.utils import expand_as_right, prod, set_lazy_legacy
 
 from torch import nn, Tensor

@@ -19,8 +19,7 @@ import numpy as np
 
 import torch
 
-from tensordict import PersistentTensorDict, TensorDict
-from tensordict.tensordict import make_tensordict
+from tensordict import make_tensordict, PersistentTensorDict, TensorDict
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.datasets.d4rl_infos import D4RL_DATASETS

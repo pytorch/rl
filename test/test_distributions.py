@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 
 from _utils_internal import get_default_devices
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDictBase
 from torch import autograd, nn
 from torchrl.modules import (
     NormalParamWrapper,
