@@ -2101,8 +2101,8 @@ class TestLibThreading:
                 RandomPolicy(ContinuousActionVecMockEnv().full_action_spec),
             )
             for _ in collector:
+                assert torch.get_num_threads() == init_threads - 1
                 break
-            assert torch.get_num_threads() == init_threads - 1
             collector.shutdown()
             assert torch.get_num_threads() == init_threads
             collector = MultiSyncDataCollector(
@@ -2110,8 +2110,8 @@ class TestLibThreading:
                 RandomPolicy(ContinuousActionVecMockEnv().full_action_spec.expand(2)),
             )
             for _ in collector:
+                assert torch.get_num_threads() == init_threads - 2
                 break
-            assert torch.get_num_threads() == init_threads - 2
             collector.shutdown()
             assert torch.get_num_threads() == init_threads
         finally:
