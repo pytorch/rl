@@ -649,7 +649,6 @@ class _BatchedEnv(EnvBase):
         self._start_workers()
 
     def to(self, device: DEVICE_TYPING):
-        print("super to")
         device = torch.device(device)
         if device == self.device:
             return self
@@ -865,7 +864,6 @@ class SerialEnv(_BatchedEnv):
             return self
         super().to(device)
         if not self.is_closed:
-            print("casting envs")
             self._envs = [env.to(device) for env in self._envs]
         return self
 

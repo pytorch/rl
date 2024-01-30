@@ -34,7 +34,6 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
     TensorDictParams,
-    unravel_key,
 )
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.utils import NestedKey
