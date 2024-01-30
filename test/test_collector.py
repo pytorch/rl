@@ -2052,7 +2052,9 @@ class TestUpdateParams:
 
         def _reset(self, tensordict=None):
             self.state.zero_()
-            return TensorDict({"state": self.state.clone()}, self.batch_size, device=self.device)
+            return TensorDict(
+                {"state": self.state.clone()}, self.batch_size, device=self.device
+            )
 
         def _set_seed(self, seed):
             return seed
