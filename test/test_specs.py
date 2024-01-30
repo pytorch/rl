@@ -408,7 +408,9 @@ class TestComposite:
                 shape=shape, device=dest, dtype=dtype
             )
             assert ts.device == device
-            assert ts["good"].device == (device if device is not None else dest)
+            assert ts["good"].device == (
+                device if device is not None else torch.zeros(()).device
+            )
             assert ts["bad"].device == (device if device is not None else dest)
 
     def test_del(self, shape, is_complete, device, dtype):

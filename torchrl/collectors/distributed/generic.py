@@ -631,9 +631,7 @@ class DistributedDataCollector(DataCollectorBase):
         if self._VERBOSE:
             logging.info("got data", _data)
             logging.info("expanding...")
-        self._tensordict_out = (
-            _data.expand((self.num_workers, *_data.shape))
-        )
+        self._tensordict_out = _data.expand((self.num_workers, *_data.shape))
         if self._VERBOSE:
             logging.info("locking")
         if self._sync:

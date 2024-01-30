@@ -316,7 +316,7 @@ class TestCollectorDevices:
         in_keys = ["observation"]
         out_keys = ["action"]
         # receives and sends data on gpu
-        default_device = "cuda" if torch.cuda.device_count() else "cpu"
+        default_device = "cuda:0" if torch.cuda.device_count() else "cpu"
 
         def forward(self, tensordict):
             assert tensordict.device == torch.device(self.default_device)

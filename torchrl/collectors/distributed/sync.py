@@ -463,9 +463,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
         )
         for _data in pseudo_collector:
             break
-        self._tensordict_out = (
-            _data.expand((self.num_workers, *_data.shape))
-        )
+        self._tensordict_out = _data.expand((self.num_workers, *_data.shape))
         self._single_tds = self._tensordict_out.unbind(0)
         self._tensordict_out.lock_()
         pseudo_collector.shutdown()
