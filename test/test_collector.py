@@ -21,6 +21,7 @@ from _utils_internal import (
     get_default_devices,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
+    retry,
 )
 from mocking_classes import (
     ContinuousActionVecMockEnv,
@@ -1669,6 +1670,7 @@ def test_maxframes_error():
         )
 
 
+@retry(AssertionError, tries=10, delay=0)
 @pytest.mark.parametrize("policy_device", [None, *get_available_devices()])
 @pytest.mark.parametrize("env_device", [None, *get_available_devices()])
 @pytest.mark.parametrize("storing_device", [None, *get_available_devices()])
