@@ -366,10 +366,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
             collector_kwarg["env_device"] = self.env_device[i]
             collector_kwarg["policy_device"] = self.policy_device[i]
 
-        if postproc is not None and hasattr(postproc, "to"):
-            self.postproc = postproc.to(self.storing_device)
-        else:
-            self.postproc = postproc
+        self.postproc = postproc
         self.split_trajs = split_trajs
 
         self.backend = backend
@@ -466,20 +463,9 @@ class DistributedSyncDataCollector(DataCollectorBase):
         )
         for _data in pseudo_collector:
             break
-        if not issubclass(self.collector_class, SyncDataCollector):
-            # Multi-data collectors
-            self._tensordict_out = (
-                _data.expand((self.num_workers, *_data.shape))
-                .to_tensordict()
-                .to(self.storing_device)
-            )
-        else:
-            # Multi-data collectors
-            self._tensordict_out = (
-                _data.expand((self.num_workers, *_data.shape))
-                .to_tensordict()
-                .to(self.storing_device)
-            )
+        self._tensordict_out = (
+            _data.expand((self.num_workers, *_data.shape))
+        )
         self._single_tds = self._tensordict_out.unbind(0)
         self._tensordict_out.lock_()
         pseudo_collector.shutdown()

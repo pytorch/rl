@@ -360,10 +360,7 @@ class RPCDataCollector(DataCollectorBase):
             collector_kwarg["env_device"] = self.env_device[i]
             collector_kwarg["policy_device"] = self.policy_device[i]
 
-        if postproc is not None and hasattr(postproc, "to"):
-            self.postproc = postproc.to(self.storing_device)
-        else:
-            self.postproc = postproc
+        self.postproc = postproc
         self.split_trajs = split_trajs
 
         if tensorpipe_options is None:
@@ -688,7 +685,7 @@ class RPCDataCollector(DataCollectorBase):
                         args=(self.collector_rrefs[i],),
                     )
                     self.futures.append((future, i))
-                return data.to(self.storing_device)
+                return data
             self.futures.append((future, i))
 
     def _next_sync_rpc(self):
@@ -715,7 +712,7 @@ class RPCDataCollector(DataCollectorBase):
                     )
             else:
                 self.futures.append((future, i))
-        data = torch.cat(data).to(self.storing_device)
+        data = torch.cat(data)
         traj_ids = data.get(("collector", "traj_ids"), None)
         if traj_ids is not None:
             for i in range(1, self.num_workers):
