@@ -2095,25 +2095,27 @@ class TestLibThreading:
     )
     def test_auto_num_threads(self):
         init_threads = torch.get_num_threads()
-
-        collector = MultiSyncDataCollector(
-            [ContinuousActionVecMockEnv],
-            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
-        )
-        for _ in collector:
-            break
-        assert torch.get_num_threads() == init_threads - 1
-        collector.shutdown()
-        assert torch.get_num_threads() == init_threads
-        collector = MultiSyncDataCollector(
-            [ParallelEnv(2, ContinuousActionVecMockEnv)],
-            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
-        )
-        for _ in collector:
-            break
-        assert torch.get_num_threads() == init_threads - 2
-        collector.shutdown()
-        assert torch.get_num_threads() == init_threads
+        try:
+            collector = MultiSyncDataCollector(
+                [ContinuousActionVecMockEnv],
+                RandomPolicy(ContinuousActionVecMockEnv().full_action_spec),
+            )
+            for _ in collector:
+                break
+            assert torch.get_num_threads() == init_threads - 1
+            collector.shutdown()
+            assert torch.get_num_threads() == init_threads
+            collector = MultiSyncDataCollector(
+                [ParallelEnv(2, ContinuousActionVecMockEnv)],
+                RandomPolicy(ContinuousActionVecMockEnv().full_action_spec.expand(2)),
+            )
+            for _ in collector:
+                break
+            assert torch.get_num_threads() == init_threads - 2
+            collector.shutdown()
+            assert torch.get_num_threads() == init_threads
+        finally:
+            torch.set_num_threads(init_threads)
 
 
 if __name__ == "__main__":
