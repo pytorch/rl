@@ -1320,6 +1320,7 @@ class _MultiDataCollector(DataCollectorBase):
             print("self.num_threads", self.num_threads)
 
         torch.set_num_threads(self.num_threads)
+        assert torch.get_num_threads() == self.num_threads
         import torchrl
 
         torchrl._THREAD_POOL = self.num_threads
