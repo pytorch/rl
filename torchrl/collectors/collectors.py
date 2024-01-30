@@ -995,10 +995,10 @@ class SyncDataCollector(DataCollectorBase):
                 # self._shuttle.update(env_output, inplace=True)
                 if self.storing_device is not None:
                     tensordicts.append(
-                        self._shuttle.clone().to(self.storing_device, non_blocking=True)
+                        self._shuttle.to(self.storing_device, non_blocking=True)
                     )
                 else:
-                    tensordicts.append(self._shuttle.clone())
+                    tensordicts.append(self._shuttle)
 
                 self._shuttle = self._shuttle._fast_apply(
                     self._update_device_wise,
