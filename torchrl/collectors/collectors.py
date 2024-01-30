@@ -958,8 +958,16 @@ class SyncDataCollector(DataCollectorBase):
                         policy_input = self._shuttle
                     # we still do the assignment for security
                     policy_output = self.policy(policy_input)
-                    # update is a no-op if identities match, so this is safe and efficient in all cases
-                    self._shuttle.update(policy_output, inplace=True)
+                    if self._shuttle is not policy_output:
+                        # ad-hoc update shuttle
+                        self._shuttle = self._shuttle._fast_apply(self._update_device_wise, policy_output)
+                    # # update is a no-op if identities match, so this is safe and efficient in all cases
+                    # # We could remove the inplace and update just the keys that have been updated by
+                    # # policy, but that would require some tricks to check if the policy
+                    # # modifies a key or not. We should also make sure things are
+                    # # robust to in-place modifications by the policy (just checking if the
+                    # # tensor id matches or not isn't enough).
+                    # self._shuttle.update(policy_output, inplace=True)
 
                 if self._cast_to_policy_device:
                     if self.env_device is not None:
@@ -971,7 +979,13 @@ class SyncDataCollector(DataCollectorBase):
                     env_input = self._shuttle
 
                 env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
-                self._shuttle.update(env_output, inplace=True)
+                if self._shuttle is not env_output:
+                    # ad-hoc update shuttle
+                    self._shuttle = self._shuttle._fast_apply(self._update_device_wise, env_output)
+                # # Here we could update only the leaves that are part of the env output
+                # # since we have access to them and update() supports lists of keys
+                # # to update.
+                # self._shuttle.update(env_output, inplace=True)
                 if self.storing_device is not None:
                     tensordicts.append(
                         self._shuttle.clone().to(self.storing_device, non_blocking=True)
@@ -979,11 +993,11 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     tensordicts.append(self._shuttle.clone())
 
-                self._shuttle.update(
+                self._shuttle = self._shuttle._fast_apply(
+                    self._update_device_wise,
                     env_next_output.set(
                         "collector", env_output.get("collector").copy()
                     ),
-                    inplace=True,
                 )
 
                 self._update_traj_ids(env_output)
@@ -1020,6 +1034,18 @@ class SyncDataCollector(DataCollectorBase):
                             out=self._final_rollout,
                         )
         return self._final_rollout
+
+    @staticmethod
+    def _update_device_wise(tensor0, tensor1):
+        # given 2 tensors, returns tensor0 if their identity matches,
+        # or a copy of tensor1 on the device of tensor0 otherwise
+        if tensor1 is None:
+            return tensor0
+        if tensor1 is tensor0:
+            return tensor0
+        if tensor1.device == tensor0.device:
+            return tensor1
+        return tensor1.to(tensor0.device, non_blocking=True)
 
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
