@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import gc
 import argparse
 import os.path
 import re
@@ -2375,10 +2376,14 @@ class TestLibThreading:
             assert torch.get_num_threads() == max(1, init_threads - 5)
 
             env2.close()
+            del env2
+            gc.collect()
 
             assert torch.get_num_threads() == max(1, init_threads - 3)
 
             env3.close()
+            del env3
+            gc.collect()
 
             assert torch.get_num_threads() == init_threads
         finally:

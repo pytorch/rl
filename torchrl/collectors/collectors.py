@@ -1437,7 +1437,7 @@ also that the state dict is synchronised across processes if needed."""
             )
             print(
                 "collectors.py:1439 torch.set_num_threads(torchrl._THREAD_POOL)",
-                torchrl._THREAD_POOL
+                torchrl._THREAD_POOL, self._total_workers_from_env(self.create_env_fn)
             )
             torch.set_num_threads(torchrl._THREAD_POOL)
 

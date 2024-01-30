@@ -2101,19 +2101,31 @@ class TestLibThreading:
                 RandomPolicy(ContinuousActionVecMockEnv().full_action_spec),
             )
             for _ in collector:
+                print("checking torch.get_num_threads()", torch.get_num_threads(), "expecting", init_threads - 1)
                 assert torch.get_num_threads() == init_threads - 1
                 break
             collector.shutdown()
             assert torch.get_num_threads() == init_threads
+            del collector
+            import gc
+            gc.collect()
+        finally:
+            torch.set_num_threads(init_threads)
+
+        try:
             collector = MultiSyncDataCollector(
                 [ParallelEnv(2, ContinuousActionVecMockEnv)],
                 RandomPolicy(ContinuousActionVecMockEnv().full_action_spec.expand(2)),
             )
             for _ in collector:
+                print("checking torch.get_num_threads()", torch.get_num_threads(), "expecting", init_threads - 2)
                 assert torch.get_num_threads() == init_threads - 2
                 break
             collector.shutdown()
             assert torch.get_num_threads() == init_threads
+            del collector
+            import gc
+            gc.collect()
         finally:
             torch.set_num_threads(init_threads)
 
