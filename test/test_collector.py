@@ -2404,6 +2404,7 @@ class TestLibThreading:
             collector = MultiSyncDataCollector(
                 [ContinuousActionVecMockEnv],
                 RandomPolicy(ContinuousActionVecMockEnv().full_action_spec),
+                frames_per_batch=3,
             )
             for _ in collector:
                 assert torch.get_num_threads() == init_threads - 1
@@ -2419,6 +2420,7 @@ class TestLibThreading:
             collector = MultiSyncDataCollector(
                 [ParallelEnv(2, ContinuousActionVecMockEnv)],
                 RandomPolicy(ContinuousActionVecMockEnv().full_action_spec.expand(2)),
+                frames_per_batch=3,
             )
             for _ in collector:
                 assert torch.get_num_threads() == init_threads - 2
