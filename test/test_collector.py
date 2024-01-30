@@ -1944,13 +1944,14 @@ class TestMultiKeyEnvsCollector:
     def test_collector(self, batch_size, frames_per_batch, max_steps, seed=1):
         env = MultiKeyCountingEnv(batch_size=batch_size, max_steps=max_steps)
         torch.manual_seed(seed)
-        policy = MultiKeyCountingEnvPolicy(env.input_spec["full_action_spec"])
+        device = get_default_devices()[0]
+        policy = MultiKeyCountingEnvPolicy(env.input_spec["full_action_spec"].to(device))
         ccollector = SyncDataCollector(
             create_env_fn=env,
             policy=policy,
             frames_per_batch=frames_per_batch,
             total_frames=100,
-            device=get_default_devices()[0],
+            device=device,
         )
 
         for _td in ccollector:
@@ -1967,8 +1968,9 @@ class TestMultiKeyEnvsCollector:
         env = MultiKeyCountingEnv(batch_size=(batch_dim,))
         env_fn = lambda: env
         torch.manual_seed(seed)
+        device = get_default_devices()[0]
         policy = MultiKeyCountingEnvPolicy(
-            env.input_spec["full_action_spec"], deterministic=True
+            env.input_spec["full_action_spec"].to(device), deterministic=True
         )
 
         ccollector = MultiaSyncDataCollector(
@@ -1976,7 +1978,7 @@ class TestMultiKeyEnvsCollector:
             policy=policy,
             frames_per_batch=frames_per_batch,
             total_frames=100,
-            device=get_default_devices()[0],
+            device=device,
         )
         for i, d in enumerate(ccollector):
             if i == 0:
