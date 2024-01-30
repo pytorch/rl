@@ -684,7 +684,9 @@ class SyncDataCollector(DataCollectorBase):
         self.return_same_td = return_same_td
 
         # Shuttle is a deviceless tensordict that just carried data from env to policy and policy to env
-        self._shuttle = env.reset().clear_device_()
+        self._shuttle = env.reset()
+        if self.policy_device != self.env_device or self.env_device is None:
+            self._shuttle.clear_device_()
         traj_ids = torch.arange(self.n_env, device=self.storing_device).view(
             self.env.batch_size
         )
@@ -692,7 +694,6 @@ class SyncDataCollector(DataCollectorBase):
             ("collector", "traj_ids"),
             traj_ids,
         )
-
         with torch.no_grad():
             self._final_rollout = self.env.fake_tensordict()
 
@@ -727,7 +728,7 @@ class SyncDataCollector(DataCollectorBase):
                 if policy_spec.ndim < self._final_rollout.ndim:
                     policy_spec = policy_spec.expand(self._final_rollout.shape)
                 for key, spec in policy_spec.items(True, True):
-                    if key in self._final_rollout.keys(isinstance(key, tuple)):
+                    if key in self._final_rollout.keys(True):
                         continue
                     self._final_rollout.set(key, spec.zero())
 
@@ -737,20 +738,14 @@ class SyncDataCollector(DataCollectorBase):
             # This is the safest thing to do if the spec has None fields or if there is
             # no spec at all.
             # See #505 for additional context.
-            self._final_rollout.update(self._shuttle)
+            self._final_rollout.update(self._shuttle.copy())
             with torch.no_grad():
-                input = self._final_rollout
+                input = self._shuttle.copy()
                 if self.policy_device:
                     input = input.to(self.policy_device)
-                elif self._cast_to_policy_device and input.device is not None:
-                    input.clear_device_()
                 # we cast to policy device, we'll deal with the device later
                 _tensordict_out = self.policy(input)
-                if self.storing_device:
-                    _tensordict_out = _tensordict_out.to(self.storing_device, non_blocking=True)
-                else:
-                    _tensordict_out.clear_device_()
-                self._final_rollout = _tensordict_out
+                self._final_rollout.update(_tensordict_out)
 
         self._final_rollout = (
             self._final_rollout.unsqueeze(-1)
@@ -938,7 +933,7 @@ class SyncDataCollector(DataCollectorBase):
 
         """
         if self.reset_at_each_iter:
-            self._shuttle.update(self.env.reset())
+            self._shuttle.update(self.env.reset(), inplace=True)
 
         # self._shuttle.fill_(("collector", "step_count"), 0)
         self._final_rollout.fill_(("collector", "traj_ids"), -1)
@@ -953,7 +948,9 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     if self._cast_to_policy_device:
                         if self.policy_device is not None:
-                            policy_input = self._shuttle.to(self.policy_device, non_blocking=True)
+                            policy_input = self._shuttle.to(
+                                self.policy_device, non_blocking=True
+                            )
                         elif self.policy_device is None:
                             # we know the tensordict has a device otherwise we would not be here
                             policy_input = self._shuttle.copy().clear_device_()
@@ -973,19 +970,21 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     env_input = self._shuttle
 
-                env_output, env_next_output = self.env.step_and_maybe_reset(
-                    env_input
-                )
-                self._shuttle.update(env_next_output.set(
-                    "collector", env_output.get("collector").copy()
-                ), inplace=True)
-
+                env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
+                self._shuttle.update(env_output, inplace=True)
                 if self.storing_device is not None:
                     tensordicts.append(
-                        env_output.to(self.storing_device, non_blocking=True)
+                        self._shuttle.clone().to(self.storing_device, non_blocking=True)
                     )
                 else:
-                    tensordicts.append(env_output)
+                    tensordicts.append(self._shuttle.clone())
+
+                self._shuttle.update(
+                    env_next_output.set(
+                        "collector", env_output.get("collector").copy()
+                    ),
+                    inplace=True,
+                )
 
                 self._update_traj_ids(env_output)
                 if (
@@ -1025,7 +1024,7 @@ class SyncDataCollector(DataCollectorBase):
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
         # metadata
-        md = self._shuttle.get("collector").clone()
+        collector_metadata = self._shuttle.get("collector").clone()
         if index is not None:
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
@@ -1044,9 +1043,11 @@ class SyncDataCollector(DataCollectorBase):
             _reset = None
             self._shuttle.zero_()
 
-        self._shuttle.update(self.env.reset(**kwargs))
-        md["traj_ids"] = md["traj_ids"] - md["traj_ids"].min()
-        self._shuttle["collector"] = md
+        self._shuttle.update(self.env.reset(**kwargs), inplace=True)
+        collector_metadata["traj_ids"] = (
+            collector_metadata["traj_ids"] - collector_metadata["traj_ids"].min()
+        )
+        self._shuttle["collector"] = collector_metadata
 
     def shutdown(self) -> None:
         """Shuts down all workers and/or closes the local environment."""
