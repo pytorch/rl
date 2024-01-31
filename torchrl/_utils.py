@@ -33,6 +33,8 @@ from torch import multiprocessing as mp
 LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "DEBUG")
 logger = logging.getLogger(__name__)
 logger.setLevel(getattr(logging, LOGGING_LEVEL))
+# Disable propagation to the root logger
+logger.propagate = False
 # Remove all attached handlers
 while logger.hasHandlers():
     logger.removeHandler(logger.handlers[0])
