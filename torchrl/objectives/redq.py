@@ -8,9 +8,9 @@ from numbers import Number
 from typing import Union
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, TensorDictModule, TensorDictSequential
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 
@@ -85,7 +85,7 @@ class REDQLoss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.redq import REDQLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
@@ -137,8 +137,7 @@ class REDQLoss(LossModule):
     the expected keyword arguments are:
     ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and qvalue network
     The return value is a tuple of tensors in the following order:
-    ``["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy",
-        "state_action_value_actor", "action_log_prob_actor", "next.state_value", "target_value",]``.
+    ``["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy", "state_action_value_actor", "action_log_prob_actor", "next.state_value", "target_value",]``.
 
     Examples:
         >>> import torch

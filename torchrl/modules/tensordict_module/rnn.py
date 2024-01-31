@@ -8,10 +8,10 @@ import torch
 import torch.nn.functional as F
 from tensordict import TensorDictBase, unravel_key_list
 
-from tensordict.nn import TensorDictModuleBase as ModuleBase
+from tensordict.base import NO_DEFAULT
 
-from tensordict.tensordict import NO_DEFAULT
-from tensordict.utils import expand_as_right, prod
+from tensordict.nn import TensorDictModuleBase as ModuleBase
+from tensordict.utils import expand_as_right, prod, set_lazy_legacy
 
 from torch import nn, Tensor
 from torch.nn.modules.rnn import RNNCellBase
@@ -825,7 +825,8 @@ class GRU(GRUBase):
     """A PyTorch module for executing multiple steps of a multi-layer GRU. The module behaves exactly like :class:`torch.nn.GRU`, but this implementation is exclusively coded in Python.
 
     .. note::
-        This class is implemented without relying on CuDNN, which makes it compatible with :func:`torch.vmap` and :func:`torch.compile`.
+        This class is implemented without relying on CuDNN, which makes it
+        compatible with :func:`torch.vmap` and :func:`torch.compile`.
 
     Examples:
         >>> import torch
@@ -1028,7 +1029,6 @@ class GRUModule(ModuleBase):
         dropout: If non-zero, introduces a `Dropout` layer on the outputs of each
             GRU layer except the last layer, with dropout probability equal to
             :attr:`dropout`. Default: 0
-        proj_size: If ``> 0``, will use GRU with projections of corresponding size. Default: 0
         python_based: If ``True``, will use a full Python implementation of the GRU cell. Default: ``False``
 
     Keyword Args:
@@ -1292,6 +1292,7 @@ class GRUModule(ModuleBase):
         out._recurrent_mode = mode
         return out
 
+    @set_lazy_legacy(False)
     def forward(self, tensordict: TensorDictBase):
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None]
@@ -1313,8 +1314,6 @@ class GRUModule(ModuleBase):
                 )
         else:
             tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)
-        # TODO: replace by contiguous, or ultimately deprecate the default lazy unsqueeze
-        tensordict_shaped = tensordict_shaped.to_tensordict()
 
         is_init = tensordict_shaped.get("is_init").squeeze(-1)
         splits = None

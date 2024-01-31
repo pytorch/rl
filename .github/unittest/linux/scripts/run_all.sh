@@ -76,7 +76,7 @@ export DISPLAY=:0
 export SDL_VIDEODRIVER=dummy
 
 # legacy from bash scripts: remove?
-conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy
+conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy LAZY_LEGACY_OP=False
 
 pip3 install pip --upgrade
 pip install virtualenv
@@ -143,7 +143,11 @@ fi
 python -c "import functorch"
 
 # install snapshot
-pip3 install git+https://github.com/pytorch/torchsnapshot
+if [[ "$TORCH_VERSION" == "nightly" ]]; then
+  pip3 install git+https://github.com/pytorch/torchsnapshot
+else
+  pip3 install torchsnapshot
+fi
 
 # install tensordict
 pip3 install git+https://github.com/pytorch/tensordict.git

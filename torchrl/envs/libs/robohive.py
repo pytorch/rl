@@ -11,8 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from tensordict import TensorDict
-from tensordict.tensordict import make_tensordict
+from tensordict import make_tensordict, TensorDict
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
 from torchrl.envs.libs.gym import _AsyncMeta, _gym_to_torchrl_spec_transform, GymEnv
@@ -145,15 +144,23 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             raise RuntimeError("did not load any environment.")
 
     @implement_for(
+        "gymnasium",
+    )  # make sure gym 0.13 is installed, otherwise raise an exception
+    def _build_env(self, *args, **kwargs):  # noqa: F811
+        raise NotImplementedError(
+            "Your gym version is too recent, RoboHiveEnv is only compatible with gym==0.13."
+        )
+
+    @implement_for(
         "gym", "0.14", None
     )  # make sure gym 0.13 is installed, otherwise raise an exception
-    def _build_env(self, *args, **kwargs):
+    def _build_env(self, *args, **kwargs):  # noqa: F811
         raise NotImplementedError(
             "Your gym version is too recent, RoboHiveEnv is only compatible with gym 0.13."
         )
 
     @implement_for(
-        "gym", "0.13", "0.14"
+        "gym", None, "0.14"
     )  # make sure gym 0.13 is installed, otherwise raise an exception
     def _build_env(  # noqa: F811
         self,

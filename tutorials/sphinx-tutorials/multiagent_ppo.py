@@ -595,8 +595,8 @@ replay_buffer = ReplayBuffer(
 #
 
 loss_module = ClipPPOLoss(
-    actor=policy,
-    critic=critic,
+    actor_network=policy,
+    critic_network=critic,
     clip_epsilon=clip_epsilon,
     entropy_coef=entropy_eps,
     normalize_advantage=False,  # Important to avoid normalizing across the agent dimension
@@ -659,8 +659,8 @@ for tensordict_data in collector:
     with torch.no_grad():
         GAE(
             tensordict_data,
-            params=loss_module.critic_params,
-            target_params=loss_module.target_critic_params,
+            params=loss_module.critic_network_params,
+            target_params=loss_module.target_critic_network_params,
         )  # Compute GAE and add it to the data
 
     data_view = tensordict_data.reshape(-1)  # Flatten the batch size to shuffle data

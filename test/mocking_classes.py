@@ -6,7 +6,8 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import expand_right, NestedKey
 
 from torchrl.data.tensor_specs import (
@@ -229,6 +230,7 @@ class MockSerialEnv(EnvBase):
                 "observation": n.clone(),
             },
             batch_size=[],
+            device=self.device,
         )
 
     def _reset(self, tensordict: TensorDictBase = None, **kwargs) -> TensorDictBase:
@@ -240,7 +242,9 @@ class MockSerialEnv(EnvBase):
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict(
-            {"done": done, "terminated": done.clone(), "observation": n}, []
+            {"done": done, "terminated": done.clone(), "observation": n},
+            [],
+            device=self.device,
         )
 
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
@@ -515,7 +519,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
             assert (a.sum(-1) == 1).all()
 
         obs = self._get_in_obs(tensordict.get(self._out_key)) + a / self.maxstep
-        tensordict = tensordict.empty()  # empty tensordict
+        tensordict = tensordict.empty()
 
         tensordict.set(self.out_key, self._get_out_obs(obs))
         tensordict.set(self._out_key, self._get_out_obs(obs))
@@ -603,6 +607,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         # state = torch.zeros(self.size) + self.counter
         if tensordict is None:
             tensordict = TensorDict({}, self.batch_size, device=self.device)
+
         tensordict = tensordict.empty()
         tensordict.update(self.observation_spec.rand())
         # tensordict.set("next_" + self.out_key, self._get_out_obs(state))
@@ -622,6 +627,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         a = tensordict.get("action")
 
         obs = self._obs_step(self._get_in_obs(tensordict.get(self._out_key)), a)
+
         tensordict = tensordict.empty()  # empty tensordict
 
         tensordict.set(self.out_key, self._get_out_obs(obs))
@@ -1372,8 +1378,9 @@ class CountingBatchedEnv(EnvBase):
         return tensordict
 
 
-class HeteroCountingEnvPolicy:
+class HeterogeneousCountingEnvPolicy(TensorDictModuleBase):
     def __init__(self, full_action_spec: TensorSpec, count: bool = True):
+        super().__init__()
         self.full_action_spec = full_action_spec
         self.count = count
 
@@ -1384,7 +1391,7 @@ class HeteroCountingEnvPolicy:
         return td.update(action_td)
 
 
-class HeteroCountingEnv(EnvBase):
+class HeterogeneousCountingEnv(EnvBase):
     """A heterogeneous, counting Env."""
 
     def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
@@ -1567,13 +1574,14 @@ class HeteroCountingEnv(EnvBase):
         torch.manual_seed(seed)
 
 
-class MultiKeyCountingEnvPolicy:
+class MultiKeyCountingEnvPolicy(TensorDictModuleBase):
     def __init__(
         self,
         full_action_spec: TensorSpec,
         count: bool = True,
         deterministic: bool = False,
     ):
+        super().__init__()
         if not deterministic and not count:
             raise ValueError("Not counting policy is always deterministic")
 

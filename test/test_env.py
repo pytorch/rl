@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import gc
 import os.path
 import re
 from collections import defaultdict
@@ -38,8 +39,8 @@ from mocking_classes import (
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
     DummyModelBasedEnvBase,
-    HeteroCountingEnv,
-    HeteroCountingEnvPolicy,
+    HeterogeneousCountingEnv,
+    HeterogeneousCountingEnvPolicy,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     MockSerialEnv,
@@ -48,9 +49,13 @@ from mocking_classes import (
     NestedCountingEnv,
 )
 from packaging import version
-from tensordict import dense_stack_tds
+from tensordict import (
+    assert_allclose_td,
+    dense_stack_tds,
+    LazyStackedTensorDict,
+    TensorDict,
+)
 from tensordict.nn import TensorDictModuleBase
-from tensordict.tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
 from tensordict.utils import _unravel_key_to_tuple
 from torch import nn
 
@@ -394,6 +399,14 @@ class TestParallel:
             assert (
                 env.shared_tensordict_parent.device.type == torch.device(edevice).type
             )
+
+    def test_serial_for_single(self):
+        env = ParallelEnv(1, ContinuousActionVecMockEnv, serial_for_single=True)
+        assert isinstance(env, SerialEnv)
+        env = ParallelEnv(1, ContinuousActionVecMockEnv)
+        assert isinstance(env, ParallelEnv)
+        env = ParallelEnv(2, ContinuousActionVecMockEnv, serial_for_single=True)
+        assert isinstance(env, ParallelEnv)
 
     @pytest.mark.parametrize("num_parallel_env", [1, 10])
     @pytest.mark.parametrize("env_batch_size", [[], (32,), (32, 1), (32, 0)])
@@ -1141,10 +1154,12 @@ class TestStepMdp:
             tds[0]["this", "one"] = torch.zeros(2)
             tds[1]["but", "not", "this", "one"] = torch.ones(2)
             tds[0]["next", "this", "one"] = torch.ones(2) * 2
-            tensordict = torch.stack(tds, 0)
+            tensordict = LazyStackedTensorDict.lazy_stack(tds, 0)
         next_tensordict = TensorDict({}, [4]) if has_out else None
         if has_out and lazy_stack:
-            next_tensordict = torch.stack(next_tensordict.unbind(0), 0)
+            next_tensordict = LazyStackedTensorDict.lazy_stack(
+                next_tensordict.unbind(0), 0
+            )
         out = step_mdp(
             tensordict.lock_(),
             keep_other=keep_other,
@@ -1498,8 +1513,7 @@ class TestStepMdp:
                     [td_batch_size],
                 )
             )
-        lazy_td = torch.stack(tds, dim=1)
-        input_td = lazy_td
+        lazy_td = LazyStackedTensorDict.lazy_stack(tds, dim=1)
 
         td = step_mdp(
             lazy_td.lock_(),
@@ -1785,7 +1799,7 @@ class TestConcurrentEnvs:
                 r_p.append(env_s.rollout(100, break_when_any_done=False, policy=policy))
                 r_s.append(env_p.rollout(100, break_when_any_done=False, policy=policy))
 
-        td_equals = torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()
+        td_equals = torch.stack(r_p) == torch.stack(r_s)
         if td_equals.all():
             if q is not None:
                 q.put(("passed", j))
@@ -2025,12 +2039,12 @@ class TestNestedSpecs:
 class TestHeteroEnvs:
     @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
     def test_reset(self, batch_size):
-        env = HeteroCountingEnv(batch_size=batch_size)
+        env = HeterogeneousCountingEnv(batch_size=batch_size)
         env.reset()
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
     def test_rand_step(self, batch_size):
-        env = HeteroCountingEnv(batch_size=batch_size)
+        env = HeterogeneousCountingEnv(batch_size=batch_size)
         td = env.reset()
         assert (td["lazy"][..., 0]["tensor_0"] == 0).all()
         td = env.rand_step()
@@ -2041,7 +2055,7 @@ class TestHeteroEnvs:
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
     @pytest.mark.parametrize("rollout_steps", [1, 2, 5])
     def test_rollout(self, batch_size, rollout_steps, n_lazy_dim=3):
-        env = HeteroCountingEnv(batch_size=batch_size)
+        env = HeterogeneousCountingEnv(batch_size=batch_size)
         td = env.rollout(rollout_steps, return_contiguous=False)
         td = dense_stack_tds(td)
 
@@ -2063,8 +2077,8 @@ class TestHeteroEnvs:
     @pytest.mark.parametrize("rollout_steps", [1, 2, 5])
     @pytest.mark.parametrize("count", [True, False])
     def test_rollout_policy(self, batch_size, rollout_steps, count):
-        env = HeteroCountingEnv(batch_size=batch_size)
-        policy = HeteroCountingEnvPolicy(
+        env = HeterogeneousCountingEnv(batch_size=batch_size)
+        policy = HeterogeneousCountingEnvPolicy(
             env.input_spec["full_action_spec"], count=count
         )
         td = env.rollout(rollout_steps, policy=policy, return_contiguous=False)
@@ -2082,14 +2096,14 @@ class TestHeteroEnvs:
     @pytest.mark.parametrize("batch_size", [(1, 2)])
     @pytest.mark.parametrize("env_type", ["serial", "parallel"])
     def test_vec_env(self, batch_size, env_type, rollout_steps=4, n_workers=2):
-        env_fun = lambda: HeteroCountingEnv(batch_size=batch_size)
+        env_fun = lambda: HeterogeneousCountingEnv(batch_size=batch_size)
         if env_type == "serial":
             vec_env = SerialEnv(n_workers, env_fun)
         else:
             vec_env = ParallelEnv(n_workers, env_fun)
         vec_batch_size = (n_workers,) + batch_size
         # check_env_specs(vec_env, return_contiguous=False)
-        policy = HeteroCountingEnvPolicy(vec_env.input_spec["full_action_spec"])
+        policy = HeterogeneousCountingEnvPolicy(vec_env.input_spec["full_action_spec"])
         vec_env.reset()
         td = vec_env.rollout(
             rollout_steps,
@@ -2164,7 +2178,7 @@ class TestMultiKeyEnvs:
         MockBatchedUnLockedEnv,
         MockSerialEnv,
         NestedCountingEnv,
-        HeteroCountingEnv,
+        HeterogeneousCountingEnv,
         MultiKeyCountingEnv,
     ],
 )
@@ -2320,30 +2334,64 @@ class TestTerminatedOrTruncated:
         assert not data["nested", "_reset"].any()
 
 
-@pytest.mark.skipif(
-    IS_OSX, reason="setting different threads across workeres can randomly fail on OSX."
-)
-def test_num_threads():
-    from torchrl.envs import batched_envs
-
-    _run_worker_pipe_shared_mem_save = batched_envs._run_worker_pipe_shared_mem
-    batched_envs._run_worker_pipe_shared_mem = decorate_thread_sub_func(
-        batched_envs._run_worker_pipe_shared_mem, num_threads=3
+class TestLibThreading:
+    @pytest.mark.skipif(
+        IS_OSX,
+        reason="setting different threads across workeres can randomly fail on OSX.",
     )
-    num_threads = torch.get_num_threads()
-    try:
-        env = ParallelEnv(
-            2, ContinuousActionVecMockEnv, num_sub_threads=3, num_threads=7
+    def test_num_threads(self):
+        from torchrl.envs import batched_envs
+
+        _run_worker_pipe_shared_mem_save = batched_envs._run_worker_pipe_shared_mem
+        batched_envs._run_worker_pipe_shared_mem = decorate_thread_sub_func(
+            batched_envs._run_worker_pipe_shared_mem, num_threads=3
         )
-        # We could test that the number of threads isn't changed until we start the procs.
-        # Even though it's unlikely that we have 7 threads, we still disable this for safety
-        # assert torch.get_num_threads() != 7
-        env.rollout(3)
-        assert torch.get_num_threads() == 7
-    finally:
-        # reset vals
-        batched_envs._run_worker_pipe_shared_mem = _run_worker_pipe_shared_mem_save
-        torch.set_num_threads(num_threads)
+        num_threads = torch.get_num_threads()
+        try:
+            env = ParallelEnv(
+                2, ContinuousActionVecMockEnv, num_sub_threads=3, num_threads=7
+            )
+            # We could test that the number of threads isn't changed until we start the procs.
+            # Even though it's unlikely that we have 7 threads, we still disable this for safety
+            # assert torch.get_num_threads() != 7
+            env.rollout(3)
+            assert torch.get_num_threads() == 7
+        finally:
+            # reset vals
+            batched_envs._run_worker_pipe_shared_mem = _run_worker_pipe_shared_mem_save
+            torch.set_num_threads(num_threads)
+
+    @pytest.mark.skipif(
+        IS_OSX,
+        reason="setting different threads across workeres can randomly fail on OSX.",
+    )
+    def test_auto_num_threads(self):
+        init_threads = torch.get_num_threads()
+
+        try:
+            env3 = ParallelEnv(3, lambda: GymEnv("Pendulum-v1"))
+            env3.rollout(2)
+
+            assert torch.get_num_threads() == max(1, init_threads - 3)
+
+            env2 = ParallelEnv(2, lambda: GymEnv("Pendulum-v1"))
+            env2.rollout(2)
+
+            assert torch.get_num_threads() == max(1, init_threads - 5)
+
+            env2.close()
+            del env2
+            gc.collect()
+
+            assert torch.get_num_threads() == max(1, init_threads - 3)
+
+            env3.close()
+            del env3
+            gc.collect()
+
+            assert torch.get_num_threads() == init_threads
+        finally:
+            torch.set_num_threads(init_threads)
 
 
 def test_run_type_checks():

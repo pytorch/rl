@@ -15,7 +15,12 @@ from typing import Dict, List, Union
 
 import torch
 
-from tensordict import is_tensor_collection, TensorDictBase, unravel_key
+from tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDictBase,
+    unravel_key,
+)
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
@@ -26,7 +31,7 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import LazyStackedTensorDict, NestedKey
+from tensordict.utils import NestedKey
 from torchrl._utils import _replace_last
 
 from torchrl.data.tensor_specs import (
@@ -450,7 +455,9 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
         fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
     else:
-        fake_tensordict = torch.stack([fake_tensordict.clone() for _ in range(3)], -1)
+        fake_tensordict = LazyStackedTensorDict.lazy_stack(
+            [fake_tensordict.clone() for _ in range(3)], -1
+        )
     # eliminate empty containers
     fake_tensordict_select = fake_tensordict.select(*fake_tensordict.keys(True, True))
     real_tensordict_select = real_tensordict.select(*real_tensordict.keys(True, True))

@@ -33,7 +33,7 @@ jobs:
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       post-script: ""
       package-name: torchrl
-      runner-type: macos-m1-12
+      runner-type: macos-m1-stable
       smoke-test-script: ""
       trigger-event: ${{ github.event_name }}
       env-var-script: .github/scripts/m1_script.sh

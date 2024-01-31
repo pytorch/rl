@@ -137,8 +137,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
 
     # Loss
     loss_module = ClipPPOLoss(
-        actor=policy,
-        critic=value_module,
+        actor_network=policy,
+        critic_network=value_module,
         clip_epsilon=cfg.loss.clip_epsilon,
         entropy_coef=cfg.loss.entropy_eps,
         normalize_advantage=False,
@@ -174,7 +174,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         with torch.no_grad():
             loss_module.value_estimator(
                 tensordict_data,
-                params=loss_module.critic_params,
+                params=loss_module.critic_network_params,
                 target_params=loss_module.target_critic_params,
             )
         current_frames = tensordict_data.numel()

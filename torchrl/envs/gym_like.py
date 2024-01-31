@@ -13,8 +13,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import TensorDict
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -84,7 +83,7 @@ class default_info_dict_reader(BaseInfoDictReader):
             _info_spec = None
         elif spec is None:
             _info_spec = CompositeSpec(
-                {key: UnboundedContinuousTensorSpec() for key in keys}, shape=[]
+                {key: UnboundedContinuousTensorSpec(()) for key in keys}, shape=[]
             )
         elif not isinstance(spec, CompositeSpec):
             if self.keys is not None and len(spec) != len(self.keys):
@@ -478,7 +477,7 @@ class GymLikeEnv(_EnvWrapper):
         within the tensordict.
 
         This method returns a (possibly transformed) environment where we make sure that
-        the :func:`torchrl.envs.utils.check_env_specs` succeeds, whether or not
+        the :func:`torchrl.envs.utils.check_env_specs` succeeds, whether
         the info is filled at reset time.
 
         This method requires running a few iterations in the environment to

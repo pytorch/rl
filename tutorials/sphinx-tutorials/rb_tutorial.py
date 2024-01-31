@@ -46,6 +46,23 @@ Using Replay Buffers
 # replay buffer is a straightforward process, as shown in the following
 # example:
 #
+
+# sphinx_gallery_start_ignore
+import warnings
+
+warnings.filterwarnings("ignore")
+from torch import multiprocessing
+
+# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
+# `__main__` method call, but for the easy of reading the code switch to fork
+# which is also a default spawn method in Google's Colaboratory
+try:
+    multiprocessing.set_start_method("fork")
+except RuntimeError:
+    assert multiprocessing.get_start_method() == "fork"
+
+# sphinx_gallery_end_ignore
+
 import tempfile
 
 from torchrl.data import ReplayBuffer
@@ -262,6 +279,50 @@ print("sample:", sample)
 ######################################################################
 # As expected. the data has the proper class and shape!
 #
+# Integration with PyTree
+# ~~~~~~~~~~~~~~~~~~~~~~~
+#
+# TorchRL's replay buffers also work with any pytree data structure.
+# A PyTree is a nested structure of arbitrary depth made of dicts, lists and/or
+# tuples where the leaves are tensors.
+# This means that one can store in contiguous memory any such tree structure!
+# Various storages can be used:
+# :class:`~torchrl.data.replay_buffers.TensorStorage`, :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`
+# or :class:`~torchrl.data.replay_buffers.LazyTensorStorage` all accept this kind of data.
+#
+# Here is a bried demonstration of what this feature looks like:
+#
+
+from torch.utils._pytree import tree_map
+
+
+# With pytrees, any callable can be used as a transform:
+def transform(x):
+    # Zeros all the data in the pytree
+    return tree_map(lambda y: y * 0, x)
+
+
+# Let's build our replay buffer on disk:
+rb = ReplayBuffer(storage=LazyMemmapStorage(100), transform=transform)
+data = {
+    "a": torch.randn(3),
+    "b": {"c": (torch.zeros(2), [torch.ones(1)])},
+    30: -torch.ones(()),  # non-string keys also work
+}
+rb.add(data)
+
+# The sample has a similar structure to the data (with a leading dimension of 10 for each tensor)
+sample = rb.sample(10)
+
+
+# let's check that our transform did its job:
+def assert0(x):
+    assert (x == 0).all()
+
+
+tree_map(assert0, sample)
+
+
 # Sampling and iterating over buffers
 # -----------------------------------
 #

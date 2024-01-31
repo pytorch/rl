@@ -66,7 +66,8 @@ conda env config vars set \
   DISPLAY=unix:0.0 \
   PYOPENGL_PLATFORM=egl \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
-  sim_backend=MUJOCO
+  sim_backend=MUJOCO \
+  LAZY_LEGACY_OP=False
 
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"

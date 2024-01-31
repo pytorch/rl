@@ -19,8 +19,7 @@ import numpy as np
 
 import torch
 
-from tensordict import PersistentTensorDict, TensorDict
-from tensordict.tensordict import make_tensordict
+from tensordict import make_tensordict, PersistentTensorDict, TensorDict
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.datasets.d4rl_infos import D4RL_DATASETS
@@ -38,6 +37,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
     To install D4RL, follow the instructions on the
     `official repo <https://github.com/Farama-Foundation/D4RL>`__.
 
+    The data format follows the :ref:`TED convention <TED-format>`.
     The replay buffer contains the env specs under D4RLExperienceReplay.specs.
 
     If present, metadata will be written in ``D4RLExperienceReplay.metadata``
@@ -52,7 +52,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
-            a default RoundRobinWriter() will be used.
+            a default :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter` will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset.
@@ -61,7 +61,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.transforms.transforms.Compose` class.
         split_trajs (bool, optional): if ``True``, the trajectories will be split
             along the first dimension and padded to have a matching shape.
             To split the trajectories, the ``"done"`` signal will be used, which

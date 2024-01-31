@@ -73,14 +73,31 @@ Key learnings:
 #   simulation graph.
 # * Finally, we will train a simple policy to solve the system we implemented.
 #
+
+# sphinx_gallery_start_ignore
+import warnings
+
+warnings.filterwarnings("ignore")
+from torch import multiprocessing
+
+# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
+# `__main__` method call, but for the easy of reading the code switch to fork
+# which is also a default spawn method in Google's Colaboratory
+try:
+    multiprocessing.set_start_method("fork")
+except RuntimeError:
+    assert multiprocessing.get_start_method() == "fork"
+
+# sphinx_gallery_end_ignore
+
 from collections import defaultdict
 from typing import Optional
 
 import numpy as np
 import torch
 import tqdm
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn
 
 from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec

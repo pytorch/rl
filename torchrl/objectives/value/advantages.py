@@ -13,6 +13,7 @@ from functools import wraps
 from typing import Callable, List, Optional, Union
 
 import torch
+from tensordict import TensorDictBase
 from tensordict.nn import (
     dispatch,
     is_functional,
@@ -20,7 +21,6 @@ from tensordict.nn import (
     TensorDictModule,
     TensorDictModuleBase,
 )
-from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 from torch import nn, Tensor
 

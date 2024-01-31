@@ -1,3 +1,4 @@
+from .atari_dqn import AtariDQNExperienceReplay
 from .d4rl import D4RLExperienceReplay
 from .gen_dgrl import GenDGRLExperienceReplay
 from .minari_data import MinariExperienceReplay

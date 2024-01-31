@@ -114,8 +114,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         average_adv=False,
     )
     loss_module = A2CLoss(
-        actor=actor,
-        critic=critic,
+        actor_network=actor,
+        critic_network=critic,
         loss_critic_type=cfg.loss.loss_critic_type,
         entropy_coef=cfg.loss.entropy_coef,
         critic_coef=cfg.loss.critic_coef,

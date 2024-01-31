@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 
 from tensordict.utils import NestedKey, unravel_key
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
@@ -48,7 +48,7 @@ class DDPGLoss(LossModule):
         >>> from torchrl.data import BoundedTensorSpec
         >>> from torchrl.modules.tensordict_module.actors import Actor, ValueOperator
         >>> from torchrl.objectives.ddpg import DDPGLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> actor = Actor(spec=spec, module=nn.Linear(n_obs, n_act))

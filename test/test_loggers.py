@@ -12,6 +12,8 @@ from time import sleep
 
 import pytest
 import torch
+
+from tensordict import MemoryMappedTensor
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, _has_tv, MLFlowLogger
 from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
@@ -150,16 +152,22 @@ class TestCSVLogger:
                 assert row == f"{step},{values[i].item()}\n"
 
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
-    def test_log_video(self, steps, tmpdir):
+    @pytest.mark.parametrize(
+        "video_format", ["pt", "memmap"] + ["mp4"] if _has_tv else []
+    )
+    def test_log_video(self, steps, video_format, tmpdir):
         torch.manual_seed(0)
         exp_name = "ramala"
-        logger = CSVLogger(log_dir=tmpdir, exp_name=exp_name)
+        logger = CSVLogger(log_dir=tmpdir, exp_name=exp_name, video_format=video_format)
 
         # creating a sample video (T, C, H, W), where T - number of frames,
         # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
         # the first 64 frames are black and the next 64 are white
         video = torch.cat(
-            (torch.zeros(64, 1, 32, 32), torch.full((64, 1, 32, 32), 255))
+            (
+                torch.zeros(64, 1, 32, 32, dtype=torch.uint8),
+                torch.full((64, 1, 32, 32), 255, dtype=torch.uint8),
+            )
         )
         video = video[None, :]
         for i in range(3):
@@ -171,11 +179,31 @@ class TestCSVLogger:
         sleep(0.01)  # wait until events are registered
 
         # check that the logged videos are the same as the initial video
-        video_file_name = "foo_" + ("0" if not steps else str(steps[0])) + ".pt"
-        logged_video = torch.load(
-            os.path.join(tmpdir, exp_name, "videos", video_file_name)
+        extention = (
+            ".pt"
+            if video_format == "pt"
+            else ".memmap"
+            if video_format == "memmap"
+            else ".mp4"
         )
-        assert torch.equal(video, logged_video), logged_video
+        video_file_name = "foo_" + ("0" if not steps else str(steps[0])) + extention
+        path = os.path.join(tmpdir, exp_name, "videos", video_file_name)
+        if video_format == "pt":
+            logged_video = torch.load(path)
+            assert torch.equal(video, logged_video), logged_video
+        elif video_format == "memmap":
+            logged_video = MemoryMappedTensor.from_filename(
+                path, dtype=torch.uint8, shape=(1, 128, 1, 32, 32)
+            )
+            assert torch.equal(video, logged_video), logged_video
+        elif video_format == "mp4":
+            import torchvision
+
+            logged_video = torchvision.io.read_video(path, output_format="TCHW")[0][
+                :, :1
+            ]
+            logged_video = logged_video.unsqueeze(0)
+            torch.testing.assert_close(video, logged_video)
 
         # check that we catch the error in case the format of the tensor is wrong
         video_wrong_format = torch.zeros(64, 2, 32, 32)
