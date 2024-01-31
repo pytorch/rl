@@ -14,6 +14,7 @@ import sys
 import time
 
 import pytest
+from tensordict.nn import TensorDictModuleBase
 
 try:
     import ray
