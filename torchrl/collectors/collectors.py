@@ -26,10 +26,11 @@ from textwrap import indent
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
 import numpy as np
+
 import torch
 import torch.nn as nn
-
 from tensordict import (
+    is_tensor_collection,
     LazyStackedTensorDict,
     TensorDict,
     TensorDictBase,
@@ -172,7 +173,9 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
         raise RuntimeError(
             "Passing a policy that is not a tensordict.nn.TensorDictModuleBase subclass but has in_keys and out_keys "
             "is deprecated. Users should inherit from this class (which "
-            "has very few restrictions) to make the experience smoother.",
+            "has very few restrictions) to make the experience smoother. "
+            "Simply change your policy from `class Policy(nn.Module)` to `Policy(tensordict.nn.TensorDictModuleBase)` "
+            "and this error should disappear.",
         )
     elif not hasattr(policy, "in_keys") and not hasattr(policy, "out_keys"):
         # if it's not a TensorDictModule, and in_keys and out_keys are not defined then
@@ -230,7 +233,15 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 key: value for key, value in observation_spec.rand().items()
             }
             # we check if all the mandatory params are there
-            if set(sig.parameters) == {"tensordict"} or set(sig.parameters) == {"td"}:
+            params = list(sig.parameters.keys())
+            if (
+                set(sig.parameters) == {"tensordict"}
+                or set(sig.parameters) == {"td"}
+                or (
+                    len(params) == 1
+                    and is_tensor_collection(sig.parameters[params[0]].annotation)
+                )
+            ):
                 pass
             elif not required_kwargs.difference(set(next_observation)):
                 in_keys = [str(k) for k in sig.parameters if k in next_observation]
@@ -261,6 +272,7 @@ If you want TorchRL to automatically wrap your policy with a TensorDictModule
 then the arguments to policy.forward must correspond one-to-one with entries
 in env.observation_spec that are prefixed with 'next_'. For more complex
 behaviour and more control you can consider writing your own TensorDictModule.
+Check the collector documentation to know more about accepted policies.
 """
                 )
         return policy
@@ -380,6 +392,18 @@ class SyncDataCollector(DataCollectorBase):
             If ``None`` is provided, the policy used will be a
             :class:`~torchrl.collectors.RandomPolicy` instance with the environment
             ``action_spec``.
+            Accepted policies are usually subclasses of :class:`~tensordict.nn.TensorDictModuleBase`.
+            This is the recommended usage of the collector.
+            Other callables are accepted too:
+            If the policy is not a ``TensorDictModuleBase`` (e.g., a regular :class:`~torch.nn.Module`
+            instances) it will be wrapped in a `nn.Module` first.
+            Then, the collector will try to assess if these
+            modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+            - If the policy forward signature matches any of ``forward(self, tensordict)``,
+              ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
+              any typing with a single argument typed as a subclass of ``TensorDictBase``)
+              then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
     Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the total
@@ -973,10 +997,10 @@ class SyncDataCollector(DataCollectorBase):
                     # >>> assert data0["done"] is not data1["done"]
                     yield tensordict_out.clone()
 
-    def _update_traj_ids(self, tensordict) -> None:
+    def _update_traj_ids(self, env_output) -> None:
         # we can't use the reset keys because they're gone
         traj_sop = _aggregate_end_of_traj(
-            tensordict.get("next"), done_keys=self.env.done_keys
+            env_output.get("next"), done_keys=self.env.done_keys
         )
         if traj_sop.any():
             traj_ids = self._shuttle.get(("collector", "traj_ids"))
@@ -1225,11 +1249,23 @@ class _MultiDataCollector(DataCollectorBase):
     Args:
         create_env_fn (List[Callabled]): list of Callables, each returning an
             instance of :class:`~torchrl.envs.EnvBase`.
-        policy (Callable, optional): Instance of TensorDictModule class.
-            Must accept TensorDictBase object as input.
+        policy (Callable): Policy to be executed in the environment.
+            Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
             If ``None`` is provided, the policy used will be a
             :class:`~torchrl.collectors.RandomPolicy` instance with the environment
             ``action_spec``.
+            Accepted policies are usually subclasses of :class:`~tensordict.nn.TensorDictModuleBase`.
+            This is the recommended usage of the collector.
+            Other callables are accepted too:
+            If the policy is not a ``TensorDictModuleBase`` (e.g., a regular :class:`~torch.nn.Module`
+            instances) it will be wrapped in a `nn.Module` first.
+            Then, the collector will try to assess if these
+            modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+            - If the policy forward signature matches any of ``forward(self, tensordict)``,
+              ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
+              any typing with a single argument typed as a subclass of ``TensorDictBase``)
+              then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
     Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the
@@ -2294,8 +2330,23 @@ class aSyncDataCollector(MultiaSyncDataCollector):
 
     Args:
         create_env_fn (Callabled): Callable returning an instance of EnvBase
-        policy (Callable, optional): Instance of TensorDictModule class.
-            Must accept TensorDictBase object as input.
+        policy (Callable): Policy to be executed in the environment.
+            Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
+            If ``None`` is provided, the policy used will be a
+            :class:`~torchrl.collectors.RandomPolicy` instance with the environment
+            ``action_spec``.
+            Accepted policies are usually subclasses of :class:`~tensordict.nn.TensorDictModuleBase`.
+            This is the recommended usage of the collector.
+            Other callables are accepted too:
+            If the policy is not a ``TensorDictModuleBase`` (e.g., a regular :class:`~torch.nn.Module`
+            instances) it will be wrapped in a `nn.Module` first.
+            Then, the collector will try to assess if these
+            modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+            - If the policy forward signature matches any of ``forward(self, tensordict)``,
+              ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
+              any typing with a single argument typed as a subclass of ``TensorDictBase``)
+              then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
     Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the
@@ -2492,7 +2543,7 @@ def _main_async_collector(
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
-    tensordict = data = d = data_in = inner_collector = dc_iter = None
+    collected_tensordict = data = data_in = data_in = inner_collector = dc_iter = None
 
     inner_collector = SyncDataCollector(
         create_env_fn,
@@ -2566,42 +2617,45 @@ def _main_async_collector(
             else:
                 inner_collector.init_random_frames = -1
 
-            d = next(dc_iter)
+            data_in = next(dc_iter)
             if pipe_child.poll(_MIN_TIMEOUT):
                 # in this case, main send a message to the worker while it was busy collecting trajectories.
                 # In that case, we skip the collected trajectory and get the message from main. This is faster than
                 # sending the trajectory in the queue until timeout when it's never going to be received.
                 continue
             if j == 0:
-                tensordict = d
-                if storing_device is not None and tensordict.device != storing_device:
+                collected_tensordict = data_in
+                if (
+                    storing_device is not None
+                    and collected_tensordict.device != storing_device
+                ):
                     raise RuntimeError(
-                        f"expected device to be {storing_device} but got {tensordict.device}"
+                        f"expected device to be {storing_device} but got {collected_tensordict.device}"
                     )
                 # If policy and env are on cpu, we put in shared mem,
                 # if policy is on cuda and env on cuda, we are fine with this
                 # If policy is on cuda and env on cpu (or opposite) we put tensors that
                 # are on cpu in shared mem.
-                if tensordict.device is not None:
+                if collected_tensordict.device is not None:
                     # placehoder in case we need different behaviours
-                    if tensordict.device.type in ("cpu", "mps"):
-                        tensordict.share_memory_()
-                    elif tensordict.device.type == "cuda":
-                        tensordict.share_memory_()
+                    if collected_tensordict.device.type in ("cpu", "mps"):
+                        collected_tensordict.share_memory_()
+                    elif collected_tensordict.device.type == "cuda":
+                        collected_tensordict.share_memory_()
                     else:
                         raise NotImplementedError(
-                            f"Device {tensordict.device} is not supported in multi-collectors yet."
+                            f"Device {collected_tensordict.device} is not supported in multi-collectors yet."
                         )
                 else:
                     # make sure each cpu tensor is shared - assuming non-cpu devices are shared
-                    tensordict.apply(
+                    collected_tensordict.apply(
                         lambda x: x.share_memory_()
                         if x.device.type in ("cpu", "mps")
                         else x
                     )
-                data = (tensordict, idx)
+                data = (collected_tensordict, idx)
             else:
-                if d is not tensordict:
+                if data_in is not collected_tensordict:
                     raise RuntimeError(
                         "SyncDataCollector should return the same tensordict modified in-place."
                     )
@@ -2656,7 +2710,7 @@ def _main_async_collector(
             continue
 
         elif msg == "close":
-            del tensordict, data, d, data_in
+            del collected_tensordict, data, data_in, data_in
             inner_collector.shutdown()
             del inner_collector, dc_iter
             pipe_child.send("closed")
