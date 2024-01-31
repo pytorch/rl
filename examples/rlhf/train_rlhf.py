@@ -56,7 +56,14 @@ def main(cfg):
     ctx = setup(cfg.sys)
 
     logger = get_logger(
-        logger_type=cfg.io.logger, logger_name="./log", experiment_name="torchrlhf-gpt2"
+        logger_type=cfg.io.logger,
+        logger_name="./log",
+        experiment_name="torchrlhf-gpt2",
+        wandb_kwargs={
+            "config": dict(cfg),
+            "project": cfg.io.project_name,
+            "group": cfg.logger.group_name,
+        },
     )
 
     # =============== Dataloaders =============== #

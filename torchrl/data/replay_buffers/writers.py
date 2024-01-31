@@ -357,7 +357,7 @@ class TensorDictMaxValueWriter(Writer):
     def dumps(self, path):
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
-        t = torch.tensor(self._current_top_values)
+        t = torch.as_tensor(self._current_top_values)
         try:
             MemoryMappedTensor.from_filename(
                 filename=path / "current_top_values.memmap",
@@ -453,7 +453,7 @@ class WriterEnsemble(Writer):
         if isinstance(index, slice) and index == slice(None):
             return self
         if isinstance(index, (list, range, np.ndarray)):
-            index = torch.tensor(index)
+            index = torch.as_tensor(index)
         if isinstance(index, torch.Tensor):
             if index.ndim > 1:
                 raise RuntimeError(

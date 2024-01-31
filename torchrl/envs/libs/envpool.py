@@ -264,7 +264,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
                 f"The output of step was had {len(out)} elements, but only 4 or 5 are supported."
             )
         obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
-        reward_and_done = {self.reward_key: torch.tensor(reward)}
+        reward_and_done = {self.reward_key: torch.as_tensor(reward)}
         reward_and_done["done"] = done
         reward_and_done["terminated"] = terminated
         reward_and_done["truncated"] = truncated
@@ -290,7 +290,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         if isinstance(x, treevalue.TreeValue):
             ret = self._treevalue_to_dict(x)
         elif not isinstance(x, dict):
-            ret = {"observation": torch.tensor(x)}
+            ret = {"observation": torch.as_tensor(x)}
         else:
             ret = x
         return ret
@@ -304,7 +304,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         """
         import treevalue
 
-        return {k[0]: torch.tensor(v) for k, v in treevalue.flatten(tv)}
+        return {k[0]: torch.as_tensor(v) for k, v in treevalue.flatten(tv)}
 
     def _set_seed(self, seed: Optional[int]):
         if seed is not None:

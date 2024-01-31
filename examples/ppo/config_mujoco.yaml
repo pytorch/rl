@@ -1,6 +1,6 @@
 # task and env
 env:
-  env_name: HalfCheetah-v3
+  env_name: HalfCheetah-v4
 
 # collector
 collector:
@@ -10,6 +10,8 @@ collector:
 # logger
 logger:
   backend: wandb
+  project_name: torchrl_example_ppo
+  group_name: null
   exp_name: Mujoco_Schulman17
   test_interval: 1_000_000
   num_test_episodes: 5

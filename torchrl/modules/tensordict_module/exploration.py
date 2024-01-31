@@ -107,10 +107,10 @@ class EGreedyModule(TensorDictModuleBase):
 
         super().__init__()
 
-        self.register_buffer("eps_init", torch.tensor([eps_init]))
-        self.register_buffer("eps_end", torch.tensor([eps_end]))
+        self.register_buffer("eps_init", torch.as_tensor([eps_init]))
+        self.register_buffer("eps_end", torch.as_tensor([eps_end]))
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
+        self.register_buffer("eps", torch.as_tensor([eps_init], dtype=torch.float32))
 
         if spec is not None:
             if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
@@ -254,12 +254,12 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         )
 
         super().__init__(policy)
-        self.register_buffer("eps_init", torch.tensor([eps_init]))
-        self.register_buffer("eps_end", torch.tensor([eps_end]))
+        self.register_buffer("eps_init", torch.as_tensor([eps_init]))
+        self.register_buffer("eps_end", torch.as_tensor([eps_end]))
         if self.eps_end > self.eps_init:
             raise RuntimeError("eps should decrease over time or be constant")
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
+        self.register_buffer("eps", torch.as_tensor([eps_init], dtype=torch.float32))
         self.action_key = action_key
         self.action_mask_key = action_mask_key
         if spec is not None:

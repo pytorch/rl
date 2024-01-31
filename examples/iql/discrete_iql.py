@@ -18,6 +18,8 @@ import hydra
 import numpy as np
 import torch
 import tqdm
+
+from torchrl.envs import set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
 
@@ -34,15 +36,22 @@ from utils import (
 
 @hydra.main(config_path=".", config_name="discrete_iql")
 def main(cfg: "DictConfig"):  # noqa: F821
+    set_gym_backend(cfg.env.backend).set()
+
     # Create logger
-    exp_name = generate_exp_name("Discrete-IQL-online", cfg.env.exp_name)
+    exp_name = generate_exp_name("Discrete-IQL-online", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:
         logger = get_logger(
             logger_type=cfg.logger.backend,
             logger_name="iql_logging",
             experiment_name=exp_name,
-            wandb_kwargs={"mode": cfg.logger.mode, "config": cfg},
+            wandb_kwargs={
+                "mode": cfg.logger.mode,
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
 
     # Set seeds

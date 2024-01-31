@@ -79,7 +79,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if cfg.logger.backend:
         exp_name = generate_exp_name("A2C", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
         logger = get_logger(
-            cfg.logger.backend, logger_name="a2c", experiment_name=exp_name
+            cfg.logger.backend,
+            logger_name="a2c",
+            experiment_name=exp_name,
+            wandb_kwargs={
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
 
     # Create test environment

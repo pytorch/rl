@@ -1506,6 +1506,7 @@ class terminal_obs_reader(BaseInfoDictReader):
     def __call__(self, info_dict, tensordict):
         terminal_obs = info_dict.get(self.backend_key[self.backend], None)
         for key, item in self.info_spec.items(True, True):
+            key = (key,) if isinstance(key, str) else key
             final_obs_buffer = item.zero()
             if terminal_obs is not None:
                 for i, obs in enumerate(terminal_obs):

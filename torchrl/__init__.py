@@ -51,4 +51,3 @@ import torchrl.trainers
 filter_warnings_subprocess = True
 
 _THREAD_POOL_INIT = torch.get_num_threads()
-_THREAD_POOL = torch.get_num_threads()

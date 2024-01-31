@@ -884,7 +884,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         # to be deprecated in v0.4
         def map_device(tensor):
             if tensor.device != self.device:
-                return tensor.to(self.device, non_blocking=True)
+                return tensor.to(self.device, non_blocking=False)
             return tensor
 
         if is_tensor_collection(result):
@@ -1005,7 +1005,7 @@ class StorageEnsemble(Storage):
         if isinstance(index, slice) and index == slice(None):
             return self
         if isinstance(index, (list, range, np.ndarray)):
-            index = torch.tensor(index)
+            index = torch.as_tensor(index)
         if isinstance(index, torch.Tensor):
             if index.ndim > 1:
                 raise RuntimeError(

@@ -633,10 +633,10 @@ class _BatchedEnv(EnvBase):
         self.is_closed = True
         import torchrl
 
-        torchrl._THREAD_POOL = min(
-            torchrl._THREAD_POOL_INIT, torchrl._THREAD_POOL + self.num_workers
+        num_threads = min(
+            torchrl._THREAD_POOL_INIT, torch.get_num_threads() + self.num_workers
         )
-        torch.set_num_threads(torchrl._THREAD_POOL)
+        torch.set_num_threads(num_threads)
 
     def _shutdown_workers(self) -> None:
         raise NotImplementedError
@@ -783,7 +783,7 @@ class SerialEnv(_BatchedEnv):
             elif device is None:
                 out = out.clone().clear_device_()
             else:
-                out = out.to(device, non_blocking=True)
+                out = out.to(device, non_blocking=False)
         return out
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
@@ -804,7 +804,7 @@ class SerialEnv(_BatchedEnv):
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
             env_device = self._envs[i].device
             if env_device != self.device:
-                data_in = tensordict_in[i].to(env_device, non_blocking=True)
+                data_in = tensordict_in[i].to(env_device, non_blocking=False)
             else:
                 data_in = tensordict_in[i]
             out_td = self._envs[i]._step(data_in)
@@ -826,7 +826,7 @@ class SerialEnv(_BatchedEnv):
             elif device is None:
                 out = out.clone().clear_device_()
             else:
-                out = out.to(device, non_blocking=True)
+                out = out.to(device, non_blocking=False)
         return out
 
     def __getattr__(self, attr: str) -> Any:
@@ -1015,16 +1015,11 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
         from torchrl.envs.env_creator import EnvCreator
 
         if self.num_threads is None:
-            import torchrl
-
             self.num_threads = max(
-                1, torchrl._THREAD_POOL - self.num_workers
+                1, torch.get_num_threads() - self.num_workers
             )  # 1 more thread for this proc
 
         torch.set_num_threads(self.num_threads)
-        import torchrl
-
-        torchrl._THREAD_POOL = self.num_threads
 
         ctx = mp.get_context("spawn")
 
@@ -1161,8 +1156,8 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
             next_td = next_td.clone()
             tensordict_ = tensordict_.clone()
         elif device is not None:
-            next_td = next_td.to(device, non_blocking=True)
-            tensordict_ = tensordict_.to(device, non_blocking=True)
+            next_td = next_td.to(device, non_blocking=False)
+            tensordict_ = tensordict_.to(device, non_blocking=False)
         else:
             next_td = next_td.clone().clear_device_()
             tensordict_ = tensordict_.clone().clear_device_()
@@ -1222,7 +1217,7 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
             if out.device == device:
                 out = out.clone()
             else:
-                out = out.to(device, non_blocking=True)
+                out = out.to(device, non_blocking=False)
         return out
 
     @_check_start
@@ -1298,7 +1293,7 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
             elif device is None:
                 out = out.clear_device_().clone()
             else:
-                out = out.to(device, non_blocking=True)
+                out = out.to(device, non_blocking=False)
         return out
 
     @_check_start
@@ -1589,5 +1584,5 @@ def _run_worker_pipe_shared_mem(
 def _update_cuda(t_dest, t_source):
     if t_source is None:
         return
-    t_dest.copy_(t_source.pin_memory(), non_blocking=True)
+    t_dest.copy_(t_source.pin_memory(), non_blocking=False)
     return

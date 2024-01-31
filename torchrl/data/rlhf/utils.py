@@ -100,7 +100,7 @@ class AdaptiveKLController(KLControllerBase):
             )
         n_steps = len(kl_values)
         # renormalize kls
-        kl_value = -torch.tensor(kl_values).mean() / self.coef
+        kl_value = -torch.as_tensor(kl_values).mean() / self.coef
         proportional_error = np.clip(kl_value / self.target - 1, -0.2, 0.2)  # ϵₜ
         mult = 1 + proportional_error * n_steps / self.horizon
         self.coef *= mult  # βₜ₊₁
@@ -314,10 +314,10 @@ class RolloutFromModel:
         # of generated tokens
         done_idx = torch.minimum(
             (generated != self.EOS_TOKEN_ID).sum(dim=-1) - batch.prompt_rindex,
-            torch.tensor(self.max_new_tokens) - 1,
+            torch.as_tensor(self.max_new_tokens) - 1,
         )
         truncated_idx = (
-            torch.tensor(self.max_new_tokens, device=generated.device).expand_as(
+            torch.as_tensor(self.max_new_tokens, device=generated.device).expand_as(
                 done_idx
             )
             - 1
