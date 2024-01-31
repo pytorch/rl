@@ -34,8 +34,8 @@ LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "DEBUG")
 logger = logging.getLogger(__name__)
 logger.setLevel(getattr(logging, LOGGING_LEVEL))
 # Remove all attached handlers
-for handler in logger.handlers[:]:
-    logger.removeHandler(handler)
+while logger.hasHandlers():
+    logger.removeHandler(logger.handlers[0])
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s")
