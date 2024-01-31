@@ -58,7 +58,7 @@ class VideoRecorder(ObservationTransform):
         Check :class:`~torchrl.env.GymEnv` or :class:`~torchrl.envs.DMControlEnv` to see how to render images
         in these contexts.
         >>> base_env = DMControlEnv("cheetah", "run", from_pixels=True)
-        >>> env = TransformedEnv(base_env, VideoRecorder(torchrl_logger=torchrl_logger, tag="run_video"))
+        >>> env = TransformedEnv(base_env, VideoRecorder(logger=torchrl_logger, tag="run_video"))
         >>> env.rollout(100)
 
         All transforms have a dump function, mostly a no-op except for ``VideoRecorder``, and :class:`~torchrl.envs.transforms.Composite`

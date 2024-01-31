@@ -545,7 +545,7 @@ class Trainer:
         loss_str = indent(f"loss={self.loss_module}", 4 * " ")
         collector_str = indent(f"collector={self.collector}", 4 * " ")
         optimizer_str = indent(f"optimizer={self.optimizer}", 4 * " ")
-        logger = indent(f"torchrl_logger={self.logger}", 4 * " ")
+        logger = indent(f"logger={self.logger}", 4 * " ")
 
         string = "\n".join(
             [
