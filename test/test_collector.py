@@ -2361,7 +2361,7 @@ def test_collector_reloading(collector_class):
 class TestLibThreading:
     @pytest.mark.skipif(
         IS_OSX,
-        reason="setting different threads across workeres can randomly fail on OSX.",
+        reason="setting different threads across workers can randomly fail on OSX.",
     )
     def test_num_threads(self):
         from torchrl.collectors import collectors
@@ -2396,7 +2396,7 @@ class TestLibThreading:
 
     @pytest.mark.skipif(
         IS_OSX,
-        reason="setting different threads across workeres can randomly fail on OSX.",
+        reason="setting different threads across workers can randomly fail on OSX.",
     )
     def test_auto_num_threads(self):
         init_threads = torch.get_num_threads()

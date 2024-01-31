@@ -2337,7 +2337,7 @@ class TestTerminatedOrTruncated:
 class TestLibThreading:
     @pytest.mark.skipif(
         IS_OSX,
-        reason="setting different threads across workeres can randomly fail on OSX.",
+        reason="setting different threads across workers can randomly fail on OSX.",
     )
     def test_num_threads(self):
         from torchrl.envs import batched_envs
@@ -2363,18 +2363,18 @@ class TestLibThreading:
 
     @pytest.mark.skipif(
         IS_OSX,
-        reason="setting different threads across workeres can randomly fail on OSX.",
+        reason="setting different threads across workers can randomly fail on OSX.",
     )
     def test_auto_num_threads(self):
         init_threads = torch.get_num_threads()
 
         try:
-            env3 = ParallelEnv(3, lambda: GymEnv("Pendulum-v1"))
+            env3 = ParallelEnv(3, ContinuousActionVecMockEnv)
             env3.rollout(2)
 
             assert torch.get_num_threads() == max(1, init_threads - 3)
 
-            env2 = ParallelEnv(2, lambda: GymEnv("Pendulum-v1"))
+            env2 = ParallelEnv(2, ContinuousActionVecMockEnv)
             env2.rollout(2)
 
             assert torch.get_num_threads() == max(1, init_threads - 5)
