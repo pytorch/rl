@@ -56,13 +56,13 @@ def main(cfg):
     ctx = setup(cfg.sys)
 
     logger = get_logger(
-        logger_type=cfg.io.torchrl_logger,
+        logger_type=cfg.io.logger,
         logger_name="./log",
         experiment_name="torchrlhf-gpt2",
         wandb_kwargs={
             "config": dict(cfg),
             "project": cfg.io.project_name,
-            "group": cfg.torchrl_logger.group_name,
+            "group": cfg.io.group_name,
         },
     )
 

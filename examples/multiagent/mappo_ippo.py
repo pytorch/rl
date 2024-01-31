@@ -31,7 +31,7 @@ def rendering_callback(env, td):
 @hydra.main(version_base="1.1", config_path=".", config_name="mappo_ippo")
 def train(cfg: "DictConfig"):  # noqa: F821
     # Device
-    cfg.train.device = "cpu" if not torch.has_cuda else "cuda:0"
+    cfg.train.device = "cpu" if not torch.cuda.device_count() else "cuda:0"
     cfg.env.device = cfg.train.device
 
     # Seeding

@@ -1091,7 +1091,7 @@ def _reset_batch_size(x):
     shape = x.get("_rb_batch_size", None)
     if shape is not None:
         warnings.warn(
-            "Reshaping nested tensordicts will be deprecated soon.",
+            "Reshaping nested tensordicts will be deprecated in v0.4.0.",
             category=DeprecationWarning,
         )
         data = x.get("_data")

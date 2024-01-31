@@ -36,7 +36,7 @@ from tqdm import tqdm
 if __name__ == "__main__":
 
     # 1. Define Hyperparameters
-    device = "cpu"  # if not torch.has_cuda else "cuda:0"
+    device = "cpu"  # if not torch.cuda.device_count() else "cuda:0"
     num_cells = 256
     max_grad_norm = 1.0
     frame_skip = 1

@@ -26,7 +26,7 @@ from torchrl.modules.tensordict_module.common import ensure_tensordict_compatibl
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -332,8 +332,7 @@ class CQLLoss(LossModule):
         self.target_entropy_buffer = None
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
         self.temperature = temperature
         self.min_q_weight = min_q_weight
@@ -1030,8 +1029,7 @@ class DiscreteCQLLoss(LossModule):
         self.action_space = _find_action_space(action_space)
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:

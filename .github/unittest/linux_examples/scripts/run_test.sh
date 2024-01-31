@@ -114,6 +114,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn_atari.
   buffer.batch_size=10 \
   device=cuda:0 \
   loss.num_updates=1 \
+  logger.backend= \
   buffer.buffer_size=120
 python .github/unittest/helpers/coverage_run_parallel.py examples/cql/discrete_cql_online.py \
   collector.total_frames=48 \
@@ -256,6 +257,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn_atari.
   buffer.batch_size=10 \
   device=cuda:0 \
   loss.num_updates=1 \
+  logger.backend= \
   buffer.buffer_size=120
 python .github/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py \
   num_workers=2 \

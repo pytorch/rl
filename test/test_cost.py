@@ -6091,7 +6091,7 @@ class TestPPO(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(actor, value, gamma=0.9, loss_critic_type="l2")
+        loss_fn = loss_class(actor, value, loss_critic_type="l2")
 
         params = TensorDict.from_module(loss_fn, as_module=True)
 
@@ -11960,7 +11960,7 @@ class TestAdv:
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["test_value"]
         )
 
-        with pytest.warns(DeprecationWarning):
+        with pytest.raises(RuntimeError, match="via constructor is deprecated"):
             if adv is VTrace:
                 actor_net = TensorDictModule(
                     nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]

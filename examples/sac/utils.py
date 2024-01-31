@@ -108,7 +108,7 @@ def make_replay_buffer(
     batch_size,
     prb=False,
     buffer_size=1000000,
-    buffer_scratch_dir=None,
+    scratch_dir=None,
     device="cpu",
     prefetch=3,
 ):
@@ -120,7 +120,7 @@ def make_replay_buffer(
             prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
-                scratch_dir=buffer_scratch_dir,
+                scratch_dir=scratch_dir,
                 device=device,
             ),
             batch_size=batch_size,
@@ -131,7 +131,7 @@ def make_replay_buffer(
             prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
-                scratch_dir=buffer_scratch_dir,
+                scratch_dir=scratch_dir,
                 device=device,
             ),
             batch_size=batch_size,

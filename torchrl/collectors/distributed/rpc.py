@@ -102,8 +102,20 @@ class RPCDataCollector(DataCollectorBase):
         policy (Callable): Policy to be executed in the environment.
             Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
             If ``None`` is provided, the policy used will be a
-            :class:`RandomPolicy` instance with the environment
+            :class:`~torchrl.collectors.RandomPolicy` instance with the environment
             ``action_spec``.
+            Accepted policies are usually subclasses of :class:`~tensordict.nn.TensorDictModuleBase`.
+            This is the recommended usage of the collector.
+            Other callables are accepted too:
+            If the policy is not a ``TensorDictModuleBase`` (e.g., a regular :class:`~torch.nn.Module`
+            instances) it will be wrapped in a `nn.Module` first.
+            Then, the collector will try to assess if these
+            modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+            - If the policy forward signature matches any of ``forward(self, tensordict)``,
+              ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
+              any typing with a single argument typed as a subclass of ``TensorDictBase``)
+              then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
     Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the total

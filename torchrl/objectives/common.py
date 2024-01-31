@@ -113,14 +113,11 @@ class LossModule(TensorDictModuleBase):
         # self.register_forward_pre_hook(_parameters_to_tensordict)
 
     def _set_deprecated_ctor_keys(self, **kwargs) -> None:
-        """Helper function to set a tensordict key from a constructor and raise a warning simultaneously."""
         for key, value in kwargs.items():
             if value is not None:
-                warnings.warn(
+                raise RuntimeError(
                     f"Setting '{key}' via the constructor is deprecated, use .set_keys(<key>='some_key') instead.",
-                    category=DeprecationWarning,
                 )
-                self.set_keys(**{key: value})
 
     def set_keys(self, **kwargs) -> None:
         """Set tensordict key names.
@@ -217,7 +214,8 @@ class LossModule(TensorDictModuleBase):
         """
         if kwargs.pop("funs_to_decorate", None) is not None:
             warnings.warn(
-                "funs_to_decorate is without effect with the new objective API.",
+                "funs_to_decorate is without effect with the new objective API. This "
+                "warning will be replaced by an error in v0.4.0.",
                 category=DeprecationWarning,
             )
         if kwargs:
