@@ -24,7 +24,7 @@ from datetime import datetime
 import torch
 import torch.distributed.rpc as rpc
 from tensordict import TensorDict
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import (

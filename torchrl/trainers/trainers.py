@@ -19,9 +19,13 @@ from tensordict import pad, TensorDictBase
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
-from torchrl import logger as torchrl_logger
 
-from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict, VERBOSE
+from torchrl._utils import (
+    _CKPT_BACKEND,
+    KeyDependentDefaultDict,
+    logger as torchrl_logger,
+    VERBOSE,
+)
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (

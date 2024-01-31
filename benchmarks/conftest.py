@@ -8,7 +8,7 @@ import warnings
 from collections import defaultdict
 
 import pytest
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 CALL_TIMES = defaultdict(lambda: 0.0)
 

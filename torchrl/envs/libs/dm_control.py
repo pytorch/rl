@@ -12,9 +12,8 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from torchrl import logger as torchrl_logger
 
-from torchrl._utils import VERBOSE
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,

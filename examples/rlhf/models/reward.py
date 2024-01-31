@@ -6,7 +6,7 @@ import warnings
 
 import torch
 from tensordict.nn import TensorDictModule
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.modules.models.rlhf import GPT2RewardModel
 

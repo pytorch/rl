@@ -15,7 +15,7 @@ import hydra
 import torch
 from models.transformer import init_transformer
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.rlhf.dataset import get_dataloader
 from torchrl.data.rlhf.prompt import PromptData

@@ -17,9 +17,7 @@ import torch.cuda
 from tensordict import TensorDict
 from torch import nn
 
-from torchrl import logger as torchrl_logger
-
-from torchrl._utils import _ProcessNoWarn, VERBOSE
+from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,

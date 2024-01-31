@@ -15,7 +15,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDict
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import TensorStorage

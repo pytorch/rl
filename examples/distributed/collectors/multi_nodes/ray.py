@@ -9,7 +9,7 @@ be created. Why?
 """
 from tensordict.nn import TensorDictModule
 from torch import nn
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.distributed.ray import RayCollector
 from torchrl.envs.libs.gym import GymEnv
 

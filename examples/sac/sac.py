@@ -19,7 +19,7 @@ import torch
 import torch.cuda
 import tqdm
 from tensordict import TensorDict
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.record.loggers import generate_exp_name, get_logger

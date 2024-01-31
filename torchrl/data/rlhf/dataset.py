@@ -15,7 +15,7 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 
 from tensordict.utils import NestedKey
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.replay_buffers import (
     SamplerWithoutReplacement,
     TensorDictReplayBuffer,

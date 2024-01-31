@@ -11,7 +11,7 @@ from typing import Callable, Dict, Optional, Union
 import torch
 from tensordict import TensorDictBase
 
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase, EnvMetaData

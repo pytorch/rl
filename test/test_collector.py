@@ -43,8 +43,7 @@ from tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 
 from torch import nn
-from torchrl import logger as torchrl_logger
-from torchrl._utils import _replace_last, prod, seed_generator
+from torchrl._utils import _replace_last, logger as torchrl_logger, prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
     _Interruptor,

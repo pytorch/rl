@@ -8,7 +8,7 @@ import hydra
 import torch
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.rlhf.dataset import get_dataloader
 from torchrl.data.rlhf.reward import PairwiseDataset
 from utils import get_file_logger, resolve_name_or_path, setup

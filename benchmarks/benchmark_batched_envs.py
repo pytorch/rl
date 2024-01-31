@@ -16,7 +16,7 @@ Requires pandas ("pip install pandas").
 """
 
 import pandas as pd
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 pd.set_option("display.max_columns", 100)
 pd.set_option("display.width", 1000)

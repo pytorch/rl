@@ -18,8 +18,7 @@ import torch
 import torch.cuda
 
 from tensordict import tensorclass, TensorDict
-from torchrl import logger as torchrl_logger
-from torchrl._utils import implement_for, seed_generator
+from torchrl._utils import implement_for, logger as torchrl_logger, seed_generator
 from torchrl.data.utils import CloudpickleWrapper
 
 from torchrl.envs import MultiThreadedEnv, ObservationNorm

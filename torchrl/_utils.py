@@ -9,6 +9,8 @@ import collections
 import functools
 import inspect
 
+import logging
+
 import math
 import os
 import sys
@@ -27,7 +29,15 @@ from packaging.version import parse
 
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
-from torchrl import logger as torchrl_logger
+
+LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "DEBUG")
+logger = logging.getLogger(__name__)
+logger.setLevel(getattr(logging, LOGGING_LEVEL))
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
@@ -76,7 +86,7 @@ class timeit:
             strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
-            torchrl_logger.info(" -- ".join(strings))
+            logger.info(" -- ".join(strings))
 
     @staticmethod
     def erase():
@@ -424,7 +434,7 @@ class implement_for:
 
         """
         if VERBOSE:
-            torchrl_logger.info("resetting implement_for")
+            logger.info("resetting implement_for")
         if setters_dict is None:
             setters_dict = copy(cls._implementations)
         for setter in setters_dict.values():
@@ -671,17 +681,17 @@ def print_directory_tree(path, indent="", display_metadata=True):
 
         total_size_bytes = get_directory_size(path)
         formatted_size = format_size(total_size_bytes)
-        torchrl_logger.info(f"Directory size: {formatted_size}")
+        logger.info(f"Directory size: {formatted_size}")
 
     if os.path.isdir(path):
-        torchrl_logger.info(indent + os.path.basename(path) + "/")
+        logger.info(indent + os.path.basename(path) + "/")
         indent += "    "
         for item in os.listdir(path):
             print_directory_tree(
                 os.path.join(path, item), indent=indent, display_metadata=False
             )
     else:
-        torchrl_logger.info(indent + os.path.basename(path))
+        logger.info(indent + os.path.basename(path))
 
 
 def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:

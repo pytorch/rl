@@ -20,7 +20,7 @@ import numpy as np
 import torch
 from tensordict import MemoryMappedTensor, TensorDict
 from torch import multiprocessing as mp
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import (

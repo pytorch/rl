@@ -14,7 +14,7 @@ import warnings
 from copy import copy, deepcopy
 from typing import Callable, List, OrderedDict
 
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors.distributed import DEFAULT_SLURM_CONF
 from torchrl.collectors.distributed.default_configs import (

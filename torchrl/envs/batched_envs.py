@@ -21,8 +21,12 @@ import torch
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple, unravel_key
 from torch import multiprocessing as mp
-from torchrl import logger as torchrl_logger
-from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, VERBOSE
+from torchrl._utils import (
+    _check_for_faulty_process,
+    _ProcessNoWarn,
+    logger as torchrl_logger,
+    VERBOSE,
+)
 from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import _EnvPostInit, EnvBase

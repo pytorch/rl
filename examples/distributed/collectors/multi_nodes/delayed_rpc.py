@@ -27,7 +27,7 @@ import time
 from argparse import ArgumentParser
 
 import tqdm
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors.distributed import RPCDataCollector, submitit_delayed_launcher
 from torchrl.collectors.distributed.default_configs import (

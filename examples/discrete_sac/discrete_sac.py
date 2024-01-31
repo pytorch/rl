@@ -17,7 +17,7 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 

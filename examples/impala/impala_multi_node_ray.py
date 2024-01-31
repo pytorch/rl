@@ -8,7 +8,7 @@ This script reproduces the IMPALA Algorithm
 results from Espeholt et al. 2018 for the on Atari Environments.
 """
 import hydra
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 
 @hydra.main(config_path=".", config_name="config_multi_node_ray", version_base="1.1")

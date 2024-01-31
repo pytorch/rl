@@ -51,14 +51,3 @@ import torchrl.trainers
 filter_warnings_subprocess = True
 
 _THREAD_POOL_INIT = torch.get_num_threads()
-
-LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "DEBUG")
-import logging
-
-logger = logging.getLogger(__name__)
-logger.setLevel(getattr(logging, LOGGING_LEVEL))
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)

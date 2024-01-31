@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import torch
 from tensordict.nn import TensorDictModule
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 from transformers import GPT2LMHeadModel
 
 

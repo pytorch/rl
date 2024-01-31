@@ -6,7 +6,7 @@
 import importlib
 from contextlib import nullcontext
 
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.datasets.gen_dgrl import GenDGRLExperienceReplay
 

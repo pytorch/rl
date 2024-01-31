@@ -39,12 +39,12 @@ from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_map
 from torch.utils.data import IterableDataset
-from torchrl import logger as torchrl_logger
 
 from torchrl._utils import (
     _check_for_faulty_process,
     _ProcessNoWarn,
     accept_remote_rref_udf_invocation,
+    logger as torchrl_logger,
     prod,
     RL_WARNINGS,
     VERBOSE,

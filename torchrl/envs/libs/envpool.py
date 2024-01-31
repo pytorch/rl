@@ -12,7 +12,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDict, TensorDictBase
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,

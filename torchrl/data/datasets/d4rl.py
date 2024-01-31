@@ -19,7 +19,7 @@ import torch
 
 from tensordict import make_tensordict, PersistentTensorDict, TensorDict
 
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.datasets.d4rl_infos import D4RL_DATASETS

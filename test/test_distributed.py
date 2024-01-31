@@ -13,7 +13,7 @@ import sys
 import time
 
 import pytest
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 try:
     import ray

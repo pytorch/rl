@@ -1,9 +1,7 @@
 import subprocess
 import time
 
-from torchrl import logger as torchrl_logger
-
-from torchrl._utils import VERBOSE
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.collectors.distributed.default_configs import (
     DEFAULT_SLURM_CONF,
     DEFAULT_SLURM_CONF_MAIN,

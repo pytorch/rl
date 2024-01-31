@@ -10,7 +10,7 @@ import torch.optim
 import tqdm
 
 from tensordict.nn import TensorDictSequential
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.envs import ExplorationType, set_exploration_type

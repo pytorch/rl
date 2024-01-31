@@ -23,9 +23,13 @@ from tensordict.utils import _STRDTYPE2DTYPE, expand_right
 from torch import multiprocessing as mp
 
 from torch.utils._pytree import LeafSpec, tree_flatten, tree_map, tree_unflatten
-from torchrl import logger as torchrl_logger
 
-from torchrl._utils import _CKPT_BACKEND, implement_for, VERBOSE
+from torchrl._utils import (
+    _CKPT_BACKEND,
+    implement_for,
+    logger as torchrl_logger,
+    VERBOSE,
+)
 from torchrl.data.replay_buffers.utils import INT_CLASSES
 
 try:

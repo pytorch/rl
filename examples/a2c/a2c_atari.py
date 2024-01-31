@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import hydra
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 
 @hydra.main(config_path=".", config_name="config_atari", version_base="1.1")

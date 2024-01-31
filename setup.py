@@ -15,7 +15,7 @@ from typing import List
 
 from setuptools import find_packages, setup
 from torch.utils.cpp_extension import BuildExtension, CppExtension
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 cwd = os.path.dirname(os.path.abspath(__file__))
 try:

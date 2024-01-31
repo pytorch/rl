@@ -12,7 +12,7 @@ from typing import Union
 import torch
 from tensordict import TensorDictBase
 from torch import nn
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,

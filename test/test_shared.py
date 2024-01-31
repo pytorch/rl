@@ -10,7 +10,7 @@ import pytest
 import torch
 from tensordict import LazyStackedTensorDict, TensorDict
 from torch import multiprocessing as mp
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 
 class TestShared:

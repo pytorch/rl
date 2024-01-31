@@ -24,7 +24,7 @@ import gym
 
 import torch.cuda
 import tqdm
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.distributed import RPCDataCollector

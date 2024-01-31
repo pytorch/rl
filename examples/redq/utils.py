@@ -18,8 +18,7 @@ from tensordict.nn import (
 from torch import distributions as d, nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from torchrl import logger as torchrl_logger
-from torchrl._utils import VERBOSE
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
 
 from torchrl.data import ReplayBuffer, TensorDictReplayBuffer

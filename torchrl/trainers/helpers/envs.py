@@ -7,9 +7,8 @@ from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import torch
-from torchrl import logger as torchrl_logger
 
-from torchrl._utils import VERBOSE
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
