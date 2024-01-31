@@ -145,7 +145,7 @@ class MPPIPlanner(MPCPlannerBase):
         self.num_candidates = num_candidates
         self.top_k = top_k
         self.reward_key = reward_key
-        self.register_buffer("temperature", torch.tensor(temperature))
+        self.register_buffer("temperature", torch.as_tensor(temperature))
 
     def planning(self, tensordict: TensorDictBase) -> torch.Tensor:
         batch_size = tensordict.batch_size
