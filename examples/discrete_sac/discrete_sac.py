@@ -37,7 +37,7 @@ from utils import (
 def main(cfg: "DictConfig"):  # noqa: F821
     device = torch.device(cfg.network.device)
 
-    # Create torchrl_logger
+    # Create logger
     exp_name = generate_exp_name("DiscreteSAC", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:

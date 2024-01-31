@@ -39,7 +39,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     torch.manual_seed(cfg.env.seed)
     np.random.seed(cfg.env.seed)
 
-    # Create torchrl_logger
+    # Create logger
     logger = make_logger(cfg)
 
     # Create offline replay buffer
