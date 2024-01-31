@@ -314,7 +314,7 @@ class A2CLoss(LossModule):
 
     @property
     def actor_params(self):
-        warnings.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
             "link will be removed in v0.4.",
             category=DeprecationWarning,
