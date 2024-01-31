@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import contextlib
-import logging
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
