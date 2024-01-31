@@ -2543,7 +2543,7 @@ def _main_async_collector(
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
-    collected_tensordict = data = data_in = data_in = inner_collector = dc_iter = None
+    collected_tensordict = data = next_data = data_in = inner_collector = dc_iter = None
 
     inner_collector = SyncDataCollector(
         create_env_fn,
@@ -2617,14 +2617,14 @@ def _main_async_collector(
             else:
                 inner_collector.init_random_frames = -1
 
-            data_in = next(dc_iter)
+            next_data = next(dc_iter)
             if pipe_child.poll(_MIN_TIMEOUT):
                 # in this case, main send a message to the worker while it was busy collecting trajectories.
                 # In that case, we skip the collected trajectory and get the message from main. This is faster than
                 # sending the trajectory in the queue until timeout when it's never going to be received.
                 continue
             if j == 0:
-                collected_tensordict = data_in
+                collected_tensordict = next_data
                 if (
                     storing_device is not None
                     and collected_tensordict.device != storing_device
@@ -2655,7 +2655,7 @@ def _main_async_collector(
                     )
                 data = (collected_tensordict, idx)
             else:
-                if data_in is not collected_tensordict:
+                if next_data is not collected_tensordict:
                     raise RuntimeError(
                         "SyncDataCollector should return the same tensordict modified in-place."
                     )
@@ -2710,7 +2710,7 @@ def _main_async_collector(
             continue
 
         elif msg == "close":
-            del collected_tensordict, data, data_in, data_in
+            del collected_tensordict, data, next_data, data_in
             inner_collector.shutdown()
             del inner_collector, dc_iter
             pipe_child.send("closed")
