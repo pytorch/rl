@@ -248,7 +248,6 @@ def make_loss_module(cfg, model):
         loss_function=cfg.optim.loss_function,
         delay_actor=True,
         delay_qvalue=True,
-        gamma=cfg.optim.gamma,
         action_spec=model[0][1].spec,
         policy_noise=cfg.optim.policy_noise,
         noise_clip=cfg.optim.noise_clip,
