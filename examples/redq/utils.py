@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import logging
 from copy import copy
 from typing import Callable, Dict, Optional, Sequence, Tuple, Union
 
@@ -18,6 +17,8 @@ from tensordict.nn import (
 )
 from torch import distributions as d, nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
+
+from torchrl import logger as torchrl_logger
 from torchrl._utils import VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
 
@@ -148,7 +149,7 @@ def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
             "collector.max_frames_per_traj",
             "collector.total_frames",
             "collector.frames_per_batch",
-            "logger.record_frames",
+            "torchrl_logger.record_frames",
             "exploration.annealing_frames",
             "collector.init_random_frames",
             "env.init_env_steps",
@@ -214,10 +215,10 @@ def make_trainer(
         >>> policy_exploration = EGreedyWrapper(policy)
         >>> replay_buffer = TensorDictReplayBuffer()
         >>> dir = tempfile.gettempdir()
-        >>> logger = TensorboardLogger(exp_name=dir)
+        >>> torchrl_logger = TensorboardLogger(exp_name=dir)
         >>> trainer = make_trainer(collector, loss_module, recorder, target_net_updater, policy_exploration,
-        ...    replay_buffer, logger)
-        >>> logging.info(trainer)
+        ...    replay_buffer, torchrl_logger)
+        >>> torchrl_logger.info(trainer)
 
     """
 
@@ -244,14 +245,14 @@ def make_trainer(
         raise NotImplementedError(f"lr scheduler {cfg.optim.lr_scheduler}")
 
     if VERBOSE:
-        logging.info(
+        torchrl_logger.info(
             f"collector = {collector}; \n"
             f"loss_module = {loss_module}; \n"
             f"recorder = {recorder}; \n"
             f"target_net_updater = {target_net_updater}; \n"
             f"policy_exploration = {policy_exploration}; \n"
             f"replay_buffer = {replay_buffer}; \n"
-            f"logger = {logger}; \n"
+            f"torchrl_logger = {logger}; \n"
             f"cfg = {cfg}; \n"
         )
 
@@ -328,12 +329,12 @@ def make_trainer(
     if recorder is not None:
         # create recorder object
         recorder_obj = Recorder(
-            record_frames=cfg.logger.record_frames,
+            record_frames=cfg.torchrl_logger.record_frames,
             frame_skip=cfg.env.frame_skip,
             policy_exploration=policy_exploration,
             environment=recorder,
-            record_interval=cfg.logger.record_interval,
-            log_keys=cfg.logger.recorder_log_keys,
+            record_interval=cfg.torchrl_logger.record_interval,
+            log_keys=cfg.torchrl_logger.recorder_log_keys,
         )
         # register recorder
         trainer.register_op(
@@ -344,11 +345,11 @@ def make_trainer(
         recorder_obj(None)
         # create explorative recorder - could be optional
         recorder_obj_explore = Recorder(
-            record_frames=cfg.logger.record_frames,
+            record_frames=cfg.torchrl_logger.record_frames,
             frame_skip=cfg.env.frame_skip,
             policy_exploration=policy_exploration,
             environment=recorder,
-            record_interval=cfg.logger.record_interval,
+            record_interval=cfg.torchrl_logger.record_interval,
             exploration_type=ExplorationType.RANDOM,
             suffix="exploration",
             out_keys={("next", "reward"): "r_evaluation_exploration"},
@@ -568,7 +569,7 @@ def transformed_env_constructor(
     Args:
         cfg (DictConfig): a DictConfig containing the arguments of the script.
         video_tag (str, optional): video tag to be passed to the Logger object
-        logger (Logger, optional): logger associated with the script
+        logger (Logger, optional): torchrl_logger associated with the script
         stats (dict, optional): a dictionary containing the :obj:`loc` and :obj:`scale` for the `ObservationNorm` transform
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.

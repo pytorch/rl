@@ -7,13 +7,14 @@ r"""Generic distributed data-collector using torch.distributed.rpc backend."""
 from __future__ import annotations
 
 import collections
-import logging
 import os
 import socket
 import time
 import warnings
 from copy import copy, deepcopy
 from typing import Callable, List, OrderedDict
+
+from torchrl import logger as torchrl_logger
 
 from torchrl.collectors.distributed import DEFAULT_SLURM_CONF
 from torchrl.collectors.distributed.default_configs import (
@@ -77,7 +78,7 @@ def _rpc_init_collection_node(
         **tensorpipe_options,
     )
     if verbose:
-        logging.info(
+        torchrl_logger.info(
             f"init rpc with master addr: {os.environ['MASTER_ADDR']}:{os.environ['MASTER_PORT']}"
         )
     rpc.init_rpc(
@@ -445,7 +446,7 @@ class RPCDataCollector(DataCollectorBase):
                         f"COLLECTOR_NODE_{rank}", {0: self.visible_devices[i]}
                     )
         if self._VERBOSE:
-            logging.info("init rpc")
+            torchrl_logger.info("init rpc")
         rpc.init_rpc(
             "TRAINER_NODE",
             rank=0,
@@ -476,7 +477,9 @@ class RPCDataCollector(DataCollectorBase):
                 time.sleep(time_interval)
                 try:
                     if self._VERBOSE:
-                        logging.info(f"trying to connect to collector node {i + 1}")
+                        torchrl_logger.info(
+                            f"trying to connect to collector node {i + 1}"
+                        )
                     collector_info = rpc.get_worker_info(f"COLLECTOR_NODE_{i + 1}")
                     break
                 except RuntimeError as err:
@@ -491,7 +494,7 @@ class RPCDataCollector(DataCollectorBase):
             if not isinstance(env_make, (EnvBase, EnvCreator)):
                 env_make = CloudpickleWrapper(env_make)
             if self._VERBOSE:
-                logging.info("Making collector in remote node")
+                torchrl_logger.info("Making collector in remote node")
             collector_rref = rpc.remote(
                 collector_infos[i],
                 collector_class,
@@ -515,7 +518,7 @@ class RPCDataCollector(DataCollectorBase):
         if not self._sync:
             for i in range(num_workers):
                 if self._VERBOSE:
-                    logging.info("Asking for the first batch")
+                    torchrl_logger.info("Asking for the first batch")
                 future = rpc.rpc_async(
                     collector_infos[i],
                     collector_class.next,
@@ -545,7 +548,7 @@ class RPCDataCollector(DataCollectorBase):
                 self._VERBOSE,
             )
             if self._VERBOSE:
-                logging.info("job id", job.job_id)  # ID of your job
+                torchrl_logger.info("job id", job.job_id)  # ID of your job
             return job
         elif self.launcher == "mp":
             job = _ProcessNoWarn(
@@ -589,7 +592,7 @@ class RPCDataCollector(DataCollectorBase):
         self.jobs = []
         for i in range(self.num_workers):
             if self._VERBOSE:
-                logging.info(f"Submitting job {i}")
+                torchrl_logger.info(f"Submitting job {i}")
             job = self._init_worker_rpc(
                 executor,
                 i,
@@ -646,7 +649,7 @@ class RPCDataCollector(DataCollectorBase):
         futures = []
         for i in workers:
             if self._VERBOSE:
-                logging.info(f"calling update on worker {i}")
+                torchrl_logger.info(f"calling update on worker {i}")
             futures.append(
                 rpc.rpc_async(
                     self.collector_infos[i],
@@ -657,14 +660,14 @@ class RPCDataCollector(DataCollectorBase):
         if wait:
             for i in workers:
                 if self._VERBOSE:
-                    logging.info(f"waiting for worker {i}")
+                    torchrl_logger.info(f"waiting for worker {i}")
                 futures[i].wait()
                 if self._VERBOSE:
-                    logging.info("got it!")
+                    torchrl_logger.info("got it!")
 
     def _next_async_rpc(self):
         if self._VERBOSE:
-            logging.info("next async")
+            torchrl_logger.info("next async")
         if not len(self.futures):
             raise StopIteration(
                 f"The queue is empty, the collector has ran out of data after {self._collected_frames} collected frames."
@@ -675,7 +678,7 @@ class RPCDataCollector(DataCollectorBase):
                 if self.update_after_each_batch:
                     self.update_policy_weights_(workers=(i,), wait=False)
                 if self._VERBOSE:
-                    logging.info(f"future {i} is done")
+                    torchrl_logger.info(f"future {i} is done")
                 data = future.value()
                 self._collected_frames += data.numel()
                 if self._collected_frames < self.total_frames:
@@ -690,7 +693,7 @@ class RPCDataCollector(DataCollectorBase):
 
     def _next_sync_rpc(self):
         if self._VERBOSE:
-            logging.info("next sync: futures")
+            torchrl_logger.info("next sync: futures")
         if self.update_after_each_batch:
             self.update_policy_weights_()
         for i in range(self.num_workers):
@@ -707,7 +710,7 @@ class RPCDataCollector(DataCollectorBase):
             if future.done():
                 data += [future.value()]
                 if self._VERBOSE:
-                    logging.info(
+                    torchrl_logger.info(
                         f"got data from {i} // data has len {len(data)} / {self.num_workers}"
                     )
             else:
@@ -738,15 +741,15 @@ class RPCDataCollector(DataCollectorBase):
         if self._shutdown:
             return
         if self._VERBOSE:
-            logging.info("shutting down")
+            torchrl_logger.info("shutting down")
         for future, i in self.futures:
             # clear the futures
             while future is not None and not future.done():
-                logging.info(f"waiting for proc {i} to clear")
+                torchrl_logger.info(f"waiting for proc {i} to clear")
                 future.wait()
         for i in range(self.num_workers):
             if self._VERBOSE:
-                logging.info(f"shutting down {i}")
+                torchrl_logger.info(f"shutting down {i}")
             rpc.rpc_sync(
                 self.collector_infos[i],
                 self.collector_class.shutdown,
@@ -754,7 +757,7 @@ class RPCDataCollector(DataCollectorBase):
                 timeout=int(IDLE_TIMEOUT),
             )
         if self._VERBOSE:
-            logging.info("rpc shutdown")
+            torchrl_logger.info("rpc shutdown")
         rpc.shutdown(timeout=int(IDLE_TIMEOUT))
         if self.launcher == "mp":
             for job in self.jobs:

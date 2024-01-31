@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import contextlib
-import logging
 
 import math
 import warnings
@@ -18,6 +17,7 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
+from torchrl import logger as torchrl_logger
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -363,7 +363,7 @@ class PPOLoss(LossModule):
 
     @property
     def actor_params(self):
-        logging.warning(
+        torchrl_logger.warning(
             f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
             "link will be removed in v0.4.",
             category=DeprecationWarning,

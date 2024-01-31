@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import abc
 import itertools
-import logging
 import warnings
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
+from torchrl import logger as torchrl_logger
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -454,7 +454,7 @@ class GymLikeEnv(_EnvWrapper):
                 isinstance(info_dict_reader, default_info_dict_reader)
                 and info_dict_reader.info_spec is None
             ):
-                logging.info(
+                torchrl_logger.info(
                     "The info_dict_reader does not have specs. The only way to palliate to this issue automatically "
                     "is to run a dummy rollout and gather the specs automatically. "
                     "To silence this message, provide the specs directly to your spec reader."

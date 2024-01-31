@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import abc
-import logging
 import pathlib
 import warnings
 from collections import defaultdict, OrderedDict
@@ -20,6 +19,7 @@ from tensordict import pad, TensorDictBase
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
+from torchrl import logger as torchrl_logger
 
 from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict, VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
@@ -476,7 +476,7 @@ class Trainer:
 
     def shutdown(self):
         if VERBOSE:
-            logging.info("shutting down collector")
+            torchrl_logger.info("shutting down collector")
         self.collector.shutdown()
 
     def optim_steps(self, batch: TensorDictBase) -> None:
@@ -541,7 +541,7 @@ class Trainer:
         loss_str = indent(f"loss={self.loss_module}", 4 * " ")
         collector_str = indent(f"collector={self.collector}", 4 * " ")
         optimizer_str = indent(f"optimizer={self.optimizer}", 4 * " ")
-        logger = indent(f"logger={self.logger}", 4 * " ")
+        logger = indent(f"torchrl_logger={self.logger}", 4 * " ")
 
         string = "\n".join(
             [
@@ -822,7 +822,7 @@ class ClearCudaCache(TrainerHookBase):
 
 
 class LogReward(TrainerHookBase):
-    """Reward logger hook.
+    """Reward torchrl_logger hook.
 
     Args:
         logname (str, optional): name of the rewards to be logged. Default is :obj:`"r_training"`.

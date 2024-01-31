@@ -10,7 +10,6 @@ It supports state environments like MuJoCo.
 
 The helper functions are coded in the utils.py associated with this script.
 """
-import logging
 import time
 
 import hydra
@@ -18,6 +17,7 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
+from torchrl import logger as torchrl_logger
 
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
@@ -37,19 +37,19 @@ from utils import (
 def main(cfg: "DictConfig"):  # noqa: F821
     device = torch.device(cfg.network.device)
 
-    # Create logger
-    exp_name = generate_exp_name("TD3", cfg.logger.exp_name)
+    # Create torchrl_logger
+    exp_name = generate_exp_name("TD3", cfg.torchrl_logger.exp_name)
     logger = None
-    if cfg.logger.backend:
+    if cfg.torchrl_logger.backend:
         logger = get_logger(
-            logger_type=cfg.logger.backend,
+            logger_type=cfg.torchrl_logger.backend,
             logger_name="td3_logging",
             experiment_name=exp_name,
             wandb_kwargs={
-                "mode": cfg.logger.mode,
+                "mode": cfg.torchrl_logger.mode,
                 "config": dict(cfg),
-                "project": cfg.logger.project_name,
-                "group": cfg.logger.group_name,
+                "project": cfg.torchrl_logger.project_name,
+                "group": cfg.torchrl_logger.group_name,
             },
         )
 
@@ -95,7 +95,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     delayed_updates = cfg.optim.policy_update_delay
     prb = cfg.replay_buffer.prb
     eval_rollout_steps = cfg.env.max_episode_steps
-    eval_iter = cfg.logger.eval_iter
+    eval_iter = cfg.torchrl_logger.eval_iter
     frames_per_batch = cfg.collector.frames_per_batch
     update_counter = 0
 
@@ -207,7 +207,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    logging.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

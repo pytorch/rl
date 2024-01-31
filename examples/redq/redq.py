@@ -57,24 +57,24 @@ def main(cfg: "DictConfig"):  # noqa: F821
     exp_name = "_".join(
         [
             "REDQ",
-            cfg.logger.exp_name,
+            cfg.torchrl_logger.exp_name,
             str(uuid.uuid4())[:8],
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
 
     logger = get_logger(
-        logger_type=cfg.logger.backend,
+        logger_type=cfg.torchrl_logger.backend,
         logger_name="redq_logging",
         experiment_name=exp_name,
         wandb_kwargs={
-            "mode": cfg.logger.mode,
+            "mode": cfg.torchrl_logger.mode,
             "config": dict(cfg),
-            "project": cfg.logger.project_name,
-            "group": cfg.logger.group_name,
+            "project": cfg.torchrl_logger.project_name,
+            "group": cfg.torchrl_logger.group_name,
         },
     )
-    video_tag = exp_name if cfg.logger.record_video else ""
+    video_tag = exp_name if cfg.torchrl_logger.record_video else ""
 
     key, init_env_steps, stats = None, None, None
     if not cfg.env.vecnorm and cfg.env.norm_stats:

@@ -155,7 +155,7 @@ def transformed_env_constructor(
     Args:
         cfg (DictConfig): a DictConfig containing the arguments of the script.
         video_tag (str, optional): video tag to be passed to the Logger object
-        logger (Logger, optional): logger associated with the script
+        logger (Logger, optional): torchrl_logger associated with the script
         stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.

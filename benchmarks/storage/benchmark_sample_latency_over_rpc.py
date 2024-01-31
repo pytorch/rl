@@ -14,7 +14,6 @@ e.g. to benchmark LazyMemmapStorage, run the following commands using either two
 This code is based on examples/distributed/distributed_replay_buffer.py.
 """
 import argparse
-import logging
 import os
 import pickle
 import sys
@@ -25,6 +24,7 @@ from datetime import datetime
 import torch
 import torch.distributed.rpc as rpc
 from tensordict import TensorDict
+from torchrl import logger as torchrl_logger
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import (
@@ -106,10 +106,10 @@ class DummyTrainerNode:
                 buffer_rref = rpc.remote(
                     replay_buffer_info, ReplayBufferNode, args=(1000000,)
                 )
-                logging.info(f"Connected to replay buffer {replay_buffer_info}")
+                torchrl_logger.info(f"Connected to replay buffer {replay_buffer_info}")
                 return buffer_rref
             except Exception:
-                logging.info("Failed to connect to replay buffer")
+                torchrl_logger.info("Failed to connect to replay buffer")
                 time.sleep(RETRY_DELAY_SECS)
 
 
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     rank = args.rank
     storage_type = args.storage
 
-    logging.info(f"Rank: {rank}; Storage: {storage_type}")
+    torchrl_logger.info(f"Rank: {rank}; Storage: {storage_type}")
 
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"
@@ -167,7 +167,7 @@ if __name__ == "__main__":
             if i == 0:
                 continue
             results.append(result)
-            logging.info(i, results[-1])
+            torchrl_logger.info(i, results[-1])
 
         with open(
             f'./benchmark_{datetime.now().strftime("%d-%m-%Y%H:%M:%S")};batch_size={BATCH_SIZE};tensor_size={TENSOR_SIZE};repeat={REPEATS};storage={storage_type}.pkl',
@@ -176,7 +176,7 @@ if __name__ == "__main__":
             pickle.dump(results, f)
 
         tensor_results = torch.tensor(results)
-        logging.info(f"Mean: {torch.mean(tensor_results)}")
+        torchrl_logger.info(f"Mean: {torch.mean(tensor_results)}")
         breakpoint()
     elif rank == 1:
         # rank 1 is the replay buffer

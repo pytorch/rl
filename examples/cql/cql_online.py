@@ -11,7 +11,6 @@ It works across Gym and MuJoCo over a variety of tasks.
 The helper functions are coded in the utils.py associated with this script.
 
 """
-import logging
 import time
 
 import hydra
@@ -19,6 +18,7 @@ import numpy as np
 import torch
 import tqdm
 from tensordict import TensorDict
+from torchrl import logger as torchrl_logger
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
 
@@ -35,19 +35,19 @@ from utils import (
 
 @hydra.main(version_base="1.1", config_path=".", config_name="online_config")
 def main(cfg: "DictConfig"):  # noqa: F821
-    # Create logger
-    exp_name = generate_exp_name("CQL-online", cfg.logger.exp_name)
+    # Create torchrl_logger
+    exp_name = generate_exp_name("CQL-online", cfg.torchrl_logger.exp_name)
     logger = None
-    if cfg.logger.backend:
+    if cfg.torchrl_logger.backend:
         logger = get_logger(
-            logger_type=cfg.logger.backend,
+            logger_type=cfg.torchrl_logger.backend,
             logger_name="cql_logging",
             experiment_name=exp_name,
             wandb_kwargs={
-                "mode": cfg.logger.mode,
+                "mode": cfg.torchrl_logger.mode,
                 "config": dict(cfg),
-                "project": cfg.logger.project_name,
-                "group": cfg.logger.group_name,
+                "project": cfg.torchrl_logger.project_name,
+                "group": cfg.torchrl_logger.group_name,
             },
         )
 
@@ -99,7 +99,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         * cfg.optim.utd_ratio
     )
     prb = cfg.replay_buffer.prb
-    eval_iter = cfg.logger.eval_iter
+    eval_iter = cfg.torchrl_logger.eval_iter
     frames_per_batch = cfg.collector.frames_per_batch
     eval_rollout_steps = cfg.collector.max_frames_per_traj
 
@@ -211,7 +211,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    logging.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
     collector.shutdown()
 

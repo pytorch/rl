@@ -5,7 +5,6 @@
 import argparse
 import distutils.command.clean
 import glob
-import logging
 import os
 import shutil
 import subprocess
@@ -16,6 +15,7 @@ from typing import List
 
 from setuptools import find_packages, setup
 from torch.utils.cpp_extension import BuildExtension, CppExtension
+from torchrl import logger as torchrl_logger
 
 cwd = os.path.dirname(os.path.abspath(__file__))
 try:
@@ -97,7 +97,7 @@ class clean(distutils.command.clean.clean):
 
         # Remove torchrl extension
         for path in (ROOT_DIR / "torchrl").glob("**/*.so"):
-            logging.info(f"removing '{path}'")
+            torchrl_logger.info(f"removing '{path}'")
             path.unlink()
         # Remove build directory
         build_dirs = [
@@ -105,7 +105,7 @@ class clean(distutils.command.clean.clean):
         ]
         for path in build_dirs:
             if path.exists():
-                logging.info(f"removing '{path}' (and everything under it)")
+                torchrl_logger.info(f"removing '{path}' (and everything under it)")
                 shutil.rmtree(str(path), ignore_errors=True)
 
 
@@ -129,7 +129,7 @@ def get_extensions():
     }
     debug_mode = os.getenv("DEBUG", "0") == "1"
     if debug_mode:
-        logging.info("Compiling in debug mode")
+        torchrl_logger.info("Compiling in debug mode")
         extra_compile_args = {
             "cxx": [
                 "-O0",
@@ -178,11 +178,11 @@ def _main(argv):
     else:
         version = get_version()
         write_version_file(version)
-    logging.info("Building wheel {}-{}".format(package_name, version))
-    logging.info(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
+    torchrl_logger.info("Building wheel {}-{}".format(package_name, version))
+    torchrl_logger.info(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
 
     pytorch_package_dep = _get_pytorch_version(is_nightly)
-    logging.info("-- PyTorch dependency:", pytorch_package_dep)
+    torchrl_logger.info("-- PyTorch dependency:", pytorch_package_dep)
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
 

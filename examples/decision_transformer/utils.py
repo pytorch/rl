@@ -493,17 +493,19 @@ def make_dt_optimizer(optim_cfg, loss_module):
 
 
 def make_logger(cfg):
-    if not cfg.logger.backend:
+    if not cfg.torchrl_logger.backend:
         return None
-    exp_name = generate_exp_name(cfg.logger.model_name, cfg.logger.exp_name)
+    exp_name = generate_exp_name(
+        cfg.torchrl_logger.model_name, cfg.torchrl_logger.exp_name
+    )
     logger = get_logger(
-        cfg.logger.backend,
-        logger_name=cfg.logger.model_name,
+        cfg.torchrl_logger.backend,
+        logger_name=cfg.torchrl_logger.model_name,
         experiment_name=exp_name,
         wandb_kwargs={
             "config": dict(cfg),
-            "project": cfg.logger.project_name,
-            "group": cfg.logger.group_name,
+            "project": cfg.torchrl_logger.project_name,
+            "group": cfg.torchrl_logger.group_name,
         },
     )
     return logger

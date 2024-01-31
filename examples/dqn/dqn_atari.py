@@ -7,7 +7,6 @@
 DQN: Reproducing experimental results from Mnih et al. 2015 for the
 Deep Q-Learning Algorithm on Atari Environments.
 """
-import logging
 import tempfile
 import time
 
@@ -16,6 +15,7 @@ import torch.nn
 import torch.optim
 import tqdm
 from tensordict.nn import TensorDictSequential
+from torchrl import logger as torchrl_logger
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
@@ -36,7 +36,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     total_frames = cfg.collector.total_frames // frame_skip
     frames_per_batch = cfg.collector.frames_per_batch // frame_skip
     init_random_frames = cfg.collector.init_random_frames // frame_skip
-    test_interval = cfg.logger.test_interval // frame_skip
+    test_interval = cfg.torchrl_logger.test_interval // frame_skip
 
     # Make the components
     model = make_dqn_model(cfg.env.env_name, frame_skip)
@@ -94,18 +94,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create the optimizer
     optimizer = torch.optim.Adam(loss_module.parameters(), lr=cfg.optim.lr)
 
-    # Create the logger
+    # Create the torchrl_logger
     logger = None
-    if cfg.logger.backend:
+    if cfg.torchrl_logger.backend:
         exp_name = generate_exp_name("DQN", f"Atari_mnih15_{cfg.env.env_name}")
         logger = get_logger(
-            cfg.logger.backend,
+            cfg.torchrl_logger.backend,
             logger_name="dqn",
             experiment_name=exp_name,
             wandb_kwargs={
                 "config": dict(cfg),
-                "project": cfg.logger.project_name,
-                "group": cfg.logger.group_name,
+                "project": cfg.torchrl_logger.project_name,
+                "group": cfg.torchrl_logger.group_name,
             },
         )
 
@@ -119,7 +119,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     sampling_start = time.time()
     num_updates = cfg.loss.num_updates
     max_grad = cfg.optim.max_grad_norm
-    num_test_episodes = cfg.logger.num_test_episodes
+    num_test_episodes = cfg.torchrl_logger.num_test_episodes
     q_losses = torch.zeros(num_updates, device=device)
     pbar = tqdm.tqdm(total=total_frames)
     for data in collector:
@@ -215,7 +215,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    logging.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

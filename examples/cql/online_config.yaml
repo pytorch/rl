@@ -19,7 +19,7 @@ collector:
   max_frames_per_traj: 1000
 
 
-# logger
+# torchrl_logger
 logger:
   backend: wandb
   project_name: torchrl_example_cql

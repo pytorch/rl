@@ -163,8 +163,8 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/discrete_sac/d
   replay_buffer.size=120 \
   env.name=CartPole-v1 \
   logger.backend=
-#  logger.record_video=True \
-#  logger.record_frames=4 \
+#  torchrl_logger.record_video=True \
+#  torchrl_logger.record_frames=4 \
 python .github/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
   total_frames=200 \
   init_random_frames=10 \

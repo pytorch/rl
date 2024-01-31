@@ -8,7 +8,6 @@ import collections
 
 import functools
 import inspect
-import logging
 
 import math
 import os
@@ -28,6 +27,7 @@ from packaging.version import parse
 
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
+from torchrl import logger as torchrl_logger
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
@@ -76,7 +76,7 @@ class timeit:
             strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
-            logging.info(" -- ".join(strings))
+            torchrl_logger.info(" -- ".join(strings))
 
     @staticmethod
     def erase():
@@ -424,7 +424,7 @@ class implement_for:
 
         """
         if VERBOSE:
-            logging.info("resetting implement_for")
+            torchrl_logger.info("resetting implement_for")
         if setters_dict is None:
             setters_dict = copy(cls._implementations)
         for setter in setters_dict.values():
@@ -671,17 +671,17 @@ def print_directory_tree(path, indent="", display_metadata=True):
 
         total_size_bytes = get_directory_size(path)
         formatted_size = format_size(total_size_bytes)
-        logging.info(f"Directory size: {formatted_size}")
+        torchrl_logger.info(f"Directory size: {formatted_size}")
 
     if os.path.isdir(path):
-        logging.info(indent + os.path.basename(path) + "/")
+        torchrl_logger.info(indent + os.path.basename(path) + "/")
         indent += "    "
         for item in os.listdir(path):
             print_directory_tree(
                 os.path.join(path, item), indent=indent, display_metadata=False
             )
     else:
-        logging.info(indent + os.path.basename(path))
+        torchrl_logger.info(indent + os.path.basename(path))
 
 
 def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:

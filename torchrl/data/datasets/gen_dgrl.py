@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import importlib.util
-import logging
 import os
 import tarfile
 import tempfile
@@ -16,6 +15,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDict
+from torchrl import logger as torchrl_logger
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import TensorStorage
@@ -240,7 +240,7 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
             batch = self._PROCESS_NPY_BATCH
         _, file_name, _ = link
         file_path = os.path.join(download_folder, file_name)
-        logging.info(
+        torchrl_logger.info(
             f"Unpacking dataset file {file_path} ({file_name}) to {download_folder}."
         )
         idx = 0
@@ -326,14 +326,14 @@ class GenDGRLExperienceReplay(TensorDictReplayBuffer):
         file_path = os.path.join(download_folder, file_name)
 
         if skip_downloaded_files and os.path.isfile(file_path):
-            logging.info(f"Skipping {file_path}, already downloaded!")
+            torchrl_logger.info(f"Skipping {file_path}, already downloaded!")
             return file_name, True
 
         in_progress_folder = os.path.join(download_folder, "_in_progress")
         os.makedirs(in_progress_folder, exist_ok=True)
         in_progress_file_path = os.path.join(in_progress_folder, file_name)
 
-        logging.info(
+        torchrl_logger.info(
             f"Downloading dataset file {file_name} ({url}) to {in_progress_file_path}."
         )
         cls._download_with_progress_bar(url, in_progress_file_path)

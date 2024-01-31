@@ -6,13 +6,13 @@
 from __future__ import annotations
 
 import importlib
-import logging
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
 
 from tensordict import TensorDict, TensorDictBase
+from torchrl import logger as torchrl_logger
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
@@ -308,7 +308,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _set_seed(self, seed: Optional[int]):
         if seed is not None:
-            logging.info(
+            torchrl_logger.info(
                 "MultiThreadedEnvWrapper._set_seed ignored, as setting seed in an existing envorinment is not\
                    supported by envpool. Please create a new environment, passing the seed to the constructor."
             )
@@ -398,7 +398,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
     def _set_seed(self, seed: Optional[int]):
         """Library EnvPool only supports setting a seed by recreating the environment."""
         if seed is not None:
-            logging.debug("Recreating EnvPool environment to set seed.")
+            torchrl_logger.debug("Recreating EnvPool environment to set seed.")
             self.create_env_kwargs["seed"] = seed
             self._env = self._build_env(
                 env_name=self.env_name,

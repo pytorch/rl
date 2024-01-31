@@ -7,9 +7,8 @@
 This script reproduces the IMPALA Algorithm
 results from Espeholt et al. 2018 for the on Atari Environments.
 """
-import logging
-
 import hydra
+from torchrl import logger as torchrl_logger
 
 
 @hydra.main(config_path=".", config_name="config_single_node", version_base="1.1")
@@ -36,7 +35,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     frame_skip = 4
     total_frames = cfg.collector.total_frames // frame_skip
     frames_per_batch = cfg.collector.frames_per_batch // frame_skip
-    test_interval = cfg.logger.test_interval // frame_skip
+    test_interval = cfg.torchrl_logger.test_interval // frame_skip
 
     # Extract other config parameters
     batch_size = cfg.loss.batch_size  # Number of rollouts per batch
@@ -47,7 +46,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     anneal_lr = cfg.optim.anneal_lr
     sgd_updates = cfg.loss.sgd_updates
     max_grad_norm = cfg.optim.max_grad_norm
-    num_test_episodes = cfg.logger.num_test_episodes
+    num_test_episodes = cfg.torchrl_logger.num_test_episodes
     total_network_updates = (
         total_frames // (frames_per_batch * batch_size)
     ) * cfg.loss.sgd_updates
@@ -101,20 +100,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
         alpha=cfg.optim.alpha,
     )
 
-    # Create logger
+    # Create torchrl_logger
     logger = None
-    if cfg.logger.backend:
+    if cfg.torchrl_logger.backend:
         exp_name = generate_exp_name(
-            "IMPALA", f"{cfg.logger.exp_name}_{cfg.env.env_name}"
+            "IMPALA", f"{cfg.torchrl_logger.exp_name}_{cfg.env.env_name}"
         )
         logger = get_logger(
-            cfg.logger.backend,
+            cfg.torchrl_logger.backend,
             logger_name="impala",
             experiment_name=exp_name,
             wandb_kwargs={
                 "config": dict(cfg),
-                "project": cfg.logger.project_name,
-                "group": cfg.logger.group_name,
+                "project": cfg.torchrl_logger.project_name,
+                "group": cfg.torchrl_logger.group_name,
             },
         )
 
@@ -247,7 +246,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    logging.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

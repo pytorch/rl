@@ -2,12 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import logging
 from copy import copy
 from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import torch
+from torchrl import logger as torchrl_logger
 
 from torchrl._utils import VERBOSE
 from torchrl.envs import ParallelEnv
@@ -228,7 +228,7 @@ def transformed_env_constructor(
     Args:
         cfg (DictConfig): a DictConfig containing the arguments of the script.
         video_tag (str, optional): video tag to be passed to the Logger object
-        logger (Logger, optional): logger associated with the script
+        logger (Logger, optional): torchrl_logger associated with the script
         stats (dict, optional): a dictionary containing the :obj:`loc` and :obj:`scale` for the `ObservationNorm` transform
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.
@@ -394,7 +394,7 @@ def get_stats_random_rollout(
         )()
 
     if VERBOSE:
-        logging.info("computing state stats")
+        torchrl_logger.info("computing state stats")
     if not hasattr(cfg, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
@@ -427,7 +427,7 @@ def get_stats_random_rollout(
     s[s == 0] = 1.0
 
     if VERBOSE:
-        logging.info(
+        torchrl_logger.info(
             f"stats computed for {val_stats.numel()} steps. Got: \n"
             f"loc = {m}, \n"
             f"scale = {s}"

@@ -7,9 +7,8 @@
 This script reproduces the Proximal Policy Optimization (PPO) Algorithm
 results from Schulman et al. 2017 for the on MuJoCo Environments.
 """
-import logging
-
 import hydra
+from torchrl import logger as torchrl_logger
 
 
 @hydra.main(config_path=".", config_name="config_mujoco", version_base="1.1")
@@ -83,18 +82,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.optim.lr, eps=1e-5)
     critic_optim = torch.optim.Adam(critic.parameters(), lr=cfg.optim.lr, eps=1e-5)
 
-    # Create logger
+    # Create torchrl_logger
     logger = None
-    if cfg.logger.backend:
-        exp_name = generate_exp_name("PPO", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
+    if cfg.torchrl_logger.backend:
+        exp_name = generate_exp_name(
+            "PPO", f"{cfg.torchrl_logger.exp_name}_{cfg.env.env_name}"
+        )
         logger = get_logger(
-            cfg.logger.backend,
+            cfg.torchrl_logger.backend,
             logger_name="ppo",
             experiment_name=exp_name,
             wandb_kwargs={
                 "config": dict(cfg),
-                "project": cfg.logger.project_name,
-                "group": cfg.logger.group_name,
+                "project": cfg.torchrl_logger.project_name,
+                "group": cfg.torchrl_logger.group_name,
             },
         )
 
@@ -116,8 +117,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     cfg_optim_lr = cfg.optim.lr
     cfg_loss_anneal_clip_eps = cfg.loss.anneal_clip_epsilon
     cfg_loss_clip_epsilon = cfg.loss.clip_epsilon
-    cfg_logger_test_interval = cfg.logger.test_interval
-    cfg_logger_num_test_episodes = cfg.logger.num_test_episodes
+    cfg_logger_test_interval = cfg.torchrl_logger.test_interval
+    cfg_logger_num_test_episodes = cfg.torchrl_logger.num_test_episodes
     losses = TensorDict({}, batch_size=[cfg_loss_ppo_epochs, num_mini_batches])
 
     for i, data in enumerate(collector):
@@ -230,7 +231,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     end_time = time.time()
     execution_time = end_time - start_time
-    logging.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

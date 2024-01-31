@@ -5,7 +5,6 @@ Train example with a distributed collector
 This script reproduces the PPO example in https://pytorch.org/rl/tutorials/coding_ppo.html
 with a RayCollector.
 """
-import logging
 from collections import defaultdict
 
 import matplotlib.pyplot as plt
@@ -13,6 +12,7 @@ import torch
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
+from torchrl import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.distributed.ray import RayCollector
 from torchrl.data.replay_buffers import ReplayBuffer
@@ -235,4 +235,4 @@ if __name__ == "__main__":
     plt.title("Max step count (test)")
     save_name = "/tmp/results.jpg"
     plt.savefig(save_name)
-    logging.info(f"results saved in {save_name}")
+    torchrl_logger.info(f"results saved in {save_name}")

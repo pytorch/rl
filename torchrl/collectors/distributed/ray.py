@@ -1,12 +1,18 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 from __future__ import annotations
 
-import logging
 import warnings
 from typing import Callable, Dict, Iterator, List, OrderedDict, Union
 
 import torch
 import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
+
+from torchrl import torchrl_logger as torchrl_logger
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
@@ -18,7 +24,6 @@ from torchrl.collectors.utils import split_trajectories
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
 
-logger = logging.getLogger(__name__)
 
 RAY_ERR = None
 try:
@@ -64,8 +69,8 @@ def print_remote_collector_info(self):
         f"Created remote collector with in machine "
         f"{get_node_ip_address()} using gpus {ray.get_gpu_ids()}"
     )
-    # logger.warning(s)
-    logging.info(s)
+    # torchrl_logger.warning(s)
+    torchrl_logger.info(s)
 
 
 @classmethod

@@ -19,7 +19,7 @@ _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 
 
 class MLFlowLogger(Logger):
-    """Wrapper for the mlflow logger.
+    """Wrapper for the mlflow torchrl_logger.
 
     Args:
         exp_name (str): The name of the experiment.
@@ -94,7 +94,7 @@ class MLFlowLogger(Logger):
         video = video.permute(0, 2, 3, 1)  # T C H W -> T H W C
         if video.size(dim=-1) != 3:
             raise ValueError(
-                "The MLFlow logger only supports videos with 3 color channels."
+                "The MLFlow torchrl_logger only supports videos with 3 color channels."
             )
         self.video_log_counter += 1
         fps = kwargs.pop("fps", 6)

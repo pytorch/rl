@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import logging
 import time
 
 import hydra
@@ -12,6 +11,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 from torch.distributions import Categorical, OneHotCategorical
+from torchrl import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -225,7 +225,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
     optim = torch.optim.Adam(loss_module.parameters(), cfg.train.lr)
 
     # Logging
-    if cfg.logger.backend:
+    if cfg.torchrl_logger.backend:
         model_name = (
             ("Het" if not cfg.model.shared_parameters else "")
             + ("MA" if cfg.model.centralised_critic else "I")
@@ -237,7 +237,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
     total_frames = 0
     sampling_start = time.time()
     for i, tensordict_data in enumerate(collector):
-        logging.info(f"\nIteration {i}")
+        torchrl_logger.info(f"\nIteration {i}")
 
         sampling_time = time.time() - sampling_start
 
@@ -280,7 +280,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         training_tds = torch.stack(training_tds)
 
         # More logs
-        if cfg.logger.backend:
+        if cfg.torchrl_logger.backend:
             log_training(
                 logger,
                 training_tds,
@@ -297,7 +297,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         if (
             cfg.eval.evaluation_episodes > 0
             and i % cfg.eval.evaluation_interval == 0
-            and cfg.logger.backend
+            and cfg.torchrl_logger.backend
         ):
             evaluation_start = time.time()
             with torch.no_grad() and set_exploration_type(ExplorationType.MODE):
@@ -315,7 +315,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
 
                 log_evaluation(logger, rollouts, env_test, evaluation_time, step=i)
 
-        if cfg.logger.backend == "wandb":
+        if cfg.torchrl_logger.backend == "wandb":
             logger.experiment.log({}, commit=True)
         sampling_start = time.time()
 

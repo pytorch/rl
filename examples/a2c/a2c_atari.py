@@ -2,9 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import logging
-
 import hydra
+from torchrl import logger as torchrl_logger
 
 
 @hydra.main(config_path=".", config_name="config_atari", version_base="1.1")
@@ -32,7 +31,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     total_frames = cfg.collector.total_frames // frame_skip
     frames_per_batch = cfg.collector.frames_per_batch // frame_skip
     mini_batch_size = cfg.loss.mini_batch_size // frame_skip
-    test_interval = cfg.logger.test_interval // frame_skip
+    test_interval = cfg.torchrl_logger.test_interval // frame_skip
 
     # Create models (check utils_atari.py)
     actor, critic, critic_head = make_ppo_models(cfg.env.env_name)
@@ -88,18 +87,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
         eps=cfg.optim.eps,
     )
 
-    # Create logger
+    # Create torchrl_logger
     logger = None
-    if cfg.logger.backend:
-        exp_name = generate_exp_name("A2C", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
+    if cfg.torchrl_logger.backend:
+        exp_name = generate_exp_name(
+            "A2C", f"{cfg.torchrl_logger.exp_name}_{cfg.env.env_name}"
+        )
         logger = get_logger(
-            cfg.logger.backend,
+            cfg.torchrl_logger.backend,
             logger_name="a2c",
             experiment_name=exp_name,
             wandb_kwargs={
                 "config": dict(cfg),
-                "project": cfg.logger.project_name,
-                "group": cfg.logger.group_name,
+                "project": cfg.torchrl_logger.project_name,
+                "group": cfg.torchrl_logger.group_name,
             },
         )
 
@@ -200,7 +201,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor.eval()
                 eval_start = time.time()
                 test_rewards = eval_model(
-                    actor, test_env, num_episodes=cfg.logger.num_test_episodes
+                    actor, test_env, num_episodes=cfg.torchrl_logger.num_test_episodes
                 )
                 eval_time = time.time() - eval_start
                 log_info.update(
@@ -220,7 +221,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     end_time = time.time()
     execution_time = end_time - start_time
-    logging.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ env:
   collect_target_return: 12000
   backend: gym  # D4RL uses gym so we make sure gymnasium is hidden
 
-# logger
+# torchrl_logger
 logger:
   backend: wandb
   project_name: torchrl_example_dt

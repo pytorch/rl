@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import logging
 import time
 
 import hydra
@@ -11,6 +10,7 @@ import torch.optim
 import tqdm
 
 from tensordict.nn import TensorDictSequential
+from torchrl import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.envs import ExplorationType, set_exploration_type
@@ -77,18 +77,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create the optimizer
     optimizer = torch.optim.Adam(loss_module.parameters(), lr=cfg.optim.lr)
 
-    # Create the logger
+    # Create the torchrl_logger
     logger = None
-    if cfg.logger.backend:
+    if cfg.torchrl_logger.backend:
         exp_name = generate_exp_name("DQN", f"CartPole_{cfg.env.env_name}")
         logger = get_logger(
-            cfg.logger.backend,
+            cfg.torchrl_logger.backend,
             logger_name="dqn",
             experiment_name=exp_name,
             wandb_kwargs={
                 "config": dict(cfg),
-                "project": cfg.logger.project_name,
-                "group": cfg.logger.group_name,
+                "project": cfg.torchrl_logger.project_name,
+                "group": cfg.torchrl_logger.group_name,
             },
         )
 
@@ -100,8 +100,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     start_time = time.time()
     num_updates = cfg.loss.num_updates
     batch_size = cfg.buffer.batch_size
-    test_interval = cfg.logger.test_interval
-    num_test_episodes = cfg.logger.num_test_episodes
+    test_interval = cfg.torchrl_logger.test_interval
+    num_test_episodes = cfg.torchrl_logger.num_test_episodes
     frames_per_batch = cfg.collector.frames_per_batch
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     init_random_frames = cfg.collector.init_random_frames
@@ -194,7 +194,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    logging.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

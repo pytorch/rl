@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import logging
 from dataclasses import dataclass
 from typing import List, Optional, Union
 from warnings import warn
@@ -12,6 +11,7 @@ import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
+from torchrl import logger as torchrl_logger
 
 from torchrl._utils import VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
@@ -136,9 +136,9 @@ def make_trainer(
         >>> policy_exploration = EGreedyWrapper(policy)
         >>> replay_buffer = TensorDictReplayBuffer()
         >>> dir = tempfile.gettempdir()
-        >>> logger = TensorboardLogger(exp_name=dir)
+        >>> torchrl_logger = TensorboardLogger(exp_name=dir)
         >>> trainer = make_trainer(collector, loss_module, recorder, target_net_updater, policy_exploration,
-        ...    replay_buffer, logger)
+        ...    replay_buffer, torchrl_logger)
         >>> print(trainer)
 
     """
@@ -174,14 +174,14 @@ def make_trainer(
         raise NotImplementedError(f"lr scheduler {cfg.lr_scheduler}")
 
     if VERBOSE:
-        logging.info(
+        torchrl_logger.info(
             f"collector = {collector}; \n"
             f"loss_module = {loss_module}; \n"
             f"recorder = {recorder}; \n"
             f"target_net_updater = {target_net_updater}; \n"
             f"policy_exploration = {policy_exploration}; \n"
             f"replay_buffer = {replay_buffer}; \n"
-            f"logger = {logger}; \n"
+            f"torchrl_logger = {logger}; \n"
             f"cfg = {cfg}; \n"
         )
 

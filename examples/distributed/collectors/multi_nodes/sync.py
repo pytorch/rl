@@ -2,13 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import logging
 import time
 from argparse import ArgumentParser
 
 import gym
 
 import tqdm
+from torchrl import logger as torchrl_logger
 
 from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
@@ -122,5 +122,5 @@ if __name__ == "__main__":
             t0 = time.time()
     collector.shutdown()
     t1 = time.time()
-    logging.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    torchrl_logger.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
     exit()

@@ -8,12 +8,12 @@ Contains distributed tests which are expected to be a considerable burden for th
 """
 import abc
 import argparse
-import logging
 import os
 import sys
 import time
 
 import pytest
+from torchrl import logger as torchrl_logger
 
 try:
     import ray
@@ -89,7 +89,7 @@ class DistributedCollectorBase:
         cls._start_worker()
         env = ContinuousActionVecMockEnv
         policy = RandomPolicy(env().action_spec)
-        logging.info("creating collector")
+        torchrl_logger.info("creating collector")
         collector = cls.distributed_class()(
             [env] * 2,
             policy,
@@ -98,7 +98,7 @@ class DistributedCollectorBase:
             **cls.distributed_kwargs(),
         )
         total = 0
-        logging.info("getting data...")
+        torchrl_logger.info("getting data...")
         for data in collector:
             total += data.numel()
             assert data.numel() == frames_per_batch

@@ -32,7 +32,7 @@ class VideoRecorder(ObservationTransform):
         logger (Logger): a Logger instance where the video
             should be written. To save the video under a memmap tensor or an mp4 file, use
             the :class:`~torchrl.record.loggers.CSVLogger` class.
-        tag (str): the video tag in the logger.
+        tag (str): the video tag in the torchrl_logger.
         in_keys (Sequence of NestedKey, optional): keys to be read to produce the video.
             Default is :obj:`"pixels"`.
         skip (int): frame interval in the output video.
@@ -50,15 +50,15 @@ class VideoRecorder(ObservationTransform):
         >>> from torchrl.record.loggers.csv import CSVLogger
         >>> from torchrl.envs import TransformedEnv, DMControlEnv
 
-        The video format is chosen in the logger. Wandb and tensorboard will take care of that
+        The video format is chosen in the torchrl_logger. Wandb and tensorboard will take care of that
         on their own, CSV accepts various video formats.
-        >>> logger = CSVLogger(exp_name="cheetah", log_dir="cheetah_videos", video_format="mp4")
+        >>> torchrl_logger = CSVLogger(exp_name="cheetah", log_dir="cheetah_videos", video_format="mp4")
 
         Some envs (eg, Atari games) natively return images, some require the user to ask for them.
         Check :class:`~torchrl.env.GymEnv` or :class:`~torchrl.envs.DMControlEnv` to see how to render images
         in these contexts.
         >>> base_env = DMControlEnv("cheetah", "run", from_pixels=True)
-        >>> env = TransformedEnv(base_env, VideoRecorder(logger=logger, tag="run_video"))
+        >>> env = TransformedEnv(base_env, VideoRecorder(torchrl_logger=torchrl_logger, tag="run_video"))
         >>> env.rollout(100)
 
         All transforms have a dump function, mostly a no-op except for ``VideoRecorder``, and :class:`~torchrl.envs.transforms.Composite`
@@ -137,7 +137,7 @@ class VideoRecorder(ObservationTransform):
         return observation
 
     def dump(self, suffix: Optional[str] = None) -> None:
-        """Writes the video to the self.logger attribute.
+        """Writes the video to the self.torchrl_logger attribute.
 
         Args:
             suffix (str, optional): a suffix for the video to be recorded
