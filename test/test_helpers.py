@@ -543,7 +543,7 @@ def test_initialize_stats_from_non_obs_transform(device):
 def test_initialize_obs_transform_stats_raise_exception():
     env = ContinuousActionVecMockEnv()
     t_env = TransformedEnv(env)
-    t_env.transform = ObservationNorm()
+    t_env.transform = ObservationNorm(in_keys=["observation"])
     with pytest.raises(
         RuntimeError, match="More than one key exists in the observation_specs"
     ):
@@ -557,10 +557,14 @@ def test_retrieve_observation_norms_state_dict(device, composed):
     env.set_seed(1)
 
     t_env = TransformedEnv(env)
-    t_env.transform = ObservationNorm(standard_normal=True, loc=0.5, scale=0.2)
+    t_env.transform = ObservationNorm(
+        standard_normal=True, loc=0.5, scale=0.2, in_keys=["observation"]
+    )
     if composed:
         t_env.append_transform(
-            ObservationNorm(standard_normal=True, loc=1.0, scale=0.3)
+            ObservationNorm(
+                standard_normal=True, loc=1.0, scale=0.3, in_keys=["observation"]
+            )
         )
     initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
     state_dicts = retrieve_observation_norms_state_dict(t_env)

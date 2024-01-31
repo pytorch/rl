@@ -8126,7 +8126,9 @@ transforms = [
     ),
     pytest.param(partial(SqueezeTransform, squeeze_dim=-1), id="SqueezeTransform"),
     GrayScale,
-    ObservationNorm,
+    pytest.param(
+        partial(ObservationNorm, in_keys=["observation"]), id="ObservationNorm"
+    ),
     pytest.param(partial(CatFrames, dim=-3, N=4), id="CatFrames"),
     pytest.param(partial(RewardScaling, loc=1, scale=2), id="RewardScaling"),
     FiniteTensorDictCheck,

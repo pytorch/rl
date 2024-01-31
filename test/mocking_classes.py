@@ -646,7 +646,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         return obs + a / self.maxstep
 
 
-class DiscreteActionVecPolicy:
+class DiscreteActionVecPolicy(TensorDictModuleBase):
     in_keys = ["observation"]
     out_keys = ["action"]
 

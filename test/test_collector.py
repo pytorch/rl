@@ -1491,37 +1491,38 @@ class TestAutoWrap:
         collector.shutdown()
         del collector
 
-    def test_no_wrap_compatible_module(self, collector_class, env_maker):
-        policy = TensorDictCompatiblePolicy(
-            out_features=env_maker().action_spec.shape[-1]
-        )
-        policy(env_maker().reset())
-
-        collector = collector_class(
-            **self._create_collector_kwargs(env_maker, collector_class, policy)
-        )
-
-        if collector_class is not SyncDataCollector:
-            # We now do the casting only on the remote workers
-            pass
-        else:
-            assert isinstance(collector.policy, TensorDictCompatiblePolicy)
-            assert collector.policy.out_keys == ["action"]
-            assert collector.policy is policy
-
-        for i, data in enumerate(collector):
-            if i == 0:
-                assert (data["action"] != 0).any()
-                for p in policy.parameters():
-                    p.data.zero_()
-                    assert p.device == torch.device("cpu")
-                collector.update_policy_weights_()
-            elif i == 4:
-                assert (data["action"] == 0).all()
-                break
-
-        collector.shutdown()
-        del collector
+    # Deprecated as from v0.3
+    # def test_no_wrap_compatible_module(self, collector_class, env_maker):
+    #     policy = TensorDictCompatiblePolicy(
+    #         out_features=env_maker().action_spec.shape[-1]
+    #     )
+    #     policy(env_maker().reset())
+    #
+    #     collector = collector_class(
+    #         **self._create_collector_kwargs(env_maker, collector_class, policy)
+    #     )
+    #
+    #     if collector_class is not SyncDataCollector:
+    #         # We now do the casting only on the remote workers
+    #         pass
+    #     else:
+    #         assert isinstance(collector.policy, TensorDictCompatiblePolicy)
+    #         assert collector.policy.out_keys == ["action"]
+    #         assert collector.policy is policy
+    #
+    #     for i, data in enumerate(collector):
+    #         if i == 0:
+    #             assert (data["action"] != 0).any()
+    #             for p in policy.parameters():
+    #                 p.data.zero_()
+    #                 assert p.device == torch.device("cpu")
+    #             collector.update_policy_weights_()
+    #         elif i == 4:
+    #             assert (data["action"] == 0).all()
+    #             break
+    #
+    #     collector.shutdown()
+    #     del collector
 
     def test_auto_wrap_error(self, collector_class, env_maker):
         policy = UnwrappablePolicy(out_features=env_maker().action_spec.shape[-1])

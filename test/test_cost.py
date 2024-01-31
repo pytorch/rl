@@ -6091,7 +6091,7 @@ class TestPPO(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(actor, value, gamma=0.9, loss_critic_type="l2")
+        loss_fn = loss_class(actor, value, loss_critic_type="l2")
 
         params = TensorDict.from_module(loss_fn, as_module=True)
 
