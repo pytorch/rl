@@ -156,14 +156,6 @@ class TestEGreedy:
         assert not (action[~action_mask] == 0).all()
         assert (masked_action[~action_mask] == 0).all()
 
-    def test_egreedy_wrapper_deprecation(self):
-        torch.manual_seed(0)
-        spec = BoundedTensorSpec(1, 1, torch.Size([4]))
-        module = torch.nn.Linear(4, 4, bias=False)
-        policy = Actor(spec=spec, module=module)
-        with pytest.deprecated_call():
-            EGreedyWrapper(policy)
-
     def test_no_spec_error(
         self,
     ):

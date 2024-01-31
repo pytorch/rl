@@ -2063,7 +2063,7 @@ class TestUpdateParams:
         def _set_seed(self, seed):
             return seed
 
-    class Policy(nn.Module):
+    class Policy(TensorDictModuleBase):
         def __init__(self):
             super().__init__()
             self.param = nn.Parameter(torch.zeros(()))
