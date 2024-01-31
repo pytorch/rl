@@ -36,7 +36,7 @@ replay_buffer:
   prb: 0
   buffer_prefetch: 64
   size: 1_000_000
-  scratch_dir: ${env.exp_name}_${env.seed}
+  scratch_dir: null
 
 # Optimization
 optim:

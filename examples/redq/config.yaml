@@ -68,7 +68,7 @@ buffer:
   prb: 1
   sub_traj_len:
   size: 500_000
-  scratch_dir:
+  scratch_dir: null
   prefetch: 64
 
 network:

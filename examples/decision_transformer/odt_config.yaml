@@ -36,7 +36,7 @@ replay_buffer:
   stacked_frames: 20
   buffer_prefetch: 64
   capacity: 1_000_000
-  buffer_scratch_dir:
+  scratch_dir:
   device: cuda:0
   prefetch: 3
 
