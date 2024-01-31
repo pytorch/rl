@@ -176,7 +176,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
                 optim.zero_grad()
                 target_net_updater.step()
 
-        qnet_explore.step(frames=current_frames)  # Update exploration annealing
+        qnet_explore[1].step(frames=current_frames)  # Update exploration annealing
         collector.update_policy_weights_()
 
         training_time = time.time() - training_start
