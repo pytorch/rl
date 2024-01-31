@@ -77,18 +77,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create the optimizer
     optimizer = torch.optim.Adam(loss_module.parameters(), lr=cfg.optim.lr)
 
-    # Create the torchrl_logger
+    # Create the logger
     logger = None
-    if cfg.torchrl_logger.backend:
+    if cfg.logger.backend:
         exp_name = generate_exp_name("DQN", f"CartPole_{cfg.env.env_name}")
         logger = get_logger(
-            cfg.torchrl_logger.backend,
+            cfg.logger.backend,
             logger_name="dqn",
             experiment_name=exp_name,
             wandb_kwargs={
                 "config": dict(cfg),
-                "project": cfg.torchrl_logger.project_name,
-                "group": cfg.torchrl_logger.group_name,
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
             },
         )
 
@@ -100,8 +100,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     start_time = time.time()
     num_updates = cfg.loss.num_updates
     batch_size = cfg.buffer.batch_size
-    test_interval = cfg.torchrl_logger.test_interval
-    num_test_episodes = cfg.torchrl_logger.num_test_episodes
+    test_interval = cfg.logger.test_interval
+    num_test_episodes = cfg.logger.num_test_episodes
     frames_per_batch = cfg.collector.frames_per_batch
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     init_random_frames = cfg.collector.init_random_frames

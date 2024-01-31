@@ -19,7 +19,7 @@ buffer:
   batch_size: 32
   scratch_dir: null
 
-# torchrl_logger
+# logger
 logger:
   backend: wandb
   project_name: torchrl_example_dqn

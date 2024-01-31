@@ -14,12 +14,12 @@ from torchrl.record.loggers.wandb import WandbLogger
 
 def init_logging(cfg, model_name: str):
     logger = get_logger(
-        logger_type=cfg.torchrl_logger.backend,
+        logger_type=cfg.logger.backend,
         logger_name=os.getcwd(),
         experiment_name=generate_exp_name(cfg.env.scenario_name, model_name),
         wandb_kwargs={
-            "group": cfg.torchrl_logger.group_name or model_name,
-            "project": cfg.torchrl_logger.project_name
+            "group": cfg.logger.group_name or model_name,
+            "project": cfg.logger.project_name
             or f"torchrl_example_{cfg.env.scenario_name}",
         },
     )

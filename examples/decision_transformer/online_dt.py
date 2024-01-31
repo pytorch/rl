@@ -77,8 +77,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     pretrain_gradient_steps = cfg.optim.pretrain_gradient_steps
     clip_grad = cfg.optim.clip_grad
-    eval_steps = cfg.torchrl_logger.eval_steps
-    pretrain_log_interval = cfg.torchrl_logger.pretrain_log_interval
+    eval_steps = cfg.logger.eval_steps
+    pretrain_log_interval = cfg.logger.pretrain_log_interval
     reward_scaling = cfg.env.reward_scaling
 
     torchrl_logger.info(" ***Pretraining*** ")

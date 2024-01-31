@@ -148,7 +148,7 @@ def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
             "collector.max_frames_per_traj",
             "collector.total_frames",
             "collector.frames_per_batch",
-            "torchrl_logger.record_frames",
+            "logger.record_frames",
             "exploration.annealing_frames",
             "collector.init_random_frames",
             "env.init_env_steps",
@@ -214,9 +214,9 @@ def make_trainer(
         >>> policy_exploration = EGreedyWrapper(policy)
         >>> replay_buffer = TensorDictReplayBuffer()
         >>> dir = tempfile.gettempdir()
-        >>> torchrl_logger = TensorboardLogger(exp_name=dir)
+        >>> logger = TensorboardLogger(exp_name=dir)
         >>> trainer = make_trainer(collector, loss_module, recorder, target_net_updater, policy_exploration,
-        ...    replay_buffer, torchrl_logger)
+        ...    replay_buffer, logger)
         >>> torchrl_logger.info(trainer)
 
     """
@@ -328,12 +328,12 @@ def make_trainer(
     if recorder is not None:
         # create recorder object
         recorder_obj = Recorder(
-            record_frames=cfg.torchrl_logger.record_frames,
+            record_frames=cfg.logger.record_frames,
             frame_skip=cfg.env.frame_skip,
             policy_exploration=policy_exploration,
             environment=recorder,
-            record_interval=cfg.torchrl_logger.record_interval,
-            log_keys=cfg.torchrl_logger.recorder_log_keys,
+            record_interval=cfg.logger.record_interval,
+            log_keys=cfg.logger.recorder_log_keys,
         )
         # register recorder
         trainer.register_op(
@@ -344,11 +344,11 @@ def make_trainer(
         recorder_obj(None)
         # create explorative recorder - could be optional
         recorder_obj_explore = Recorder(
-            record_frames=cfg.torchrl_logger.record_frames,
+            record_frames=cfg.logger.record_frames,
             frame_skip=cfg.env.frame_skip,
             policy_exploration=policy_exploration,
             environment=recorder,
-            record_interval=cfg.torchrl_logger.record_interval,
+            record_interval=cfg.logger.record_interval,
             exploration_type=ExplorationType.RANDOM,
             suffix="exploration",
             out_keys={("next", "reward"): "r_evaluation_exploration"},

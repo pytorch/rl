@@ -7,7 +7,7 @@ collector:
   frames_per_batch: 64
   total_frames: 1_000_000
 
-# torchrl_logger
+# logger
 logger:
   backend: wandb
   project_name: torchrl_example_a2c

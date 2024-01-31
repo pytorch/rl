@@ -38,19 +38,19 @@ from utils import (
 def main(cfg: "DictConfig"):  # noqa: F821
     device = torch.device(cfg.network.device)
 
-    # Create torchrl_logger
-    exp_name = generate_exp_name("SAC", cfg.torchrl_logger.exp_name)
+    # Create logger
+    exp_name = generate_exp_name("SAC", cfg.logger.exp_name)
     logger = None
-    if cfg.torchrl_logger.backend:
+    if cfg.logger.backend:
         logger = get_logger(
-            logger_type=cfg.torchrl_logger.backend,
+            logger_type=cfg.logger.backend,
             logger_name="sac_logging",
             experiment_name=exp_name,
             wandb_kwargs={
-                "mode": cfg.torchrl_logger.mode,
+                "mode": cfg.logger.mode,
                 "config": dict(cfg),
-                "project": cfg.torchrl_logger.project_name,
-                "group": cfg.torchrl_logger.group_name,
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
             },
         )
 
@@ -97,7 +97,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         * cfg.optim.utd_ratio
     )
     prb = cfg.replay_buffer.prb
-    eval_iter = cfg.torchrl_logger.eval_iter
+    eval_iter = cfg.logger.eval_iter
     frames_per_batch = cfg.collector.frames_per_batch
     eval_rollout_steps = cfg.env.max_episode_steps
 

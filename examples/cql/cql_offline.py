@@ -31,19 +31,19 @@ from utils import (
 
 @hydra.main(config_path=".", config_name="offline_config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
-    # Create torchrl_logger
-    exp_name = generate_exp_name("CQL-offline", cfg.torchrl_logger.exp_name)
+    # Create logger
+    exp_name = generate_exp_name("CQL-offline", cfg.logger.exp_name)
     logger = None
-    if cfg.torchrl_logger.backend:
+    if cfg.logger.backend:
         logger = get_logger(
-            logger_type=cfg.torchrl_logger.backend,
+            logger_type=cfg.logger.backend,
             logger_name="cql_logging",
             experiment_name=exp_name,
             wandb_kwargs={
-                "mode": cfg.torchrl_logger.mode,
+                "mode": cfg.logger.mode,
                 "config": dict(cfg),
-                "project": cfg.torchrl_logger.project_name,
-                "group": cfg.torchrl_logger.group_name,
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
             },
         )
     # Set seeds
@@ -52,7 +52,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     device = torch.device(cfg.optim.device)
 
     # Create env
-    train_env, eval_env = make_environment(cfg, cfg.torchrl_logger.eval_envs)
+    train_env, eval_env = make_environment(cfg, cfg.logger.eval_envs)
 
     # Create replay buffer
     replay_buffer = make_offline_replay_buffer(cfg.replay_buffer)
@@ -75,8 +75,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     gradient_steps = cfg.optim.gradient_steps
     policy_eval_start = cfg.optim.policy_eval_start
-    evaluation_interval = cfg.torchrl_logger.eval_iter
-    eval_steps = cfg.torchrl_logger.eval_steps
+    evaluation_interval = cfg.logger.eval_iter
+    eval_steps = cfg.logger.eval_steps
 
     # Training loop
     start_time = time.time()

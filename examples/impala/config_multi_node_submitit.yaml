@@ -19,7 +19,7 @@ collector:
   total_frames: 200_000_000
   num_workers: 1
 
-# torchrl_logger
+# logger
 logger:
   backend: wandb
   project_name: torchrl_example_impala_submitit

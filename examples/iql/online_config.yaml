@@ -18,7 +18,7 @@ collector:
   device: cpu
   max_frames_per_traj: 200
 
-# torchrl_logger
+# logger
 logger:
   backend: wandb
   project_name: torchrl_example_iql

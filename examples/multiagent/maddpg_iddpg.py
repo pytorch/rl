@@ -158,7 +158,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
     optim = torch.optim.Adam(loss_module.parameters(), cfg.train.lr)
 
     # Logging
-    if cfg.torchrl_logger.backend:
+    if cfg.logger.backend:
         model_name = (
             ("Het" if not cfg.model.shared_parameters else "")
             + ("MA" if cfg.model.centralised_critic else "I")
@@ -210,7 +210,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         training_tds = torch.stack(training_tds)
 
         # More logs
-        if cfg.torchrl_logger.backend:
+        if cfg.logger.backend:
             log_training(
                 logger,
                 training_tds,
@@ -227,7 +227,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         if (
             cfg.eval.evaluation_episodes > 0
             and i % cfg.eval.evaluation_interval == 0
-            and cfg.torchrl_logger.backend
+            and cfg.logger.backend
         ):
             evaluation_start = time.time()
             with torch.no_grad() and set_exploration_type(ExplorationType.MEAN):
@@ -245,7 +245,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
 
                 log_evaluation(logger, rollouts, env_test, evaluation_time, step=i)
 
-        if cfg.torchrl_logger.backend == "wandb":
+        if cfg.logger.backend == "wandb":
             logger.experiment.log({}, commit=True)
         sampling_start = time.time()
 

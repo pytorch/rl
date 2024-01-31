@@ -18,7 +18,7 @@ buffer:
   buffer_size: 10_000
   batch_size: 128
 
-# torchrl_logger
+# logger
 logger:
   backend: wandb
   project_name: torchrl_example_dqn

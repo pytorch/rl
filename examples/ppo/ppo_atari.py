@@ -36,7 +36,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     total_frames = cfg.collector.total_frames // frame_skip
     frames_per_batch = cfg.collector.frames_per_batch // frame_skip
     mini_batch_size = cfg.loss.mini_batch_size // frame_skip
-    test_interval = cfg.torchrl_logger.test_interval // frame_skip
+    test_interval = cfg.logger.test_interval // frame_skip
 
     # Create models (check utils_atari.py)
     actor, critic = make_ppo_models(cfg.env.env_name)
@@ -90,20 +90,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
         eps=cfg.optim.eps,
     )
 
-    # Create torchrl_logger
+    # Create logger
     logger = None
-    if cfg.torchrl_logger.backend:
+    if cfg.logger.backend:
         exp_name = generate_exp_name(
-            "PPO", f"{cfg.torchrl_logger.exp_name}_{cfg.env.env_name}"
+            "PPO", f"{cfg.logger.exp_name}_{cfg.env.env_name}"
         )
         logger = get_logger(
-            cfg.torchrl_logger.backend,
+            cfg.logger.backend,
             logger_name="ppo",
             experiment_name=exp_name,
             wandb_kwargs={
                 "config": dict(cfg),
-                "project": cfg.torchrl_logger.project_name,
-                "group": cfg.torchrl_logger.group_name,
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
             },
         )
 
@@ -129,7 +129,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     cfg_optim_lr = cfg.optim.lr
     cfg_loss_anneal_clip_eps = cfg.loss.anneal_clip_epsilon
     cfg_loss_clip_epsilon = cfg.loss.clip_epsilon
-    cfg_logger_num_test_episodes = cfg.torchrl_logger.num_test_episodes
+    cfg_logger_num_test_episodes = cfg.logger.num_test_episodes
     cfg_optim_max_grad_norm = cfg.optim.max_grad_norm
     cfg.loss.clip_epsilon = cfg_loss_clip_epsilon
     losses = TensorDict({}, batch_size=[cfg_loss_ppo_epochs, num_mini_batches])

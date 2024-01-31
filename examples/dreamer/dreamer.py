@@ -88,7 +88,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     exp_name = generate_exp_name("Dreamer", cfg.exp_name)
     logger = get_logger(
-        logger_type=cfg.torchrl_logger,
+        logger_type=cfg.logger,
         logger_name="dreamer",
         experiment_name=exp_name,
         wandb_kwargs={

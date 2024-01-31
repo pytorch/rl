@@ -73,20 +73,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.optim.lr)
     critic_optim = torch.optim.Adam(critic.parameters(), lr=cfg.optim.lr)
 
-    # Create torchrl_logger
+    # Create logger
     logger = None
-    if cfg.torchrl_logger.backend:
+    if cfg.logger.backend:
         exp_name = generate_exp_name(
-            "A2C", f"{cfg.torchrl_logger.exp_name}_{cfg.env.env_name}"
+            "A2C", f"{cfg.logger.exp_name}_{cfg.env.env_name}"
         )
         logger = get_logger(
-            cfg.torchrl_logger.backend,
+            cfg.logger.backend,
             logger_name="a2c",
             experiment_name=exp_name,
             wandb_kwargs={
                 "config": dict(cfg),
-                "project": cfg.torchrl_logger.project_name,
-                "group": cfg.torchrl_logger.group_name,
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
             },
         )
 
@@ -180,13 +180,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Get test rewards
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if ((i - 1) * frames_in_batch) // cfg.torchrl_logger.test_interval < (
+            if ((i - 1) * frames_in_batch) // cfg.logger.test_interval < (
                 i * frames_in_batch
-            ) // cfg.torchrl_logger.test_interval:
+            ) // cfg.logger.test_interval:
                 actor.eval()
                 eval_start = time.time()
                 test_rewards = eval_model(
-                    actor, test_env, num_episodes=cfg.torchrl_logger.num_test_episodes
+                    actor, test_env, num_episodes=cfg.logger.num_test_episodes
                 )
                 eval_time = time.time() - eval_start
                 log_info.update(

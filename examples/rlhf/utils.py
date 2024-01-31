@@ -225,7 +225,7 @@ def resolve_name_or_path(name_or_path):
 
 def get_file_logger(name, filename, level=logging.DEBUG):
     """
-    Set up torchrl_logger that will log to the given filename.
+    Set up logger that will log to the given filename.
     """
     logger = logging.getLogger(name)
     handler = logging.FileHandler(filename)

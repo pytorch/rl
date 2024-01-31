@@ -7,7 +7,7 @@ env:
   seed: 0
   backend: gymnasium
 
-# torchrl_logger
+# logger
 logger:
   backend: wandb
   project_name: torchrl_example_iql
