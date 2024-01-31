@@ -343,13 +343,15 @@ def rollout_consistency_assertion(
 
     if done_strict and not done.any():
         raise RuntimeError("No done detected, test could not complete.")
-
-    # data resulting from step, when it's done
-    r_done = rollout[..., :-1]["next"][done]
-    # data resulting from step, when it's done, after step_mdp and reset
-    r_done_tp1 = rollout[..., 1:][done]
-    # check that at least one obs after reset does not match the version before reset
-    assert not torch.isclose(r_done[observation_key], r_done_tp1[observation_key]).all()
+    if done.any():
+        # data resulting from step, when it's done
+        r_done = rollout[..., :-1]["next"][done]
+        # data resulting from step, when it's done, after step_mdp and reset
+        r_done_tp1 = rollout[..., 1:][done]
+        # check that at least one obs after reset does not match the version before reset
+        assert not torch.isclose(
+            r_done[observation_key] - r_done_tp1[observation_key]
+        ).all()
 
 
 def rand_reset(env):
