@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
 
-from torchrl import torchrl_logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
