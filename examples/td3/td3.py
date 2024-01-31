@@ -30,7 +30,7 @@ from utils import (
     make_replay_buffer,
     make_td3_agent,
 )
-
+from torchrl._utils import logger as torchrl_logger
 
 @hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
@@ -206,7 +206,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    logger.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":
