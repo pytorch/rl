@@ -350,7 +350,7 @@ def rollout_consistency_assertion(
         r_done_tp1 = rollout[..., 1:][done]
         # check that at least one obs after reset does not match the version before reset
         assert not torch.isclose(
-            r_done[observation_key] - r_done_tp1[observation_key]
+            r_done[observation_key], r_done_tp1[observation_key]
         ).all()
 
 
