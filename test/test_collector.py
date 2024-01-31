@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import logging
 
 import sys
@@ -2357,39 +2358,79 @@ def test_collector_reloading(collector_class):
     del collector
 
 
-@pytest.mark.skipif(
-    IS_OSX, reason="setting different threads across workeres can randomly fail on OSX."
-)
-def test_num_threads():
-    from torchrl.collectors import collectors
-
-    _main_async_collector_saved = collectors._main_async_collector
-    collectors._main_async_collector = decorate_thread_sub_func(
-        collectors._main_async_collector, num_threads=3
+class TestLibThreading:
+    @pytest.mark.skipif(
+        IS_OSX,
+        reason="setting different threads across workers can randomly fail on OSX.",
     )
-    num_threads = torch.get_num_threads()
-    try:
-        env = ContinuousActionVecMockEnv()
-        c = MultiSyncDataCollector(
-            [env],
-            policy=RandomPolicy(env.action_spec),
-            num_threads=7,
-            num_sub_threads=3,
-            total_frames=200,
-            frames_per_batch=200,
+    def test_num_threads(self):
+        from torchrl.collectors import collectors
+
+        _main_async_collector_saved = collectors._main_async_collector
+        collectors._main_async_collector = decorate_thread_sub_func(
+            collectors._main_async_collector, num_threads=3
         )
-        assert torch.get_num_threads() == 7
-        for _ in c:
-            pass
-    finally:
+        num_threads = torch.get_num_threads()
         try:
-            c.shutdown()
-            del c
-        except Exception:
-            logging.info("Failed to shut down collector")
-        # reset vals
-        collectors._main_async_collector = _main_async_collector_saved
-        torch.set_num_threads(num_threads)
+            env = ContinuousActionVecMockEnv()
+            c = MultiSyncDataCollector(
+                [env],
+                policy=RandomPolicy(env.action_spec),
+                num_threads=7,
+                num_sub_threads=3,
+                total_frames=200,
+                frames_per_batch=200,
+            )
+            assert torch.get_num_threads() == 7
+            for _ in c:
+                pass
+        finally:
+            try:
+                c.shutdown()
+                del c
+            except Exception:
+                logging.info("Failed to shut down collector")
+            # reset vals
+            collectors._main_async_collector = _main_async_collector_saved
+            torch.set_num_threads(num_threads)
+
+    @pytest.mark.skipif(
+        IS_OSX,
+        reason="setting different threads across workers can randomly fail on OSX.",
+    )
+    def test_auto_num_threads(self):
+        init_threads = torch.get_num_threads()
+        try:
+            collector = MultiSyncDataCollector(
+                [ContinuousActionVecMockEnv],
+                RandomPolicy(ContinuousActionVecMockEnv().full_action_spec),
+                frames_per_batch=3,
+            )
+            for _ in collector:
+                assert torch.get_num_threads() == init_threads - 1
+                break
+            collector.shutdown()
+            assert torch.get_num_threads() == init_threads
+            del collector
+            gc.collect()
+        finally:
+            torch.set_num_threads(init_threads)
+
+        try:
+            collector = MultiSyncDataCollector(
+                [ParallelEnv(2, ContinuousActionVecMockEnv)],
+                RandomPolicy(ContinuousActionVecMockEnv().full_action_spec.expand(2)),
+                frames_per_batch=3,
+            )
+            for _ in collector:
+                assert torch.get_num_threads() == init_threads - 2
+                break
+            collector.shutdown()
+            assert torch.get_num_threads() == init_threads
+            del collector
+            gc.collect()
+        finally:
+            torch.set_num_threads(init_threads)
 
 
 if __name__ == "__main__":

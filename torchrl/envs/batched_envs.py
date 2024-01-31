@@ -270,8 +270,6 @@ class _BatchedEnv(EnvBase):
         super().__init__(device=device)
         self.serial_for_single = serial_for_single
         self.is_closed = True
-        if num_threads is None:
-            num_threads = num_workers + 1  # 1 more thread for this proc
         self.num_sub_threads = num_sub_threads
         self.num_threads = num_threads
         self._cache_in_keys = None
@@ -633,6 +631,12 @@ class _BatchedEnv(EnvBase):
 
         self._shutdown_workers()
         self.is_closed = True
+        import torchrl
+
+        num_threads = min(
+            torchrl._THREAD_POOL_INIT, torch.get_num_threads() + self.num_workers
+        )
+        torch.set_num_threads(num_threads)
 
     def _shutdown_workers(self) -> None:
         raise NotImplementedError
@@ -1009,6 +1013,11 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
 
     def _start_workers(self) -> None:
         from torchrl.envs.env_creator import EnvCreator
+
+        if self.num_threads is None:
+            self.num_threads = max(
+                1, torch.get_num_threads() - self.num_workers
+            )  # 1 more thread for this proc
 
         torch.set_num_threads(self.num_threads)
 
