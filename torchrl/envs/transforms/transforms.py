@@ -1332,7 +1332,7 @@ class ClipTransform(Transform):
             if val is None:
                 return None, None, torch.finfo(torch.get_default_dtype()).max
             if not isinstance(val, torch.Tensor):
-                val = torch.tensor(val)
+                val = torch.as_tensor(val)
             if not val.dtype.is_floating_point:
                 val = val.float()
             eps = torch.finfo(val.dtype).resolution
@@ -1626,10 +1626,10 @@ class RewardClipping(Transform):
             out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         clamp_min_tensor = (
-            clamp_min if isinstance(clamp_min, Tensor) else torch.tensor(clamp_min)
+            clamp_min if isinstance(clamp_min, Tensor) else torch.as_tensor(clamp_min)
         )
         clamp_max_tensor = (
-            clamp_max if isinstance(clamp_max, Tensor) else torch.tensor(clamp_max)
+            clamp_max if isinstance(clamp_max, Tensor) else torch.as_tensor(clamp_max)
         )
         self.register_buffer("clamp_min", clamp_min_tensor)
         self.register_buffer("clamp_max", clamp_max_tensor)
@@ -2390,7 +2390,7 @@ class ObservationNorm(ObservationTransform):
             out_keys_inv=out_keys_inv,
         )
         if not isinstance(standard_normal, torch.Tensor):
-            standard_normal = torch.tensor(standard_normal)
+            standard_normal = torch.as_tensor(standard_normal)
         self.register_buffer("standard_normal", standard_normal)
         self.eps = 1e-6
 
@@ -3612,10 +3612,10 @@ class DeviceCastTransform(Transform):
 
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return tensordict.to(self.device, non_blocking=True)
+        return tensordict.to(self.device, non_blocking=False)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return tensordict.to(self.device, non_blocking=True)
+        return tensordict.to(self.device, non_blocking=False)
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
@@ -3628,8 +3628,8 @@ class DeviceCastTransform(Transform):
         if parent is None:
             if self.orig_device is None:
                 return tensordict
-            return tensordict.to(self.orig_device, non_blocking=True)
-        return tensordict.to(parent.device, non_blocking=True)
+            return tensordict.to(self.orig_device, non_blocking=False)
+        return tensordict.to(parent.device, non_blocking=False)
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         return input_spec.to(self.device)
@@ -5146,7 +5146,7 @@ class StepCounter(Transform):
             if step_count is None:
                 step_count = self.container.observation_spec[step_count_key].zero()
                 if step_count.device != reset.device:
-                    step_count = step_count.to(reset.device, non_blocking=True)
+                    step_count = step_count.to(reset.device, non_blocking=False)
 
             # zero the step count if reset is needed
             step_count = torch.where(~expand_as_right(reset, step_count), step_count, 0)

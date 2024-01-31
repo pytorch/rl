@@ -283,8 +283,10 @@ class A2CLoss(LossModule):
         except AttributeError:
             device = torch.device("cpu")
 
-        self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
-        self.register_buffer("critic_coef", torch.tensor(critic_coef, device=device))
+        self.register_buffer(
+            "entropy_coef", torch.as_tensor(entropy_coef, device=device)
+        )
+        self.register_buffer("critic_coef", torch.as_tensor(critic_coef, device=device))
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.loss_critic_type = loss_critic_type

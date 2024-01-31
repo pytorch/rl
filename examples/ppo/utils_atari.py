@@ -41,15 +41,13 @@ from torchrl.modules import (
 # --------------------------------------------------------------------
 
 
-def make_base_env(
-    env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False
-):
+def make_base_env(env_name="BreakoutNoFrameskip-v4", frame_skip=4, is_test=False):
     env = GymEnv(
         env_name,
         frame_skip=frame_skip,
         from_pixels=True,
         pixels_only=False,
-        device=device,
+        device="cpu",
     )
     env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
@@ -61,8 +59,9 @@ def make_base_env(
 def make_parallel_env(env_name, num_envs, device, is_test=False):
     env = ParallelEnv(
         num_envs,
-        EnvCreator(lambda: make_base_env(env_name, device=device)),
+        EnvCreator(lambda: make_base_env(env_name)),
         serial_for_single=True,
+        device=device,
     )
     env = TransformedEnv(env)
     env.append_transform(ToTensorImage())

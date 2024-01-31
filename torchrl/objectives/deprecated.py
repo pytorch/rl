@@ -173,22 +173,24 @@ class REDQLoss_deprecated(LossModule):
         except AttributeError:
             device = torch.device("cpu")
 
-        self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
+        self.register_buffer("alpha_init", torch.as_tensor(alpha_init, device=device))
         self.register_buffer(
-            "min_log_alpha", torch.tensor(min_alpha, device=device).log()
+            "min_log_alpha", torch.as_tensor(min_alpha, device=device).log()
         )
         self.register_buffer(
-            "max_log_alpha", torch.tensor(max_alpha, device=device).log()
+            "max_log_alpha", torch.as_tensor(max_alpha, device=device).log()
         )
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
             self.register_buffer(
-                "log_alpha", torch.tensor(math.log(alpha_init), device=device)
+                "log_alpha", torch.as_tensor(math.log(alpha_init), device=device)
             )
         else:
             self.register_parameter(
                 "log_alpha",
-                torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
+                torch.nn.Parameter(
+                    torch.as_tensor(math.log(alpha_init), device=device)
+                ),
             )
 
         self._target_entropy = target_entropy
@@ -228,7 +230,7 @@ class REDQLoss_deprecated(LossModule):
                     np.prod(action_spec[self.tensor_keys.action].shape)
                 )
             self.register_buffer(
-                "target_entropy_buffer", torch.tensor(target_entropy, device=device)
+                "target_entropy_buffer", torch.as_tensor(target_entropy, device=device)
             )
             return self.target_entropy_buffer
         return target_entropy

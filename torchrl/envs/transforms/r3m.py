@@ -292,8 +292,8 @@ class R3MTransform(Compose):
         std = [0.229, 0.224, 0.225]
         normalize = ObservationNorm(
             in_keys=in_keys,
-            loc=torch.tensor(mean).view(3, 1, 1),
-            scale=torch.tensor(std).view(3, 1, 1),
+            loc=torch.as_tensor(mean).view(3, 1, 1),
+            scale=torch.as_tensor(std).view(3, 1, 1),
             standard_normal=True,
         )
         transforms.append(normalize)

@@ -412,8 +412,8 @@ def _proc_spec(spec):
             )
         return BoundedTensorSpec(
             shape=spec["shape"],
-            low=torch.tensor(spec["low"]),
-            high=torch.tensor(spec["high"]),
+            low=torch.as_tensor(spec["low"]),
+            high=torch.as_tensor(spec["high"]),
             dtype=_DTYPE_DIR[spec["dtype"]],
         )
     elif spec["type"] == "Discrete":

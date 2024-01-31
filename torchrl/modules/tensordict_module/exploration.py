@@ -107,10 +107,10 @@ class EGreedyModule(TensorDictModuleBase):
 
         super().__init__()
 
-        self.register_buffer("eps_init", torch.tensor([eps_init]))
-        self.register_buffer("eps_end", torch.tensor([eps_end]))
+        self.register_buffer("eps_init", torch.as_tensor([eps_init]))
+        self.register_buffer("eps_end", torch.as_tensor([eps_end]))
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
+        self.register_buffer("eps", torch.as_tensor([eps_init], dtype=torch.float32))
 
         if spec is not None:
             if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:

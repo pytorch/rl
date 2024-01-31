@@ -867,7 +867,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 device=data.device,
             )
             if data.batch_size:
-                data_add["_rb_batch_size"] = torch.tensor(data.batch_size)
+                data_add["_rb_batch_size"] = torch.as_tensor(data.batch_size)
 
         else:
             data_add = data
@@ -1441,7 +1441,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
         if isinstance(index, slice) and index == slice(None):
             return self
         if isinstance(index, (list, range, np.ndarray)):
-            index = torch.tensor(index)
+            index = torch.as_tensor(index)
         if isinstance(index, torch.Tensor):
             if index.ndim > 1:
                 raise RuntimeError(

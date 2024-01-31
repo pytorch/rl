@@ -684,7 +684,7 @@ def _slice_data(data: TensorDict, slice_len, pad_value):
         truncated,
         dim=data.ndim - 1,
         value=True,
-        index=torch.tensor(-1, device=truncated.device),
+        index=torch.as_tensor(-1, device=truncated.device),
     )
     done = data.get(("next", "done"))
     data.set(("next", "truncated"), truncated)

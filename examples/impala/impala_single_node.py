@@ -111,7 +111,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
             cfg.logger.backend,
             logger_name="impala",
             experiment_name=exp_name,
-            project="impala",
+            wandb_kwargs={
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
 
     # Create test environment

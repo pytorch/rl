@@ -1374,9 +1374,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     ) -> torch.Tensor:
         if not isinstance(val, torch.Tensor):
             if ignore_device:
-                val = torch.tensor(val)
+                val = torch.as_tensor(val)
             else:
-                val = torch.tensor(val, device=self.device)
+                val = torch.as_tensor(val, device=self.device)
 
         if space is None:
             space = self.space
@@ -1555,9 +1555,9 @@ class BoundedTensorSpec(TensorSpec):
             dtype = torch.get_default_dtype()
 
         if not isinstance(low, torch.Tensor):
-            low = torch.tensor(low, dtype=dtype, device=device)
+            low = torch.as_tensor(low, dtype=dtype, device=device)
         if not isinstance(high, torch.Tensor):
-            high = torch.tensor(high, dtype=dtype, device=device)
+            high = torch.as_tensor(high, dtype=dtype, device=device)
         if high.device != device:
             high = high.to(device)
         if low.device != device:
@@ -1857,8 +1857,8 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         dtype, device = _default_dtype_and_device(dtype, device)
         box = (
             ContinuousBox(
-                torch.tensor(-np.inf, device=device).expand(shape),
-                torch.tensor(np.inf, device=device).expand(shape),
+                torch.as_tensor(-np.inf, device=device).expand(shape),
+                torch.as_tensor(np.inf, device=device).expand(shape),
             )
             if shape == _DEFAULT_SHAPE
             else None

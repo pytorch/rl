@@ -28,11 +28,11 @@ def _to_torch(
     data: Tensor, device, pin_memory: bool = False, non_blocking: bool = False
 ) -> torch.Tensor:
     if isinstance(data, np.generic):
-        return torch.tensor(data, device=device)
+        return torch.as_tensor(data, device=device)
     elif isinstance(data, np.ndarray):
         data = torch.from_numpy(data)
     elif not isinstance(data, Tensor):
-        data = torch.tensor(data, device=device)
+        data = torch.as_tensor(data, device=device)
 
     if pin_memory:
         data = data.pin_memory()
