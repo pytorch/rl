@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import contextlib
-import logging
 
 import math
 import warnings
@@ -21,7 +20,7 @@ from torch import distributions as d
 
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -331,8 +330,7 @@ class PPOLoss(LossModule):
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self._set_deprecated_ctor_keys(
             advantage=advantage_key,
             value_target=value_target_key,
@@ -363,7 +361,7 @@ class PPOLoss(LossModule):
 
     @property
     def actor_params(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
             "link will be removed in v0.4.",
             category=DeprecationWarning,

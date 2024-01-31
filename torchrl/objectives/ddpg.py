@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
@@ -19,7 +18,7 @@ from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -230,8 +229,7 @@ class DDPGLoss(LossModule):
         self.loss_function = loss_function
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:

@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import math
-import warnings
 from dataclasses import dataclass
 from numbers import Number
 from typing import Tuple, Union
@@ -22,7 +21,7 @@ from torchrl.objectives import default_value_kwargs, distance_loss, ValueEstimat
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _vmap_func,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
@@ -202,8 +201,7 @@ class REDQLoss_deprecated(LossModule):
         self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
     @property
     def target_entropy(self):

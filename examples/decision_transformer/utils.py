@@ -296,7 +296,7 @@ def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
     )
     storage = LazyMemmapStorage(
         max_size=rb_cfg.capacity,
-        scratch_dir=rb_cfg.buffer_scratch_dir,
+        scratch_dir=rb_cfg.scratch_dir,
         device=rb_cfg.device,
     )
 

@@ -7,11 +7,12 @@ import argparse
 
 import torch
 import tqdm
-from torch import nn
 
+from tensordict.nn import TensorDictSequential
+from torch import nn
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import DistributionalQValueActor, EGreedyWrapper, MLP, QValueActor
+from torchrl.modules import DistributionalQValueActor, EGreedyModule, MLP, QValueActor
 from torchrl.objectives import DistributionalDQNLoss, DQNLoss
 
 parser = argparse.ArgumentParser()
@@ -85,12 +86,14 @@ if __name__ == "__main__":
         actor(env.reset())
         loss = DQNLoss(actor, loss_function="smooth_l1", action_space=env.action_spec)
         loss.make_value_estimator(gamma=0.0)
-    policy = EGreedyWrapper(
+    policy = TensorDictSequential(
         actor,
-        eps_init=eps_greedy,
-        eps_end=0.0,
-        annealing_num_steps=n_steps,
-        spec=env.action_spec,
+        EGreedyModule(
+            eps_init=eps_greedy,
+            eps_end=0.0,
+            annealing_num_steps=n_steps,
+            spec=env.action_spec,
+        ),
     )
     optim = torch.optim.Adam(loss.parameters(), lr, weight_decay=wd)
 

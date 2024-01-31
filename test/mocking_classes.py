@@ -646,7 +646,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         return obs + a / self.maxstep
 
 
-class DiscreteActionVecPolicy:
+class DiscreteActionVecPolicy(TensorDictModuleBase):
     in_keys = ["observation"]
     out_keys = ["action"]
 
@@ -979,10 +979,13 @@ class ActionObsMergeLinear(nn.Module):
         return self.linear(torch.cat([observation, action], dim=-1))
 
 
-class CountingEnvCountPolicy:
+class CountingEnvCountPolicy(TensorDictModuleBase):
     def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
+        super().__init__()
         self.action_spec = action_spec
         self.action_key = action_key
+        self.in_keys = []
+        self.out_keys = [action_key]
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
         return td.set(self.action_key, self.action_spec.zero() + 1)

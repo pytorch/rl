@@ -299,23 +299,17 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self.shifted = shifted
 
         if advantage_key is not None:
-            warnings.warn(
-                "Setting 'advantage_key' via ctor is deprecated, use .set_keys(advantage_key='some_key') instead.",
-                category=DeprecationWarning,
+            raise RuntimeError(
+                "Setting 'advantage_key' via constructor is deprecated, use .set_keys(advantage_key='some_key') instead.",
             )
-            self.dep_keys["advantage"] = advantage_key
         if value_target_key is not None:
-            warnings.warn(
-                "Setting 'value_target_key' via ctor is deprecated, use .set_keys(value_target_key='some_key') instead.",
-                category=DeprecationWarning,
+            raise RuntimeError(
+                "Setting 'value_target_key' via constructor is deprecated, use .set_keys(value_target_key='some_key') instead.",
             )
-            self.dep_keys["value_target"] = value_target_key
         if value_key is not None:
-            warnings.warn(
-                "Setting 'value_key' via ctor is deprecated, use .set_keys(value_key='some_key') instead.",
-                category=DeprecationWarning,
+            raise RuntimeError(
+                "Setting 'value_key' via constructor is deprecated, use .set_keys(value_key='some_key') instead.",
             )
-            self.dep_keys["value"] = value_key
 
     @property
     def tensor_keys(self) -> _AcceptedKeys:
