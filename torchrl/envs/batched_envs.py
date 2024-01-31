@@ -633,10 +633,10 @@ class _BatchedEnv(EnvBase):
         self.is_closed = True
         import torchrl
 
-        torchrl._THREAD_POOL = min(
-            torchrl._THREAD_POOL_INIT, torchrl._THREAD_POOL + self.num_workers
+        num_threads = min(
+            torchrl._THREAD_POOL_INIT, torch.get_num_threads() + self.num_workers
         )
-        torch.set_num_threads(torchrl._THREAD_POOL)
+        torch.set_num_threads(num_threads)
 
     def _shutdown_workers(self) -> None:
         raise NotImplementedError
@@ -1015,16 +1015,11 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
         from torchrl.envs.env_creator import EnvCreator
 
         if self.num_threads is None:
-            import torchrl
-
             self.num_threads = max(
-                1, torchrl._THREAD_POOL - self.num_workers
+                1, torch.get_num_threads() - self.num_workers
             )  # 1 more thread for this proc
 
         torch.set_num_threads(self.num_threads)
-        import torchrl
-
-        torchrl._THREAD_POOL = self.num_threads
 
         ctx = mp.get_context("spawn")
 
