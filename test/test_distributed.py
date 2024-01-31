@@ -49,7 +49,7 @@ if sys.platform.startswith("win"):
     pytest.skip("skipping windows tests in windows", allow_module_level=True)
 
 
-class CountingPolicy(nn.Module):
+class CountingPolicy(TensorDictModuleBase):
     """A policy for counting env.
 
     Returns a step of 1 by default but weights can be adapted.
