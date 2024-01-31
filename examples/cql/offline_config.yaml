@@ -5,7 +5,7 @@ env:
   library: gym
   n_samples_stats: 1000
   seed: 0
-  backend: gymnasium  # D4RL uses gym so we make sure gymnasium is hidden
+  backend: gymnasium
 
 # logger
 logger:
