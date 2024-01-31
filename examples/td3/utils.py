@@ -121,14 +121,14 @@ def make_replay_buffer(
     batch_size,
     prb=False,
     buffer_size=1000000,
-    buffer_scratch_dir=None,
+    scratch_dir=None,
     device="cpu",
     prefetch=3,
 ):
     with (
         tempfile.TemporaryDirectory()
-        if buffer_scratch_dir is None
-        else nullcontext(buffer_scratch_dir)
+        if scratch_dir is None
+        else nullcontext(scratch_dir)
     ) as scratch_dir:
         if prb:
             replay_buffer = TensorDictPrioritizedReplayBuffer(
@@ -248,7 +248,6 @@ def make_loss_module(cfg, model):
         loss_function=cfg.optim.loss_function,
         delay_actor=True,
         delay_qvalue=True,
-        gamma=cfg.optim.gamma,
         action_spec=model[0][1].spec,
         policy_noise=cfg.optim.policy_noise,
         noise_clip=cfg.optim.noise_clip,

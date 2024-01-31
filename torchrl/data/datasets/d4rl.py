@@ -146,7 +146,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         prefetch: int | None = None,
         transform: "torchrl.envs.Transform" | None = None,  # noqa-F821
         split_trajs: bool = False,
-        from_env: bool = None,
+        from_env: bool = False,
         use_truncated_as_done: bool = True,
         direct_download: bool = None,
         terminate_on_end: bool = None,
@@ -165,29 +165,16 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             direct_download = not self._has_d4rl
 
         if not direct_download:
-            if from_env is None:
-                warnings.warn(
-                    "from_env will soon default to ``False``, ie the data will be "
-                    "downloaded without relying on d4rl by default. "
-                    "For now, ``True`` will still be the default. "
-                    "To disable this warning, explicitly pass the ``from_env`` argument "
-                    "during construction of the dataset.",
-                    category=DeprecationWarning,
-                )
-                from_env = True
-            else:
-                warnings.warn(
-                    "You are using the D4RL library for collecting data. "
-                    "We advise against this use, as D4RL formatting can be "
-                    "inconsistent. "
-                    "To download the D4RL data without the D4RL library, use "
-                    "direct_download=True in the dataset constructor. "
-                    "Recurring to `direct_download=False` will soon be deprecated."
-                )
+            warnings.warn(
+                "You are using the D4RL library for collecting data. "
+                "We advise against this use, as D4RL formatting can be "
+                "inconsistent. "
+                "To download the D4RL data without the D4RL library, use "
+                "direct_download=True in the dataset constructor. "
+                "Recurring to `direct_download=False` will soon be deprecated."
+            )
             self.from_env = from_env
         else:
-            if from_env is None:
-                from_env = False
             self.from_env = from_env
 
         if (download == "force") or (download and not self._is_downloaded()):

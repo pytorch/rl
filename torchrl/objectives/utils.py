@@ -25,9 +25,9 @@ except ImportError as err:
         raise err_ft from err
 from torchrl.envs.utils import step_mdp
 
-_GAMMA_LMBDA_DEPREC_WARNING = (
+_GAMMA_LMBDA_DEPREC_ERROR = (
     "Passing gamma / lambda parameters through the loss constructor "
-    "is deprecated and will be removed soon. To customize your value function, "
+    "is a deprecated feature. To customize your value function, "
     "run `loss_module.make_value_estimator(ValueEstimators.<value_fun>, gamma=val)`."
 )
 
@@ -299,9 +299,8 @@ class SoftUpdate(TargetNetUpdater):
         tau: Optional[float] = None,
     ):
         if eps is None and tau is None:
-            warnings.warn(
-                "Neither eps nor tau was provided. Taking the default value "
-                "eps=0.999. This behaviour will soon be deprecated.",
+            raise RuntimeError(
+                "Neither eps nor tau was provided. " "This behaviour is deprecated.",
                 category=DeprecationWarning,
             )
             eps = 0.999

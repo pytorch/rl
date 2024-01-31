@@ -62,7 +62,7 @@ def main(cfg):
         wandb_kwargs={
             "config": dict(cfg),
             "project": cfg.io.project_name,
-            "group": cfg.logger.group_name,
+            "group": cfg.io.group_name,
         },
     )
 

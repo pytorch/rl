@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import contextlib
-import logging
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
@@ -18,7 +17,7 @@ from torch import distributions as d
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -288,8 +287,7 @@ class A2CLoss(LossModule):
         )
         self.register_buffer("critic_coef", torch.as_tensor(critic_coef, device=device))
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.loss_critic_type = loss_critic_type
 
     @property
@@ -298,41 +296,46 @@ class A2CLoss(LossModule):
 
     @property
     def actor(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.actor is deprecated, use {self.__class__.__name__}.actor_network instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.actor_network
 
     @property
     def critic(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.critic is deprecated, use {self.__class__.__name__}.critic_network instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.critic_network
 
     @property
     def actor_params(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.actor_network_params
 
     @property
     def critic_params(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.critic_params is deprecated, use {self.__class__.__name__}.critic_network_params instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.critic_network_params
 
     @property
     def target_critic_params(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.target_critic_params is deprecated, use {self.__class__.__name__}.target_critic_network_params instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.target_critic_network_params
 

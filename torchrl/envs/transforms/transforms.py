@@ -2372,15 +2372,9 @@ class ObservationNorm(ObservationTransform):
         standard_normal: bool = False,
     ):
         if in_keys is None:
-            warnings.warn(
-                "Not passing in_keys to ObservationNorm will soon be deprecated. "
-                "Ensure you specify the entries to be normalized",
-                category=DeprecationWarning,
+            raise RuntimeError(
+                "Not passing in_keys to ObservationNorm is a deprecated behaviour."
             )
-            in_keys = [
-                "observation",
-                "pixels",
-            ]
 
         if out_keys is None:
             out_keys = copy(in_keys)
@@ -2719,7 +2713,7 @@ class CatFrames(ObservationTransform):
             raise ValueError(f"padding must be one of {self.ACCEPTED_PADDING}")
         if padding == "zeros":
             warnings.warn(
-                "Padding option 'zeros' will be deprecated in the future. "
+                "Padding option 'zeros' will be deprecated in v0.4.0. "
                 "Please use 'constant' padding with padding_value 0 instead.",
                 category=DeprecationWarning,
             )

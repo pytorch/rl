@@ -6,7 +6,7 @@ env:
   seed: 0
   train_num_envs: 1
   eval_num_envs: 1
-  backend: gym
+  backend: gymnasium
 
 # Collector
 collector:
