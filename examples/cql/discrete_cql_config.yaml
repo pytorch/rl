@@ -2,7 +2,7 @@
 env:
   name: CartPole-v1
   task: ""
-  backend: gym
+  backend: gymnasium
   n_samples_stats: 1000
   max_episode_steps: 200
   seed: 0
