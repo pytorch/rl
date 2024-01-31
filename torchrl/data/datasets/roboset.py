@@ -95,7 +95,7 @@ class RobosetExperienceReplay(TensorDictReplayBuffer):
         >>> for batch in d:
         ...     break
         >>> # data is organised by seed and episode, but stored contiguously
-        >>> torchrl_logger.info(batch["seed"], batch["episode"])
+        >>> torchrl_logger.info(f"{batch['seed']}, {batch['episode']}")
         tensor([2, 1, 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 2, 2, 2, 1, 1, 2, 0, 2, 0, 2, 2, 1,
                 0, 2, 0, 0, 1, 1, 2, 1]) tensor([17, 20, 18,  9,  6,  1, 12,  6,  2,  6,  8, 15,  8, 21, 17,  3,  9, 20,
                 23, 12,  3, 16, 19, 16, 16,  4,  4, 12,  1,  2, 15, 24])

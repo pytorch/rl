@@ -167,7 +167,7 @@ if __name__ == "__main__":
             if i == 0:
                 continue
             results.append(result)
-            torchrl_logger.info(i, results[-1])
+            torchrl_logger.info(f"{i}, {results[-1]}")
 
         with open(
             f'./benchmark_{datetime.now().strftime("%d-%m-%Y%H:%M:%S")};batch_size={BATCH_SIZE};tensor_size={TENSOR_SIZE};repeat={REPEATS};storage={storage_type}.pkl',
