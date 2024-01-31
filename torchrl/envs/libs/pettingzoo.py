@@ -462,7 +462,7 @@ class PettingZooWrapper(_EnvWrapper):
                             "info": CompositeSpec(
                                 {
                                     key: UnboundedContinuousTensorSpec(
-                                        shape=torch.tensor(value).shape,
+                                        shape=torch.as_tensor(value).shape,
                                         device=self.device,
                                     )
                                     for key, value in info_dict[agent].items()
@@ -501,7 +501,7 @@ class PettingZooWrapper(_EnvWrapper):
                     device=self.device,
                 )
             except AttributeError:
-                state_example = torch.tensor(self.state(), device=self.device)
+                state_example = torch.as_tensor(self.state(), device=self.device)
                 state_spec = UnboundedContinuousTensorSpec(
                     shape=state_example.shape,
                     dtype=state_example.dtype,
@@ -560,7 +560,7 @@ class PettingZooWrapper(_EnvWrapper):
                 if group_info is not None:
                     agent_info_dict = info_dict[agent]
                     for agent_info, value in agent_info_dict.items():
-                        group_info.get(agent_info)[index] = torch.tensor(
+                        group_info.get(agent_info)[index] = torch.as_tensor(
                             value, device=self.device
                         )
 

@@ -102,9 +102,9 @@ def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
 
 def _robust_to_tensor(array: Union[float, np.ndarray]) -> torch.Tensor:
     if isinstance(array, np.ndarray):
-        return torch.tensor(array.copy())
+        return torch.as_tensor(array.copy())
     else:
-        return torch.tensor(array)
+        return torch.as_tensor(array)
 
 
 class DMControlWrapper(GymLikeEnv):

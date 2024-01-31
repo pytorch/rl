@@ -240,11 +240,11 @@ class TruncatedNormal(D.Independent):
         if isinstance(max, torch.Tensor):
             max = max.to(self.device)
         else:
-            max = torch.tensor(max, device=self.device)
+            max = torch.as_tensor(max, device=self.device)
         if isinstance(min, torch.Tensor):
             min = min.to(self.device)
         else:
-            min = torch.tensor(min, device=self.device)
+            min = torch.as_tensor(min, device=self.device)
         self.min = min
         self.max = max
         self.update(loc, scale)
