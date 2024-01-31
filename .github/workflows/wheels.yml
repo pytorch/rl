@@ -53,7 +53,7 @@ jobs:
           path: dist/*.whl
 
   build-wheel-mac:
-    runs-on: macos-latest
+    runs-on: macos-11
     strategy:
       matrix:
         python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
@@ -121,7 +121,7 @@ jobs:
     needs: [build-wheel-linux, build-wheel-mac]
     strategy:
       matrix:
-        os: [["linux", "ubuntu-20.04"], ["mac", "macos-latest"]]
+        os: [["linux", "ubuntu-20.04"], ["mac", "macos-11"]]
         python_version: [ "3.8", "3.9", "3.10", "3.11" ]
     runs-on: ${{ matrix.os[1] }}
     steps:
