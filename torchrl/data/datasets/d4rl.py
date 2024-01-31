@@ -438,7 +438,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 def _download_dataset_from_url(dataset_url, dataset_path):
     dataset_filepath = _filepath_from_url(dataset_url, dataset_path)
     if not os.path.exists(dataset_filepath):
-        torchrl_logger.info("Downloading dataset:", dataset_url, "to", dataset_filepath)
+        torchrl_logger.info(f"Downloading dataset: {dataset_url} to {dataset_filepath}")
         urllib.request.urlretrieve(dataset_url, dataset_filepath)
     if not os.path.exists(dataset_filepath):
         raise IOError("Failed to download dataset from %s" % dataset_url)

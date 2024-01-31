@@ -544,7 +544,7 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
         tempdir = Path(tempdir)
         os.makedirs(tempdir / str(run))
         files_str = " ".join(run_files)  # .decode("utf-8")
-        torchrl_logger.info("downloading", files_str)
+        torchrl_logger.info(f"downloading {files_str}")
         command = f"gsutil -m cp {files_str} {tempdir}/{run}"
         subprocess.run(
             command, shell=True

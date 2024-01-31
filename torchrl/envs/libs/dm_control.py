@@ -32,7 +32,7 @@ if torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
     os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
     if VERBOSE:
-        torchrl_logger.info("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
+        torchrl_logger.info(f"EGL_DEVICE_ID: {os.environ['EGL_DEVICE_ID']}")
 
 _has_dmc = _has_dm_control = importlib.util.find_spec("dm_control") is not None
 

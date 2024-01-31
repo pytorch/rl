@@ -14,7 +14,6 @@ from tensordict import TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
-from torchrl._utils import logger as torchrl_logger
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,

@@ -13,7 +13,6 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
-from torchrl._utils import logger as torchrl_logger
 
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (

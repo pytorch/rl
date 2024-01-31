@@ -319,7 +319,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/multiagent/iql
   collector.frames_per_batch=200 \
   train.num_epochs=3 \
   train.minibatch_size=100 \
-  logger.backendg
+  logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/multiagent/qmix_vdn.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \

@@ -327,7 +327,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
 
         # From this point, the local paths are non needed anymore
         td_save = td_save.expand(total_steps).memmap_like(data_path, num_threads=32)
-        torchrl_logger.info("Saved tensordict:", td_save)
+        torchrl_logger.info(f"Saved tensordict: {td_save}")
         idx0 = 0
         idx1 = 0
         while len(files):

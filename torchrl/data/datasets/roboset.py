@@ -250,7 +250,7 @@ class RobosetExperienceReplay(TensorDictReplayBuffer):
         episode_dict = {}
         h5_datas = []
         for seed, h5_data_name in enumerate(h5_data_files):
-            torchrl_logger.info("\nReading", h5_data_name)
+            torchrl_logger.info(f"\nReading {h5_data_name}")
             h5_data = PersistentTensorDict.from_h5(h5_data_name)
             h5_datas.append(h5_data)
             for i, (episode_key, episode) in enumerate(h5_data.items()):
@@ -259,7 +259,7 @@ class RobosetExperienceReplay(TensorDictReplayBuffer):
                 episode_dict[(seed, episode_num)] = (episode_key, episode_len)
                 # Get the total number of steps for the dataset
                 total_steps += episode_len
-                torchrl_logger.info("total_steps", total_steps, end="\t")
+                torchrl_logger.info(f"total_steps {total_steps}")
                 if i == 0 and seed == 0:
                     td_data.set("episode", 0)
                     td_data.set("seed", 0)
@@ -282,13 +282,11 @@ class RobosetExperienceReplay(TensorDictReplayBuffer):
 
         td_data = td_data.expand(total_steps)
         # save to designated location
-        torchrl_logger.info(
-            f"creating tensordict data in {self.data_path_root}: ", end="\t"
-        )
+        torchrl_logger.info(f"creating tensordict data in {self.data_path_root}: ")
         td_data = td_data.memmap_like(self.data_path_root)
-        # torchrl_logger.info("tensordict structure:", td_data)
+        # torchrl_logger.info(f"tensordict structure: {td_data}")
         torchrl_logger.info(
-            "Local dataset structure:", print_directory_tree(self.data_path_root)
+            f"Local dataset structure: {print_directory_tree(self.data_path_root)}"
         )
 
         torchrl_logger.info(f"Reading data from {len(episode_dict)} episodes")

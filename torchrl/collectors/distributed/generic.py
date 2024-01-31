@@ -616,7 +616,7 @@ class DistributedDataCollector(DataCollectorBase):
             init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
         if self._VERBOSE:
-            torchrl_logger.info("main initiated! Launching store...", end="\t")
+            torchrl_logger.info("main initiated! Launching store...")
         self._store = torch.distributed.TCPStore(
             host_name=self.IPAddr,
             port=int(TCP_PORT) + 1,
@@ -642,7 +642,7 @@ class DistributedDataCollector(DataCollectorBase):
         for _data in pseudo_collector:
             break
         if self._VERBOSE:
-            torchrl_logger.info("got data", _data)
+            torchrl_logger.info(f"got data {_data}")
             torchrl_logger.info("expanding...")
         self._tensordict_out = _data.expand((self.num_workers, *_data.shape))
         if self._VERBOSE:
@@ -744,7 +744,7 @@ class DistributedDataCollector(DataCollectorBase):
         else:
             IPAddr = "localhost"
         if self._VERBOSE:
-            torchrl_logger.info("Server IP address:", IPAddr)
+            torchrl_logger.info(f"Server IP address: {IPAddr}")
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = str(self.tcp_port)
@@ -767,7 +767,7 @@ class DistributedDataCollector(DataCollectorBase):
                         i,
                     )
                     if self._VERBOSE:
-                        torchrl_logger.info("job id", job.job_id)  # ID of your job
+                        torchrl_logger.info(f"job id {job.job_id}")  # ID of your job
                 elif self.launcher == "mp":
                     job = self._init_worker_dist_mp(
                         i,
@@ -931,7 +931,7 @@ class DistributedDataCollector(DataCollectorBase):
         for i in range(self.num_workers):
             rank = i + 1
             if self._VERBOSE:
-                torchrl_logger.info(f"getting status of node {rank}", end="\t")
+                torchrl_logger.info(f"getting status of node {rank}")
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"down":
                 raise RuntimeError(f"Expected 'down' but got status {status}.")

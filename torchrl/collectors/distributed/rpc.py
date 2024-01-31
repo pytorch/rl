@@ -560,7 +560,7 @@ class RPCDataCollector(DataCollectorBase):
                 self._VERBOSE,
             )
             if self._VERBOSE:
-                torchrl_logger.info("job id", job.job_id)  # ID of your job
+                torchrl_logger.info(f"job id {job.job_id}")  # ID of your job
             return job
         elif self.launcher == "mp":
             job = _ProcessNoWarn(

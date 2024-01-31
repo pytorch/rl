@@ -2426,7 +2426,7 @@ _minari_selected_datasets()
 @pytest.mark.slow
 class TestMinari:
     def test_load(self, selected_dataset, split):
-        torchrl_logger.info("dataset", selected_dataset)
+        torchrl_logger.info(f"dataset {selected_dataset}")
         data = MinariExperienceReplay(
             selected_dataset, batch_size=32, split_trajs=split
         )

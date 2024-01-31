@@ -100,7 +100,7 @@ def _distributed_init_collection_node(
         **collector_kwargs,
     )
 
-    torchrl_logger.info("IP address:", rank0_ip, "\ttcp port:", tcpport)
+    torchrl_logger.info(f"IP address: {rank0_ip} \ttcp port: {tcpport}")
     if verbose:
         torchrl_logger.info(f"node with rank {rank} -- launching distributed")
     torch.distributed.init_process_group(
@@ -454,7 +454,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
         backend,
     ):
         TCP_PORT = self.tcp_port
-        torchrl_logger.info("init master...", end="\t")
+        torchrl_logger.info("init master...")
         torch.distributed.init_process_group(
             backend,
             rank=0,
@@ -534,7 +534,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
 
         hostname = socket.gethostname()
         IPAddr = socket.gethostbyname(hostname)
-        torchrl_logger.info("Server IP address:", IPAddr)
+        torchrl_logger.info(f"Server IP address: {IPAddr}")
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = str(self.tcp_port)
@@ -552,7 +552,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
                     executor,
                     i,
                 )
-                torchrl_logger.info("job id", job.job_id)  # ID of your job
+                torchrl_logger.info(f"job id {job.job_id}")  # ID of your job
             elif self.launcher == "mp":
                 job = self._init_worker_dist_mp(
                     i,
