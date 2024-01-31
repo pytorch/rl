@@ -23,17 +23,23 @@ jobs:
       test-infra-ref: main
   build:
     needs: generate-matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repository: pytorch/rl
+            smoke-test-script: test/smoke_test.py
+            package-name: torchrl
     name: pytorch/rl
     uses: pytorch/test-infra/.github/workflows/build_wheels_macos.yml@main
     with:
-      repository: pytorch/rl
+      repository: ${{ matrix.repository }}
       ref: ""
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
-      post-script: ""
-      package-name: torchrl
+      package-name: ${{ matrix.package-name }}
       runner-type: macos-m1-stable
-      smoke-test-script: ""
+      smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ github.event_name }}
       env-var-script: .github/scripts/m1_script.sh
