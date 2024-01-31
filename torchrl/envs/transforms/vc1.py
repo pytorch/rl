@@ -132,8 +132,8 @@ class VC1Transform(Transform):
         elif isinstance(model_transforms, transforms.Normalize):
             return ObservationNorm(
                 in_keys=in_keys,
-                loc=torch.tensor(model_transforms.mean).reshape(3, 1, 1),
-                scale=torch.tensor(model_transforms.std).reshape(3, 1, 1),
+                loc=torch.as_tensor(model_transforms.mean).reshape(3, 1, 1),
+                scale=torch.as_tensor(model_transforms.std).reshape(3, 1, 1),
                 standard_normal=True,
             )
         elif isinstance(model_transforms, transforms.ToTensor):

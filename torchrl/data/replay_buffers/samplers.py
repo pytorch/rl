@@ -461,10 +461,10 @@ class PrioritizedSampler(Sampler):
                 filename=path / "mintree.memmap",
             )
         mm_st.copy_(
-            torch.tensor([self._sum_tree[i] for i in range(self._max_capacity)])
+            torch.as_tensor([self._sum_tree[i] for i in range(self._max_capacity)])
         )
         mm_mt.copy_(
-            torch.tensor([self._min_tree[i] for i in range(self._max_capacity)])
+            torch.as_tensor([self._min_tree[i] for i in range(self._max_capacity)])
         )
         with open(path / "sampler_metadata.json", "w") as file:
             json.dump(

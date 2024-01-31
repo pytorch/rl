@@ -146,7 +146,7 @@ class KLRewardTransform(Transform):
         self.functional_actor.apply(find_sample_log_prob)
 
         if not isinstance(coef, torch.Tensor):
-            coef = torch.tensor(coef)
+            coef = torch.as_tensor(coef)
         self.register_buffer("coef", coef)
 
     def _reset(
