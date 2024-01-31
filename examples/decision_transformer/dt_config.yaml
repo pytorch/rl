@@ -1,6 +1,6 @@
 # environment and task
 env:
-  name: HalfCheetah-v3
+  name: HalfCheetah-v4
   task: ""
   library: gym
   stacked_frames: 20
@@ -20,7 +20,9 @@ env:
 # logger
 logger:
   backend: wandb
+  project_name: torchrl_example_dt
   model_name: DT
+  group_name: null
   exp_name: DT-HalfCheetah-medium-v2
   pretrain_log_interval: 500 # record interval in frames
   fintune_log_interval: 1

@@ -147,7 +147,7 @@ class EndOfLifeTransform(Transform):
             raise RuntimeError(self.NO_PARENT_ERR.format(type(self)))
 
         lives = self._get_lives()
-        end_of_life = torch.tensor(
+        end_of_life = torch.as_tensor(
             tensordict.get(self.lives_key) > lives, device=self.parent.device
         )
         try:

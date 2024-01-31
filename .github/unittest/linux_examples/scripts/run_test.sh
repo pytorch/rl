@@ -45,6 +45,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/decision_trans
   optim.updates_per_episode=3 \
   optim.warmup_steps=10 \
   optim.device=cuda:0 \
+  env.backend=gymnasium \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py examples/iql/iql_offline.py \
   optim.gradient_steps=55 \

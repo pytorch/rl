@@ -3618,10 +3618,10 @@ class DeviceCastTransform(Transform):
 
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return tensordict.to(self.device, non_blocking=True)
+        return tensordict.to(self.device, non_blocking=False)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return tensordict.to(self.device, non_blocking=True)
+        return tensordict.to(self.device, non_blocking=False)
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
@@ -3634,8 +3634,8 @@ class DeviceCastTransform(Transform):
         if parent is None:
             if self.orig_device is None:
                 return tensordict
-            return tensordict.to(self.orig_device, non_blocking=True)
-        return tensordict.to(parent.device, non_blocking=True)
+            return tensordict.to(self.orig_device, non_blocking=False)
+        return tensordict.to(parent.device, non_blocking=False)
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         return input_spec.to(self.device)
@@ -5152,7 +5152,7 @@ class StepCounter(Transform):
             if step_count is None:
                 step_count = self.container.observation_spec[step_count_key].zero()
                 if step_count.device != reset.device:
-                    step_count = step_count.to(reset.device, non_blocking=True)
+                    step_count = step_count.to(reset.device, non_blocking=False)
 
             # zero the step count if reset is needed
             step_count = torch.where(~expand_as_right(reset, step_count), step_count, 0)

@@ -1058,7 +1058,7 @@ class SyncDataCollector(DataCollectorBase):
 
                 if self.storing_device is not None:
                     tensordicts.append(
-                        self._shuttle.to(self.storing_device, non_blocking=True)
+                        self._shuttle.to(self.storing_device, non_blocking=False)
                     )
                 else:
                     tensordicts.append(self._shuttle)

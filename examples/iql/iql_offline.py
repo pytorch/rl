@@ -31,18 +31,24 @@ from utils import (
 )
 
 
-@set_gym_backend("gym")
 @hydra.main(config_path=".", config_name="offline_config")
 def main(cfg: "DictConfig"):  # noqa: F821
+    set_gym_backend(cfg.env.backend).set()
+
     # Create logger
-    exp_name = generate_exp_name("IQL-offline", cfg.env.exp_name)
+    exp_name = generate_exp_name("IQL-offline", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:
         logger = get_logger(
             logger_type=cfg.logger.backend,
             logger_name="iql_logging",
             experiment_name=exp_name,
-            wandb_kwargs={"mode": cfg.logger.mode, "config": cfg},
+            wandb_kwargs={
+                "mode": cfg.logger.mode,
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
 
     # Set seeds
