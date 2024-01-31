@@ -1602,18 +1602,12 @@ class _MultiDataCollector(DataCollectorBase):
 
     def _run_processes(self) -> None:
         if self.num_threads is None:
-            import torchrl
-
             total_workers = self._total_workers_from_env(self.create_env_fn)
             self.num_threads = max(
-                1, torchrl._THREAD_POOL - total_workers
+                1, torch.get_num_threads() - total_workers
             )  # 1 more thread for this proc
 
         torch.set_num_threads(self.num_threads)
-        assert torch.get_num_threads() == self.num_threads
-        import torchrl
-
-        torchrl._THREAD_POOL = self.num_threads
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
@@ -1722,11 +1716,12 @@ also that the state dict is synchronised across processes if needed."""
         finally:
             import torchrl
 
-            torchrl._THREAD_POOL = min(
+            num_threads = min(
                 torchrl._THREAD_POOL_INIT,
-                torchrl._THREAD_POOL + self._total_workers_from_env(self.create_env_fn),
+                torch.get_num_threads()
+                + self._total_workers_from_env(self.create_env_fn),
             )
-            torch.set_num_threads(torchrl._THREAD_POOL)
+            torch.set_num_threads(num_threads)
 
             for proc in self.procs:
                 if proc.is_alive():

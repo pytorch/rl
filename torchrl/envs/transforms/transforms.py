@@ -5063,21 +5063,6 @@ class StepCounter(Transform):
         return truncated_keys
 
     @property
-    def completed_keys(self):
-        done_keys = self.__dict__.get("_done_keys", None)
-        if done_keys is None:
-            # make the default done keys
-            done_keys = []
-            for reset_key in self.parent._filtered_reset_keys:
-                if isinstance(reset_key, str):
-                    key = "done"
-                else:
-                    key = (*reset_key[:-1], "done")
-                done_keys.append(key)
-        self.__dict__["_done_keys"] = done_keys
-        return done_keys
-
-    @property
     def done_keys(self):
         done_keys = self.__dict__.get("_done_keys", None)
         if done_keys is None:
