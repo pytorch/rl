@@ -52,7 +52,7 @@ class VideoRecorder(ObservationTransform):
 
         The video format is chosen in the torchrl_logger. Wandb and tensorboard will take care of that
         on their own, CSV accepts various video formats.
-        >>> torchrl_logger = CSVLogger(exp_name="cheetah", log_dir="cheetah_videos", video_format="mp4")
+        >>> logger = CSVLogger(exp_name="cheetah", log_dir="cheetah_videos", video_format="mp4")
 
         Some envs (eg, Atari games) natively return images, some require the user to ask for them.
         Check :class:`~torchrl.env.GymEnv` or :class:`~torchrl.envs.DMControlEnv` to see how to render images
@@ -137,7 +137,7 @@ class VideoRecorder(ObservationTransform):
         return observation
 
     def dump(self, suffix: Optional[str] = None) -> None:
-        """Writes the video to the self.torchrl_logger attribute.
+        """Writes the video to the self.logger attribute.
 
         Args:
             suffix (str, optional): a suffix for the video to be recorded

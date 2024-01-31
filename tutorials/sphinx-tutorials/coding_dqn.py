@@ -562,7 +562,7 @@ init_bias = 2.0
 # - ``collector``
 # - ``loss_module``
 # - ``optimizer``
-# - ``torchrl_logger``: A torchrl_logger can be
+# - ``torchrl_logger``: A logger can be
 # - ``total_frames``: this parameter defines the lifespan of the trainer.
 # - ``frame_skip``: when a frame-skip is used, the collector must be made
 #   aware of it in order to accurately count the number of frames

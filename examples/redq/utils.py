@@ -251,7 +251,7 @@ def make_trainer(
             f"target_net_updater = {target_net_updater}; \n"
             f"policy_exploration = {policy_exploration}; \n"
             f"replay_buffer = {replay_buffer}; \n"
-            f"torchrl_logger = {logger}; \n"
+            f"logger = {logger}; \n"
             f"cfg = {cfg}; \n"
         )
 

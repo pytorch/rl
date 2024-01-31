@@ -28,7 +28,7 @@ def generate_exp_name(model_name: str, experiment_name: str) -> str:
 def get_logger(
     logger_type: str, logger_name: str, experiment_name: str, **kwargs
 ) -> Logger:
-    """Get a torchrl_logger instance of the provided `logger_type`.
+    """Get a logger instance of the provided `logger_type`.
 
     Args:
         logger_type (str): One of tensorboard / csv / wandb / mlflow.

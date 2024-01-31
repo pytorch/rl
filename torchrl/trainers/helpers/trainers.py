@@ -135,7 +135,7 @@ def make_trainer(
         >>> policy_exploration = EGreedyWrapper(policy)
         >>> replay_buffer = TensorDictReplayBuffer()
         >>> dir = tempfile.gettempdir()
-        >>> torchrl_logger = TensorboardLogger(exp_name=dir)
+        >>> logger = TensorboardLogger(exp_name=dir)
         >>> trainer = make_trainer(collector, loss_module, recorder, target_net_updater, policy_exploration,
         ...    replay_buffer, torchrl_logger)
         >>> print(trainer)
@@ -180,7 +180,7 @@ def make_trainer(
             f"target_net_updater = {target_net_updater}; \n"
             f"policy_exploration = {policy_exploration}; \n"
             f"replay_buffer = {replay_buffer}; \n"
-            f"torchrl_logger = {logger}; \n"
+            f"logger = {logger}; \n"
             f"cfg = {cfg}; \n"
         )
 

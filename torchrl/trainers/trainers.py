@@ -828,7 +828,7 @@ class ClearCudaCache(TrainerHookBase):
 
 
 class LogReward(TrainerHookBase):
-    """Reward torchrl_logger hook.
+    """Reward logger hook.
 
     Args:
         logname (str, optional): name of the rewards to be logged. Default is :obj:`"r_training"`.

@@ -16,7 +16,7 @@ from .common import Logger
 
 
 class CSVExperiment:
-    """A CSV torchrl_logger experiment class."""
+    """A CSV logger experiment class."""
 
     def __init__(self, log_dir: str, *, video_format="pt", video_fps=30):
         self.scalars = defaultdict(lambda: [])
