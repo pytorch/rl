@@ -293,7 +293,7 @@ class IQLLoss(LossModule):
     @property
     def device(self) -> torch.device:
         raise RuntimeError(
-            "The device attributes of the looses is deprecated since v0.3.",
+            "The device attributes of the losses is deprecated since v0.3.",
         )
 
     def _set_in_keys(self):
@@ -400,7 +400,7 @@ class IQLLoss(LossModule):
             )  # assert has no gradient
 
         exp_a = torch.exp((min_q - value) * self.temperature)
-        exp_a = torch.min(exp_a, torch.FloatTensor([100.0]).to(self.device))
+        exp_a = exp_a.clamp_max(100)
 
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
@@ -768,7 +768,7 @@ class DiscreteIQLLoss(IQLLoss):
             )  # assert has no gradient
 
         exp_a = torch.exp((min_Q - value) * self.temperature)
-        exp_a = torch.min(exp_a, torch.FloatTensor([100.0]).to(self.device))
+        exp_a = exp_a.clamp_max(100)
 
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())

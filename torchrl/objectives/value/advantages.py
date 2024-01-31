@@ -300,15 +300,15 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
         if advantage_key is not None:
             raise RuntimeError(
-                "Setting 'advantage_key' via ctor is deprecated, use .set_keys(advantage_key='some_key') instead.",
+                "Setting 'advantage_key' via constructor is deprecated, use .set_keys(advantage_key='some_key') instead.",
             )
         if value_target_key is not None:
             raise RuntimeError(
-                "Setting 'value_target_key' via ctor is deprecated, use .set_keys(value_target_key='some_key') instead.",
+                "Setting 'value_target_key' via constructor is deprecated, use .set_keys(value_target_key='some_key') instead.",
             )
         if value_key is not None:
             raise RuntimeError(
-                "Setting 'value_key' via ctor is deprecated, use .set_keys(value_key='some_key') instead.",
+                "Setting 'value_key' via constructor is deprecated, use .set_keys(value_key='some_key') instead.",
             )
 
     @property

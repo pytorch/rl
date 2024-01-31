@@ -11960,7 +11960,7 @@ class TestAdv:
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["test_value"]
         )
 
-        with pytest.warns(DeprecationWarning):
+        with pytest.raises(RuntimeError, match="via constructor is deprecated"):
             if adv is VTrace:
                 actor_net = TensorDictModule(
                     nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]

@@ -501,9 +501,13 @@ def test_initialize_stats_from_observation_norms(device, keys, composed, initial
     stats = {"loc": None, "scale": None}
     if initialized:
         stats = {"loc": 0.0, "scale": 1.0}
-    t_env.transform = ObservationNorm(standard_normal=True, **stats)
+    t_env.transform = ObservationNorm(
+        in_keys=["observation"], standard_normal=True, **stats
+    )
     if composed:
-        t_env.append_transform(ObservationNorm(standard_normal=True, **stats))
+        t_env.append_transform(
+            ObservationNorm(in_keys=["observation"], standard_normal=True, **stats)
+        )
     if not initialized:
         with pytest.raises(
             ValueError, match="Attempted to use an uninitialized parameter"

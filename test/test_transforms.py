@@ -4176,13 +4176,13 @@ class TestObservationNorm(TransformBase):
         )
 
     def test_observationnorm_stats_already_initialized_error(self):
-        transform = ObservationNorm(in_keys="next_observation", loc=0, scale=1)
+        transform = ObservationNorm(in_keys=["next_observation"], loc=0, scale=1)
 
         with pytest.raises(RuntimeError, match="Loc/Scale are already initialized"):
             transform.init_stats(num_iter=11)
 
     def test_observationnorm_wrong_catdim(self):
-        transform = ObservationNorm(in_keys="next_observation", loc=0, scale=1)
+        transform = ObservationNorm(in_keys=["next_observation"], loc=0, scale=1)
 
         with pytest.raises(
             ValueError, match="cat_dim must be part of or equal to reduce_dim"
@@ -7671,8 +7671,12 @@ class TestTransformedEnv:
             observation=BoundedTensorSpec(low=0, high=10, shape=torch.Size((1,)))
         )
         base_env = ContinuousActionVecMockEnv(observation_spec=obs_spec)
-        t1 = TransformedEnv(base_env, transform=ObservationNorm(loc=3, scale=2))
-        t2 = TransformedEnv(base_env, transform=ObservationNorm(loc=1, scale=6))
+        t1 = TransformedEnv(
+            base_env, transform=ObservationNorm(in_keys=["observation"], loc=3, scale=2)
+        )
+        t2 = TransformedEnv(
+            base_env, transform=ObservationNorm(in_keys=["observation"], loc=1, scale=6)
+        )
 
         t1_obs_spec = t1.observation_spec
         t2_obs_spec = t2.observation_spec
