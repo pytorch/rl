@@ -93,9 +93,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create logger
     logger = None
     if cfg.logger.backend:
-        exp_name = generate_exp_name(
-            "PPO", f"{cfg.logger.exp_name}_{cfg.env.env_name}"
-        )
+        exp_name = generate_exp_name("PPO", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
         logger = get_logger(
             cfg.logger.backend,
             logger_name="ppo",
