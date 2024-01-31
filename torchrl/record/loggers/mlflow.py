@@ -19,7 +19,7 @@ _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 
 
 class MLFlowLogger(Logger):
-    """Wrapper for the mlflow torchrl_logger.
+    """Wrapper for the mlflow logger.
 
     Args:
         exp_name (str): The name of the experiment.

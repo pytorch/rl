@@ -137,7 +137,7 @@ def make_trainer(
         >>> dir = tempfile.gettempdir()
         >>> logger = TensorboardLogger(exp_name=dir)
         >>> trainer = make_trainer(collector, loss_module, recorder, target_net_updater, policy_exploration,
-        ...    replay_buffer, torchrl_logger)
+        ...    replay_buffer, logger)
         >>> print(trainer)
 
     """

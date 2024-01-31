@@ -17,7 +17,7 @@ _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 
 
 class WandbLogger(Logger):
-    """Wrapper for the wandb torchrl_logger.
+    """Wrapper for the wandb logger.
 
     The keyword arguments are mainly based on the :func:`wandb.init` kwargs.
     See the doc `here <https://docs.wandb.ai/ref/python/init>`__.
@@ -94,7 +94,7 @@ class WandbLogger(Logger):
             exp_name (str): The name of the experiment.
 
         Returns:
-            WandbLogger: The wandb experiment torchrl_logger.
+            WandbLogger: The wandb experiment logger.
         """
         if not _has_wandb:
             raise ImportError("Wandb is not installed")

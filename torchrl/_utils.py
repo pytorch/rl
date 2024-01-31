@@ -33,11 +33,11 @@ from torch import multiprocessing as mp
 LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "DEBUG")
 logger = logging.getLogger(__name__)
 logger.setLevel(getattr(logging, LOGGING_LEVEL))
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+# console_handler = logging.StreamHandler()
+# console_handler.setLevel(logging.INFO)
+# formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+# console_handler.setFormatter(formatter)
+# logger.addHandler(console_handler)
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"

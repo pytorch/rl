@@ -16,7 +16,7 @@ _has_omgaconf = importlib.util.find_spec("omegaconf") is not None
 
 
 class TensorboardLogger(Logger):
-    """Wrapper for the Tensoarboard torchrl_logger.
+    """Wrapper for the Tensoarboard logger.
 
     Args:
         exp_name (str): The name of the experiment.

@@ -163,7 +163,7 @@ def is_notebook() -> bool:
 #   to maximise the return;
 # - An optimizer, which performs parameter updates based on our loss.
 #
-# Additional modules include a torchrl_logger, a recorder (executes the policy in
+# Additional modules include a logger, a recorder (executes the policy in
 # "eval" mode) and a target network updater. With all these components into
 # place, it is easy to see how one could misplace or misuse one component in
 # the training script. The trainer is there to orchestrate everything for you!
@@ -562,7 +562,7 @@ init_bias = 2.0
 # - ``collector``
 # - ``loss_module``
 # - ``optimizer``
-# - ``torchrl_logger``: A logger can be
+# - ``logger``: A logger can be
 # - ``total_frames``: this parameter defines the lifespan of the trainer.
 # - ``frame_skip``: when a frame-skip is used, the collector must be made
 #   aware of it in order to accurately count the number of frames
