@@ -981,6 +981,7 @@ class ActionObsMergeLinear(nn.Module):
 
 class CountingEnvCountPolicy(TensorDictModuleBase):
     def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
+        super().__init__()
         self.action_spec = action_spec
         self.action_key = action_key
         self.in_keys = []
