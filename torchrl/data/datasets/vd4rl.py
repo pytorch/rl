@@ -8,7 +8,6 @@ import functools
 
 import importlib
 import json
-import logging
 import os
 import pathlib
 import shutil
@@ -23,7 +22,7 @@ import torch
 from tensordict import PersistentTensorDict, TensorDict
 from torch import multiprocessing as mp
 
-from torchrl._utils import KeyDependentDefaultDict
+from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
@@ -300,7 +299,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
                     func(subfolder, filename)
                     for (subfolder, filename) in zip(paths_to_proc, files_to_proc)
                 ]
-            logging.info("Downloaded, processing files")
+            torchrl_logger.info("Downloaded, processing files")
             if _has_tqdm:
                 import tqdm
 
@@ -328,7 +327,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
 
         # From this point, the local paths are non needed anymore
         td_save = td_save.expand(total_steps).memmap_like(data_path, num_threads=32)
-        logging.info("Saved tensordict:", td_save)
+        torchrl_logger.info(f"Saved tensordict: {td_save}")
         idx0 = 0
         idx1 = 0
         while len(files):

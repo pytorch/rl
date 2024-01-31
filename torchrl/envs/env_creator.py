@@ -5,12 +5,13 @@
 
 from __future__ import annotations
 
-import logging
 from collections import OrderedDict
 from typing import Callable, Dict, Optional, Union
 
 import torch
 from tensordict import TensorDictBase
+
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase, EnvMetaData
@@ -98,7 +99,7 @@ class EnvCreator:
                 if not item.is_shared():
                     item.share_memory_()
                 else:
-                    logging.info(
+                    torchrl_logger.info(
                         f"{self.env_type}: {item} is already shared"
                     )  # , deleting key')
                     del state_dict[key]

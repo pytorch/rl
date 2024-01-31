@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import importlib
-import logging
 import os
 import subprocess
 from functools import partial
@@ -13,6 +12,7 @@ from typing import Union
 import torch
 from tensordict import TensorDictBase
 from torch import nn
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -237,7 +237,7 @@ class VC1Transform(Transform):
         try:
             from vc_models import models  # noqa: F401
 
-            logging.info("vc_models found, no need to install.")
+            torchrl_logger.info("vc_models found, no need to install.")
         except ModuleNotFoundError:
             HOME = os.environ.get("HOME")
             vcdir = HOME + "/.cache/torchrl/eai-vc"

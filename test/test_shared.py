@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
-import logging
 import time
 import warnings
 
@@ -11,6 +10,7 @@ import pytest
 import torch
 from tensordict import LazyStackedTensorDict, TensorDict
 from torch import multiprocessing as mp
+from torchrl._utils import logger as torchrl_logger
 
 
 class TestShared:
@@ -20,7 +20,7 @@ class TestShared:
         assert tensordict.is_shared()
         t0 = time.time()
         tensordict.zero_()
-        logging.info(f"zeroing time: {time.time() - t0}")
+        torchrl_logger.info(f"zeroing time: {time.time() - t0}")
         command_pipe_child.send("done")
         command_pipe_child.close()
         del command_pipe_child, command_pipe_parent, tensordict
@@ -112,7 +112,7 @@ class TestStack:
         command_pipe_child.close()
         command_pipe_parent.send("stack" if stack else "serial")
         time_spent = command_pipe_parent.recv()
-        logging.info(f"stack {stack}: time={time_spent}")
+        torchrl_logger.info(f"stack {stack}: time={time_spent}")
         for item in td.values():
             assert (item == 0).all()
         proc.join()
@@ -121,7 +121,7 @@ class TestStack:
 
     @pytest.mark.parametrize("shared", ["shared", "memmap"])
     def test_shared(self, shared):
-        logging.info(f"test_shared: shared={shared}")
+        torchrl_logger.info(f"test_shared: shared={shared}")
         torch.manual_seed(0)
         tensordict = TensorDict(
             source={
@@ -163,36 +163,36 @@ def test_memmap(idx, dtype, large_scale=False):
     td_sm = td.clone().share_memory_()
     td_memmap = td.clone().memmap_()
 
-    logging.info("\nTesting reading from TD")
+    torchrl_logger.info("\nTesting reading from TD")
     for i in range(2):
         t0 = time.time()
         td_sm[idx].clone()
         if i == 1:
-            logging.info(f"sm: {time.time() - t0:4.4f} sec")
+            torchrl_logger.info(f"sm: {time.time() - t0:4.4f} sec")
 
         t0 = time.time()
         td_memmap[idx].clone()
         if i == 1:
-            logging.info(f"memmap: {time.time() - t0:4.4f} sec")
+            torchrl_logger.info(f"memmap: {time.time() - t0:4.4f} sec")
 
     td_to_copy = td[idx].contiguous()
     for k in td_to_copy.keys():
         td_to_copy.set_(k, torch.ones_like(td_to_copy.get(k)))
 
-    logging.info("\nTesting writing to TD")
+    torchrl_logger.info("\nTesting writing to TD")
     for i in range(2):
         t0 = time.time()
         sub_td_sm = td_sm.get_sub_tensordict(idx)
         sub_td_sm.update_(td_to_copy)
         if i == 1:
-            logging.info(f"sm td: {time.time() - t0:4.4f} sec")
+            torchrl_logger.info(f"sm td: {time.time() - t0:4.4f} sec")
         torch.testing.assert_close(sub_td_sm.get("a"), td_to_copy.get("a"))
 
         t0 = time.time()
         sub_td_sm = td_memmap.get_sub_tensordict(idx)
         sub_td_sm.update_(td_to_copy)
         if i == 1:
-            logging.info(f"memmap td: {time.time() - t0:4.4f} sec")
+            torchrl_logger.info(f"memmap td: {time.time() - t0:4.4f} sec")
         torch.testing.assert_close(sub_td_sm.get("a")._tensor, td_to_copy.get("a"))
 
 

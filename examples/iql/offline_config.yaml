@@ -1,6 +1,6 @@
 # env and task
 env:
-  name: HalfCheetah-v2
+  name: HalfCheetah-v4
   task: ""
   exp_name: iql_${replay_buffer.dataset}
   n_samples_stats: 1000
