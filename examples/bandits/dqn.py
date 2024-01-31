@@ -12,12 +12,7 @@ from tensordict.nn import TensorDictSequential
 from torch import nn
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import (
-    DistributionalQValueActor,
-    EGreedyModule,
-    MLP,
-    QValueActor,
-)
+from torchrl.modules import DistributionalQValueActor, EGreedyModule, MLP, QValueActor
 from torchrl.objectives import DistributionalDQNLoss, DQNLoss
 
 parser = argparse.ArgumentParser()
