@@ -8,7 +8,6 @@ import functools
 import gzip
 import io
 import json
-import logging
 
 import os
 import shutil
@@ -21,6 +20,7 @@ import numpy as np
 import torch
 from tensordict import MemoryMappedTensor, TensorDict
 from torch import multiprocessing as mp
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
@@ -484,7 +484,7 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
         return False
 
     def _download_and_preproc(self):
-        logging.info(
+        torchrl_logger.info(
             f"Downloading and preprocessing dataset {self.dataset_id} with {self.num_procs} processes. This may take a while..."
         )
         if os.path.exists(self.dataset_path):
@@ -544,7 +544,7 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
         tempdir = Path(tempdir)
         os.makedirs(tempdir / str(run))
         files_str = " ".join(run_files)  # .decode("utf-8")
-        logging.info("downloading", files_str)
+        torchrl_logger.info(f"downloading {files_str}")
         command = f"gsutil -m cp {files_str} {tempdir}/{run}"
         subprocess.run(
             command, shell=True
@@ -559,7 +559,7 @@ class AtariDQNExperienceReplay(TensorDictReplayBuffer):
                 shutil.rmtree(path)
                 raise
         shutil.rmtree(tempdir / str(run))
-        logging.info(f"Concluded run {run} out of {total_episodes}")
+        torchrl_logger.info(f"Concluded run {run} out of {total_episodes}")
 
     @classmethod
     def _preproc_run(cls, path, gz_files, run):

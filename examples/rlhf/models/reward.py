@@ -2,11 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import logging
 import warnings
 
 import torch
 from tensordict.nn import TensorDictModule
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.modules.models.rlhf import GPT2RewardModel
 
@@ -31,7 +31,7 @@ def init_reward_model(
 
     model.to(device)
     if compile_model:
-        logging.info("Compiling the reward model...")
+        torchrl_logger.info("Compiling the reward model...")
         model = torch.compile(model)
 
     model = TensorDictModule(

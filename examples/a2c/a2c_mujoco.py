@@ -2,9 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import logging
-
 import hydra
+from torchrl._utils import logger as torchrl_logger
 
 
 @hydra.main(config_path=".", config_name="config_mujoco", version_base="1.1")
@@ -205,7 +204,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     end_time = time.time()
     execution_time = end_time - start_time
-    logging.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

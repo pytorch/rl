@@ -5,8 +5,6 @@
 from __future__ import annotations
 
 import importlib
-
-import logging
 import os
 import tempfile
 import urllib
@@ -20,6 +18,8 @@ import numpy as np
 import torch
 
 from tensordict import make_tensordict, PersistentTensorDict, TensorDict
+
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.datasets.d4rl_infos import D4RL_DATASETS
@@ -438,7 +438,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 def _download_dataset_from_url(dataset_url, dataset_path):
     dataset_filepath = _filepath_from_url(dataset_url, dataset_path)
     if not os.path.exists(dataset_filepath):
-        logging.info("Downloading dataset:", dataset_url, "to", dataset_filepath)
+        torchrl_logger.info(f"Downloading dataset: {dataset_url} to {dataset_filepath}")
         urllib.request.urlretrieve(dataset_url, dataset_filepath)
     if not os.path.exists(dataset_filepath):
         raise IOError("Failed to download dataset from %s" % dataset_url)
@@ -462,7 +462,7 @@ def _filepath_from_url(dataset_url, dataset_path):
 
 if __name__ == "__main__":
     data = D4RLExperienceReplay("kitchen-partial-v0", batch_size=128)
-    logging.info(data)
+    torchrl_logger.info(data)
     for sample in data:
-        logging.info(sample)
+        torchrl_logger.info(sample)
         break

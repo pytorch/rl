@@ -12,7 +12,6 @@ import contextlib
 import functools
 
 import inspect
-import logging
 import os
 import queue
 import sys
@@ -46,6 +45,7 @@ from torchrl._utils import (
     _check_for_faulty_process,
     _ProcessNoWarn,
     accept_remote_rref_udf_invocation,
+    logger as torchrl_logger,
     prod,
     RL_WARNINGS,
     VERBOSE,
@@ -2564,7 +2564,7 @@ def _main_async_collector(
         interruptor=interruptor,
     )
     if verbose:
-        logging.info("Sync data collector created")
+        torchrl_logger.info("Sync data collector created")
     dc_iter = iter(inner_collector)
     j = 0
     pipe_child.send("instantiated")
@@ -2577,10 +2577,10 @@ def _main_async_collector(
             counter = 0
             data_in, msg = pipe_child.recv()
             if verbose:
-                logging.info(f"worker {idx} received {msg}")
+                torchrl_logger.info(f"worker {idx} received {msg}")
         else:
             if verbose:
-                logging.info(f"poll failed, j={j}, worker={idx}")
+                torchrl_logger.info(f"poll failed, j={j}, worker={idx}")
             # default is "continue" (after first iteration)
             # this is expected to happen if queue_out reached the timeout, but no new msg was waiting in the pipe
             # in that case, the main process probably expects the worker to continue collect data
@@ -2600,7 +2600,7 @@ def _main_async_collector(
 
                 counter += _timeout
                 if verbose:
-                    logging.info(f"worker {idx} has counter {counter}")
+                    torchrl_logger.info(f"worker {idx} has counter {counter}")
                 if counter >= (_MAX_IDLE_COUNT * _TIMEOUT):
                     raise RuntimeError(
                         f"This process waited for {counter} seconds "
@@ -2663,13 +2663,13 @@ def _main_async_collector(
             try:
                 queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
-                    logging.info(f"worker {idx} successfully sent data")
+                    torchrl_logger.info(f"worker {idx} successfully sent data")
                 j += 1
                 has_timed_out = False
                 continue
             except queue.Full:
                 if verbose:
-                    logging.info(f"worker {idx} has timed out")
+                    torchrl_logger.info(f"worker {idx} has timed out")
                 has_timed_out = True
                 continue
 
@@ -2715,7 +2715,7 @@ def _main_async_collector(
             del inner_collector, dc_iter
             pipe_child.send("closed")
             if verbose:
-                logging.info(f"collector {idx} closed")
+                torchrl_logger.info(f"collector {idx} closed")
             break
 
         else:

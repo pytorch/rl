@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import contextlib
-import logging
 import os
 
 import os.path
@@ -19,7 +18,7 @@ import torch
 import torch.cuda
 
 from tensordict import tensorclass, TensorDict
-from torchrl._utils import implement_for, seed_generator
+from torchrl._utils import implement_for, logger as torchrl_logger, seed_generator
 from torchrl.data.utils import CloudpickleWrapper
 
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
@@ -120,7 +119,7 @@ def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
                     return f(*args, **kwargs)
                 except ExceptionToCheck as e:
                     msg = "%s, Retrying in %d seconds..." % (str(e), mdelay)
-                    logging.info(msg)
+                    torchrl_logger.info(msg)
                     time.sleep(mdelay)
                     mtries -= 1
             try:

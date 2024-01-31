@@ -7,9 +7,8 @@
 This script reproduces the Proximal Policy Optimization (PPO) Algorithm
 results from Schulman et al. 2017 for the on MuJoCo Environments.
 """
-import logging
-
 import hydra
+from torchrl._utils import logger as torchrl_logger
 
 
 @hydra.main(config_path=".", config_name="config_mujoco", version_base="1.1")
@@ -230,7 +229,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     end_time = time.time()
     execution_time = end_time - start_time
-    logging.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

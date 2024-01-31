@@ -6,7 +6,6 @@
 r"""Generic distributed data-collector using torch.distributed backend."""
 from __future__ import annotations
 
-import logging
 import os
 import socket
 from copy import copy, deepcopy
@@ -16,7 +15,8 @@ from typing import Callable, List, OrderedDict
 import torch.cuda
 from tensordict import TensorDict
 from torch import nn
-from torchrl._utils import _ProcessNoWarn, VERBOSE
+
+from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
 
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
@@ -65,7 +65,7 @@ def _distributed_init_collection_node(
     os.environ["MASTER_PORT"] = str(tcpport)
 
     if verbose:
-        logging.info(
+        torchrl_logger.info(
             f"node with rank {rank} -- creating collector of type {collector_class}"
         )
     if not issubclass(collector_class, SyncDataCollector):
@@ -100,9 +100,9 @@ def _distributed_init_collection_node(
         **collector_kwargs,
     )
 
-    logging.info("IP address:", rank0_ip, "\ttcp port:", tcpport)
+    torchrl_logger.info(f"IP address: {rank0_ip} \ttcp port: {tcpport}")
     if verbose:
-        logging.info(f"node with rank {rank} -- launching distributed")
+        torchrl_logger.info(f"node with rank {rank} -- launching distributed")
     torch.distributed.init_process_group(
         backend,
         rank=rank,
@@ -111,9 +111,9 @@ def _distributed_init_collection_node(
         # init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
     if verbose:
-        logging.info(f"node with rank {rank} -- creating store")
+        torchrl_logger.info(f"node with rank {rank} -- creating store")
     if verbose:
-        logging.info(f"node with rank {rank} -- loop")
+        torchrl_logger.info(f"node with rank {rank} -- loop")
     policy_weights.irecv(0)
     frames = 0
     for i, data in enumerate(collector):
@@ -454,7 +454,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
         backend,
     ):
         TCP_PORT = self.tcp_port
-        logging.info("init master...", end="\t")
+        torchrl_logger.info("init master...")
         torch.distributed.init_process_group(
             backend,
             rank=0,
@@ -462,7 +462,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
             timeout=timedelta(MAX_TIME_TO_CONNECT),
             init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
-        logging.info("done")
+        torchrl_logger.info("done")
 
     def _make_container(self):
         env_constructor = self.env_constructors[0]
@@ -534,7 +534,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
 
         hostname = socket.gethostname()
         IPAddr = socket.gethostbyname(hostname)
-        logging.info("Server IP address:", IPAddr)
+        torchrl_logger.info(f"Server IP address: {IPAddr}")
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = str(self.tcp_port)
@@ -546,18 +546,18 @@ class DistributedSyncDataCollector(DataCollectorBase):
             executor = submitit.AutoExecutor(folder="log_test")
             executor.update_parameters(**self.slurm_kwargs)
         for i in range(self.num_workers):
-            logging.info("Submitting job")
+            torchrl_logger.info("Submitting job")
             if self.launcher == "submitit":
                 job = self._init_worker_dist_submitit(
                     executor,
                     i,
                 )
-                logging.info("job id", job.job_id)  # ID of your job
+                torchrl_logger.info(f"job id {job.job_id}")  # ID of your job
             elif self.launcher == "mp":
                 job = self._init_worker_dist_mp(
                     i,
                 )
-                logging.info("job launched")
+                torchrl_logger.info("job launched")
             self.jobs.append(job)
         self._init_master_dist(self.num_workers + 1, self.backend)
 

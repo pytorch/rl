@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import gc
-import logging
 
 import os
 from collections import OrderedDict
@@ -22,7 +21,12 @@ import torch
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple, unravel_key
 from torch import multiprocessing as mp
-from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, VERBOSE
+from torchrl._utils import (
+    _check_for_faulty_process,
+    _ProcessNoWarn,
+    logger as torchrl_logger,
+    VERBOSE,
+)
 from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import _EnvPostInit, EnvBase
@@ -623,7 +627,7 @@ class _BatchedEnv(EnvBase):
         if self.is_closed:
             raise RuntimeError("trying to close a closed environment")
         if self._verbose:
-            logging.info(f"closing {self.__class__.__name__}")
+            torchrl_logger.info(f"closing {self.__class__.__name__}")
 
         self.__dict__["_input_spec"] = None
         self.__dict__["_output_spec"] = None
@@ -1047,7 +1051,7 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
         with clear_mpi_env_vars():
             for idx in range(_num_workers):
                 if self._verbose:
-                    logging.info(f"initiating worker {idx}")
+                    torchrl_logger.info(f"initiating worker {idx}")
                 # No certainty which module multiprocessing_context is
                 parent_pipe, child_pipe = ctx.Pipe()
                 env_fun = self.create_env_fn[idx]
@@ -1305,7 +1309,7 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
                 )
             for i, channel in enumerate(self.parent_channels):
                 if self._verbose:
-                    logging.info(f"closing {i}")
+                    torchrl_logger.info(f"closing {i}")
                 channel.send(("close", None))
                 self._events[i].wait()
                 self._events[i].clear()
@@ -1473,7 +1477,7 @@ def _run_worker_pipe_shared_mem(
 
         elif cmd == "init":
             if verbose:
-                logging.info(f"initializing {pid}")
+                torchrl_logger.info(f"initializing {pid}")
             if initialized:
                 raise RuntimeError("worker already initialized")
             i = 0
@@ -1489,7 +1493,7 @@ def _run_worker_pipe_shared_mem(
 
         elif cmd == "reset":
             if verbose:
-                logging.info(f"resetting worker {pid}")
+                torchrl_logger.info(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             cur_td = env.reset(tensordict=data)
@@ -1541,7 +1545,7 @@ def _run_worker_pipe_shared_mem(
             mp_event.set()
             child_pipe.close()
             if verbose:
-                logging.info(f"{pid} closed")
+                torchrl_logger.info(f"{pid} closed")
             gc.collect()
             break
 

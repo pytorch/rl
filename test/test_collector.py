@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import gc
-import logging
 
 import sys
 
@@ -44,7 +43,7 @@ from tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 
 from torch import nn
-from torchrl._utils import _replace_last, prod, seed_generator
+from torchrl._utils import _replace_last, logger as torchrl_logger, prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
     _Interruptor,
@@ -2390,7 +2389,7 @@ class TestLibThreading:
                 c.shutdown()
                 del c
             except Exception:
-                logging.info("Failed to shut down collector")
+                torchrl_logger.info("Failed to shut down collector")
             # reset vals
             collectors._main_async_collector = _main_async_collector_saved
             torch.set_num_threads(num_threads)

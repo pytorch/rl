@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import logging
 from copy import copy
 from typing import Callable, Dict, Optional, Sequence, Tuple, Union
 
@@ -18,7 +17,8 @@ from tensordict.nn import (
 )
 from torch import distributions as d, nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torchrl._utils import VERBOSE
+
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
 
 from torchrl.data import ReplayBuffer, TensorDictReplayBuffer
@@ -217,7 +217,7 @@ def make_trainer(
         >>> logger = TensorboardLogger(exp_name=dir)
         >>> trainer = make_trainer(collector, loss_module, recorder, target_net_updater, policy_exploration,
         ...    replay_buffer, logger)
-        >>> logging.info(trainer)
+        >>> torchrl_logger.info(trainer)
 
     """
 
@@ -244,7 +244,7 @@ def make_trainer(
         raise NotImplementedError(f"lr scheduler {cfg.optim.lr_scheduler}")
 
     if VERBOSE:
-        logging.info(
+        torchrl_logger.info(
             f"collector = {collector}; \n"
             f"loss_module = {loss_module}; \n"
             f"recorder = {recorder}; \n"

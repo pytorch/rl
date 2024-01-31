@@ -122,4 +122,4 @@ if __name__ == "__main__":
                 f"training reward {data['next', 'reward'].sum() / env.numel() : 4.4f}, "
                 f"loss {loss_val: 4.4f} (init: {init_loss: 4.4f})"
             )
-        policy.step()
+        policy[1].step()

@@ -108,7 +108,7 @@ class CSVExperiment:
 
 
 class CSVLogger(Logger):
-    """A minimal-dependecy CSV-logger.
+    """A minimal-dependecy CSV logger.
 
     Args:
         exp_name (str): The name of the experiment.

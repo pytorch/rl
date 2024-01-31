@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import logging
 import time
 
 import hydra
@@ -10,6 +9,7 @@ import torch
 
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -170,7 +170,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
     total_frames = 0
     sampling_start = time.time()
     for i, tensordict_data in enumerate(collector):
-        logging.info(f"\nIteration {i}")
+        torchrl_logger.info(f"\nIteration {i}")
 
         sampling_time = time.time() - sampling_start
 

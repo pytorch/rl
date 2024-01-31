@@ -10,7 +10,6 @@ It supports state environments like gym and gymnasium.
 
 The helper functions are coded in the utils.py associated with this script.
 """
-import logging
 import time
 
 import hydra
@@ -18,6 +17,7 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
@@ -196,7 +196,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    logging.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":
