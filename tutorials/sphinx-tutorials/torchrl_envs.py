@@ -575,7 +575,7 @@ def env_make(env_name):
 parallel_env = ParallelEnv(
     2,
     [env_make, env_make],
-    [{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
+    create_env_kwargs=[{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
 )
 tensordict = parallel_env.reset()
 
@@ -619,7 +619,7 @@ def env_make(env_name):
 parallel_env = ParallelEnv(
     2,
     [env_make, env_make],
-    [{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
+    create_env_kwargs=[{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
 )
 parallel_env = TransformedEnv(parallel_env, GrayScale())  # transforms on main process
 tensordict = parallel_env.reset()

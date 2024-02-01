@@ -86,6 +86,8 @@ TorchRL trainer: A DQN example
 import tempfile
 import warnings
 
+from tensordict.nn import TensorDictSequential
+
 warnings.filterwarnings("ignore")
 
 from torch import multiprocessing
@@ -125,7 +127,7 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
 )
-from torchrl.modules import DuelingCnnDQNet, EGreedyWrapper, QValueActor
+from torchrl.modules import DuelingCnnDQNet, EGreedyModule, QValueActor
 
 from torchrl.objectives import DQNLoss, SoftUpdate
 from torchrl.record.loggers.csv import CSVLogger
@@ -328,13 +330,13 @@ def make_model(dummy_env):
     tensordict = dummy_env.fake_tensordict()
     actor(tensordict)
 
-    # we wrap our actor in an EGreedyWrapper for data collection
-    actor_explore = EGreedyWrapper(
-        actor,
+    # we join our actor with an EGreedyModule for data collection
+    exploration_module = EGreedyModule(
         annealing_num_steps=total_frames,
         eps_init=eps_greedy_val,
         eps_end=eps_greedy_val_env,
     )
+    actor_explore = TensorDictSequential(actor, exploration_module)
 
     return actor, actor_explore
 
@@ -641,6 +643,12 @@ recorder = Recorder(
     log_pbar=True,
 )
 recorder.register(trainer)
+
+###############################################################################
+# The exploration module epsilon factor is also annealed:
+#
+
+trainer.register_op("post_steps", actor_explore[1].step, frames=frames_per_batch)
 
 ###############################################################################
 # - Any callable (including :class:`~torchrl.trainers.TrainerHookBase`

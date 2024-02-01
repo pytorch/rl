@@ -344,12 +344,21 @@ tree_map(assert0, sample)
 #
 # Fixed batch-size
 # ~~~~~~~~~~~~~~~~
-# If the batch-size is passed during construction, it should be ommited when
+# If the batch-size is passed during construction, it should be omited when
 # sampling:
 
+data = MyData(
+    images=torch.randint(
+        255,
+        (1000, 64, 64, 3),
+    ),
+    labels=torch.randint(100, (1000,)),
+    batch_size=[1000],
+)
+
 buffer_lazymemmap = ReplayBuffer(storage=LazyMemmapStorage(size), batch_size=128)
-buffer_lazymemmap.extend(data)
-buffer_lazymemmap.sample()
+buffer_lazymemmap.add(data)
+buffer_lazymemmap.sample()  # will produces 128 identical samples
 
 
 ######################################################################
@@ -363,7 +372,7 @@ buffer_lazymemmap.sample()
 buffer_lazymemmap = ReplayBuffer(
     storage=LazyMemmapStorage(size), batch_size=128, prefetch=10
 )  # creates a queue of 10 elements to be prefetched in the background
-buffer_lazymemmap.extend(data)
+buffer_lazymemmap.add(data)
 print(buffer_lazymemmap.sample())
 
 
