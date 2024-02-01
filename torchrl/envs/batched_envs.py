@@ -813,7 +813,7 @@ class SerialEnv(_BatchedEnv):
                 data_in = tensordict_in[i]
             out_td = self._envs[i]._step(data_in)
             next_td[i].update_(
-                out_td.to(self.device, non_blocking=True),
+                out_td.to(self.device, non_blocking=True).clone(),
                 keys_to_update=list(self._env_output_keys),
             )
         # We must pass a clone of the tensordict, as the values of this tensordict
