@@ -72,11 +72,10 @@ from torch import multiprocessing
 # TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
 # `__main__` method call, but for the easy of reading the code switch to fork
 # which is also a default spawn method in Google's Colaboratory
-is_sphinx = 'sphinx_gallery_conf' in globals()
 try:
     multiprocessing.set_start_method("fork")
 except RuntimeError:
-    assert is_sphinx or (multiprocessing.get_start_method() == "fork")
+    pass
 
 # sphinx_gallery_end_ignore
 
@@ -87,7 +86,7 @@ import tqdm
 
 ###############################################################################
 # We will execute the policy on CUDA if available
-device =  torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use CUDA
 
 ###############################################################################
@@ -247,24 +246,19 @@ def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
     hp.update(hyperparams)
     value_key = "state_action_value"
     if value_type == ValueEstimators.TD1:
-        self._value_estimator = TD1Estimator(
-            value_network=self.actor_critic, **hp
-        )
+        self._value_estimator = TD1Estimator(value_network=self.actor_critic, **hp)
     elif value_type == ValueEstimators.TD0:
-        self._value_estimator = TD0Estimator(
-            value_network=self.actor_critic, **hp
-        )
+        self._value_estimator = TD0Estimator(value_network=self.actor_critic, **hp)
     elif value_type == ValueEstimators.GAE:
         raise NotImplementedError(
             f"Value type {value_type} it not implemented for loss {type(self)}."
         )
     elif value_type == ValueEstimators.TDLambda:
-        self._value_estimator = TDLambdaEstimator(
-            value_network=self.actor_critic, **hp
-        )
+        self._value_estimator = TDLambdaEstimator(value_network=self.actor_critic, **hp)
     else:
         raise NotImplementedError(f"Unknown value type {value_type}")
     self._value_estimator.set_keys(value=value_key)
+
 
 ###############################################################################
 # The ``make_value_estimator`` method can but does not need to be called: ifgg
@@ -538,9 +532,7 @@ def make_transformed_env(
     # version of the transform
     env.append_transform(ObservationNorm(in_keys=[out_key], standard_normal=True))
 
-    env.append_transform(
-        DoubleToFloat()
-    )
+    env.append_transform(DoubleToFloat())
 
     env.append_transform(StepCounter(max_frames_per_traj))
 
