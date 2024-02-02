@@ -165,7 +165,11 @@ from tqdm import tqdm
 #
 
 is_fork = multiprocessing.get_start_method() == "fork"
-device = torch.device(0) if torch.cuda.is_available() and not is_fork else torch.device("cpu")
+device = (
+    torch.device(0)
+    if torch.cuda.is_available() and not is_fork
+    else torch.device("cpu")
+)
 num_cells = 256  # number of cells in each layer i.e. output dim.
 lr = 3e-4
 max_grad_norm = 1.0
