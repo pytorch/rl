@@ -1132,7 +1132,7 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
                         self.shared_tensordict_parent.set_(key, next_td.get(key[1:]))
         else:
             self.shared_tensordict_parent.update_(
-                tensordict.select(*self._env_input_keys, "next", strict=False)
+                tensordict, keys_to_update=[*self._env_input_keys, "next"],
             )
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step_and_maybe_reset", None))
@@ -1489,7 +1489,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before resetting")
             cur_td = env.reset(tensordict=data)
             shared_tensordict.update_(
-                cur_td.select(*_selected_reset_keys, strict=False)
+                cur_td, keys_to_update=list(_selected_reset_keys),
             )
             if event is not None:
                 event.record()
