@@ -692,8 +692,6 @@ class SerialEnv(_BatchedEnv):
 
         for idx in range(_num_workers):
             env = self.create_env_fn[idx](**self.create_env_kwargs[idx])
-            if self.device is not None:
-                env = env.to(self.device)
             self._envs.append(env)
         self.is_closed = False
 
@@ -764,19 +762,20 @@ class SerialEnv(_BatchedEnv):
 
             _td = _env.reset(tensordict=tensordict_, **kwargs)
             self.shared_tensordicts[i].update_(
-                _td.select(*self._selected_reset_keys_filt, strict=False)
+                _td,
+                keys_to_update=list(self._selected_reset_keys_filt),
             )
         selected_output_keys = self._selected_reset_keys_filt
         device = self.device
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
-            out = TensorDict(
-                {}, batch_size=self.shared_tensordict_parent.shape, device=device
+            def select_and_clone(name, tensor):
+                if name in self.shared_tensordict_parent:
+                    return tensor.clone()
+
+            out = self.shared_tensordict_parent.named_apply(
+                select_and_clone, nested_keys=True
             )
-            for key in selected_output_keys:
-                _set_single_key(
-                    self.shared_tensordict_parent, out, key, clone=True, device=device
-                )
         else:
             out = self.shared_tensordict_parent.select(
                 *selected_output_keys,
@@ -787,7 +786,7 @@ class SerialEnv(_BatchedEnv):
             elif device is None:
                 out = out.clone().clear_device_()
             else:
-                out = out.to(device, non_blocking=False)
+                out = out.to(device, non_blocking=True)
         return out
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
@@ -808,14 +807,11 @@ class SerialEnv(_BatchedEnv):
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
             env_device = self._envs[i].device
             if env_device != self.device:
-                data_in = tensordict_in[i].to(env_device, non_blocking=False)
+                data_in = tensordict_in[i].to(env_device, non_blocking=True)
             else:
                 data_in = tensordict_in[i]
             out_td = self._envs[i]._step(data_in)
-            next_td[i].update_(
-                out_td.to(self.device, non_blocking=True).clone(),
-                keys_to_update=list(self._env_output_keys),
-            )
+            next_td[i].update_(out_td.select(*self._env_output_keys, strict=False))
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         device = self.device
@@ -833,7 +829,7 @@ class SerialEnv(_BatchedEnv):
             elif device is None:
                 out = out.clone().clear_device_()
             else:
-                out = out.to(device, non_blocking=False)
+                out = out.to(device, non_blocking=True)
         return out
 
     def __getattr__(self, attr: str) -> Any:
@@ -1163,8 +1159,8 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
             next_td = next_td.clone()
             tensordict_ = tensordict_.clone()
         elif device is not None:
-            next_td = next_td.to(device, non_blocking=False)
-            tensordict_ = tensordict_.to(device, non_blocking=False)
+            next_td = next_td.to(device, non_blocking=True)
+            tensordict_ = tensordict_.to(device, non_blocking=True)
         else:
             next_td = next_td.clone().clear_device_()
             tensordict_ = tensordict_.clone().clear_device_()
@@ -1224,7 +1220,7 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
             if out.device == device:
                 out = out.clone()
             else:
-                out = out.to(device, non_blocking=False)
+                out = out.to(device, non_blocking=True)
         return out
 
     @_check_start
@@ -1300,7 +1296,7 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
             elif device is None:
                 out = out.clear_device_().clone()
             else:
-                out = out.to(device, non_blocking=False)
+                out = out.to(device, non_blocking=True)
         return out
 
     @_check_start
@@ -1591,5 +1587,5 @@ def _run_worker_pipe_shared_mem(
 def _update_cuda(t_dest, t_source):
     if t_source is None:
         return
-    t_dest.copy_(t_source.pin_memory(), non_blocking=False)
+    t_dest.copy_(t_source.pin_memory(), non_blocking=True)
     return
