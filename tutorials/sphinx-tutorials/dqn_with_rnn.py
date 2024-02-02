@@ -116,7 +116,8 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import ConvNet, EGreedyModule, LSTMModule, MLP, QValueModule
 from torchrl.objectives import DQNLoss, SoftUpdate
 
-device = torch.device(0) if torch.cuda.device_count() else torch.device("cpu")
+is_fork = multiprocessing.get_start_method() == "fork"
+device = torch.device(0) if torch.cuda.is_available() and not is_fork else torch.device("cpu")
 
 ######################################################################
 # Environment

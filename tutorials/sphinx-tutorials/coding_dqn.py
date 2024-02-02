@@ -478,7 +478,8 @@ def get_loss_module(actor, gamma):
 # in practice, and the performance of the algorithm should hopefully not be
 # too sensitive to slight variations of these.
 
-device = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
+is_fork = multiprocessing.get_start_method() == "fork"
+device = torch.device(0) if torch.cuda.is_available() and not is_fork else torch.device("cpu")
 
 ###############################################################################
 # Optimizer

@@ -42,7 +42,8 @@ from torchrl.envs import R3MTransform, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import Actor
 
-device = "cuda:0" if torch.cuda.device_count() else "cpu"
+is_fork = multiprocessing.get_start_method() == "fork"
+device = torch.device(0) if torch.cuda.is_available() and not is_fork else torch.device("cpu")
 
 ##############################################################################
 # Let us first create an environment. For the sake of simplicity, we will be using

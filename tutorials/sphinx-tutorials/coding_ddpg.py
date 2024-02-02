@@ -91,7 +91,8 @@ import tqdm
 
 ###############################################################################
 # We will execute the policy on CUDA if available
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+is_fork = multiprocessing.get_start_method() == "fork"
+device = torch.device(0) if torch.cuda.is_available() and not is_fork else torch.device("cpu")
 collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use CUDA
 
 ###############################################################################
