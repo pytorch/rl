@@ -809,21 +809,19 @@ class SerialEnv(_BatchedEnv):
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         device = self.device
-        if self._single_task:
-            out = TensorDict(
-                {}, batch_size=self.shared_tensordict_parent.shape, device=device
-            )
-            for key in self._selected_step_keys:
-                _set_single_key(next_td, out, key, clone=True, device=device)
-        else:
-            # strict=False ensures that non-homogeneous keys are still there
-            out = next_td.select(*self._selected_step_keys, strict=False)
-            if out.device == device:
-                out = out.clone()
-            elif device is None:
-                out = out.clone().clear_device_()
-            else:
-                out = out.to(device, non_blocking=True)
+
+        def select_and_clone(name, tensor):
+            if name in self._selected_step_keys:
+                return tensor.clone()
+
+        out = next_td.named_apply(
+            select_and_clone, nested_keys=True
+        )
+
+        if out.device != device and device is None:
+            out = out.clear_device_()
+        elif out.device != device:
+            out = out.to(device, non_blocking=True)
         return out
 
     def __getattr__(self, attr: str) -> Any:
