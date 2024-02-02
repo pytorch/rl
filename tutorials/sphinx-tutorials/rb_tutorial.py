@@ -57,9 +57,14 @@ from torch import multiprocessing
 # `__main__` method call, but for the easy of reading the code switch to fork
 # which is also a default spawn method in Google's Colaboratory
 try:
-    multiprocessing.set_start_method("fork")
+    is_sphinx = __sphinx_build__
+except NameError:
+    is_sphinx = False
+
+try:
+    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
 except RuntimeError:
-    assert multiprocessing.get_start_method() == "fork"
+    pass
 
 # sphinx_gallery_end_ignore
 
@@ -133,7 +138,7 @@ from tensordict import TensorDict
 from torchrl.data import LazyMemmapStorage, LazyTensorStorage, ListStorage
 
 # We define the maximum size of the buffer
-size = 10_000
+size = 100
 
 ######################################################################
 # A buffer with a list storage buffer can store any kind of data (but we must
@@ -260,10 +265,10 @@ class MyData:
 data = MyData(
     images=torch.randint(
         255,
-        (1000, 64, 64, 3),
+        (10, 64, 64, 3),
     ),
-    labels=torch.randint(100, (1000,)),
-    batch_size=[1000],
+    labels=torch.randint(100, (10,)),
+    batch_size=[10],
 )
 
 tempdir = tempfile.TemporaryDirectory()
@@ -303,7 +308,7 @@ def transform(x):
 
 
 # Let's build our replay buffer on disk:
-rb = ReplayBuffer(storage=LazyMemmapStorage(100), transform=transform)
+rb = ReplayBuffer(storage=LazyMemmapStorage(size), transform=transform)
 data = {
     "a": torch.randn(3),
     "b": {"c": (torch.zeros(2), [torch.ones(1)])},
@@ -344,12 +349,21 @@ tree_map(assert0, sample)
 #
 # Fixed batch-size
 # ~~~~~~~~~~~~~~~~
-# If the batch-size is passed during construction, it should be ommited when
+# If the batch-size is passed during construction, it should be omited when
 # sampling:
 
+data = MyData(
+    images=torch.randint(
+        255,
+        (10, 64, 64, 3),
+    ),
+    labels=torch.randint(100, (10,)),
+    batch_size=[10],
+)
+
 buffer_lazymemmap = ReplayBuffer(storage=LazyMemmapStorage(size), batch_size=128)
-buffer_lazymemmap.extend(data)
-buffer_lazymemmap.sample()
+buffer_lazymemmap.add(data)
+buffer_lazymemmap.sample()  # will produces 128 identical samples
 
 
 ######################################################################
@@ -363,7 +377,7 @@ buffer_lazymemmap.sample()
 buffer_lazymemmap = ReplayBuffer(
     storage=LazyMemmapStorage(size), batch_size=128, prefetch=10
 )  # creates a queue of 10 elements to be prefetched in the background
-buffer_lazymemmap.extend(data)
+buffer_lazymemmap.add(data)
 print(buffer_lazymemmap.sample())
 
 
@@ -397,10 +411,10 @@ buffer_lazymemmap = ReplayBuffer(
 # we create a data that is big enough to get a couple of samples
 data = TensorDict(
     {
-        "a": torch.arange(512).view(128, 4),
-        ("b", "c"): torch.arange(1024).view(128, 8),
+        "a": torch.arange(64).view(16, 4),
+        ("b", "c"): torch.arange(128).view(16, 8),
     },
-    batch_size=[128],
+    batch_size=[16],
 )
 
 buffer_lazymemmap.extend(data)
@@ -443,7 +457,7 @@ print("sampling 5 elements:", buffer_lazymemmap.sample(5))
 
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler
 
-size = 1000
+size = 100
 
 rb = ReplayBuffer(
     storage=ListStorage(size),
@@ -718,7 +732,7 @@ t = Compose(
     GrayScale(in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
     CatFrames(dim=-4, N=4, in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
 )
-rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(1000), transform=t, batch_size=16)
+rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(size), transform=t, batch_size=16)
 data_exclude = data.exclude("pixels_trsf", ("next", "pixels_trsf"))
 rb.add(data_exclude)
 
