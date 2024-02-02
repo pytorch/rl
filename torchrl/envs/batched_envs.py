@@ -811,7 +811,7 @@ class SerialEnv(_BatchedEnv):
         device = self.device
 
         def select_and_clone(name, tensor):
-            if name in self._selected_step_keys:
+            if _unravel_key_to_tuple(name) in self._selected_step_keys:
                 return tensor.clone()
             print(f"{name} not in {self._selected_step_keys}")
 
