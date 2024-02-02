@@ -24,9 +24,14 @@ from torch import multiprocessing
 # `__main__` method call, but for the easy of reading the code switch to fork
 # which is also a default spawn method in Google's Colaboratory
 try:
-    multiprocessing.set_start_method("fork")
+    is_sphinx = __sphinx_build__
+except NameError:
+    is_sphinx = False
+
+try:
+    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
 except RuntimeError:
-    assert multiprocessing.get_start_method() == "fork"
+    pass
 
 # sphinx_gallery_end_ignore
 
@@ -37,7 +42,12 @@ from torchrl.envs import R3MTransform, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import Actor
 
-device = "cuda:0" if torch.cuda.device_count() else "cpu"
+is_fork = multiprocessing.get_start_method() == "fork"
+device = (
+    torch.device(0)
+    if torch.cuda.is_available() and not is_fork
+    else torch.device("cpu")
+)
 
 ##############################################################################
 # Let us first create an environment. For the sake of simplicity, we will be using

@@ -122,9 +122,11 @@ Key learnings:
 # Torch
 import torch
 
-# Tensordict modules
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
+
+# Tensordict modules
+from torch import multiprocessing
 
 # Data collection
 from torchrl.collectors import SyncDataCollector
@@ -161,7 +163,12 @@ from tqdm import tqdm
 #
 
 # Devices
-device = "cpu" if not torch.has_cuda else "cuda:0"  # The divice where learning is run
+is_fork = multiprocessing.get_start_method() == "fork"
+device = (
+    torch.device(0)
+    if torch.cuda.is_available() and not is_fork
+    else torch.device("cpu")
+)
 vmas_device = device  # The device where the simulator is run (VMAS can run on GPU)
 
 # Sampling
