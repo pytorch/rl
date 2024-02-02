@@ -767,26 +767,20 @@ class SerialEnv(_BatchedEnv):
             )
         selected_output_keys = self._selected_reset_keys_filt
         device = self.device
-        if self._single_task:
-            # select + clone creates 2 tds, but we can create one only
-            def select_and_clone(name, tensor):
-                if name in self.shared_tensordict_parent:
-                    return tensor.clone()
+        # select + clone creates 2 tds, but we can create one only
+        def select_and_clone(name, tensor):
+            if name in selected_output_keys:
+                return tensor.clone()
 
-            out = self.shared_tensordict_parent.named_apply(
-                select_and_clone, nested_keys=True
-            )
+        out = self.shared_tensordict_parent.named_apply(
+            select_and_clone, nested_keys=True
+        )
+        if out.device == device:
+            out = out.clone()
+        elif device is None:
+            out = out.clear_device_()
         else:
-            out = self.shared_tensordict_parent.select(
-                *selected_output_keys,
-                strict=False,
-            )
-            if out.device == device:
-                out = out.clone()
-            elif device is None:
-                out = out.clone().clear_device_()
-            else:
-                out = out.to(device, non_blocking=True)
+            out = out.to(device, non_blocking=True)
         return out
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
