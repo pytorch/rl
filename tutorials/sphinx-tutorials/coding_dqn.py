@@ -96,19 +96,23 @@ from torch import multiprocessing
 # `__main__` method call, but for the easy of reading the code switch to fork
 # which is also a default spawn method in Google's Colaboratory
 try:
-    multiprocessing.set_start_method("fork")
+    is_sphinx = __sphinx_build__
+except NameError:
+    is_sphinx = False
+
+try:
+    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
 except RuntimeError:
     pass
 
 
 # sphinx_gallery_end_ignore
-
 import os
 import uuid
 
 import torch
 from torch import nn
-from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector
 from torchrl.data import LazyMemmapStorage, MultiStep, TensorDictReplayBuffer
 from torchrl.envs import (
     EnvCreator,
@@ -332,6 +336,7 @@ def make_model(dummy_env):
 
     # we join our actor with an EGreedyModule for data collection
     exploration_module = EGreedyModule(
+        spec=dummy_env.action_spec,
         annealing_num_steps=total_frames,
         eps_init=eps_greedy_val,
         eps_end=eps_greedy_val_env,
@@ -383,6 +388,13 @@ def get_replay_buffer(buffer_size, n_optim, batch_size):
 # We choose the following configuration: we will be running a series of
 # parallel environments synchronously in parallel in different collectors,
 # themselves running in parallel but asynchronously.
+#
+# .. note::
+#   This feature is only available when running the code within the "spawn"
+#   start method of python multiprocessing library. If this tutorial is run
+#   directly as a script (thereby using the "fork" method) we will be using
+#   a regular :class:`~torchrl.collectors.SyncDataCollector`.
+#
 # The advantage of this configuration is that we can balance the amount of
 # compute that is executed in batch with what we want to be executed
 # asynchronously. We encourage the reader to experiment how the collection
@@ -411,11 +423,15 @@ def get_collector(
     total_frames,
     device,
 ):
-    data_collector = MultiaSyncDataCollector(
-        [
-            make_env(parallel=True, obs_norm_sd=stats),
-        ]
-        * num_collectors,
+    is_fork = multiprocessing.get_start_method() == "fork"
+    if is_fork:
+        cls = SyncDataCollector
+        env_arg = make_env(parallel=True, obs_norm_sd=stats)
+    else:
+        cls = MultiaSyncDataCollector
+        env_arg = [make_env(parallel=True, obs_norm_sd=stats)]*num_collectors
+    data_collector = cls(
+        env_arg,
         policy=actor_explore,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
