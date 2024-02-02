@@ -765,7 +765,7 @@ class SerialEnv(_BatchedEnv):
                 _td,
                 keys_to_update=list(self._selected_reset_keys_filt),
             )
-        selected_output_keys = self._selected_reset_keys_filt
+        selected_output_keys = [_unravel_key_to_tuple(key) for key in self._selected_reset_keys_filt]
         device = self.device
         # select + clone creates 2 tds, but we can create one only
         def select_and_clone(name, tensor):
