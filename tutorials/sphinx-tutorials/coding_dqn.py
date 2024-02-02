@@ -112,7 +112,7 @@ import uuid
 
 import torch
 from torch import nn
-from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import LazyMemmapStorage, MultiStep, TensorDictReplayBuffer
 from torchrl.envs import (
     EnvCreator,
@@ -276,6 +276,7 @@ def get_norm_stats():
     # let's check that normalizing constants have a size of ``[C, 1, 1]`` where
     # ``C=4`` (because of :class:`~torchrl.envs.CatFrames`).
     print("state dict of the observation norm:", obs_norm_sd)
+    test_env.close()
     return obs_norm_sd
 
 
@@ -423,13 +424,8 @@ def get_collector(
     total_frames,
     device,
 ):
-    is_fork = multiprocessing.get_start_method() == "fork"
-    if is_fork:
-        cls = SyncDataCollector
-        env_arg = make_env(parallel=True, obs_norm_sd=stats)
-    else:
-        cls = MultiaSyncDataCollector
-        env_arg = [make_env(parallel=True, obs_norm_sd=stats)]*num_collectors
+    cls = MultiaSyncDataCollector
+    env_arg = [make_env(parallel=True, obs_norm_sd=stats)] * num_collectors
     data_collector = cls(
         env_arg,
         policy=actor_explore,
