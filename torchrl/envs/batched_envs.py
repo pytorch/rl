@@ -765,7 +765,9 @@ class SerialEnv(_BatchedEnv):
                 _td,
                 keys_to_update=list(self._selected_reset_keys_filt),
             )
-        selected_output_keys = [_unravel_key_to_tuple(key) for key in self._selected_reset_keys_filt]
+        selected_output_keys = [
+            _unravel_key_to_tuple(key) for key in self._selected_reset_keys_filt
+        ]
         device = self.device
         # select + clone creates 2 tds, but we can create one only
         def select_and_clone(name, tensor):
@@ -805,7 +807,7 @@ class SerialEnv(_BatchedEnv):
             else:
                 data_in = tensordict_in[i]
             out_td = self._envs[i]._step(data_in)
-            next_td[i].update_(out_td.select(*self._env_output_keys, strict=False))
+            next_td[i].update_(out_td, keys_to_update=list(self._env_output_keys))
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         device = self.device
@@ -814,9 +816,7 @@ class SerialEnv(_BatchedEnv):
             if _unravel_key_to_tuple(name) in self._selected_step_keys:
                 return tensor.clone()
 
-        out = next_td.named_apply(
-            select_and_clone, nested_keys=True
-        )
+        out = next_td.named_apply(select_and_clone, nested_keys=True)
 
         if out.device != device and device is None:
             out = out.clear_device_()
