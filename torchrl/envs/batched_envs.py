@@ -777,12 +777,11 @@ class SerialEnv(_BatchedEnv):
         out = self.shared_tensordict_parent.named_apply(
             select_and_clone, nested_keys=True
         )
-        if out.device == device:
-            out = out.clone()
-        elif device is None:
-            out = out.clear_device_()
-        else:
-            out = out.to(device, non_blocking=True)
+        if out.device != device:
+            if device is None:
+                out = out.clear_device_()
+            else:
+                out = out.to(device, non_blocking=True)
         return out
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
@@ -808,6 +807,7 @@ class SerialEnv(_BatchedEnv):
                 data_in = tensordict_in[i]
             out_td = self._envs[i]._step(data_in)
             next_td[i].update_(out_td, keys_to_update=list(self._env_output_keys))
+
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         device = self.device
@@ -818,10 +818,11 @@ class SerialEnv(_BatchedEnv):
 
         out = next_td.named_apply(select_and_clone, nested_keys=True)
 
-        if out.device != device and device is None:
-            out = out.clear_device_()
-        elif out.device != device:
-            out = out.to(device, non_blocking=True)
+        if out.device != device:
+            if device is None:
+                out = out.clear_device_()
+            elif out.device != device:
+                out = out.to(device, non_blocking=True)
         return out
 
     def __getattr__(self, attr: str) -> Any:
