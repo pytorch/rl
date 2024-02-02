@@ -1705,7 +1705,7 @@ def test_reset_heterogeneous_envs(
         assert (
             data[0]["next", "truncated"].squeeze()
             == torch.tensor([False, True], device=data_device).repeat(25)[:50]
-        ).all(), data[0]["next", "truncated"][:10]
+        ).all(), data[0]["next", "truncated"]
         assert (
             data[1]["next", "truncated"].squeeze()
             == torch.tensor([False, False, True], device=data_device).repeat(17)[:50]
