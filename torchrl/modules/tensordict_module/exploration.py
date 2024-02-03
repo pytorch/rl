@@ -149,10 +149,7 @@ class EGreedyModule(TensorDictModuleBase):
 
             out = action_tensordict.get(action_key)
             eps = self.eps.item()
-            cond = (
-                torch.rand(action_tensordict.shape, device=out.device)
-                < eps
-            )
+            cond = torch.rand(action_tensordict.shape, device=out.device) < eps
             cond = expand_as_right(cond, out)
             spec = self.spec
             if spec is not None:
