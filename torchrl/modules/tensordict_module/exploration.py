@@ -149,10 +149,7 @@ class EGreedyModule(TensorDictModuleBase):
 
             out = action_tensordict.get(action_key)
             eps = self.eps.item()
-            cond = (
-                torch.rand(action_tensordict.shape, device=action_tensordict.device)
-                < eps
-            ).to(out.dtype)
+            cond = torch.rand(action_tensordict.shape, device=out.device) < eps
             cond = expand_as_right(cond, out)
             spec = self.spec
             if spec is not None:
@@ -177,7 +174,7 @@ class EGreedyModule(TensorDictModuleBase):
                             f"Action mask key {self.action_mask_key} not found in {tensordict}."
                         )
                     spec.update_mask(action_mask)
-                out = cond * spec.rand().to(out.device) + (1 - cond) * out
+                out = torch.where(cond, spec.rand().to(out.device), out)
             else:
                 raise RuntimeError("spec must be provided to the exploration wrapper.")
             action_tensordict.set(action_key, out)
