@@ -20,7 +20,7 @@ from warnings import warn
 import torch
 
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
-from tensordict._tensordict import _unravel_key_to_tuple, unravel_key
+from tensordict._tensordict import unravel_key
 from torch import multiprocessing as mp
 from torchrl._utils import (
     _check_for_faulty_process,
@@ -1132,8 +1132,7 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
             #   and this transform overrides an observation key (eg, CatFrames)
             #   the shape, dtype or device may not necessarily match and writing
             #   the value in-place will fail.
-            for key in self._env_input_keys:
-                self.shared_tensordict_parent.set_(key, tensordict.get(key))
+            self.shared_tensordict_parent.update_(tensordict, keys_to_update=self._env_input_keys)
             next_td = tensordict.get("next", None)
             if next_td is not None:
                 # we copy the input keys as well as the keys in the 'next' td, if any
@@ -1461,7 +1460,6 @@ def _run_worker_pipe_shared_mem(
 
     child_pipe.send("started")
     next_shared_tensordict, root_shared_tensordict = (None,) * 2
-    shared_tensordict_input = shared_tensordict.exclude("next")
     while True:
         try:
             if child_pipe.poll(_timeout):
@@ -1517,7 +1515,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            next_td = env._step(shared_tensordict_input)
+            next_td = env._step(root_shared_tensordict)
             next_shared_tensordict.update_(next_td)
             if event is not None:
                 event.record()
@@ -1529,7 +1527,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            td, root_next_td = env.step_and_maybe_reset(shared_tensordict_input)
+            td, root_next_td = env.step_and_maybe_reset(root_shared_tensordict.copy())
             next_shared_tensordict.update_(td.get("next"))
             root_shared_tensordict.update_(root_next_td)
             if event is not None:
@@ -1548,7 +1546,6 @@ def _run_worker_pipe_shared_mem(
                 data,
                 next_shared_tensordict,
                 root_shared_tensordict,
-                shared_tensordict_input,
             )
             mp_event.set()
             child_pipe.close()
