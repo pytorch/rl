@@ -535,22 +535,17 @@ class _BatchedEnv(EnvBase):
         self._selected_keys = self._selected_keys.union(reset_keys)
 
         # input keys
-        self._selected_input_keys = {
-            unravel_key(key) for key in self._env_input_keys
-        }
+        self._selected_input_keys = {unravel_key(key) for key in self._env_input_keys}
         # output keys after reset
         self._selected_reset_keys = {
-            unravel_key(key)
-            for key in self._env_obs_keys + self.done_keys + reset_keys
+            unravel_key(key) for key in self._env_obs_keys + self.done_keys + reset_keys
         }
         # output keys after reset, filtered
         self._selected_reset_keys_filt = {
             unravel_key(key) for key in self._env_obs_keys + self.done_keys
         }
         # output keys after step
-        self._selected_step_keys = {
-            unravel_key(key) for key in self._env_output_keys
-        }
+        self._selected_step_keys = {unravel_key(key) for key in self._env_output_keys}
 
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
@@ -1170,8 +1165,18 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
             next_td = next_td.clone()
             tensordict_ = tensordict_.clone()
         elif device is not None:
-            next_td = next_td.apply(lambda x: x.to(device, non_blocking=True) if x.device != device else x.clone(), device=device)
-            tensordict_ = tensordict_.apply(lambda x: x.to(device, non_blocking=True) if x.device != device else x.clone(), device=device)
+            next_td = next_td._fast_apply(
+                lambda x: x.to(device, non_blocking=True)
+                if x.device != device
+                else x.clone(),
+                device=device,
+            )
+            tensordict_ = tensordict_._fast_apply(
+                lambda x: x.to(device, non_blocking=True)
+                if x.device != device
+                else x.clone(),
+                device=device,
+            )
         else:
             next_td = next_td.clone().clear_device_()
             tensordict_ = tensordict_.clone().clear_device_()
