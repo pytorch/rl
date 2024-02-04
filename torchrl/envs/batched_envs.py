@@ -1170,8 +1170,8 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
             next_td = next_td.clone()
             tensordict_ = tensordict_.clone()
         elif device is not None:
-            next_td = next_td.apply(lambda x: x.to(device, non_blocking=True) if x.device != device else x.clone())
-            tensordict_ = tensordict_.apply(lambda x: x.to(device, non_blocking=True) if x.device != device else x.clone())
+            next_td = next_td.apply(lambda x: x.to(device, non_blocking=True) if x.device != device else x.clone(), device=device)
+            tensordict_ = tensordict_.apply(lambda x: x.to(device, non_blocking=True) if x.device != device else x.clone(), device=device)
         else:
             next_td = next_td.clone().clear_device_()
             tensordict_ = tensordict_.clone().clear_device_()
