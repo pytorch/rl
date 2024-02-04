@@ -1461,6 +1461,7 @@ def _run_worker_pipe_shared_mem(
 
     child_pipe.send("started")
     next_shared_tensordict, root_shared_tensordict = (None,) * 2
+    shared_tensordict_input = shared_tensordict.exclude("next")
     while True:
         try:
             if child_pipe.poll(_timeout):
@@ -1516,7 +1517,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            next_td = env._step(shared_tensordict)
+            next_td = env._step(shared_tensordict_input)
             next_shared_tensordict.update_(next_td)
             if event is not None:
                 event.record()
@@ -1528,7 +1529,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            td, root_next_td = env.step_and_maybe_reset(shared_tensordict)
+            td, root_next_td = env.step_and_maybe_reset(shared_tensordict_input)
             next_shared_tensordict.update_(td.get("next"))
             root_shared_tensordict.update_(root_next_td)
             if event is not None:
@@ -1547,6 +1548,7 @@ def _run_worker_pipe_shared_mem(
                 data,
                 next_shared_tensordict,
                 root_shared_tensordict,
+                shared_tensordict_input,
             )
             mp_event.set()
             child_pipe.close()
