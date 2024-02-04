@@ -226,7 +226,9 @@ class ListStorage(Storage):
             if isinstance(elt, torch.Tensor):
                 self._storage.append(elt)
             elif isinstance(elt, (dict, OrderedDict)):
-                self._storage.append(TensorDict({}, []).load_state_dict(elt))
+                self._storage.append(
+                    TensorDict({}, []).load_state_dict(elt, strict=False)
+                )
             else:
                 raise TypeError(
                     f"Objects of type {type(elt)} are not supported by ListStorage.load_state_dict"
@@ -497,9 +499,11 @@ class TensorStorage(Storage):
                 )
         elif isinstance(_storage, (dict, OrderedDict)):
             if is_tensor_collection(self._storage):
-                self._storage.load_state_dict(_storage)
+                self._storage.load_state_dict(_storage, strict=False)
             elif self._storage is None:
-                self._storage = TensorDict({}, []).load_state_dict(_storage)
+                self._storage = TensorDict({}, []).load_state_dict(
+                    _storage, strict=False
+                )
             else:
                 raise RuntimeError(
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}. If your storage is pytree-based, use the dumps/load API instead."
@@ -832,7 +836,7 @@ class LazyMemmapStorage(LazyTensorStorage):
                 )
         elif isinstance(_storage, (dict, OrderedDict)):
             if is_tensor_collection(self._storage):
-                self._storage.load_state_dict(_storage)
+                self._storage.load_state_dict(_storage, strict=False)
                 self._storage.memmap_()
             elif self._storage is None:
                 warnings.warn(
@@ -840,7 +844,9 @@ class LazyMemmapStorage(LazyTensorStorage):
                     "It is preferable to load a storage onto a"
                     "pre-allocated one whenever possible."
                 )
-                self._storage = TensorDict({}, []).load_state_dict(_storage)
+                self._storage = TensorDict({}, []).load_state_dict(
+                    _storage, strict=False
+                )
                 self._storage.memmap_()
             else:
                 raise RuntimeError(
