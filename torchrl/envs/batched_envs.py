@@ -1518,7 +1518,8 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            next_td = env._step(root_shared_tensordict.copy())
+            # No need to copy here since we don't write in-place
+            next_td = env._step(root_shared_tensordict)
             next_shared_tensordict.update_(next_td)
             if event is not None:
                 event.record()
@@ -1530,8 +1531,14 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            td, root_next_td = env.step_and_maybe_reset(root_shared_tensordict.copy())
-            next_shared_tensordict.update_(td.get("next"))
+            # We must copy the root shared td here, or at least get rid of done:
+            # if we don't `td is root_shared_tensordict`
+            # which means that root_shared_tensordict will carry the content of next
+            # in the next iteration. When using StepCounter, it will look for an
+            # existing done state, find it and consider the env as done by input (not
+            # by output) of the step!
+            td, root_next_td = env.step_and_maybe_reset(root_shared_tensordict)
+            next_shared_tensordict.update_(td.pop("next"))
             root_shared_tensordict.update_(root_next_td)
             if event is not None:
                 event.record()
