@@ -1132,7 +1132,9 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
             #   and this transform overrides an observation key (eg, CatFrames)
             #   the shape, dtype or device may not necessarily match and writing
             #   the value in-place will fail.
-            self.shared_tensordict_parent.update_(tensordict, keys_to_update=self._env_input_keys)
+            self.shared_tensordict_parent.update_(
+                tensordict, keys_to_update=self._env_input_keys
+            )
             next_td = tensordict.get("next", None)
             if next_td is not None:
                 # we copy the input keys as well as the keys in the 'next' td, if any
@@ -1487,6 +1489,7 @@ def _run_worker_pipe_shared_mem(
             i = 0
             next_shared_tensordict = shared_tensordict.get("next")
             root_shared_tensordict = shared_tensordict.exclude("next")
+            root_shared_tensordict_copy = root_shared_tensordict.copy()
             if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
                 raise RuntimeError(
                     "tensordict must be placed in shared memory (share_memory_() or memmap_())"
@@ -1515,7 +1518,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            next_td = env._step(root_shared_tensordict)
+            next_td = env._step(root_shared_tensordict_copy)
             next_shared_tensordict.update_(next_td)
             if event is not None:
                 event.record()
@@ -1527,7 +1530,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            td, root_next_td = env.step_and_maybe_reset(root_shared_tensordict.copy())
+            td, root_next_td = env.step_and_maybe_reset(root_shared_tensordict_copy)
             next_shared_tensordict.update_(td.get("next"))
             root_shared_tensordict.update_(root_next_td)
             if event is not None:
