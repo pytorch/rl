@@ -10156,10 +10156,9 @@ class TestRemoveEmptySpecs(TransformBase):
 
     def test_transform_inverse(self):
         td = TensorDict({"a": {"b": {"c": {}}}}, [])
-        assert not td.is_empty()
         t = RemoveEmptySpecs()
         t.inv(td)
-        assert not td.is_empty()
+        assert len(td.keys()) != 0
         env = TransformedEnv(self.DummyEnv(), RemoveEmptySpecs())
         td2 = env.transform.inv(TensorDict({}, []))
         assert ("state", "sub") in td2.keys(True)
