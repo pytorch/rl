@@ -1518,7 +1518,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            next_td = env._step(root_shared_tensordict_copy)
+            next_td = env._step(root_shared_tensordict.copy())
             next_shared_tensordict.update_(next_td)
             if event is not None:
                 event.record()
@@ -1530,7 +1530,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            td, root_next_td = env.step_and_maybe_reset(root_shared_tensordict_copy)
+            td, root_next_td = env.step_and_maybe_reset(root_shared_tensordict.copy())
             next_shared_tensordict.update_(td.get("next"))
             root_shared_tensordict.update_(root_next_td)
             if event is not None:
