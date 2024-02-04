@@ -10113,17 +10113,15 @@ class TestRemoveEmptySpecs(TransformBase):
 
     def test_transform_no_env(self):
         td = TensorDict({"a": {"b": {"c": {}}}}, [])
-        assert not td.is_empty()
         t = RemoveEmptySpecs()
         t._call(td)
-        assert td.is_empty()
+        assert len(td.keys()) == 0
 
     def test_transform_compose(self):
         td = TensorDict({"a": {"b": {"c": {}}}}, [])
-        assert not td.is_empty()
         t = Compose(RemoveEmptySpecs())
         t._call(td)
-        assert td.is_empty()
+        assert len(td.keys()) == 0
 
     def test_transform_env(self):
         base_env = self.DummyEnv()
@@ -10138,7 +10136,7 @@ class TestRemoveEmptySpecs(TransformBase):
         td = TensorDict({"a": {"b": {"c": {}}}}, [])
         t = nn.Sequential(Compose(RemoveEmptySpecs()))
         td = t(td)
-        assert td.is_empty(), td
+        assert len(td.keys()) == 0
 
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(self, rbclass):
@@ -10154,14 +10152,13 @@ class TestRemoveEmptySpecs(TransformBase):
         td = rb.sample(1)
         if "index" in td.keys():
             del td["index"]
-        assert td.is_empty()
+        assert len(td.keys()) == 0
 
     def test_transform_inverse(self):
         td = TensorDict({"a": {"b": {"c": {}}}}, [])
-        assert not td.is_empty()
         t = RemoveEmptySpecs()
         t.inv(td)
-        assert not td.is_empty()
+        assert len(td.keys()) != 0
         env = TransformedEnv(self.DummyEnv(), RemoveEmptySpecs())
         td2 = env.transform.inv(TensorDict({}, []))
         assert ("state", "sub") in td2.keys(True)
