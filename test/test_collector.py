@@ -1677,7 +1677,10 @@ def test_maxframes_error():
 @pytest.mark.parametrize("storing_device", [None, *get_available_devices()])
 @pytest.mark.parametrize("parallel", [False, True])
 def test_reset_heterogeneous_envs(
-    policy_device: torch.device, env_device: torch.device, storing_device: torch.device, parallel
+    policy_device: torch.device,
+    env_device: torch.device,
+    storing_device: torch.device,
+    parallel,
 ):
     if (
         policy_device is not None
