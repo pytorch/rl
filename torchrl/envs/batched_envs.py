@@ -1123,34 +1123,29 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
-        if self._single_task and not self.has_lazy_inputs:
-            # We must use the in_keys and nothing else for the following reasons:
-            # - efficiency: copying all the keys will in practice mean doing a lot
-            #   of writing operations since the input tensordict may (and often will)
-            #   contain all the previous output data.
-            # - value mismatch: if the batched env is placed within a transform
-            #   and this transform overrides an observation key (eg, CatFrames)
-            #   the shape, dtype or device may not necessarily match and writing
-            #   the value in-place will fail.
-            self.shared_tensordict_parent.update_(
-                tensordict, keys_to_update=self._env_input_keys
-            )
-            next_td = tensordict.get("next", None)
-            if next_td is not None:
-                # we copy the input keys as well as the keys in the 'next' td, if any
-                # as this mechanism can be used by a policy to set anticipatively the
-                # keys of the next call (eg, with recurrent nets)
-                for key in next_td.keys(True, True):
-                    key = unravel_key(("next", key))
-                    if key in self.shared_tensordict_parent.keys(True, True):
-                        self.shared_tensordict_parent.set_(key, next_td.get(key[1:]))
+        # We must use the in_keys and nothing else for the following reasons:
+        # - efficiency: copying all the keys will in practice mean doing a lot
+        #   of writing operations since the input tensordict may (and often will)
+        #   contain all the previous output data.
+        # - value mismatch: if the batched env is placed within a transform
+        #   and this transform overrides an observation key (eg, CatFrames)
+        #   the shape, dtype or device may not necessarily match and writing
+        #   the value in-place will fail.
+        self.shared_tensordict_parent.update_(
+            tensordict, keys_to_update=self._env_input_keys
+        )
+        next_td_passthrough = tensordict.get("next", None)
+        if next_td_passthrough is not None:
+            # if we have input "next" data (eg, RNNs which pass the next state)
+            # the sub-envs will need to process them through step_and_maybe_reset.
+            # We keep track of which keys are present to let the worker know what
+            # should be passd to the env (we don't want to pass done states for instance)
+            next_td_keys = list(next_td_passthrough.keys(True, True))
+            self.shared_tensordict_parent.get("next").update_(next_td_passthrough)
         else:
-            self.shared_tensordict_parent.update_(
-                tensordict,
-                keys_to_update=[*self._env_input_keys, "next"],
-            )
+            next_td_keys = None
         for i in range(self.num_workers):
-            self.parent_channels[i].send(("step_and_maybe_reset", None))
+            self.parent_channels[i].send(("step_and_maybe_reset", next_td_keys))
 
         for i in range(self.num_workers):
             event = self._events[i]
@@ -1186,35 +1181,33 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
 
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self._single_task and not self.has_lazy_inputs:
-            # We must use the in_keys and nothing else for the following reasons:
-            # - efficiency: copying all the keys will in practice mean doing a lot
-            #   of writing operations since the input tensordict may (and often will)
-            #   contain all the previous output data.
-            # - value mismatch: if the batched env is placed within a transform
-            #   and this transform overrides an observation key (eg, CatFrames)
-            #   the shape, dtype or device may not necessarily match and writing
-            #   the value in-place will fail.
-            for key in tensordict.keys(True, True):
-                # we copy the input keys as well as the keys in the 'next' td, if any
-                # as this mechanism can be used by a policy to set anticipatively the
-                # keys of the next call (eg, with recurrent nets)
-                if key in self._env_input_keys or (
-                    isinstance(key, tuple)
-                    and key[0] == "next"
-                    and key in self.shared_tensordict_parent.keys(True, True)
-                ):
-                    val = tensordict.get(key)
-                    self.shared_tensordict_parent.set_(key, val)
+        # We must use the in_keys and nothing else for the following reasons:
+        # - efficiency: copying all the keys will in practice mean doing a lot
+        #   of writing operations since the input tensordict may (and often will)
+        #   contain all the previous output data.
+        # - value mismatch: if the batched env is placed within a transform
+        #   and this transform overrides an observation key (eg, CatFrames)
+        #   the shape, dtype or device may not necessarily match and writing
+        #   the value in-place will fail.
+        self.shared_tensordict_parent.update_(
+            tensordict, keys_to_update=list(self._env_input_keys)
+        )
+        next_td_passthrough = tensordict.get("next", None)
+        if next_td_passthrough is not None:
+            # if we have input "next" data (eg, RNNs which pass the next state)
+            # the sub-envs will need to process them through step_and_maybe_reset.
+            # We keep track of which keys are present to let the worker know what
+            # should be passd to the env (we don't want to pass done states for instance)
+            next_td_keys = list(next_td_passthrough.keys(True, True))
+            self.shared_tensordict_parent.get("next").update_(next_td_passthrough)
         else:
-            self.shared_tensordict_parent.update_(
-                tensordict.select(*self._env_input_keys, "next", strict=False)
-            )
+            next_td_keys = None
+
         if self.event is not None:
             self.event.record()
             self.event.synchronize()
         for i in range(self.num_workers):
-            self.parent_channels[i].send(("step", None))
+            self.parent_channels[i].send(("step", next_td_keys))
 
         for i in range(self.num_workers):
             event = self._events[i]
@@ -1518,7 +1511,14 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             # No need to copy here since we don't write in-place
-            next_td = env._step(root_shared_tensordict)
+            if data:
+                next_td_passthrough_keys = data
+                input = root_shared_tensordict.set(
+                    "next", next_shared_tensordict.select(*next_td_passthrough_keys)
+                )
+            else:
+                input = root_shared_tensordict
+            next_td = env._step(input)
             next_shared_tensordict.update_(next_td)
             if event is not None:
                 event.record()
@@ -1536,9 +1536,19 @@ def _run_worker_pipe_shared_mem(
             # in the next iteration. When using StepCounter, it will look for an
             # existing done state, find it and consider the env as done by input (not
             # by output) of the step!
-            td, root_next_td = env.step_and_maybe_reset(root_shared_tensordict)
+            # Caveat: for RNN we may need some keys of the "next" TD so we pass the list
+            # through data
+            if data:
+                next_td_passthrough_keys = data
+                input = root_shared_tensordict.set(
+                    "next", next_shared_tensordict.select(*next_td_passthrough_keys)
+                )
+            else:
+                input = root_shared_tensordict
+            td, root_next_td = env.step_and_maybe_reset(input)
             next_shared_tensordict.update_(td.pop("next"))
             root_shared_tensordict.update_(root_next_td)
+
             if event is not None:
                 event.record()
                 event.synchronize()
