@@ -31,7 +31,7 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_type as set_exploration_type,
 )
 from tensordict.utils import NestedKey
-from torchrl._utils import _replace_last, logger as torchrl_logger
+from torchrl._utils import _replace_last, _rng_decorator, logger as torchrl_logger
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -419,7 +419,9 @@ def _per_level_env_check(data0, data1, check_dtype):
                     )
 
 
-def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
+def check_env_specs(
+    env, return_contiguous=True, check_dtype=True, seed: int | None = None
+):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
@@ -436,7 +438,12 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
             of inputs/outputs). Defaults to True.
         check_dtype (bool, optional): if False, dtype checks will be skipped.
             Defaults to True.
-        seed (int, optional): for reproducibility, a seed is set.
+        seed (int, optional): for reproducibility, a seed can be set.
+            The seed will be set in pytorch temporarily, then the RNG state will
+            be reverted to what it was before. For the env, we set the seed but since
+            setting the rng state back to what is was isn't a feature of most environment,
+            we leave it to the user to accomplish that.
+            Defaults to ``None``.
 
     Caution: this function resets the env seed. It should be used "offline" to
     check that an env is adequately constructed, but it may affect the seeding
@@ -444,8 +451,11 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
 
     """
     if seed is not None:
-        torch.manual_seed(seed)
-        env.set_seed(seed)
+        with _rng_decorator(seed):
+            env.set_seed(seed)
+            return check_env_specs(
+                env, return_contiguous=return_contiguous, check_dtype=check_dtype
+            )
 
     fake_tensordict = env.fake_tensordict()
     real_tensordict = env.rollout(3, return_contiguous=return_contiguous)

@@ -12,7 +12,10 @@ from unittest import mock
 import _utils_internal
 import pytest
 
-from torchrl._utils import get_binary_env_var, implement_for
+import torch
+
+from _utils_internal import get_default_devices
+from torchrl._utils import _rng_decorator, get_binary_env_var, implement_for
 
 from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
 
@@ -356,6 +359,21 @@ def test_set_gym_nested():
         GymWrapper._output_transform(
             MockGym, (1, 2, True, {})
         )  # would break with gymnasium
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+def test_rng_decorator(device):
+    torch.manual_seed(10)
+    with torch.device(device):
+        s0a = torch.randn(3)
+        with _rng_decorator(0):
+            torch.randn(3)
+        s0b = torch.randn(3)
+        torch.manual_seed(10)
+        s1a = torch.randn(3)
+        s1b = torch.randn(3)
+        torch.testing.assert_close(s0a, s1a)
+        torch.testing.assert_close(s0b, s1b)
 
 
 if __name__ == "__main__":

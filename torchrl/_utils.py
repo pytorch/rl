@@ -704,3 +704,17 @@ def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
         return new_ending
     else:
         return key[:-1] + (new_ending,)
+
+
+class _rng_decorator(_DecoratorContextManager):
+    """Temporarily sets the seed and sets back the rng state when exiting."""
+
+    def __init__(self, seed):
+        self.seed = seed
+
+    def __enter__(self):
+        self._state = torch.random.get_rng_state()
+        torch.manual_seed(self.seed)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        torch.random.set_rng_state(self._state)
