@@ -720,14 +720,23 @@ class _rng_decorator(_DecoratorContextManager):
 
     def _get_state(self):
         if self.has_cuda:
-            self._state = (
-                torch.random.get_rng_state(), torch.cuda.get_rng_state(self.device))
+            if self.device is None:
+                self._state = (
+                    torch.random.get_rng_state(), torch.cuda.get_rng_state())
+            else:
+                self._state = (
+                    torch.random.get_rng_state(), torch.cuda.get_rng_state(self.device))
+
         else:
             self.state = torch.random.get_rng_state()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.has_cuda:
             torch.random.set_rng_state(self._state[0])
-            torch.cuda.set_rng_state(self._state[1], device=self.device)
+            if self.device is not None:
+                torch.cuda.set_rng_state(self._state[1], device=self.device)
+            else:
+                torch.cuda.set_rng_state(self._state[1])
+
         else:
             torch.random.set_rng_state(self._state)
