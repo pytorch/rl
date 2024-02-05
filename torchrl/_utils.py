@@ -712,7 +712,7 @@ class _rng_decorator(_DecoratorContextManager):
     def __init__(self, seed, device=None):
         self.seed = seed
         self.device = device
-        self.has_cuda = torch.cuda.is_available():
+        self.has_cuda = torch.cuda.is_available()
 
     def __enter__(self):
         self._get_state()
