@@ -423,7 +423,8 @@ class _BatchedEnv(EnvBase):
                 #     map_device, nested_keys=True, filter_empty=True
                 # )
                 self._env_tensordict.named_apply(
-                    map_device, nested_keys=True,
+                    map_device,
+                    nested_keys=True,
                 )
 
             self._batch_locked = meta_data.batch_locked
@@ -1640,6 +1641,7 @@ def _update_cuda(t_dest, t_source):
         return
     t_dest.copy_(t_source.pin_memory(), non_blocking=True)
     return
+
 
 def _filter_empty(tensordict):
     return tensordict.select(*tensordict.keys(True, True))
