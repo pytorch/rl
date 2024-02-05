@@ -419,8 +419,11 @@ class _BatchedEnv(EnvBase):
                 def map_device(key, value, device_map=device_map):
                     return value.to(device_map[key])
 
+                # self._env_tensordict.named_apply(
+                #     map_device, nested_keys=True, filter_empty=True
+                # )
                 self._env_tensordict.named_apply(
-                    map_device, nested_keys=True, filter_empty=True
+                    map_device, nested_keys=True,
                 )
 
             self._batch_locked = meta_data.batch_locked
@@ -788,11 +791,17 @@ class SerialEnv(_BatchedEnv):
             if name in selected_output_keys:
                 return tensor.clone()
 
+        # out = self.shared_tensordict_parent.named_apply(
+        #     select_and_clone,
+        #     nested_keys=True,
+        #     filter_empty=True,
+        # )
         out = self.shared_tensordict_parent.named_apply(
             select_and_clone,
             nested_keys=True,
-            filter_empty=True,
         )
+        del out["next"]
+
         if out.device != device:
             if device is None:
                 out = out.clear_device_()
@@ -832,7 +841,8 @@ class SerialEnv(_BatchedEnv):
             if name in self._selected_step_keys:
                 return tensor.clone()
 
-        out = next_td.named_apply(select_and_clone, nested_keys=True, filter_empty=True)
+        # out = next_td.named_apply(select_and_clone, nested_keys=True, filter_empty=True)
+        out = next_td.named_apply(select_and_clone, nested_keys=True)
 
         if out.device != device:
             if device is None:
@@ -1626,3 +1636,6 @@ def _update_cuda(t_dest, t_source):
         return
     t_dest.copy_(t_source.pin_memory(), non_blocking=True)
     return
+
+def _filter_empty(tensordict):
+    return tensordict.select(*tensordict.keys(True, True))
