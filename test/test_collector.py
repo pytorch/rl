@@ -1690,8 +1690,8 @@ def test_reset_heterogeneous_envs(
         env_device = torch.device("cpu")  # explicit mapping
     elif env_device is not None and env_device.type == "cuda" and policy_device is None:
         policy_device = torch.device("cpu")
-    env1 = lambda: TransformedEnv(CountingEnv(), StepCounter(2))
-    env2 = lambda: TransformedEnv(CountingEnv(), StepCounter(3))
+    env1 = lambda: TransformedEnv(CountingEnv(device="cpu"), StepCounter(2))
+    env2 = lambda: TransformedEnv(CountingEnv(device="cpu"), StepCounter(3))
     if parallel:
         cls = ParallelEnv
     else:
