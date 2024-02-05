@@ -5,7 +5,6 @@
 import argparse
 import os
 import sys
-import time
 from copy import copy
 from importlib import import_module
 from unittest import mock

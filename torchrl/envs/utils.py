@@ -451,7 +451,10 @@ def check_env_specs(
 
     """
     if seed is not None:
-        with _rng_decorator(seed):
+        device = (
+            env.device if env.device is not None and env.device.type == "cuda" else None
+        )
+        with _rng_decorator(seed, device=device):
             env.set_seed(seed)
             return check_env_specs(
                 env, return_contiguous=return_contiguous, check_dtype=check_dtype
