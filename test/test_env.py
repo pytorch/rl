@@ -2095,7 +2095,10 @@ class TestHeteroEnvs:
 
     @pytest.mark.parametrize("batch_size", [(1, 2)])
     @pytest.mark.parametrize("env_type", ["serial", "parallel"])
-    def test_vec_env(self, batch_size, env_type, rollout_steps=4, n_workers=2):
+    @pytest.mark.parametrize("break_when_any_done", [False, True])
+    def test_vec_env(
+        self, batch_size, env_type, break_when_any_done, rollout_steps=4, n_workers=2
+    ):
         env_fun = lambda: HeterogeneousCountingEnv(batch_size=batch_size)
         if env_type == "serial":
             vec_env = SerialEnv(n_workers, env_fun)
@@ -2109,7 +2112,7 @@ class TestHeteroEnvs:
             rollout_steps,
             policy=policy,
             return_contiguous=False,
-            break_when_any_done=False,
+            break_when_any_done=break_when_any_done,
         )
         td = dense_stack_tds(td)
         for i in range(env_fun().n_nested_dim):

@@ -1675,8 +1675,12 @@ def test_maxframes_error():
 @pytest.mark.parametrize("policy_device", [None, *get_available_devices()])
 @pytest.mark.parametrize("env_device", [None, *get_available_devices()])
 @pytest.mark.parametrize("storing_device", [None, *get_available_devices()])
+@pytest.mark.parametrize("parallel", [False, True])
 def test_reset_heterogeneous_envs(
-    policy_device: torch.device, env_device: torch.device, storing_device: torch.device
+    policy_device: torch.device,
+    env_device: torch.device,
+    storing_device: torch.device,
+    parallel,
 ):
     if (
         policy_device is not None
@@ -1686,9 +1690,13 @@ def test_reset_heterogeneous_envs(
         env_device = torch.device("cpu")  # explicit mapping
     elif env_device is not None and env_device.type == "cuda" and policy_device is None:
         policy_device = torch.device("cpu")
-    env1 = lambda: TransformedEnv(CountingEnv(), StepCounter(2))
-    env2 = lambda: TransformedEnv(CountingEnv(), StepCounter(3))
-    env = SerialEnv(2, [env1, env2], device=env_device)
+    env1 = lambda: TransformedEnv(CountingEnv(device="cpu"), StepCounter(2))
+    env2 = lambda: TransformedEnv(CountingEnv(device="cpu"), StepCounter(3))
+    if parallel:
+        cls = ParallelEnv
+    else:
+        cls = SerialEnv
+    env = cls(2, [env1, env2], device=env_device)
     collector = SyncDataCollector(
         env,
         RandomPolicy(env.action_spec),
@@ -1705,7 +1713,7 @@ def test_reset_heterogeneous_envs(
         assert (
             data[0]["next", "truncated"].squeeze()
             == torch.tensor([False, True], device=data_device).repeat(25)[:50]
-        ).all(), data[0]["next", "truncated"][:10]
+        ).all(), data[0]["next", "truncated"]
         assert (
             data[1]["next", "truncated"].squeeze()
             == torch.tensor([False, False, True], device=data_device).repeat(17)[:50]

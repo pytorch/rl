@@ -268,7 +268,7 @@ def _set_single_key(
                 dest = new_val
             else:
                 if device is not None and val.device != device:
-                    val = val.to(device, non_blocking=False)
+                    val = val.to(device, non_blocking=True)
                 elif clone:
                     val = val.clone()
                 dest._set_str(k, val, inplace=False, validated=True)
