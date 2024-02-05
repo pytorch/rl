@@ -11,7 +11,7 @@ TorchRL
 
 TorchRL is an open-source Reinforcement Learning (RL) library for PyTorch.
 
-You can install torchrl directly from PyPI (see more about installation
+You can install TorchRL directly from PyPI (see more about installation
 instructions in the dedicated section below):
 
 .. code-block::
@@ -50,7 +50,7 @@ Nightly releases can be installed via
   $ pip install tensordict-nightly
   $ pip install torchrl-nightly
 
-or via a `git clone` if you're willing to contribute to the library:
+or via a ``git clone`` if you're willing to contribute to the library:
 
 .. code-block::
 
