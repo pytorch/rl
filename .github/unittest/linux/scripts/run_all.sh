@@ -124,9 +124,9 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+      pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
   else
-      pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
@@ -143,10 +143,14 @@ fi
 python -c "import functorch"
 
 # install snapshot
-pip3 install git+https://github.com/pytorch/torchsnapshot
+if [[ "$TORCH_VERSION" == "nightly" ]]; then
+  pip3 install git+https://github.com/pytorch/torchsnapshot
+else
+  pip3 install torchsnapshot
+fi
 
 # install tensordict
-pip3 install git+https://github.com/pytorch-labs/tensordict.git
+pip3 install git+https://github.com/pytorch/tensordict.git
 
 printf "* Installing torchrl\n"
 python setup.py develop
@@ -179,15 +183,18 @@ python -m torch.utils.collect_env
 export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
 export MAX_IDLE_COUNT=100
+export BATCHED_PIPE_TIMEOUT=60
 
 pytest test/smoke_test.py -v --durations 200
 pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'
 if [ "${CU_VERSION:-}" != cpu ] ; then
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
-    --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py
+    --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
+    --timeout=120
 else
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
-    --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py --ignore test/test_distributed.py
+    --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py --ignore test/test_distributed.py \
+    --timeout=120
 fi
 
 coverage combine

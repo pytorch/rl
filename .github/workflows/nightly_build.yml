@@ -45,7 +45,7 @@ jobs:
       - name: Install PyTorch nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
+          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
       - name: Build TorchRL Nightly
         run: |
           rm -r dist || true
@@ -84,15 +84,14 @@ jobs:
         uses: actions/checkout@v2
       - name: Install PyTorch nightly
         run: |
-          python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
       - name: Build TorchRL Nightly
         run: |
-          rm -r dist || true
           export CC=clang CXX=clang++
           python3 -mpip install wheel
+          python3 -mpip install ninja
           python3 setup.py bdist_wheel \
-            --package_name torchrl-nightly \
-            --python-tag=${{ matrix.python-tag }}
+            --package_name torchrl-nightly
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
         with:
@@ -117,7 +116,7 @@ jobs:
         uses: actions/checkout@v2
       - name: Install PyTorch Nightly
         run: |
-          python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
       - name: Upgrade pip
         run: |
           python3 -mpip install --upgrade pip
@@ -126,7 +125,7 @@ jobs:
           python3 -mpip install numpy pytest --no-cache-dir
       - name: Install tensordict
         run: |
-          python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
+          python3 -mpip install git+https://github.com/pytorch/tensordict.git
       - name: Download built wheels
         uses: actions/download-artifact@v2
         with:
@@ -232,14 +231,14 @@ jobs:
       - name: Install PyTorch Nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
+          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
       - name: Upgrade pip
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install --upgrade pip
       - name: Install tensordict
         run: |
-          python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
+          python3 -mpip install git+https://github.com/pytorch/tensordict.git
       - name: Install test dependencies
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
@@ -290,7 +289,7 @@ jobs:
       - name: Install PyTorch nightly
         shell: bash
         run: |
-          python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
       - name: Build TorchRL nightly
         shell: bash
         run: |
@@ -323,7 +322,7 @@ jobs:
       - name: Install PyTorch Nightly
         shell: bash
         run: |
-          python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
       - name: Upgrade pip
         shell: bash
         run: |
@@ -334,7 +333,7 @@ jobs:
           python3 -mpip install numpy pytest --no-cache-dir
       - name: Install tensordict
         run: |
-          python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
+          python3 -mpip install git+https://github.com/pytorch/tensordict.git
       - name: Download built wheels
         uses: actions/download-artifact@v2
         with:

@@ -2,8 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import itertools
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
@@ -290,6 +290,10 @@ def make_redq_model(
             is_shared=False)
 
     """
+    warnings.warn(
+        "This helper function will be deprecated in v0.4. Consider using the local helper in the REDQ example.",
+        category=DeprecationWarning,
+    )
     tanh_loc = cfg.tanh_loc
     default_policy_scale = cfg.default_policy_scale
     gSDE = cfg.gSDE
@@ -653,6 +657,7 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
             out_keys=[action_key],
             default_interaction_type=InteractionType.RANDOM,
             distribution_class=TanhNormal,
+            distribution_kwargs={"tanh_loc": True},
             spec=CompositeSpec(**{action_key: proof_environment.action_spec}),
         ),
     )
@@ -699,8 +704,9 @@ def _dreamer_make_actor_real(
             SafeProbabilisticModule(
                 in_keys=["loc", "scale"],
                 out_keys=[action_key],
-                default_interaction_type=InteractionType.RANDOM,
+                default_interaction_type=InteractionType.MODE,
                 distribution_class=TanhNormal,
+                distribution_kwargs={"tanh_loc": True},
                 spec=CompositeSpec(
                     **{action_key: proof_environment.action_spec.to("cpu")}
                 ),

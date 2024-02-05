@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import gymnasium as gym
 import numpy as np
 import torch.nn
 import torch.optim
@@ -12,11 +11,12 @@ from torchrl.data import CompositeSpec
 from torchrl.data.tensor_specs import DiscreteBox
 from torchrl.envs import (
     CatFrames,
-    default_info_dict_reader,
     DoubleToFloat,
+    EndOfLifeTransform,
     EnvCreator,
     ExplorationType,
     GrayScale,
+    GymEnv,
     NoopResetEnv,
     ParallelEnv,
     Resize,
@@ -27,7 +27,6 @@ from torchrl.envs import (
     TransformedEnv,
     VecNorm,
 )
-from torchrl.envs.libs.gym import GymWrapper
 from torchrl.modules import (
     ActorValueOperator,
     ConvNet,
@@ -43,43 +42,20 @@ from torchrl.modules import (
 # --------------------------------------------------------------------
 
 
-class EpisodicLifeEnv(gym.Wrapper):
-    def __init__(self, env):
-        """Make end-of-life == end-of-episode, but only reset on true game over.
-        Done by DeepMind for the DQN and co. It helps value estimation.
-        """
-        gym.Wrapper.__init__(self, env)
-        self.lives = 0
-
-    def step(self, action):
-        obs, rew, done, truncate, info = self.env.step(action)
-        lives = self.env.unwrapped.ale.lives()
-        info["end_of_life"] = False
-        if (lives < self.lives) or done:
-            info["end_of_life"] = True
-        self.lives = lives
-        return obs, rew, done, truncate, info
-
-    def reset(self, **kwargs):
-        reset_data = self.env.reset(**kwargs)
-        self.lives = self.env.unwrapped.ale.lives()
-        return reset_data
-
-
 def make_base_env(
     env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False
 ):
-    env = gym.make(env_name)
-    if not is_test:
-        env = EpisodicLifeEnv(env)
-    env = GymWrapper(
-        env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device
+    env = GymEnv(
+        env_name,
+        frame_skip=frame_skip,
+        from_pixels=True,
+        pixels_only=False,
+        device=device,
     )
     env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
     if not is_test:
-        reader = default_info_dict_reader(["end_of_life"])
-        env.set_info_dict_reader(reader)
+        env.append_transform(EndOfLifeTransform())
     return env
 
 

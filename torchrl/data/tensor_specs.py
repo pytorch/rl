@@ -75,6 +75,8 @@ NOT_IMPLEMENTED_ERROR = NotImplementedError(
     " an issue at https://github.com/pytorch/rl/issues"
 )
 
+NO_DEFAULT = object()
+
 
 def _default_dtype_and_device(
     dtype: Union[None, torch.dtype],
@@ -384,7 +386,7 @@ class ContinuousBox(Box):
     @property
     def maximum(self):
         warnings.warn(
-            f"{type(self)}.maximum is going to be deprecated in favour of {type(self)}.low",
+            f"{type(self)}.maximum is going to be deprecated in favour of {type(self)}.high",
             category=DeprecationWarning,
         )
         return self._high.to(self.device)
@@ -425,12 +427,29 @@ class ContinuousBox(Box):
         return f"{self.__class__.__name__}({min_str},{max_str})"
 
     def __eq__(self, other):
+        if other is None:
+
+            minval, maxval = _minmax_dtype(self.low.dtype)
+            minval = torch.as_tensor(minval).to(self.low.device, self.low.dtype)
+            maxval = torch.as_tensor(maxval).to(self.low.device, self.low.dtype)
+            if (
+                torch.isclose(self.low, minval).all()
+                and torch.isclose(self.high, maxval).all()
+            ):
+                return True
+            if (
+                not torch.isfinite(self.low).any()
+                and not torch.isfinite(self.high).any()
+            ):
+                return True
+            return False
         return (
             type(self) == type(other)
             and self.low.dtype == other.low.dtype
             and self.high.dtype == other.high.dtype
-            and torch.equal(self.low, other.low)
-            and torch.equal(self.high, other.high)
+            and self.device == other.device
+            and torch.isclose(self.low, other.low).all()
+            and torch.isclose(self.high, other.high).all()
         )
 
 
@@ -988,6 +1007,8 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
     def __eq__(self, other):
         if not isinstance(other, LazyStackedTensorSpec):
             return False
+        if self.device != other.device:
+            return False
         if len(self._specs) != len(other._specs):
             return False
         for _spec1, _spec2 in zip(self._specs, other._specs):
@@ -1168,6 +1189,10 @@ class OneHotDiscreteTensorSpec(TensorSpec):
                 )
         super().__init__(shape, space, device, dtype, "discrete")
         self.update_mask(mask)
+
+    @property
+    def n(self):
+        return self.space.n
 
     def update_mask(self, mask):
         if mask is not None:
@@ -1497,6 +1522,7 @@ class BoundedTensorSpec(TensorSpec):
                 raise TypeError(self.CONFLICTING_KWARGS.format("low", "minimum"))
             low = kwargs.pop("minimum")
             warnings.warn(self.DEPRECATED_KWARGS, category=DeprecationWarning)
+        domain = kwargs.pop("domain", "continuous")
         if len(kwargs):
             raise TypeError(f"Got unrecognised kwargs {tuple(kwargs.keys())}.")
 
@@ -1565,7 +1591,26 @@ class BoundedTensorSpec(TensorSpec):
                 raise RuntimeError(shape_err_msg)
         self.shape = shape
 
-        super().__init__(shape, ContinuousBox(low, high), device, dtype, "continuous")
+        super().__init__(
+            shape, ContinuousBox(low, high, device=device), device, dtype, domain=domain
+        )
+
+    def __eq__(self, other):
+        return (
+            type(other) == type(self)
+            and self.device == other.device
+            and self.shape == other.shape
+            and self.space == other.space
+            and self.dtype == other.dtype
+        )
+
+    @property
+    def low(self):
+        return self.space.low
+
+    @property
+    def high(self):
+        return self.space.high
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
@@ -1776,22 +1821,24 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = None,
+        **kwargs,
     ):
         if isinstance(shape, int):
             shape = torch.Size([shape])
 
         dtype, device = _default_dtype_and_device(dtype, device)
         box = (
-            ContinuousBox(torch.tensor(-np.inf), torch.tensor(np.inf))
+            ContinuousBox(
+                torch.tensor(-np.inf, device=device).expand(shape),
+                torch.tensor(np.inf, device=device).expand(shape),
+            )
             if shape == _DEFAULT_SHAPE
             else None
         )
+        default_domain = "continuous" if dtype.is_floating_point else "discrete"
+        domain = kwargs.pop("domain", default_domain)
         super().__init__(
-            shape=shape,
-            space=box,
-            device=device,
-            dtype=dtype,
-            domain="continuous",
+            shape=shape, space=box, device=device, dtype=dtype, domain=domain, **kwargs
         )
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
@@ -1854,6 +1901,34 @@ class UnboundedContinuousTensorSpec(TensorSpec):
             for i in range(self.shape[dim])
         )
 
+    def __eq__(self, other):
+        # those specs are equivalent to a discrete spec
+        if isinstance(other, UnboundedDiscreteTensorSpec):
+            return (
+                UnboundedDiscreteTensorSpec(
+                    shape=self.shape,
+                    device=self.device,
+                    dtype=self.dtype,
+                )
+                == other
+            )
+        if isinstance(other, BoundedTensorSpec):
+            minval, maxval = _minmax_dtype(self.dtype)
+            minval = torch.as_tensor(minval).to(self.device, self.dtype)
+            maxval = torch.as_tensor(maxval).to(self.device, self.dtype)
+            return (
+                BoundedTensorSpec(
+                    shape=self.shape,
+                    high=maxval,
+                    low=minval,
+                    dtype=self.dtype,
+                    device=self.device,
+                    domain=self.domain,
+                )
+                == other
+            )
+        return super().__eq__(other)
+
 
 @dataclass(repr=False)
 class UnboundedDiscreteTensorSpec(TensorSpec):
@@ -1897,7 +1972,7 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
             space=space,
             device=device,
             dtype=dtype,
-            domain="continuous",
+            domain="discrete",
         )
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
@@ -1963,6 +2038,58 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
             )
             for i in range(self.shape[dim])
         )
+
+    def __eq__(self, other):
+        # those specs are equivalent to a discrete spec
+        if isinstance(other, UnboundedContinuousTensorSpec):
+            return (
+                UnboundedContinuousTensorSpec(
+                    shape=self.shape,
+                    device=self.device,
+                    dtype=self.dtype,
+                    domain=self.domain,
+                )
+                == other
+            )
+        if isinstance(other, BoundedTensorSpec):
+            return (
+                BoundedTensorSpec(
+                    shape=self.shape,
+                    high=self.space.high,
+                    low=self.space.low,
+                    dtype=self.dtype,
+                    device=self.device,
+                    domain=self.domain,
+                )
+                == other
+            )
+        return super().__eq__(other)
+
+    def __ne__(self, other):
+        # those specs are equivalent to a discrete spec
+        if isinstance(other, UnboundedContinuousTensorSpec):
+            return (
+                UnboundedContinuousTensorSpec(
+                    shape=self.shape,
+                    device=self.device,
+                    dtype=self.dtype,
+                    domain=self.domain,
+                )
+                != other
+            )
+        if isinstance(other, BoundedTensorSpec):
+            return (
+                BoundedTensorSpec(
+                    shape=self.shape,
+                    high=self.space.high,
+                    low=self.space.low,
+                    dtype=self.dtype,
+                    device=self.device,
+                    domain=self.domain,
+                )
+                != other
+            )
+        return super().__ne__(other)
 
 
 @dataclass(repr=False)
@@ -2368,6 +2495,10 @@ class DiscreteTensorSpec(TensorSpec):
         super().__init__(shape, space, device, dtype, domain="discrete")
         self.update_mask(mask)
 
+    @property
+    def n(self):
+        return self.space.n
+
     def update_mask(self, mask):
         if mask is not None:
             try:
@@ -2599,7 +2730,7 @@ class BinaryDiscreteTensorSpec(DiscreteTensorSpec):
         n: int,
         shape: Optional[torch.Size] = None,
         device: Optional[DEVICE_TYPING] = None,
-        dtype: Union[str, torch.dtype] = torch.long,
+        dtype: Union[str, torch.dtype] = torch.int8,
     ):
         if shape is None or not len(shape):
             shape = torch.Size((n,))
@@ -2695,6 +2826,18 @@ class BinaryDiscreteTensorSpec(DiscreteTensorSpec):
             dtype=self.dtype,
         )
 
+    def __eq__(self, other):
+        if not isinstance(other, BinaryDiscreteTensorSpec):
+            if isinstance(other, DiscreteTensorSpec):
+                return (
+                    other.n == 2
+                    and other.device == self.device
+                    and other.shape == self.shape
+                    and other.dtype == self.dtype
+                )
+            return False
+        return super().__eq__(other)
+
 
 @dataclass(repr=False)
 class MultiDiscreteTensorSpec(DiscreteTensorSpec):
@@ -2710,7 +2853,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         dtype (str or torch.dtype, optional): dtype of the tensors.
 
     Examples:
-        >>> ts = MultiDiscreteTensorSpec((3,2,3))
+        >>> ts = MultiDiscreteTensorSpec((3, 2, 3))
         >>> ts.is_in(torch.tensor([2, 0, 1]))
         True
         >>> ts.is_in(torch.tensor([2, 2, 1]))
@@ -3135,10 +3278,10 @@ class CompositeSpec(TensorSpec):
             raise RuntimeError("Cannot modify shape of locked composite spec.")
         for key, spec in self.items():
             if isinstance(spec, CompositeSpec):
-                if spec.shape[: self.ndim] != self.shape:
+                if spec.shape[: len(value)] != value:
                     spec.shape = value
             elif spec is not None:
-                if spec.shape[: self.ndim] != self.shape:
+                if spec.shape[: len(value)] != value:
                     raise ValueError(
                         f"The shape of the spec and the CompositeSpec mismatch during shape resetting: the "
                         f"{self.ndim} first dimensions should match but got self['{key}'].shape={spec.shape} and "
@@ -3254,19 +3397,16 @@ class CompositeSpec(TensorSpec):
 
     def __getitem__(self, idx):
         """Indexes the current CompositeSpec based on the provided index."""
-        if (
-            isinstance(idx, str)
-            or isinstance(idx, tuple)
-            and all(isinstance(item, str) for item in idx)
-        ):
-            if isinstance(idx, tuple) and len(idx) > 1:
+        if isinstance(idx, (str, tuple)):
+            idx_unravel = unravel_key(idx)
+        else:
+            idx_unravel = ()
+        if idx_unravel:
+            if isinstance(idx_unravel, tuple):
                 return self[idx[0]][idx[1:]]
-            elif isinstance(idx, tuple):
-                return self[idx[0]]
-
-            if idx in {"shape", "device", "dtype", "space"}:
-                raise AttributeError(f"CompositeSpec has no key {idx}")
-            return self._specs[idx]
+            if idx_unravel in {"shape", "device", "dtype", "space"}:
+                raise AttributeError(f"CompositeSpec has no key {idx_unravel}")
+            return self._specs[idx_unravel]
 
         indexed_shape = _shape_indexing(self.shape, idx)
         indexed_specs = {}
@@ -3299,6 +3439,19 @@ class CompositeSpec(TensorSpec):
             shape=indexed_shape,
             device=device,
         )
+
+    def get(self, item, default=NO_DEFAULT):
+        """Gets an item from the CompositeSpec.
+
+        If the item is absent, a default value can be passed.
+
+        """
+        try:
+            return self[item]
+        except KeyError:
+            if item is not NO_DEFAULT:
+                return default
+            raise
 
     def __setitem__(self, key, value):
         if isinstance(key, tuple) and len(key) > 1:
@@ -3344,7 +3497,8 @@ class CompositeSpec(TensorSpec):
 
     def __delitem__(self, key: str) -> None:
         if isinstance(key, tuple) and len(key) > 1:
-            del self._specs[key[0]][key[1:]]
+            spec = self[key[:-1]]
+            del spec[key[-1]]
             return
         elif isinstance(key, tuple):
             del self._specs[key[0]]
@@ -3362,7 +3516,7 @@ class CompositeSpec(TensorSpec):
         self, vals: Dict[str, Any], *, ignore_device: bool = False
     ) -> Dict[str, torch.Tensor]:
         if isinstance(vals, TensorDict):
-            out = vals.select()  # create and empty tensordict similar to vals
+            out = vals.empty()  # create and empty tensordict similar to vals
         else:
             out = TensorDict({}, torch.Size([]), _run_checks=False)
         for key, item in vals.items():
@@ -3422,9 +3576,7 @@ class CompositeSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         _dict = {
-            key: self[key].rand(shape)
-            for key in self.keys(True)
-            if isinstance(key, str) and self[key] is not None
+            key: self[key].rand(shape) for key in self.keys() if self[key] is not None
         }
         return TensorDict(
             _dict,
@@ -3582,8 +3734,10 @@ class CompositeSpec(TensorSpec):
     def __eq__(self, other):
         return (
             type(self) is type(other)
+            and self.shape == other.shape
             and self._device == other._device
-            and self._specs == other._specs
+            and set(self._specs.keys()) == set(other._specs.keys())
+            and all((self._specs[key] == spec) for (key, spec) in other._specs.items())
         )
 
     def update(self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpec]]) -> None:
@@ -3802,6 +3956,8 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         if len(self._specs) != len(other._specs):
             return False
         if self.stack_dim != other.stack_dim:
+            return False
+        if self.device != other.device:
             return False
         for _spec1, _spec2 in zip(self._specs, other._specs):
             if _spec1 != _spec2:
@@ -4220,3 +4376,13 @@ class _CompositeSpecKeysView:
                 return True
         else:
             return False
+
+
+def _minmax_dtype(dtype):
+    if dtype is torch.bool:
+        return False, True
+    if dtype.is_floating_point:
+        info = torch.finfo(dtype)
+    else:
+        info = torch.iinfo(dtype)
+    return info.min, info.max

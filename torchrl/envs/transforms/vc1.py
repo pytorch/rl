@@ -1,10 +1,17 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import importlib
+import logging
 import os
 import subprocess
 from functools import partial
 from typing import Union
 
 import torch
+from tensordict import TensorDictBase
 from torch import nn
 
 from torchrl.data.tensor_specs import (
@@ -21,6 +28,7 @@ from torchrl.envs.transforms.transforms import (
     ToTensorImage,
     Transform,
 )
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 _has_vc = importlib.util.find_spec("vc_models") is not None
 
@@ -170,6 +178,14 @@ class VC1Transform(Transform):
 
     forward = _call
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        # TODO: Check this makes sense
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
     @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:
         shape = None
@@ -221,12 +237,11 @@ class VC1Transform(Transform):
         try:
             from vc_models import models  # noqa: F401
 
-            print("vc_models found, no need to install.")
+            logging.info("vc_models found, no need to install.")
         except ModuleNotFoundError:
             HOME = os.environ.get("HOME")
             vcdir = HOME + "/.cache/torchrl/eai-vc"
             parentdir = os.path.dirname(os.path.abspath(vcdir))
-            print(parentdir)
             os.makedirs(parentdir, exist_ok=True)
             try:
                 from git import Repo

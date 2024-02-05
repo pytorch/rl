@@ -8,6 +8,7 @@ import collections
 
 import functools
 import inspect
+import logging
 
 import math
 import os
@@ -24,12 +25,14 @@ from typing import Any, Callable, cast, Dict, TypeVar, Union
 import numpy as np
 import torch
 from packaging.version import parse
-from torch import multiprocessing as mp
 
+from tensordict.utils import NestedKey
+from torch import multiprocessing as mp
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
+BATCHED_PIPE_TIMEOUT = float(os.environ.get("BATCHED_PIPE_TIMEOUT", "10000.0"))
 
 
 class timeit:
@@ -63,7 +66,7 @@ class timeit:
         val[2] = N
 
     @staticmethod
-    def print(prefix=None):
+    def print(prefix=None):  # noqa: T202
         keys = list(timeit._REG)
         keys.sort()
         for name in keys:
@@ -73,7 +76,7 @@ class timeit:
             strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
-            print(" -- ".join(strings))
+            logging.info(" -- ".join(strings))
 
     @staticmethod
     def erase():
@@ -175,19 +178,15 @@ class _Dynamic_CKPT_BACKEND:
     backends = ["torch", "torchsnapshot"]
 
     def _get_backend(self):
-        backend = os.environ.get("CKPT_BACKEND", "torchsnapshot")
+        backend = os.environ.get("CKPT_BACKEND", "torch")
         if backend == "torchsnapshot":
             try:
                 import torchsnapshot  # noqa: F401
-
-                _has_ts = True
-            except ImportError:
-                _has_ts = False
-            if not _has_ts:
+            except ImportError as err:
                 raise ImportError(
                     f"torchsnapshot not found, but the backend points to this library. "
                     f"Consider installing torchsnapshot or choose another backend (available backends: {self.backends})"
-                )
+                ) from err
         return backend
 
     def __getattr__(self, item):
@@ -223,6 +222,10 @@ class implement_for:
         from_version: version from which implementation is compatible. Can be open (None).
         to_version: version from which implementation is no longer compatible. Can be open (None).
 
+    Keyword Args:
+        class_method (bool, optional): if ``True``, the function will be written as a class method.
+            Defaults to ``False``.
+
     Examples:
         >>> @implement_for("gym", "0.13", "0.14")
         >>> def fun(self, x):
@@ -239,7 +242,7 @@ class implement_for:
         ...     # More recent gym versions will return x + 2
         ...     return x + 2
         ...
-        >>> @implement_for("gymnasium", "0.27", None)
+        >>> @implement_for("gymnasium")
         >>> def fun(self, x):
         ...     # If gymnasium is to be used instead of gym, x+3 will be returned
         ...     return x + 3
@@ -258,16 +261,20 @@ class implement_for:
         module_name: Union[str, Callable],
         from_version: str = None,
         to_version: str = None,
+        *,
+        class_method: bool = False,
     ):
         self.module_name = module_name
         self.from_version = from_version
         self.to_version = to_version
+        self.class_method = class_method
         implement_for._setters.append(self)
 
     @staticmethod
-    def check_version(version, from_version, to_version):
-        return (from_version is None or parse(version) >= parse(from_version)) and (
-            to_version is None or parse(version) < parse(to_version)
+    def check_version(version: str, from_version: str | None, to_version: str | None):
+        version = parse(".".join([str(v) for v in parse(version).release]))
+        return (from_version is None or version >= parse(from_version)) and (
+            to_version is None or version < parse(to_version)
         )
 
     @staticmethod
@@ -277,10 +284,16 @@ class implement_for:
         return out
 
     @classmethod
-    def func_name(cls, fn):
+    def get_func_name(cls, fn):
         # produces a name like torchrl.module.Class.method or torchrl.module.function
-        first = str(fn).split(".")[0][len("<function ") :]
-        last = str(fn).split(".")[1:]
+        fn_str = str(fn).split(".")
+        if fn_str[0].startswith("<bound method "):
+            first = fn_str[0][len("<bound method ") :]
+        elif fn_str[0].startswith("<function "):
+            first = fn_str[0][len("<function ") :]
+        else:
+            raise RuntimeError(f"Unkown func representation {fn}")
+        last = fn_str[1:]
         if last:
             first = [first]
             last[-1] = last[-1].split(" ")[0]
@@ -300,10 +313,10 @@ class implement_for:
 
     def module_set(self):
         """Sets the function in its module, if it exists already."""
-        prev_setter = type(self)._implementations.get(self.func_name(self.fn), None)
+        prev_setter = type(self)._implementations.get(self.get_func_name(self.fn), None)
         if prev_setter is not None:
             prev_setter.do_set = False
-        type(self)._implementations[self.func_name(self.fn)] = self
+        type(self)._implementations[self.get_func_name(self.fn)] = self
         cls = self.get_class_that_defined_method(self.fn)
         if cls is not None:
             if cls.__class__.__name__ == "function":
@@ -311,7 +324,10 @@ class implement_for:
         else:
             # class not yet defined
             return
-        setattr(cls, self.fn.__name__, self.fn)
+        if self.class_method:
+            setattr(cls, self.fn.__name__, classmethod(self.fn))
+        else:
+            setattr(cls, self.fn.__name__, self.fn)
 
     @classmethod
     def import_module(cls, module_name: Union[Callable, str]) -> str:
@@ -329,11 +345,37 @@ class implement_for:
             module = module_name()
         return module.__version__
 
+    _lazy_impl = collections.defaultdict(list)
+
+    def _delazify(self, func_name):
+        for local_call in implement_for._lazy_impl[func_name]:
+            out = local_call()
+        return out
+
     def __call__(self, fn):
+        # function names are unique
+        self.func_name = self.get_func_name(fn)
         self.fn = fn
+        implement_for._lazy_impl[self.func_name].append(self._call)
+
+        @wraps(fn)
+        def _lazy_call_fn(*args, **kwargs):
+            # first time we call the function, we also do the replacement.
+            # This will cause the imports to occur only during the first call to fn
+
+            result = self._delazify(self.func_name)(*args, **kwargs)
+            return result
+
+        if self.class_method:
+            return classmethod(_lazy_call_fn)
+
+        return _lazy_call_fn
+
+    def _call(self):
 
         # If the module is missing replace the function with the mock.
-        func_name = self.func_name(self.fn)
+        fn = self.fn
+        func_name = self.func_name
         implementations = implement_for._implementations
 
         @wraps(fn)
@@ -382,7 +424,7 @@ class implement_for:
 
         """
         if VERBOSE:
-            print("resetting implement_for")
+            logging.info("resetting implement_for")
         if setters_dict is None:
             setters_dict = copy(cls._implementations)
         for setter in setters_dict.values():
@@ -596,3 +638,54 @@ class _ProcessNoWarn(mp.Process):
                 warnings.simplefilter("ignore")
                 return mp.Process.run(self, *args, **kwargs)
         return mp.Process.run(self, *args, **kwargs)
+
+
+def print_directory_tree(path, indent="", display_metadata=True):
+    """Prints the directory tree starting from the specified path.
+
+    Args:
+        path (str): The path of the directory to print.
+        indent (str): The current indentation level for formatting.
+        display_metadata (bool): if ``True``, metadata of the dir will be
+            displayed too.
+
+    """
+    if display_metadata:
+
+        def get_directory_size(path="."):
+            total_size = 0
+
+            for dirpath, _, filenames in os.walk(path):
+                for filename in filenames:
+                    file_path = os.path.join(dirpath, filename)
+                    total_size += os.path.getsize(file_path)
+
+            return total_size
+
+        def format_size(size):
+            # Convert size to a human-readable format
+            for unit in ["B", "KB", "MB", "GB", "TB"]:
+                if size < 1024.0:
+                    return f"{size:.2f} {unit}"
+                size /= 1024.0
+
+        total_size_bytes = get_directory_size(path)
+        formatted_size = format_size(total_size_bytes)
+        logging.info(f"Directory size: {formatted_size}")
+
+    if os.path.isdir(path):
+        logging.info(indent + os.path.basename(path) + "/")
+        indent += "    "
+        for item in os.listdir(path):
+            print_directory_tree(
+                os.path.join(path, item), indent=indent, display_metadata=False
+            )
+    else:
+        logging.info(indent + os.path.basename(path))
+
+
+def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
+    if isinstance(key, str):
+        return new_ending
+    else:
+        return key[:-1] + (new_ending,)

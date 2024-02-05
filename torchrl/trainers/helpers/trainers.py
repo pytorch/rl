@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 from dataclasses import dataclass
 from typing import List, Optional, Union
 from warnings import warn
@@ -14,7 +15,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl._utils import VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
-from torchrl.data import ReplayBuffer
+from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import ExplorationType
 from torchrl.modules import reset_noise
@@ -173,7 +174,7 @@ def make_trainer(
         raise NotImplementedError(f"lr scheduler {cfg.lr_scheduler}")
 
     if VERBOSE:
-        print(
+        logging.info(
             f"collector = {collector}; \n"
             f"loss_module = {loss_module}; \n"
             f"recorder = {recorder}; \n"
@@ -258,6 +259,7 @@ def make_trainer(
     )
 
     if recorder is not None:
+        # create recorder object
         recorder_obj = Recorder(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
@@ -266,11 +268,14 @@ def make_trainer(
             record_interval=cfg.record_interval,
             log_keys=cfg.recorder_log_keys,
         )
+        # register recorder
         trainer.register_op(
             "post_steps_log",
             recorder_obj,
         )
+        # call recorder - could be removed
         recorder_obj(None)
+        # create explorative recorder - could be optional
         recorder_obj_explore = Recorder(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
@@ -281,10 +286,12 @@ def make_trainer(
             suffix="exploration",
             out_keys={("next", "reward"): "r_evaluation_exploration"},
         )
+        # register recorder
         trainer.register_op(
             "post_steps_log",
             recorder_obj_explore,
         )
+        # call recorder - could be removed
         recorder_obj_explore(None)
 
     trainer.register_op(

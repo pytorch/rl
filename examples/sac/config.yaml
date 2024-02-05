@@ -1,41 +1,41 @@
-# Environment
+# environment and task
 env:
   name: HalfCheetah-v3
   task: ""
-  exp_name: "HalfCheetah-SAC"
-  library: gym
-  frame_skip: 1
-  seed: 1
+  exp_name: ${env.name}_SAC
+  library: gymnasium
+  max_episode_steps: 1000
+  seed: 42
 
-# Collection
+# collector
 collector:
-  total_frames: 1000000
-  init_random_frames: 10000
+  total_frames: 1_000_000
+  init_random_frames: 25000
   frames_per_batch: 1000
-  max_frames_per_traj: 1000
   init_env_steps: 1000
-  async_collection: 1
-  collector_device: cpu
+  device: cpu
   env_per_collector: 1
-  num_workers: 1
+  reset_at_each_iter: False
 
-# Replay Buffer
+# replay buffer
 replay_buffer:
   size: 1000000
   prb: 0 # use prioritized experience replay
+  scratch_dir: ${env.exp_name}_${env.seed}
 
-# Optimization
-optimization:
+# optim
+optim:
   utd_ratio: 1.0
   gamma: 0.99
-  loss_function: smooth_l1
-  lr: 3e-4
-  weight_decay: 2e-4
-  lr_scheduler: ""
+  loss_function: l2
+  lr: 3.0e-4
+  weight_decay: 0.0
   batch_size: 256
   target_update_polyak: 0.995
+  alpha_init: 1.0
+  adam_eps: 1.0e-8
 
-# Algorithm
+# network
 network:
   hidden_sizes: [256, 256]
   activation: relu
@@ -43,7 +43,7 @@ network:
   scale_lb: 0.1
   device: "cuda:0"
 
-# Logging
+# logging
 logger:
   backend: wandb
   mode: online

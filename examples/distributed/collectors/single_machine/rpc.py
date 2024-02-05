@@ -17,8 +17,11 @@ The default task is `Pong-v5` but a different one can be picked through the
 `--env` flag. Any available gym env will work.
 
 """
+import logging
 import time
 from argparse import ArgumentParser
+
+import gym
 
 import torch.cuda
 import tqdm
@@ -26,7 +29,7 @@ import tqdm
 from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.distributed import RPCDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -85,7 +88,11 @@ if __name__ == "__main__":
     else:
         collector_kwargs = {"device": "cpu", "storing_device": "cpu"}
 
-    make_env = EnvCreator(lambda: GymEnv(args.env))
+    def gym_make():
+        with set_gym_backend(gym):
+            return GymEnv(args.env)
+
+    make_env = EnvCreator(gym_make)
     if num_workers == 1:
         action_spec = make_env().action_spec
     else:
@@ -117,5 +124,5 @@ if __name__ == "__main__":
             t0 = time.time()
     collector.shutdown()
     t1 = time.time()
-    print(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    logging.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
     exit()

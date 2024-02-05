@@ -17,24 +17,16 @@ from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 
-from torchrl.data import CompositeSpec
+from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives import default_value_kwargs, distance_loss, ValueEstimators
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _cache_values, _GAMMA_LMBDA_DEPREC_WARNING
+from torchrl.objectives.utils import (
+    _cache_values,
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    _vmap_func,
+)
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-try:
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap
-
-    FUNCTORCH_ERR = ""
-    _has_functorch = True
-except ImportError as err:
-    FUNCTORCH_ERR = str(err)
-    _has_functorch = False
 
 
 class REDQLoss_deprecated(LossModule):
@@ -109,6 +101,9 @@ class REDQLoss_deprecated(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         action: NestedKey = "action"
@@ -118,6 +113,7 @@ class REDQLoss_deprecated(LossModule):
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     delay_actor: bool = False
@@ -145,8 +141,6 @@ class REDQLoss_deprecated(LossModule):
     ):
         self._in_keys = None
         self._out_keys = None
-        if not _has_functorch:
-            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
@@ -204,7 +198,7 @@ class REDQLoss_deprecated(LossModule):
         self.target_entropy_buffer = None
         self.gSDE = gSDE
 
-        self._vmap_qvalue_networkN0 = vmap(self.qvalue_network, (None, 0))
+        self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
 
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
@@ -248,6 +242,7 @@ class REDQLoss_deprecated(LossModule):
                 value=self.tensor_keys.value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
         self._set_in_keys()
 
@@ -264,6 +259,7 @@ class REDQLoss_deprecated(LossModule):
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
             *self.qvalue_network.in_keys,
@@ -322,11 +318,10 @@ class REDQLoss_deprecated(LossModule):
     def _actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
         tensordict_clone = tensordict.select(*obs_keys)
-        with set_exploration_type(ExplorationType.RANDOM):
-            self.actor_network(
-                tensordict_clone,
-                params=self.actor_network_params,
-            )
+        with set_exploration_type(
+            ExplorationType.RANDOM
+        ), self.actor_network_params.to_module(self.actor_network):
+            self.actor_network(tensordict_clone)
 
         tensordict_expand = self._vmap_qvalue_networkN0(
             tensordict_clone.select(*self.qvalue_network.in_keys),
@@ -358,11 +353,10 @@ class REDQLoss_deprecated(LossModule):
             )  # next_observation ->
             # observation
             # select pseudo-action
-            with set_exploration_type(ExplorationType.RANDOM):
-                self.actor_network(
-                    next_td,
-                    params=self.target_actor_network_params,
-                )
+            with set_exploration_type(
+                ExplorationType.RANDOM
+            ), self.target_actor_network_params.to_module(self.actor_network):
+                self.actor_network(next_td)
             sample_log_prob = next_td.get("sample_log_prob")
             # get q-values
             next_td = self._vmap_qvalue_networkN0(
@@ -434,6 +428,7 @@ class REDQLoss_deprecated(LossModule):
             "value": self.tensor_keys.value,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)
 

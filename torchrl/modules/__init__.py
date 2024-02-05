@@ -17,6 +17,7 @@ from .distributions import (
     TruncatedNormal,
 )
 from .models import (
+    Conv3dNet,
     ConvNet,
     DdpgCnnActor,
     DdpgCnnQNet,
@@ -29,6 +30,7 @@ from .models import (
     DuelingCnnDQNet,
     LSTMNet,
     MLP,
+    MultiAgentConvNet,
     MultiAgentMLP,
     NoisyLazyLinear,
     NoisyLinear,
@@ -55,7 +57,12 @@ from .tensordict_module import (
     DistributionalQValueModule,
     EGreedyModule,
     EGreedyWrapper,
+    GRU,
+    GRUCell,
+    GRUModule,
     LMHeadActorValueOperator,
+    LSTM,
+    LSTMCell,
     LSTMModule,
     OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,

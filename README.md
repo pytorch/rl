@@ -1,4 +1,4 @@
-[![pytorch](https://circleci.com/gh/pytorch/rl.svg?style=shield)](https://circleci.com/gh/pytorch/rl)
+[![Unit-tests](https://github.com/pytorch/rl/actions/workflows/test-linux.yml/badge.svg)](https://github.com/pytorch/rl/actions/workflows/test-linux.yml)
 [![Documentation](https://img.shields.io/badge/Documentation-blue.svg)](https://pytorch.org/rl/)
 [![Benchmarks](https://img.shields.io/badge/Benchmarks-blue.svg)](https://pytorch.github.io/rl/dev/bench/)
 [![codecov](https://codecov.io/gh/pytorch/rl/branch/main/graph/badge.svg?token=HcpK1ILV6r)](https://codecov.io/gh/pytorch/rl)
@@ -9,6 +9,7 @@
 <a href="https://pypi.org/project/torchrl-nightly"><img src="https://img.shields.io/pypi/v/torchrl-nightly?label=nightly" alt="pypi nightly version"></a>
 [![Downloads](https://static.pepy.tech/personalized-badge/torchrl?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads)](https://pepy.tech/project/torchrl)
 [![Downloads](https://static.pepy.tech/personalized-badge/torchrl-nightly?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads%20(nightly))](https://pepy.tech/project/torchrl-nightly)
+[![Discord Shield](https://dcbadge.vercel.app/api/server/cZs26Qq3Dd)](https://discord.gg/cZs26Qq3Dd)
 
 # TorchRL
 
@@ -50,7 +51,7 @@ We have some introductory videos for you to get to know the library better, chec
 RL algorithms are very heterogeneous, and it can be hard to recycle a codebase
 across settings (e.g. from online to offline, from state-based to pixel-based 
 learning).
-TorchRL solves this problem through [`TensorDict`](https://github.com/pytorch-labs/tensordict/),
+TorchRL solves this problem through [`TensorDict`](https://github.com/pytorch/tensordict/),
 a convenient data structure<sup>(1)</sup> that can be used to streamline one's
 RL codebase.
 With this tool, one can write a *complete PPO training script in less than 100
@@ -219,7 +220,7 @@ to be easily recycled across settings.
   ```
   </details>
 
-TensorDict comes with a dedicated [`tensordict.nn`](https://pytorch-labs.github.io/tensordict/reference/nn.html)
+TensorDict comes with a dedicated [`tensordict.nn`](https://pytorch.github.io/tensordict/reference/nn.html)
 module that contains everything you might need to write your model with it.
 And it is `functorch` and `torch.compile` compatible!
 
@@ -256,7 +257,7 @@ And it is `functorch` and `torch.compile` compatible!
   ```
   </details>
 
-  Check [TensorDict tutorials](https://pytorch-labs.github.io/tensordict/) to
+  Check [TensorDict tutorials](https://pytorch.github.io/tensordict/) to
   learn more!
 
 
@@ -369,7 +370,7 @@ And it is `functorch` and `torch.compile` compatible!
   tensordict = env.reset()
   assert tensordict.device == torch.device("cuda:0")
   ```
-  Other transforms include: reward scaling (`RewardScaling`), shape operations (concatenation of tensors, unsqueezing etc.), contatenation of
+  Other transforms include: reward scaling (`RewardScaling`), shape operations (concatenation of tensors, unsqueezing etc.), concatenation of
   successive operations (`CatFrames`), resizing (`Resize`) and many more.
 
   Unlike other libraries, the transforms are stacked as a list (and not wrapped in each other), which makes it
@@ -384,7 +385,7 @@ And it is `functorch` and `torch.compile` compatible!
   ```
   </details>
 
-- various tools for distributed learning (e.g. [memory mapped tensors](https://github.com/pytorch-labs/tensordict/blob/main/tensordict/memmap.py))<sup>(2)</sup>;
+- various tools for distributed learning (e.g. [memory mapped tensors](https://github.com/pytorch/tensordict/blob/main/tensordict/memmap.py))<sup>(2)</sup>;
 - various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py))<sup>(1)</sup>:
   <details>
     <summary>Code</summary>
@@ -470,7 +471,7 @@ And it is `functorch` and `torch.compile` compatible!
   ### Advantage computation
   ```python
   from torchrl.objectives.value.functional import vec_td_lambda_return_estimate
-  advantage = vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done)
+  advantage = vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done, terminated)
   ```
 
   </details>
@@ -490,15 +491,18 @@ If you would like to contribute to new features, check our [call for contributio
 ## Examples, tutorials and demos
 
 A series of [examples](examples/) are provided with an illustrative purpose:
-- [DQN and Rainbow](examples/dqn/dqn.py)
+- [DQN](examples/dqn)
 - [DDPG](examples/ddpg/ddpg.py)
 - [IQL](examples/iql/iql.py)
+- [CQL](examples/iql/cql.py)
 - [TD3](examples/td3/td3.py)
 - [A2C](examples/a2c_old/a2c.py)
 - [PPO](examples/ppo/ppo.py)
 - [SAC](examples/sac/sac.py)
 - [REDQ](examples/redq/redq.py)
 - [Dreamer](examples/dreamer/dreamer.py)
+- [Decision Transformers](examples/decision_transformer)
+- [RLHF](examples/rlhf)
 
 and many more to come!
 
@@ -536,7 +540,7 @@ conda activate torch_rl
 Depending on the use of functorch that you want to make, you may want to 
 install the latest (nightly) PyTorch release or the latest stable version of PyTorch.
 See [here](https://pytorch.org/get-started/locally/) for a detailed list of commands, 
-including `pip3` or windows/OSX compatible installation commands.
+including `pip3` or other special installation instructions.
 
 **Torchrl**
 
@@ -544,33 +548,42 @@ You can install the **latest stable release** by using
 ```
 pip3 install torchrl
 ```
-This should work on linux and MacOs (not M1). For Windows and M1/M2 machines, one
-should install the library locally (see below).
+This should work on linux, Windows 10 and OsX (Intel or Silicon chips).
+On certain Windows machines (Windows 11), one should install the library locally (see below).
 
 The **nightly build** can be installed via
 ```
 pip install torchrl-nightly
 ```
+which we currently only ship for Linux and OsX (Intel) machines.
+Importantly, the nightly builds require the nightly builds of PyTorch too.
 
 To install extra dependencies, call
 ```
-pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils]"
+pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils,marl,checkpointing]"
 ```
 or a subset of these.
 
-Alternatively, as the library is at an early stage, it may be wise to install
-it in develop mode as this will make it possible to pull the latest changes and
-benefit from them immediately.
-Start by cloning the repo:
+One may also desire to install the library locally. Three main reasons can motivate this:
+- the nightly/stable release isn't available for one's platform (eg, Windows 11, nightlies for Apple Silicon etc.);
+- contributing to the code;
+- install torchrl with a previous version of PyTorch (note that this should also be doable via a regular install followed
+  by a downgrade to a previous pytorch version -- but the C++ binaries will not be available.)
+
+To install the library locally, start by cloning the repo:
 ```
 git clone https://github.com/pytorch/rl
 ```
 
-Go to the directory where you have cloned the torchrl repo and install it
+Go to the directory where you have cloned the torchrl repo and install it (after
+installing `ninja`)
 ```
 cd /path/to/torchrl/
-pip install -e .
+pip install ninja -U
+python setup.py develop
 ```
+
+(unfortunately, `pip install -e .` will not work).
 
 On M1 machines, this should work out-of-the-box with the nightly build of PyTorch.
 If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message
@@ -616,36 +629,44 @@ pip3 install wandb
 
 **Troubleshooting**
 
-If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs,
+If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs (or
+a warning indicating that the C++ binaries could not be loaded),
 it means that the C++ extensions were not installed or not found.
-One common reason might be that you are trying to import torchrl from within the
-git repo location. Indeed the following code snippet should return an error if
-torchrl has not been installed in `develop` mode:
-```
-cd ~/path/to/rl/repo
-python -c 'from torchrl.envs.libs.gym import GymEnv'
-```
-If this is the case, consider executing torchrl from another location.
 
-On **MacOs**, we recommend installing XCode first.
-With Apple Silicon M1 chips, make sure you are using the arm64-built python
-(e.g. [here](https://betterprogramming.pub/how-to-install-pytorch-on-apple-m1-series-512b3ad9bc6)). Running the following lines of code
+- One common reason might be that you are trying to import torchrl from within the
+  git repo location. The following code snippet should return an error if
+  torchrl has not been installed in `develop` mode:
+  ```
+  cd ~/path/to/rl/repo
+  python -c 'from torchrl.envs.libs.gym import GymEnv'
+  ```
+  If this is the case, consider executing torchrl from another location.
+- If you're not importing torchrl from within its repo location, it could be
+  caused by a problem during the local installation. Check the log after the
+  `python setup.py develop`. One common cause is a g++/C++ version discrepancy
+  and/or a problem with the `ninja` library.
+- If the problem persists, feel free to open an issue on the topic in the repo,
+  we'll make our best to help!
+- On **MacOs**, we recommend installing XCode first. 
+  With Apple Silicon M1 chips, make sure you are using the arm64-built python
+  (e.g. [here](https://betterprogramming.pub/how-to-install-pytorch-on-apple-m1-series-512b3ad9bc6)).
+  Running the following lines of code
+  ```
+  wget https://raw.githubusercontent.com/pytorch/pytorch/master/torch/utils/collect_env.py
+  python collect_env.py
+  ```
+  should display
+  ```
+  OS: macOS *** (arm64)
+  ```
+  and not
+  ```
+  OS: macOS **** (x86_64)
+  ```
 
-```
-wget https://raw.githubusercontent.com/pytorch/pytorch/master/torch/utils/collect_env.py
-python collect_env.py
-```
-should display
-```
-OS: macOS *** (arm64)
-```
-and not
-```
-OS: macOS **** (x86_64)
-```
-
-Versioning issues can cause error message of the type ```undefined symbol``` and such. For these, refer to the [versioning issues document](knowledge_base/VERSIONING_ISSUES.md) for a complete explanation and proposed workarounds.
-
+Versioning issues can cause error message of the type ```undefined symbol```
+and such. For these, refer to the [versioning issues document](knowledge_base/VERSIONING_ISSUES.md)
+for a complete explanation and proposed workarounds.
 
 ## Asking a question
 
@@ -660,7 +681,7 @@ Internal collaborations to torchrl are welcome! Feel free to fork, submit issues
 You can checkout the detailed contribution guide [here](CONTRIBUTING.md).
 As mentioned above, a list of open contributions can be found in [here](https://github.com/pytorch/rl/issues/509).
 
-Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is commited locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
+Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is committed locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
 
 
 ## Disclaimer

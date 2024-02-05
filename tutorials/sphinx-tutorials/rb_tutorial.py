@@ -46,6 +46,7 @@ Using Replay Buffers
 # replay buffer is a straightforward process, as shown in the following
 # example:
 #
+import tempfile
 
 from torchrl.data import ReplayBuffer
 
@@ -175,9 +176,8 @@ print("samples: a=", sample["a"], "\n('b', 'c'):", sample["b", "c"])
 ######################################################################
 # We can also customize the storage location on disk:
 #
-buffer_lazymemmap = ReplayBuffer(
-    storage=LazyMemmapStorage(size, scratch_dir="/tmp/memmap/")
-)
+tempdir = tempfile.TemporaryDirectory()
+buffer_lazymemmap = ReplayBuffer(storage=LazyMemmapStorage(size, scratch_dir=tempdir))
 buffer_lazymemmap.extend(data)
 print(f"The buffer has {len(buffer_lazymemmap)} elements")
 print("the 'a' tensor is stored in", buffer_lazymemmap._storage._storage["a"].filename)
@@ -207,8 +207,9 @@ print(
 
 from torchrl.data import TensorDictReplayBuffer
 
+tempdir = tempfile.TemporaryDirectory()
 buffer_lazymemmap = TensorDictReplayBuffer(
-    storage=LazyMemmapStorage(size, scratch_dir="/tmp/memmap/"), batch_size=12
+    storage=LazyMemmapStorage(size, scratch_dir=tempdir), batch_size=12
 )
 buffer_lazymemmap.extend(data)
 print(f"The buffer has {len(buffer_lazymemmap)} elements")
@@ -248,8 +249,9 @@ data = MyData(
     batch_size=[1000],
 )
 
+tempdir = tempfile.TemporaryDirectory()
 buffer_lazymemmap = TensorDictReplayBuffer(
-    storage=LazyMemmapStorage(size, scratch_dir="/tmp/memmap/"), batch_size=12
+    storage=LazyMemmapStorage(size, scratch_dir=tempdir), batch_size=12
 )
 buffer_lazymemmap.extend(data)
 print(f"The buffer has {len(buffer_lazymemmap)} elements")
@@ -260,6 +262,50 @@ print("sample:", sample)
 ######################################################################
 # As expected. the data has the proper class and shape!
 #
+# Integration with PyTree
+# ~~~~~~~~~~~~~~~~~~~~~~~
+#
+# TorchRL's replay buffers also work with any pytree data structure.
+# A PyTree is a nested structure of arbitrary depth made of dicts, lists and/or
+# tuples where the leaves are tensors.
+# This means that one can store in contiguous memory any such tree structure!
+# Various storages can be used:
+# :class:`~torchrl.data.replay_buffers.TensorStorage`, :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`
+# or :class:`~torchrl.data.replay_buffers.LazyTensorStorage` all accept this kind of data.
+#
+# Here is a bried demonstration of what this feature looks like:
+#
+
+from torch.utils._pytree import tree_map
+
+
+# With pytrees, any callable can be used as a transform:
+def transform(x):
+    # Zeros all the data in the pytree
+    return tree_map(lambda y: y * 0, x)
+
+
+# Let's build our replay buffer on disk:
+rb = ReplayBuffer(storage=LazyMemmapStorage(100), transform=transform)
+data = {
+    "a": torch.randn(3),
+    "b": {"c": (torch.zeros(2), [torch.ones(1)])},
+    30: -torch.ones(()),  # non-string keys also work
+}
+rb.add(data)
+
+# The sample has a similar structure to the data (with a leading dimension of 10 for each tensor)
+sample = rb.sample(10)
+
+
+# let's check that our transform did its job:
+def assert0(x):
+    assert (x == 0).all()
+
+
+tree_map(assert0, sample)
+
+
 # Sampling and iterating over buffers
 # -----------------------------------
 #

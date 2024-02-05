@@ -2,432 +2,557 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Callable, Optional, Sequence, Union
+import tempfile
+from contextlib import nullcontext
 
-from torchrl.data import UnboundedContinuousTensorSpec
+# from torchrl.record.loggers import Logger
+# from torchrl.record.recorder import VideoRecorder
+
+import torch
+
+# from dataclasses import dataclass, field as dataclass_field
+# from typing import Any, Callable, Optional, Sequence, Union
+
+import torch.nn as nn
+from tensordict.nn import InteractionType
+from torchrl.collectors import SyncDataCollector
+from torchrl.data import TensorDictReplayBuffer
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+
+from torchrl.data.tensor_specs import (
+    CompositeSpec,
+    # DiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
+)
 from torchrl.envs import ParallelEnv
-from torchrl.envs.common import EnvBase
-from torchrl.envs.env_creator import env_creator, EnvCreator
+
+# from torchrl.envs.common import EnvBase
+from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
+from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import (
-    CatFrames,
-    CenterCrop,
+    # CatFrames,
+    # CenterCrop,
     DoubleToFloat,
+    FrameSkipTransform,
     GrayScale,
-    NoopResetEnv,
+    # NoopResetEnv,
     ObservationNorm,
+    RandomCropTensorDict,
     Resize,
-    RewardScaling,
+    # RewardScaling,
+    RewardSum,
     ToTensorImage,
     TransformedEnv,
+    VecNorm,
 )
-from torchrl.envs.transforms.transforms import FlattenObservation, TensorDictPrimer
-from torchrl.record.loggers import Logger
-from torchrl.record.recorder import VideoRecorder
 
-__all__ = [
-    "transformed_env_constructor",
-    "parallel_env_constructor",
-]
+from torchrl.envs.transforms.transforms import TensorDictPrimer  # FlattenObservation
+from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.modules import (
+    MLP,
+    # NoisyLinear,
+    # NormalParamWrapper,
+    SafeModule,
+    SafeProbabilisticModule,
+    SafeProbabilisticTensorDictSequential,
+    SafeSequential,
+)
+from torchrl.modules.distributions import TanhNormal
+from torchrl.modules.models.model_based import (
+    DreamerActor,
+    ObsDecoder,
+    ObsEncoder,
+    RSSMPosterior,
+    RSSMPrior,
+    RSSMRollout,
+)
+from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
+from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 
-LIBS = {
-    "gym": GymEnv,
-    "dm_control": DMControlEnv,
-}
-import torch
-from torch.cuda.amp import autocast
 
-
-def make_env_transforms(
-    env,
-    cfg,
-    video_tag,
-    logger,
-    env_name,
-    stats,
-    norm_obs_only,
-    env_library,
-    action_dim_gsde,
-    state_dim_gsde,
-    batch_dims=0,
-    obs_norm_state_dict=None,
-):
-    env = TransformedEnv(env)
-
-    from_pixels = cfg.from_pixels
-    vecnorm = cfg.vecnorm
-    norm_rewards = vecnorm and cfg.norm_rewards
-    reward_scaling = cfg.reward_scaling
-    reward_loc = cfg.reward_loc
-
-    if len(video_tag):
-        center_crop = cfg.center_crop
-        if center_crop:
-            center_crop = center_crop[0]
-        env.append_transform(
-            VideoRecorder(
-                logger=logger,
-                tag=f"{video_tag}_{env_name}_video",
-                center_crop=center_crop,
-            ),
-        )
-
-    if cfg.noops:
-        env.append_transform(NoopResetEnv(cfg.noops))
-
-    if from_pixels:
-        if not cfg.catframes:
-            raise RuntimeError(
-                "this env builder currently only accepts positive catframes values"
-                "when pixels are being used."
+# TODO make env with action repeat transform
+def _make_env(cfg, device):
+    lib = cfg.env.backend
+    if lib in ("gym", "gymnasium"):
+        with set_gym_backend(lib):
+            return GymEnv(
+                cfg.env.name,
+                device=device,
             )
-        env.append_transform(ToTensorImage())
-        if cfg.center_crop:
-            env.append_transform(CenterCrop(*cfg.center_crop))
-        env.append_transform(Resize(cfg.image_size, cfg.image_size))
-        if cfg.grayscale:
-            env.append_transform(GrayScale())
-        env.append_transform(FlattenObservation(0, -3, allow_positive_dim=True))
-        env.append_transform(CatFrames(N=cfg.catframes, in_keys=["pixels"], dim=-3))
-        if stats is None and obs_norm_state_dict is None:
+    elif lib == "dm_control":
+        env = DMControlEnv(cfg.env.name, cfg.env.task, from_pixels=cfg.env.from_pixels)
+        env = TransformedEnv(env)
+        if cfg.env.from_pixels:
+            env.append_transform(ToTensorImage())
+            if cfg.env.grayscale:
+                env.append_transform(GrayScale())
+            img_size = cfg.env.image_size
+            env.append_transform(Resize(img_size, img_size))
+            env.append_transform(VecNorm(in_keys=["pixels"]))
             obs_stats = {
                 "loc": torch.zeros(()),
                 "scale": torch.ones(()),
             }
-        elif stats is None and obs_norm_state_dict is not None:
-            obs_stats = obs_norm_state_dict
+            obs_norm = ObservationNorm(**obs_stats, in_keys=["pixels"])
+            env.append_transform(obs_norm)
         else:
-            obs_stats = stats
-        obs_stats["standard_normal"] = True
-        obs_norm = ObservationNorm(**obs_stats, in_keys=["pixels"])
-        # if obs_norm_state_dict:
-        #     obs_norm.load_state_dict(obs_norm_state_dict)
-        env.append_transform(obs_norm)
-    if norm_rewards:
-        reward_scaling = 1.0
-        reward_loc = 0.0
-    if norm_obs_only:
-        reward_scaling = 1.0
-        reward_loc = 0.0
-    if reward_scaling is not None:
-        env.append_transform(RewardScaling(reward_loc, reward_scaling))
+            # TODO:
+            # concatenate vel and pos to observation
+            # .apppend_transform(C)
+            pass
 
-    double_to_float_list = []
-    float_to_double_list = []
-    if env_library is DMControlEnv:
-        double_to_float_list += [
-            "reward",
-        ]
-        float_to_double_list += ["action"]  # DMControl requires double-precision
-    env.append_transform(DoubleToFloat())
+        env.append_transform(DoubleToFloat())
+        env.append_transform(RewardSum())
+        env.append_transform(FrameSkipTransform(cfg.env.frame_skip))
 
-    default_dict = {
-        "state": UnboundedContinuousTensorSpec(shape=(*env.batch_size, cfg.state_dim)),
-        "belief": UnboundedContinuousTensorSpec(
-            shape=(*env.batch_size, cfg.rssm_hidden_dim)
+        default_dict = {
+            "state": UnboundedContinuousTensorSpec(shape=(cfg.networks.state_dim)),
+            "belief": UnboundedContinuousTensorSpec(
+                shape=(cfg.networks.rssm_hidden_dim)
+            ),
+        }
+        env.append_transform(
+            TensorDictPrimer(random=False, default_value=0, **default_dict)
+        )
+        return env
+
+    else:
+        raise NotImplementedError(f"Unknown lib {lib}.")
+
+
+def make_environments(cfg, device):
+    """Make environments for training and evaluation."""
+    train_env = ParallelEnv(
+        1,
+        EnvCreator(lambda cfg=cfg: _make_env(cfg, device=device)),
+    )
+    train_env.set_seed(cfg.env.seed)
+    eval_env = ParallelEnv(
+        1,
+        EnvCreator(lambda cfg=cfg: _make_env(cfg, device=device)),
+    )
+    eval_env.set_seed(cfg.env.seed + 1)
+    return train_env, eval_env
+
+
+def make_dreamer(
+    config,
+    test_env,
+    device,
+    action_key: str = "action",
+    value_key: str = "state_value",
+    use_decoder_in_env: bool = False,
+):
+    # Make encoder and decoder
+    if config.env.from_pixels:
+        encoder = ObsEncoder()
+        decoder = ObsDecoder()
+        observation_in_key = "pixels"
+        obsevation_out_key = "reco_pixels"
+    else:
+        observation_in_key = "observation"
+        obsevation_out_key = "reco_observation"
+        raise NotImplementedError("Currently only pixel observations are supported.")
+
+    # Make RSSM
+    rssm_prior = RSSMPrior(
+        hidden_dim=config.networks.rssm_hidden_dim,
+        rnn_hidden_dim=config.networks.rssm_hidden_dim,
+        state_dim=config.networks.state_dim,
+        action_spec=test_env.action_spec,
+    )
+    rssm_posterior = RSSMPosterior(
+        hidden_dim=config.networks.rssm_hidden_dim, state_dim=config.networks.state_dim
+    )
+    # Make reward module
+    reward_module = MLP(
+        out_features=1,
+        depth=2,
+        num_cells=config.networks.hidden_dim,
+        activation_class=get_activation(config.networks.activation),
+    )
+
+    # Make combined world model
+    world_model = _dreamer_make_world_model(
+        encoder,
+        decoder,
+        rssm_prior,
+        rssm_posterior,
+        reward_module,
+        observation_in_key=observation_in_key,
+        observation_out_key=obsevation_out_key,
+    )
+
+    # Initialize world model
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
+        tensordict = test_env.fake_tensordict().unsqueeze(-1)
+        tensordict = tensordict.to_tensordict()
+        tensordict = tensordict
+        world_model(tensordict)
+
+    # Create model-based environment
+    model_based_env = _dreamer_make_mbenv(
+        reward_module=reward_module,
+        rssm_prior=rssm_prior,
+        decoder=decoder,
+        observation_out_key=obsevation_out_key,
+        test_env=test_env,
+        use_decoder_in_env=use_decoder_in_env,
+        state_dim=config.networks.state_dim,
+        rssm_hidden_dim=config.networks.rssm_hidden_dim,
+    )
+
+    # Make actor
+    actor_simulator, actor_realworld = _dreamer_make_actors(
+        encoder=encoder,
+        observation_in_key=observation_in_key,
+        rssm_prior=rssm_prior,
+        rssm_posterior=rssm_posterior,
+        mlp_num_units=config.networks.hidden_dim,
+        activation=get_activation(config.networks.activation),
+        action_key=action_key,
+        test_env=test_env,
+    )
+    # Exploration noise to be added to the actor_realworld
+    actor_realworld = AdditiveGaussianWrapper(
+        actor_realworld,
+        sigma_init=1.0,
+        sigma_end=1.0,
+        annealing_num_steps=1,
+        mean=0.0,
+        std=config.networks.exploration_noise,
+    )
+
+    # Make Critic
+    value_model = _dreamer_make_value_model(
+        hidden_dim=config.networks.hidden_dim,
+        activation=config.networks.activation,
+        value_key=value_key,
+    )
+
+    # Initialize model-based environment, actor and critic
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
+        tensordict = model_based_env.fake_tensordict().unsqueeze(-1)
+        tensordict = tensordict
+        tensordict = actor_simulator(tensordict)
+        value_model(tensordict)
+
+    return world_model, model_based_env, actor_simulator, value_model, actor_realworld
+
+
+def make_collector(cfg, train_env, actor_model_explore):
+    """Make collector."""
+    collector = SyncDataCollector(
+        train_env,
+        actor_model_explore,
+        init_random_frames=cfg.collector.init_random_frames,
+        frames_per_batch=cfg.collector.frames_per_batch,
+        total_frames=cfg.collector.total_frames,
+        device=cfg.collector.device,
+    )
+    collector.set_seed(cfg.env.seed)
+    return collector
+
+
+def make_replay_buffer(
+    batch_size,
+    batch_seq_len,
+    prb=False,
+    buffer_size=1000000,
+    buffer_scratch_dir=None,
+    device="cpu",
+    prefetch=3,
+):
+    with (
+        tempfile.TemporaryDirectory()
+        if buffer_scratch_dir is None
+        else nullcontext(buffer_scratch_dir)
+    ) as scratch_dir:
+        crop_seq = RandomCropTensorDict(sub_seq_len=batch_seq_len, sample_dim=-1)
+        replay_buffer = TensorDictReplayBuffer(
+            pin_memory=False,
+            prefetch=prefetch,
+            storage=LazyMemmapStorage(
+                buffer_size,
+                scratch_dir=scratch_dir,
+                device=device,
+            ),
+            transform=crop_seq,
+            batch_size=batch_size,
+        )
+        return replay_buffer
+
+
+def _dreamer_make_value_model(
+    hidden_dim: int = 400, activation: str = "elu", value_key: str = "state_value"
+):
+    value_model = SafeModule(
+        MLP(
+            out_features=1,
+            depth=3,
+            num_cells=hidden_dim,
+            activation_class=get_activation(activation),
         ),
+        in_keys=["state", "belief"],
+        out_keys=[value_key],
+    )
+    return value_model
+
+
+def _dreamer_make_actors(
+    encoder,
+    observation_in_key,
+    rssm_prior,
+    rssm_posterior,
+    mlp_num_units,
+    activation,
+    action_key,
+    test_env,
+):
+    actor_module = DreamerActor(
+        out_features=test_env.action_spec.shape[-1],
+        depth=3,
+        num_cells=mlp_num_units,
+        activation_class=activation,
+    )
+    actor_simulator = _dreamer_make_actor_sim(action_key, test_env, actor_module)
+    actor_realworld = _dreamer_make_actor_real(
+        encoder,
+        observation_in_key,
+        rssm_prior,
+        rssm_posterior,
+        actor_module,
+        action_key,
+        test_env,
+    )
+    return actor_simulator, actor_realworld
+
+
+def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
+    actor_simulator = SafeProbabilisticTensorDictSequential(
+        SafeModule(
+            actor_module,
+            in_keys=["state", "belief"],
+            out_keys=["loc", "scale"],
+            spec=CompositeSpec(
+                **{
+                    "loc": UnboundedContinuousTensorSpec(
+                        proof_environment.action_spec.shape,
+                        device=proof_environment.action_spec.device,
+                    ),
+                    "scale": UnboundedContinuousTensorSpec(
+                        proof_environment.action_spec.shape,
+                        device=proof_environment.action_spec.device,
+                    ),
+                }
+            ),
+        ),
+        SafeProbabilisticModule(
+            in_keys=["loc", "scale"],
+            out_keys=[action_key],
+            default_interaction_type=InteractionType.RANDOM,
+            distribution_class=TanhNormal,
+            distribution_kwargs={"tanh_loc": True},
+            spec=CompositeSpec(**{action_key: proof_environment.action_spec}),
+        ),
+    )
+    return actor_simulator
+
+
+def _dreamer_make_actor_real(
+    encoder,
+    observation_in_key,
+    rssm_prior,
+    rssm_posterior,
+    actor_module,
+    action_key,
+    proof_environment,
+):
+    # actor for real world: interacts with states ~ posterior
+    # Out actor differs from the original paper where first they compute prior and posterior and then act on it
+    # but we found that this approach worked better.
+    actor_realworld = SafeSequential(
+        SafeModule(
+            encoder,
+            in_keys=[observation_in_key],
+            out_keys=["encoded_latents"],
+        ),
+        SafeModule(
+            rssm_posterior,
+            in_keys=["belief", "encoded_latents"],
+            out_keys=[
+                "_",
+                "_",
+                "state",
+            ],
+        ),
+        SafeProbabilisticTensorDictSequential(
+            SafeModule(
+                actor_module,
+                in_keys=["state", "belief"],
+                out_keys=["loc", "scale"],
+                spec=CompositeSpec(
+                    **{
+                        "loc": UnboundedContinuousTensorSpec(
+                            proof_environment.action_spec.shape,
+                        ),
+                        "scale": UnboundedContinuousTensorSpec(
+                            proof_environment.action_spec.shape,
+                        ),
+                    }
+                ),
+            ),
+            SafeProbabilisticModule(
+                in_keys=["loc", "scale"],
+                out_keys=[action_key],
+                default_interaction_type=InteractionType.MODE,
+                distribution_class=TanhNormal,
+                distribution_kwargs={"tanh_loc": True},
+                spec=CompositeSpec(
+                    **{action_key: proof_environment.action_spec.to("cpu")}
+                ),
+            ),
+        ),
+        SafeModule(
+            rssm_prior,
+            in_keys=["state", "belief", action_key],
+            out_keys=[
+                "_",
+                "_",
+                "_",  # we don't need the prior state
+                ("next", "belief"),
+            ],
+        ),
+    )
+    return actor_realworld
+
+
+def _dreamer_make_mbenv(
+    reward_module,
+    rssm_prior,
+    test_env,
+    decoder,
+    observation_out_key: str = "reco_pixels",
+    use_decoder_in_env: bool = False,
+    state_dim: int = 30,
+    rssm_hidden_dim: int = 200,
+):
+    # MB environment
+    if use_decoder_in_env:
+        mb_env_obs_decoder = SafeModule(
+            decoder,
+            in_keys=[("next", "state"), ("next", "belief")],
+            out_keys=[("next", observation_out_key)],
+        )
+    else:
+        mb_env_obs_decoder = None
+
+    transition_model = SafeSequential(
+        SafeModule(
+            rssm_prior,
+            in_keys=["state", "belief", "action"],
+            out_keys=[
+                "_",
+                "_",
+                "state",
+                "belief",
+            ],
+        ),
+    )
+    reward_model = SafeModule(
+        reward_module,
+        in_keys=["state", "belief"],
+        out_keys=["reward"],
+    )
+    model_based_env = DreamerEnv(
+        world_model=WorldModelWrapper(
+            transition_model,
+            reward_model,
+        ),
+        prior_shape=torch.Size([state_dim]),
+        belief_shape=torch.Size([rssm_hidden_dim]),
+        obs_decoder=mb_env_obs_decoder,
+    )
+
+    model_based_env.set_specs_from_env(test_env)
+    model_based_env = TransformedEnv(model_based_env)
+    default_dict = {
+        "state": UnboundedContinuousTensorSpec((1, state_dim)),
+        "belief": UnboundedContinuousTensorSpec((1, rssm_hidden_dim)),
     }
-    env.append_transform(
+    model_based_env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
     )
-
-    return env
-
-
-def transformed_env_constructor(
-    cfg: "DictConfig",  # noqa: F821
-    video_tag: str = "",
-    logger: Optional[Logger] = None,
-    stats: Optional[dict] = None,
-    norm_obs_only: bool = False,
-    use_env_creator: bool = False,
-    custom_env_maker: Optional[Callable] = None,
-    custom_env: Optional[EnvBase] = None,
-    return_transformed_envs: bool = True,
-    action_dim_gsde: Optional[int] = None,
-    state_dim_gsde: Optional[int] = None,
-    batch_dims: Optional[int] = 0,
-    obs_norm_state_dict: Optional[dict] = None,
-) -> Union[Callable, EnvCreator]:
-    """
-    Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
-
-    Args:
-        cfg (DictConfig): a DictConfig containing the arguments of the script.
-        video_tag (str, optional): video tag to be passed to the Logger object
-        logger (Logger, optional): logger associated with the script
-        stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
-        norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
-            Default is `False`.
-        use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,
-            one can make sure that running statistics will be put in shared memory and accessible for all workers
-            when using a `VecNorm` transform. Default is `True`.
-        custom_env_maker (callable, optional): if your env maker is not part
-            of torchrl env wrappers, a custom callable
-            can be passed instead. In this case it will override the
-            constructor retrieved from `args`.
-        custom_env (EnvBase, optional): if an existing environment needs to be
-            transformed_in, it can be passed directly to this helper. `custom_env_maker`
-            and `custom_env` are exclusive features.
-        return_transformed_envs (bool, optional): if True, a transformed_in environment
-            is returned.
-        action_dim_gsde (int, Optional): if gSDE is used, this can present the action dim to initialize the noise.
-            Make sure this is indicated in environment executed in parallel.
-        state_dim_gsde: if gSDE is used, this can present the state dim to initialize the noise.
-            Make sure this is indicated in environment executed in parallel.
-        batch_dims (int, optional): number of dimensions of a batch of data. If a single env is
-            used, it should be 0 (default). If multiple envs are being transformed in parallel,
-            it should be set to 1 (or the number of dims of the batch).
-        obs_norm_state_dict (dict, optional): the state_dict of the ObservationNorm transform to be loaded
-            into the environment
-    """
-
-    def make_transformed_env(**kwargs) -> TransformedEnv:
-        env_name = cfg.env_name
-        env_task = cfg.env_task
-        env_library = LIBS[cfg.env_library]
-        frame_skip = cfg.frame_skip
-        from_pixels = cfg.from_pixels
-
-        if custom_env is None and custom_env_maker is None:
-            if isinstance(cfg.collector_device, str):
-                device = cfg.collector_device
-            elif isinstance(cfg.collector_device, Sequence):
-                device = cfg.collector_device[0]
-            else:
-                raise ValueError(
-                    "collector_device must be either a string or a sequence of strings"
-                )
-            env_kwargs = {
-                "env_name": env_name,
-                "device": device,
-                "frame_skip": frame_skip,
-                "from_pixels": from_pixels or len(video_tag),
-                "pixels_only": from_pixels,
-            }
-            if env_name == "quadruped":
-                # hard code camera_id for quadruped
-                camera_id = "x"
-                env_kwargs["camera_id"] = camera_id
-            if env_library is DMControlEnv:
-                env_kwargs.update({"task_name": env_task})
-            env_kwargs.update(kwargs)
-            env = env_library(**env_kwargs)
-        elif custom_env is None and custom_env_maker is not None:
-            env = custom_env_maker(**kwargs)
-        elif custom_env_maker is None and custom_env is not None:
-            env = custom_env
-        else:
-            raise RuntimeError("cannot provive both custom_env and custom_env_maker")
-
-        if not return_transformed_envs:
-            return env
-
-        return make_env_transforms(
-            env,
-            cfg,
-            video_tag,
-            logger,
-            env_name,
-            stats,
-            norm_obs_only,
-            env_library,
-            action_dim_gsde,
-            state_dim_gsde,
-            batch_dims=batch_dims,
-            obs_norm_state_dict=obs_norm_state_dict,
-        )
-
-    if use_env_creator:
-        return env_creator(make_transformed_env)
-    return make_transformed_env
+    return model_based_env
 
 
-def parallel_env_constructor(
-    cfg: "DictConfig", **kwargs  # noqa: F821
-) -> Union[ParallelEnv, EnvCreator]:
-    """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
-
-    Args:
-        cfg (DictConfig): config containing user-defined arguments
-        kwargs: keyword arguments for the `transformed_env_constructor` method.
-    """
-    batch_transform = cfg.batch_transform
-    if cfg.env_per_collector == 1:
-        kwargs.update({"cfg": cfg, "use_env_creator": True})
-        make_transformed_env = transformed_env_constructor(**kwargs)
-        return make_transformed_env
-    kwargs.update({"cfg": cfg, "use_env_creator": True})
-    make_transformed_env = transformed_env_constructor(
-        return_transformed_envs=not batch_transform, **kwargs
-    )
-    parallel_env = ParallelEnv(
-        num_workers=cfg.env_per_collector,
-        create_env_fn=make_transformed_env,
-        create_env_kwargs=None,
-        pin_memory=cfg.pin_memory,
-    )
-    if batch_transform:
-        kwargs.update(
-            {
-                "cfg": cfg,
-                "use_env_creator": False,
-                "custom_env": parallel_env,
-                "batch_dims": 1,
-            }
-        )
-        env = transformed_env_constructor(**kwargs)()
-        return env
-    return parallel_env
-
-
-def recover_pixels(pixels, stats):
-    return (
-        (255 * (pixels * stats["scale"] + stats["loc"]))
-        .clamp(min=0, max=255)
-        .to(torch.uint8)
-    )
-
-
-@torch.inference_mode()
-def call_record(
-    logger,
-    record,
-    collected_frames,
-    sampled_tensordict,
-    stats,
-    model_based_env,
-    actor_model,
-    cfg,
+def _dreamer_make_world_model(
+    encoder,
+    decoder,
+    rssm_prior,
+    rssm_posterior,
+    reward_module,
+    observation_in_key: str = "pixels",
+    observation_out_key: str = "reco_pixels",
 ):
-    td_record = record(None)
-    if td_record is not None and logger is not None:
-        for key, value in td_record.items():
-            if key in ["r_evaluation", "total_r_evaluation"]:
-                logger.log_scalar(
-                    key,
-                    value.detach().item(),
-                    step=collected_frames,
-                )
-    # Compute observation reco
-    if cfg.record_video and record._count % cfg.record_interval == 0:
-        world_model_td = sampled_tensordict
+    # World Model and reward model
+    rssm_rollout = RSSMRollout(
+        SafeModule(
+            rssm_prior,
+            in_keys=["state", "belief", "action"],
+            out_keys=[
+                ("next", "prior_mean"),
+                ("next", "prior_std"),
+                "_",
+                ("next", "belief"),
+            ],
+        ),
+        SafeModule(
+            rssm_posterior,
+            in_keys=[("next", "belief"), ("next", "encoded_latents")],
+            out_keys=[
+                ("next", "posterior_mean"),
+                ("next", "posterior_std"),
+                ("next", "state"),
+            ],
+        ),
+    )
 
-        true_pixels = recover_pixels(world_model_td[("next", "pixels")], stats)
-
-        reco_pixels = recover_pixels(world_model_td["next", "reco_pixels"], stats)
-        with autocast(dtype=torch.float16):
-            world_model_td = world_model_td.select("state", "belief", "reward")
-            world_model_td = model_based_env.rollout(
-                max_steps=true_pixels.shape[1],
-                policy=actor_model,
-                auto_reset=False,
-                tensordict=world_model_td[:, 0],
-            )
-        imagine_pxls = recover_pixels(
-            model_based_env.decode_obs(world_model_td)["next", "reco_pixels"],
-            stats,
-        )
-
-        stacked_pixels = torch.cat([true_pixels, reco_pixels, imagine_pxls], dim=-1)
-        if logger is not None:
-            logger.log_video(
-                "pixels_rec_and_imag",
-                stacked_pixels.detach().cpu(),
-            )
-
-
-def grad_norm(optimizer: torch.optim.Optimizer):
-    sum_of_sq = 0.0
-    for pg in optimizer.param_groups:
-        for p in pg["params"]:
-            sum_of_sq += p.grad.pow(2).sum()
-    return sum_of_sq.sqrt().detach().item()
+    transition_model = SafeSequential(
+        SafeModule(
+            encoder,
+            in_keys=[("next", observation_in_key)],
+            out_keys=[("next", "encoded_latents")],
+        ),
+        rssm_rollout,
+        SafeModule(
+            decoder,
+            in_keys=[("next", "state"), ("next", "belief")],
+            out_keys=[("next", observation_out_key)],
+        ),
+    )
+    reward_model = SafeModule(
+        reward_module,
+        in_keys=[("next", "state"), ("next", "belief")],
+        out_keys=[("next", "reward")],
+    )
+    world_model = WorldModelWrapper(
+        transition_model,
+        reward_model,
+    )
+    return world_model
 
 
-def make_recorder_env(cfg, video_tag, obs_norm_state_dict, logger, create_env_fn):
-    recorder = transformed_env_constructor(
-        cfg,
-        video_tag=video_tag,
-        norm_obs_only=True,
-        obs_norm_state_dict=obs_norm_state_dict,
-        logger=logger,
-        use_env_creator=False,
-    )()
-
-    # remove video recorder from recorder to have matching state_dict keys
-    if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.base_env)
-        for transform in recorder.transform:
-            if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform.clone())
+def get_activation(name):
+    if name == "relu":
+        return nn.ReLU
+    elif name == "tanh":
+        return nn.Tanh
+    elif name == "leaky_relu":
+        return nn.LeakyReLU
+    elif name == "elu":
+        return nn.ELU
     else:
-        recorder_rm = recorder
-
-    if isinstance(create_env_fn, ParallelEnv):
-        sd = create_env_fn.state_dict()["worker0"]
-    elif isinstance(create_env_fn, EnvCreator):
-        _env = create_env_fn()
-        _env.rollout(2)
-        sd = _env.state_dict()
-        del _env
-    else:
-        sd = create_env_fn.state_dict()
-    sd = {
-        key: val
-        for key, val in sd.items()
-        if key.endswith("loc") or key.endswith("scale")
-    }
-    if not len(sd):
-        raise ValueError("Empty state dict")
-    recorder_rm.load_state_dict(sd, strict=False)
-    # reset reward scaling
-    for t in recorder.transform:
-        if isinstance(t, RewardScaling):
-            t.scale.fill_(1.0)
-            t.loc.fill_(0.0)
-    return recorder
-
-
-@dataclass
-class EnvConfig:
-    env_library: str = "gym"
-    # env_library used for the simulated environment. Default=gym
-    env_name: str = "Humanoid-v2"
-    # name of the environment to be created. Default=Humanoid-v2
-    env_task: str = ""
-    # task (if any) for the environment. Default=run
-    from_pixels: bool = False
-    # whether the environment output should be state vector(s) (default) or the pixels.
-    frame_skip: int = 1
-    # frame_skip for the environment. Note that this value does NOT impact the buffer size,
-    # maximum steps per trajectory, frames per batch or any other factor in the algorithm,
-    # e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4
-    # the actual number of frames retrieved will be 200e6. Default=1.
-    reward_scaling: Optional[float] = None
-    # scale of the reward.
-    reward_loc: float = 0.0
-    # location of the reward.
-    init_env_steps: int = 1000
-    # number of random steps to compute normalizing constants
-    vecnorm: bool = False
-    # Normalizes the environment observation and reward outputs with the running statistics obtained across processes.
-    norm_rewards: bool = False
-    # If True, rewards will be normalized on the fly. This may interfere with SAC update rule and should be used cautiously.
-    norm_stats: bool = True
-    # Deactivates the normalization based on random collection of data.
-    noops: int = 0
-    # number of random steps to do after reset. Default is 0
-    catframes: int = 0
-    # Number of frames to concatenate through time. Default is 0 (do not use CatFrames).
-    center_crop: Any = dataclass_field(default_factory=lambda: [])
-    # center crop size.
-    grayscale: bool = True
-    # Disables grayscale transform.
-    max_frames_per_traj: int = 1000
-    # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
-    batch_transform: bool = True
-    # if True, the transforms will be applied to the parallel env, and not to each individual env.\
-    image_size: int = 84
+        raise NotImplementedError

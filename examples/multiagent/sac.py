@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import logging
 import time
 
 import hydra
@@ -23,6 +23,7 @@ from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.modules.models.multiagent import MultiAgentMLP
 from torchrl.objectives import DiscreteSACLoss, SACLoss, SoftUpdate, ValueEstimators
 from utils.logging import init_logging, log_evaluation, log_training
+from utils.utils import DoneTransform
 
 
 def rendering_callback(env, td):
@@ -179,6 +180,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         storing_device=cfg.train.device,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
+        postproc=DoneTransform(reward_key=env.reward_key, done_keys=env.done_keys),
     )
 
     replay_buffer = TensorDictReplayBuffer(
@@ -198,6 +200,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
             state_action_value=("agents", "state_action_value"),
             action=env.action_key,
             reward=env.reward_key,
+            done=("agents", "done"),
+            terminated=("agents", "terminated"),
         )
     else:
         loss_module = DiscreteSACLoss(
@@ -211,6 +215,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
             action_value=("agents", "action_value"),
             action=env.action_key,
             reward=env.reward_key,
+            done=("agents", "done"),
+            terminated=("agents", "terminated"),
         )
 
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=cfg.loss.gamma)
@@ -231,16 +237,9 @@ def train(cfg: "DictConfig"):  # noqa: F821
     total_frames = 0
     sampling_start = time.time()
     for i, tensordict_data in enumerate(collector):
-        print(f"\nIteration {i}")
+        logging.info(f"\nIteration {i}")
 
         sampling_time = time.time() - sampling_start
-
-        tensordict_data.set(
-            ("next", "done"),
-            tensordict_data.get(("next", "done"))
-            .unsqueeze(-1)
-            .expand(tensordict_data.get(("next", env.reward_key)).shape),
-        )  # We need to expand the done to match the reward shape
 
         current_frames = tensordict_data.numel()
         total_frames += current_frames
@@ -259,7 +258,6 @@ def train(cfg: "DictConfig"):  # noqa: F821
                     loss_vals["loss_actor"]
                     + loss_vals["loss_alpha"]
                     + loss_vals["loss_qvalue"]
-                    + loss_vals["loss_alpha"]
                 )
 
                 loss_value.backward()

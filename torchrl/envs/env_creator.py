@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections import OrderedDict
 from typing import Callable, Dict, Optional, Union
 
@@ -97,7 +98,7 @@ class EnvCreator:
                 if not item.is_shared():
                     item.share_memory_()
                 else:
-                    print(
+                    logging.info(
                         f"{self.env_type}: {item} is already shared"
                     )  # , deleting key')
                     del state_dict[key]

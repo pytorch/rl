@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import logging
 import os
 import pickle
 
@@ -164,11 +165,11 @@ def run_comparison_torchrl_rllib(
         evaluation = {}
     for framework in ["TorchRL", "RLlib"]:
         if framework not in evaluation.keys():
-            print(f"\nFramework {framework}")
+            logging.info(f"\nFramework {framework}")
             vmas_times = []
             for n_envs in list_n_envs:
                 n_envs = int(n_envs)
-                print(f"Running {n_envs} environments")
+                logging.info(f"Running {n_envs} environments")
                 if framework == "TorchRL":
                     vmas_times.append(
                         (n_envs * n_steps)
@@ -189,7 +190,7 @@ def run_comparison_torchrl_rllib(
                             device=device,
                         )
                     )
-                print(f"fps {vmas_times[-1]}s")
+                logging.info(f"fps {vmas_times[-1]}s")
             evaluation[framework] = vmas_times
 
     store_pickled_evaluation(name=figure_name_pkl, evaluation=evaluation)

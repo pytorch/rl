@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import logging
 
 import hydra
 
@@ -49,7 +50,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create data buffer
     sampler = SamplerWithoutReplacement()
     data_buffer = TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(cfg.collector.frames_per_batch, device=device),
+        storage=LazyMemmapStorage(cfg.collector.frames_per_batch),
         sampler=sampler,
         batch_size=cfg.loss.mini_batch_size,
     )
@@ -62,8 +63,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         average_gae=False,
     )
     loss_module = A2CLoss(
-        actor=actor,
-        critic=critic,
+        actor_network=actor,
+        critic_network=critic,
         loss_critic_type=cfg.loss.loss_critic_type,
         entropy_coef=cfg.loss.entropy_coef,
         critic_coef=cfg.loss.critic_coef,
@@ -124,6 +125,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         data_buffer.extend(data_reshape)
 
         for k, batch in enumerate(data_buffer):
+
+            # Get a data batch
+            batch = batch.to(device)
 
             # Linearly decrease the learning rate and clip epsilon
             alpha = 1.0
@@ -194,7 +198,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     end_time = time.time()
     execution_time = end_time - start_time
-    print(f"Training took {execution_time:.2f} seconds to finish")
+    logging.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

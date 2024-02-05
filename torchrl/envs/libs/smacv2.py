@@ -10,7 +10,7 @@ from typing import Dict, Optional
 import torch
 from tensordict import TensorDict, TensorDictBase
 
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
@@ -181,8 +181,8 @@ class SMACv2Wrapper(_EnvWrapper):
     @_classproperty
     def available_envs(cls):
         if not _has_smacv2:
-            return
-        yield from _get_envs()
+            return []
+        return list(_get_envs())
 
     def __init__(
         self,

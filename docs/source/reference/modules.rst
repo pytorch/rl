@@ -69,6 +69,7 @@ other cases, the action written in the tensordict is simply the network output.
 
     AdditiveGaussianWrapper
     EGreedyModule
+    EGreedyWrapper
     OrnsteinUhlenbeckProcessWrapper
 
 Probabilistic actors
@@ -332,6 +333,11 @@ algorithms, such as DQN, DDPG or Dreamer.
     DistributionalDQNnet
     DreamerActor
     DuelingCnnDQNet
+    GRUCell
+    GRU
+    GRUModule
+    LSTMCell
+    LSTM
     LSTMModule
     ObsDecoder
     ObsEncoder
@@ -350,6 +356,7 @@ multi-agent contexts.
     :template: rl_template_noinherit.rst
 
     MultiAgentMLP
+    MultiAgentConvNet
     QMixer
     VDNMixer
 

@@ -14,6 +14,7 @@ e.g. to benchmark LazyMemmapStorage, run the following commands using either two
 This code is based on examples/distributed/distributed_replay_buffer.py.
 """
 import argparse
+import logging
 import os
 import pickle
 import sys
@@ -105,10 +106,10 @@ class DummyTrainerNode:
                 buffer_rref = rpc.remote(
                     replay_buffer_info, ReplayBufferNode, args=(1000000,)
                 )
-                print(f"Connected to replay buffer {replay_buffer_info}")
+                logging.info(f"Connected to replay buffer {replay_buffer_info}")
                 return buffer_rref
             except Exception:
-                print("Failed to connect to replay buffer")
+                logging.info("Failed to connect to replay buffer")
                 time.sleep(RETRY_DELAY_SECS)
 
 
@@ -143,7 +144,7 @@ if __name__ == "__main__":
     rank = args.rank
     storage_type = args.storage
 
-    print(f"Rank: {rank}; Storage: {storage_type}")
+    logging.info(f"Rank: {rank}; Storage: {storage_type}")
 
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"
@@ -166,7 +167,7 @@ if __name__ == "__main__":
             if i == 0:
                 continue
             results.append(result)
-            print(i, results[-1])
+            logging.info(i, results[-1])
 
         with open(
             f'./benchmark_{datetime.now().strftime("%d-%m-%Y%H:%M:%S")};batch_size={BATCH_SIZE};tensor_size={TENSOR_SIZE};repeat={REPEATS};storage={storage_type}.pkl',
@@ -175,7 +176,7 @@ if __name__ == "__main__":
             pickle.dump(results, f)
 
         tensor_results = torch.tensor(results)
-        print(f"Mean: {torch.mean(tensor_results)}")
+        logging.info(f"Mean: {torch.mean(tensor_results)}")
         breakpoint()
     elif rank == 1:
         # rank 1 is the replay buffer

@@ -5,7 +5,7 @@ Train example with a distributed collector
 This script reproduces the PPO example in https://pytorch.org/rl/tutorials/coding_ppo.html
 with a RayCollector.
 """
-
+import logging
 from collections import defaultdict
 
 import matplotlib.pyplot as plt
@@ -117,7 +117,7 @@ if __name__ == "__main__":
         "object_store_memory": 1024**3,
     }
     collector = RayCollector(
-        env_makers=[env] * num_collectors,
+        create_env_fn=[env] * num_collectors,
         policy=policy_module,
         collector_class=SyncDataCollector,
         collector_kwargs={
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     )
     loss_module = ClipPPOLoss(
         actor=policy_module,
-        critic=value_module,
+        critic_network=value_module,
         advantage_key="advantage",
         clip_epsilon=clip_epsilon,
         entropy_bonus=bool(entropy_eps),
@@ -235,4 +235,4 @@ if __name__ == "__main__":
     plt.title("Max step count (test)")
     save_name = "/tmp/results.jpg"
     plt.savefig(save_name)
-    print(f"results saved in {save_name}")
+    logging.info(f"results saved in {save_name}")

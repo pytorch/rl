@@ -4,16 +4,25 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
+import re
 import warnings
 from enum import Enum
 from typing import Iterable, Optional, Union
 
 import torch
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
+from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
+from torch.nn.modules import dropout
 
+try:
+    from torch import vmap
+except ImportError as err:
+    try:
+        from functorch import vmap
+    except ImportError as err_ft:
+        raise err_ft from err
 from torchrl.envs.utils import step_mdp
 
 _GAMMA_LMBDA_DEPREC_WARNING = (
@@ -21,6 +30,8 @@ _GAMMA_LMBDA_DEPREC_WARNING = (
     "is deprecated and will be removed soon. To customize your value function, "
     "run `loss_module.make_value_estimator(ValueEstimators.<value_fun>, gamma=val)`."
 )
+
+RANDOM_MODULE_LIST = (dropout._DropoutNd,)
 
 
 class ValueEstimators(Enum):
@@ -39,6 +50,7 @@ class ValueEstimators(Enum):
     TD1 = "TD(1) (infinity-step return)"
     TDLambda = "TD(lambda)"
     GAE = "Generalized advantage estimate"
+    VTrace = "V-trace"
 
 
 def default_value_kwargs(value_type: ValueEstimators):
@@ -61,6 +73,8 @@ def default_value_kwargs(value_type: ValueEstimators):
         return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
     elif value_type == ValueEstimators.TDLambda:
         return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
+    elif value_type == ValueEstimators.VTrace:
+        return {"gamma": 0.99, "differentiable": True}
     else:
         raise NotImplementedError(f"Unknown value type {value_type}.")
 
@@ -353,18 +367,19 @@ class hold_out_net(_context_manager):
 
     def __init__(self, network: nn.Module) -> None:
         self.network = network
-        try:
-            self.p_example = next(network.parameters())
-        except (AttributeError, StopIteration):
-            self.p_example = torch.tensor([])
-        self._prev_state = []
+        for p in network.parameters():
+            self.mode = p.requires_grad
+            break
+        else:
+            self.mode = True
 
     def __enter__(self) -> None:
-        self._prev_state.append(self.p_example.requires_grad)
-        self.network.requires_grad_(False)
+        if self.mode:
+            self.network.requires_grad_(False)
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.network.requires_grad_(self._prev_state.pop())
+        if self.mode:
+            self.network.requires_grad_()
 
 
 class hold_out_params(_context_manager):
@@ -457,9 +472,33 @@ def _cache_values(fun):
             out = fun(self, netname)
         else:
             out = fun(self)
-        if is_tensor_collection(out):
-            out.lock_()
+        # TODO: decide what to do with locked tds in functional calls
+        # if is_tensor_collection(out):
+        #     out.lock_()
         _cache[attr_name] = out
         return out
 
     return new_fun
+
+
+def _vmap_func(module, *args, func=None, **kwargs):
+    try:
+
+        def decorated_module(*module_args_params):
+            params = module_args_params[-1]
+            module_args = module_args_params[:-1]
+            with params.to_module(module):
+                if func is None:
+                    return module(*module_args)
+                else:
+                    return getattr(module, func)(*module_args)
+
+        return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
+
+    except RuntimeError as err:
+        if re.match(
+            r"vmap: called random operation while in randomness error mode", str(err)
+        ):
+            raise RuntimeError(
+                "Please use <loss_module>.set_vmap_randomness('different') to handle random operations during vmap."
+            ) from err

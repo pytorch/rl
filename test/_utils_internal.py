@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import contextlib
+import logging
 import os
 
 import os.path
@@ -62,7 +63,7 @@ def _set_gym_environments():  # noqa: F811
     PONG_VERSIONED = "ALE/Pong-v5"
 
 
-@implement_for("gymnasium", "0.27.0", None)
+@implement_for("gymnasium")
 def _set_gym_environments():  # noqa: F811
     global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
 
@@ -119,7 +120,7 @@ def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
                     return f(*args, **kwargs)
                 except ExceptionToCheck as e:
                     msg = "%s, Retrying in %d seconds..." % (str(e), mdelay)
-                    print(msg)
+                    logging.info(msg)
                     time.sleep(mdelay)
                     mtries -= 1
             try:
@@ -325,7 +326,7 @@ def make_tc(td):
 
 
 def rollout_consistency_assertion(
-    rollout, *, done_key="done", observation_key="observation"
+    rollout, *, done_key="done", observation_key="observation", done_strict=False
 ):
     """Tests that observations in "next" match observations in the next root tensordict when done is False, and don't match otherwise."""
 
@@ -335,11 +336,13 @@ def rollout_consistency_assertion(
     # data resulting from step, when it's not done, after step_mdp
     r_not_done_tp1 = rollout[:, 1:][~done]
     torch.testing.assert_close(
-        r_not_done[observation_key], r_not_done_tp1[observation_key]
+        r_not_done[observation_key],
+        r_not_done_tp1[observation_key],
+        msg=f"Key {observation_key} did not match",
     )
 
-    if not done.any():
-        return
+    if done_strict and not done.any():
+        raise RuntimeError("No done detected, test could not complete.")
 
     # data resulting from step, when it's done
     r_done = rollout[:, :-1]["next"][done]
@@ -347,7 +350,10 @@ def rollout_consistency_assertion(
     r_done_tp1 = rollout[:, 1:][done]
     assert (
         (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1) > 1e-1
-    ).all(), (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1)
+    ).all(), (
+        f"Entries in next tensordict do not match entries in root "
+        f"tensordict after reset : {(r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1) < 1e-1}"
+    )
 
 
 def rand_reset(env):
@@ -401,7 +407,8 @@ def check_rollout_consistency_multikey_env(td: TensorDict, max_steps: int):
 
     # Check done and reset for nested_1
     observation_is_max = td["next", "nested_1", "observation"][..., 0] == max_steps + 1
-    next_is_done = td["next", "nested_1", "done"][index_batch_size][:-1].squeeze(-1)
+    # done at the root always prevail
+    next_is_done = td["next", "done"][index_batch_size][:-1].squeeze(-1)
     assert (td["next", "nested_1", "done"][observation_is_max]).all()
     assert (~td["next", "nested_1", "done"][~observation_is_max]).all()
     # Obs after done is 0
@@ -429,7 +436,8 @@ def check_rollout_consistency_multikey_env(td: TensorDict, max_steps: int):
 
     # Check done and reset for nested_2
     observation_is_max = td["next", "nested_2", "observation"][..., 0] == max_steps + 1
-    next_is_done = td["next", "nested_2", "done"][index_batch_size][:-1].squeeze(-1)
+    # done at the root always prevail
+    next_is_done = td["next", "done"][index_batch_size][:-1].squeeze(-1)
     assert (td["next", "nested_2", "done"][observation_is_max]).all()
     assert (~td["next", "nested_2", "done"][~observation_is_max]).all()
     # Obs after done is 0

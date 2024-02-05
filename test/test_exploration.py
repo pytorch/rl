@@ -18,6 +18,7 @@ from scipy.stats import ttest_1samp
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
 from tensordict.tensordict import TensorDict
 from torch import nn
+from torchrl._utils import _replace_last
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
@@ -28,7 +29,7 @@ from torchrl.data import (
 )
 from torchrl.envs import SerialEnv
 from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
-from torchrl.envs.utils import _replace_last, set_exploration_type
+from torchrl.envs.utils import set_exploration_type
 from torchrl.modules import SafeModule, SafeSequential
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import (
@@ -51,7 +52,7 @@ from torchrl.modules.tensordict_module.exploration import (
 
 
 class TestEGreedy:
-    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1.0])
+    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1])
     @pytest.mark.parametrize("module", [True, False])
     def test_egreedy(self, eps_init, module):
         torch.manual_seed(0)
@@ -78,7 +79,7 @@ class TestEGreedy:
             assert (action == 0).any()
             assert ((action == 1) | (action == 0)).all()
 
-    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1.0])
+    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1])
     @pytest.mark.parametrize("module", [True, False])
     @pytest.mark.parametrize("spec_class", ["discrete", "one_hot"])
     def test_egreedy_masked(self, module, eps_init, spec_class):
@@ -609,7 +610,10 @@ def test_gsde(
         device=device,
     )
     if gSDE:
-        gSDENoise(shape=[batch]).reset(td)
+        td_reset = td.empty()
+        gsde = gSDENoise(shape=[batch], reset_key="_reset").to(device)
+        gsde._reset(td, td_reset)
+        td.update(td_reset)
         assert "_eps_gSDE" in td.keys()
         assert td.get("_eps_gSDE").device == device
     actor(td)

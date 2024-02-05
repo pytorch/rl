@@ -14,7 +14,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.tensordict import make_tensordict
 from torchrl._utils import implement_for
-from torchrl.data import UnboundedContinuousTensorSpec
+from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
 from torchrl.envs.libs.gym import _AsyncMeta, _gym_to_torchrl_spec_transform, GymEnv
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
@@ -64,14 +64,52 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
 
     Github: https://github.com/vikashplus/robohive/
 
-    RoboHive requires gym 0.13.
+    Doc: https://github.com/vikashplus/robohive/wiki
+
+    Paper: https://arxiv.org/abs/2310.06828
+
+    .. warning::
+        RoboHive requires gym 0.13.
 
     Args:
-        env_name (str): the environment name to build.
-        read_info (bool, optional): whether the the info should be parsed.
-            Defaults to ``True``.
-        device (torch.device, optional): the device on which the input/output
-            are expected. Defaults to torch default device.
+        env_name (str): the environment name to build. Must be one of :attr:`.available_envs`
+        categorical_action_encoding (bool, optional): if ``True``, categorical
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            Defaults to ``False``.
+
+    Keyword Args:
+        from_pixels (bool, optional): if ``True``, an attempt to return the pixel
+            observations from the env will be performed. By default, these observations
+            will be written under the ``"pixels"`` entry.
+            The method being used varies
+            depending on the gym version and may involve a ``wrappers.pixel_observation.PixelObservationWrapper``.
+            Defaults to ``False``.
+        pixels_only (bool, optional): if ``True``, only the pixel observations will
+            be returned (by default under the ``"pixels"`` entry in the output tensordict).
+            If ``False``, observations (eg, states) and pixels will be returned
+            whenever ``from_pixels=True``. Defaults to ``True``.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        batch_size (torch.Size, optional): Only ``torch.Size([])`` will work with
+            ``RoboHiveEnv`` since vectorized environments are not supported within the
+            class. To execute more than one environment at a time, see :class:`~torchrl.envs.ParallelEnv`.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+
+    Attributes:
+        available_envs (list): a list of available envs to build.
+
+    Examples:
+        >>> from torchrl.envs import RoboHiveEnv
+        >>> env = RoboHiveEnv(RoboHiveEnv.available_envs[0])
+        >>> env.rollout(3)
+
     """
 
     env_list = []
@@ -88,9 +126,9 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
     @_classproperty
     def available_envs(cls):
         if not _has_robohive:
-            return
+            return []
         RoboHiveEnv.register_envs()
-        yield from cls.env_list
+        return cls.env_list
 
     @classmethod
     def register_envs(cls):
@@ -107,15 +145,23 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             raise RuntimeError("did not load any environment.")
 
     @implement_for(
+        "gymnasium",
+    )  # make sure gym 0.13 is installed, otherwise raise an exception
+    def _build_env(self, *args, **kwargs):  # noqa: F811
+        raise NotImplementedError(
+            "Your gym version is too recent, RoboHiveEnv is only compatible with gym==0.13."
+        )
+
+    @implement_for(
         "gym", "0.14", None
     )  # make sure gym 0.13 is installed, otherwise raise an exception
-    def _build_env(self, *args, **kwargs):
+    def _build_env(self, *args, **kwargs):  # noqa: F811
         raise NotImplementedError(
             "Your gym version is too recent, RoboHiveEnv is only compatible with gym 0.13."
         )
 
     @implement_for(
-        "gym", "0.13", "0.14"
+        "gym", None, "0.14"
     )  # make sure gym 0.13 is installed, otherwise raise an exception
     def _build_env(  # noqa: F811
         self,

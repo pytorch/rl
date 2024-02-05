@@ -2,11 +2,15 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
+from __future__ import annotations
+
+import collections
 import importlib
 import warnings
 from copy import copy
 from types import ModuleType
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 from warnings import warn
 
 import numpy as np
@@ -17,6 +21,7 @@ from tensordict import TensorDictBase
 
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
+    _minmax_dtype,
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
@@ -26,16 +31,13 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
 )
-from torchrl.data.utils import numpy_to_torch_dtype_dict
+from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
 from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
 
-from torchrl.envs.gym_like import (
-    BaseInfoDictReader,
-    default_info_dict_reader,
-    GymLikeEnv,
-)
+from torchrl.envs.gym_like import BaseInfoDictReader, GymLikeEnv
 
 from torchrl.envs.utils import _classproperty
 
@@ -105,7 +107,7 @@ class set_gym_backend(_DecoratorContextManager):
         """Sets the backend as default."""
         global DEFAULT_GYM
         DEFAULT_GYM = self.backend
-        found_setter = False
+        found_setters = collections.defaultdict(lambda: False)
         for setter in copy(implement_for._setters):
             check_module = (
                 callable(setter.module_name)
@@ -117,13 +119,26 @@ class set_gym_backend(_DecoratorContextManager):
             if check_module and check_version:
                 setter.module_set()
                 found_setter = True
+            elif check_module:
+                found_setter = False
+            else:
+                found_setter = None
+            if found_setter is not None:
+                found_setters[setter.func_name] = (
+                    found_setters[setter.func_name] or found_setter
+                )
         # we keep only the setters we need. This is safe because a copy is saved under self._setters_saved
-        if not found_setter:
-            raise ImportError(
-                f"could not set anything related to gym backend "
-                f"{self.backend.__name__} with version={self.backend.__version__}. "
-                f"Check that the gym versions match!"
-            )
+        for func_name, found_setter in found_setters.items():
+            if not found_setter:
+                raise ImportError(
+                    f"could not set anything related to gym backend "
+                    f"{self.backend.__name__} with version={self.backend.__version__} for the function with name {func_name}. "
+                    f"Check that the gym versions match!"
+                )
+
+    def set(self):
+        """Irreversibly sets the gym backend in the script."""
+        self._call()
 
     def __enter__(self):
         # we save a complete list of setters as well as whether they should be set.
@@ -200,18 +215,33 @@ def _gym_to_torchrl_spec_transform(
     device="cpu",
     categorical_action_encoding=False,
     remap_state_to_observation: bool = True,
+    batch_size: tuple = (),
 ) -> TensorSpec:
     """Maps the gym specs to the TorchRL specs.
 
     Args:
-        spec: the gym space to transform
-        dtype: a dtype to use for the spec. Defaults to`spec.dtype`.
-        device: the device for the spec. Defaults to "cpu".
-        categorical_action_encoding: whether discrete spaces should be mapped to categorical or one-hot.
-            Defaults to one-hot.
-        remap_state_to_observation: whether to rename the 'state' key of Dict specs to "observation". Default is true.
+        spec (gym.spaces member): the gym space to transform.
+        dtype (torch.dtype): a dtype to use for the spec.
+            Defaults to`spec.dtype`.
+        device (torch.device): the device for the spec.
+            Defaults to ``"cpu"``.
+        categorical_action_encoding (bool): whether discrete spaces should be mapped to categorical or one-hot.
+            Defaults to ``False`` (one-hot).
+        remap_state_to_observation (bool): whether to rename the 'state' key of
+            Dict specs to "observation". Default is true.
+        batch_size (torch.Size): batch size to which expand the spec. Defaults to
+            ``torch.Size([])``.
 
     """
+    if batch_size:
+        return _gym_to_torchrl_spec_transform(
+            spec,
+            dtype=dtype,
+            device=device,
+            categorical_action_encoding=categorical_action_encoding,
+            remap_state_to_observation=remap_state_to_observation,
+            batch_size=None,
+        ).expand(batch_size)
     gym_spaces = gym_backend("spaces")
     if isinstance(spec, gym_spaces.tuple.Tuple):
         return torch.stack(
@@ -279,6 +309,14 @@ def _gym_to_torchrl_spec_transform(
         low = torch.tensor(spec.low, device=device, dtype=dtype)
         high = torch.tensor(spec.high, device=device, dtype=dtype)
         is_unbounded = low.isinf().all() and high.isinf().all()
+
+        minval, maxval = _minmax_dtype(dtype)
+        minval = torch.as_tensor(minval).to(low.device, dtype)
+        maxval = torch.as_tensor(maxval).to(low.device, dtype)
+        is_unbounded = is_unbounded or (
+            torch.isclose(low, torch.tensor(minval, dtype=dtype)).all()
+            and torch.isclose(high, torch.tensor(maxval, dtype=dtype)).all()
+        )
         return (
             UnboundedContinuousTensorSpec(shape, device=device, dtype=dtype)
             if is_unbounded
@@ -310,13 +348,117 @@ def _gym_to_torchrl_spec_transform(
                 categorical_action_encoding=categorical_action_encoding,
                 remap_state_to_observation=remap_state_to_observation,
             )
-        return CompositeSpec(**spec_out)
+        # the batch-size must be set later
+        return CompositeSpec(spec_out)
     elif isinstance(spec, gym_spaces.dict.Dict):
         return _gym_to_torchrl_spec_transform(
             spec.spaces,
             device=device,
             categorical_action_encoding=categorical_action_encoding,
             remap_state_to_observation=remap_state_to_observation,
+        )
+    else:
+        raise NotImplementedError(
+            f"spec of type {type(spec).__name__} is currently unaccounted for"
+        )
+
+
+@implement_for("gym", None, "0.18")
+def _box_convert(spec, gym_spaces, shape):
+    low = spec.low.detach().unique().cpu().item()
+    high = spec.high.detach().unique().cpu().item()
+    return gym_spaces.Box(low=low, high=high, shape=shape)
+
+
+@implement_for("gym", "0.18")
+def _box_convert(spec, gym_spaces, shape):  # noqa: F811
+    low = spec.low.detach().cpu().numpy()
+    high = spec.high.detach().cpu().numpy()
+    return gym_spaces.Box(low=low, high=high, shape=shape)
+
+
+@implement_for("gymnasium")
+def _box_convert(spec, gym_spaces, shape):  # noqa: F811
+    low = spec.low.detach().cpu().numpy()
+    high = spec.high.detach().cpu().numpy()
+    return gym_spaces.Box(low=low, high=high, shape=shape)
+
+
+@implement_for("gym", "0.21", None)
+def _multidiscrete_convert(gym_spaces, spec):
+    return gym_spaces.multi_discrete.MultiDiscrete(
+        spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
+    )
+
+
+@implement_for("gymnasium")
+def _multidiscrete_convert(gym_spaces, spec):  # noqa: F811
+    return gym_spaces.multi_discrete.MultiDiscrete(
+        spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
+    )
+
+
+@implement_for("gym", None, "0.21")
+def _multidiscrete_convert(gym_spaces, spec):  # noqa: F811
+    return gym_spaces.multi_discrete.MultiDiscrete(spec.nvec)
+
+
+def _torchrl_to_gym_spec_transform(
+    spec,
+    categorical_action_encoding=False,
+) -> TensorSpec:
+    """Maps TorchRL specs to gym spaces.
+
+    Args:
+        spec: the torchrl spec to transform.
+        categorical_action_encoding: whether discrete spaces should be mapped to categorical or one-hot.
+            Defaults to one-hot.
+
+    """
+    gym_spaces = gym_backend("spaces")
+    shape = spec.shape
+    if isinstance(spec, MultiDiscreteTensorSpec):
+        return _multidiscrete_convert(gym_spaces, spec)
+    if isinstance(spec, MultiOneHotDiscreteTensorSpec):
+        return gym_spaces.multi_discrete.MultiDiscrete(spec.nvec)
+    if isinstance(spec, BinaryDiscreteTensorSpec):
+        return gym_spaces.multi_binary.MultiBinary(spec.shape[-1])
+    if isinstance(spec, DiscreteTensorSpec):
+        return gym_spaces.discrete.Discrete(
+            spec.n
+        )  # dtype=torch_to_numpy_dtype_dict[spec.dtype])
+    if isinstance(spec, OneHotDiscreteTensorSpec):
+        return gym_spaces.discrete.Discrete(spec.n)
+    if isinstance(spec, UnboundedContinuousTensorSpec):
+        minval, maxval = _minmax_dtype(spec.dtype)
+        return gym_spaces.Box(
+            low=minval,
+            high=maxval,
+            shape=shape,
+            dtype=torch_to_numpy_dtype_dict[spec.dtype],
+        )
+    if isinstance(spec, UnboundedDiscreteTensorSpec):
+        minval, maxval = _minmax_dtype(spec.dtype)
+        return gym_spaces.Box(
+            low=minval,
+            high=maxval,
+            shape=shape,
+            dtype=torch_to_numpy_dtype_dict[spec.dtype],
+        )
+    if isinstance(spec, BoundedTensorSpec):
+        return _box_convert(spec, gym_spaces, shape)
+    if isinstance(spec, CompositeSpec):
+        # remove batch size
+        while spec.shape:
+            spec = spec[0]
+        return gym_spaces.Dict(
+            **{
+                key: _torchrl_to_gym_spec_transform(
+                    val,
+                    categorical_action_encoding=categorical_action_encoding,
+                )
+                for key, val in spec.items()
+            }
         )
     else:
         raise NotImplementedError(
@@ -345,7 +487,7 @@ def _get_gym_envs():  # noqa: F811
     return gym.envs.registration.registry.keys()
 
 
-@implement_for("gymnasium", "0.27.0", None)
+@implement_for("gymnasium")
 def _get_gym_envs():  # noqa: F811
     gym = gym_backend()
     return gym.envs.registration.registry.keys()
@@ -434,17 +576,97 @@ class _AsyncMeta(_EnvPostInit):
 class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     """OpenAI Gym environment wrapper.
 
+    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
+
+    Args:
+        env (gym.Env): the environment to wrap. Batched environments (:class:`~stable_baselines3.common.vec_env.base_vec_env.VecEnv`
+            or :class:`gym.VectorEnv`) are supported and the environment batch-size
+            will reflect the number of environments executed in parallel.
+        categorical_action_encoding (bool, optional): if ``True``, categorical
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            Defaults to ``False``.
+
+    Keyword Args:
+        from_pixels (bool, optional): if ``True``, an attempt to return the pixel
+            observations from the env will be performed. By default, these observations
+            will be written under the ``"pixels"`` entry.
+            The method being used varies
+            depending on the gym version and may involve a ``wrappers.pixel_observation.PixelObservationWrapper``.
+            Defaults to ``False``.
+        pixels_only (bool, optional): if ``True``, only the pixel observations will
+            be returned (by default under the ``"pixels"`` entry in the output tensordict).
+            If ``False``, observations (eg, states) and pixels will be returned
+            whenever ``from_pixels=True``. Defaults to ``True``.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        batch_size (torch.Size, optional): the batch size of the environment.
+            Should match the leading dimensions of all observations, done states,
+            rewards, actions and infos.
+            Defaults to ``torch.Size([])``.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+
+    Attributes:
+        available_envs (List[str]): a list of environments to build.
+
+    .. note::
+        If an attribute cannot be found, this class will attempt to retrieve it from
+        the nested env:
+
+            >>> from torchrl.envs import GymWrapper
+            >>> import gymnasium as gym
+            >>> env = GymWrapper(gym.make("Pendulum-v1"))
+            >>> print(env.spec.max_episode_steps)
+            200
+
     Examples:
-        >>> env = gym.make("Pendulum-v0")
-        >>> env = GymWrapper(env)
+        >>> import gymnasium as gym
+        >>> from torchrl.envs import GymWrapper
+        >>> base_env = gym.make("Pendulum-v1")
+        >>> env = GymWrapper(base_env)
         >>> td = env.rand_step()
         >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
         >>> print(env.available_envs)
+        ['ALE/Adventure-ram-v5', 'ALE/Adventure-v5', 'ALE/AirRaid-ram-v5', 'ALE/AirRaid-v5', 'ALE/Alien-ram-v5', 'ALE/Alien-v5',
+
+    .. note::
+        info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
+        if no other reader is provided. To provide another reader, refer to
+        :meth:`~.set_info_dict_reader`. To automatically register the info_dict
+        content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
 
     """
 
     git_url = "https://github.com/openai/gym"
     libname = "gym"
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_gym:
+            return []
+        return list(_get_envs())
 
     @staticmethod
     def get_library_name(env) -> str:
@@ -480,21 +702,20 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         )
 
     def __init__(self, env=None, categorical_action_encoding=False, **kwargs):
-        if env is not None:
-            kwargs["env"] = env
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
-        if "env" in kwargs:
+        if env is not None:
             if "EnvCompatibility" in str(
-                kwargs["env"]
+                env
             ):  # a hacky way of knowing if EnvCompatibility is part of the wrappers of env
                 raise ValueError(
                     "GymWrapper does not support the gym.wrapper.compatibility.EnvCompatibility wrapper. "
                     "If this feature is needed, detail your use case in an issue of "
                     "https://github.com/pytorch/rl/issues."
                 )
-            libname = self.get_library_name(kwargs["env"])
+            libname = self.get_library_name(env)
             with set_gym_backend(libname):
+                kwargs["env"] = env
                 super().__init__(**kwargs)
         else:
             super().__init__(**kwargs)
@@ -528,7 +749,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self._env, tuple_of_classes + (gym_backend("vector").VectorEnv,)
         )
 
-    @implement_for("gym", None, "0.27")
+    @implement_for("gym")
     def _get_batch_size(self, env):
         if hasattr(env, "num_envs"):
             batch_size = torch.Size([env.num_envs, *self.batch_size])
@@ -536,7 +757,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             batch_size = self.batch_size
         return batch_size
 
-    @implement_for("gymnasium", "0.27", None)  # gymnasium wants the unwrapped env
+    @implement_for("gymnasium")  # gymnasium wants the unwrapped env
     def _get_batch_size(self, env):  # noqa: F811
         if hasattr(env, "num_envs"):
             batch_size = torch.Size([env.unwrapped.num_envs, *self.batch_size])
@@ -623,7 +844,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
-    @implement_for("gymnasium", "0.27.0", None)
+    @implement_for("gymnasium")
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
         compatibility = gym_backend("wrappers.compatibility")
         pixel_observation = gym_backend("wrappers.pixel_observation")
@@ -646,12 +867,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         )
 
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
-
-    @_classproperty
-    def available_envs(cls):
-        if not _has_gym:
-            return
-        yield from _get_envs()
 
     @property
     def lib(self) -> ModuleType:
@@ -691,7 +906,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self._seed_calls_reset = False
             self._env.seed(seed=seed)
 
-    @implement_for("gymnasium", "0.27.0", None)
+    @implement_for("gymnasium")
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
         try:
             self.reset(seed=seed)
@@ -901,8 +1116,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @property
     def info_dict_reader(self):
-        if not self._info_dict_reader:
-            self._info_dict_reader.append(default_info_dict_reader())
         return self._info_dict_reader
 
     @info_dict_reader.setter
@@ -910,7 +1123,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         self._info_dict_reader = value
 
     def _reset(
-        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+        self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
         if self._is_batched:
             # batched (aka 'vectorized') env reset is a bit special: envs are
@@ -922,7 +1135,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             if reset is None:
                 return super()._reset(tensordict)
             elif reset is not None:
-                return tensordict.clone(False)
+                return tensordict.exclude("_reset")
         return super()._reset(tensordict, **kwargs)
 
 
@@ -933,13 +1146,102 @@ ACCEPTED_TYPE_ERRORS = {
 
 
 class GymEnv(GymWrapper):
-    """OpenAI Gym environment wrapper.
+    """OpenAI Gym environment wrapper constructed by environment ID directly.
+
+    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
+
+    Args:
+        env_name (str): the environment id registered in `gym.registry`.
+        categorical_action_encoding (bool, optional): if ``True``, categorical
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            Defaults to ``False``.
+
+    Keyword Args:
+        num_envs (int, optional): the number of envs to run in parallel. Defaults to
+            ``None`` (a single env is to be run). :class:`~gym.vector.AsyncVectorEnv`
+            will be used by default.
+        disable_env_checker (bool, optional): for gym > 0.24 only. If ``True`` (default
+            for these versions), the environment checker won't be run.
+        from_pixels (bool, optional): if ``True``, an attempt to return the pixel
+            observations from the env will be performed. By default, these observations
+            will be written under the ``"pixels"`` entry.
+            The method being used varies
+            depending on the gym version and may involve a ``wrappers.pixel_observation.PixelObservationWrapper``.
+            Defaults to ``False``.
+        pixels_only (bool, optional): if ``True``, only the pixel observations will
+            be returned (by default under the ``"pixels"`` entry in the output tensordict).
+            If ``False``, observations (eg, states) and pixels will be returned
+            whenever ``from_pixels=True``. Defaults to ``True``.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        batch_size (torch.Size, optional): the batch size of the environment.
+            Should match the leading dimensions of all observations, done states,
+            rewards, actions and infos.
+            Defaults to ``torch.Size([])``.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+
+    Attributes:
+        available_envs (List[str]): the list of envs that can be built.
+
+    .. note::
+        If an attribute cannot be found, this class will attempt to retrieve it from
+        the nested env:
+
+            >>> from torchrl.envs import GymEnv
+            >>> env = GymEnv("Pendulum-v1")
+            >>> print(env.spec.max_episode_steps)
+            200
 
     Examples:
-        >>> env = GymEnv(env_name="Pendulum-v0", frame_skip=4)
+        >>> from torchrl.envs import GymEnv
+        >>> env = GymEnv("Pendulum-v1")
         >>> td = env.rand_step()
         >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
         >>> print(env.available_envs)
+        ['ALE/Adventure-ram-v5', 'ALE/Adventure-v5', 'ALE/AirRaid-ram-v5', 'ALE/AirRaid-v5', 'ALE/Alien-ram-v5', 'ALE/Alien-v5',
+
+    .. note::
+        If both `OpenAI/gym` and `gymnasium` are present in the virtual environment,
+        one can swap backend using :func:`~torchrl.envs.libs.gym.set_gym_backend`:
+
+            >>> from torchrl.envs import set_gym_backend, GymEnv
+            >>> with set_gym_backend("gym"):
+            ...     env = GymEnv("Pendulum-v1")
+            ...     print(env._env)
+            <class 'gym.wrappers.time_limit.TimeLimit'>
+            >>> with set_gym_backend("gymnasium"):
+            ...     env = GymEnv("Pendulum-v1")
+            ...     print(env._env)
+            <class 'gymnasium.wrappers.time_limit.TimeLimit'>
+
+    .. note::
+        info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
+        if no other reader is provided. To provide another reader, refer to
+        :meth:`~.set_info_dict_reader`. To automatically register the info_dict
+        content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
 
     """
 
@@ -1016,7 +1318,14 @@ class GymEnv(GymWrapper):
                     raise err
         env = super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
         if num_envs > 0:
-            env = self._async_env([CloudpickleWrapper(lambda: env)] * num_envs)
+            try:
+                env = self._async_env([CloudpickleWrapper(lambda: env)] * num_envs)
+            except RuntimeError:
+                # It would fail if the environment is not pickable. In that case,
+                # delegating environment instantiation to each subprocess as a fallback.
+                env = self._async_env(
+                    [lambda: self.lib.make(env_name, **kwargs)] * num_envs
+                )
             self.batch_size = torch.Size([num_envs, *self.batch_size])
         return env
 
@@ -1055,7 +1364,6 @@ class MOGymWrapper(GymWrapper):
         >>> env = MOGymWrapper(mo_gym.make('minecart-v0'), frame_skip=4)
         >>> td = env.rand_step()
         >>> print(td)
-        >>> print(env.available_envs)
 
     """
 
@@ -1063,6 +1371,31 @@ class MOGymWrapper(GymWrapper):
     libname = "mo-gymnasium"
 
     _make_specs = set_gym_backend("gymnasium")(GymEnv._make_specs)
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_mo:
+            return []
+        return [
+            "deep-sea-treasure-v0",
+            "deep-sea-treasure-concave-v0",
+            "resource-gathering-v0",
+            "fishwood-v0",
+            "breakable-bottles-v0",
+            "fruit-tree-v0",
+            "water-reservoir-v0",
+            "four-room-v0",
+            "mo-mountaincar-v0",
+            "mo-mountaincarcontinuous-v0",
+            "mo-lunar-lander-v2",
+            "minecart-v0",
+            "mo-highway-v0",
+            "mo-highway-fast-v0",
+            "mo-supermario-v0",
+            "mo-reacher-v4",
+            "mo-hopper-v4",
+            "mo-halfcheetah-v4",
+        ]
 
 
 class MOGymEnv(GymEnv):
@@ -1078,6 +1411,8 @@ class MOGymEnv(GymEnv):
 
     git_url = "https://github.com/Farama-Foundation/MO-Gymnasium"
     libname = "mo-gymnasium"
+
+    available_envs = MOGymWrapper.available_envs
 
     @property
     def lib(self) -> ModuleType:
@@ -1145,7 +1480,7 @@ class terminal_obs_reader(BaseInfoDictReader):
             # Simplest case: there is one observation,
             # presented as a np.ndarray. The key should be pixels or observation.
             # We just write that value at its location in the tensor
-            tensor[index] = torch.as_tensor(obs, device=tensor.device)
+            tensor[index] = torch.tensor(obs, device=tensor.device)
         elif isinstance(obs, dict):
             if key not in obs:
                 raise KeyError(
@@ -1156,13 +1491,13 @@ class terminal_obs_reader(BaseInfoDictReader):
                 # if the obs is a dict, we expect that the key points also to
                 # a value in the obs. We retrieve this value and write it in the
                 # tensor
-                tensor[index] = torch.as_tensor(subobs, device=tensor.device)
+                tensor[index] = torch.tensor(subobs, device=tensor.device)
 
         elif isinstance(obs, (list, tuple)):
             # tuples are stacked along the first dimension when passing gym spaces
             # to torchrl specs. As such, we can simply stack the tuple and set it
             # at the relevant index (assuming stacking can be achieved)
-            tensor[index] = torch.as_tensor(obs, device=tensor.device)
+            tensor[index] = torch.tensor(obs, device=tensor.device)
         else:
             raise NotImplementedError(
                 f"Observations of type {type(obs)} are not supported yet."
@@ -1171,11 +1506,12 @@ class terminal_obs_reader(BaseInfoDictReader):
     def __call__(self, info_dict, tensordict):
         terminal_obs = info_dict.get(self.backend_key[self.backend], None)
         for key, item in self.info_spec.items(True, True):
-            final_obs = item.zero()
+            final_obs_buffer = item.zero()
             if terminal_obs is not None:
                 for i, obs in enumerate(terminal_obs):
-                    self._read_obs(obs, key[-1], final_obs, index=i)
-            tensordict.set(key, final_obs)
+                    # writes final_obs inplace with terminal_obs content
+                    self._read_obs(obs, key[-1], final_obs_buffer, index=i)
+            tensordict.set(key, final_obs_buffer)
         return tensordict
 
 

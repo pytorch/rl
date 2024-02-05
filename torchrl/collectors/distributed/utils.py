@@ -1,3 +1,4 @@
+import logging
 import subprocess
 import time
 
@@ -96,7 +97,7 @@ class submitit_delayed_launcher:
             executor.update_parameters(**self.submitit_main_conf)
             main_job = executor.submit(main_func)
             # listen to output file looking for IP address
-            print(f"job id: {main_job.job_id}")
+            logging.info(f"job id: {main_job.job_id}")
             time.sleep(2.0)
             node = None
             while not node:
@@ -107,10 +108,11 @@ class submitit_delayed_launcher:
                 except ValueError:
                     time.sleep(0.5)
                     continue
-            print(f"node: {node}")
-            cmd = f"sinfo -n {node} -O nodeaddr | tail -1"
+            logging.info(f"node: {node}")
+            # by default, sinfo will truncate the node name at char 20, we increase this to 200
+            cmd = f"sinfo -n {node} -O nodeaddr:200 | tail -1"
             rank0_ip = subprocess.check_output(cmd, shell=True, text=True).strip()
-            print(f"IP: {rank0_ip}")
+            logging.info(f"IP: {rank0_ip}")
             world_size = self.num_jobs + 1
 
             # submit jobs

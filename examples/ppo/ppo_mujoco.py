@@ -7,6 +7,8 @@
 This script reproduces the Proximal Policy Optimization (PPO) Algorithm
 results from Schulman et al. 2017 for the on MuJoCo Environments.
 """
+import logging
+
 import hydra
 
 
@@ -28,7 +30,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.record.loggers import generate_exp_name, get_logger
     from utils_mujoco import eval_model, make_env, make_ppo_models
 
-    # Define paper hyperparameters
     device = "cpu" if not torch.cuda.device_count() else "cuda"
     num_mini_batches = cfg.collector.frames_per_batch // cfg.loss.mini_batch_size
     total_network_updates = (
@@ -55,7 +56,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create data buffer
     sampler = SamplerWithoutReplacement()
     data_buffer = TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(cfg.collector.frames_per_batch, device=device),
+        storage=LazyMemmapStorage(cfg.collector.frames_per_batch),
         sampler=sampler,
         batch_size=cfg.loss.mini_batch_size,
     )
@@ -67,9 +68,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         value_network=critic,
         average_gae=False,
     )
+
     loss_module = ClipPPOLoss(
-        actor=actor,
-        critic=critic,
+        actor_network=actor,
+        critic_network=critic,
         clip_epsilon=cfg.loss.clip_epsilon,
         loss_critic_type=cfg.loss.loss_critic_type,
         entropy_coef=cfg.loss.entropy_coef,
@@ -78,8 +80,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create optimizers
-    actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.optim.lr)
-    critic_optim = torch.optim.Adam(critic.parameters(), lr=cfg.optim.lr)
+    actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.optim.lr, eps=1e-5)
+    critic_optim = torch.optim.Adam(critic.parameters(), lr=cfg.optim.lr, eps=1e-5)
 
     # Create logger
     logger = None
@@ -144,6 +146,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
             for k, batch in enumerate(data_buffer):
 
+                # Get a data batch
+                batch = batch.to(device)
+
                 # Linearly decrease the learning rate and clip epsilon
                 alpha = 1.0
                 if cfg_optim_anneal_lr:
@@ -184,7 +189,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "train/lr": alpha * cfg_optim_lr,
                 "train/sampling_time": sampling_time,
                 "train/training_time": training_time,
-                "train/clip_epsilon": alpha * cfg_loss_clip_epsilon,
+                "train/clip_epsilon": alpha * cfg_loss_clip_epsilon
+                if cfg_loss_anneal_clip_eps
+                else cfg_loss_clip_epsilon,
             }
         )
 
@@ -216,7 +223,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     end_time = time.time()
     execution_time = end_time - start_time
-    print(f"Training took {execution_time:.2f} seconds to finish")
+    logging.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

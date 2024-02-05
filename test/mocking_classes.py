@@ -93,6 +93,13 @@ class _MockEnv(EnvBase):
                 action=cls._input_spec["full_action_spec"],
                 shape=cls._input_spec["full_action_spec"].shape[:-1],
             )
+        dtype = kwargs.pop("dtype", torch.get_default_dtype())
+        for spec in (cls._output_spec, cls._input_spec):
+            if dtype != torch.get_default_dtype():
+                for key, val in list(spec.items(True, True)):
+                    if val.dtype == torch.get_default_dtype():
+                        val = val.to(dtype)
+                        spec[key] = val
         return super().__new__(cls, *args, **kwargs)
 
     def __init__(
@@ -104,6 +111,7 @@ class _MockEnv(EnvBase):
         super().__init__(
             device=kwargs.pop("device", "cpu"),
             dtype=torch.get_default_dtype(),
+            allow_done_after_reset=kwargs.pop("allow_done_after_reset", False),
         )
         self.set_seed(seed)
         self.is_closed = False
@@ -488,7 +496,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         state = torch.zeros(self.size) + self.counter
         if tensordict is None:
             tensordict = TensorDict({}, self.batch_size, device=self.device)
-        tensordict = tensordict.select().set(self.out_key, self._get_out_obs(state))
+        tensordict = tensordict.empty().set(self.out_key, self._get_out_obs(state))
         tensordict = tensordict.set(self._out_key, self._get_out_obs(state))
         tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
         tensordict.set(
@@ -507,7 +515,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
             assert (a.sum(-1) == 1).all()
 
         obs = self._get_in_obs(tensordict.get(self._out_key)) + a / self.maxstep
-        tensordict = tensordict.select()  # empty tensordict
+        tensordict = tensordict.empty()
 
         tensordict.set(self.out_key, self._get_out_obs(obs))
         tensordict.set(self._out_key, self._get_out_obs(obs))
@@ -595,7 +603,8 @@ class ContinuousActionVecMockEnv(_MockEnv):
         # state = torch.zeros(self.size) + self.counter
         if tensordict is None:
             tensordict = TensorDict({}, self.batch_size, device=self.device)
-        tensordict = tensordict.select()
+
+        tensordict = tensordict.empty()
         tensordict.update(self.observation_spec.rand())
         # tensordict.set("next_" + self.out_key, self._get_out_obs(state))
         # tensordict.set("next_" + self._out_key, self._get_out_obs(state))
@@ -614,7 +623,8 @@ class ContinuousActionVecMockEnv(_MockEnv):
         a = tensordict.get("action")
 
         obs = self._obs_step(self._get_in_obs(tensordict.get(self._out_key)), a)
-        tensordict = tensordict.select()  # empty tensordict
+
+        tensordict = tensordict.empty()  # empty tensordict
 
         tensordict.set(self.out_key, self._get_out_obs(obs))
         tensordict.set(self._out_key, self._get_out_obs(obs))
@@ -1099,11 +1109,13 @@ class NestedCountingEnv(CountingEnv):
         nest_done: bool = True,
         nest_reward: bool = True,
         nested_dim: int = 3,
+        has_root_done: bool = False,
         **kwargs,
     ):
         super().__init__(max_steps=max_steps, start_val=start_val, **kwargs)
 
         self.nested_dim = nested_dim
+        self.has_root_done = has_root_done
 
         self.nested_obs_action = nest_obs_action
         self.nested_done = nest_done
@@ -1165,81 +1177,105 @@ class NestedCountingEnv(CountingEnv):
             done_spec = self.full_done_spec.unsqueeze(-1).expand(
                 *self.batch_size, self.nested_dim
             )
-            self.done_spec = CompositeSpec(
+            done_spec = CompositeSpec(
                 {"data": done_spec},
                 shape=self.batch_size,
             )
+            if self.has_root_done:
+                done_spec["done"] = DiscreteTensorSpec(
+                    2,
+                    shape=(
+                        *self.batch_size,
+                        1,
+                    ),
+                    dtype=torch.bool,
+                )
+            self.done_spec = done_spec
 
     def _reset(self, tensordict):
-        if (
-            self.nested_done
-            and tensordict is not None
-            and "_reset" in tensordict.keys()
-        ):
-            tensordict = tensordict.clone()
-            tensordict["_reset"] = tensordict["_reset"].sum(-2, dtype=torch.bool)
-        td = super()._reset(tensordict)
-        if self.nested_done:
-            for done_key in self.done_keys:
-                if isinstance(done_key, str):
-                    done_key = (done_key,)
-                td[done_key] = (
-                    td[done_key[-1]]
-                    .unsqueeze(-1)
-                    .expand(*self.batch_size, self.nested_dim, 1)
-                )
-                del td[done_key[-1]]
-        if self.nested_obs_action:
-            td["data", "states"] = (
-                td["observation"]
-                .unsqueeze(-1)
-                .expand(*self.batch_size, self.nested_dim, 1)
-            )
-            del td["observation"]
-        if "data" in td.keys():
-            td["data"].batch_size = (*self.batch_size, self.nested_dim)
-        return td
 
-    def _step(self, td):
-        if self.nested_obs_action:
-            td = td.clone()
-            td["data"].batch_size = self.batch_size
-            td[self.action_key] = td[self.action_key].max(-2)[0]
-        next_td = super()._step(td)
-        if self.nested_obs_action:
-            td[self.action_key] = (
-                td[self.action_key]
-                .unsqueeze(-1)
-                .expand(*self.batch_size, self.nested_dim, 1)
-            )
-        if "data" in td.keys():
-            td["data"].batch_size = (*self.batch_size, self.nested_dim)
-        td = next_td
+        # check that reset works as expected
+        if tensordict is not None:
+            if self.nested_done:
+                if not self.has_root_done:
+                    assert "_reset" not in tensordict.keys()
+            else:
+                assert ("data", "_reset") not in tensordict.keys(True)
+
+        tensordict_reset = super()._reset(tensordict)
+
         if self.nested_done:
             for done_key in self.done_keys:
                 if isinstance(done_key, str):
-                    done_key = (done_key,)
-                td[done_key] = (
-                    td[done_key[-1]]
-                    .unsqueeze(-1)
-                    .expand(*self.batch_size, self.nested_dim, 1)
+                    continue
+                if self.has_root_done:
+                    done = tensordict_reset.get(done_key[-1])
+                else:
+                    done = tensordict_reset.pop(done_key[-1])
+                tensordict_reset.set(
+                    done_key,
+                    (done.unsqueeze(-2).expand(*self.batch_size, self.nested_dim, 1)),
                 )
-                del td[done_key[-1]]
         if self.nested_obs_action:
-            td["data", "states"] = (
-                td["observation"]
+            obs = tensordict_reset.pop("observation")
+            tensordict_reset.set(
+                ("data", "states"),
+                (obs.unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)),
+            )
+        if "data" in tensordict_reset.keys():
+            tensordict_reset.get("data").batch_size = (
+                *self.batch_size,
+                self.nested_dim,
+            )
+        return tensordict_reset
+
+    def _step(self, tensordict):
+        if self.nested_obs_action:
+            tensordict = tensordict.clone()
+            tensordict["data"].batch_size = self.batch_size
+            tensordict[self.action_key] = tensordict[self.action_key].max(-2)[0]
+        next_tensordict = super()._step(tensordict)
+        if self.nested_obs_action:
+            tensordict[self.action_key] = (
+                tensordict[self.action_key]
                 .unsqueeze(-1)
                 .expand(*self.batch_size, self.nested_dim, 1)
             )
-            del td["observation"]
-        if self.nested_reward:
-            td[self.reward_key] = (
-                td["reward"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
+        if "data" in tensordict.keys():
+            tensordict["data"].batch_size = (*self.batch_size, self.nested_dim)
+        if self.nested_done:
+            for done_key in self.done_keys:
+                if isinstance(done_key, str):
+                    continue
+                if self.has_root_done:
+                    done = next_tensordict.get(done_key[-1])
+                else:
+                    done = next_tensordict.pop(done_key[-1])
+                next_tensordict.set(
+                    done_key,
+                    (done.unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)),
+                )
+        if self.nested_obs_action:
+            next_tensordict.set(
+                ("data", "states"),
+                (
+                    next_tensordict.pop("observation")
+                    .unsqueeze(-1)
+                    .expand(*self.batch_size, self.nested_dim, 1)
+                ),
             )
-            del td["reward"]
-        if "data" in td.keys():
-            td["data"].batch_size = (*self.batch_size, self.nested_dim)
-        return td
+        if self.nested_reward:
+            next_tensordict.set(
+                self.reward_key,
+                (
+                    next_tensordict.pop("reward")
+                    .unsqueeze(-1)
+                    .expand(*self.batch_size, self.nested_dim, 1)
+                ),
+            )
+        if "data" in next_tensordict.keys():
+            next_tensordict.get("data").batch_size = (*self.batch_size, self.nested_dim)
+        return next_tensordict
 
 
 class CountingBatchedEnv(EnvBase):
@@ -1499,7 +1535,8 @@ class HeteroCountingEnv(EnvBase):
         reset_td.update(self.output_spec["full_done_spec"].zero())
 
         assert reset_td.batch_size == self.batch_size
-
+        for key in reset_td.keys(True):
+            assert "_reset" not in key
         return reset_td
 
     def _step(
@@ -1681,6 +1718,7 @@ class MultiKeyCountingEnv(EnvBase):
                 ),
                 shape=(self.nested_dim_2,),
             ),
+            # done at the root always prevail
             done=DiscreteTensorSpec(
                 n=2,
                 shape=(1,),
@@ -1702,17 +1740,10 @@ class MultiKeyCountingEnv(EnvBase):
         if tensordict is not None:
             _reset = tensordict.get("_reset", None)
             if _reset is not None:
-                self.count[_reset.squeeze(-1)] = self.start_val
-
-            _reset_nested_1 = tensordict.get(("nested_1", "_reset"), None)
-            if _reset_nested_1 is not None:
-                self.count_nested_1[_reset_nested_1.squeeze(-1)] = self.start_val
-
-            _reset_nested_2 = tensordict.get(("nested_2", "_reset"), None)
-            if _reset_nested_2 is not None:
-                self.count_nested_2[_reset_nested_2.squeeze(-1)] = self.start_val
-
-            if _reset is None and _reset_nested_1 is None and _reset_nested_2 is None:
+                self.count[_reset] = self.start_val
+                self.count_nested_1[_reset] = self.start_val
+                self.count_nested_2[_reset] = self.start_val
+            else:
                 reset_all = True
 
         if tensordict is None or reset_all:

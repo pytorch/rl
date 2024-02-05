@@ -5,35 +5,42 @@
 
 from __future__ import annotations
 
+import logging
+
 import os
 from collections import OrderedDict
 from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 from warnings import warn
 
 import torch
 
 from tensordict import TensorDict
-from tensordict._tensordict import _unravel_key_to_tuple, unravel_keys
+from tensordict._tensordict import _unravel_key_to_tuple, unravel_key
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, VERBOSE
+from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
-from torchrl.envs.utils import (
-    _aggregate_resets,
-    _set_single_key,
-    _sort_keys,
-    clear_mpi_env_vars,
+# legacy
+from torchrl.envs.libs.envpool import (  # noqa: F401
+    MultiThreadedEnv,
+    MultiThreadedEnvWrapper,
 )
 
-# legacy
-from .libs.envpool import MultiThreadedEnv, MultiThreadedEnvWrapper  # noqa: F401
+from torchrl.envs.utils import (
+    _aggregate_end_of_traj,
+    _set_single_key,
+    _sort_keys,
+    _update_during_reset,
+    clear_mpi_env_vars,
+)
 
 
 def _check_start(fun):
@@ -121,17 +128,22 @@ class _BatchedEnv(EnvBase):
         memmap (bool): whether or not the returned tensordict will be placed in memory map.
         policy_proof (callable, optional): if provided, it'll be used to get the list of
             tensors to return through the :obj:`step()` and :obj:`reset()` methods, such as :obj:`"hidden"` etc.
-        device (str, int, torch.device): for consistency, this argument is kept. However this
-            argument should not be passed, as the device will be inferred from the environments.
-            It is assumed that all environments will run on the same device as a common shared
-            tensordict will be used to pass data from process to process. The device can be
-            changed after instantiation using :obj:`env.to(device)`.
+        device (str, int, torch.device): The device of the batched environment can be passed.
+            If not, it is inferred from the env. In this case, it is assumed that
+            the device of all environments match. If it is provided, it can differ
+            from the sub-environment device(s). In that case, the data will be
+            automatically cast to the appropriate device during collection.
+            This can be used to speed up collection in case casting to device
+            introduces an overhead (eg, numpy-based environents etc.): by using
+            a ``"cuda"`` device for the batched environment but a ``"cpu"``
+            device for the nested environments, one can keep the overhead to a
+            minimum.
         num_threads (int, optional): number of threads for this process.
-            Defaults to the number of workers.
-            This parameter has no effect for the :class:`~SerialEnv` class.
-        num_sub_threads (int, optional): number of threads of the subprocesses.
             Should be equal to one plus the number of processes launched within
             each subprocess (or one if a single process is launched).
+            Defaults to the number of workers + 1.
+            This parameter has no effect for the :class:`~SerialEnv` class.
+        num_sub_threads (int, optional): number of threads of the subprocesses.
             Defaults to 1 for safety: if none is indicated, launching multiple
             workers may charge the cpu load too much and harm performance.
             This parameter has no effect for the :class:`~SerialEnv` class.
@@ -161,14 +173,7 @@ class _BatchedEnv(EnvBase):
         num_threads: int = None,
         num_sub_threads: int = 1,
     ):
-        if device is not None:
-            raise ValueError(
-                "Device setting for batched environment can't be done at initialization. "
-                "The device will be inferred from the constructed environment. "
-                "It can be set through the `to(device)` method."
-            )
-
-        super().__init__(device=None)
+        super().__init__(device=device)
         self.is_closed = True
         if num_threads is None:
             num_threads = num_workers + 1  # 1 more thread for this proc
@@ -217,7 +222,7 @@ class _BatchedEnv(EnvBase):
                 "memmap and shared memory are mutually exclusive features."
             )
         self._batch_size = None
-        self._device = None
+        self._device = torch.device(device) if device is not None else device
         self._dummy_env_str = None
         self._seeds = None
         self.__dict__["_input_spec"] = None
@@ -268,14 +273,39 @@ class _BatchedEnv(EnvBase):
         return self._cache_in_keys
 
     def _set_properties(self):
+
+        cls = type(self)
+
+        def _check_for_empty_spec(specs: CompositeSpec):
+            for subspec in (
+                "full_state_spec",
+                "full_action_spec",
+                "full_done_spec",
+                "full_reward_spec",
+                "full_observation_spec",
+            ):
+                for key, spec in reversed(
+                    list(specs.get(subspec, default=CompositeSpec()).items(True))
+                ):
+                    if isinstance(spec, CompositeSpec) and spec.is_empty():
+                        raise RuntimeError(
+                            f"The environment passed to {cls.__name__} has empty specs in {key}. Consider using "
+                            f"torchrl.envs.transforms.RemoveEmptySpecs to remove the empty specs."
+                        )
+            return specs
+
         meta_data = self.meta_data
         self._properties_set = True
         if self._single_task:
             self._batch_size = meta_data.batch_size
-            device = self._device = meta_data.device
+            device = meta_data.device
+            if self._device is None:
+                self._device = device
 
-            input_spec = meta_data.specs["input_spec"].to(device)
-            output_spec = meta_data.specs["output_spec"].to(device)
+            input_spec = _check_for_empty_spec(meta_data.specs["input_spec"].to(device))
+            output_spec = _check_for_empty_spec(
+                meta_data.specs["output_spec"].to(device)
+            )
 
             self.action_spec = input_spec["full_action_spec"]
             self.state_spec = input_spec["full_state_spec"]
@@ -288,16 +318,26 @@ class _BatchedEnv(EnvBase):
             self._batch_locked = meta_data.batch_locked
         else:
             self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
-            device = self._device = meta_data[0].device
-            # TODO: check that all action_spec and reward spec match (issue #351)
+            devices = set()
+            for _meta_data in meta_data:
+                device = _meta_data.device
+                devices.add(device)
+            if self._device is None:
+                if len(devices) > 1:
+                    raise ValueError(
+                        f"The device wasn't passed to {type(self)}, but more than one device was found in the sub-environments. "
+                        f"Please indicate a device to be used for collection."
+                    )
+                device = list(devices)[0]
+                self._device = device
 
             input_spec = []
             for md in meta_data:
-                input_spec.append(md.specs["input_spec"])
+                input_spec.append(_check_for_empty_spec(md.specs["input_spec"]))
             input_spec = torch.stack(input_spec, 0)
             output_spec = []
             for md in meta_data:
-                output_spec.append(md.specs["output_spec"])
+                output_spec.append(_check_for_empty_spec(md.specs["output_spec"]))
             output_spec = torch.stack(output_spec, 0)
 
             self.action_spec = input_spec["full_action_spec"]
@@ -399,7 +439,7 @@ class _BatchedEnv(EnvBase):
         }
         # output keys after reset, filtered
         self._selected_reset_keys_filt = {
-            unravel_keys(key) for key in self._env_obs_keys + self.done_keys
+            unravel_key(key) for key in self._env_obs_keys + self.done_keys
         }
         # output keys after step
         self._selected_step_keys = {
@@ -409,15 +449,17 @@ class _BatchedEnv(EnvBase):
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
                 *self._selected_keys,
-                "next",
+                *(unravel_key(("next", key)) for key in self._env_output_keys),
                 strict=False,
             )
-            self.shared_tensordict_parent = shared_tensordict_parent.to(self.device)
+            self.shared_tensordict_parent = shared_tensordict_parent
         else:
             # Multi-task: we share tensordict that *may* have different keys
             shared_tensordict_parent = [
-                tensordict.select(*self._selected_keys, "next", strict=False).to(
-                    self.device
+                tensordict.select(
+                    *self._selected_keys,
+                    *(unravel_key(("next", key)) for key in self._env_output_keys),
+                    strict=False,
                 )
                 for tensordict in shared_tensordict_parent
             ]
@@ -437,13 +479,11 @@ class _BatchedEnv(EnvBase):
                 # Multi-task: we share tensordict that *may* have different keys
                 # LazyStacked already stores this so we don't need to do anything
                 self.shared_tensordicts = self.shared_tensordict_parent
-            if self.device.type == "cpu":
+            if self.shared_tensordict_parent.device.type == "cpu":
                 if self._share_memory:
-                    for td in self.shared_tensordicts:
-                        td.share_memory_()
+                    self.shared_tensordict_parent.share_memory_()
                 elif self._memmap:
-                    for td in self.shared_tensordicts:
-                        td.memmap_()
+                    self.shared_tensordict_parent.memmap_()
         else:
             if self._share_memory:
                 self.shared_tensordict_parent.share_memory_()
@@ -454,6 +494,14 @@ class _BatchedEnv(EnvBase):
                 if not self.shared_tensordict_parent.is_memmap():
                     raise RuntimeError("memmap_() failed")
             self.shared_tensordicts = self.shared_tensordict_parent.unbind(0)
+        # we cache all the keys of the shared parent td for future use. This is
+        # safe since the td is locked.
+        self._cache_shared_keys = set(self.shared_tensordict_parent.keys(True, True))
+
+        self._shared_tensordict_parent_next = self.shared_tensordict_parent.get("next")
+        self._shared_tensordict_parent_root = self.shared_tensordict_parent.exclude(
+            "next", *self.reset_keys
+        )
 
     def _start_workers(self) -> None:
         """Starts the various envs."""
@@ -472,12 +520,11 @@ class _BatchedEnv(EnvBase):
         if self.is_closed:
             raise RuntimeError("trying to close a closed environment")
         if self._verbose:
-            print(f"closing {self.__class__.__name__}")
+            logging.info(f"closing {self.__class__.__name__}")
 
         self.__dict__["_input_spec"] = None
         self.__dict__["_output_spec"] = None
         self._properties_set = False
-        self.event = None
 
         self._shutdown_workers()
         self.is_closed = True
@@ -501,11 +548,6 @@ class _BatchedEnv(EnvBase):
         if device == self.device:
             return self
         self._device = device
-        self.meta_data = (
-            self.meta_data.to(device)
-            if self._single_task
-            else [meta_data.to(device) for meta_data in self.meta_data]
-        )
         if not self.is_closed:
             warn(
                 "Casting an open environment to another device requires closing and re-opening it. "
@@ -537,7 +579,7 @@ class SerialEnv(_BatchedEnv):
 
         for idx in range(_num_workers):
             env = self.create_env_fn[idx](**self.create_env_kwargs[idx])
-            self._envs.append(env.to(self.device))
+            self._envs.append(env)
         self.is_closed = False
 
     @_check_start
@@ -557,31 +599,6 @@ class SerialEnv(_BatchedEnv):
         for idx, env in enumerate(self._envs):
             env.load_state_dict(state_dict[f"worker{idx}"])
 
-    @_check_start
-    def _step(
-        self,
-        tensordict: TensorDict,
-    ) -> TensorDict:
-        tensordict_in = tensordict.clone(False)
-        next_td = self.shared_tensordict_parent.get("next")
-        for i in range(self.num_workers):
-            # shared_tensordicts are locked, and we need to select the keys since we update in-place.
-            # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
-            out_td = self._envs[i]._step(tensordict_in[i])
-            next_td[i].update_(out_td.select(*self._env_output_keys, strict=False))
-        # We must pass a clone of the tensordict, as the values of this tensordict
-        # will be modified in-place at further steps
-        if self._single_task:
-            out = TensorDict(
-                {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
-            )
-            for key in self._selected_step_keys:
-                _set_single_key(next_td, out, key, clone=True)
-        else:
-            # strict=False ensures that non-homogeneous keys are still there
-            out = next_td.select(*self._selected_step_keys, strict=False).clone()
-        return out
-
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
             for env in self._envs:
@@ -599,9 +616,10 @@ class SerialEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-
         if tensordict is not None:
-            needs_resetting = _aggregate_resets(tensordict, reset_keys=self.reset_keys)
+            needs_resetting = _aggregate_end_of_traj(
+                tensordict, reset_keys=self.reset_keys
+            )
             if needs_resetting.ndim > 2:
                 needs_resetting = needs_resetting.flatten(1, needs_resetting.ndim - 1)
             if needs_resetting.ndim > 1:
@@ -614,48 +632,87 @@ class SerialEnv(_BatchedEnv):
             )
 
         for i, _env in enumerate(self._envs):
+            if not needs_resetting[i]:
+                continue
             if tensordict is not None:
                 tensordict_ = tensordict[i]
                 if tensordict_.is_empty():
                     tensordict_ = None
+                else:
+                    env_device = _env.device
+                    if env_device != self.device:
+                        tensordict_ = tensordict_.to(env_device)
+                    else:
+                        tensordict_ = tensordict_.clone(False)
             else:
                 tensordict_ = None
 
-            if not needs_resetting[i]:
-                # We update the stored tensordict with the value of the "next"
-                # key as one may be surprised to receive data that is not up-to-date
-                # If we don't do this, the result of calling reset and skipping one env
-                # will be that the env will have the data from the previous
-                # step at the root (since the shared_tensordict did not go through
-                # step_mdp).
-                self.shared_tensordicts[i].update_(
-                    self.shared_tensordicts[i]
-                    .get("next")
-                    .select(*self._selected_reset_keys, strict=False)
-                )
-                if tensordict_ is not None:
-                    self.shared_tensordicts[i].update_(
-                        tensordict_.select(*self._selected_reset_keys, strict=False)
-                    )
-                continue
-            _td = _env._reset(tensordict=tensordict_, **kwargs)
+            _td = _env.reset(tensordict=tensordict_, **kwargs)
             self.shared_tensordicts[i].update_(
-                _td.select(*self._selected_reset_keys, strict=False)
+                _td.select(*self._selected_reset_keys_filt, strict=False)
             )
         selected_output_keys = self._selected_reset_keys_filt
+        device = self.device
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
             out = TensorDict(
-                {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
+                {}, batch_size=self.shared_tensordict_parent.shape, device=device
             )
             for key in selected_output_keys:
-                _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
-            return out
+                _set_single_key(
+                    self.shared_tensordict_parent, out, key, clone=True, device=device
+                )
         else:
-            return self.shared_tensordict_parent.select(
+            out = self.shared_tensordict_parent.select(
                 *selected_output_keys,
                 strict=False,
-            ).clone()
+            )
+            if out.device == device:
+                out = out.clone()
+            else:
+                out = out.to(device, non_blocking=True)
+        return out
+
+    def _reset_proc_data(self, tensordict, tensordict_reset):
+        # since we call `reset` directly, all the postproc has been completed
+        if tensordict is not None:
+            return _update_during_reset(tensordict_reset, tensordict, self.reset_keys)
+        return tensordict_reset
+
+    @_check_start
+    def _step(
+        self,
+        tensordict: TensorDict,
+    ) -> TensorDict:
+        tensordict_in = tensordict.clone(False)
+        next_td = self.shared_tensordict_parent.get("next")
+        for i in range(self.num_workers):
+            # shared_tensordicts are locked, and we need to select the keys since we update in-place.
+            # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
+            env_device = self._envs[i].device
+            if env_device != self.device:
+                data_in = tensordict_in[i].to(env_device, non_blocking=True)
+            else:
+                data_in = tensordict_in[i]
+            out_td = self._envs[i]._step(data_in)
+            next_td[i].update_(out_td.select(*self._env_output_keys, strict=False))
+        # We must pass a clone of the tensordict, as the values of this tensordict
+        # will be modified in-place at further steps
+        device = self.device
+        if self._single_task:
+            out = TensorDict(
+                {}, batch_size=self.shared_tensordict_parent.shape, device=device
+            )
+            for key in self._selected_step_keys:
+                _set_single_key(next_td, out, key, clone=True, device=device)
+        else:
+            # strict=False ensures that non-homogeneous keys are still there
+            out = next_td.select(*self._selected_step_keys, strict=False)
+            if out.device == device:
+                out = out.clone()
+            else:
+                out = out.to(device, non_blocking=True)
+        return out
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
@@ -709,6 +766,136 @@ class ParallelEnv(_BatchedEnv):
     """
 
     __doc__ += _BatchedEnv.__doc__
+    __doc__ += """
+
+    .. warning::
+      TorchRL's ParallelEnv is quite stringent when it comes to env specs, since
+      these are used to build shared memory buffers for inter-process communication.
+      As such, we encourage users to first run a check of the env specs with
+      :func:`~torchrl.envs.utils.check_env_specs`:
+
+        >>> from torchrl.envs import check_env_specs
+        >>> env = make_env()
+        >>> check_env_specs(env) # if this passes without error you're good to go!
+        >>> penv = ParallelEnv(2, make_env)
+
+      In particular, gym-like envs with info-dict readers may be difficult to
+      share across processes if the spec is not properly set, which is hard to
+      do automatically. Check :meth:`~torchrl.envs.GymLikeEnv.set_info_dict_reader`
+      for more information. Here is a short example:
+
+        >>> from torchrl.envs import GymEnv, set_gym_backend, check_env_specs, TransformedEnv, TensorDictPrimer
+        >>> import torch
+        >>> env = GymEnv("HalfCheetah-v4")
+        >>> env.rollout(3)  # no info registered, this env passes check_env_specs
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([10, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([10]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=cpu,
+            is_shared=False)
+        >>> check_env_specs(env)  # succeeds!
+        >>> env.set_info_dict_reader()  # sets the default info_dict reader
+        >>> env.rollout(10)  # because the info_dict is empty at reset time, we're missing the root infos!
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([10, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward_ctrl: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward_run: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        x_position: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                        x_velocity: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False)},
+                    batch_size=torch.Size([10]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=cpu,
+            is_shared=False)
+        >>> check_env_specs(env)  # This check now fails! We should not use an env constructed like this in a parallel env
+        >>> # This ad-hoc fix registers the info-spec for reset. It is wrapped inside `env.auto_register_info_dict()`
+        >>> env_fixed = TransformedEnv(env, TensorDictPrimer(env.info_dict_reader[0].info_spec))
+        >>> env_fixed.rollout(10)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([10, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward_ctrl: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward_run: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        x_position: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                        x_velocity: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False)},
+                    batch_size=torch.Size([10]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                reward_ctrl: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                reward_run: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                x_position: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False),
+                x_velocity: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float64, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=cpu,
+            is_shared=False)
+        >>> check_env_specs(env_fixed)  # Succeeds! This env can be used within a parallel env!
+
+        Related classes and methods: :meth:`~torchrl.envs.GymLikeEnv.auto_register_info_dict`
+        and :class:`~torchrl.envs.gym_like.default_info_dict_reader`.
+
+    .. warning::
+      The choice of the devices where ParallelEnv needs to be executed can
+      drastically influence its performance. The rule of thumbs is:
+
+        - If the base environment (backend, e.g., Gym) is executed on CPU, the
+          sub-environments should be executed on CPU and the data should be
+          passed via shared physical memory.
+        - If the base environment is (or can be) executed on CUDA, the sub-environments
+          should be placed on CUDA too.
+        - If a CUDA device is available and the policy is to be executed on CUDA,
+          the ParallelEnv device should be set to CUDA.
+
+      Therefore, supposing a CUDA device is available, we have the following scenarios:
+
+        >>> # The sub-envs are executed on CPU, but the policy is on GPU
+        >>> env = ParallelEnv(N, MyEnv(..., device="cpu"), device="cuda")
+        >>> # The sub-envs are executed on CUDA
+        >>> env = ParallelEnv(N, MyEnv(..., device="cuda"), device="cuda")
+        >>> # this will create the exact same environment
+        >>> env = ParallelEnv(N, MyEnv(..., device="cuda"))
+        >>> # If no cuda device is available
+        >>> env = ParallelEnv(N, MyEnv(..., device="cpu"))
+
+    """
 
     def _start_workers(self) -> None:
         from torchrl.envs.env_creator import EnvCreator
@@ -721,39 +908,39 @@ class ParallelEnv(_BatchedEnv):
 
         self.parent_channels = []
         self._workers = []
-        self._events = []
-        if self.device.type == "cuda":
+        func = _run_worker_pipe_shared_mem
+        if self.shared_tensordict_parent.device.type == "cuda":
             self.event = torch.cuda.Event()
         else:
             self.event = None
+        self._events = [ctx.Event() for _ in range(_num_workers)]
+        kwargs = [{"mp_event": self._events[i]} for i in range(_num_workers)]
         with clear_mpi_env_vars():
             for idx in range(_num_workers):
                 if self._verbose:
-                    print(f"initiating worker {idx}")
+                    logging.info(f"initiating worker {idx}")
                 # No certainty which module multiprocessing_context is
                 parent_pipe, child_pipe = ctx.Pipe()
-                event = ctx.Event()
-                self._events.append(event)
                 env_fun = self.create_env_fn[idx]
                 if not isinstance(env_fun, EnvCreator):
                     env_fun = CloudpickleWrapper(env_fun)
-
+                kwargs[idx].update(
+                    {
+                        "parent_pipe": parent_pipe,
+                        "child_pipe": child_pipe,
+                        "env_fun": env_fun,
+                        "env_fun_kwargs": self.create_env_kwargs[idx],
+                        "shared_tensordict": self.shared_tensordicts[idx],
+                        "_selected_input_keys": self._selected_input_keys,
+                        "_selected_reset_keys": self._selected_reset_keys,
+                        "_selected_step_keys": self._selected_step_keys,
+                        "has_lazy_inputs": self.has_lazy_inputs,
+                    }
+                )
                 process = _ProcessNoWarn(
-                    target=_run_worker_pipe_shared_mem,
+                    target=func,
                     num_threads=self.num_sub_threads,
-                    args=(
-                        parent_pipe,
-                        child_pipe,
-                        env_fun,
-                        self.create_env_kwargs[idx],
-                        self.device,
-                        event,
-                        self.shared_tensordicts[idx],
-                        self._selected_input_keys,
-                        self._selected_reset_keys,
-                        self._selected_step_keys,
-                        self.has_lazy_inputs,
-                    ),
+                    kwargs=kwargs[idx],
                 )
                 process.daemon = True
                 process.start()
@@ -796,20 +983,80 @@ class ParallelEnv(_BatchedEnv):
             event.clear()
 
     @_check_start
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def step_and_maybe_reset(
+        self, tensordict: TensorDictBase
+    ) -> Tuple[TensorDictBase, TensorDictBase]:
         if self._single_task and not self.has_lazy_inputs:
-            # this is faster than update_ but won't work for lazy stacks
+            # We must use the in_keys and nothing else for the following reasons:
+            # - efficiency: copying all the keys will in practice mean doing a lot
+            #   of writing operations since the input tensordict may (and often will)
+            #   contain all the previous output data.
+            # - value mismatch: if the batched env is placed within a transform
+            #   and this transform overrides an observation key (eg, CatFrames)
+            #   the shape, dtype or device may not necessarily match and writing
+            #   the value in-place will fail.
             for key in self._env_input_keys:
-                key = _unravel_key_to_tuple(key)
-                self.shared_tensordict_parent._set_tuple(
-                    key,
-                    tensordict._get_tuple(key, None),
-                    inplace=True,
-                    validated=True,
-                )
+                self.shared_tensordict_parent.set_(key, tensordict.get(key))
+            next_td = tensordict.get("next", None)
+            if next_td is not None:
+                # we copy the input keys as well as the keys in the 'next' td, if any
+                # as this mechanism can be used by a policy to set anticipatively the
+                # keys of the next call (eg, with recurrent nets)
+                for key in next_td.keys(True, True):
+                    key = unravel_key(("next", key))
+                    if key in self.shared_tensordict_parent.keys(True, True):
+                        self.shared_tensordict_parent.set_(key, next_td.get(key[1:]))
         else:
             self.shared_tensordict_parent.update_(
-                tensordict.select(*self._env_input_keys, strict=False)
+                tensordict.select(*self._env_input_keys, "next", strict=False)
+            )
+        for i in range(self.num_workers):
+            self.parent_channels[i].send(("step_and_maybe_reset", None))
+
+        for i in range(self.num_workers):
+            event = self._events[i]
+            event.wait()
+            event.clear()
+
+        # We must pass a clone of the tensordict, as the values of this tensordict
+        # will be modified in-place at further steps
+        next_td = self._shared_tensordict_parent_next
+        tensordict_ = self._shared_tensordict_parent_root
+        device = self.device
+        if self.shared_tensordict_parent.device == device:
+            next_td = next_td.clone()
+            tensordict_ = tensordict_.clone()
+        else:
+            next_td = next_td.to(device, non_blocking=True)
+            tensordict_ = tensordict_.to(device, non_blocking=True)
+        tensordict.set("next", next_td)
+        return tensordict, tensordict_
+
+    @_check_start
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._single_task and not self.has_lazy_inputs:
+            # We must use the in_keys and nothing else for the following reasons:
+            # - efficiency: copying all the keys will in practice mean doing a lot
+            #   of writing operations since the input tensordict may (and often will)
+            #   contain all the previous output data.
+            # - value mismatch: if the batched env is placed within a transform
+            #   and this transform overrides an observation key (eg, CatFrames)
+            #   the shape, dtype or device may not necessarily match and writing
+            #   the value in-place will fail.
+            for key in tensordict.keys(True, True):
+                # we copy the input keys as well as the keys in the 'next' td, if any
+                # as this mechanism can be used by a policy to set anticipatively the
+                # keys of the next call (eg, with recurrent nets)
+                if key in self._env_input_keys or (
+                    isinstance(key, tuple)
+                    and key[0] == "next"
+                    and key in self.shared_tensordict_parent.keys(True, True)
+                ):
+                    val = tensordict.get(key)
+                    self.shared_tensordict_parent.set_(key, val)
+        else:
+            self.shared_tensordict_parent.update_(
+                tensordict.select(*self._env_input_keys, "next", strict=False)
             )
         if self.event is not None:
             self.event.record()
@@ -825,21 +1072,28 @@ class ParallelEnv(_BatchedEnv):
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         next_td = self.shared_tensordict_parent.get("next")
+        device = self.device
         if self._single_task:
             out = TensorDict(
-                {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
+                {}, batch_size=self.shared_tensordict_parent.shape, device=device
             )
             for key in self._selected_step_keys:
-                _set_single_key(next_td, out, key, clone=True)
+                _set_single_key(next_td, out, key, clone=True, device=device)
         else:
             # strict=False ensures that non-homogeneous keys are still there
-            out = next_td.select(*self._selected_step_keys, strict=False).clone()
+            out = next_td.select(*self._selected_step_keys, strict=False)
+            if out.device == device:
+                out = out.clone()
+            else:
+                out = out.to(device, non_blocking=True)
         return out
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         if tensordict is not None:
-            needs_resetting = _aggregate_resets(tensordict, reset_keys=self.reset_keys)
+            needs_resetting = _aggregate_end_of_traj(
+                tensordict, reset_keys=self.reset_keys
+            )
             if needs_resetting.ndim > 2:
                 needs_resetting = needs_resetting.flatten(1, needs_resetting.ndim - 1)
             if needs_resetting.ndim > 1:
@@ -887,41 +1141,56 @@ class ParallelEnv(_BatchedEnv):
             event.clear()
 
         selected_output_keys = self._selected_reset_keys_filt
+        device = self.device
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
             out = TensorDict(
-                {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
+                {}, batch_size=self.shared_tensordict_parent.shape, device=device
             )
             for key in selected_output_keys:
-                _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
-            return out
+                _set_single_key(
+                    self.shared_tensordict_parent, out, key, clone=True, device=device
+                )
         else:
-            return self.shared_tensordict_parent.select(
+            out = self.shared_tensordict_parent.select(
                 *selected_output_keys,
                 strict=False,
-            ).clone()
+            )
+            if out.device == device:
+                out = out.clone()
+            else:
+                out = out.to(device, non_blocking=True)
+        return out
 
     @_check_start
     def _shutdown_workers(self) -> None:
-        if self.is_closed:
-            raise RuntimeError(
-                "calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
-            )
-        for i, channel in enumerate(self.parent_channels):
-            if self._verbose:
-                print(f"closing {i}")
-            channel.send(("close", None))
-            self._events[i].wait()
-            self._events[i].clear()
+        try:
+            if self.is_closed:
+                raise RuntimeError(
+                    "calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
+                )
+            for i, channel in enumerate(self.parent_channels):
+                if self._verbose:
+                    logging.info(f"closing {i}")
+                channel.send(("close", None))
+                self._events[i].wait()
+                self._events[i].clear()
 
-        del self.shared_tensordicts, self.shared_tensordict_parent
+            del self.shared_tensordicts, self.shared_tensordict_parent
 
-        for channel in self.parent_channels:
-            channel.close()
-        for proc in self._workers:
-            proc.join()
+            for channel in self.parent_channels:
+                channel.close()
+            for proc in self._workers:
+                proc.join(timeout=1.0)
+        finally:
+            for proc in self._workers:
+                if proc.is_alive():
+                    proc.terminate()
         del self._workers
         del self.parent_channels
+        self._cuda_events = None
+        self._events = None
+        self.event = None
 
     @_check_start
     def set_seed(
@@ -1004,7 +1273,6 @@ def _run_worker_pipe_shared_mem(
     child_pipe: connection.Connection,
     env_fun: Union[EnvBase, Callable],
     env_fun_kwargs: Dict[str, Any],
-    device: DEVICE_TYPING = None,
     mp_event: mp.Event = None,
     shared_tensordict: TensorDictBase = None,
     _selected_input_keys=None,
@@ -1013,13 +1281,11 @@ def _run_worker_pipe_shared_mem(
     has_lazy_inputs: bool = False,
     verbose: bool = False,
 ) -> None:
-    if device is None:
-        device = torch.device("cpu")
+    device = shared_tensordict.device
     if device.type == "cuda":
         event = torch.cuda.Event()
     else:
         event = None
-
     parent_pipe.close()
     pid = os.getpid()
     if not isinstance(env_fun, EnvBase):
@@ -1030,17 +1296,26 @@ def _run_worker_pipe_shared_mem(
                 "env_fun_kwargs must be empty if an environment is passed to a process."
             )
         env = env_fun
-    env = env.to(device)
     del env_fun
 
     i = -1
+    import torchrl
+
+    _timeout = torchrl._utils.BATCHED_PIPE_TIMEOUT
+
     initialized = False
 
     child_pipe.send("started")
 
     while True:
         try:
-            cmd, data = child_pipe.recv()
+            if child_pipe.poll(_timeout):
+                cmd, data = child_pipe.recv()
+            else:
+                raise TimeoutError(
+                    f"Worker timed out after {_timeout}s, "
+                    f"increase timeout if needed throught the BATCHED_PIPE_TIMEOUT environment variable."
+                )
         except EOFError as err:
             raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
         if cmd == "seed":
@@ -1053,27 +1328,29 @@ def _run_worker_pipe_shared_mem(
 
         elif cmd == "init":
             if verbose:
-                print(f"initializing {pid}")
+                logging.info(f"initializing {pid}")
             if initialized:
                 raise RuntimeError("worker already initialized")
             i = 0
             next_shared_tensordict = shared_tensordict.get("next")
-            shared_tensordict = shared_tensordict.clone(False)
-            del shared_tensordict["next"]
-
+            root_shared_tensordict = shared_tensordict.exclude("next")
             if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
                 raise RuntimeError(
                     "tensordict must be placed in shared memory (share_memory_() or memmap_())"
                 )
+            shared_tensordict = shared_tensordict.clone(False).unlock_()
+
             initialized = True
 
         elif cmd == "reset":
             if verbose:
-                print(f"resetting worker {pid}")
+                logging.info(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
-            cur_td = env._reset(tensordict=data)
-            shared_tensordict.update_(cur_td)
+            cur_td = env.reset(tensordict=data)
+            shared_tensordict.update_(
+                cur_td.select(*_selected_reset_keys, strict=False)
+            )
             if event is not None:
                 event.record()
                 event.synchronize()
@@ -1083,8 +1360,22 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            next_td = env._step(shared_tensordict)
+            env_input = shared_tensordict
+            next_td = env._step(env_input)
             next_shared_tensordict.update_(next_td)
+            if event is not None:
+                event.record()
+                event.synchronize()
+            mp_event.set()
+
+        elif cmd == "step_and_maybe_reset":
+            if not initialized:
+                raise RuntimeError("called 'init' before step")
+            i += 1
+            env_input = shared_tensordict
+            td, root_next_td = env.step_and_maybe_reset(env_input)
+            next_shared_tensordict.update_(td.get("next"))
+            root_shared_tensordict.update_(root_next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
@@ -1099,7 +1390,7 @@ def _run_worker_pipe_shared_mem(
             mp_event.set()
             child_pipe.close()
             if verbose:
-                print(f"{pid} closed")
+                logging.info(f"{pid} closed")
             break
 
         elif cmd == "load_state_dict":
@@ -1135,3 +1426,10 @@ def _run_worker_pipe_shared_mem(
             else:
                 # don't send env through pipe
                 child_pipe.send(("_".join([cmd, "done"]), None))
+
+
+def _update_cuda(t_dest, t_source):
+    if t_source is None:
+        return
+    t_dest.copy_(t_source.pin_memory(), non_blocking=True)
+    return

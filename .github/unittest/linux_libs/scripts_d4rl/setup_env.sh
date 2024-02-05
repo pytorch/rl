@@ -40,11 +40,13 @@ if [ ! -d "${env_dir}" ]; then
 fi
 conda activate "${env_dir}"
 
+python3 -m pip install pip --upgrade
+
 #pip3 uninstall cython -y
 #pip uninstall cython -y
 #conda uninstall cython -y
-pip3 install "cython<3"
-conda install -c anaconda cython="<3.0.0" -y
+python3 -m pip install "cython<3" --upgrade
+#conda install -c anaconda cython="<3.0.0" -y
 
 
 # 3. Install mujoco

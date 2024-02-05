@@ -23,6 +23,7 @@ from the jump host and pass the slurm specs to submitit.
   and DEFAULT_SLURM_CONF_MAIN dictionaries below).
 
 """
+import logging
 import time
 from argparse import ArgumentParser
 
@@ -110,15 +111,22 @@ frames_per_batch = args.frames_per_batch
     framework="rpc",
 )
 def main():
+    import gym
     from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
     from torchrl.collectors.collectors import RandomPolicy
     from torchrl.data import BoundedTensorSpec
-    from torchrl.envs.libs.gym import GymEnv
+    from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 
     collector_class = SyncDataCollector if num_workers == 1 else MultiSyncDataCollector
     device_str = "device" if num_workers == 1 else "devices"
+
+    def make_env():
+        # gymnasium breaks when using multiproc
+        with set_gym_backend(gym):
+            return GymEnv("ALE/Pong-v5")
+
     collector = RPCDataCollector(
-        [EnvCreator(lambda: GymEnv("ALE/Pong-v5"))] * num_jobs,
+        [EnvCreator(make_env)] * num_jobs,
         policy=RandomPolicy(BoundedTensorSpec(-1, 1, shape=(1,))),
         launcher="submitit_delayed",
         frames_per_batch=frames_per_batch,
@@ -140,7 +148,7 @@ def main():
         if i == 10:
             t0 = time.time()
     t1 = time.time()
-    print(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    logging.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
     collector.shutdown()
     exit()
 

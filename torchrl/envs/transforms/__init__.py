@@ -3,11 +3,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from .gym_transforms import EndOfLifeTransform
 from .r3m import R3MTransform
 from .rlhf import KLRewardTransform
 from .transforms import (
     ActionMask,
     BinarizeReward,
+    BurnInTransform,
     CatFrames,
     CatTensors,
     CenterCrop,
@@ -30,6 +32,7 @@ from .transforms import (
     PermuteTransform,
     PinMemoryTransform,
     RandomCropTensorDict,
+    RemoveEmptySpecs,
     RenameTransform,
     Resize,
     Reward2GoTransform,
@@ -37,6 +40,7 @@ from .transforms import (
     RewardScaling,
     RewardSum,
     SelectTransform,
+    SignTransform,
     SqueezeTransform,
     StepCounter,
     TargetReturn,
@@ -46,6 +50,7 @@ from .transforms import (
     Transform,
     TransformedEnv,
     UnsqueezeTransform,
+    VecGymEnvTransform,
     VecNorm,
 )
 from .vc1 import VC1Transform

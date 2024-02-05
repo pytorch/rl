@@ -80,7 +80,8 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=egl \
-  PYOPENGL_PLATFORM=egl
+  PYOPENGL_PLATFORM=egl \
+  BATCHED_PIPE_TIMEOUT=60
 
 pip install pip --upgrade
 
@@ -146,7 +147,7 @@ version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
 git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
-pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
 
 # smoke test
 python -c "import functorch"
@@ -155,7 +156,7 @@ python -c "import functorch"
 pip install git+https://github.com/pytorch/torchsnapshot
 
 # install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict.git
+pip install git+https://github.com/pytorch/tensordict.git
 
 printf "* Installing torchrl\n"
 python setup.py develop

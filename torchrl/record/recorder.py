@@ -3,20 +3,23 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from copy import copy
 from typing import Optional, Sequence
 
 import torch
+
+from tensordict.tensordict import TensorDictBase
+
+from tensordict.utils import NestedKey
+
+from torchrl.envs.transforms import ObservationTransform, Transform
+from torchrl.record.loggers import Logger
 
 try:
     from torchvision.transforms.functional import center_crop as center_crop_fn
     from torchvision.utils import make_grid
 except ImportError:
     center_crop_fn = None
-
-from tensordict.tensordict import TensorDictBase
-
-from torchrl.envs.transforms import ObservationTransform, Transform
-from torchrl.record.loggers import Logger
 
 
 class VideoRecorder(ObservationTransform):
@@ -27,9 +30,10 @@ class VideoRecorder(ObservationTransform):
 
     Args:
         logger (Logger): a Logger instance where the video
-            should be written.
+            should be written. To save the video under a memmap tensor or an mp4 file, use
+            the :class:`~torchrl.record.loggers.CSVLogger` class.
         tag (str): the video tag in the logger.
-        in_keys (Sequence[str], optional): keys to be read to produce the video.
+        in_keys (Sequence of NestedKey, optional): keys to be read to produce the video.
             Default is :obj:`"pixels"`.
         skip (int): frame interval in the output video.
             Default is 2.
@@ -37,6 +41,31 @@ class VideoRecorder(ObservationTransform):
         make_grid (bool, optional): if ``True``, a grid is created assuming that a
             tensor of shape [B x W x H x 3] is provided, with B being the batch
             size. Default is True.
+        out_keys (sequence of NestedKey, optional): destination keys. Defaults
+            to ``in_keys`` if not provided.
+
+    Examples:
+        The following example shows how to save a rollout under a video. First a few imports:
+        >>> from torchrl.record import VideoRecorder
+        >>> from torchrl.record.loggers.csv import CSVLogger
+        >>> from torchrl.envs import TransformedEnv, DMControlEnv
+
+        The video format is chosen in the logger. Wandb and tensorboard will take care of that
+        on their own, CSV accepts various video formats.
+        >>> logger = CSVLogger(exp_name="cheetah", log_dir="cheetah_videos", video_format="mp4")
+
+        Some envs (eg, Atari games) natively return images, some require the user to ask for them.
+        Check :class:`~torchrl.env.GymEnv` or :class:`~torchrl.envs.DMControlEnv` to see how to render images
+        in these contexts.
+        >>> base_env = DMControlEnv("cheetah", "run", from_pixels=True)
+        >>> env = TransformedEnv(base_env, VideoRecorder(logger=logger, tag="run_video"))
+        >>> env.rollout(100)
+
+        All transforms have a dump function, mostly a no-op except for ``VideoRecorder``, and :class:`~torchrl.envs.transforms.Composite`
+        which will dispatch the `dumps` to all its members.
+        >>> env.transform.dump()
+
+    Our video is available under ``./cheetah_videos/cheetah/videos/run_video_0.mp4``!
 
     """
 
@@ -44,16 +73,18 @@ class VideoRecorder(ObservationTransform):
         self,
         logger: Logger,
         tag: str,
-        in_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
         skip: int = 2,
         center_crop: Optional[int] = None,
         make_grid: bool = True,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         **kwargs,
     ) -> None:
         if in_keys is None:
             in_keys = ["pixels"]
-
-        super().__init__(in_keys=in_keys)
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         video_kwargs = {"fps": 6}
         video_kwargs.update(kwargs)
         self.video_kwargs = video_kwargs
@@ -129,6 +160,12 @@ class VideoRecorder(ObservationTransform):
         self.count = 0
         self.obs = []
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        self._call(tensordict_reset)
+        return tensordict_reset
+
 
 class TensorDictRecorder(Transform):
     """TensorDict recorder.
@@ -164,14 +201,14 @@ class TensorDictRecorder(Transform):
         self.skip = skip
         self.count = 0
 
-    def _call(self, td: TensorDictBase) -> TensorDictBase:
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         self.count += 1
         if self.count % self.skip == 0:
-            _td = td
+            _td = tensordict
             if self.in_keys:
-                _td = td.select(*self.in_keys).to_tensordict()
+                _td = tensordict.select(*self.in_keys).to_tensordict()
             self.td.append(_td)
-        return td
+        return tensordict
 
     def dump(self, suffix: Optional[str] = None) -> None:
         if suffix is None:
@@ -190,3 +227,9 @@ class TensorDictRecorder(Transform):
         self.count = 0
         del self.td
         self.td = []
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        self._call(tensordict_reset)
+        return tensordict_reset
