@@ -1788,6 +1788,7 @@ class TestLSTMModule:
     def test_lstm_parallel_env(self, python_based, parallel, heterogeneous):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
+        torch.manual_seed(0)
         device = "cuda" if torch.cuda.device_count() else "cpu"
         # tests that hidden states are carried over with parallel envs
         lstm_module = LSTMModule(
@@ -2125,6 +2126,8 @@ class TestGRUModule:
     @pytest.mark.parametrize("heterogeneous", [True, False])
     def test_gru_parallel_env(self, python_based, parallel, heterogeneous):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
+
+        torch.manual_seed(0)
 
         device = "cuda" if torch.cuda.device_count() else "cpu"
         # tests that hidden states are carried over with parallel envs

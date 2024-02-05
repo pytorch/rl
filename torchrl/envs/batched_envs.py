@@ -419,7 +419,9 @@ class _BatchedEnv(EnvBase):
                 def map_device(key, value, device_map=device_map):
                     return value.to(device_map[key])
 
-                self._env_tensordict.named_apply(map_device, nested_keys=True)
+                self._env_tensordict.named_apply(
+                    map_device, nested_keys=True, filter_empty=True
+                )
 
             self._batch_locked = meta_data.batch_locked
         else:
@@ -787,7 +789,9 @@ class SerialEnv(_BatchedEnv):
                 return tensor.clone()
 
         out = self.shared_tensordict_parent.named_apply(
-            select_and_clone, nested_keys=True
+            select_and_clone,
+            nested_keys=True,
+            filter_empty=True,
         )
         if out.device != device:
             if device is None:
@@ -828,7 +832,7 @@ class SerialEnv(_BatchedEnv):
             if name in self._selected_step_keys:
                 return tensor.clone()
 
-        out = next_td.named_apply(select_and_clone, nested_keys=True)
+        out = next_td.named_apply(select_and_clone, nested_keys=True, filter_empty=True)
 
         if out.device != device:
             if device is None:
@@ -1044,7 +1048,7 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
         def look_for_cuda(tensor, has_cuda=has_cuda):
             has_cuda[0] = has_cuda[0] or tensor.is_cuda
 
-        self.shared_tensordict_parent.apply(look_for_cuda)
+        self.shared_tensordict_parent.apply(look_for_cuda, filter_empty=True)
         has_cuda = has_cuda[0]
         if has_cuda:
             self.event = torch.cuda.Event()
@@ -1166,12 +1170,14 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
                 if x.device != device
                 else x.clone(),
                 device=device,
+                filter_empty=True,
             )
             tensordict_ = tensordict_._fast_apply(
                 lambda x: x.to(device, non_blocking=True)
                 if x.device != device
                 else x.clone(),
                 device=device,
+                filter_empty=True,
             )
         else:
             next_td = next_td.clone().clear_device_()
@@ -1223,7 +1229,11 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
             if name in self._selected_step_keys:
                 return tensor.clone()
 
-        out = next_td.named_apply(select_and_clone, nested_keys=True)
+        out = next_td.named_apply(
+            select_and_clone,
+            nested_keys=True,
+            filter_empty=True,
+        )
         if out.device != device:
             if device is None:
                 out.clear_device_()
@@ -1290,7 +1300,9 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
                 return tensor.clone()
 
         out = self.shared_tensordict_parent.named_apply(
-            select_and_clone, nested_keys=True
+            select_and_clone,
+            nested_keys=True,
+            filter_empty=True,
         )
         if out.device != device:
             if device is None:
@@ -1426,7 +1438,7 @@ def _run_worker_pipe_shared_mem(
         def look_for_cuda(tensor, has_cuda=has_cuda):
             has_cuda[0] = has_cuda[0] or tensor.is_cuda
 
-        shared_tensordict.apply(look_for_cuda)
+        shared_tensordict.apply(look_for_cuda, filter_empty=True)
         has_cuda = has_cuda[0]
     else:
         has_cuda = device.type == "cuda"
