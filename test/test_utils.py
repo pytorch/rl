@@ -363,8 +363,8 @@ def test_set_gym_nested():
 
 @pytest.mark.parametrize("device", get_default_devices())
 def test_rng_decorator(device):
-    torch.manual_seed(10)
     with torch.device(device):
+        torch.manual_seed(10)
         s0a = torch.randn(3)
         with _rng_decorator(0):
             torch.randn(3)
