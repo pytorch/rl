@@ -1472,7 +1472,7 @@ class HeterogeneousCountingEnv(EnvBase):
         )
 
     def get_agent_obs_spec(self, i):
-        camera = BoundedTensorSpec(low=0, high=200, shape=(7, 7, 3))
+        camera = BoundedTensorSpec(low=0, high=200, shape=(7, 7, 3), dtype=torch.int8)
         vector_3d = UnboundedContinuousTensorSpec(shape=(3,))
         vector_2d = UnboundedContinuousTensorSpec(shape=(2,))
         lidar = BoundedTensorSpec(low=0, high=5, shape=(8,))
