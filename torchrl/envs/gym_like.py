@@ -322,7 +322,7 @@ class GymLikeEnv(_EnvWrapper):
             tensordict_out = TensorDict(
                 obs_dict, batch_size=tensordict.batch_size, _run_checks=False
             )
-        tensordict_out = tensordict_out.to(self.device, non_blocking=False)
+        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
 
         if self.info_dict_reader and (info_dict is not None):
             if not isinstance(info_dict, dict):
@@ -366,7 +366,7 @@ class GymLikeEnv(_EnvWrapper):
             for key, item in self.observation_spec.items(True, True):
                 if key not in tensordict_out.keys(True, True):
                     tensordict_out[key] = item.zero()
-        tensordict_out = tensordict_out.to(self.device, non_blocking=False)
+        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     @abc.abstractmethod
