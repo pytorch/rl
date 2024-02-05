@@ -369,7 +369,6 @@ def test_rng_decorator(device):
         s0a = torch.randn(3)
         with _rng_decorator(0):
             torch.randn(3)
-            time.sleep(4)
         s0b = torch.randn(3)
         torch.manual_seed(10)
         s1a = torch.randn(3)

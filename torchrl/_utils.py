@@ -709,12 +709,25 @@ def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
 class _rng_decorator(_DecoratorContextManager):
     """Temporarily sets the seed and sets back the rng state when exiting."""
 
-    def __init__(self, seed):
+    def __init__(self, seed, device=None):
         self.seed = seed
+        self.device = device
+        self.has_cuda = torch.cuda.is_available():
 
     def __enter__(self):
-        self._state = torch.random.get_rng_state()
+        self._get_state()
         torch.manual_seed(self.seed)
 
+    def _get_state(self):
+        if self.has_cuda:
+            self._state = (
+                torch.random.get_rng_state(), torch.cuda.get_rng_state(self.device))
+        else:
+            self.state = torch.random.get_rng_state()
+
     def __exit__(self, exc_type, exc_val, exc_tb):
-        torch.random.set_rng_state(self._state)
+        if self.has_cuda:
+            torch.random.set_rng_state(self._state[0])
+            torch.cuda.set_rng_state(self._state[1], device=self.device)
+        else:
+            torch.random.set_rng_state(self._state)
