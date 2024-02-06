@@ -7,10 +7,11 @@ from dreamer_utils import (
     make_dreamer,
     make_environments,
     make_replay_buffer,
+    log_metrics,
 )
 
 # float16
-from torch.cuda.amp import GradScaler
+from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 
 from torchrl.objectives.dreamer import (
@@ -19,7 +20,7 @@ from torchrl.objectives.dreamer import (
     DreamerValueLoss,
 )
 
-# from torchrl.record.loggers import generate_exp_name, get_logger
+from torchrl.record.loggers import generate_exp_name, get_logger
 
 # from torchrl.trainers.helpers.envs import (
 #     correct_for_frame_skip,
@@ -40,17 +41,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
     else:
         device = torch.device("cpu")
 
-    # exp_name = generate_exp_name("Dreamer", cfg.logger.exp_name)
-    # logger = get_logger(
-    #     logger_type=cfg.logger.logger_type,
-    #     logger_name="dreamer",
-    #     experiment_name=exp_name,
-    #     wandb_kwargs={
-    #         "project": cfg.logger.project,
-    #         "mode": cfg.logger.mode,
-    #         "config": cfg,
-    #     },
-    # )
+    # Create logger
+    exp_name = generate_exp_name("Dreamer", cfg.logger.exp_name)
+    logger = None
+    if cfg.logger.backend:
+        logger = get_logger(
+            logger_type=cfg.logger.backend,
+            logger_name="dreamer_logging",
+            experiment_name=exp_name,
+            wandb_kwargs={"mode": cfg.logger.mode},  # "config": cfg},
+        )
 
     train_env, test_env = make_environments(cfg=cfg, device=device)
 
@@ -59,7 +59,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     value_key = "state_value"
     world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
         config=cfg,
-        test_env=test_env,
         device=device,
         action_key=action_key,
         value_key=value_key,
@@ -92,6 +91,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         buffer_size=cfg.replay_buffer.buffer_size,
         buffer_scratch_dir=cfg.replay_buffer.scratch_dir,
         device=cfg.networks.device,
+        pixel_obs=cfg.env.from_pixels,
     )
 
     # Training loop
@@ -105,9 +105,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.optimization.actor_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.optimization.value_lr)
 
-    scaler1 = GradScaler()
-    scaler2 = GradScaler()
-    scaler3 = GradScaler()
+    # scaler1 = GradScaler()
+    # scaler2 = GradScaler()
+    # scaler3 = GradScaler()
 
     init_random_frames = cfg.collector.init_random_frames
     batch_size = cfg.optimization.batch_size
@@ -119,6 +119,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         current_frames = tensordict.numel()
         collected_frames += current_frames
 
+        tensordict["pixels"] = (tensordict["pixels"] * 255).to(torch.uint8)
+        tensordict["next", "pixels"] = (tensordict["next", "pixels"] * 255).to(
+            torch.uint8
+        )
+        ep_reward = tensordict.get("episode_reward")[:, -1]
         replay_buffer.extend(tensordict.cpu())
 
         if collected_frames >= init_random_frames:
@@ -128,45 +133,62 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     device, non_blocking=True
                 )
                 # update world model
-                # with autocast(dtype=torch.float16):
-                model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
-                loss_world_model = (
-                    model_loss_td["loss_model_kl"]
-                    + model_loss_td["loss_model_reco"]
-                    + model_loss_td["loss_model_reward"]
-                )
+                with autocast(dtype=torch.float16):
+                    model_loss_td, sampled_tensordict = world_model_loss(
+                        sampled_tensordict
+                    )
+                    loss_world_model = (
+                        model_loss_td["loss_model_kl"]
+                        + model_loss_td["loss_model_reco"]
+                        + model_loss_td["loss_model_reward"]
+                    )
 
                 world_model_opt.zero_grad()
-                scaler1.scale(loss_world_model).backward()
-                scaler1.unscale_(world_model_opt)
+                loss_world_model.backward()
+                # scaler1.scale(loss_world_model).backward()
+                # scaler1.unscale_(world_model_opt)
                 clip_grad_norm_(world_model.parameters(), grad_clip)
-
-                scaler1.step(world_model_opt)
-                scaler1.update()
+                world_model_opt.step()
+                # scaler1.step(world_model_opt)
+                # scaler1.update()
 
                 # update actor network
-                # with autocast(dtype=torch.float16):
-                actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+                with autocast(dtype=torch.float16):
+                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
 
                 actor_opt.zero_grad()
-                scaler2.scale(actor_loss_td["loss_actor"]).backward()
-                scaler2.unscale_(actor_opt)
+                actor_loss_td["loss_actor"].backward()
+                # scaler2.scale(actor_loss_td["loss_actor"]).backward()
+                # scaler2.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), grad_clip)
-
-                scaler2.step(actor_opt)
-                scaler2.update()
+                actor_opt.step()
+                # scaler2.step(actor_opt)
+                # scaler2.update()
 
                 # update value network
-                # with autocast(dtype=torch.float16):
-                value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                with autocast(dtype=torch.float16):
+                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
                 value_opt.zero_grad()
-                scaler3.scale(value_loss_td["loss_value"]).backward()
-                scaler3.unscale_(value_opt)
+                value_loss_td["loss_value"].backward()
+                # scaler3.scale(value_loss_td["loss_value"]).backward()
+                # scaler3.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), grad_clip)
+                value_opt.step()
+                # scaler3.step(value_opt)
+                # scaler3.update()
 
-                scaler3.step(value_opt)
-                scaler3.update()
+        metrics_to_log = {
+            "reward": ep_reward.item(),
+            "loss_model_kl": model_loss_td["loss_model_kl"].item(),
+            "loss_model_reco": model_loss_td["loss_model_reco"].item(),
+            "loss_model_reward": model_loss_td["loss_model_reward"].item(),
+            "loss_actor": actor_loss_td["loss_actor"].item(),
+            "loss_value": value_loss_td["loss_value"].item(),
+        }
+
+        if logger is not None:
+            log_metrics(logger, metrics_to_log, collected_frames)
 
         policy.step(current_frames)
         collector.update_policy_weights_()
