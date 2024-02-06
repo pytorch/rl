@@ -12,8 +12,7 @@ from torch import nn
 
 from torchrl.data.utils import DEVICE_TYPING
 
-from .models import AbsLinear, HyperLinear, MLP
-from torchrl.modules.models import ConvNet, MLP
+from torchrl.modules.models import AbsLinear, ConvNet, HyperLinear, MLP
 
 
 class MultiAgentMLP(nn.Module):
