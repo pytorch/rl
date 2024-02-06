@@ -629,7 +629,9 @@ class TestParallel:
     def test_transform_env_transform_no_device(self, heterogeneous):
         # Tests non-regression on 1865
         def make_env():
-            return TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(max_steps=3))
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(), StepCounter(max_steps=3)
+            )
 
         if heterogeneous:
             make_envs = [EnvCreator(make_env), EnvCreator(make_env)]
