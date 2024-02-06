@@ -3,11 +3,11 @@ import torch
 import torch.cuda
 import tqdm
 from dreamer_utils import (
+    log_metrics,
     make_collector,
     make_dreamer,
     make_environments,
     make_replay_buffer,
-    log_metrics,
 )
 
 # float16
