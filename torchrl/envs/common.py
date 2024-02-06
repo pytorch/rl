@@ -107,7 +107,7 @@ class EnvMetaData:
         def fill_device_map(name, val, device_map=device_map):
             device_map[name] = val.device
 
-        tensordict.named_apply(fill_device_map, nested_keys=True)
+        tensordict.named_apply(fill_device_map, nested_keys=True, filter_empty=True)
         return EnvMetaData(
             tensordict, specs, batch_size, env_str, device, batch_locked, device_map
         )
