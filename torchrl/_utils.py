@@ -729,7 +729,7 @@ class _rng_decorator(_DecoratorContextManager):
                 )
 
         else:
-            self.state = torch.random.get_rng_state()
+            self._state = torch.random.get_rng_state()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.has_cuda:
