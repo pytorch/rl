@@ -801,22 +801,30 @@ class SyncDataCollector(DataCollectorBase):
                             "Consider using a placeholder for missing keys."
                         )
 
-                policy_output._fast_apply(check_exclusive, call_on_nested=True)
+                policy_output._fast_apply(
+                    check_exclusive, call_on_nested=True, filter_empty=True
+                )
+
                 # Use apply, because it works well with lazy stacks
                 # Edge-case of this approach: the policy may change the values in-place and only by a tiny bit
                 # or occasionally. In these cases, the keys will be missed (we can't detect if the policy has
                 # changed them here).
                 # This will cause a failure to update entries when policy and env device mismatch and
                 # casting is necessary.
+                def filter_policy(value_output, value_input, value_input_clone):
+                    if (
+                        (value_input is None)
+                        or (value_output is not value_input)
+                        or ~torch.isclose(value_output, value_input_clone).any()
+                    ):
+                        return value_output
+
                 filtered_policy_output = policy_output.apply(
-                    lambda value_output, value_input, value_input_clone: value_output
-                    if (value_input is None)
-                    or (value_output is not value_input)
-                    or ~torch.isclose(value_output, value_input_clone).any()
-                    else None,
+                    filter_policy,
                     policy_input_copy,
                     policy_input_clone,
                     default=None,
+                    filter_empty=True,
                 )
                 self._policy_output_keys = list(
                     self._policy_output_keys.union(
@@ -933,7 +941,7 @@ class SyncDataCollector(DataCollectorBase):
                 if tensor.is_cuda:
                     cuda_devices.add(tensor.device)
 
-            self._final_rollout.apply(cuda_check)
+            self._final_rollout.apply(cuda_check, filter_empty=True)
             for device in cuda_devices:
                 streams.append(torch.cuda.Stream(device, priority=-1))
                 events.append(streams[-1].record_event())
