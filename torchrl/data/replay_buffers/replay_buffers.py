@@ -907,11 +907,13 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
         if self._transform is not None:
             data = self._transform.inv(tensordicts.get("_data"))
-            tensordicts.set("_data", data)
+            tensordicts._set_str("_data", data, validated=True, inplace=False)
             if data.device is not None:
                 tensordicts = tensordicts.to(data.device)
 
-        tensordicts.batch_size = tensordicts.get("_data").batch_size[:1]
+        _data = tensordicts.get("_data")
+        tensordicts.batch_size = _data.batch_size[:1]
+        tensordicts.names = _data.names[:1]
         tensordicts.set(
             "index",
             torch.zeros(tensordicts.shape, device=tensordicts.device, dtype=torch.int),
