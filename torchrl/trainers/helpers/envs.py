@@ -8,7 +8,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import torch
 
-from torchrl._utils import VERBOSE
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
@@ -145,16 +145,6 @@ def make_env_transforms(
     if reward_scaling is not None:
         env.append_transform(RewardScaling(reward_loc, reward_scaling))
 
-    double_to_float_list = []
-    double_to_float_inv_list = []
-    if env_library is DMControlEnv:
-        double_to_float_list += [
-            "reward",
-        ]
-        double_to_float_list += [
-            "action",
-        ]
-        double_to_float_inv_list += ["action"]  # DMControl requires double-precision
     if not from_pixels:
         selected_keys = [
             key
@@ -187,22 +177,13 @@ def make_env_transforms(
                 )
             )
 
-        double_to_float_list.append(out_key)
-        env.append_transform(
-            DoubleToFloat(
-                in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
-            )
-        )
+        env.append_transform(DoubleToFloat())
 
         if hasattr(cfg, "catframes") and cfg.catframes:
             env.append_transform(CatFrames(N=cfg.catframes, in_keys=[out_key], dim=-1))
 
     else:
-        env.append_transform(
-            DoubleToFloat(
-                in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
-            )
-        )
+        env.append_transform(DoubleToFloat())
 
     if hasattr(cfg, "gSDE") and cfg.gSDE:
         env.append_transform(
@@ -412,7 +393,7 @@ def get_stats_random_rollout(
         )()
 
     if VERBOSE:
-        print("computing state stats")
+        torchrl_logger.info("computing state stats")
     if not hasattr(cfg, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
@@ -445,7 +426,7 @@ def get_stats_random_rollout(
     s[s == 0] = 1.0
 
     if VERBOSE:
-        print(
+        torchrl_logger.info(
             f"stats computed for {val_stats.numel()} steps. Got: \n"
             f"loc = {m}, \n"
             f"scale = {s}"

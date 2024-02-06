@@ -16,8 +16,15 @@ from torch import nn
 from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec
 from torchrl.modules import (
     CEMPlanner,
+    DTActor,
+    GRU,
+    GRUCell,
+    LSTM,
+    LSTMCell,
     LSTMNet,
+    MultiAgentConvNet,
     MultiAgentMLP,
+    OnlineDTActor,
     QMixer,
     SafeModule,
     TanhModule,
@@ -25,7 +32,11 @@ from torchrl.modules import (
     VDNMixer,
 )
 from torchrl.modules.distributions.utils import safeatanh, safetanh
-from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
+from torchrl.modules.models import Conv3dNet, ConvNet, MLP, NoisyLazyLinear, NoisyLinear
+from torchrl.modules.models.decision_transformer import (
+    _has_transformers,
+    DecisionTransformer,
+)
 from torchrl.modules.models.model_based import (
     DreamerActor,
     ObsDecoder,
@@ -173,6 +184,113 @@ def test_convnet(
     x = torch.randn(*batch, in_features, input_size, input_size, device=device)
     y = convnet(x)
     assert y.shape == torch.Size([*batch, expected_features])
+
+
+class TestConv3d:
+    @pytest.mark.parametrize("in_features", [3, 10, None])
+    @pytest.mark.parametrize(
+        "input_size, depth, num_cells, kernel_sizes, strides, paddings, expected_features",
+        [
+            (10, None, None, 3, 1, 0, 32 * 4 * 4 * 4),
+            (10, 3, 32, 3, 1, 1, 32 * 10 * 10 * 10),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "activation_class, activation_kwargs",
+        [(nn.ReLU, {"inplace": True}), (nn.ReLU, {}), (nn.PReLU, {})],
+    )
+    @pytest.mark.parametrize(
+        "norm_class, norm_kwargs",
+        [
+            (None, None),
+            (nn.LazyBatchNorm3d, {}),
+            (nn.BatchNorm3d, {"num_features": 32}),
+        ],
+    )
+    @pytest.mark.parametrize("bias_last_layer", [True, False])
+    @pytest.mark.parametrize(
+        "aggregator_class, aggregator_kwargs",
+        [(SquashDims, None)],
+    )
+    @pytest.mark.parametrize("squeeze_output", [False])
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("batch", [(2,), (2, 2)])
+    def test_conv3dnet(
+        self,
+        batch,
+        in_features,
+        depth,
+        num_cells,
+        kernel_sizes,
+        strides,
+        paddings,
+        activation_class,
+        activation_kwargs,
+        norm_class,
+        norm_kwargs,
+        bias_last_layer,
+        aggregator_class,
+        aggregator_kwargs,
+        squeeze_output,
+        device,
+        input_size,
+        expected_features,
+        seed=0,
+    ):
+        torch.manual_seed(seed)
+        conv3dnet = Conv3dNet(
+            in_features=in_features,
+            depth=depth,
+            num_cells=num_cells,
+            kernel_sizes=kernel_sizes,
+            strides=strides,
+            paddings=paddings,
+            activation_class=activation_class,
+            activation_kwargs=activation_kwargs,
+            norm_class=norm_class,
+            norm_kwargs=norm_kwargs,
+            bias_last_layer=bias_last_layer,
+            aggregator_class=aggregator_class,
+            aggregator_kwargs=aggregator_kwargs,
+            squeeze_output=squeeze_output,
+            device=device,
+        )
+        if in_features is None:
+            in_features = 5
+        x = torch.randn(
+            *batch, in_features, input_size, input_size, input_size, device=device
+        )
+        y = conv3dnet(x)
+        assert y.shape == torch.Size([*batch, expected_features])
+        with pytest.raises(ValueError, match="must have at least 4 dimensions"):
+            conv3dnet(torch.randn(3, 16, 16))
+
+    def test_errors(self):
+        with pytest.raises(
+            ValueError, match="Null depth is not permitted with Conv3dNet"
+        ):
+            conv3dnet = Conv3dNet(
+                in_features=5,
+                num_cells=32,
+                depth=0,
+            )
+        with pytest.raises(
+            ValueError, match="depth=None requires one of the input args"
+        ):
+            conv3dnet = Conv3dNet(
+                in_features=5,
+                num_cells=32,
+                depth=None,
+            )
+        with pytest.raises(
+            ValueError, match="consider matching or specifying a constant num_cells"
+        ):
+            conv3dnet = Conv3dNet(
+                in_features=5,
+                num_cells=[32],
+                depth=None,
+                kernel_sizes=[3, 3],
+            )
 
 
 @pytest.mark.parametrize(
@@ -440,7 +558,7 @@ class TestDreamerComponents:
     @pytest.mark.parametrize("action_size", [3, 6])
     def test_rssm_prior(self, device, batch_size, stoch_size, deter_size, action_size):
         action_spec = BoundedTensorSpec(
-            shape=(action_size,), dtype=torch.float32, minimum=-1, maximum=1
+            shape=(action_size,), dtype=torch.float32, low=-1, high=1
         )
         rssm_prior = RSSMPrior(
             action_spec,
@@ -495,7 +613,7 @@ class TestDreamerComponents:
         self, device, batch_size, temporal_size, stoch_size, deter_size, action_size
     ):
         action_spec = BoundedTensorSpec(
-            shape=(action_size,), dtype=torch.float32, minimum=-1, maximum=1
+            shape=(action_size,), dtype=torch.float32, low=-1, high=1
         )
         rssm_prior = RSSMPrior(
             action_spec,
@@ -804,6 +922,58 @@ class TestMultiAgent:
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
 
     @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize("share_params", [True, False])
+    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
+    def test_cnn(
+        self, n_agents, centralised, share_params, batch, x=50, y=50, channels=3
+    ):
+        torch.manual_seed(0)
+        cnn = MultiAgentConvNet(
+            n_agents=n_agents, centralised=centralised, share_params=share_params
+        )
+        td = TensorDict(
+            {
+                "agents": TensorDict(
+                    {"observation": torch.randn(*batch, n_agents, channels, x, y)},
+                    [*batch, n_agents],
+                )
+            },
+            batch_size=batch,
+        )
+        obs = td[("agents", "observation")]
+        out = cnn(obs)
+        assert out.shape[:-1] == (*batch, n_agents)
+        for i in range(n_agents):
+            if centralised and share_params:
+                assert torch.allclose(out[..., i, :], out[..., 0, :])
+            else:
+                for j in range(i + 1, n_agents):
+                    assert not torch.allclose(out[..., i, :], out[..., j, :])
+
+        obs[..., 0, 0, 0, 0] += 1
+        out2 = cnn(obs)
+        for i in range(n_agents):
+            if centralised:
+                # a modification to the input of agent 0 will impact all agents
+                assert not torch.allclose(out[..., i, :], out2[..., i, :])
+            elif i > 0:
+                assert torch.allclose(out[..., i, :], out2[..., i, :])
+
+        obs = torch.randn(*batch, 1, channels, x, y).expand(
+            *batch, n_agents, channels, x, y
+        )
+        out = cnn(obs)
+        for i in range(n_agents):
+            if share_params:
+                # same input same output
+                assert torch.allclose(out[..., i, :], out[..., 0, :])
+            else:
+                for j in range(i + 1, n_agents):
+                    # same input different output
+                    assert not torch.allclose(out[..., i, :], out[..., j, :])
+
+    @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize(
         "batch",
         [
@@ -950,6 +1120,276 @@ def test_tanh_atanh(use_vmap, scale):
 
     xp.sum().backward()
     torch.testing.assert_close(x.grad, torch.ones_like(x))
+
+
+@pytest.mark.skipif(
+    not _has_transformers, reason="transformers needed for TestDecisionTransformer"
+)
+class TestDecisionTransformer:
+    def test_init(self):
+        DecisionTransformer(
+            3,
+            4,
+        )
+        with pytest.raises(TypeError):
+            DecisionTransformer(3, 4, config="some_str")
+        DecisionTransformer(
+            3,
+            4,
+            config=DecisionTransformer.DTConfig(
+                n_layer=2, n_embd=16, n_positions=16, n_inner=16, n_head=2
+            ),
+        )
+
+    @pytest.mark.parametrize("batch_dims", [[], [3], [3, 4]])
+    def test_exec(self, batch_dims, T=5):
+        observations = torch.randn(*batch_dims, T, 3)
+        actions = torch.randn(*batch_dims, T, 4)
+        r2go = torch.randn(*batch_dims, T, 1)
+        model = DecisionTransformer(
+            3,
+            4,
+            config=DecisionTransformer.DTConfig(
+                n_layer=2, n_embd=16, n_positions=16, n_inner=16, n_head=2
+            ),
+        )
+        out = model(observations, actions, r2go)
+        assert out.shape == torch.Size([*batch_dims, T, 16])
+
+    @pytest.mark.parametrize("batch_dims", [[], [3], [3, 4]])
+    def test_dtactor(self, batch_dims, T=5):
+        dtactor = DTActor(
+            3,
+            4,
+            transformer_config=DecisionTransformer.DTConfig(
+                n_layer=2, n_embd=16, n_positions=16, n_inner=16, n_head=2
+            ),
+        )
+        observations = torch.randn(*batch_dims, T, 3)
+        actions = torch.randn(*batch_dims, T, 4)
+        r2go = torch.randn(*batch_dims, T, 1)
+        out = dtactor(observations, actions, r2go)
+        assert out.shape == torch.Size([*batch_dims, T, 4])
+
+    @pytest.mark.parametrize("batch_dims", [[], [3], [3, 4]])
+    def test_onlinedtactor(self, batch_dims, T=5):
+        dtactor = OnlineDTActor(
+            3,
+            4,
+            transformer_config=DecisionTransformer.DTConfig(
+                n_layer=2, n_embd=16, n_positions=16, n_inner=16, n_head=2
+            ),
+        )
+        observations = torch.randn(*batch_dims, T, 3)
+        actions = torch.randn(*batch_dims, T, 4)
+        r2go = torch.randn(*batch_dims, T, 1)
+        mu, sig = dtactor(observations, actions, r2go)
+        assert mu.shape == torch.Size([*batch_dims, T, 4])
+        assert sig.shape == torch.Size([*batch_dims, T, 4])
+        assert (dtactor.log_std_min < sig.log()).all()
+        assert (dtactor.log_std_max > sig.log()).all()
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("bias", [True, False])
+def test_python_lstm_cell(device, bias):
+
+    lstm_cell1 = LSTMCell(10, 20, device=device, bias=bias)
+    lstm_cell2 = nn.LSTMCell(10, 20, device=device, bias=bias)
+
+    lstm_cell1.load_state_dict(lstm_cell2.state_dict())
+
+    # Make sure parameters match
+    for (k1, v1), (k2, v2) in zip(
+        lstm_cell1.named_parameters(), lstm_cell2.named_parameters()
+    ):
+        assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
+
+    # Run loop
+    input = torch.randn(2, 3, 10, device=device)
+    h0 = torch.randn(3, 20, device=device)
+    c0 = torch.randn(3, 20, device=device)
+    with torch.no_grad():
+        for i in range(input.size()[0]):
+            h1, c1 = lstm_cell1(input[i], (h0, c0))
+            h2, c2 = lstm_cell2(input[i], (h0, c0))
+
+            # Make sure the final hidden states have the same shape
+            assert h1.shape == h2.shape
+            assert c1.shape == c2.shape
+            torch.testing.assert_close(h1, h2)
+            torch.testing.assert_close(c1, c2)
+            h0 = h1
+            c0 = c1
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("bias", [True, False])
+def test_python_gru_cell(device, bias):
+
+    gru_cell1 = GRUCell(10, 20, device=device, bias=bias)
+    gru_cell2 = nn.GRUCell(10, 20, device=device, bias=bias)
+
+    gru_cell2.load_state_dict(gru_cell1.state_dict())
+
+    # Make sure parameters match
+    for (k1, v1), (k2, v2) in zip(
+        gru_cell1.named_parameters(), gru_cell2.named_parameters()
+    ):
+        assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
+        assert (v1 == v2).all()
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
+
+    # Run loop
+    input = torch.randn(2, 3, 10, device=device)
+    h0 = torch.zeros(3, 20, device=device)
+    with torch.no_grad():
+        for i in range(input.size()[0]):
+            h1 = gru_cell1(input[i], h0)
+            h2 = gru_cell2(input[i], h0)
+
+            # Make sure the final hidden states have the same shape
+            assert h1.shape == h2.shape
+            torch.testing.assert_close(h1, h2)
+            h0 = h1
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("bias", [True, False])
+@pytest.mark.parametrize("batch_first", [True, False])
+@pytest.mark.parametrize("dropout", [0.0, 0.5])
+@pytest.mark.parametrize("num_layers", [1, 2])
+def test_python_lstm(device, bias, dropout, batch_first, num_layers):
+    B = 5
+    T = 3
+    lstm1 = LSTM(
+        input_size=10,
+        hidden_size=20,
+        num_layers=num_layers,
+        device=device,
+        bias=bias,
+        batch_first=batch_first,
+    )
+    lstm2 = nn.LSTM(
+        input_size=10,
+        hidden_size=20,
+        num_layers=num_layers,
+        device=device,
+        bias=bias,
+        batch_first=batch_first,
+    )
+
+    lstm2.load_state_dict(lstm1.state_dict())
+
+    # Make sure parameters match
+    for (k1, v1), (k2, v2) in zip(lstm1.named_parameters(), lstm2.named_parameters()):
+        assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
+
+    if batch_first:
+        input = torch.randn(B, T, 10, device=device)
+    else:
+        input = torch.randn(T, B, 10, device=device)
+
+    h0 = torch.randn(num_layers, 5, 20, device=device)
+    c0 = torch.randn(num_layers, 5, 20, device=device)
+
+    # Test without hidden states
+    with torch.no_grad():
+        output1, (h1, c1) = lstm1(input)
+        output2, (h2, c2) = lstm2(input)
+
+    assert h1.shape == h2.shape
+    assert c1.shape == c2.shape
+    assert output1.shape == output2.shape
+    if dropout == 0.0:
+        torch.testing.assert_close(output1, output2)
+        torch.testing.assert_close(h1, h2)
+        torch.testing.assert_close(c1, c2)
+
+    # Test with hidden states
+    with torch.no_grad():
+        output1, (h1, c1) = lstm1(input, (h0, c0))
+        output2, (h2, c2) = lstm1(input, (h0, c0))
+
+    assert h1.shape == h2.shape
+    assert c1.shape == c2.shape
+    assert output1.shape == output2.shape
+    if dropout == 0.0:
+        torch.testing.assert_close(output1, output2)
+        torch.testing.assert_close(h1, h2)
+        torch.testing.assert_close(c1, c2)
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("bias", [True, False])
+@pytest.mark.parametrize("batch_first", [True, False])
+@pytest.mark.parametrize("dropout", [0.0, 0.5])
+@pytest.mark.parametrize("num_layers", [1, 2])
+def test_python_gru(device, bias, dropout, batch_first, num_layers):
+    B = 5
+    T = 3
+    gru1 = GRU(
+        input_size=10,
+        hidden_size=20,
+        num_layers=num_layers,
+        device=device,
+        bias=bias,
+        batch_first=batch_first,
+    )
+    gru2 = nn.GRU(
+        input_size=10,
+        hidden_size=20,
+        num_layers=num_layers,
+        device=device,
+        bias=bias,
+        batch_first=batch_first,
+    )
+    gru2.load_state_dict(gru1.state_dict())
+
+    # Make sure parameters match
+    for (k1, v1), (k2, v2) in zip(gru1.named_parameters(), gru2.named_parameters()):
+        assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
+        torch.testing.assert_close(v1, v2)
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
+
+    if batch_first:
+        input = torch.randn(B, T, 10, device=device)
+    else:
+        input = torch.randn(T, B, 10, device=device)
+
+    h0 = torch.randn(num_layers, 5, 20, device=device)
+
+    # Test without hidden states
+    with torch.no_grad():
+        output1, h1 = gru1(input)
+        output2, h2 = gru2(input)
+
+    assert h1.shape == h2.shape
+    assert output1.shape == output2.shape
+    if dropout == 0.0:
+        torch.testing.assert_close(output1, output2)
+        torch.testing.assert_close(h1, h2)
+
+    # Test with hidden states
+    with torch.no_grad():
+        output1, h1 = gru1(input, h0)
+        output2, h2 = gru2(input, h0)
+
+    assert h1.shape == h2.shape
+    assert output1.shape == output2.shape
+    if dropout == 0.0:
+        torch.testing.assert_close(output1, output2)
+        torch.testing.assert_close(h1, h2)
 
 
 if __name__ == "__main__":

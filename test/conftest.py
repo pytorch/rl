@@ -33,7 +33,6 @@ Call times:
         out_str += f"\t{key}{spaces}{item: 4.4f}s\n"
         if i == maxprint - 1:
             break
-    print(out_str)
 
 
 @pytest.fixture(autouse=True)
@@ -54,7 +53,7 @@ def measure_duration(request: pytest.FixtureRequest):
     request.addfinalizer(fin)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def set_warnings() -> None:
     warnings.filterwarnings(
         "ignore",
@@ -66,3 +65,43 @@ def set_warnings() -> None:
         category=UserWarning,
         message=r"Couldn't cast the policy onto the desired device on remote process",
     )
+    warnings.filterwarnings(
+        "ignore",
+        category=DeprecationWarning,
+        message=r"Deprecated call to `pkg_resources.declare_namespace",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=DeprecationWarning,
+        message=r"Using or importing the ABCs",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=DeprecationWarning,
+        message=r"Please use `coo_matrix` from the `scipy.sparse` namespace",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=DeprecationWarning,
+        message=r"jax.tree_util.register_keypaths is deprecated|jax.ShapedArray is deprecated",
+    )
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--runslow", action="store_true", default=False, help="run slow tests"
+    )
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "slow: mark test as slow to run")
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--runslow"):
+        # --runslow given in cli: do not skip slow tests
+        return
+    skip_slow = pytest.mark.skip(reason="need --runslow option to run")
+    for item in items:
+        if "slow" in item.keywords:
+            item.add_marker(skip_slow)

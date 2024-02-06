@@ -2,333 +2,218 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+"""Discrete SAC Example.
 
+This is a simple self-contained example of a discrete SAC training script.
+
+It supports gym state environments like CartPole.
+
+The helper functions are coded in the utils.py associated with this script.
+"""
+import time
 
 import hydra
 import numpy as np
 import torch
 import torch.cuda
 import tqdm
-from tensordict.nn import InteractionType
+from torchrl._utils import logger as torchrl_logger
 
-from torch import nn, optim
-from torchrl.collectors import SyncDataCollector
-from torchrl.data import (
-    CompositeSpec,
-    TensorDictPrioritizedReplayBuffer,
-    TensorDictReplayBuffer,
-)
-
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.envs import EnvCreator, ParallelEnv
-
-from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import MLP, SafeModule
-from torchrl.modules.distributions import OneHotCategorical
 
-from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
-
-from torchrl.objectives import DiscreteSACLoss, SoftUpdate
 from torchrl.record.loggers import generate_exp_name, get_logger
-
-
-def env_maker(env_name, frame_skip=1, device="cpu", from_pixels=False):
-    return GymEnv(
-        env_name, device=device, frame_skip=frame_skip, from_pixels=from_pixels
-    )
-
-
-def make_replay_buffer(
-    prb=False,
-    buffer_size=1000000,
-    batch_size=256,
-    buffer_scratch_dir="/tmp/",
-    device="cpu",
-    prefetch=3,
-):
-    if prb:
-        replay_buffer = TensorDictPrioritizedReplayBuffer(
-            alpha=0.7,
-            beta=0.5,
-            pin_memory=False,
-            batch_size=batch_size,
-            prefetch=prefetch,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=buffer_scratch_dir,
-                device=device,
-            ),
-        )
-    else:
-        replay_buffer = TensorDictReplayBuffer(
-            pin_memory=False,
-            batch_size=batch_size,
-            prefetch=prefetch,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=buffer_scratch_dir,
-                device=device,
-            ),
-        )
-    return replay_buffer
+from utils import (
+    log_metrics,
+    make_collector,
+    make_environment,
+    make_loss_module,
+    make_optimizer,
+    make_replay_buffer,
+    make_sac_agent,
+)
 
 
 @hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
+    device = torch.device(cfg.network.device)
 
-    device = (
-        torch.device("cuda:0")
-        if torch.cuda.is_available()
-        and torch.cuda.device_count() > 0
-        and cfg.device == "cuda:0"
-        else torch.device("cpu")
-    )
-
-    exp_name = generate_exp_name("Discrete_SAC", cfg.exp_name)
-    logger = get_logger(
-        logger_type=cfg.logger,
-        logger_name="dSAC_logging",
-        experiment_name=exp_name,
-        wandb_kwargs={"mode": cfg.mode},
-    )
-
-    torch.manual_seed(cfg.seed)
-    np.random.seed(cfg.seed)
-
-    def env_factory(num_workers):
-        """Creates an instance of the environment."""
-
-        # 1.2 Create env vector
-        vec_env = ParallelEnv(
-            create_env_fn=EnvCreator(lambda: env_maker(env_name=cfg.env_name)),
-            num_workers=num_workers,
+    # Create logger
+    exp_name = generate_exp_name("DiscreteSAC", cfg.logger.exp_name)
+    logger = None
+    if cfg.logger.backend:
+        logger = get_logger(
+            logger_type=cfg.logger.backend,
+            logger_name="DiscreteSAC_logging",
+            experiment_name=exp_name,
+            wandb_kwargs={
+                "mode": cfg.logger.mode,
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
 
-        return vec_env
+    # Set seeds
+    torch.manual_seed(cfg.env.seed)
+    np.random.seed(cfg.env.seed)
 
-    # Sanity check
-    test_env = env_factory(num_workers=5)
-    num_actions = test_env.action_spec.space.n
+    # Create environments
+    train_env, eval_env = make_environment(cfg)
 
-    # Create Agent
-    # Define Actor Network
-    in_keys = ["observation"]
+    # Create agent
+    model = make_sac_agent(cfg, train_env, eval_env, device)
 
-    actor_net_kwargs = {
-        "num_cells": [256, 256],
-        "out_features": num_actions,
-        "activation_class": nn.ReLU,
-    }
+    # Create TD3 loss
+    loss_module, target_net_updater = make_loss_module(cfg, model)
 
-    actor_net = MLP(**actor_net_kwargs)
+    # Create off-policy collector
+    collector = make_collector(cfg, train_env, model[0])
 
-    actor_module = SafeModule(
-        module=actor_net,
-        in_keys=in_keys,
-        out_keys=["logits"],
-    )
-    actor = ProbabilisticActor(
-        spec=CompositeSpec(action=test_env.action_spec),
-        module=actor_module,
-        in_keys=["logits"],
-        out_keys=["action"],
-        distribution_class=OneHotCategorical,
-        distribution_kwargs={},
-        default_interaction_type=InteractionType.RANDOM,
-        return_log_prob=False,
-    ).to(device)
-
-    # Define Critic Network
-    qvalue_net_kwargs = {
-        "num_cells": [256, 256],
-        "out_features": num_actions,
-        "activation_class": nn.ReLU,
-    }
-
-    qvalue_net = MLP(
-        **qvalue_net_kwargs,
-    )
-
-    qvalue = ValueOperator(
-        in_keys=in_keys,
-        module=qvalue_net,
-    ).to(device)
-
-    # init nets
-    with torch.no_grad():
-        td = test_env.reset()
-        td = td.to(device)
-        actor(td)
-        qvalue(td)
-
-    del td
-    test_env.close()
-    test_env.eval()
-
-    model = torch.nn.ModuleList([actor, qvalue])
-
-    # Create SAC loss
-    loss_module = DiscreteSACLoss(
-        actor_network=model[0],
-        qvalue_network=model[1],
-        num_actions=num_actions,
-        num_qvalue_nets=2,
-        target_entropy_weight=cfg.target_entropy_weight,
-        loss_function="smooth_l1",
-    )
-    loss_module.make_value_estimator(gamma=cfg.gamma)
-
-    # Define Target Network Updater
-    target_net_updater = SoftUpdate(loss_module, eps=cfg.target_update_polyak)
-
-    # Make Off-Policy Collector
-    collector = SyncDataCollector(
-        env_factory,
-        create_env_kwargs={"num_workers": cfg.env_per_collector},
-        policy=model[0],
-        frames_per_batch=cfg.frames_per_batch,
-        max_frames_per_traj=cfg.max_frames_per_traj,
-        total_frames=cfg.total_frames,
-        device=cfg.device,
-    )
-    collector.set_seed(cfg.seed)
-
-    # Make Replay Buffer
+    # Create replay buffer
     replay_buffer = make_replay_buffer(
-        prb=cfg.prb,
-        buffer_size=cfg.buffer_size,
-        batch_size=cfg.batch_size,
-        device=device,
+        batch_size=cfg.optim.batch_size,
+        prb=cfg.replay_buffer.prb,
+        buffer_size=cfg.replay_buffer.size,
+        scratch_dir=cfg.replay_buffer.scratch_dir,
+        device="cpu",
     )
 
-    # Optimizers
-    params = list(loss_module.parameters())
-    optimizer_actor = optim.Adam(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
-
-    rewards = []
-    rewards_eval = []
+    # Create optimizers
+    optimizer_actor, optimizer_critic, optimizer_alpha = make_optimizer(
+        cfg, loss_module
+    )
 
     # Main loop
+    start_time = time.time()
     collected_frames = 0
-    pbar = tqdm.tqdm(total=cfg.total_frames)
-    r0 = None
-    loss = None
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
-    for i, tensordict in enumerate(collector):
+    init_random_frames = cfg.collector.init_random_frames
+    num_updates = int(
+        cfg.collector.env_per_collector
+        * cfg.collector.frames_per_batch
+        * cfg.optim.utd_ratio
+    )
+    prb = cfg.replay_buffer.prb
+    eval_rollout_steps = cfg.env.max_episode_steps
+    eval_iter = cfg.logger.eval_iter
+    frames_per_batch = cfg.collector.frames_per_batch
 
-        # update weights of the inference policy
+    sampling_start = time.time()
+    for tensordict in collector:
+        sampling_time = time.time() - sampling_start
+
+        # Update weights of the inference policy
         collector.update_policy_weights_()
 
-        new_collected_epochs = len(np.unique(tensordict["collector"]["traj_ids"]))
-        if r0 is None:
-            r0 = (
-                tensordict["next", "reward"].sum().item()
-                / new_collected_epochs
-                / cfg.env_per_collector
-            )
         pbar.update(tensordict.numel())
 
-        # extend the replay buffer with the new data
-        if "mask" in tensordict.keys():
-            # if multi-step, a mask is present to help filter padded values
-            current_frames = tensordict["mask"].sum()
-            tensordict = tensordict[tensordict.get("mask").squeeze(-1)]
-        else:
-            tensordict = tensordict.view(-1)
-            current_frames = tensordict.numel()
+        tensordict = tensordict.reshape(-1)
+        current_frames = tensordict.numel()
+        # Add to replay buffer
         replay_buffer.extend(tensordict.cpu())
         collected_frames += current_frames
-        total_collected_epochs = tensordict["collector"]["traj_ids"].max().item()
 
-        # optimization steps
-        if collected_frames >= cfg.init_random_frames:
+        # Optimization steps
+        training_start = time.time()
+        if collected_frames >= init_random_frames:
             (
-                total_losses,
                 actor_losses,
                 q_losses,
                 alpha_losses,
-                alphas,
-                entropies,
-            ) = ([], [], [], [], [], [])
-            for _ in range(cfg.frames_per_batch * int(cfg.utd_ratio)):
-                # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample().clone()
+            ) = ([], [], [])
+            for _ in range(num_updates):
+                # Sample from replay buffer
+                sampled_tensordict = replay_buffer.sample()
+                if sampled_tensordict.device != device:
+                    sampled_tensordict = sampled_tensordict.to(
+                        device, non_blocking=True
+                    )
+                else:
+                    sampled_tensordict = sampled_tensordict.clone()
 
-                loss_td = loss_module(sampled_tensordict)
+                # Compute loss
+                loss_out = loss_module(sampled_tensordict)
 
-                actor_loss = loss_td["loss_actor"]
-                q_loss = loss_td["loss_qvalue"]
-                alpha_loss = loss_td["loss_alpha"]
+                actor_loss, q_loss, alpha_loss = (
+                    loss_out["loss_actor"],
+                    loss_out["loss_qvalue"],
+                    loss_out["loss_alpha"],
+                )
 
-                loss = actor_loss + q_loss + alpha_loss
+                # Update critic
+                optimizer_critic.zero_grad()
+                q_loss.backward()
+                optimizer_critic.step()
+                q_losses.append(q_loss.item())
+
+                # Update actor
                 optimizer_actor.zero_grad()
-                loss.backward()
+                actor_loss.backward()
                 optimizer_actor.step()
 
-                # update qnet_target params
+                actor_losses.append(actor_loss.item())
+
+                # Update alpha
+                optimizer_alpha.zero_grad()
+                alpha_loss.backward()
+                optimizer_alpha.step()
+
+                alpha_losses.append(alpha_loss.item())
+
+                # Update target params
                 target_net_updater.step()
 
-                # update priority
-                if cfg.prb:
+                # Update priority
+                if prb:
                     replay_buffer.update_priority(sampled_tensordict)
 
-                total_losses.append(loss.item())
-                actor_losses.append(actor_loss.item())
-                q_losses.append(q_loss.item())
-                alpha_losses.append(alpha_loss.item())
-                alphas.append(loss_td["alpha"].item())
-                entropies.append(loss_td["entropy"].item())
-
-        rewards.append(
-            (
-                i,
-                tensordict["next", "reward"].sum().item()
-                / cfg.env_per_collector
-                / new_collected_epochs,
-            )
+        training_time = time.time() - training_start
+        episode_end = (
+            tensordict["next", "done"]
+            if tensordict["next", "done"].any()
+            else tensordict["next", "truncated"]
         )
-        metrics = {
-            "train_reward": rewards[-1][1],
-            "collected_frames": collected_frames,
-            "epochs": total_collected_epochs,
-        }
+        episode_rewards = tensordict["next", "episode_reward"][episode_end]
 
-        if loss is not None:
-            metrics.update(
-                {
-                    "total_loss": np.mean(total_losses),
-                    "actor_loss": np.mean(actor_losses),
-                    "q_loss": np.mean(q_losses),
-                    "alpha_loss": np.mean(alpha_losses),
-                    "alpha": np.mean(alphas),
-                    "entropy": np.mean(entropies),
-                }
+        # Logging
+        metrics_to_log = {}
+        if len(episode_rewards) > 0:
+            episode_length = tensordict["next", "step_count"][episode_end]
+            metrics_to_log["train/reward"] = episode_rewards.mean().item()
+            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
+                episode_length
             )
 
-        with set_exploration_type(
-            ExplorationType.RANDOM
-        ), torch.no_grad():  # TODO: exploration mode to mean causes nans
+        if collected_frames >= init_random_frames:
+            metrics_to_log["train/q_loss"] = np.mean(q_losses)
+            metrics_to_log["train/a_loss"] = np.mean(actor_losses)
+            metrics_to_log["train/alpha_loss"] = np.mean(alpha_losses)
+            metrics_to_log["train/sampling_time"] = sampling_time
+            metrics_to_log["train/training_time"] = training_time
 
-            eval_rollout = test_env.rollout(
-                max_steps=cfg.max_frames_per_traj,
-                policy=actor,
-                auto_cast_to_device=True,
-            ).clone()
-            eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-            rewards_eval.append((i, eval_reward))
-            eval_str = f"eval cumulative reward: {rewards_eval[-1][1]: 4.4f} (init: {rewards_eval[0][1]: 4.4f})"
-            metrics.update({"test_reward": rewards_eval[-1][1]})
-        if len(rewards_eval):
-            pbar.set_description(
-                f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f})," + eval_str
-            )
-
-        # log metrics
-        for key, value in metrics.items():
-            logger.log_scalar(key, value, step=collected_frames)
+        # Evaluation
+        if abs(collected_frames % eval_iter) < frames_per_batch:
+            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+                eval_start = time.time()
+                eval_rollout = eval_env.rollout(
+                    eval_rollout_steps,
+                    model[0],
+                    auto_cast_to_device=True,
+                    break_when_any_done=True,
+                )
+                eval_time = time.time() - eval_start
+                eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
+                metrics_to_log["eval/reward"] = eval_reward
+                metrics_to_log["eval/time"] = eval_time
+        if logger is not None:
+            log_metrics(logger, metrics_to_log, collected_frames)
+        sampling_start = time.time()
 
     collector.shutdown()
+    end_time = time.time()
+    execution_time = end_time - start_time
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

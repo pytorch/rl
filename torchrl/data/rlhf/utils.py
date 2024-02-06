@@ -2,9 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import importlib
-from typing import Tuple
+from __future__ import annotations
 
+import abc
+import collections
+import importlib
+from typing import Sequence, Tuple
+
+import numpy as np
 import torch
 
 from tensordict import TensorDict
@@ -14,6 +19,91 @@ from torch.nn import functional as F
 from torchrl.data.rlhf.prompt import PromptData
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
+
+
+class KLControllerBase(abc.ABC):
+    """Base class for KL controllers.
+
+    Each controller must implement an update method that takes the current KL value and
+    the number of steps and updates the kl_coef attribute of the wrapped model,
+    which will multiply the KL during calculation of the reward.
+    """
+
+    @abc.abstractmethod
+    def update(self, kl_values: float):
+        pass
+
+
+class ConstantKLController(KLControllerBase):
+    """Constant KL Controller.
+
+    This controller maintains a fixed coefficient no matter what values it is updated
+    with.
+
+    Arguments:
+        model: wrapped model that needs to be controlled. Must have attribute 'kl_coef'
+        kl_coef (float): The coefficient to multiply KL with when calculating the
+            reward.
+    """
+
+    def __init__(self, model, kl_coef):
+        self.model = model
+        if not hasattr(model, "kl_coef"):
+            raise AttributeError(
+                "Model input to ConstantKLController doesn't have attribute 'kl_coef'"
+            )
+        self.coef = kl_coef
+        self.model.kl_coef = self.coef
+
+    def update(self, kl_values: Sequence[float] = None):
+        self.model.kl_coef = self.coef
+
+
+class AdaptiveKLController(KLControllerBase):
+    """Adaptive KL Controller as described in Ziegler et al. "Fine-Tuning Language Models from Human Preferences".
+
+    Arguments:
+        model: wrapped model that needs to be controlled. Must have attribute 'kl_coef'
+        init_kl_coef (float): The starting value of the coefficient.
+        target (float): The target KL value. When the observed KL is smaller, the
+            coefficient is decreased, thereby relaxing the KL penalty in the training
+            objective and allowing the model to stray further from the reference model.
+            When the observed KL is greater than the target, the KL coefficient is
+            increased, thereby pulling the model back towards the reference model.
+        horizon (int): Scaling factor to control how aggressively we update the
+            coefficient.
+
+    Reference: Section 2.2 https://arxiv.org/pdf/1909.08593.pdf#page=2
+    Source: https://github.com/openai/lm-human-preferences/blob/master/lm_human_preferences/train_policy.py
+    """
+
+    def __init__(self, model, init_kl_coef: float, target: float, horizon: int):
+        self.model = model
+        self.coef = init_kl_coef
+        self.target = target
+        self.horizon = horizon
+        self.model.kl_coef = self.coef
+
+    def update(self, kl_values: Sequence[float]):
+        """Update ``self.coef`` adaptively.
+
+        Arguments:
+            kl_values (sequence of float): The current KL value between the newest policy and the initial
+                policy.
+
+        """
+        if kl_values is None:
+            raise ValueError(
+                f"The kl_values were not provided to {type(self)}. "
+                f"Make sure these values are provided for the scheduler to be updated "
+                f"accordingly. "
+            )
+        n_steps = len(kl_values)
+        # renormalize kls
+        kl_value = -torch.as_tensor(kl_values).mean() / self.coef
+        proportional_error = np.clip(kl_value / self.target - 1, -0.2, 0.2)  # ϵₜ
+        mult = 1 + proportional_error * n_steps / self.horizon
+        self.coef *= mult  # βₜ₊₁
 
 
 class RolloutFromModel:
@@ -33,10 +123,13 @@ class RolloutFromModel:
         reward_model: (nn.Module, tensordict.nn.TensorDictModule): a model which, given
             ``input_ids`` and ``attention_mask``, calculates rewards for each token and
             end_scores (the reward for the final token in each sequence).
+        kl_coef: (float, optional): initial kl coefficient.
         max_new_tokens (int, optional): the maximum length of the sequence.
             Defaults to 50.
         score_clip (float, optional): Scores from the reward model are clipped to the
             range ``(-score_clip, score_clip)``. Defaults to 10.
+        kl_scheduler (KLControllerBase, optional): the KL coefficient scheduler.
+        num_steps (int, optional): number of steps between two optimization.
 
     Examples:
         >>> from tensordict.nn import TensorDictModule
@@ -87,7 +180,15 @@ class RolloutFromModel:
     EOS_TOKEN_ID = 50256
 
     def __init__(
-        self, model, ref_model, reward_model, max_new_tokens=50, score_clip=10.0
+        self,
+        model,
+        ref_model,
+        reward_model,
+        kl_coef=0.1,
+        max_new_tokens=50,
+        score_clip=10.0,
+        kl_scheduler: KLControllerBase | None = None,
+        num_steps: int | None = None,
     ):
         if not _has_transformers:
             raise ImportError(
@@ -99,18 +200,23 @@ class RolloutFromModel:
         self.reward_model = reward_model
         self.max_new_tokens = max_new_tokens
         self.score_clip = score_clip
-
-    def kl_step(self):
-        """Makes a step in the KL coefficient schedule."""
-        raise NotImplementedError
+        self.kl_coef = kl_coef
+        self.kl_scheduler = kl_scheduler
+        if num_steps is not None:
+            self._kl_queue = collections.deque(maxlen=num_steps)
+        else:
+            # we create a list. Value appended to it will be detached scalars so very cheap to store,
+            # even if the update is not called.
+            # The scheduler update will take care of erasing these values.
+            self._kl_queue = []
 
     @torch.no_grad()
-    def rollout_from_data(self, batch, kl_coef=0.1):
+    def rollout_from_data(self, batch):
         generated, log_probs, log_ratio = self.generate(batch)
-        return self.create_rollout_td(batch, generated, log_probs, log_ratio, kl_coef)
+        return self.create_rollout_td(batch, generated, log_probs, log_ratio)
 
     @torch.no_grad()
-    def create_rollout_td(self, batch, generated, log_probs, log_ratio, kl_coef=0.1):
+    def create_rollout_td(self, batch, generated, log_probs, log_ratio):
         """A TensorDict wrapper for generated data.
 
         This function takes a batch plus the generated tokens and replicates the
@@ -142,9 +248,11 @@ class RolloutFromModel:
               part of the inputs that will be used for generating the next token.
             - ``("next", "attention_mask")``: updated attention_mask after token has been
               generated. Passed to the generative model on the next time step
-            - ``("next", "done")``: Boolean array indicating whether we've reached a
+            - ``("next", "terminated")``: Boolean array indicating whether we've reached a
               terminal state (either because we generated EOS token or because we
               reached the token limit)
+            - ``("next", "done")``: Boolean array indicating whether we've reached a
+              final state. Currently a copy of ``"terminated"``.
             - ``("next", "reward")``: The reward received at each time step
             - ``("next", "reward_raw")``: The raw reward from the reward model, without the
               KL term. This is mainly for debugging and logging, it is not used in
@@ -155,7 +263,7 @@ class RolloutFromModel:
         rollout_generated = self._get_rollout_generated(generated, batch)
         rollout_attention_mask = (rollout_generated != self.EOS_TOKEN_ID).bool()
 
-        done = self._get_done_status(generated, batch)
+        done, terminated = self._get_done_status(generated, batch)
         action = self._get_action(generated, batch)
         end_scores, end_scores_labels = self._get_end_scores(
             rollout_generated, rollout_attention_mask, batch
@@ -167,7 +275,7 @@ class RolloutFromModel:
         )
         reward_raw = clipped_scores.unsqueeze(-1).unsqueeze(-1)
         reward_raw = reward_raw * done
-        reward_kl = -kl_coef * log_ratio.unsqueeze(-1)
+        reward_kl = -self.kl_coef * log_ratio.unsqueeze(-1)
         reward = reward_raw + reward_kl
         td = {
             "action": action,
@@ -178,11 +286,13 @@ class RolloutFromModel:
                 "input_ids": rollout_generated[:, 1:].clone(),
                 "attention_mask": rollout_attention_mask[:, 1:].clone(),
                 "done": done,
+                "terminated": terminated,
                 "reward": reward,
                 "reward_raw": reward_raw,
                 "reward_kl": reward_kl,
             },
         }
+        self._kl_queue.append(reward_kl.detach().mean())
         return TensorDict(
             td, batch_size=done.shape[:2], device=generated.device
         ).refine_names(..., "time")
@@ -204,15 +314,26 @@ class RolloutFromModel:
         # of generated tokens
         done_idx = torch.minimum(
             (generated != self.EOS_TOKEN_ID).sum(dim=-1) - batch.prompt_rindex,
-            torch.tensor(self.max_new_tokens) - 1,
+            torch.as_tensor(self.max_new_tokens) - 1,
         )
-        done = torch.zeros(
+        truncated_idx = (
+            torch.as_tensor(self.max_new_tokens, device=generated.device).expand_as(
+                done_idx
+            )
+            - 1
+        )
+        zeros = torch.zeros(
             done_idx.numel(),
             self.max_new_tokens,
             dtype=torch.bool,
             device=generated.device,
         )
-        return done.scatter(-1, done_idx.unsqueeze(-1), 1).unsqueeze(-1)
+        truncated = zeros.scatter(-1, truncated_idx.unsqueeze(-1), 1).unsqueeze(-1)
+        done = zeros.scatter(-1, done_idx.unsqueeze(-1), 1).unsqueeze(-1)
+        terminated = (
+            done & ~truncated
+        )  # we assume that if it's not truncated, it was terminated
+        return truncated | terminated, terminated
 
     def _get_action(self, generated, batch):
         # the sequence of actions for each trajectory is just the generated token ids
@@ -390,3 +511,11 @@ class RolloutFromModel:
 
         log_ratio = self._log_ratio(generated, batch.prompt_rindex)
         return generated, log_probs_gen, log_ratio
+
+    def step_scheduler(self):
+        # recover true kl
+        self.kl_scheduler.update(self._kl_queue)
+        if isinstance(self._kl_queue, (list, collections.deque)):
+            # remove all values
+            while len(self._kl_queue):
+                self._kl_queue.remove(self._kl_queue[0])

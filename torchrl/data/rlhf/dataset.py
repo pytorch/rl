@@ -14,9 +14,13 @@ import torch
 
 from tensordict import TensorDict, TensorDictBase
 
-from tensordict.tensordict import NestedKey
-from torchrl.data import TensorDictReplayBuffer, TensorStorage
-from torchrl.data.replay_buffers import SamplerWithoutReplacement
+from tensordict.utils import NestedKey
+from torchrl._utils import logger as torchrl_logger
+from torchrl.data.replay_buffers import (
+    SamplerWithoutReplacement,
+    TensorDictReplayBuffer,
+    TensorStorage,
+)
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
@@ -77,8 +81,8 @@ class TokenizedDatasetLoader:
         >>> print(dataset)
         TensorDict(
             fields={
-                attention_mask: MemmapTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False),
-                input_ids: MemmapTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False)},
+                attention_mask: MemoryMappedTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False),
+                input_ids: MemoryMappedTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False)},
             batch_size=torch.Size([185068]),
             device=None,
             is_shared=False)
@@ -137,6 +141,7 @@ class TokenizedDatasetLoader:
         data_dir = root_dir / str(Path(self.dataset_name).name).split("-")[0]
         data_dir_total = data_dir / split / str(max_length)
         # search for data
+        torchrl_logger.info(f"Looking for data in {data_dir_total}")
         if os.path.exists(data_dir_total):
             dataset = TensorDict.load_memmap(data_dir_total)
             return dataset
@@ -270,8 +275,8 @@ class TokenizedDatasetLoader:
                         fields={
                             prefix: TensorDict(
                                 fields={
-                                    labels: MemmapTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.float32, is_shared=False),
-                                    tokens: MemmapTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.int64, is_shared=False)},
+                                    labels: MemoryMappedTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.float32, is_shared=False),
+                                    tokens: MemoryMappedTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.int64, is_shared=False)},
                                 batch_size=torch.Size([10]),
                                 device=None,
                                 is_shared=False)},
@@ -308,16 +313,17 @@ def create_infinite_iterator(iterator):
 
 
 def get_dataloader(
-    batch_size,
-    block_size,
-    tensorclass_type,
-    device,
-    dataset_name=None,
-    infinite=True,
-    prefetch=0,
-    split="train",
-    root_dir=None,
-    from_disk=False,
+    batch_size: int,
+    block_size: int,
+    tensorclass_type: Type,
+    device: torch.device,
+    dataset_name: str | None = None,
+    infinite: bool = True,
+    prefetch: int = 0,
+    split: str = "train",
+    root_dir: str | None = None,
+    from_disk: bool = False,
+    num_workers: int | None = None,
 ):
     """Creates a dataset and returns a dataloader from it.
 
@@ -346,9 +352,12 @@ def get_dataloader(
         from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
             will be used. Otherwise, :func:`datasets.load_dataset` will be used.
             Defaults to ``False``.
+        num_workers (int, optional): number of workers for :meth:`datasets.dataset.map`
+            which is called during tokenization.
+            Defaults to ``max(os.cpu_count() // 2, 1)``.
 
     Examples:
-        >>> from torchrl.data.rlhf.comparison import PairwiseDataset
+        >>> from torchrl.data.rlhf.reward import PairwiseDataset
         >>> dataloader = get_dataloader(
         ...     batch_size=256, block_size=550, tensorclass_type=PairwiseDataset, device="cpu")
         >>> for d in dataloader:
@@ -381,6 +390,7 @@ def get_dataloader(
         max_length=block_size,
         root_dir=root_dir,
         from_disk=from_disk,
+        num_workers=num_workers,
     )
     out = TensorDictReplayBuffer(
         storage=TensorStorage(data),

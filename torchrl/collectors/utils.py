@@ -6,7 +6,8 @@
 from typing import Callable
 
 import torch
-from tensordict.tensordict import pad, TensorDictBase
+
+from tensordict import pad, set_lazy_legacy, TensorDictBase
 
 
 def _stack_output(fun) -> Callable:
@@ -25,6 +26,7 @@ def _stack_output_zip(fun) -> Callable:
     return stacked_output_fun
 
 
+@set_lazy_legacy(False)
 def split_trajectories(
     rollout_tensordict: TensorDictBase, prefix=None
 ) -> TensorDictBase:
@@ -58,15 +60,21 @@ def split_trajectories(
 
     traj_ids = rollout_tensordict.get(traj_ids_key, None)
     done = rollout_tensordict.get(("next", "done"))
-    truncated = rollout_tensordict.get(
-        ("next", "truncated"), torch.zeros((), device=done.device, dtype=torch.bool)
-    )
-    done = done | truncated
     if traj_ids is None:
-        traj_ids = done.cumsum(rollout_tensordict.ndim - 1)
+        idx = (slice(None),) * (rollout_tensordict.ndim - 1) + (slice(None, -1),)
+        done_sel = done[idx]
+        pads = [1, 0]
+        pads = [0, 0] * (done.ndim - rollout_tensordict.ndim) + pads
+        done_sel = torch.nn.functional.pad(done_sel, pads)
+        if done_sel.shape != done.shape:
+            raise RuntimeError(
+                f"done and done_sel have different shape {done.shape} - {done_sel.shape} "
+            )
+        traj_ids = done_sel.cumsum(rollout_tensordict.ndim - 1)
+        traj_ids = traj_ids.squeeze(-1)
         if rollout_tensordict.ndim > 1:
             for i in range(1, rollout_tensordict.shape[0]):
-                traj_ids[i] += traj_ids[i - 1].max()
+                traj_ids[i] += traj_ids[i - 1].max() + 1
         rollout_tensordict.set(traj_ids_key, traj_ids)
 
     splits = traj_ids.view(-1)
@@ -82,7 +90,7 @@ def split_trajectories(
             ),
         )
         if rollout_tensordict.ndimension() == 1:
-            rollout_tensordict = rollout_tensordict.unsqueeze(0).to_tensordict()
+            rollout_tensordict = rollout_tensordict.unsqueeze(0)
         return rollout_tensordict.unflatten_keys(sep)
     out_splits = rollout_tensordict.view(-1).split(splits, 0)
 

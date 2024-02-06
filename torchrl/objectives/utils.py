@@ -4,23 +4,34 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
+import re
 import warnings
 from enum import Enum
 from typing import Iterable, Optional, Union
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
+from torch.nn.modules import dropout
 
+try:
+    from torch import vmap
+except ImportError as err:
+    try:
+        from functorch import vmap
+    except ImportError as err_ft:
+        raise err_ft from err
 from torchrl.envs.utils import step_mdp
 
-_GAMMA_LMBDA_DEPREC_WARNING = (
+_GAMMA_LMBDA_DEPREC_ERROR = (
     "Passing gamma / lambda parameters through the loss constructor "
-    "is deprecated and will be removed soon. To customize your value function, "
+    "is a deprecated feature. To customize your value function, "
     "run `loss_module.make_value_estimator(ValueEstimators.<value_fun>, gamma=val)`."
 )
+
+RANDOM_MODULE_LIST = (dropout._DropoutNd,)
 
 
 class ValueEstimators(Enum):
@@ -39,6 +50,7 @@ class ValueEstimators(Enum):
     TD1 = "TD(1) (infinity-step return)"
     TDLambda = "TD(lambda)"
     GAE = "Generalized advantage estimate"
+    VTrace = "V-trace"
 
 
 def default_value_kwargs(value_type: ValueEstimators):
@@ -61,6 +73,8 @@ def default_value_kwargs(value_type: ValueEstimators):
         return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
     elif value_type == ValueEstimators.TDLambda:
         return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
+    elif value_type == ValueEstimators.VTrace:
+        return {"gamma": 0.99, "differentiable": True}
     else:
         raise NotImplementedError(f"Unknown value type {value_type}.")
 
@@ -141,32 +155,19 @@ class TargetNetUpdater:
         self,
         loss_module: "LossModule",  # noqa: F821
     ):
+        from torchrl.objectives.common import LossModule
+
+        if not isinstance(loss_module, LossModule):
+            raise ValueError("The loss_module must be a LossModule instance.")
         _has_update_associated = getattr(loss_module, "_has_update_associated", None)
-        loss_module._has_update_associated = True
+        for k in loss_module._has_update_associated.keys():
+            loss_module._has_update_associated[k] = True
         try:
             _target_names = []
-            # for properties
-            for name in loss_module.__class__.__dict__:
-                if (
-                    name.startswith("target_")
-                    and (name.endswith("params") or name.endswith("buffers"))
-                    and (getattr(loss_module, name) is not None)
-                ):
+            for name, _ in loss_module.named_children():
+                # the TensorDictParams is a nn.Module instance
+                if name.startswith("target_") and name.endswith("_params"):
                     _target_names.append(name)
-
-            # for regular lists: raise an exception
-            for name in loss_module.__dict__:
-                if (
-                    name.startswith("target_")
-                    and (name.endswith("params") or name.endswith("buffers"))
-                    and (getattr(loss_module, name) is not None)
-                ):
-                    raise RuntimeError(
-                        "Your module seems to have a target tensor list contained "
-                        "in a non-dynamic structure (such as a list). If the "
-                        "module is cast onto a device, the reference to these "
-                        "tensors will be lost."
-                    )
 
             if len(_target_names) == 0:
                 raise RuntimeError(
@@ -191,7 +192,8 @@ class TargetNetUpdater:
             self.init_()
             _has_update_associated = True
         finally:
-            loss_module._has_update_associated = _has_update_associated
+            for k in loss_module._has_update_associated.keys():
+                loss_module._has_update_associated[k] = _has_update_associated
 
     @property
     def _targets(self):
@@ -297,9 +299,8 @@ class SoftUpdate(TargetNetUpdater):
         tau: Optional[float] = None,
     ):
         if eps is None and tau is None:
-            warnings.warn(
-                "Neither eps nor tau was provided. Taking the default value "
-                "eps=0.999. This behaviour will soon be deprecated.",
+            raise RuntimeError(
+                "Neither eps nor tau was provided. " "This behaviour is deprecated.",
                 category=DeprecationWarning,
             )
             eps = 0.999
@@ -365,18 +366,19 @@ class hold_out_net(_context_manager):
 
     def __init__(self, network: nn.Module) -> None:
         self.network = network
-        try:
-            self.p_example = next(network.parameters())
-        except (AttributeError, StopIteration):
-            self.p_example = torch.tensor([])
-        self._prev_state = []
+        for p in network.parameters():
+            self.mode = p.requires_grad
+            break
+        else:
+            self.mode = True
 
     def __enter__(self) -> None:
-        self._prev_state.append(self.p_example.requires_grad)
-        self.network.requires_grad_(False)
+        if self.mode:
+            self.network.requires_grad_(False)
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.network.requires_grad_(self._prev_state.pop())
+        if self.mode:
+            self.network.requires_grad_()
 
 
 class hold_out_params(_context_manager):
@@ -469,9 +471,33 @@ def _cache_values(fun):
             out = fun(self, netname)
         else:
             out = fun(self)
-        if is_tensor_collection(out):
-            out.lock_()
+        # TODO: decide what to do with locked tds in functional calls
+        # if is_tensor_collection(out):
+        #     out.lock_()
         _cache[attr_name] = out
         return out
 
     return new_fun
+
+
+def _vmap_func(module, *args, func=None, **kwargs):
+    try:
+
+        def decorated_module(*module_args_params):
+            params = module_args_params[-1]
+            module_args = module_args_params[:-1]
+            with params.to_module(module):
+                if func is None:
+                    return module(*module_args)
+                else:
+                    return getattr(module, func)(*module_args)
+
+        return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
+
+    except RuntimeError as err:
+        if re.match(
+            r"vmap: called random operation while in randomness error mode", str(err)
+        ):
+            raise RuntimeError(
+                "Please use <loss_module>.set_vmap_randomness('different') to handle random operations during vmap."
+            ) from err

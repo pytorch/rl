@@ -2,27 +2,32 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+import contextlib
+
 import math
 import warnings
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
 
 from .common import LossModule
-from .value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator
+from .value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator, VTrace
 
 
 class PPOLoss(LossModule):
@@ -43,8 +48,8 @@ class PPOLoss(LossModule):
     https://arxiv.org/abs/1707.06347
 
     Args:
-        actor (ProbabilisticTensorDictSequential): policy operator.
-        critic (ValueOperator): value operator.
+        actor_network (ProbabilisticTensorDictSequential): policy operator.
+        critic_network (ValueOperator): value operator.
 
     Keyword Args:
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
@@ -76,6 +81,10 @@ class PPOLoss(LossModule):
         value_key (str, optional): [Deprecated, use set_keys(value_key) instead]
             The input tensordict key where the state
             value is expected to be written. Defaults to ``"state_value"``.
+        functional (bool, optional): whether modules should be functionalized.
+            Functionalizing permits features like meta-RL, but makes it
+            impossible to use distributed models (DDP, FSDP, ...) and comes
+            with a little cost. Defaults to ``True``.
 
     .. note::
       The advantage (typically GAE) can be computed by the loss function or
@@ -126,7 +135,7 @@ class PPOLoss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.ppo import PPOLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> base_layer = nn.Linear(n_obs, 5)
@@ -144,11 +153,11 @@ class PPOLoss(LossModule):
         >>> loss = PPOLoss(actor, value)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
-        >>> data = TensorDict({
-        ...         "observation": torch.randn(*batch, n_obs),
+        >>> data = TensorDict({"observation": torch.randn(*batch, n_obs),
         ...         "action": action,
         ...         "sample_log_prob": torch.randn_like(action[..., 1]),
         ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...         ("next", "reward"): torch.randn(*batch, 1),
         ...         ("next", "observation"): torch.randn(*batch, n_obs),
         ...     }, batch)
@@ -166,10 +175,9 @@ class PPOLoss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["action", "sample_log_prob", "next_reward", "next_done"]`` + in_keys of the actor and value network.
+    ``["action", "sample_log_prob", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and value network.
     The return value is a tuple of tensors in the following order:
-    ``["loss_objective"]`` + ``["entropy", "loss_entropy"]`` if entropy_bonus is set
-                           + ``"loss_critic"`` if critic_coef is not None.
+    ``["loss_objective"]`` + ``["entropy", "loss_entropy"]`` if entropy_bonus is set + ``"loss_critic"`` if critic_coef is not ``None``.
     The output keys can also be filtered using :meth:`PPOLoss.select_out_keys` method.
 
     Examples:
@@ -204,6 +212,7 @@ class PPOLoss(LossModule):
         ...         action=action,
         ...         sampleLogProb=torch.randn_like(action[..., 1]) / 10,
         ...         next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...         next_reward=torch.randn(*batch, 1),
         ...         next_observation=torch.randn(*batch, n_obs))
         >>> loss_objective.backward()
@@ -233,6 +242,9 @@ class PPOLoss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -242,14 +254,15 @@ class PPOLoss(LossModule):
         action: NestedKey = "action"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
 
     def __init__(
         self,
-        actor: ProbabilisticTensorDictSequential,
-        critic: TensorDictModule,
+        actor_network: ProbabilisticTensorDictSequential | None = None,
+        critic_network: TensorDictModule | None = None,
         *,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
@@ -262,20 +275,47 @@ class PPOLoss(LossModule):
         advantage_key: str = None,
         value_target_key: str = None,
         value_key: str = None,
+        functional: bool = True,
+        actor: ProbabilisticTensorDictSequential = None,
+        critic: ProbabilisticTensorDictSequential = None,
     ):
+        if actor is not None:
+            actor_network = actor
+            del actor
+        if critic is not None:
+            critic_network = critic
+            del critic
+        if actor_network is None or critic_network is None:
+            raise TypeError(
+                "Missing positional arguments actor_network or critic_network."
+            )
+
+        self._functional = functional
         self._in_keys = None
         self._out_keys = None
         super().__init__()
-        self.convert_to_functional(
-            actor, "actor", funs_to_decorate=["forward", "get_dist"]
-        )
+        if functional:
+            self.convert_to_functional(actor_network, "actor_network")
+        else:
+            self.actor_network = actor_network
+            self.actor_network_params = None
+            self.target_actor_network_params = None
+
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
             # params of critic must be refs to actor if they're shared
-            policy_params = list(actor.parameters())
+            policy_params = list(actor_network.parameters())
         else:
             policy_params = None
-        self.convert_to_functional(critic, "critic", compare_against=policy_params)
+        if functional:
+            self.convert_to_functional(
+                critic_network, "critic_network", compare_against=policy_params
+            )
+        else:
+            self.critic_network = critic_network
+            self.critic_network_params = None
+            self.target_critic_network_params = None
+
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus
         self.separate_losses = separate_losses
@@ -290,13 +330,61 @@ class PPOLoss(LossModule):
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self._set_deprecated_ctor_keys(
             advantage=advantage_key,
             value_target=value_target_key,
             value=value_key,
         )
+
+    @property
+    def functional(self):
+        return self._functional
+
+    @property
+    def actor(self):
+        warnings.warn(
+            f"{self.__class__.__name__}.actor is deprecated, use {self.__class__.__name__}.actor_network instead. This "
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
+        )
+        return self.actor_network
+
+    @property
+    def critic(self):
+        warnings.warn(
+            f"{self.__class__.__name__}.critic is deprecated, use {self.__class__.__name__}.critic_network instead. This "
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
+        )
+        return self.critic_network
+
+    @property
+    def actor_params(self):
+        warnings.warn(
+            f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
+        )
+        return self.actor_network_params
+
+    @property
+    def critic_params(self):
+        warnings.warn(
+            f"{self.__class__.__name__}.critic_params is deprecated, use {self.__class__.__name__}.critic_network_params instead. This "
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
+        )
+        return self.critic_network_params
+
+    @property
+    def target_critic_params(self):
+        warnings.warn(
+            f"{self.__class__.__name__}.target_critic_params is deprecated, use {self.__class__.__name__}.target_critic_network_params instead. This "
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
+        )
+        return self.target_critic_network_params
 
     def _set_in_keys(self):
         keys = [
@@ -304,9 +392,10 @@ class PPOLoss(LossModule):
             self.tensor_keys.sample_log_prob,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
-            *self.actor.in_keys,
-            *[("next", key) for key in self.actor.in_keys],
-            *self.critic.in_keys,
+            ("next", self.tensor_keys.terminated),
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
+            *self.critic_network.in_keys,
         ]
         self._in_keys = list(set(keys))
 
@@ -343,6 +432,7 @@ class PPOLoss(LossModule):
                 value=self.tensor_keys.value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
         self._set_in_keys()
 
@@ -367,7 +457,10 @@ class PPOLoss(LossModule):
                 f"tensordict stored {self.tensor_keys.action} requires grad."
             )
 
-        dist = self.actor.get_dist(tensordict, params=self.actor_params)
+        with self.actor_network_params.to_module(
+            self.actor_network
+        ) if self.functional else contextlib.nullcontext():
+            dist = self.actor_network.get_dist(tensordict)
         log_prob = dist.log_prob(action)
 
         prev_log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
@@ -393,10 +486,10 @@ class PPOLoss(LossModule):
                 f"can be used for the value loss."
             )
 
-        state_value_td = self.critic(
-            tensordict,
-            params=self.critic_params,
-        )
+        with self.critic_network_params.to_module(
+            self.critic_network
+        ) if self.functional else contextlib.nullcontext():
+            state_value_td = self.critic_network(tensordict)
 
         try:
             state_value = state_value_td.get(self.tensor_keys.value)
@@ -415,8 +508,10 @@ class PPOLoss(LossModule):
 
     @property
     @_cache_values
-    def _cached_critic_params_detached(self):
-        return self.critic_params.detach()
+    def _cached_critic_network_params_detached(self):
+        if not self.functional:
+            return None
+        return self.critic_network_params.detach()
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -425,13 +520,13 @@ class PPOLoss(LossModule):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self._cached_critic_params_detached,
-                target_params=self.target_critic_params,
+                params=self._cached_critic_network_params_detached,
+                target_params=self.target_critic_network_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean().item()
-            scale = advantage.std().clamp_min(1e-6).item()
+            loc = advantage.mean()
+            scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
         log_weight, dist = self._log_weight(tensordict)
@@ -455,13 +550,29 @@ class PPOLoss(LossModule):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(value_network=self.critic, **hp)
+            self._value_estimator = TD1Estimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(value_network=self.critic, **hp)
+            self._value_estimator = TD0Estimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(value_network=self.critic, **hp)
+            self._value_estimator = GAE(value_network=self.critic_network, **hp)
         elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
+            self._value_estimator = TDLambdaEstimator(
+                value_network=self.critic_network, **hp
+            )
+        elif value_type == ValueEstimators.VTrace:
+            # VTrace currently does not support functional call on the actor
+            if self.functional:
+                actor_with_params = deepcopy(self.actor_network)
+                self.actor_network_params.to_module(actor_with_params)
+            else:
+                actor_with_params = self.actor_network
+            self._value_estimator = VTrace(
+                value_network=self.critic_network, actor_network=actor_with_params, **hp
+            )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 
@@ -471,6 +582,8 @@ class PPOLoss(LossModule):
             "value_target": self.tensor_keys.value_target,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
+            "sample_log_prob": self.tensor_keys.sample_log_prob,
         }
         self._value_estimator.set_keys(**tensor_keys)
 
@@ -482,8 +595,8 @@ class ClipPPOLoss(PPOLoss):
         loss = -min( weight * advantage, min(max(weight, 1-eps), 1+eps) * advantage)
 
     Args:
-        actor (ProbabilisticTensorDictSequential): policy operator.
-        critic (ValueOperator): value operator.
+        actor_network (ProbabilisticTensorDictSequential): policy operator.
+        critic_network (ValueOperator): value operator.
 
     Keyword Args:
         clip_epsilon (scalar, optional): weight clipping threshold in the clipped PPO loss equation.
@@ -517,6 +630,10 @@ class ClipPPOLoss(PPOLoss):
         value_key (str, optional): [Deprecated, use set_keys(value_key) instead]
             The input tensordict key where the state
             value is expected to be written. Defaults to ``"state_value"``.
+        functional (bool, optional): whether modules should be functionalized.
+            Functionalizing permits features like meta-RL, but makes it
+            impossible to use distributed models (DDP, FSDP, ...) and comes
+            with a little cost. Defaults to ``True``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -563,8 +680,8 @@ class ClipPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: ProbabilisticTensorDictSequential,
-        critic: TensorDictModule,
+        actor_network: ProbabilisticTensorDictSequential | None = None,
+        critic_network: TensorDictModule | None = None,
         *,
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
@@ -578,8 +695,8 @@ class ClipPPOLoss(PPOLoss):
         **kwargs,
     ):
         super(ClipPPOLoss, self).__init__(
-            actor,
-            critic,
+            actor_network,
+            critic_network,
             entropy_bonus=entropy_bonus,
             samples_mc_entropy=samples_mc_entropy,
             entropy_coef=entropy_coef,
@@ -622,13 +739,13 @@ class ClipPPOLoss(PPOLoss):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self._cached_critic_params_detached,
-                target_params=self.target_critic_params,
+                params=self._cached_critic_network_params_detached,
+                target_params=self.target_critic_network_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean().item()
-            scale = advantage.std().clamp_min(1e-6).item()
+            loc = advantage.mean()
+            scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
         log_weight, dist = self._log_weight(tensordict)
@@ -641,11 +758,6 @@ class ClipPPOLoss(PPOLoss):
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
             batch = log_weight.shape[0]
 
-        if not advantage.shape == log_weight.shape:
-            raise RuntimeError(
-                f"advantage.shape and log_weight.shape do not match (got {advantage.shape} "
-                f"and {log_weight.shape})"
-            )
         gain1 = log_weight.exp() * advantage
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
@@ -674,8 +786,8 @@ class KLPENPPOLoss(PPOLoss):
     favouring a certain level of distancing between the two while still preventing them to be too much apart.
 
     Args:
-        actor (ProbabilisticTensorDictSequential): policy operator.
-        critic (ValueOperator): value operator.
+        actor_network (ProbabilisticTensorDictSequential): policy operator.
+        critic_network (ValueOperator): value operator.
 
     Keyword Args:
         dtarg (scalar, optional): target KL divergence. Defaults to ``0.01``.
@@ -716,6 +828,10 @@ class KLPENPPOLoss(PPOLoss):
         value_key (str, optional): [Deprecated, use set_keys(value_key) instead]
             The input tensordict key where the state
             value is expected to be written. Defaults to ``"state_value"``.
+        functional (bool, optional): whether modules should be functionalized.
+            Functionalizing permits features like meta-RL, but makes it
+            impossible to use distributed models (DDP, FSDP, ...) and comes
+            with a little cost. Defaults to ``True``.
 
 
     .. note:
@@ -763,8 +879,8 @@ class KLPENPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: ProbabilisticTensorDictSequential,
-        critic: TensorDictModule,
+        actor_network: ProbabilisticTensorDictSequential | None = None,
+        critic_network: TensorDictModule | None = None,
         *,
         dtarg: float = 0.01,
         beta: float = 1.0,
@@ -782,8 +898,8 @@ class KLPENPPOLoss(PPOLoss):
         **kwargs,
     ):
         super(KLPENPPOLoss, self).__init__(
-            actor,
-            critic,
+            actor_network,
+            critic_network,
             entropy_bonus=entropy_bonus,
             samples_mc_entropy=samples_mc_entropy,
             entropy_coef=entropy_coef,
@@ -833,19 +949,22 @@ class KLPENPPOLoss(PPOLoss):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self._cached_critic_params_detached,
-                target_params=self.target_critic_params,
+                params=self._cached_critic_network_params_detached,
+                target_params=self.target_critic_network_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean().item()
-            scale = advantage.std().clamp_min(1e-6).item()
+            loc = advantage.mean()
+            scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
         log_weight, dist = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
 
-        previous_dist = self.actor.build_dist_from_params(tensordict)
-        current_dist = self.actor.get_dist(tensordict, params=self.actor_params)
+        previous_dist = self.actor_network.build_dist_from_params(tensordict)
+        with self.actor_network_params.to_module(
+            self.actor_network
+        ) if self.functional else contextlib.nullcontext():
+            current_dist = self.actor_network.get_dist(tensordict)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:

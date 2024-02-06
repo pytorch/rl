@@ -5,7 +5,17 @@
 import os
 from warnings import warn
 
+import torch
+
+from tensordict import set_lazy_legacy
+
 from torch import multiprocessing as mp
+
+set_lazy_legacy(False).set()
+
+if torch.cuda.device_count() > 1:
+    n = torch.cuda.device_count() - 1
+    os.environ["MUJOCO_EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
 
 from ._extension import _init_extension
 
@@ -35,3 +45,9 @@ import torchrl.envs
 import torchrl.modules
 import torchrl.objectives
 import torchrl.trainers
+
+# Filter warnings in subprocesses: True by default given the multiple optional
+# deps of the library. This can be turned on via `torchrl.filter_warnings_subprocess = False`.
+filter_warnings_subprocess = True
+
+_THREAD_POOL_INIT = torch.get_num_threads()

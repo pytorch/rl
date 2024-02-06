@@ -2,12 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 from typing import List, Optional, Union
 
 import torch
-from tensordict import TensorDict
-from tensordict.tensordict import TensorDictBase
+from tensordict import set_lazy_legacy, TensorDict, TensorDictBase
 from torch.hub import load_state_dict_from_url
 
 from torchrl.data.tensor_specs import (
@@ -26,6 +24,7 @@ from torchrl.envs.transforms.transforms import (
     Transform,
     UnsqueezeTransform,
 )
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 try:
     from torchvision import models
@@ -72,14 +71,24 @@ class _VIPNet(Transform):
         self.convnet = convnet
         self.del_keys = del_keys
 
+    @set_lazy_legacy(False)
     def _call(self, tensordict):
-        tensordict_view = tensordict.view(-1)
-        super()._call(tensordict_view)
+        with tensordict.view(-1) as tensordict_view:
+            super()._call(tensordict_view)
+
         if self.del_keys:
             tensordict.exclude(*self.in_keys, inplace=True)
         return tensordict
 
     forward = _call
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        # TODO: Check this makes sense
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
     @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:
@@ -257,8 +266,8 @@ class VIPTransform(Compose):
         std = [0.229, 0.224, 0.225]
         normalize = ObservationNorm(
             in_keys=in_keys,
-            loc=torch.tensor(mean).view(3, 1, 1),
-            scale=torch.tensor(std).view(3, 1, 1),
+            loc=torch.as_tensor(mean).view(3, 1, 1),
+            scale=torch.as_tensor(std).view(3, 1, 1),
             standard_normal=True,
         )
         transforms.append(normalize)
@@ -268,7 +277,7 @@ class VIPTransform(Compose):
         transforms.append(resize)
 
         # VIP
-        if out_keys is None:
+        if out_keys in (None, []):
             if stack_images:
                 out_keys = ["vip_vec"]
             else:
@@ -349,16 +358,19 @@ class VIPRewardTransform(VIPTransform):
     This class will update the reward computation
     """
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
         if "goal_embedding" not in tensordict.keys():
             tensordict = self._embed_goal(tensordict)
-        return super().reset(tensordict)
+        tensordict_reset.set("goal_embedding", tensordict.pop("goal_embedding"))
+        return super()._reset(tensordict, tensordict_reset)
 
     def _embed_goal(self, tensordict):
         if "goal_image" not in tensordict.keys():
             raise KeyError(
                 f"{self.__class__.__name__}.reset() requires a `'goal_image'` key to be "
-                f"present in the input tensordict."
+                f"present in the input tensordict. Got keys {list(tensordict.keys())}."
             )
         tensordict_in = tensordict.select("goal_image").rename_key_(
             "goal_image", self.in_keys[0]
@@ -369,21 +381,37 @@ class VIPRewardTransform(VIPTransform):
         )
         return tensordict
 
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
         if "goal_embedding" not in tensordict.keys():
             tensordict = self._embed_goal(tensordict)
         last_embedding_key = self.out_keys[0]
         last_embedding = tensordict.get(last_embedding_key, None)
-        tensordict = super()._step(tensordict)
-        cur_embedding = tensordict.get(("next", self.out_keys[0]))
+        next_tensordict = super()._step(tensordict, next_tensordict)
+        cur_embedding = next_tensordict.get(self.out_keys[0])
         if last_embedding is not None:
             goal_embedding = tensordict["goal_embedding"]
-            reward = -torch.norm(cur_embedding - goal_embedding, dim=-1) - (
-                -torch.norm(last_embedding - goal_embedding, dim=-1)
+            reward = -torch.linalg.norm(cur_embedding - goal_embedding, dim=-1) - (
+                -torch.linalg.norm(last_embedding - goal_embedding, dim=-1)
             )
-            tensordict.set(("next", "reward"), reward)
-        return tensordict
+            next_tensordict.set("reward", reward)
+        return next_tensordict
 
     def forward(self, tensordict):
         tensordict = super().forward(tensordict)
         return tensordict
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        if "full_state_spec" in input_spec.keys():
+            full_state_spec = input_spec["full_state_spec"]
+        else:
+            full_state_spec = CompositeSpec(
+                shape=input_spec.shape, device=input_spec.device
+            )
+        # find the obs spec
+        in_key = self.in_keys[0]
+        spec = self.parent.output_spec["full_observation_spec"][in_key]
+        full_state_spec["goal_image"] = spec.clone()
+        input_spec["full_state_spec"] = full_state_spec
+        return super().transform_input_spec(input_spec)

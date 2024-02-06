@@ -127,6 +127,7 @@ IQL
     :template: rl_template_noinherit.rst
 
     IQLLoss
+    DiscreteIQLLoss
 
 CQL
 ----
@@ -136,6 +137,17 @@ CQL
     :template: rl_template_noinherit.rst
 
     CQLLoss
+    DiscreteCQLLoss
+
+DT
+----
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    DTLoss
+    OnlineDTLoss
 
 TD3
 ----

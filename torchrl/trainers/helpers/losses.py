@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import warnings
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
@@ -10,7 +11,6 @@ from torchrl.modules import ActorCriticOperator, ActorValueOperator
 from torchrl.objectives import DistributionalDQNLoss, DQNLoss, HardUpdate, SoftUpdate
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.deprecated import REDQLoss_deprecated
-
 from torchrl.objectives.utils import TargetNetUpdater
 
 
@@ -42,6 +42,10 @@ def make_redq_loss(
     model, cfg
 ) -> Tuple[REDQLoss_deprecated, Optional[TargetNetUpdater]]:
     """Builds the REDQ loss module."""
+    warnings.warn(
+        "This helper function will be deprecated in v0.4. Consider using the local helper in the REDQ example.",
+        category=DeprecationWarning,
+    )
     loss_kwargs = {}
     if hasattr(cfg, "distributional") and cfg.distributional:
         raise NotImplementedError
@@ -143,7 +147,7 @@ class PPOLossConfig:
     lmbda: float = 0.95
     # lambda factor in GAE (using 'lambda' as attribute is prohibited in python, hence the misspelling)
     entropy_bonus: bool = True
-    # Whether or not to add an entropy term to the PPO loss.
+    # whether to add an entropy term to the PPO loss.
     entropy_coef: float = 1e-3
     # Entropy factor for the PPO loss
     samples_mc_entropy: int = 1

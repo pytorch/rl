@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import importlib
 import os
 import subprocess
@@ -5,7 +10,9 @@ from functools import partial
 from typing import Union
 
 import torch
+from tensordict import TensorDictBase
 from torch import nn
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -21,6 +28,7 @@ from torchrl.envs.transforms.transforms import (
     ToTensorImage,
     Transform,
 )
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 _has_vc = importlib.util.find_spec("vc_models") is not None
 
@@ -124,8 +132,8 @@ class VC1Transform(Transform):
         elif isinstance(model_transforms, transforms.Normalize):
             return ObservationNorm(
                 in_keys=in_keys,
-                loc=torch.tensor(model_transforms.mean).reshape(3, 1, 1),
-                scale=torch.tensor(model_transforms.std).reshape(3, 1, 1),
+                loc=torch.as_tensor(model_transforms.mean).reshape(3, 1, 1),
+                scale=torch.as_tensor(model_transforms.std).reshape(3, 1, 1),
                 standard_normal=True,
             )
         elif isinstance(model_transforms, transforms.ToTensor):
@@ -159,8 +167,8 @@ class VC1Transform(Transform):
                 if in_key != out_key
             ]
             saved_td = tensordict.select(*in_keys)
-        tensordict_view = tensordict.view(-1)
-        super()._call(self.model_transforms(tensordict_view))
+        with tensordict.view(-1) as tensordict_view:
+            super()._call(self.model_transforms(tensordict_view))
         if self.del_keys:
             tensordict.exclude(*self.in_keys, inplace=True)
         else:
@@ -169,6 +177,14 @@ class VC1Transform(Transform):
         return tensordict
 
     forward = _call
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        # TODO: Check this makes sense
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
     @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:
@@ -221,12 +237,11 @@ class VC1Transform(Transform):
         try:
             from vc_models import models  # noqa: F401
 
-            print("vc_models found, no need to install.")
+            torchrl_logger.info("vc_models found, no need to install.")
         except ModuleNotFoundError:
             HOME = os.environ.get("HOME")
             vcdir = HOME + "/.cache/torchrl/eai-vc"
             parentdir = os.path.dirname(os.path.abspath(vcdir))
-            print(parentdir)
             os.makedirs(parentdir, exist_ok=True)
             try:
                 from git import Repo

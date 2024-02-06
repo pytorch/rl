@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import torch
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDictBase
 from tensordict.utils import expand_right
 from torch import nn
 

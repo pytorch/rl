@@ -25,10 +25,28 @@ TorchRL envs
 # will pass the arguments and keyword arguments to the root library builder.
 #
 # With gym, it means that building an environment is as easy as:
+
 # sphinx_gallery_start_ignore
 import warnings
 
 warnings.filterwarnings("ignore")
+
+from torch import multiprocessing
+
+# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
+# `__main__` method call, but for the easy of reading the code switch to fork
+# which is also a default spawn method in Google's Colaboratory
+try:
+    is_sphinx = __sphinx_build__
+except NameError:
+    is_sphinx = False
+
+try:
+    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
+except RuntimeError:
+    pass
+
+
 # sphinx_gallery_end_ignore
 
 import torch
@@ -45,7 +63,7 @@ env = GymEnv("Pendulum-v1")
 # The list of available environment can be accessed through this command:
 #
 
-GymEnv.available_envs[:10]
+list(GymEnv.available_envs)[:10]
 
 ###############################################################################
 # Env Specs
@@ -60,7 +78,6 @@ GymEnv.available_envs[:10]
 print("Env observation_spec: \n", env.observation_spec)
 print("Env action_spec: \n", env.action_spec)
 print("Env reward_spec: \n", env.reward_spec)
-print("Env done_spec: \n", env.done_spec)
 
 ###############################################################################
 # Those spec come with a series of useful tools: one can assert whether a
@@ -75,6 +92,18 @@ print("projected action: \n", env.action_spec.project(action))
 ###############################################################################
 
 print("random action: \n", env.action_spec.rand())
+
+###############################################################################
+# Out of these specs, the ``done_spec`` deserves a special attention. In TorchRL,
+# all environments write end-of-trajectory signals of at least two types:
+# ``"terminated"`` (indicating that the Markov Decision Process has reached
+# a final state - the __episode__ is finished) and ``"done"``, indicating that
+# this is the last step of a __trajectory__ (but not necessarily the end of
+# the task). In general, a ``"done"`` entry that is ``True`` when a ``"terminal"``
+# is ``False`` is caused by a ``"truncated"`` signal. Gym environments account for
+# these three signals:
+
+print(env.done_spec)
 
 ###############################################################################
 # Envs are also packed with an ``env.state_spec`` attribute of type
@@ -551,7 +580,7 @@ def env_make(env_name):
 parallel_env = ParallelEnv(
     2,
     [env_make, env_make],
-    [{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
+    create_env_kwargs=[{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
 )
 tensordict = parallel_env.reset()
 
@@ -595,7 +624,7 @@ def env_make(env_name):
 parallel_env = ParallelEnv(
     2,
     [env_make, env_make],
-    [{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
+    create_env_kwargs=[{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
 )
 parallel_env = TransformedEnv(parallel_env, GrayScale())  # transforms on main process
 tensordict = parallel_env.reset()

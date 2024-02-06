@@ -1,0 +1,67 @@
+# Environment
+env:
+  env_name: PongNoFrameskip-v4
+
+# Ray init kwargs - https://docs.ray.io/en/latest/ray-core/api/doc/ray.init.html
+ray_init_config:
+  address: null
+  num_cpus: null
+  num_gpus: null
+  resources: null
+  object_store_memory: null
+  local_mode: False
+  ignore_reinit_error: False
+  include_dashboard: null
+  dashboard_host: 127.0.0.1
+  dashboard_port: null
+  job_config: null
+  configure_logging: True
+  logging_level: info
+  logging_format: null
+  log_to_driver: True
+  namespace: null
+  runtime_env: null
+  storage: null
+
+# Device for the forward and backward passes
+local_device: "cuda:0"
+
+# Resources assigned to each IMPALA rollout collection worker
+remote_worker_resources:
+  num_cpus: 1
+  num_gpus: 0.25
+  memory: 1073741824 # 1*1024**3 - 1GB
+
+# collector
+collector:
+  frames_per_batch: 80
+  total_frames: 200_000_000
+  num_workers: 12
+
+# logger
+logger:
+  backend: wandb
+  project_name: torchrl_example_impala_ray
+  group_name: null
+  exp_name: Atari_IMPALA
+  test_interval: 200_000_000
+  num_test_episodes: 3
+
+# Optim
+optim:
+  lr: 0.0006
+  eps: 1e-8
+  weight_decay: 0.0
+  momentum: 0.0
+  alpha: 0.99
+  max_grad_norm: 40.0
+  anneal_lr: True
+
+# loss
+loss:
+  gamma: 0.99
+  batch_size: 32
+  sgd_updates: 1
+  critic_coef: 0.5
+  entropy_coef: 0.01
+  loss_critic_type: l2

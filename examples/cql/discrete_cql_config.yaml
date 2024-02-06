@@ -1,0 +1,58 @@
+# Task and env
+env:
+  name: CartPole-v1
+  task: ""
+  backend: gymnasium
+  n_samples_stats: 1000
+  max_episode_steps: 200
+  seed: 0
+
+# Collector
+collector:
+  frames_per_batch: 200
+  total_frames: 20000 
+  multi_step: 0
+  init_random_frames: 1000
+  env_per_collector: 1
+  device: cpu
+  max_frames_per_traj: 200
+  annealing_frames: 10000
+  eps_start: 1.0
+  eps_end: 0.01
+
+# Logger
+logger:
+  backend: wandb
+  project_name: torchrl_example_cql
+  group_name: null
+  exp_name: cql_cartpole_gym
+  log_interval: 5000 # record interval in frames
+  eval_steps: 200
+  mode: online
+  eval_iter: 1000
+
+# Buffer
+replay_buffer:
+  prb: 0
+  buffer_prefetch: 64
+  size: 1_000_000
+  scratch_dir: null
+
+# Optimization
+optim:
+  utd_ratio: 1
+  device: cuda:0
+  lr: 1e-3
+  weight_decay: 0.0
+  batch_size: 256
+
+# Policy and model
+model:
+  hidden_sizes: [256, 256]
+  activation: relu
+
+# loss
+loss: 
+  loss_function: l2
+  gamma: 0.99
+  tau: 0.005

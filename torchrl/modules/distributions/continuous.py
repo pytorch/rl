@@ -15,7 +15,6 @@ from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
 
-# from torchrl._torchrl import safeatanh, safetanh
 from torchrl.modules.distributions.utils import (
     _cast_device,
     FasterTransformedDistribution,
@@ -241,11 +240,11 @@ class TruncatedNormal(D.Independent):
         if isinstance(max, torch.Tensor):
             max = max.to(self.device)
         else:
-            max = torch.tensor(max, device=self.device)
+            max = torch.as_tensor(max, device=self.device)
         if isinstance(min, torch.Tensor):
             min = min.to(self.device)
         else:
-            min = torch.tensor(min, device=self.device)
+            min = torch.as_tensor(min, device=self.device)
         self.min = min
         self.max = max
         self.update(loc, scale)
@@ -498,8 +497,7 @@ class TanhDelta(FasterTransformedDistribution):
 
     Args:
         param (torch.Tensor): parameter of the delta distribution;
-                min (torch.Tensor or number): minimum value of the distribution. Default is -1.0;
-        min (torch.Tensor or number, optional): minimum value of the distribution. Default is 1.0;
+        min (torch.Tensor or number, optional): minimum value of the distribution. Default is -1.0;
         max (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
         event_dims (int, optional): number of dimensions describing the action.
             Default is 1;

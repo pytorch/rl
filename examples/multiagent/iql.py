@@ -2,14 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import time
 
 import hydra
 import torch
 
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -17,10 +17,11 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs import RewardSum, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import EGreedyWrapper, QValueModule, SafeSequential
+from torchrl.modules import EGreedyModule, QValueModule, SafeSequential
 from torchrl.modules.models.multiagent import MultiAgentMLP
 from torchrl.objectives import DQNLoss, SoftUpdate, ValueEstimators
 from utils.logging import init_logging, log_evaluation, log_training
+from utils.utils import DoneTransform
 
 
 def rendering_callback(env, td):
@@ -30,7 +31,7 @@ def rendering_callback(env, td):
 @hydra.main(version_base="1.1", config_path=".", config_name="iql")
 def train(cfg: "DictConfig"):  # noqa: F821
     # Device
-    cfg.train.device = "cpu" if not torch.has_cuda else "cuda:0"
+    cfg.train.device = "cpu" if not torch.cuda.device_count() else "cuda:0"
     cfg.env.device = cfg.train.device
 
     # Seeding
@@ -95,13 +96,15 @@ def train(cfg: "DictConfig"):  # noqa: F821
     )
     qnet = SafeSequential(module, value_module)
 
-    qnet_explore = EGreedyWrapper(
+    qnet_explore = TensorDictSequential(
         qnet,
-        eps_init=0.3,
-        eps_end=0,
-        annealing_num_steps=int(cfg.collector.total_frames * (1 / 2)),
-        action_key=env.action_key,
-        spec=env.unbatched_action_spec[env.action_key],
+        EGreedyModule(
+            eps_init=0.3,
+            eps_end=0,
+            annealing_num_steps=int(cfg.collector.total_frames * (1 / 2)),
+            action_key=env.action_key,
+            spec=env.unbatched_action_spec,
+        ),
     )
 
     collector = SyncDataCollector(
@@ -111,6 +114,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         storing_device=cfg.train.device,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
+        postproc=DoneTransform(reward_key=env.reward_key, done_keys=env.done_keys),
     )
 
     replay_buffer = TensorDictReplayBuffer(
@@ -125,6 +129,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
         action=env.action_key,
         value=("agents", "chosen_action_value"),
         reward=env.reward_key,
+        done=("agents", "done"),
+        terminated=("agents", "terminated"),
     )
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=cfg.loss.gamma)
     target_net_updater = SoftUpdate(loss_module, eps=1 - cfg.loss.tau)
@@ -140,16 +146,9 @@ def train(cfg: "DictConfig"):  # noqa: F821
     total_frames = 0
     sampling_start = time.time()
     for i, tensordict_data in enumerate(collector):
-        print(f"\nIteration {i}")
+        torchrl_logger.info(f"\nIteration {i}")
 
         sampling_time = time.time() - sampling_start
-
-        tensordict_data.set(
-            ("next", "done"),
-            tensordict_data.get(("next", "done"))
-            .unsqueeze(-1)
-            .expand(tensordict_data.get(("next", env.reward_key)).shape),
-        )  # We need to expand the done to match the reward shape
 
         current_frames = tensordict_data.numel()
         total_frames += current_frames
@@ -177,7 +176,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
                 optim.zero_grad()
                 target_net_updater.step()
 
-        qnet_explore.step(frames=current_frames)  # Update exploration annealing
+        qnet_explore[1].step(frames=current_frames)  # Update exploration annealing
         collector.update_policy_weights_()
 
         training_time = time.time() - training_start

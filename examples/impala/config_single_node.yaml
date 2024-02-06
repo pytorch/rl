@@ -1,0 +1,40 @@
+# Environment
+env:
+  env_name: PongNoFrameskip-v4
+
+# Device for the forward and backward passes
+device: "cuda:0"
+
+# collector
+collector:
+  frames_per_batch: 80
+  total_frames: 200_000_000
+  num_workers: 12
+
+# logger
+logger:
+  backend: wandb
+  project_name: torchrl_example_impala
+  group_name: null
+  exp_name: Atari_IMPALA
+  test_interval: 200_000_000
+  num_test_episodes: 3
+
+# Optim
+optim:
+  lr: 0.0006
+  eps: 1e-8
+  weight_decay: 0.0
+  momentum: 0.0
+  alpha: 0.99
+  max_grad_norm: 40.0
+  anneal_lr: True
+
+# loss
+loss:
+  gamma: 0.99
+  batch_size: 32
+  sgd_updates: 1
+  critic_coef: 0.5
+  entropy_coef: 0.01
+  loss_critic_type: l2

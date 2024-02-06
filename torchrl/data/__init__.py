@@ -6,19 +6,30 @@
 from . import datasets
 from .postprocs import MultiStep
 from .replay_buffers import (
+    ImmutableDatasetWriter,
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
     PrioritizedReplayBuffer,
+    PrioritizedSampler,
+    RandomSampler,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
+    ReplayBufferEnsemble,
     RoundRobinWriter,
+    SamplerEnsemble,
+    SamplerWithoutReplacement,
+    SliceSampler,
+    SliceSamplerWithoutReplacement,
     Storage,
+    StorageEnsemble,
+    TensorDictMaxValueWriter,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
     TensorDictRoundRobinWriter,
     TensorStorage,
     Writer,
+    WriterEnsemble,
 )
 from .rlhf import (
     create_infinite_iterator,
@@ -46,3 +57,4 @@ from .tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
+from .utils import check_no_exclusive_keys, consolidate_spec, contains_lazy_spec

@@ -7,8 +7,13 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
-from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDictBase
+
+from tensordict.nn import (
+    TensorDictModule,
+    TensorDictModuleBase,
+    TensorDictModuleWrapper,
+)
 from tensordict.utils import expand_as_right, expand_right, NestedKey
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
@@ -17,13 +22,167 @@ from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 
 __all__ = [
     "EGreedyWrapper",
+    "EGreedyModule",
     "AdditiveGaussianWrapper",
     "OrnsteinUhlenbeckProcessWrapper",
 ]
 
 
+class EGreedyModule(TensorDictModuleBase):
+    """Epsilon-Greedy exploration module.
+
+    This module randomly updates the action(s) in a tensordict given an epsilon greedy exploration strategy.
+    At each call, random draws (one per action) are executed given a certain probability threshold. If successful,
+    the corresponding actions are being replaced by random samples drawn from the action spec provided.
+    Others are left unchanged.
+
+    Args:
+        spec (TensorSpec): the spec used for sampling actions.
+        eps_init (scalar, optional): initial epsilon value.
+            default: 1.0
+        eps_end (scalar, optional): final epsilon value.
+            default: 0.1
+        annealing_num_steps (int, optional): number of steps it will take for epsilon to reach
+            the ``eps_end`` value. Defaults to `1000`.
+
+    Keyword Args:
+        action_key (NestedKey, optional): the key where the action can be found in the input tensordict.
+            Default is ``"action"``.
+        action_mask_key (NestedKey, optional): the key where the action mask can be found in the input tensordict.
+            Default is ``None`` (corresponding to no mask).
+
+    .. note::
+        It is crucial to incorporate a call to :meth:`~.step` in the training loop
+        to update the exploration factor.
+        Since it is not easy to capture this omission no warning or exception
+        will be raised if this is ommitted!
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictSequential
+        >>> from torchrl.modules import EGreedyModule, Actor
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> torch.manual_seed(0)
+        >>> spec = BoundedTensorSpec(-1, 1, torch.Size([4]))
+        >>> module = torch.nn.Linear(4, 4, bias=False)
+        >>> policy = Actor(spec=spec, module=module)
+        >>> explorative_policy = TensorDictSequential(policy,  EGreedyModule(eps_init=0.2))
+        >>> td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
+        >>> print(explorative_policy(td).get("action"))
+        tensor([[ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.9055, -0.9277, -0.6295, -0.2532],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000]], grad_fn=<AddBackward0>)
+
+    """
+
+    def __init__(
+        self,
+        spec: TensorSpec,
+        eps_init: float = 1.0,
+        eps_end: float = 0.1,
+        annealing_num_steps: int = 1000,
+        *,
+        action_key: Optional[NestedKey] = "action",
+        action_mask_key: Optional[NestedKey] = None,
+    ):
+        if not isinstance(eps_init, float):
+            warnings.warn("eps_init should be a float.")
+        if eps_end > eps_init:
+            raise RuntimeError("eps should decrease over time or be constant")
+        self.action_key = action_key
+        self.action_mask_key = action_mask_key
+        in_keys = [self.action_key]
+        if self.action_mask_key is not None:
+            in_keys.append(self.action_mask_key)
+        self.in_keys = in_keys
+        self.out_keys = [self.action_key]
+
+        super().__init__()
+
+        self.register_buffer("eps_init", torch.as_tensor([eps_init]))
+        self.register_buffer("eps_end", torch.as_tensor([eps_end]))
+        self.annealing_num_steps = annealing_num_steps
+        self.register_buffer("eps", torch.as_tensor([eps_init], dtype=torch.float32))
+
+        if spec is not None:
+            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
+                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
+        self._spec = spec
+
+    @property
+    def spec(self):
+        return self._spec
+
+    def step(self, frames: int = 1) -> None:
+        """A step of epsilon decay.
+
+        After `self.annealing_num_steps` calls to this method, calls result in no-op.
+
+        Args:
+            frames (int, optional): number of frames since last step. Defaults to ``1``.
+
+        """
+        for _ in range(frames):
+            self.eps.data[0] = max(
+                self.eps_end.item(),
+                (
+                    self.eps - (self.eps_init - self.eps_end) / self.annealing_num_steps
+                ).item(),
+            )
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
+            if isinstance(self.action_key, tuple) and len(self.action_key) > 1:
+                action_tensordict = tensordict.get(self.action_key[:-1])
+                action_key = self.action_key[-1]
+            else:
+                action_tensordict = tensordict
+                action_key = self.action_key
+
+            out = action_tensordict.get(action_key)
+            eps = self.eps.item()
+            cond = torch.rand(action_tensordict.shape, device=out.device) < eps
+            cond = expand_as_right(cond, out)
+            spec = self.spec
+            if spec is not None:
+                if isinstance(spec, CompositeSpec):
+                    spec = spec[self.action_key]
+                if spec.shape != out.shape:
+                    # In batched envs if the spec is passed unbatched, the rand() will not
+                    # cover all batched dims
+                    if (
+                        not len(spec.shape)
+                        or out.shape[-len(spec.shape) :] == spec.shape
+                    ):
+                        spec = spec.expand(out.shape)
+                    else:
+                        raise ValueError(
+                            "Action spec shape does not match the action shape"
+                        )
+                if self.action_mask_key is not None:
+                    action_mask = tensordict.get(self.action_mask_key, None)
+                    if action_mask is None:
+                        raise KeyError(
+                            f"Action mask key {self.action_mask_key} not found in {tensordict}."
+                        )
+                    spec.update_mask(action_mask)
+                out = torch.where(cond, spec.rand().to(out.device), out)
+            else:
+                raise RuntimeError("spec must be provided to the exploration wrapper.")
+            action_tensordict.set(action_key, out)
+        return tensordict
+
+
 class EGreedyWrapper(TensorDictModuleWrapper):
-    """Epsilon-Greedy PO wrapper.
+    """[Deprecated] Epsilon-Greedy PO wrapper.
 
     Args:
         policy (TensorDictModule): a deterministic policy.
@@ -34,16 +193,16 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         eps_end (scalar, optional): final epsilon value.
             default: 0.1
         annealing_num_steps (int, optional): number of steps it will take for epsilon to reach the eps_end value
-        action_key (NestedKey, optional): if the policy module has more than one output key,
-            its output spec will be of type CompositeSpec. One needs to know where to
-            find the action spec.
-            Default is "action".
+        action_key (NestedKey, optional): the key where the action can be found in the input tensordict.
+            Default is ``"action"``.
+        action_mask_key (NestedKey, optional): the key where the action mask can be found in the input tensordict.
+            Default is ``None`` (corresponding to no mask).
         spec (TensorSpec, optional): if provided, the sampled action will be
-            projected onto the valid action space once explored. If not provided,
+            taken from this action space. If not provided,
             the exploration wrapper will attempt to recover it from the policy.
 
     .. note::
-        Once an environment has been wrapped in :class:`EGreedyWrapper`, it is
+        Once a module has been wrapped in :class:`EGreedyWrapper`, it is
         crucial to incorporate a call to :meth:`~.step` in the training loop
         to update the exploration factor.
         Since it is not easy to capture this omission no warning or exception
@@ -82,80 +241,12 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
         action_key: Optional[NestedKey] = "action",
+        action_mask_key: Optional[NestedKey] = None,
         spec: Optional[TensorSpec] = None,
     ):
-        super().__init__(policy)
-        self.register_buffer("eps_init", torch.tensor([eps_init]))
-        self.register_buffer("eps_end", torch.tensor([eps_end]))
-        if self.eps_end > self.eps_init:
-            raise RuntimeError("eps should decrease over time or be constant")
-        self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init]))
-        self.action_key = action_key
-        if spec is not None:
-            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
-                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
-            self._spec = spec
-        elif hasattr(self.td_module, "_spec"):
-            self._spec = self.td_module._spec.clone()
-            if action_key not in self._spec.keys():
-                self._spec[action_key] = None
-        elif hasattr(self.td_module, "spec"):
-            self._spec = self.td_module.spec.clone()
-            if action_key not in self._spec.keys():
-                self._spec[action_key] = None
-        else:
-            self._spec = CompositeSpec({key: None for key in policy.out_keys})
-
-    @property
-    def spec(self):
-        return self._spec
-
-    def step(self, frames: int = 1) -> None:
-        """A step of epsilon decay.
-
-        After self.annealing_num_steps, this function is a no-op.
-
-        Args:
-            frames (int): number of frames since last step.
-
-        """
-        for _ in range(frames):
-            self.eps.data[0] = max(
-                self.eps_end.item(),
-                (
-                    self.eps - (self.eps_init - self.eps_end) / self.annealing_num_steps
-                ).item(),
-            )
-
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = self.td_module.forward(tensordict)
-        if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
-            if isinstance(self.action_key, tuple) and len(self.action_key) > 1:
-                action_tensordict = tensordict.get(self.action_key[:-1])
-                action_key = self.action_key[-1]
-            else:
-                action_tensordict = tensordict
-                action_key = self.action_key
-
-            out = action_tensordict.get(action_key)
-            eps = self.eps.item()
-            cond = (
-                torch.rand(action_tensordict.shape, device=action_tensordict.device)
-                < eps
-            ).to(out.dtype)
-            cond = expand_as_right(cond, out)
-            spec = self.spec
-            if spec is not None:
-                if isinstance(spec, CompositeSpec):
-                    spec = spec[self.action_key]
-                out = cond * spec.rand().to(out.device) + (1 - cond) * out
-            else:
-                raise RuntimeError(
-                    "spec must be provided by the policy or directly to the exploration wrapper."
-                )
-            action_tensordict.set(action_key, out)
-        return tensordict
+        raise RuntimeError(
+            "This class is not removed in favour of torchrl.modules.EGreedyModule."
+        )
 
 
 class AdditiveGaussianWrapper(TensorDictModuleWrapper):
@@ -216,7 +307,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("mean", torch.tensor([mean]))
         self.register_buffer("std", torch.tensor([std]))
-        self.register_buffer("sigma", torch.tensor([sigma_init]))
+        self.register_buffer("sigma", torch.tensor([sigma_init], dtype=torch.float32))
         self.action_key = action_key
         self.out_keys = list(self.td_module.out_keys)
         if action_key not in self.out_keys:
@@ -424,7 +515,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
                 f"got eps_init={eps_init} and eps_end={eps_end}"
             )
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init]))
+        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
         self.out_keys = list(self.td_module.out_keys) + self.ou.out_keys
         self.is_init_key = is_init_key
         noise_key = self.ou.noise_key
