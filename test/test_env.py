@@ -624,6 +624,29 @@ class TestParallel:
         # env_serial.close()
         env0.close()
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    @pytest.mark.parametrize("heterogeneous", [False, True])
+    def test_transform_env_transform_no_device(self, heterogeneous):
+        # Tests non-regression on 1865
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(), StepCounter(max_steps=3)
+            )
+
+        if heterogeneous:
+            make_envs = [EnvCreator(make_env), EnvCreator(make_env)]
+        else:
+            make_envs = make_env
+        penv = ParallelEnv(2, make_envs)
+        r = penv.rollout(6, break_when_any_done=False)
+        assert r.shape == (2, 6)
+        try:
+            env = TransformedEnv(penv)
+            r = env.rollout(6, break_when_any_done=False)
+            assert r.shape == (2, 6)
+        finally:
+            penv.close()
+
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize(
         "env_name",
