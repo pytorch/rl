@@ -285,7 +285,7 @@ class LossModule(TensorDictModuleBase):
         # set the functional module: we need to convert the params to non-differentiable params
         # otherwise they will appear twice in parameters
         with params.apply(
-            self._make_meta_params, device=torch.device("meta"), filter_empty=True
+            self._make_meta_params, device=torch.device("meta"), filter_empty=False
         ).to_module(module):
             # avoid buffers and params being exposed
             self.__dict__[module_name] = deepcopy(module)
@@ -296,7 +296,7 @@ class LossModule(TensorDictModuleBase):
             # we create a TensorDictParams to keep the target params as Buffer instances
             target_params = TensorDictParams(
                 params.apply(
-                    _make_target_param(clone=create_target_params), filter_empty=True
+                    _make_target_param(clone=create_target_params), filter_empty=False
                 ),
                 no_convert=True,
             )

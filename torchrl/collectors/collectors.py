@@ -317,13 +317,13 @@ Check the collector documentation to know more about accepted policies.
             # Create a stateless policy, then populate this copy with params on device
             with param_and_buf.apply(
                 functools.partial(_map_to_device_params, device="meta"),
-                filter_empty=True,
+                filter_empty=False,
             ).to_module(policy):
                 policy = deepcopy(policy)
 
             param_and_buf.apply(
                 functools.partial(_map_to_device_params, device=self.policy_device),
-                filter_empty=True,
+                filter_empty=False,
             ).to_module(policy)
 
         return policy, get_weights_fn
@@ -1498,7 +1498,7 @@ class _MultiDataCollector(DataCollectorBase):
                     return weight
 
             local_policy_weights = TensorDictParams(
-                policy_weights.apply(map_weight, filter_empty=True)
+                policy_weights.apply(map_weight, filter_empty=False)
             )
 
             def _get_weight_fn(weights=policy_weights):
