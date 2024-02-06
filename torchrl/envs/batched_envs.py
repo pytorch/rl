@@ -1295,7 +1295,12 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
                         tensordict_, keys_to_update=list(self._selected_reset_keys)
                     )
                 continue
-            out = ("reset", tensordict_)
+            if tensordict_ is not None:
+                self.shared_tensordicts[i].update_(tensordict_)
+                out = ("reset", True)
+            else:
+                out = ("reset", False)
+
             channel.send(out)
             workers.append(i)
 
@@ -1522,7 +1527,9 @@ def _run_worker_pipe_shared_mem(
                 torchrl_logger.info(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
-            cur_td = env.reset(tensordict=data)
+            # we use 'data' to tell the env whether there is anything
+            # to read in the input tensordict
+            cur_td = env.reset(tensordict=root_shared_tensordict if data else None)
             shared_tensordict.update_(
                 cur_td,
                 keys_to_update=list(_selected_reset_keys),
