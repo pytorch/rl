@@ -112,7 +112,9 @@ class KLRewardTransform(Transform):
 
         # check that the model has parameters
         params = TensorDict.from_module(actor)
-        with params.apply(_stateless_param, device="meta").to_module(actor):
+        with params.apply(_stateless_param, device="meta", filter_empty=True).to_module(
+            actor
+        ):
             # copy a stateless actor
             self.__dict__["functional_actor"] = deepcopy(actor)
         # we need to register these params as buffer to have `to` and similar
@@ -129,7 +131,7 @@ class KLRewardTransform(Transform):
                 )
             return x.clone()
 
-        self.frozen_params = params.apply(_make_detached_param)
+        self.frozen_params = params.apply(_make_detached_param, filter_empty=True)
         if requires_grad:
             # includes the frozen params/buffers in the module parameters/buffers
             self.frozen_params = TensorDictParams(self.frozen_params, no_convert=True)
