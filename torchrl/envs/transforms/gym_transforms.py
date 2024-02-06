@@ -135,7 +135,7 @@ class EndOfLifeTransform(Transform):
         if callable(lives):
             lives = lives()
         elif isinstance(lives, list) and all(callable(_lives) for _lives in lives):
-            lives = torch.tensor([_lives() for _lives in lives])
+            lives = torch.as_tensor([_lives() for _lives in lives])
         return lives
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -147,7 +147,7 @@ class EndOfLifeTransform(Transform):
             raise RuntimeError(self.NO_PARENT_ERR.format(type(self)))
 
         lives = self._get_lives()
-        end_of_life = torch.tensor(
+        end_of_life = torch.as_tensor(
             tensordict.get(self.lives_key) > lives, device=self.parent.device
         )
         try:
@@ -170,7 +170,7 @@ class EndOfLifeTransform(Transform):
         end_of_life = False
         tensordict_reset.set(
             self.eol_key,
-            torch.tensor(end_of_life).expand(
+            torch.as_tensor(end_of_life).expand(
                 parent.full_done_spec[self.done_key].shape
             ),
         )

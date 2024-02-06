@@ -7,7 +7,6 @@
 DQN: Reproducing experimental results from Mnih et al. 2015 for the
 Deep Q-Learning Algorithm on Atari Environments.
 """
-
 import tempfile
 import time
 
@@ -16,6 +15,7 @@ import torch.nn
 import torch.optim
 import tqdm
 from tensordict.nn import TensorDictSequential
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
@@ -99,7 +99,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if cfg.logger.backend:
         exp_name = generate_exp_name("DQN", f"Atari_mnih15_{cfg.env.env_name}")
         logger = get_logger(
-            cfg.logger.backend, logger_name="dqn", experiment_name=exp_name
+            cfg.logger.backend,
+            logger_name="dqn",
+            experiment_name=exp_name,
+            wandb_kwargs={
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
 
     # Create the test environment
@@ -208,7 +215,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    print(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

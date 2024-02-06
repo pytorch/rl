@@ -24,7 +24,7 @@ from torchrl.modules.tensordict_module.common import ensure_tensordict_compatibl
 
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -45,7 +45,7 @@ class DQNLoss(LossModule):
         delay_value (bool, optional): whether to duplicate the value network
             into a new target value network to
             create a DQN with a target network. Default is ``False``.
-        double_dqn (bool, optional): whether or not to use Double DQN, as described in
+        double_dqn (bool, optional): whether to use Double DQN, as described in
             https://arxiv.org/abs/1509.06461. Defaults to ``False``.
         action_space (str or TensorSpec, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
@@ -224,8 +224,7 @@ class DQNLoss(LossModule):
         self.action_space = _find_action_space(action_space)
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:

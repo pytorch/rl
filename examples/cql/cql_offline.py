@@ -9,13 +9,13 @@ This is a self-contained example of an offline CQL training script.
 The helper functions are coded in the utils.py associated with this script.
 
 """
-
 import time
 
 import hydra
 import numpy as np
 import torch
 import tqdm
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
 
@@ -32,14 +32,19 @@ from utils import (
 @hydra.main(config_path=".", config_name="offline_config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
     # Create logger
-    exp_name = generate_exp_name("CQL-offline", cfg.env.exp_name)
+    exp_name = generate_exp_name("CQL-offline", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:
         logger = get_logger(
             logger_type=cfg.logger.backend,
             logger_name="cql_logging",
             experiment_name=exp_name,
-            wandb_kwargs={"mode": cfg.logger.mode, "config": cfg},
+            wandb_kwargs={
+                "mode": cfg.logger.mode,
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
     # Set seeds
     torch.manual_seed(cfg.env.seed)
@@ -145,7 +150,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         log_metrics(logger, to_log, i)
 
     pbar.close()
-    print(f"Training time: {time.time() - start_time}")
+    torchrl_logger.info(f"Training time: {time.time() - start_time}")
 
 
 if __name__ == "__main__":

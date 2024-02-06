@@ -74,13 +74,15 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin
 export SDL_VIDEODRIVER=dummy
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
+export LAZY_LEGACY_OP=False
 
 conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   DISPLAY=unix:0.0 \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=egl \
-  PYOPENGL_PLATFORM=egl
+  PYOPENGL_PLATFORM=egl \
+  BATCHED_PIPE_TIMEOUT=60
 
 pip install pip --upgrade
 

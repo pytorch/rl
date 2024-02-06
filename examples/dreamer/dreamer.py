@@ -18,6 +18,7 @@ from hydra.core.config_store import ConfigStore
 # float16
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.envs import EnvBase
 from torchrl.modules.tensordict_module.exploration import (
@@ -83,7 +84,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device = torch.device(cfg.model_device)
     else:
         device = torch.device("cpu")
-    print(f"Using device {device}")
+    torchrl_logger.info(f"Using device {device}")
 
     exp_name = generate_exp_name("Dreamer", cfg.exp_name)
     logger = get_logger(
@@ -91,7 +92,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger_name="dreamer",
         experiment_name=exp_name,
         wandb_kwargs={
-            "project": "torchrl",
+            "project": cfg.project_name,
             "group": f"Dreamer_{cfg.env_name}",
             "offline": cfg.offline_logging,
         },
@@ -184,7 +185,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         actor_model_explore=exploration_policy,
         cfg=cfg,
     )
-    print("collector:", collector)
+    torchrl_logger.info(f"collector: {collector}")
 
     replay_buffer = make_replay_buffer("cpu", cfg)
 
@@ -204,7 +205,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     final_seed = collector.set_seed(cfg.seed)
-    print(f"init seed: {cfg.seed}, final seed: {final_seed}")
+    torchrl_logger.info(f"init seed: {cfg.seed}, final seed: {final_seed}")
     # Training loop
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.total_frames)

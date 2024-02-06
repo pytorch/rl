@@ -25,6 +25,7 @@ import gym
 
 import torch
 import tqdm
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
@@ -94,7 +95,11 @@ if __name__ == "__main__":
     if args.worker_parallelism == "collector" or num_workers == 1:
         action_spec = make_env().action_spec
     else:
-        make_env = ParallelEnv(num_workers, make_env)
+        make_env = ParallelEnv(
+            num_workers,
+            make_env,
+            serial_for_single=True,
+        )
         action_spec = make_env.action_spec
 
     if args.worker_parallelism == "collector" and num_workers > 1:
@@ -147,5 +152,5 @@ if __name__ == "__main__":
             t0 = time.time()
     collector.shutdown()
     t1 = time.time()
-    print(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    torchrl_logger.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
     exit()

@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import time
 
 import hydra
@@ -12,6 +11,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 from torch.distributions import Categorical, OneHotCategorical
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -33,7 +33,7 @@ def rendering_callback(env, td):
 @hydra.main(version_base="1.1", config_path=".", config_name="sac")
 def train(cfg: "DictConfig"):  # noqa: F821
     # Device
-    cfg.train.device = "cpu" if not torch.has_cuda else "cuda:0"
+    cfg.train.device = "cpu" if not torch.cuda.device_count() else "cuda:0"
     cfg.env.device = cfg.train.device
 
     # Seeding
@@ -237,7 +237,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
     total_frames = 0
     sampling_start = time.time()
     for i, tensordict_data in enumerate(collector):
-        print(f"\nIteration {i}")
+        torchrl_logger.info(f"\nIteration {i}")
 
         sampling_time = time.time() - sampling_start
 

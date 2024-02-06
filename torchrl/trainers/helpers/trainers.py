@@ -12,7 +12,7 @@ from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from torchrl._utils import VERBOSE
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs.common import EnvBase
@@ -173,7 +173,7 @@ def make_trainer(
         raise NotImplementedError(f"lr scheduler {cfg.lr_scheduler}")
 
     if VERBOSE:
-        print(
+        torchrl_logger.info(
             f"collector = {collector}; \n"
             f"loss_module = {loss_module}; \n"
             f"recorder = {recorder}; \n"

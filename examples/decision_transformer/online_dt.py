@@ -6,13 +6,13 @@
 This is a self-contained example of an Online Decision Transformer training script.
 The helper functions are coded in the utils.py associated with this script.
 """
-
 import time
 
 import hydra
 import numpy as np
 import torch
 import tqdm
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.libs.gym import set_gym_backend
 
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -81,7 +81,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     pretrain_log_interval = cfg.logger.pretrain_log_interval
     reward_scaling = cfg.env.reward_scaling
 
-    print(" ***Pretraining*** ")
+    torchrl_logger.info(" ***Pretraining*** ")
     # Pretraining
     start_time = time.time()
     for i in range(pretrain_gradient_steps):
@@ -132,7 +132,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             log_metrics(logger, to_log, i)
 
     pbar.close()
-    print(f"Training time: {time.time() - start_time}")
+    torchrl_logger.info(f"Training time: {time.time() - start_time}")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ import hydra
 import numpy as np
 import torch
 import tqdm
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.envs import set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -30,19 +31,24 @@ from utils import (
 )
 
 
-@set_gym_backend("gym")
 @hydra.main(config_path=".", config_name="offline_config")
 def main(cfg: "DictConfig"):  # noqa: F821
+    set_gym_backend(cfg.env.backend).set()
 
     # Create logger
-    exp_name = generate_exp_name("IQL-offline", cfg.env.exp_name)
+    exp_name = generate_exp_name("IQL-offline", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:
         logger = get_logger(
             logger_type=cfg.logger.backend,
             logger_name="iql_logging",
             experiment_name=exp_name,
-            wandb_kwargs={"mode": cfg.logger.mode, "config": cfg},
+            wandb_kwargs={
+                "mode": cfg.logger.mode,
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
 
     # Set seeds
@@ -63,7 +69,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module, target_net_updater = make_loss(cfg.loss, model)
 
     # Create optimizer
-    optimizer = make_iql_optimizer(cfg.optim, loss_module)
+    optimizer_actor, optimizer_critic, optimizer_value = make_iql_optimizer(
+        cfg.optim, loss_module
+    )
 
     pbar = tqdm.tqdm(total=cfg.optim.gradient_steps)
 
@@ -77,18 +85,29 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(i)
         # sample data
         data = replay_buffer.sample()
-        # compute loss
-        loss_vals = loss_module(data.clone().to(device))
 
-        actor_loss = loss_vals["loss_actor"]
-        q_loss = loss_vals["loss_qvalue"]
-        value_loss = loss_vals["loss_value"]
-        loss_val = actor_loss + q_loss + value_loss
+        if data.device != device:
+            data = data.to(device, non_blocking=True)
 
-        # update model
-        optimizer.zero_grad()
-        loss_val.backward()
-        optimizer.step()
+        # compute losses
+        loss_info = loss_module(data)
+        actor_loss = loss_info["loss_actor"]
+        value_loss = loss_info["loss_value"]
+        q_loss = loss_info["loss_qvalue"]
+
+        optimizer_actor.zero_grad()
+        actor_loss.backward()
+        optimizer_actor.step()
+
+        optimizer_value.zero_grad()
+        value_loss.backward()
+        optimizer_value.step()
+
+        optimizer_critic.zero_grad()
+        q_loss.backward()
+        optimizer_critic.step()
+
+        # update qnet_target params
         target_net_updater.step()
 
         # log metrics
@@ -110,7 +129,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             log_metrics(logger, to_log, i)
 
     pbar.close()
-    print(f"Training time: {time.time() - start_time}")
+    torchrl_logger.info(f"Training time: {time.time() - start_time}")
 
 
 if __name__ == "__main__":

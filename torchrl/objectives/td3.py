@@ -2,14 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-from tensordict.nn import dispatch, TensorDictModule
 
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec, TensorSpec
 
@@ -18,7 +17,7 @@ from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -75,7 +74,7 @@ class TD3Loss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import Actor, ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.td3 import TD3Loss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> module = nn.Linear(n_obs, n_act)
@@ -219,7 +218,6 @@ class TD3Loss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
     ) -> None:
-
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
@@ -294,10 +292,13 @@ class TD3Loss(LossModule):
         self.register_buffer("max_action", high)
         self.register_buffer("min_action", low)
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
-        self._vmap_qvalue_network00 = _vmap_func(self.qvalue_network)
-        self._vmap_actor_network00 = _vmap_func(self.actor_network)
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+        self._vmap_qvalue_network00 = _vmap_func(
+            self.qvalue_network, randomness=self.vmap_randomness
+        )
+        self._vmap_actor_network00 = _vmap_func(
+            self.actor_network, randomness=self.vmap_randomness
+        )
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:

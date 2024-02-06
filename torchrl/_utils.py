@@ -9,6 +9,8 @@ import collections
 import functools
 import inspect
 
+import logging
+
 import math
 import os
 import sys
@@ -28,10 +30,24 @@ from packaging.version import parse
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
 
+LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "DEBUG")
+logger = logging.getLogger("torchrl")
+logger.setLevel(getattr(logging, LOGGING_LEVEL))
+# Disable propagation to the root logger
+logger.propagate = False
+# Remove all attached handlers
+while logger.hasHandlers():
+    logger.removeHandler(logger.handlers[0])
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s")
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
-BATCHED_PIPE_TIMEOUT = float(os.environ.get("RL_WARNINGS", "60.0"))
+BATCHED_PIPE_TIMEOUT = float(os.environ.get("BATCHED_PIPE_TIMEOUT", "10000.0"))
 
 
 class timeit:
@@ -65,7 +81,7 @@ class timeit:
         val[2] = N
 
     @staticmethod
-    def print(prefix=None):
+    def print(prefix=None):  # noqa: T202
         keys = list(timeit._REG)
         keys.sort()
         for name in keys:
@@ -75,7 +91,7 @@ class timeit:
             strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
-            print(" -- ".join(strings))
+            logger.info(" -- ".join(strings))
 
     @staticmethod
     def erase():
@@ -177,19 +193,15 @@ class _Dynamic_CKPT_BACKEND:
     backends = ["torch", "torchsnapshot"]
 
     def _get_backend(self):
-        backend = os.environ.get("CKPT_BACKEND", "torchsnapshot")
+        backend = os.environ.get("CKPT_BACKEND", "torch")
         if backend == "torchsnapshot":
             try:
                 import torchsnapshot  # noqa: F401
-
-                _has_ts = True
-            except ImportError:
-                _has_ts = False
-            if not _has_ts:
+            except ImportError as err:
                 raise ImportError(
                     f"torchsnapshot not found, but the backend points to this library. "
                     f"Consider installing torchsnapshot or choose another backend (available backends: {self.backends})"
-                )
+                ) from err
         return backend
 
     def __getattr__(self, item):
@@ -225,6 +237,10 @@ class implement_for:
         from_version: version from which implementation is compatible. Can be open (None).
         to_version: version from which implementation is no longer compatible. Can be open (None).
 
+    Keyword Args:
+        class_method (bool, optional): if ``True``, the function will be written as a class method.
+            Defaults to ``False``.
+
     Examples:
         >>> @implement_for("gym", "0.13", "0.14")
         >>> def fun(self, x):
@@ -241,7 +257,7 @@ class implement_for:
         ...     # More recent gym versions will return x + 2
         ...     return x + 2
         ...
-        >>> @implement_for("gymnasium", "0.27", None)
+        >>> @implement_for("gymnasium")
         >>> def fun(self, x):
         ...     # If gymnasium is to be used instead of gym, x+3 will be returned
         ...     return x + 3
@@ -260,16 +276,20 @@ class implement_for:
         module_name: Union[str, Callable],
         from_version: str = None,
         to_version: str = None,
+        *,
+        class_method: bool = False,
     ):
         self.module_name = module_name
         self.from_version = from_version
         self.to_version = to_version
+        self.class_method = class_method
         implement_for._setters.append(self)
 
     @staticmethod
-    def check_version(version, from_version, to_version):
-        return (from_version is None or parse(version) >= parse(from_version)) and (
-            to_version is None or parse(version) < parse(to_version)
+    def check_version(version: str, from_version: str | None, to_version: str | None):
+        version = parse(".".join([str(v) for v in parse(version).release]))
+        return (from_version is None or version >= parse(from_version)) and (
+            to_version is None or version < parse(to_version)
         )
 
     @staticmethod
@@ -281,8 +301,14 @@ class implement_for:
     @classmethod
     def get_func_name(cls, fn):
         # produces a name like torchrl.module.Class.method or torchrl.module.function
-        first = str(fn).split(".")[0][len("<function ") :]
-        last = str(fn).split(".")[1:]
+        fn_str = str(fn).split(".")
+        if fn_str[0].startswith("<bound method "):
+            first = fn_str[0][len("<bound method ") :]
+        elif fn_str[0].startswith("<function "):
+            first = fn_str[0][len("<function ") :]
+        else:
+            raise RuntimeError(f"Unkown func representation {fn}")
+        last = fn_str[1:]
         if last:
             first = [first]
             last[-1] = last[-1].split(" ")[0]
@@ -313,7 +339,10 @@ class implement_for:
         else:
             # class not yet defined
             return
-        setattr(cls, self.fn.__name__, self.fn)
+        if self.class_method:
+            setattr(cls, self.fn.__name__, classmethod(self.fn))
+        else:
+            setattr(cls, self.fn.__name__, self.fn)
 
     @classmethod
     def import_module(cls, module_name: Union[Callable, str]) -> str:
@@ -348,7 +377,12 @@ class implement_for:
         def _lazy_call_fn(*args, **kwargs):
             # first time we call the function, we also do the replacement.
             # This will cause the imports to occur only during the first call to fn
-            return self._delazify(self.func_name)(*args, **kwargs)
+
+            result = self._delazify(self.func_name)(*args, **kwargs)
+            return result
+
+        if self.class_method:
+            return classmethod(_lazy_call_fn)
 
         return _lazy_call_fn
 
@@ -405,7 +439,7 @@ class implement_for:
 
         """
         if VERBOSE:
-            print("resetting implement_for")
+            logger.info("resetting implement_for")
         if setters_dict is None:
             setters_dict = copy(cls._implementations)
         for setter in setters_dict.values():
@@ -546,7 +580,7 @@ def context_decorator(ctx, func):
 
     if inspect.isclass(func):
         raise RuntimeError(
-            "Cannot decorate classes; it is ambiguous whether or not only the "
+            "Cannot decorate classes; it is ambiguous whether only the "
             "constructor or all methods should have the context manager applied; "
             "additionally, decorating a class at definition-site will prevent "
             "use of the identifier as a conventional type.  "
@@ -652,17 +686,17 @@ def print_directory_tree(path, indent="", display_metadata=True):
 
         total_size_bytes = get_directory_size(path)
         formatted_size = format_size(total_size_bytes)
-        print(f"Directory size: {formatted_size}")
+        logger.info(f"Directory size: {formatted_size}")
 
     if os.path.isdir(path):
-        print(indent + os.path.basename(path) + "/")
+        logger.info(indent + os.path.basename(path) + "/")
         indent += "    "
         for item in os.listdir(path):
             print_directory_tree(
                 os.path.join(path, item), indent=indent, display_metadata=False
             )
     else:
-        print(indent + os.path.basename(path))
+        logger.info(indent + os.path.basename(path))
 
 
 def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
@@ -670,3 +704,40 @@ def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
         return new_ending
     else:
         return key[:-1] + (new_ending,)
+
+
+class _rng_decorator(_DecoratorContextManager):
+    """Temporarily sets the seed and sets back the rng state when exiting."""
+
+    def __init__(self, seed, device=None):
+        self.seed = seed
+        self.device = device
+        self.has_cuda = torch.cuda.is_available()
+
+    def __enter__(self):
+        self._get_state()
+        torch.manual_seed(self.seed)
+
+    def _get_state(self):
+        if self.has_cuda:
+            if self.device is None:
+                self._state = (torch.random.get_rng_state(), torch.cuda.get_rng_state())
+            else:
+                self._state = (
+                    torch.random.get_rng_state(),
+                    torch.cuda.get_rng_state(self.device),
+                )
+
+        else:
+            self._state = torch.random.get_rng_state()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.has_cuda:
+            torch.random.set_rng_state(self._state[0])
+            if self.device is not None:
+                torch.cuda.set_rng_state(self._state[1], device=self.device)
+            else:
+                torch.cuda.set_rng_state(self._state[1])
+
+        else:
+            torch.random.set_rng_state(self._state)

@@ -19,12 +19,12 @@ from typing import Callable
 import torch
 
 from tensordict import PersistentTensorDict, TensorDict
-from torchrl._utils import KeyDependentDefaultDict
+from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
-from torchrl.data.replay_buffers.writers import Writer
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
@@ -34,6 +34,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.utils import _classproperty
 
 _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
+_has_minari = importlib.util.find_spec("minari", None) is not None
 
 _NAME_MATCH = KeyDependentDefaultDict(lambda key: key)
 _NAME_MATCH["observations"] = "observation"
@@ -57,6 +58,10 @@ _DTYPE_DIR = {
 class MinariExperienceReplay(TensorDictReplayBuffer):
     """Minari Experience replay dataset.
 
+    Learn more about Minari on their website: https://minari.farama.org/
+
+    The data format follows the :ref:`TED convention <TED-format>`.
+
     Args:
         dataset_id (str): The dataset to be downloaded. Must be part of MinariExperienceReplay.available_datasets
         batch_size (int): Batch-size used during sampling. Can be overridden by `data.sample(batch_size)` if
@@ -73,7 +78,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
-            a default RoundRobinWriter() will be used.
+            a default :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter` will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset.
@@ -82,15 +87,13 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.transforms.transforms.Compose` class.
         split_trajs (bool, optional): if ``True``, the trajectories will be split
             along the first dimension and padded to have a matching shape.
             To split the trajectories, the ``"done"`` signal will be used, which
             is recovered via ``done = truncated | terminated``. In other words,
             it is assumed that any ``truncated`` or ``terminated`` signal is
-            equivalent to the end of a trajectory. For some datasets from
-            ``D4RL``, this may not be true. It is up to the user to make
-            accurate choices regarding this usage of ``split_trajs``.
+            equivalent to the end of a trajectory.
             Defaults to ``False``.
 
     Attributes:
@@ -106,7 +109,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         >>> from torchrl.data.datasets.minari_data import MinariExperienceReplay
         >>> data = MinariExperienceReplay("door-human-v1", batch_size=32, download="force")
         >>> for sample in data:
-        ...     print(sample)
+        ...     torchrl_logger.info(sample)
         ...     break
         TensorDict(
             fields={
@@ -193,6 +196,10 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         else:
             storage = self._load()
         storage = TensorStorage(storage)
+
+        if writer is None:
+            writer = ImmutableDatasetWriter()
+
         super().__init__(
             storage=storage,
             sampler=sampler,
@@ -206,6 +213,8 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
 
     @_classproperty
     def available_datasets(self):
+        if not _has_minari:
+            raise ImportError("minari library not found.")
         import minari
 
         return minari.list_remote_datasets().keys()
@@ -228,6 +237,8 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         return Path(self.root) / self.dataset_id / "env_metadata.json"
 
     def _download_and_preproc(self):
+        if not _has_minari:
+            raise ImportError("minari library not found.")
         import minari
 
         if _has_tqdm:
@@ -240,7 +251,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
 
             td_data = TensorDict({}, [])
             total_steps = 0
-            print("first read through data to create data structure...")
+            torchrl_logger.info("first read through data to create data structure...")
             h5_data = PersistentTensorDict.from_h5(parent_dir / "main_data.hdf5")
             # populate the tensordict
             episode_dict = {}
@@ -279,11 +290,11 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
                 td_data["done"] = td_data["truncated"] | td_data["terminated"]
             td_data = td_data.expand(total_steps)
             # save to designated location
-            print(f"creating tensordict data in {self.data_path_root}: ", end="\t")
+            torchrl_logger.info(f"creating tensordict data in {self.data_path_root}: ")
             td_data = td_data.memmap_like(self.data_path_root)
-            print("tensordict structure:", td_data)
+            torchrl_logger.info(f"tensordict structure: {td_data}")
 
-            print(f"Reading data from {max(*episode_dict) + 1} episodes")
+            torchrl_logger.info(f"Reading data from {max(*episode_dict) + 1} episodes")
             index = 0
             with tqdm(total=total_steps) if _has_tqdm else nullcontext() as pbar:
                 # iterate over episodes and populate the tensordict
@@ -398,8 +409,8 @@ def _proc_spec(spec):
             )
         return BoundedTensorSpec(
             shape=spec["shape"],
-            low=torch.tensor(spec["low"]),
-            high=torch.tensor(spec["high"]),
+            low=torch.as_tensor(spec["low"]),
+            high=torch.as_tensor(spec["high"]),
             dtype=_DTYPE_DIR[spec["dtype"]],
         )
     elif spec["type"] == "Discrete":

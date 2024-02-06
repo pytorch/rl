@@ -445,7 +445,7 @@ class QValueModule(TensorDictModuleBase):
     ):
         if isinstance(action_space, TensorSpec):
             warnings.warn(
-                "Using specs in action_space will be deprecated soon,"
+                "Using specs in action_space will be deprecated in v0.4.0,"
                 " please use the 'spec' argument if you want to provide an action spec",
                 category=DeprecationWarning,
             )
@@ -825,7 +825,7 @@ class QValueHook:
     ):
         if isinstance(action_space, TensorSpec):
             warnings.warn(
-                "Using specs in action_space will be deprecated soon,"
+                "Using specs in action_space will be deprecated in v0.4.0,"
                 " please use the 'spec' argument if you want to provide an action spec",
                 category=DeprecationWarning,
             )
@@ -922,7 +922,7 @@ class DistributionalQValueHook(QValueHook):
     ):
         if isinstance(action_space, TensorSpec):
             warnings.warn(
-                "Using specs in action_space will be deprecated soon,"
+                "Using specs in action_space will be deprecated in v0.4.0,"
                 " please use the 'spec' argument if you want to provide an action spec",
                 category=DeprecationWarning,
             )
@@ -1043,7 +1043,7 @@ class QValueActor(SafeSequential):
     ):
         if isinstance(action_space, TensorSpec):
             warnings.warn(
-                "Using specs in action_space will be deprecated soon,"
+                "Using specs in action_space will be deprecated v0.4.0,"
                 " please use the 'spec' argument if you want to provide an action spec",
                 category=DeprecationWarning,
             )
@@ -1189,7 +1189,7 @@ class DistributionalQValueActor(QValueActor):
     ):
         if isinstance(action_space, TensorSpec):
             warnings.warn(
-                "Using specs in action_space will be deprecated soon,"
+                "Using specs in action_space will be deprecated in v0.4.0,"
                 " please use the 'spec' argument if you want to provide an action spec",
                 category=DeprecationWarning,
             )

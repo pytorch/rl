@@ -6,7 +6,8 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import expand_right, NestedKey
 
 from torchrl.data.tensor_specs import (
@@ -111,6 +112,7 @@ class _MockEnv(EnvBase):
         super().__init__(
             device=kwargs.pop("device", "cpu"),
             dtype=torch.get_default_dtype(),
+            allow_done_after_reset=kwargs.pop("allow_done_after_reset", False),
         )
         self.set_seed(seed)
         self.is_closed = False
@@ -228,6 +230,7 @@ class MockSerialEnv(EnvBase):
                 "observation": n.clone(),
             },
             batch_size=[],
+            device=self.device,
         )
 
     def _reset(self, tensordict: TensorDictBase = None, **kwargs) -> TensorDictBase:
@@ -239,7 +242,9 @@ class MockSerialEnv(EnvBase):
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict(
-            {"done": done, "terminated": done.clone(), "observation": n}, []
+            {"done": done, "terminated": done.clone(), "observation": n},
+            [],
+            device=self.device,
         )
 
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
@@ -495,7 +500,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         state = torch.zeros(self.size) + self.counter
         if tensordict is None:
             tensordict = TensorDict({}, self.batch_size, device=self.device)
-        tensordict = tensordict.select().set(self.out_key, self._get_out_obs(state))
+        tensordict = tensordict.empty().set(self.out_key, self._get_out_obs(state))
         tensordict = tensordict.set(self._out_key, self._get_out_obs(state))
         tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
         tensordict.set(
@@ -514,7 +519,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
             assert (a.sum(-1) == 1).all()
 
         obs = self._get_in_obs(tensordict.get(self._out_key)) + a / self.maxstep
-        tensordict = tensordict.select()  # empty tensordict
+        tensordict = tensordict.empty()
 
         tensordict.set(self.out_key, self._get_out_obs(obs))
         tensordict.set(self._out_key, self._get_out_obs(obs))
@@ -602,7 +607,8 @@ class ContinuousActionVecMockEnv(_MockEnv):
         # state = torch.zeros(self.size) + self.counter
         if tensordict is None:
             tensordict = TensorDict({}, self.batch_size, device=self.device)
-        tensordict = tensordict.select()
+
+        tensordict = tensordict.empty()
         tensordict.update(self.observation_spec.rand())
         # tensordict.set("next_" + self.out_key, self._get_out_obs(state))
         # tensordict.set("next_" + self._out_key, self._get_out_obs(state))
@@ -621,7 +627,8 @@ class ContinuousActionVecMockEnv(_MockEnv):
         a = tensordict.get("action")
 
         obs = self._obs_step(self._get_in_obs(tensordict.get(self._out_key)), a)
-        tensordict = tensordict.select()  # empty tensordict
+
+        tensordict = tensordict.empty()  # empty tensordict
 
         tensordict.set(self.out_key, self._get_out_obs(obs))
         tensordict.set(self._out_key, self._get_out_obs(obs))
@@ -639,7 +646,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         return obs + a / self.maxstep
 
 
-class DiscreteActionVecPolicy:
+class DiscreteActionVecPolicy(TensorDictModuleBase):
     in_keys = ["observation"]
     out_keys = ["action"]
 
@@ -972,10 +979,13 @@ class ActionObsMergeLinear(nn.Module):
         return self.linear(torch.cat([observation, action], dim=-1))
 
 
-class CountingEnvCountPolicy:
+class CountingEnvCountPolicy(TensorDictModuleBase):
     def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
+        super().__init__()
         self.action_spec = action_spec
         self.action_key = action_key
+        self.in_keys = []
+        self.out_keys = [action_key]
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
         return td.set(self.action_key, self.action_spec.zero() + 1)
@@ -1062,7 +1072,7 @@ class CountingEnv(EnvBase):
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         action = tensordict.get(self.action_key)
-        self.count += action.to(torch.int).to(self.device)
+        self.count += action.to(dtype=torch.int, device=self.device)
         tensordict = TensorDict(
             source={
                 "observation": self.count.clone(),
@@ -1371,8 +1381,9 @@ class CountingBatchedEnv(EnvBase):
         return tensordict
 
 
-class HeteroCountingEnvPolicy:
+class HeterogeneousCountingEnvPolicy(TensorDictModuleBase):
     def __init__(self, full_action_spec: TensorSpec, count: bool = True):
+        super().__init__()
         self.full_action_spec = full_action_spec
         self.count = count
 
@@ -1383,7 +1394,7 @@ class HeteroCountingEnvPolicy:
         return td.update(action_td)
 
 
-class HeteroCountingEnv(EnvBase):
+class HeterogeneousCountingEnv(EnvBase):
     """A heterogeneous, counting Env."""
 
     def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
@@ -1415,10 +1426,12 @@ class HeteroCountingEnv(EnvBase):
                     3,
                 )
             ),
+            device=self.device,
         )
 
         self.unbatched_action_spec = CompositeSpec(
             lazy=action_specs,
+            device=self.device,
         )
         self.unbatched_reward_spec = CompositeSpec(
             {
@@ -1430,7 +1443,8 @@ class HeteroCountingEnv(EnvBase):
                     },
                     shape=(self.n_nested_dim,),
                 )
-            }
+            },
+            device=self.device,
         )
         self.unbatched_done_spec = CompositeSpec(
             {
@@ -1444,7 +1458,8 @@ class HeteroCountingEnv(EnvBase):
                     },
                     shape=(self.n_nested_dim,),
                 )
-            }
+            },
+            device=self.device,
         )
 
         self.action_spec = self.unbatched_action_spec.expand(
@@ -1477,7 +1492,8 @@ class HeteroCountingEnv(EnvBase):
                     "lidar": lidar,
                     "vector": vector_3d,
                     "tensor_0": tensor_0,
-                }
+                },
+                device=self.device,
             )
         elif i == 1:
             return CompositeSpec(
@@ -1486,7 +1502,8 @@ class HeteroCountingEnv(EnvBase):
                     "lidar": lidar,
                     "vector": vector_2d,
                     "tensor_1": tensor_1,
-                }
+                },
+                device=self.device,
             )
         elif i == 2:
             return CompositeSpec(
@@ -1494,7 +1511,8 @@ class HeteroCountingEnv(EnvBase):
                     "camera": camera,
                     "vector": vector_2d,
                     "tensor_2": tensor_2,
-                }
+                },
+                device=self.device,
             )
         else:
             raise ValueError(f"Index {i} undefined for index 3")
@@ -1566,13 +1584,14 @@ class HeteroCountingEnv(EnvBase):
         torch.manual_seed(seed)
 
 
-class MultiKeyCountingEnvPolicy:
+class MultiKeyCountingEnvPolicy(TensorDictModuleBase):
     def __init__(
         self,
         full_action_spec: TensorSpec,
         count: bool = True,
         deterministic: bool = False,
     ):
+        super().__init__()
         if not deterministic and not count:
             raise ValueError("Not counting policy is always deterministic")
 

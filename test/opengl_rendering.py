@@ -28,7 +28,7 @@ from __future__ import print_function
 # pylint: disable=unused-import,g-import-not-at-top,g-statement-before-imports
 
 try:
-    import OpenGL
+    import OpenGL  # noqa: F401
 except ImportError:
     print("This module depends on PyOpenGL.")
     print(
@@ -66,7 +66,7 @@ try:
 
     util.find_library = _find_library_new
     import OpenGL.EGL as egl
-    import OpenGL.GL as gl
+    import OpenGL.GL as gl  # noqa: F401
     from OpenGL import error
     from OpenGL.EGL.EXT.device_base import egl_get_devices
     from OpenGL.raw.EGL.EXT.platform_device import EGL_PLATFORM_DEVICE_EXT

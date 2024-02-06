@@ -22,6 +22,7 @@ from ray import tune
 from ray.rllib.agents.ppo import PPOTrainer
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.tune import register_env
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.envs.libs.vmas import VmasEnv
 from vmas import Wrapper
@@ -164,11 +165,11 @@ def run_comparison_torchrl_rllib(
         evaluation = {}
     for framework in ["TorchRL", "RLlib"]:
         if framework not in evaluation.keys():
-            print(f"\nFramework {framework}")
+            torchrl_logger.info(f"\nFramework {framework}")
             vmas_times = []
             for n_envs in list_n_envs:
                 n_envs = int(n_envs)
-                print(f"Running {n_envs} environments")
+                torchrl_logger.info(f"Running {n_envs} environments")
                 if framework == "TorchRL":
                     vmas_times.append(
                         (n_envs * n_steps)
@@ -189,7 +190,7 @@ def run_comparison_torchrl_rllib(
                             device=device,
                         )
                     )
-                print(f"fps {vmas_times[-1]}s")
+                torchrl_logger.info(f"fps {vmas_times[-1]}s")
             evaluation[framework] = vmas_times
 
     store_pickled_evaluation(name=figure_name_pkl, evaluation=evaluation)

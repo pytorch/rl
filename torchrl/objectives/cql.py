@@ -12,8 +12,8 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
 
@@ -26,7 +26,7 @@ from torchrl.modules.tensordict_module.common import ensure_tensordict_compatibl
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -90,7 +90,7 @@ class CQLLoss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.cql import CQLLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
@@ -332,8 +332,7 @@ class CQLLoss(LossModule):
         self.target_entropy_buffer = None
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
         self.temperature = temperature
         self.min_q_weight = min_q_weight
@@ -349,8 +348,12 @@ class CQLLoss(LossModule):
                 torch.nn.Parameter(torch.tensor(math.log(1.0), device=device)),
             )
 
-        self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
-        self._vmap_qvalue_network00 = _vmap_func(self.qvalue_network)
+        self._vmap_qvalue_networkN0 = _vmap_func(
+            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+        )
+        self._vmap_qvalue_network00 = _vmap_func(
+            self.qvalue_network, randomness=self.vmap_randomness
+        )
 
     @property
     def target_entropy(self):
@@ -1026,8 +1029,7 @@ class DiscreteCQLLoss(LossModule):
         self.action_space = _find_action_space(action_space)
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:

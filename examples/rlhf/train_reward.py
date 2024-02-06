@@ -8,6 +8,7 @@ import hydra
 import torch
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.rlhf.dataset import get_dataloader
 from torchrl.data.rlhf.reward import PairwiseDataset
 from utils import get_file_logger, resolve_name_or_path, setup
@@ -140,13 +141,13 @@ def main(cfg):
                 f"VALID: {it=}: {train_loss=:.4f}, {val_loss=:.4f}, "
                 f"{train_acc=:.4f}, {val_acc=:.4f}"
             )
-            print(msg)
+            torchrl_logger.info(msg)
             loss_logger.info(msg)
             if val_loss < best_val_loss or always_save_checkpoint:
                 best_val_loss = val_loss
                 if it > 0:
                     msg = f"saving checkpoint to {reward_out_dir}"
-                    print(msg)
+                    torchrl_logger.info(msg)
                     loss_logger.info(msg)
                     model.module.save_pretrained(reward_out_dir)
         elif it % log_interval == 0:
@@ -155,7 +156,7 @@ def main(cfg):
                 batch.chosen_data.end_scores, batch.rejected_data.end_scores
             )
             msg = f"TRAIN: {it=}: {loss=:.4f}, {acc=:.4f} time={dt*1000:.2f}ms"
-            print(msg)
+            torchrl_logger.info(msg)
             loss_logger.info(msg)
 
 

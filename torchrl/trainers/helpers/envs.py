@@ -8,7 +8,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import torch
 
-from torchrl._utils import VERBOSE
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
@@ -393,7 +393,7 @@ def get_stats_random_rollout(
         )()
 
     if VERBOSE:
-        print("computing state stats")
+        torchrl_logger.info("computing state stats")
     if not hasattr(cfg, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
@@ -426,7 +426,7 @@ def get_stats_random_rollout(
     s[s == 0] = 1.0
 
     if VERBOSE:
-        print(
+        torchrl_logger.info(
             f"stats computed for {val_stats.numel()} steps. Got: \n"
             f"loc = {m}, \n"
             f"scale = {s}"

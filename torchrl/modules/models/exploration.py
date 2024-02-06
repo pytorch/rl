@@ -345,7 +345,9 @@ class gSDEModule(nn.Module):
             )
 
         if sigma_init != 0.0:
-            self.register_buffer("sigma_init", torch.tensor(sigma_init, device=device))
+            self.register_buffer(
+                "sigma_init", torch.as_tensor(sigma_init, device=device)
+            )
 
     @property
     def sigma(self):

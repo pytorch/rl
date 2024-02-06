@@ -4,6 +4,13 @@ Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
 ===============================================================
 **Author**: `Matteo Bettini <https://github.com/matteobettini>`_
 
+.. note::
+
+   If you are interested in Multi-Agent Reinforcement Learning (MARL) in
+   TorchRL, check out
+   `BenchMARL <https://github.com/facebookresearch/BenchMARL>`__: a benchmarking library where you
+   can train and compare MARL algorithms, tasks, and models using TorchRL!
+
 This tutorial demonstrates how to use PyTorch and :py:mod:`torchrl` to
 solve a Multi-Agent Reinforcement Learning (MARL) problem.
 
@@ -115,9 +122,11 @@ Key learnings:
 # Torch
 import torch
 
-# Tensordict modules
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
+
+# Tensordict modules
+from torch import multiprocessing
 
 # Data collection
 from torchrl.collectors import SyncDataCollector
@@ -154,7 +163,12 @@ from tqdm import tqdm
 #
 
 # Devices
-device = "cpu" if not torch.has_cuda else "cuda:0"  # The divice where learning is run
+is_fork = multiprocessing.get_start_method() == "fork"
+device = (
+    torch.device(0)
+    if torch.cuda.is_available() and not is_fork
+    else torch.device("cpu")
+)
 vmas_device = device  # The device where the simulator is run (VMAS can run on GPU)
 
 # Sampling
@@ -588,8 +602,8 @@ replay_buffer = ReplayBuffer(
 #
 
 loss_module = ClipPPOLoss(
-    actor=policy,
-    critic=critic,
+    actor_network=policy,
+    critic_network=critic,
     clip_epsilon=clip_epsilon,
     entropy_coef=entropy_eps,
     normalize_advantage=False,  # Important to avoid normalizing across the agent dimension
@@ -652,8 +666,8 @@ for tensordict_data in collector:
     with torch.no_grad():
         GAE(
             tensordict_data,
-            params=loss_module.critic_params,
-            target_params=loss_module.target_critic_params,
+            params=loss_module.critic_network_params,
+            target_params=loss_module.target_critic_network_params,
         )  # Compute GAE and add it to the data
 
     data_view = tensordict_data.reshape(-1)  # Flatten the batch size to shuffle data

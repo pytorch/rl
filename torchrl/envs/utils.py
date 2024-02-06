@@ -14,7 +14,12 @@ from typing import Dict, List, Union
 
 import torch
 
-from tensordict import is_tensor_collection, TensorDictBase, unravel_key
+from tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDictBase,
+    unravel_key,
+)
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
@@ -25,8 +30,8 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import LazyStackedTensorDict, NestedKey
-from torchrl._utils import _replace_last
+from tensordict.utils import NestedKey
+from torchrl._utils import _replace_last, _rng_decorator, logger as torchrl_logger
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -186,7 +191,7 @@ def step_mdp(
             next_tensordicts = next_tensordict.unbind(tensordict.stack_dim)
         else:
             next_tensordicts = [None] * len(tensordict.tensordicts)
-        out = torch.stack(
+        out = LazyStackedTensorDict.lazy_stack(
             [
                 step_mdp(
                     td,
@@ -414,7 +419,9 @@ def _per_level_env_check(data0, data1, check_dtype):
                     )
 
 
-def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
+def check_env_specs(
+    env, return_contiguous=True, check_dtype=True, seed: int | None = None
+):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
@@ -431,7 +438,12 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
             of inputs/outputs). Defaults to True.
         check_dtype (bool, optional): if False, dtype checks will be skipped.
             Defaults to True.
-        seed (int, optional): for reproducibility, a seed is set.
+        seed (int, optional): for reproducibility, a seed can be set.
+            The seed will be set in pytorch temporarily, then the RNG state will
+            be reverted to what it was before. For the env, we set the seed but since
+            setting the rng state back to what is was isn't a feature of most environment,
+            we leave it to the user to accomplish that.
+            Defaults to ``None``.
 
     Caution: this function resets the env seed. It should be used "offline" to
     check that an env is adequately constructed, but it may affect the seeding
@@ -439,8 +451,14 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
 
     """
     if seed is not None:
-        torch.manual_seed(seed)
-        env.set_seed(seed)
+        device = (
+            env.device if env.device is not None and env.device.type == "cuda" else None
+        )
+        with _rng_decorator(seed, device=device):
+            env.set_seed(seed)
+            return check_env_specs(
+                env, return_contiguous=return_contiguous, check_dtype=check_dtype
+            )
 
     fake_tensordict = env.fake_tensordict()
     real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
@@ -449,7 +467,9 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
         fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
     else:
-        fake_tensordict = torch.stack([fake_tensordict.clone() for _ in range(3)], -1)
+        fake_tensordict = LazyStackedTensorDict.lazy_stack(
+            [fake_tensordict.clone() for _ in range(3)], -1
+        )
     # eliminate empty containers
     fake_tensordict_select = fake_tensordict.select(*fake_tensordict.keys(True, True))
     real_tensordict_select = real_tensordict.select(*real_tensordict.keys(True, True))
@@ -517,7 +537,7 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )
 
-    print("check_env_specs succeeded!")
+    torchrl_logger.info("check_env_specs succeeded!")
 
 
 def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int = -1):

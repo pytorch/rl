@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Dict, Tuple
 
 import torch
 
@@ -34,6 +35,14 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
     The Open X-Embodiment Dataset contains 1M+ real robot trajectories
     spanning 22 robot embodiments, collected through a collaboration between
     21 institutions, demonstrating 527 skills (160266 tasks).
+
+    Website: https://robotics-transformer-x.github.io/
+
+    GitHub: https://github.com/google-deepmind/open_x_embodiment
+
+    Paper: https://arxiv.org/abs/2310.08864
+
+    The data format follows the :ref:`TED convention <TED-format>`.
 
     .. note::
         Non-tensor data will be written in the tensordict data using the
@@ -66,7 +75,7 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
               sampler is set to ``False`` if they wish to enjoy the two different
               behaviours (shuffled and not) within the same code base.
 
-        num_slice (int, optional): the number of slices in a batch. This
+        num_slices (int, optional): the number of slices in a batch. This
             corresponds to the number of trajectories present in a batch.
             Once collected, the batch is presented as a concatenation of
             sub-trajectories that can be recovered through `batch.reshape(num_slices, -1)`.
@@ -107,10 +116,10 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
             0s. If another value is provided, it will be used for padding. If
             ``False`` or ``None`` (default) any encounter with a trajectory of
             insufficient length will raise an exception.
-        root (Path or str, optional): The Minari dataset root directory.
+        root (Path or str, optional): The OpenX dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/minari`.
+            ``~/.cache/torchrl/openx`.
         streaming (bool, optional): if ``True``, the data won't be downloaded but
             read from a stream instead.
 
@@ -132,7 +141,7 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
-            a default RoundRobinWriter() will be used.
+            a default :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter` will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset.
@@ -141,15 +150,13 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.transforms.transforms.Compose` class.
         split_trajs (bool, optional): if ``True``, the trajectories will be split
             along the first dimension and padded to have a matching shape.
             To split the trajectories, the ``"done"`` signal will be used, which
             is recovered via ``done = truncated | terminated``. In other words,
             it is assumed that any ``truncated`` or ``terminated`` signal is
-            equivalent to the end of a trajectory. For some datasets from
-            ``D4RL``, this may not be true. It is up to the user to make
-            accurate choices regarding this usage of ``split_trajs``.
+            equivalent to the end of a trajectory.
             Defaults to ``False``.
         strict_length (bool, optional): if ``False``, trajectories of length
             shorter than `slice_len` (or `batch_size // num_slices`) will be
@@ -527,22 +534,31 @@ class _StreamingStorage(Storage):
         slice_len=None,
         pad=None,
     ):
-        if not _has_datasets:
-            raise ImportError(
-                f"the `datasets` library is required for the dataset {dataset_id}."
-            )
-        import datasets
-
-        dataset = datasets.load_dataset(repo, dataset_id, streaming=True, split=split)
-        if shuffle:
-            dataset = dataset.shuffle()
-        self.dataset = dataset
-        self.dataset_iter = iter(dataset)
+        self.shuffle = shuffle
+        self.dataset_id = dataset_id
+        self.repo = repo
+        self.split = split
+        self._init()
         self.base_path = base_path
         self.truncate = truncate
         self.num_slices = num_slices
         self.slice_len = slice_len
         self.pad = pad
+
+    def _init(self):
+        if not _has_datasets:
+            raise ImportError(
+                f"the `datasets` library is required for the dataset {self.dataset_id}."
+            )
+        import datasets
+
+        dataset = datasets.load_dataset(
+            self.repo, self.dataset_id, streaming=True, split=self.split
+        )
+        if self.shuffle:
+            dataset = dataset.shuffle()
+        self.dataset = dataset
+        self.dataset_iter = iter(dataset)
 
     def __iter__(self):
         episode = 0
@@ -558,10 +574,12 @@ class _StreamingStorage(Storage):
             else:
                 yield data
 
-    def get(self, index: int) -> Any:
+    def get(self, index: range | torch.Tensor) -> Any:
         if not isinstance(index, range):
-            # we use a range to indicate how much data we want
-            raise RuntimeError("iterable datasets do not support indexing.")
+            if (index[1:] != index[:-1] + 1).any():
+                # we use a range to indicate how much data we want
+                raise RuntimeError("iterable datasets do not support indexing.")
+            index = range(index.shape[0])
         total = 0
         data_list = []
         episode = 0
@@ -607,6 +625,34 @@ class _StreamingStorage(Storage):
             return data[: index.stop]
         return data
 
+    def dumps(self, path):
+        path = Path(path)
+        state_dict = self.state_dict()
+        json.dump(state_dict, path / "state_dict.json")
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "repo": self.repo,
+            "split": self.split,
+            "dataset_id": self.dataset_id,
+            "shuffle": self.shuffle,
+            "base_path": self.base_path,
+            "truncated": self.truncate,
+            "num_slices": self.num_slices,
+            "slice_len": self.slice_len,
+            "pad": self.pad,
+        }
+
+    def loads(self, path):
+        path = Path(path)
+        state_dict = json.load(path / "state_dict.json")
+        self.load_state_dict(state_dict)
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        for key, val in state_dict.items():
+            setattr(self, key, val)
+        self._init()
+
     def __len__(self):
         raise RuntimeError(
             f"{type(self)} does not have a length. Use a downloaded dataset to "
@@ -638,7 +684,7 @@ def _slice_data(data: TensorDict, slice_len, pad_value):
         truncated,
         dim=data.ndim - 1,
         value=True,
-        index=torch.tensor(-1, device=truncated.device),
+        index=torch.as_tensor(-1, device=truncated.device),
     )
     done = data.get(("next", "done"))
     data.set(("next", "truncated"), truncated)
@@ -660,6 +706,12 @@ class _StreamingSampler(Sampler):
         ...
 
     def loads(self, path):
+        ...
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         ...
 
 

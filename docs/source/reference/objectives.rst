@@ -127,6 +127,7 @@ IQL
     :template: rl_template_noinherit.rst
 
     IQLLoss
+    DiscreteIQLLoss
 
 CQL
 ----

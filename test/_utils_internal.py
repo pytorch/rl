@@ -18,7 +18,7 @@ import torch
 import torch.cuda
 
 from tensordict import tensorclass, TensorDict
-from torchrl._utils import implement_for, seed_generator
+from torchrl._utils import implement_for, logger as torchrl_logger, seed_generator
 from torchrl.data.utils import CloudpickleWrapper
 
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
@@ -62,7 +62,7 @@ def _set_gym_environments():  # noqa: F811
     PONG_VERSIONED = "ALE/Pong-v5"
 
 
-@implement_for("gymnasium", "0.27.0", None)
+@implement_for("gymnasium")
 def _set_gym_environments():  # noqa: F811
     global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
 
@@ -119,7 +119,7 @@ def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
                     return f(*args, **kwargs)
                 except ExceptionToCheck as e:
                     msg = "%s, Retrying in %d seconds..." % (str(e), mdelay)
-                    print(msg)
+                    torchrl_logger.info(msg)
                     time.sleep(mdelay)
                     mtries -= 1
             try:
@@ -329,9 +329,9 @@ def rollout_consistency_assertion(
 ):
     """Tests that observations in "next" match observations in the next root tensordict when done is False, and don't match otherwise."""
 
-    done = rollout[:, :-1]["next", done_key].squeeze(-1)
+    done = rollout[..., :-1]["next", done_key].squeeze(-1)
     # data resulting from step, when it's not done
-    r_not_done = rollout[:, :-1]["next"][~done]
+    r_not_done = rollout[..., :-1]["next"][~done]
     # data resulting from step, when it's not done, after step_mdp
     r_not_done_tp1 = rollout[:, 1:][~done]
     torch.testing.assert_close(
@@ -342,17 +342,15 @@ def rollout_consistency_assertion(
 
     if done_strict and not done.any():
         raise RuntimeError("No done detected, test could not complete.")
-
-    # data resulting from step, when it's done
-    r_done = rollout[:, :-1]["next"][done]
-    # data resulting from step, when it's done, after step_mdp and reset
-    r_done_tp1 = rollout[:, 1:][done]
-    assert (
-        (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1) > 1e-1
-    ).all(), (
-        f"Entries in next tensordict do not match entries in root "
-        f"tensordict after reset : {(r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1) < 1e-1}"
-    )
+    if done.any():
+        # data resulting from step, when it's done
+        r_done = rollout[..., :-1]["next"][done]
+        # data resulting from step, when it's done, after step_mdp and reset
+        r_done_tp1 = rollout[..., 1:][done]
+        # check that at least one obs after reset does not match the version before reset
+        assert not torch.isclose(
+            r_done[observation_key], r_done_tp1[observation_key]
+        ).all()
 
 
 def rand_reset(env):

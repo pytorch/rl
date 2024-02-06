@@ -8,6 +8,7 @@ This script reproduces the Proximal Policy Optimization (PPO) Algorithm
 results from Schulman et al. 2017 for the on MuJoCo Environments.
 """
 import hydra
+from torchrl._utils import logger as torchrl_logger
 
 
 @hydra.main(config_path=".", config_name="config_mujoco", version_base="1.1")
@@ -68,8 +69,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     loss_module = ClipPPOLoss(
-        actor=actor,
-        critic=critic,
+        actor_network=actor,
+        critic_network=critic,
         clip_epsilon=cfg.loss.clip_epsilon,
         loss_critic_type=cfg.loss.loss_critic_type,
         entropy_coef=cfg.loss.entropy_coef,
@@ -86,7 +87,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if cfg.logger.backend:
         exp_name = generate_exp_name("PPO", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
         logger = get_logger(
-            cfg.logger.backend, logger_name="ppo", experiment_name=exp_name
+            cfg.logger.backend,
+            logger_name="ppo",
+            experiment_name=exp_name,
+            wandb_kwargs={
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
 
     # Create test environment
@@ -221,7 +229,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     end_time = time.time()
     execution_time = end_time - start_time
-    print(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

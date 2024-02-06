@@ -13,6 +13,8 @@ import sys
 import time
 
 import pytest
+from tensordict.nn import TensorDictModuleBase
+from torchrl._utils import logger as torchrl_logger
 
 try:
     import ray
@@ -48,7 +50,7 @@ if sys.platform.startswith("win"):
     pytest.skip("skipping windows tests in windows", allow_module_level=True)
 
 
-class CountingPolicy(nn.Module):
+class CountingPolicy(TensorDictModuleBase):
     """A policy for counting env.
 
     Returns a step of 1 by default but weights can be adapted.
@@ -88,7 +90,7 @@ class DistributedCollectorBase:
         cls._start_worker()
         env = ContinuousActionVecMockEnv
         policy = RandomPolicy(env().action_spec)
-        print("creating collector")
+        torchrl_logger.info("creating collector")
         collector = cls.distributed_class()(
             [env] * 2,
             policy,
@@ -97,7 +99,7 @@ class DistributedCollectorBase:
             **cls.distributed_kwargs(),
         )
         total = 0
-        print("getting data...")
+        torchrl_logger.info("getting data...")
         for data in collector:
             total += data.numel()
             assert data.numel() == frames_per_batch

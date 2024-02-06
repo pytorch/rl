@@ -14,7 +14,8 @@ import torch
 
 from tensordict import TensorDict, TensorDictBase
 
-from tensordict.tensordict import NestedKey
+from tensordict.utils import NestedKey
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.replay_buffers import (
     SamplerWithoutReplacement,
     TensorDictReplayBuffer,
@@ -140,7 +141,7 @@ class TokenizedDatasetLoader:
         data_dir = root_dir / str(Path(self.dataset_name).name).split("-")[0]
         data_dir_total = data_dir / split / str(max_length)
         # search for data
-        print("Looking for data in", data_dir_total)
+        torchrl_logger.info(f"Looking for data in {data_dir_total}")
         if os.path.exists(data_dir_total):
             dataset = TensorDict.load_memmap(data_dir_total)
             return dataset

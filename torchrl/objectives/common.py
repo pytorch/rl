@@ -16,10 +16,10 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
 from torch import nn
 from torch.nn import Parameter
-
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.objectives.utils import ValueEstimators
+
+from torchrl.objectives.utils import RANDOM_MODULE_LIST, ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
 
@@ -81,6 +81,7 @@ class LossModule(TensorDictModuleBase):
 
         pass
 
+    _vmap_randomness = None
     default_value_estimator: ValueEstimators = None
     SEP = "."
     TARGET_NET_WARNING = (
@@ -112,14 +113,11 @@ class LossModule(TensorDictModuleBase):
         # self.register_forward_pre_hook(_parameters_to_tensordict)
 
     def _set_deprecated_ctor_keys(self, **kwargs) -> None:
-        """Helper function to set a tensordict key from a constructor and raise a warning simultaneously."""
         for key, value in kwargs.items():
             if value is not None:
-                warnings.warn(
+                raise RuntimeError(
                     f"Setting '{key}' via the constructor is deprecated, use .set_keys(<key>='some_key') instead.",
-                    category=DeprecationWarning,
                 )
-                self.set_keys(**{key: value})
 
     def set_keys(self, **kwargs) -> None:
         """Set tensordict key names.
@@ -216,7 +214,8 @@ class LossModule(TensorDictModuleBase):
         """
         if kwargs.pop("funs_to_decorate", None) is not None:
             warnings.warn(
-                "funs_to_decorate is without effect with the new objective API.",
+                "funs_to_decorate is without effect with the new objective API. This "
+                "warning will be replaced by an error in v0.4.0.",
                 category=DeprecationWarning,
             )
         if kwargs:
@@ -428,6 +427,28 @@ class LossModule(TensorDictModuleBase):
             raise NotImplementedError(f"Unknown value type {value_type}")
 
         return self
+
+    @property
+    def vmap_randomness(self):
+        if self._vmap_randomness is None:
+            do_break = False
+            for val in self.__dict__.values():
+                if isinstance(val, torch.nn.Module):
+                    for module in val.modules():
+                        if isinstance(module, RANDOM_MODULE_LIST):
+                            self._vmap_randomness = "different"
+                            do_break = True
+                            break
+                if do_break:
+                    # double break
+                    break
+            else:
+                self._vmap_randomness = "error"
+
+        return self._vmap_randomness
+
+    def set_vmap_randomness(self, value):
+        self._vmap_randomness = value
 
     @staticmethod
     def _make_meta_params(param):

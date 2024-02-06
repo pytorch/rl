@@ -1250,7 +1250,6 @@ def test_python_gru_cell(device, bias):
     h0 = torch.zeros(3, 20, device=device)
     with torch.no_grad():
         for i in range(input.size()[0]):
-            print(i)
             h1 = gru_cell1(input[i], h0)
             h2 = gru_cell2(input[i], h0)
 

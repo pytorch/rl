@@ -11,7 +11,6 @@ It works across Gym and MuJoCo over a variety of tasks.
 The helper functions are coded in the utils.py associated with this script.
 
 """
-
 import time
 
 import hydra
@@ -19,6 +18,7 @@ import numpy as np
 import torch
 import tqdm
 from tensordict import TensorDict
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
 
@@ -36,14 +36,19 @@ from utils import (
 @hydra.main(version_base="1.1", config_path=".", config_name="online_config")
 def main(cfg: "DictConfig"):  # noqa: F821
     # Create logger
-    exp_name = generate_exp_name("CQL-online", cfg.env.exp_name)
+    exp_name = generate_exp_name("CQL-online", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:
         logger = get_logger(
             logger_type=cfg.logger.backend,
             logger_name="cql_logging",
             experiment_name=exp_name,
-            wandb_kwargs={"mode": cfg.logger.mode, "config": cfg},
+            wandb_kwargs={
+                "mode": cfg.logger.mode,
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
 
     # Set seeds
@@ -206,7 +211,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    print(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
     collector.shutdown()
 

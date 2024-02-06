@@ -11,9 +11,9 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from tensordict import TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
@@ -25,7 +25,7 @@ from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -106,7 +106,7 @@ class SACLoss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.sac import SACLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
@@ -374,11 +374,14 @@ class SACLoss(LossModule):
                 self.actor_network, self.value_network
             )
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
-        self._vmap_qnetworkN0 = _vmap_func(self.qvalue_network, (None, 0))
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+        self._vmap_qnetworkN0 = _vmap_func(
+            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+        )
         if self._version == 1:
-            self._vmap_qnetwork00 = _vmap_func(qvalue_network)
+            self._vmap_qnetwork00 = _vmap_func(
+                qvalue_network, randomness=self.vmap_randomness
+            )
 
     @property
     def target_entropy_buffer(self):
@@ -411,7 +414,6 @@ class SACLoss(LossModule):
                 isinstance(self.tensor_keys.action, tuple)
                 and len(self.tensor_keys.action) > 1
             ):
-
                 action_container_shape = action_spec[self.tensor_keys.action[:-1]].shape
             else:
                 action_container_shape = action_spec.shape
@@ -753,7 +755,6 @@ class SACLoss(LossModule):
         return loss_value, {}
 
     def _alpha_loss(self, log_prob: Tensor) -> Tensor:
-
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
             alpha_loss = -self.log_alpha * (log_prob + self.target_entropy)
@@ -783,7 +784,7 @@ class DiscreteSACLoss(LossModule):
             :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
             :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
         num_actions (int, optional): number of actions in the action space.
-            To be provided if target_entropy is ste to "auto".
+            To be provided if target_entropy is set to "auto".
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of `"smooth_l1"`, "l2",
             "l1", Default is "smooth_l1".
@@ -1049,7 +1050,9 @@ class DiscreteSACLoss(LossModule):
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
-        self._vmap_qnetworkN0 = _vmap_func(self.qvalue_network, (None, 0))
+        self._vmap_qnetworkN0 = _vmap_func(
+            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+        )
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
