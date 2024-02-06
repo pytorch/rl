@@ -24,7 +24,6 @@ from torchrl._extension import EXTENSION_WARNING
 
 from torchrl._utils import _replace_last
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
-from torchrl.data.replay_buffers.utils import _to_numpy, INT_CLASSES
 
 try:
     from torchrl._torchrl import (
