@@ -790,7 +790,7 @@ class SliceSampler(Sampler):
                         raise RuntimeError(
                             "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                         )
-                vals = self._find_start_stop_traj(end=done.squeeze())[: len(storage)]
+                vals = self._find_start_stop_traj(end=done.squeeze()[: len(storage)])
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals
                 return vals
