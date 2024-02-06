@@ -36,8 +36,8 @@ from torchrl.envs.transforms import (
     # CatFrames,
     # CenterCrop,
     DoubleToFloat,
-    DTypeCastTransform,
-    ExcludeTransform,
+    # DTypeCastTransform,
+    # ExcludeTransform,
     FrameSkipTransform,
     GrayScale,
     # NoopResetEnv,
@@ -48,7 +48,7 @@ from torchrl.envs.transforms import (
     RewardSum,
     ToTensorImage,
     TransformedEnv,
-    UnsqueezeTransform,
+    # UnsqueezeTransform,
 )
 from torchrl.envs.transforms.transforms import TensorDictPrimer  # FlattenObservation
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -264,7 +264,6 @@ def make_collector(cfg, train_env, actor_model_explore):
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.device,
         reset_at_each_iter=True,
-
     )
     collector.set_seed(cfg.env.seed)
     return collector
@@ -288,12 +287,7 @@ def make_replay_buffer(
         transforms = []
         crop_seq = RandomCropTensorDict(sub_seq_len=batch_seq_len, sample_dim=-1)
         transforms.append(crop_seq)
-        exclude_keys = ExcludeTransform(
-            ("next", "pixels"),
-            ("next", "belief"),
-            ("next", "state"),
-        )
-        # transforms.append(exclude_keys)
+
         if pixel_obs:
             # dtype_transform = DTypeCastTransform(torch.double, torch.float32, in_keys=["pixels"])
             # from 0-255 to 0-1

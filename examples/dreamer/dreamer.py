@@ -11,7 +11,7 @@ from dreamer_utils import (
 )
 
 # float16
-from torch.cuda.amp import autocast, GradScaler
+from torch.cuda.amp import autocast  # , GradScaler
 from torch.nn.utils import clip_grad_norm_
 
 from torchrl.objectives.dreamer import (
@@ -105,6 +105,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.optimization.actor_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.optimization.value_lr)
 
+    # Not sure we need those
     # scaler1 = GradScaler()
     # scaler2 = GradScaler()
     # scaler3 = GradScaler()
