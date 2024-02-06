@@ -867,7 +867,7 @@ class SliceSampler(Sampler):
                 truncated[seq_length.cumsum(0) - 1] = 1
             traj_terminated = stop_idx[traj_idx] == start_idx[traj_idx] + seq_length - 1
             terminated = torch.zeros_like(truncated)
-            if terminated.any():
+            if traj_terminated.any():
                 if isinstance(seq_length, int):
                     truncated.view(num_slices, -1)[traj_terminated] = 1
                 else:
@@ -1077,6 +1077,156 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         return SamplerWithoutReplacement.load_state_dict(self, state_dict)
+
+
+class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
+    """Samples slices of data along the first dimension, given start and stop signals, using prioritized sampling.
+
+    For more info see: SliceSampler and PrioritizedSampler
+    """
+
+    def __init__(
+        self,
+        max_capacity: int,
+        alpha: float,
+        beta: float,
+        eps: float = 1e-8,
+        dtype: torch.dtype = torch.float,
+        reduction: str = "max",
+        *,
+        num_slices: int = None,
+        slice_len: int = None,
+        end_key: NestedKey | None = None,
+        traj_key: NestedKey | None = None,
+        ends: torch.Tensor | None = None,
+        trajectories: torch.Tensor | None = None,
+        cache_values: bool = False,
+        truncated_key: NestedKey | None = ("next", "truncated"),
+        strict_length: bool = True,
+    ) -> object:
+        SliceSampler.__init__(
+            self,
+            num_slices=num_slices,
+            slice_len=slice_len,
+            end_key=end_key,
+            traj_key=traj_key,
+            cache_values=cache_values,
+            truncated_key=truncated_key,
+            strict_length=strict_length,
+            ends=ends,
+            trajectories=trajectories,
+        )
+        PrioritizedSampler.__init__(
+            self,
+            max_capacity=max_capacity,
+            alpha=alpha,
+            beta=beta,
+            eps=eps,
+            dtype=dtype,
+            reduction=reduction,
+        )
+
+    def __getstate__(self):
+        state = SliceSampler.__getstate__(self)
+        state.update(PrioritizedSampler.__getstate__(self))
+
+    def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
+        # Sample `batch_size` indices representing the start of a slice.
+        # The sampling is based on a weight vector.
+        start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
+        seq_length, num_slices = self._adjusted_batch_size(batch_size)
+
+        num_trajs = lengths.shape[0]
+        traj_idx = torch.arange(0, num_trajs, 1, device=lengths.device)
+
+        if (lengths < seq_length).any():
+            if self.strict_length:
+                raise RuntimeError(
+                    "Some stored trajectories have a length shorter than the slice that was asked for. "
+                    "Create the sampler with `strict_length=False` to allow shorter trajectories to appear "
+                    "in you batch."
+                )
+            # make seq_length a tensor with values clamped by lengths
+            seq_length = lengths[traj_idx].clamp_max(seq_length)
+
+        # build a list of index that we dont want to sample: all the steps at a `seq_length` distance of
+        # the end the trajectory, with the end of trajectory (`stop_idx`) included
+        if isinstance(seq_length, int):
+            subtractive_idx = torch.arange(
+                0, seq_length - 1, 1, device=stop_idx.device, dtype=stop_idx.dtype
+            )
+            preceding_stop_idx = (
+                stop_idx[..., None] - subtractive_idx[None, ...]
+            ).view(-1)
+        else:
+            raise NotImplementedError()
+            # preceding_stop_idx = torch.cat(
+            #     [
+            #         stop_idx
+            #         - torch.arange(_seq_len, device=stop_idx.device, dtype=stop_idx.dtype)
+            #         for stop_idx, _seq_len in zip(stop_idx, seq_length)
+            #     ]
+            # )
+
+        # force to not sample index at the end of a trajectory.
+        # it's ok to not touch self._min_tree.
+        self._sum_tree[preceding_stop_idx] = 0.0
+        # self._min_tree[preceding_stop_idx] = 0.0
+
+        starts, info = PrioritizedSampler.sample(
+            self, storage=storage, batch_size=batch_size // seq_length
+        )
+        starts = torch.from_numpy(starts).to(device=lengths.device)
+        index = self._tensor_slices_from_startend(seq_length, starts)
+        assert index.shape[0] == batch_size
+
+        if self.truncated_key is not None:
+            # following logics borrowed from SliceSampler
+            truncated_key = self.truncated_key
+            done_key = _replace_last(truncated_key, "done")
+            terminated_key = _replace_last(truncated_key, "terminated")
+
+            truncated = torch.zeros(
+                (*index.shape, 1), dtype=torch.bool, device=index.device
+            )
+            if isinstance(seq_length, int):
+                truncated.view(num_slices, -1)[:, -1] = 1
+            else:
+                truncated[seq_length.cumsum(0) - 1] = 1
+            traj_terminated = stop_idx[traj_idx] == start_idx[traj_idx] + seq_length - 1
+            terminated = torch.zeros_like(truncated)
+            if traj_terminated.any():
+                if isinstance(seq_length, int):
+                    truncated.view(num_slices, -1)[traj_terminated] = 1
+                else:
+                    truncated[(seq_length.cumsum(0) - 1)[traj_terminated]] = 1
+            truncated = truncated & ~terminated
+            done = terminated | truncated
+
+            info.update(
+                {
+                    truncated_key: truncated,
+                    done_key: done,
+                    terminated_key: terminated,
+                }
+            )
+        return index.to(torch.long), info
+
+    def _empty(self):
+        # no op for SliceSampler
+        PrioritizedSampler._empty(self)
+
+    def dumps(self, path):
+        # no op for SliceSampler
+        PrioritizedSampler.dumps(self, path)
+
+    def loads(self, path):
+        # no op for SliceSampler
+        return PrioritizedSampler.loads(self, path)
+
+    def state_dict(self):
+        # no op for SliceSampler
+        return PrioritizedSampler.state_dict(self)
 
 
 class SamplerEnsemble(Sampler):
