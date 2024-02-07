@@ -2091,6 +2091,107 @@ class TestSamplers:
         assert truncated.view(num_slices, -1)[:, -1].all()
 
 
+def test_prioritized_slice_sampler_doc_example():
+    sampler = PrioritizedSliceSampler(max_capacity=9, num_slices=3, alpha=0.7, beta=0.9)
+    rb = TensorDictReplayBuffer(
+        storage=LazyMemmapStorage(9), sampler=sampler, batch_size=6
+    )
+    data = TensorDict(
+        {
+            "observation": torch.randn(9, 16),
+            "action": torch.randn(9, 1),
+            "episode": torch.tensor([0, 0, 0, 1, 1, 1, 2, 2, 2], dtype=torch.long),
+            "steps": torch.tensor([0, 1, 2, 0, 1, 2, 0, 1, 2], dtype=torch.long),
+            ("next", "observation"): torch.randn(9, 16),
+            ("next", "reward"): torch.randn(9, 1),
+            ("next", "done"): torch.tensor(
+                [0, 0, 1, 0, 0, 1, 0, 0, 1], dtype=torch.bool
+            ).unsqueeze(1),
+        },
+        batch_size=[9],
+    )
+    rb.extend(data)
+    sample, info = rb.sample(return_info=True)
+    # print("episode", sample["episode"].tolist())
+    # print("steps", sample["steps"].tolist())
+    # print("weight", info["_weight"].tolist())
+
+    priority = torch.tensor([0, 3, 3, 0, 0, 0, 1, 1, 1])
+    rb.update_priority(torch.arange(0, 9, 1), priority=priority)
+    sample, info = rb.sample(return_info=True)
+    # print("episode", sample["episode"].tolist())
+    # print("steps", sample["steps"].tolist())
+    # print("weight", info["_weight"].tolist())
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+def test_prioritized_slice_sampler_episodes(device):
+    num_slices = 10
+    batch_size = 20
+
+    episode = torch.zeros(100, dtype=torch.int, device=device)
+    episode[:30] = 1
+    episode[30:55] = 2
+    episode[55:70] = 3
+    episode[70:] = 4
+    steps = torch.cat(
+        [torch.arange(30), torch.arange(25), torch.arange(15), torch.arange(30)], 0
+    )
+    done = torch.zeros(100, 1, dtype=torch.bool)
+    done[torch.tensor([29, 54, 69])] = 1
+
+    data = TensorDict(
+        {
+            "observation": torch.randn(100, 16),
+            "action": torch.randn(100, 4),
+            "episode": episode,
+            "steps": steps,
+            ("next", "observation"): torch.randn(100, 16),
+            ("next", "reward"): torch.randn(100, 1),
+            ("next", "done"): done,
+        },
+        batch_size=[100],
+        device=device,
+    )
+
+    num_steps = data.shape[0]
+    sampler = PrioritizedSliceSampler(
+        max_capacity=num_steps,
+        alpha=0.7,
+        beta=0.9,
+        num_slices=num_slices,
+    )
+
+    rb = TensorDictReplayBuffer(
+        storage=LazyMemmapStorage(100),
+        sampler=sampler,
+        batch_size=batch_size,
+    )
+    rb.extend(data)
+
+    episodes = []
+    for _ in range(10):
+        sample = rb.sample()
+        episodes.append(sample["episode"])
+    assert set([1, 2, 3, 4]) == set(
+        torch.cat(episodes).cpu().tolist()
+    ), "all episodes are expected to be sampled at least once"
+
+    index = torch.arange(0, num_steps, 1)
+    new_priorities = torch.cat(
+        [torch.ones(30), torch.zeros(25), torch.ones(15), torch.zeros(30)], 0
+    )
+    sampler.update_priority(index, new_priorities)
+
+    episodes = []
+    for _ in range(10):
+        sample = rb.sample()
+        episodes.append(sample["episode"])
+    assert set([1, 3]) == set(
+        torch.cat(episodes).cpu().tolist()
+    ), "after priority update, only episode 1 and 3 are expected to be sampled"
+
+
 class TestEnsemble:
     def _make_data(self, data_type):
         if data_type is torch.Tensor:

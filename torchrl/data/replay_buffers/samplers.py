@@ -1132,6 +1132,42 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`torchrl.collectors.split_trajectories`. Defaults to ``True``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage, PrioritizedSliceSampler
+        >>> from tensordict import TensorDict
+        >>> sampler = PrioritizedSliceSampler(max_capacity=9, num_slices=3, alpha=0.7, beta=0.9)
+        >>> rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(9), sampler=sampler, batch_size=6)
+        >>> data = TensorDict(
+        ...     {
+        ...         "observation": torch.randn(9,16),
+        ...         "action": torch.randn(9, 1),
+        ...         "episode": torch.tensor([0,0,0,1,1,1,2,2,2], dtype=torch.long),
+        ...         "steps": torch.tensor([0,1,2,0,1,2,0,1,2], dtype=torch.long),
+        ...         ("next", "observation"): torch.randn(9,16),
+        ...         ("next", "reward"): torch.randn(9,1),
+        ...         ("next", "done"): torch.tensor([0,0,1,0,0,1,0,0,1], dtype=torch.bool).unsqueeze(1),
+        ...     },
+        ...     batch_size=[9],
+        ... )
+        >>> rb.extend(data)
+        >>> sample, info = rb.sample(return_info=True)
+        >>> print("episode", sample["episode"].tolist())
+        >>> print("steps", sample["steps"].tolist())
+        >>> print("weight", info["_weight"].tolist())
+        >>> priority = torch.tensor([0,3,3,0,0,0,1,1,1])
+        >>> rb.update_priority(torch.arange(0,9,1), priority=priority)
+        >>> sample, info = rb.sample(return_info=True)
+        >>> print("episode", sample["episode"].tolist())
+        >>> print("steps", sample["steps"].tolist())
+        >>> print("weight", info["_weight"].tolist())
+        episode [2, 2, 2, 2, 1, 1]
+        steps [1, 2, 0, 1, 1, 2]
+        weight [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        episode [2, 2, 2, 2, 2, 2]
+        steps [1, 2, 0, 1, 0, 1]
+        weight [9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06]
     """
 
     def __init__(
@@ -1210,16 +1246,27 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         else:
             raise NotImplementedError("seq_length as a list is not supported for now")
 
-        # force to not sample index at the end of a trajectory.
-        # no need to update self._min_tree.
+        # force to not sample index at the end of a trajectory
         self._sum_tree[preceding_stop_idx] = 0.0
+        # and no need to update self._min_tree
 
         starts, info = PrioritizedSampler.sample(
             self, storage=storage, batch_size=batch_size // seq_length
         )
+        # TODO: update PrioritizedSampler.sample to return torch tensors
         starts = torch.from_numpy(starts).to(device=lengths.device)
+        info["_weight"] = torch.from_numpy(info["_weight"]).to(device=lengths.device)
+
+        # extends starting indices of each slice with sequence_length to get indices of all steps
         index = self._tensor_slices_from_startend(seq_length, starts)
-        assert index.shape[0] == batch_size
+        # repeat the weight of each slice to match the number of steps
+        info["_weight"] = torch.repeat_interleave(info["_weight"], seq_length)
+
+        # sanity check
+        if index.shape[0] != batch_size:
+            raise ValueError(
+                f"Number of indices is expected to match the batch size ({index.shape[0]} != {batch_size})."
+            )
 
         if self.truncated_key is not None:
             # following logics borrowed from SliceSampler
