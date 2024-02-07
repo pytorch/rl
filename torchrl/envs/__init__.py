@@ -87,7 +87,7 @@ from .transforms import (
     VecNorm,
     VIPRewardTransform,
     VIPTransform,
-    History
+    StackFrames
 )
 from .utils import (
     check_env_specs,

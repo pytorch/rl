@@ -52,7 +52,7 @@ from .transforms import (
     UnsqueezeTransform,
     VecGymEnvTransform,
     VecNorm,
-    History
+    StackFrames
 )
 from .vc1 import VC1Transform
 from .vip import VIPRewardTransform, VIPTransform
