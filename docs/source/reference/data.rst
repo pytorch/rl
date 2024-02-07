@@ -134,6 +134,7 @@ using the following components:
 
     Sampler
     PrioritizedSampler
+    PrioritizedSliceSampler
     RandomSampler
     SamplerWithoutReplacement
     SliceSampler
