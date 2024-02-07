@@ -911,7 +911,8 @@ class LazyMemmapStorage(LazyTensorStorage):
             out = out.expand(self.max_size, *data.shape)
             out = out.memmap_like(prefix=self.scratch_dir)
             if self.names is not None:
-                out.names = self.names
+                names = self.names + [None] * (out.batch_dims - len(self.names))
+                out.refine_names(*names)
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
