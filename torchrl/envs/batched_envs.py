@@ -419,12 +419,8 @@ class _BatchedEnv(EnvBase):
                 def map_device(key, value, device_map=device_map):
                     return value.to(device_map[key])
 
-                # self._env_tensordict.named_apply(
-                #     map_device, nested_keys=True, filter_empty=True
-                # )
                 self._env_tensordict.named_apply(
-                    map_device,
-                    nested_keys=True,
+                    map_device, nested_keys=True, filter_empty=True
                 )
 
             self._batch_locked = meta_data.batch_locked
@@ -792,16 +788,11 @@ class SerialEnv(_BatchedEnv):
             if name in selected_output_keys:
                 return tensor.clone()
 
-        # out = self.shared_tensordict_parent.named_apply(
-        #     select_and_clone,
-        #     nested_keys=True,
-        #     filter_empty=True,
-        # )
         out = self.shared_tensordict_parent.named_apply(
             select_and_clone,
             nested_keys=True,
+            filter_empty=True,
         )
-        del out["next"]
 
         if out.device != device:
             if device is None:
@@ -842,8 +833,7 @@ class SerialEnv(_BatchedEnv):
             if name in self._selected_step_keys:
                 return tensor.clone()
 
-        # out = next_td.named_apply(select_and_clone, nested_keys=True, filter_empty=True)
-        out = next_td.named_apply(select_and_clone, nested_keys=True)
+        out = next_td.named_apply(select_and_clone, nested_keys=True, filter_empty=True)
 
         if out.device != device:
             if device is None:
@@ -1059,8 +1049,7 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
         def look_for_cuda(tensor, has_cuda=has_cuda):
             has_cuda[0] = has_cuda[0] or tensor.is_cuda
 
-        # self.shared_tensordict_parent.apply(look_for_cuda, filter_empty=True)
-        self.shared_tensordict_parent.apply(look_for_cuda)
+        self.shared_tensordict_parent.apply(look_for_cuda, filter_empty=True)
         has_cuda = has_cuda[0]
         if has_cuda:
             self.event = torch.cuda.Event()
@@ -1182,14 +1171,14 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
                 if x.device != device
                 else x.clone(),
                 device=device,
-                # filter_empty=True,
+                filter_empty=True,
             )
             tensordict_ = tensordict_._fast_apply(
                 lambda x: x.to(device, non_blocking=True)
                 if x.device != device
                 else x.clone(),
                 device=device,
-                # filter_empty=True,
+                filter_empty=True,
             )
         else:
             next_td = next_td.clone().clear_device_()
@@ -1244,7 +1233,7 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
         out = next_td.named_apply(
             select_and_clone,
             nested_keys=True,
-            # filter_empty=True,
+            filter_empty=True,
         )
         if out.device != device:
             if device is None:
@@ -1295,7 +1284,22 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
                         tensordict_, keys_to_update=list(self._selected_reset_keys)
                     )
                 continue
-            out = ("reset", tensordict_)
+            if tensordict_ is not None:
+                tdkeys = list(tensordict_.keys(True, True))
+
+                # This way we can avoid calling select over all the keys in the shared tensordict
+                def tentative_update(val, other):
+                    if other is not None:
+                        val.copy_(other)
+                    return val
+
+                self.shared_tensordicts[i].apply_(
+                    tentative_update, tensordict_, default=None
+                )
+                out = ("reset", tdkeys)
+            else:
+                out = ("reset", False)
+
             channel.send(out)
             workers.append(i)
 
@@ -1314,9 +1318,8 @@ class ParallelEnv(_BatchedEnv, metaclass=_PEnvMeta):
         out = self.shared_tensordict_parent.named_apply(
             select_and_clone,
             nested_keys=True,
-            # filter_empty=True,
+            filter_empty=True,
         )
-        del out["next"]
 
         if out.device != device:
             if device is None:
@@ -1452,8 +1455,7 @@ def _run_worker_pipe_shared_mem(
         def look_for_cuda(tensor, has_cuda=has_cuda):
             has_cuda[0] = has_cuda[0] or tensor.is_cuda
 
-        # shared_tensordict.apply(look_for_cuda, filter_empty=True)
-        shared_tensordict.apply(look_for_cuda)
+        shared_tensordict.apply(look_for_cuda, filter_empty=True)
         has_cuda = has_cuda[0]
     else:
         has_cuda = device.type == "cuda"
@@ -1522,7 +1524,13 @@ def _run_worker_pipe_shared_mem(
                 torchrl_logger.info(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
-            cur_td = env.reset(tensordict=data)
+            # we use 'data' to pass the keys that we need to pass to reset,
+            # because passing the entire buffer may have unwanted consequences
+            cur_td = env.reset(
+                tensordict=root_shared_tensordict.select(*data, strict=False)
+                if data
+                else None
+            )
             shared_tensordict.update_(
                 cur_td,
                 keys_to_update=list(_selected_reset_keys),

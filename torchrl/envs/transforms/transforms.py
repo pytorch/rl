@@ -3063,7 +3063,7 @@ class FiniteTensorDictCheck(Transform):
         super().__init__(in_keys=[])
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict.apply(check_finite)
+        tensordict.apply(check_finite, filter_empty=True)
         return tensordict
 
     def _reset(

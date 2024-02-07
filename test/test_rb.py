@@ -835,7 +835,7 @@ class TestLazyStorages:
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])
 @pytest.mark.parametrize("device", get_default_devices())
-def test_prototype_prb(priority_key, contiguous, device):
+def test_ptdrb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)
     rb = TensorDictReplayBuffer(
