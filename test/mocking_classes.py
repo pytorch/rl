@@ -1072,7 +1072,7 @@ class CountingEnv(EnvBase):
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         action = tensordict.get(self.action_key)
-        self.count += action.to(torch.int).to(self.device)
+        self.count += action.to(dtype=torch.int, device=self.device)
         tensordict = TensorDict(
             source={
                 "observation": self.count.clone(),
@@ -1426,10 +1426,12 @@ class HeterogeneousCountingEnv(EnvBase):
                     3,
                 )
             ),
+            device=self.device,
         )
 
         self.unbatched_action_spec = CompositeSpec(
             lazy=action_specs,
+            device=self.device,
         )
         self.unbatched_reward_spec = CompositeSpec(
             {
@@ -1441,7 +1443,8 @@ class HeterogeneousCountingEnv(EnvBase):
                     },
                     shape=(self.n_nested_dim,),
                 )
-            }
+            },
+            device=self.device,
         )
         self.unbatched_done_spec = CompositeSpec(
             {
@@ -1455,7 +1458,8 @@ class HeterogeneousCountingEnv(EnvBase):
                     },
                     shape=(self.n_nested_dim,),
                 )
-            }
+            },
+            device=self.device,
         )
 
         self.action_spec = self.unbatched_action_spec.expand(
@@ -1488,7 +1492,8 @@ class HeterogeneousCountingEnv(EnvBase):
                     "lidar": lidar,
                     "vector": vector_3d,
                     "tensor_0": tensor_0,
-                }
+                },
+                device=self.device,
             )
         elif i == 1:
             return CompositeSpec(
@@ -1497,7 +1502,8 @@ class HeterogeneousCountingEnv(EnvBase):
                     "lidar": lidar,
                     "vector": vector_2d,
                     "tensor_1": tensor_1,
-                }
+                },
+                device=self.device,
             )
         elif i == 2:
             return CompositeSpec(
@@ -1505,7 +1511,8 @@ class HeterogeneousCountingEnv(EnvBase):
                     "camera": camera,
                     "vector": vector_2d,
                     "tensor_2": tensor_2,
-                }
+                },
+                device=self.device,
             )
         else:
             raise ValueError(f"Index {i} undefined for index 3")
