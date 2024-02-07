@@ -929,7 +929,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if data.ndim:
             priority = self._get_priority_vector(data)
         else:
-            priority = self._get_priority_item(data)
+            priority = torch.as_tensor(self._get_priority_item(data))
         index = data.get("index")
         while index.shape != priority.shape:
             # reduce index

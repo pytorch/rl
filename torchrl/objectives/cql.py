@@ -577,9 +577,14 @@ class CQLLoss(LossModule):
     def _get_policy_actions(self, data, actor_params, num_actions=10):
         batch_size = data.batch_size
         batch_size = list(batch_size[:-1]) + [batch_size[-1] * num_actions]
-        tensordict = data.select(*self.actor_network.in_keys).apply(
-            lambda x: x.repeat_interleave(num_actions, dim=data.ndim - 1),
-            batch_size=batch_size,
+        in_keys = [unravel_key(key) for key in self.actor_network.in_keys]
+
+        def filter_and_repeat(name, x):
+            if name in in_keys:
+                return x.repeat_interleave(num_actions, dim=data.ndim - 1)
+
+        tensordict = data.named_apply(
+            filter_and_repeat, batch_size=batch_size, filter_empty=True
         )
         with torch.no_grad():
             with set_exploration_type(ExplorationType.RANDOM), actor_params.to_module(
@@ -731,13 +736,18 @@ class CQLLoss(LossModule):
 
         batch_size = tensordict_q_random.batch_size
         batch_size = list(batch_size[:-1]) + [batch_size[-1] * self.num_random]
-        tensordict_q_random = tensordict_q_random.select(
-            *self.actor_network.in_keys
-        ).apply(
-            lambda x: x.repeat_interleave(
-                self.num_random, dim=tensordict_q_random.ndim - 1
-            ),
+        in_keys = [unravel_key(key) for key in self.actor_network.in_keys]
+
+        def filter_and_repeat(name, x):
+            if name in in_keys:
+                return x.repeat_interleave(
+                    self.num_random, dim=tensordict_q_random.ndim - 1
+                )
+
+        tensordict_q_random = tensordict_q_random.named_apply(
+            filter_and_repeat,
             batch_size=batch_size,
+            filter_empty=True,
         )
         tensordict_q_random.set(self.tensor_keys.action, random_actions_tensor)
         cql_tensordict = torch.cat(
