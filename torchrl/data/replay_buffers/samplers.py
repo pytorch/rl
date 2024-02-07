@@ -546,7 +546,7 @@ class SliceSampler(Sampler):
             allowed to appear in the batch.
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
-            :func:`torchrl.collectors.split_trajectories`. Defaults to ``True``.
+            :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
 
     .. note:: To recover the trajectory splits in the storage,
         :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` will first
@@ -583,7 +583,7 @@ class SliceSampler(Sampler):
         >>> print("episodes", sample.get("episode").unique())
         episodes tensor([1, 2, 3, 4], dtype=torch.int32)
 
-    :class:`torchrl.data.replay_buffers.SliceSampler` is default-compatible with
+    :class:`~torchrl.data.replay_buffers.SliceSampler` is default-compatible with
     most of TorchRL's datasets:
 
     Examples:
@@ -962,7 +962,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             allowed to appear in the batch.
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
-            :func:`torchrl.collectors.split_trajectories`. Defaults to ``True``.
+            :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
         shuffle (bool, optional): if ``False``, the order of the trajectories
             is not shuffled. Defaults to ``True``.
 
@@ -1003,7 +1003,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         >>> print("sample:", sample)
         >>> print("trajectories in sample", sample.get("episode").unique())
 
-    :class:`torchrl.data.replay_buffers.SliceSamplerWithoutReplacement` is default-compatible with
+    :class:`~torchrl.data.replay_buffers.SliceSamplerWithoutReplacement` is default-compatible with
     most of TorchRL's datasets, and allows users to consume datasets in a dataloader-like fashion:
 
     Examples:
@@ -1131,7 +1131,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             allowed to appear in the batch.
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
-            :func:`torchrl.collectors.split_trajectories`. Defaults to ``True``.
+            :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
 
     Examples:
         >>> import torch
@@ -1154,19 +1154,19 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         >>> rb.extend(data)
         >>> sample, info = rb.sample(return_info=True)
         >>> print("episode", sample["episode"].tolist())
+        episode [2, 2, 2, 2, 1, 1]
         >>> print("steps", sample["steps"].tolist())
+        steps [1, 2, 0, 1, 1, 2]
         >>> print("weight", info["_weight"].tolist())
+        weight [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
         >>> priority = torch.tensor([0,3,3,0,0,0,1,1,1])
         >>> rb.update_priority(torch.arange(0,9,1), priority=priority)
         >>> sample, info = rb.sample(return_info=True)
         >>> print("episode", sample["episode"].tolist())
-        >>> print("steps", sample["steps"].tolist())
-        >>> print("weight", info["_weight"].tolist())
-        episode [2, 2, 2, 2, 1, 1]
-        steps [1, 2, 0, 1, 1, 2]
-        weight [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
         episode [2, 2, 2, 2, 2, 2]
+        >>> print("steps", sample["steps"].tolist())
         steps [1, 2, 0, 1, 0, 1]
+        >>> print("weight", info["_weight"].tolist())
         weight [9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06]
     """
 
@@ -1254,8 +1254,8 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             self, storage=storage, batch_size=batch_size // seq_length
         )
         # TODO: update PrioritizedSampler.sample to return torch tensors
-        starts = torch.from_numpy(starts).to(device=lengths.device)
-        info["_weight"] = torch.from_numpy(info["_weight"]).to(device=lengths.device)
+        starts = torch.as_tensor(starts, device=lengths.device)
+        info["_weight"] = torch.as_tensor(info["_weight"], device=lengths.device)
 
         # extends starting indices of each slice with sequence_length to get indices of all steps
         index = self._tensor_slices_from_startend(seq_length, starts)
