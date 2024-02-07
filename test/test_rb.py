@@ -2173,7 +2173,7 @@ def test_prioritized_slice_sampler_episodes(device):
     for _ in range(10):
         sample = rb.sample()
         episodes.append(sample["episode"])
-    assert set([1, 2, 3, 4]) == set(
+    assert {1, 2, 3, 4} == set(
         torch.cat(episodes).cpu().tolist()
     ), "all episodes are expected to be sampled at least once"
 
@@ -2187,7 +2187,7 @@ def test_prioritized_slice_sampler_episodes(device):
     for _ in range(10):
         sample = rb.sample()
         episodes.append(sample["episode"])
-    assert set([1, 3]) == set(
+    assert {1, 3} == set(
         torch.cat(episodes).cpu().tolist()
     ), "after priority update, only episode 1 and 3 are expected to be sampled"
 
