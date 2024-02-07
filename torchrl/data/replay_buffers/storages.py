@@ -734,7 +734,8 @@ class LazyTensorStorage(TensorStorage):
                 .to(self.device)
             )
             if self.names is not None:
-                out.names = self.names
+                names = self.names + [None] * (out.batch_dims - len(self.names))
+                out.refine_names(*names)
         else:
             # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
             out = tree_map(
