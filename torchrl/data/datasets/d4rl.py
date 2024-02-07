@@ -5,8 +5,6 @@
 from __future__ import annotations
 
 import importlib
-
-import logging
 import os
 import tempfile
 import urllib
@@ -19,8 +17,9 @@ import numpy as np
 
 import torch
 
-from tensordict import PersistentTensorDict, TensorDict
-from tensordict.tensordict import make_tensordict
+from tensordict import make_tensordict, PersistentTensorDict, TensorDict
+
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.datasets.d4rl_infos import D4RL_DATASETS
@@ -38,6 +37,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
     To install D4RL, follow the instructions on the
     `official repo <https://github.com/Farama-Foundation/D4RL>`__.
 
+    The data format follows the :ref:`TED convention <TED-format>`.
     The replay buffer contains the env specs under D4RLExperienceReplay.specs.
 
     If present, metadata will be written in ``D4RLExperienceReplay.metadata``
@@ -52,7 +52,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
-            a default RoundRobinWriter() will be used.
+            a default :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter` will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset.
@@ -61,7 +61,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.transforms.transforms.Compose` class.
         split_trajs (bool, optional): if ``True``, the trajectories will be split
             along the first dimension and padded to have a matching shape.
             To split the trajectories, the ``"done"`` signal will be used, which
@@ -146,7 +146,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         prefetch: int | None = None,
         transform: "torchrl.envs.Transform" | None = None,  # noqa-F821
         split_trajs: bool = False,
-        from_env: bool = None,
+        from_env: bool = False,
         use_truncated_as_done: bool = True,
         direct_download: bool = None,
         terminate_on_end: bool = None,
@@ -165,29 +165,16 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             direct_download = not self._has_d4rl
 
         if not direct_download:
-            if from_env is None:
-                warnings.warn(
-                    "from_env will soon default to ``False``, ie the data will be "
-                    "downloaded without relying on d4rl by default. "
-                    "For now, ``True`` will still be the default. "
-                    "To disable this warning, explicitly pass the ``from_env`` argument "
-                    "during construction of the dataset.",
-                    category=DeprecationWarning,
-                )
-                from_env = True
-            else:
-                warnings.warn(
-                    "You are using the D4RL library for collecting data. "
-                    "We advise against this use, as D4RL formatting can be "
-                    "inconsistent. "
-                    "To download the D4RL data without the D4RL library, use "
-                    "direct_download=True in the dataset constructor. "
-                    "Recurring to `direct_download=False` will soon be deprecated."
-                )
+            warnings.warn(
+                "You are using the D4RL library for collecting data. "
+                "We advise against this use, as D4RL formatting can be "
+                "inconsistent. "
+                "To download the D4RL data without the D4RL library, use "
+                "direct_download=True in the dataset constructor. "
+                "Recurring to `direct_download=False` will soon be deprecated."
+            )
             self.from_env = from_env
         else:
-            if from_env is None:
-                from_env = False
             self.from_env = from_env
 
         if (download == "force") or (download and not self._is_downloaded()):
@@ -451,7 +438,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 def _download_dataset_from_url(dataset_url, dataset_path):
     dataset_filepath = _filepath_from_url(dataset_url, dataset_path)
     if not os.path.exists(dataset_filepath):
-        logging.info("Downloading dataset:", dataset_url, "to", dataset_filepath)
+        torchrl_logger.info(f"Downloading dataset: {dataset_url} to {dataset_filepath}")
         urllib.request.urlretrieve(dataset_url, dataset_filepath)
     if not os.path.exists(dataset_filepath):
         raise IOError("Failed to download dataset from %s" % dataset_url)
@@ -475,7 +462,7 @@ def _filepath_from_url(dataset_url, dataset_path):
 
 if __name__ == "__main__":
     data = D4RLExperienceReplay("kitchen-partial-v0", batch_size=128)
-    logging.info(data)
+    torchrl_logger.info(data)
     for sample in data:
-        logging.info(sample)
+        torchrl_logger.info(sample)
         break

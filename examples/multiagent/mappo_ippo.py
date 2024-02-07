@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import logging
 import time
 
 import hydra
@@ -11,6 +10,7 @@ import torch
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -31,7 +31,7 @@ def rendering_callback(env, td):
 @hydra.main(version_base="1.1", config_path=".", config_name="mappo_ippo")
 def train(cfg: "DictConfig"):  # noqa: F821
     # Device
-    cfg.train.device = "cpu" if not torch.has_cuda else "cuda:0"
+    cfg.train.device = "cpu" if not torch.cuda.device_count() else "cuda:0"
     cfg.env.device = cfg.train.device
 
     # Seeding
@@ -137,8 +137,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
 
     # Loss
     loss_module = ClipPPOLoss(
-        actor=policy,
-        critic=value_module,
+        actor_network=policy,
+        critic_network=value_module,
         clip_epsilon=cfg.loss.clip_epsilon,
         entropy_coef=cfg.loss.entropy_eps,
         normalize_advantage=False,
@@ -167,14 +167,14 @@ def train(cfg: "DictConfig"):  # noqa: F821
     total_frames = 0
     sampling_start = time.time()
     for i, tensordict_data in enumerate(collector):
-        logging.info(f"\nIteration {i}")
+        torchrl_logger.info(f"\nIteration {i}")
 
         sampling_time = time.time() - sampling_start
 
         with torch.no_grad():
             loss_module.value_estimator(
                 tensordict_data,
-                params=loss_module.critic_params,
+                params=loss_module.critic_network_params,
                 target_params=loss_module.target_critic_params,
             )
         current_frames = tensordict_data.numel()

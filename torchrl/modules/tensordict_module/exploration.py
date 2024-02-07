@@ -7,13 +7,13 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
+from tensordict import TensorDictBase
 
 from tensordict.nn import (
     TensorDictModule,
     TensorDictModuleBase,
     TensorDictModuleWrapper,
 )
-from tensordict.tensordict import TensorDictBase
 from tensordict.utils import expand_as_right, expand_right, NestedKey
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
@@ -107,10 +107,10 @@ class EGreedyModule(TensorDictModuleBase):
 
         super().__init__()
 
-        self.register_buffer("eps_init", torch.tensor([eps_init]))
-        self.register_buffer("eps_end", torch.tensor([eps_end]))
+        self.register_buffer("eps_init", torch.as_tensor([eps_init]))
+        self.register_buffer("eps_end", torch.as_tensor([eps_end]))
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
+        self.register_buffer("eps", torch.as_tensor([eps_init], dtype=torch.float32))
 
         if spec is not None:
             if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
@@ -149,10 +149,7 @@ class EGreedyModule(TensorDictModuleBase):
 
             out = action_tensordict.get(action_key)
             eps = self.eps.item()
-            cond = (
-                torch.rand(action_tensordict.shape, device=action_tensordict.device)
-                < eps
-            ).to(out.dtype)
+            cond = torch.rand(action_tensordict.shape, device=out.device) < eps
             cond = expand_as_right(cond, out)
             spec = self.spec
             if spec is not None:
@@ -177,7 +174,7 @@ class EGreedyModule(TensorDictModuleBase):
                             f"Action mask key {self.action_mask_key} not found in {tensordict}."
                         )
                     spec.update_mask(action_mask)
-                out = cond * spec.rand().to(out.device) + (1 - cond) * out
+                out = torch.where(cond, spec.rand().to(out.device), out)
             else:
                 raise RuntimeError("spec must be provided to the exploration wrapper.")
             action_tensordict.set(action_key, out)
@@ -247,104 +244,9 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         action_mask_key: Optional[NestedKey] = None,
         spec: Optional[TensorSpec] = None,
     ):
-        warnings.warn(
-            "EGreedyWrapper is deprecated and it will be removed in v0.3. "
-            "Please use torchrl.modules.EGreedyModule instead.",
-            category=DeprecationWarning,
+        raise RuntimeError(
+            "This class is not removed in favour of torchrl.modules.EGreedyModule."
         )
-
-        super().__init__(policy)
-        self.register_buffer("eps_init", torch.tensor([eps_init]))
-        self.register_buffer("eps_end", torch.tensor([eps_end]))
-        if self.eps_end > self.eps_init:
-            raise RuntimeError("eps should decrease over time or be constant")
-        self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
-        self.action_key = action_key
-        self.action_mask_key = action_mask_key
-        if spec is not None:
-            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
-                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
-            self._spec = spec
-        elif hasattr(self.td_module, "_spec"):
-            self._spec = self.td_module._spec.clone()
-            if action_key not in self._spec.keys():
-                self._spec[action_key] = None
-        elif hasattr(self.td_module, "spec"):
-            self._spec = self.td_module.spec.clone()
-            if action_key not in self._spec.keys():
-                self._spec[action_key] = None
-        else:
-            self._spec = spec
-
-    @property
-    def spec(self):
-        return self._spec
-
-    def step(self, frames: int = 1) -> None:
-        """A step of epsilon decay.
-
-        After self.annealing_num_steps, this function is a no-op.
-
-        Args:
-            frames (int): number of frames since last step.
-
-        """
-        for _ in range(frames):
-            self.eps.data[0] = max(
-                self.eps_end.item(),
-                (
-                    self.eps - (self.eps_init - self.eps_end) / self.annealing_num_steps
-                ).item(),
-            )
-
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = self.td_module.forward(tensordict)
-        if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
-            if isinstance(self.action_key, tuple) and len(self.action_key) > 1:
-                action_tensordict = tensordict.get(self.action_key[:-1])
-                action_key = self.action_key[-1]
-            else:
-                action_tensordict = tensordict
-                action_key = self.action_key
-
-            out = action_tensordict.get(action_key)
-            eps = self.eps.item()
-            cond = (
-                torch.rand(action_tensordict.shape, device=action_tensordict.device)
-                < eps
-            ).to(out.dtype)
-            cond = expand_as_right(cond, out)
-            spec = self.spec
-            if spec is not None:
-                if isinstance(spec, CompositeSpec):
-                    spec = spec[self.action_key]
-                if spec.shape != out.shape:
-                    # In batched envs if the spec is passed unbatched, the rand() will not
-                    # cover all batched dims
-                    if (
-                        not len(spec.shape)
-                        or out.shape[-len(spec.shape) :] == spec.shape
-                    ):
-                        spec = spec.expand(out.shape)
-                    else:
-                        raise ValueError(
-                            "Action spec shape does not match the action shape"
-                        )
-                if self.action_mask_key is not None:
-                    action_mask = tensordict.get(self.action_mask_key, None)
-                    if action_mask is None:
-                        raise KeyError(
-                            f"Action mask key {self.action_mask_key} not found in {tensordict}."
-                        )
-                    spec.update_mask(action_mask)
-                out = cond * spec.rand().to(out.device) + (1 - cond) * out
-            else:
-                raise RuntimeError(
-                    "spec must be provided by the policy or directly to the exploration wrapper."
-                )
-            action_tensordict.set(action_key, out)
-        return tensordict
 
 
 class AdditiveGaussianWrapper(TensorDictModuleWrapper):

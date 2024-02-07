@@ -2,9 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import logging
-
 import hydra
+from torchrl._utils import logger as torchrl_logger
 
 
 @hydra.main(config_path=".", config_name="config_atari", version_base="1.1")
@@ -69,8 +68,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         average_gae=True,
     )
     loss_module = A2CLoss(
-        actor=actor,
-        critic=critic,
+        actor_network=actor,
+        critic_network=critic,
         loss_critic_type=cfg.loss.loss_critic_type,
         entropy_coef=cfg.loss.entropy_coef,
         critic_coef=cfg.loss.critic_coef,
@@ -93,7 +92,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if cfg.logger.backend:
         exp_name = generate_exp_name("A2C", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
         logger = get_logger(
-            cfg.logger.backend, logger_name="a2c", experiment_name=exp_name
+            cfg.logger.backend,
+            logger_name="a2c",
+            experiment_name=exp_name,
+            wandb_kwargs={
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
 
     # Create test environment
@@ -213,7 +219,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     end_time = time.time()
     execution_time = end_time - start_time
-    logging.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

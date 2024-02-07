@@ -14,9 +14,9 @@ from mocking_classes import (
     NestedCountingEnv,
 )
 from scipy.stats import ttest_1samp
+from tensordict import TensorDict
 
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
-from tensordict.tensordict import TensorDict
 from torch import nn
 from torchrl._utils import _replace_last
 
@@ -155,14 +155,6 @@ class TestEGreedy:
 
         assert not (action[~action_mask] == 0).all()
         assert (masked_action[~action_mask] == 0).all()
-
-    def test_egreedy_wrapper_deprecation(self):
-        torch.manual_seed(0)
-        spec = BoundedTensorSpec(1, 1, torch.Size([4]))
-        module = torch.nn.Linear(4, 4, bias=False)
-        policy = Actor(spec=spec, module=module)
-        with pytest.deprecated_call():
-            EGreedyWrapper(policy)
 
     def test_no_spec_error(
         self,

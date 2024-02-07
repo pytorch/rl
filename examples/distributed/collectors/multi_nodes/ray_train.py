@@ -5,7 +5,6 @@ Train example with a distributed collector
 This script reproduces the PPO example in https://pytorch.org/rl/tutorials/coding_ppo.html
 with a RayCollector.
 """
-import logging
 from collections import defaultdict
 
 import matplotlib.pyplot as plt
@@ -13,6 +12,7 @@ import torch
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.distributed.ray import RayCollector
 from torchrl.data.replay_buffers import ReplayBuffer
@@ -36,7 +36,7 @@ from tqdm import tqdm
 if __name__ == "__main__":
 
     # 1. Define Hyperparameters
-    device = "cpu"  # if not torch.has_cuda else "cuda:0"
+    device = "cpu"  # if not torch.cuda.device_count() else "cuda:0"
     num_cells = 256
     max_grad_norm = 1.0
     frame_skip = 1
@@ -85,8 +85,8 @@ if __name__ == "__main__":
         in_keys=["loc", "scale"],
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": env.action_spec.space.minimum,
-            "max": env.action_spec.space.maximum,
+            "min": env.action_spec.space.low,
+            "max": env.action_spec.space.high,
         },
         return_log_prob=True,
     )
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     )
     loss_module = ClipPPOLoss(
         actor=policy_module,
-        critic=value_module,
+        critic_network=value_module,
         advantage_key="advantage",
         clip_epsilon=clip_epsilon,
         entropy_bonus=bool(entropy_eps),
@@ -235,4 +235,4 @@ if __name__ == "__main__":
     plt.title("Max step count (test)")
     save_name = "/tmp/results.jpg"
     plt.savefig(save_name)
-    logging.info(f"results saved in {save_name}")
+    torchrl_logger.info(f"results saved in {save_name}")

@@ -7,9 +7,8 @@
 This script reproduces the Proximal Policy Optimization (PPO) Algorithm
 results from Schulman et al. 2017 for the on Atari Environments.
 """
-import logging
-
 import hydra
+from torchrl._utils import logger as torchrl_logger
 
 
 @hydra.main(config_path=".", config_name="config_atari", version_base="1.1")
@@ -45,12 +44,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create collector
     collector = SyncDataCollector(
-        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device),
+        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, "cpu"),
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
-        device=device,
-        storing_device=device,
+        device="cpu",
+        storing_device="cpu",
         max_frames_per_traj=-1,
     )
 
@@ -70,8 +69,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         average_gae=False,
     )
     loss_module = ClipPPOLoss(
-        actor=actor,
-        critic=critic,
+        actor_network=actor,
+        critic_network=critic,
         clip_epsilon=cfg.loss.clip_epsilon,
         loss_critic_type=cfg.loss.loss_critic_type,
         entropy_coef=cfg.loss.entropy_coef,
@@ -96,7 +95,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if cfg.logger.backend:
         exp_name = generate_exp_name("PPO", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
         logger = get_logger(
-            cfg.logger.backend, logger_name="ppo", experiment_name=exp_name
+            cfg.logger.backend,
+            logger_name="ppo",
+            experiment_name=exp_name,
+            wandb_kwargs={
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
 
     # Create test environment
@@ -151,9 +157,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
             # Compute GAE
             with torch.no_grad():
-                data = adv_module(data)
+                data = adv_module(data.to(device, non_blocking=True))
             data_reshape = data.reshape(-1)
-
             # Update the data buffer
             data_buffer.extend(data_reshape)
 
@@ -168,9 +173,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if cfg_loss_anneal_clip_eps:
                     loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
                 num_network_updates += 1
-
                 # Get a data batch
-                batch = batch.to(device)
+                batch = batch.to(device, non_blocking=True)
 
                 # Forward pass PPO loss
                 loss = loss_module(batch)
@@ -180,7 +184,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 loss_sum = (
                     loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
                 )
-
                 # Backward pass
                 loss_sum.backward()
                 torch.nn.utils.clip_grad_norm_(
@@ -231,9 +234,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         collector.update_policy_weights_()
         sampling_start = time.time()
 
+    collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    logging.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

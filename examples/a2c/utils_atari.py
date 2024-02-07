@@ -61,7 +61,9 @@ def make_base_env(
 
 def make_parallel_env(env_name, num_envs, device, is_test=False):
     env = ParallelEnv(
-        num_envs, EnvCreator(lambda: make_base_env(env_name, device=device))
+        num_envs,
+        EnvCreator(lambda: make_base_env(env_name, device=device)),
+        serial_for_single=True,
     )
     env = TransformedEnv(env)
     env.append_transform(ToTensorImage())
@@ -96,8 +98,8 @@ def make_ppo_modules_pixels(proof_environment):
         num_outputs = proof_environment.action_spec.shape
         distribution_class = TanhNormal
         distribution_kwargs = {
-            "min": proof_environment.action_spec.space.minimum,
-            "max": proof_environment.action_spec.space.maximum,
+            "min": proof_environment.action_spec.space.low,
+            "max": proof_environment.action_spec.space.high,
         }
 
     # Define input keys

@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 from torchrl.data.tensor_specs import TensorSpec
@@ -17,7 +17,7 @@ from torchrl.data.utils import _find_action_space
 from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -63,7 +63,7 @@ class IQLLoss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.iql import IQLLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
@@ -285,22 +285,15 @@ class IQLLoss(LossModule):
 
         self.loss_function = loss_function
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self._vmap_qvalue_networkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
 
     @property
     def device(self) -> torch.device:
-        warnings.warn(
-            "The device attributes of the looses will be deprecated in v0.3.",
-            category=DeprecationWarning,
-        )
-        for p in self.parameters():
-            return p.device
         raise RuntimeError(
-            "At least one of the networks of SACLoss must have trainable " "parameters."
+            "The device attributes of the losses is deprecated since v0.3.",
         )
 
     def _set_in_keys(self):
@@ -407,7 +400,7 @@ class IQLLoss(LossModule):
             )  # assert has no gradient
 
         exp_a = torch.exp((min_q - value) * self.temperature)
-        exp_a = torch.min(exp_a, torch.FloatTensor([100.0]).to(self.device))
+        exp_a = exp_a.clamp_max(100)
 
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
@@ -538,7 +531,7 @@ class DiscreteIQLLoss(IQLLoss):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.iql import DiscreteIQLLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = OneHotDiscreteTensorSpec(n_act)
         >>> module = TensorDictModule(nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["logits"])
@@ -597,7 +590,7 @@ class DiscreteIQLLoss(IQLLoss):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.iql import DiscreteIQLLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> _ = torch.manual_seed(42)
         >>> n_act, n_obs = 4, 3
         >>> spec = OneHotDiscreteTensorSpec(n_act)
@@ -775,7 +768,7 @@ class DiscreteIQLLoss(IQLLoss):
             )  # assert has no gradient
 
         exp_a = torch.exp((min_Q - value) * self.temperature)
-        exp_a = torch.min(exp_a, torch.FloatTensor([100.0]).to(self.device))
+        exp_a = exp_a.clamp_max(100)
 
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())

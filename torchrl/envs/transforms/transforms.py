@@ -20,14 +20,17 @@ import torch
 from tensordict import (
     is_tensor_collection,
     NonTensorData,
+    set_lazy_legacy,
+    TensorDict,
+    TensorDictBase,
     unravel_key,
     unravel_key_list,
 )
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.nn import dispatch, TensorDictModuleBase
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn, Tensor
+from torch.utils._pytree import tree_map
 from torchrl._utils import _replace_last
 
 from torchrl.data.tensor_specs import (
@@ -346,7 +349,16 @@ class Transform(nn.Module):
 
     @dispatch(source="in_keys_inv", dest="out_keys_inv")
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
-        out = self._inv_call(tensordict.clone(False))
+        def clone(data):
+            try:
+                # we priviledge speed for tensordicts
+                return data.clone(recurse=False)
+            except AttributeError:
+                return tree_map(lambda x: x, data)
+            except TypeError:
+                return tree_map(lambda x: x, data)
+
+        out = self._inv_call(clone(tensordict))
         return out
 
     def transform_env_device(self, device: torch.device):
@@ -1163,7 +1175,7 @@ class ToTensorImage(ObservationTransform):
         from_int (bool, optional): if ``True``, the tensor will be scaled from
             the range [0, 255] to the range [0.0, 1.0]. if `False``, the tensor
             will not be scaled. if `None`, the tensor will be scaled if
-            it's a floating-point tensor. default=None.
+            it's not a floating-point tensor. default=None.
         unsqueeze (bool): if ``True``, the observation tensor is unsqueezed
             along the first dimension. default=False.
         dtype (torch.dtype, optional): dtype to use for the resulting
@@ -1320,7 +1332,7 @@ class ClipTransform(Transform):
             if val is None:
                 return None, None, torch.finfo(torch.get_default_dtype()).max
             if not isinstance(val, torch.Tensor):
-                val = torch.tensor(val)
+                val = torch.as_tensor(val)
             if not val.dtype.is_floating_point:
                 val = val.float()
             eps = torch.finfo(val.dtype).resolution
@@ -1614,10 +1626,10 @@ class RewardClipping(Transform):
             out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         clamp_min_tensor = (
-            clamp_min if isinstance(clamp_min, Tensor) else torch.tensor(clamp_min)
+            clamp_min if isinstance(clamp_min, Tensor) else torch.as_tensor(clamp_min)
         )
         clamp_max_tensor = (
-            clamp_max if isinstance(clamp_max, Tensor) else torch.tensor(clamp_max)
+            clamp_max if isinstance(clamp_max, Tensor) else torch.as_tensor(clamp_max)
         )
         self.register_buffer("clamp_min", clamp_min_tensor)
         self.register_buffer("clamp_max", clamp_max_tensor)
@@ -2360,15 +2372,9 @@ class ObservationNorm(ObservationTransform):
         standard_normal: bool = False,
     ):
         if in_keys is None:
-            warnings.warn(
-                "Not passing in_keys to ObservationNorm will soon be deprecated. "
-                "Ensure you specify the entries to be normalized",
-                category=DeprecationWarning,
+            raise RuntimeError(
+                "Not passing in_keys to ObservationNorm is a deprecated behaviour."
             )
-            in_keys = [
-                "observation",
-                "pixels",
-            ]
 
         if out_keys is None:
             out_keys = copy(in_keys)
@@ -2384,7 +2390,7 @@ class ObservationNorm(ObservationTransform):
             out_keys_inv=out_keys_inv,
         )
         if not isinstance(standard_normal, torch.Tensor):
-            standard_normal = torch.tensor(standard_normal)
+            standard_normal = torch.as_tensor(standard_normal)
         self.register_buffer("standard_normal", standard_normal)
         self.eps = 1e-6
 
@@ -2707,7 +2713,7 @@ class CatFrames(ObservationTransform):
             raise ValueError(f"padding must be one of {self.ACCEPTED_PADDING}")
         if padding == "zeros":
             warnings.warn(
-                "Padding option 'zeros' will be deprecated in the future. "
+                "Padding option 'zeros' will be deprecated in v0.4.0. "
                 "Please use 'constant' padding with padding_value 0 instead.",
                 category=DeprecationWarning,
             )
@@ -2873,6 +2879,7 @@ class CatFrames(ObservationTransform):
         else:
             return self.unfolding(tensordict)
 
+    @set_lazy_legacy(False)
     def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
         if not tensordict.ndim:
@@ -2962,6 +2969,8 @@ class CatFrames(ObservationTransform):
                 *range(data.ndim + self.dim, data.ndim - 1),
             )
             tensordict.set(out_key, data)
+        if tensordict_orig is not tensordict:
+            tensordict_orig = tensordict.transpose(tensordict.ndim - 1, i)
         return tensordict_orig
 
     def __repr__(self) -> str:
@@ -5054,21 +5063,6 @@ class StepCounter(Transform):
         return truncated_keys
 
     @property
-    def completed_keys(self):
-        done_keys = self.__dict__.get("_done_keys", None)
-        if done_keys is None:
-            # make the default done keys
-            done_keys = []
-            for reset_key in self.parent._filtered_reset_keys:
-                if isinstance(reset_key, str):
-                    key = "done"
-                else:
-                    key = (*reset_key[:-1], "done")
-                done_keys.append(key)
-        self.__dict__["_done_keys"] = done_keys
-        return done_keys
-
-    @property
     def done_keys(self):
         done_keys = self.__dict__.get("_done_keys", None)
         if done_keys is None:
@@ -5151,12 +5145,15 @@ class StepCounter(Transform):
             step_count = tensordict.get(step_count_key, default=None)
             if step_count is None:
                 step_count = self.container.observation_spec[step_count_key].zero()
+                if step_count.device != reset.device:
+                    step_count = step_count.to(reset.device, non_blocking=True)
 
             # zero the step count if reset is needed
             step_count = torch.where(~expand_as_right(reset, step_count), step_count, 0)
             tensordict_reset.set(step_count_key, step_count)
             if self.max_steps is not None:
                 truncated = step_count >= self.max_steps
+                truncated = truncated | tensordict_reset.get(truncated_key, False)
                 if self.update_done:
                     # we assume no done after reset
                     tensordict_reset.set(done_key, truncated)
@@ -5175,8 +5172,10 @@ class StepCounter(Transform):
             step_count = tensordict.get(step_count_key)
             next_step_count = step_count + 1
             next_tensordict.set(step_count_key, next_step_count)
+
             if self.max_steps is not None:
                 truncated = next_step_count >= self.max_steps
+                truncated = truncated | next_tensordict.get(truncated_key, False)
                 if self.update_done:
                     done = next_tensordict.get(done_key, None)
                     terminated = next_tensordict.get(terminated_key, None)
@@ -6413,7 +6412,7 @@ class ActionMask(Transform):
             raise ValueError(
                 self.SPEC_TYPE_ERROR.format(self.ACCEPTED_SPECS, type(action_spec))
             )
-        action_spec.update_mask(mask)
+        action_spec.update_mask(mask.to(action_spec.device))
         return tensordict
 
     def _reset(
@@ -6424,7 +6423,10 @@ class ActionMask(Transform):
             raise ValueError(
                 self.SPEC_TYPE_ERROR.format(self.ACCEPTED_SPECS, type(action_spec))
             )
-        action_spec.update_mask(tensordict.get(self.in_keys[1], None))
+        mask = tensordict.get(self.in_keys[1], None)
+        if mask is not None:
+            mask = mask.to(action_spec.device)
+        action_spec.update_mask(mask)
 
         # TODO: Check that this makes sense
         with _set_missing_tolerance(self, True):

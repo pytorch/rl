@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import abc
-import logging
 import pathlib
 import warnings
 from collections import defaultdict, OrderedDict
@@ -16,12 +15,17 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, U
 
 import numpy as np
 import torch.nn
+from tensordict import pad, TensorDictBase
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import pad, TensorDictBase
 from tensordict.utils import expand_right
 from torch import nn, optim
 
-from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict, VERBOSE
+from torchrl._utils import (
+    _CKPT_BACKEND,
+    KeyDependentDefaultDict,
+    logger as torchrl_logger,
+    VERBOSE,
+)
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
@@ -476,7 +480,7 @@ class Trainer:
 
     def shutdown(self):
         if VERBOSE:
-            logging.info("shutting down collector")
+            torchrl_logger.info("shutting down collector")
         self.collector.shutdown()
 
     def optim_steps(self, batch: TensorDictBase) -> None:
@@ -667,9 +671,11 @@ class ReplayBufferTrainer(TrainerHookBase):
         self.device = device
         if flatten_tensordicts is None:
             warnings.warn(
-                "flatten_tensordicts default value will soon be changed "
+                "flatten_tensordicts default value has now changed "
                 "to False for a faster execution. Make sure your "
-                "code is robust to this change.",
+                "code is robust to this change. To silence this warning, "
+                "pass flatten_tensordicts=<value> in your code. "
+                "This warning will be removed in v0.4.",
                 category=DeprecationWarning,
             )
             flatten_tensordicts = True

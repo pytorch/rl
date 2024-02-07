@@ -1,15 +1,18 @@
 # env and task
 env:
-  name: HalfCheetah-v2
+  name: HalfCheetah-v4
   task: ""
-  backend: gym
   exp_name: iql_${replay_buffer.dataset}
   n_samples_stats: 1000
   seed: 0
+  backend: gymnasium
 
 # logger
 logger:
   backend: wandb
+  project_name: torchrl_example_iql
+  exp_name: iql_${replay_buffer.dataset}
+  group_name: null
   eval_iter: 500
   eval_steps: 1000
   mode: online

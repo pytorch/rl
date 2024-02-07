@@ -23,11 +23,11 @@ from the jump host and pass the slurm specs to submitit.
   and DEFAULT_SLURM_CONF_MAIN dictionaries below).
 
 """
-import logging
 import time
 from argparse import ArgumentParser
 
 import tqdm
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors.distributed import RPCDataCollector, submitit_delayed_launcher
 from torchrl.collectors.distributed.default_configs import (
@@ -148,7 +148,7 @@ def main():
         if i == 10:
             t0 = time.time()
     t1 = time.time()
-    logging.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    torchrl_logger.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
     collector.shutdown()
     exit()
 

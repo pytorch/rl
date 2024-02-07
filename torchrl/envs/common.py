@@ -14,8 +14,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict import unravel_key
-from tensordict.tensordict import TensorDictBase
+from tensordict import LazyStackedTensorDict, TensorDictBase, unravel_key
 from tensordict.utils import NestedKey
 from torchrl._utils import _replace_last, implement_for, prod, seed_generator
 
@@ -59,6 +58,7 @@ class EnvMetaData:
         env_str: str,
         device: torch.device,
         batch_locked: bool = True,
+        device_map: dict = None,
     ):
         self.device = device
         self.tensordict = tensordict
@@ -66,6 +66,7 @@ class EnvMetaData:
         self.batch_size = batch_size
         self.env_str = env_str
         self.batch_locked = batch_locked
+        self.device_map = device_map
 
     @property
     def tensordict(self):
@@ -100,7 +101,16 @@ class EnvMetaData:
         device = env.device
         specs = specs.to("cpu")
         batch_locked = env.batch_locked
-        return EnvMetaData(tensordict, specs, batch_size, env_str, device, batch_locked)
+        # we need to save the device map, as the tensordict will be placed on cpu
+        device_map = {}
+
+        def fill_device_map(name, val, device_map=device_map):
+            device_map[name] = val.device
+
+        tensordict.named_apply(fill_device_map, nested_keys=True)
+        return EnvMetaData(
+            tensordict, specs, batch_size, env_str, device, batch_locked, device_map
+        )
 
     def expand(self, *size: int) -> EnvMetaData:
         tensordict = self.tensordict.expand(*size).clone()
@@ -112,6 +122,7 @@ class EnvMetaData:
             self.env_str,
             self.device,
             self.batch_locked,
+            self.device_map,
         )
 
     def clone(self):
@@ -122,13 +133,23 @@ class EnvMetaData:
             deepcopy(self.env_str),
             self.device,
             self.batch_locked,
+            self.device_map,
         )
 
     def to(self, device: DEVICE_TYPING) -> EnvMetaData:
+        if device is not None:
+            device = torch.device(device)
+            device_map = {key: device for key in self.device_map}
         tensordict = self.tensordict.contiguous().to(device)
         specs = self.specs.to(device)
         return EnvMetaData(
-            tensordict, specs, self.batch_size, self.env_str, device, self.batch_locked
+            tensordict,
+            specs,
+            self.batch_size,
+            self.env_str,
+            device,
+            self.batch_locked,
+            device_map,
         )
 
 
@@ -149,6 +170,51 @@ class _EnvPostInit(abc.ABCMeta):
 class EnvBase(nn.Module, metaclass=_EnvPostInit):
     """Abstract environment parent class.
 
+    Keyword Args:
+        device (torch.device): The device of the environment. Deviceless environments
+            are allowed (device=None). If not ``None``, all specs will be cast
+            on that device and it is expected that all inputs and outputs will
+            live on that device.
+            Defaults to ``None``.
+        dtype (deprecated): dtype of the observations. Will be deprecated in v0.4.
+        batch_size (torch.Size or equivalent, optional): batch-size of the environment.
+            Corresponds to the leading dimension of all the input and output
+            tensordicts the environment reads and writes. Defaults to an empty batch-size.
+        run_type_checks (bool, optional): If ``True``, type-checks will occur
+            at every reset and every step. Defaults to ``False``.
+        allow_done_after_reset (bool, optional): if ``True``, an environment can
+            be done after a call to :meth:`~.reset` is made. Defaults to ``False``.
+
+    Attributes:
+        done_spec (CompositeSpec): equivalent to ``full_done_spec`` as all
+            ``done_specs`` contain at least a ``"done"`` and a ``"terminated"`` entry
+        action_spec (TensorSpec): the spec of the action. Links to the spec of the leaf
+            action if only one action tensor is to be expected. Otherwise links to
+            ``full_action_spec``.
+        observation_spec (CompositeSpec): equivalent to ``full_observation_spec``.
+        reward_spec (TensorSpec): the spec of the reward. Links to the spec of the leaf
+            reward if only one reward tensor is to be expected. Otherwise links to
+            ``full_reward_spec``.
+        state_spec (CompositeSpec): equivalent to ``full_state_spec``.
+        full_done_spec (CompositeSpec): a composite spec such that ``full_done_spec.zero()``
+            returns a tensordict containing only the leaves encoding the done status of the
+            environment.
+        full_action_spec (CompositeSpec): a composite spec such that ``full_action_spec.zero()``
+            returns a tensordict containing only the leaves encoding the action of the
+            environment.
+        full_observation_spec (CompositeSpec): a composite spec such that ``full_observation_spec.zero()``
+            returns a tensordict containing only the leaves encoding the observation of the
+            environment.
+        full_reward_spec (CompositeSpec): a composite spec such that ``full_reward_spec.zero()``
+            returns a tensordict containing only the leaves encoding the reward of the
+            environment.
+        full_state_spec (CompositeSpec): a composite spec such that ``full_state_spec.zero()``
+            returns a tensordict containing only the leaves encoding the inputs (actions
+            excluded) of the environment.
+        batch_size (torch.Size): The batch-size of the environment.
+        device (torch.device): the device where the input/outputs of the environment
+            are to be expected. Can be ``None``.
+
     Methods:
         step (TensorDictBase -> TensorDictBase): step in the environment
         reset (TensorDictBase, optional -> TensorDictBase): reset the environment
@@ -158,6 +224,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             steps if no policy is provided)
 
     Examples:
+        >>> from torchrl.envs import EnvBase
+        >>> class CounterEnv(EnvBase):
+        ...     def __init__(self, batch_size=(), device=None, **kwargs):
+        ...         self.observation_spec = CompositeSpec(
+        ...             count=UnboundedContinuousTensorSpec(batch_size, device=device, dtype=torch.int64))
+        ...         self.action_spec = UnboundedContinuousTensorSpec(batch_size, device=device, dtype=torch.int8)
+        ...         # done spec and reward spec are set automatically
+        ...     def _step(self, tensordict):
+        ...
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> env = GymEnv("Pendulum-v1")
         >>> env.batch_size  # how many envs are run at once
@@ -238,23 +313,30 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     def __init__(
         self,
+        *,
         device: DEVICE_TYPING = None,
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
         allow_done_after_reset: bool = False,
     ):
-        if device is None:
-            device = torch.device("cpu")
         self.__dict__.setdefault("_batch_size", None)
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
             output_spec = self.__dict__.get("_output_spec", None)
             if output_spec is not None:
-                self.__dict__["_output_spec"] = output_spec.to(self.device)
+                self.__dict__["_output_spec"] = (
+                    output_spec.to(self.device)
+                    if self.device is not None
+                    else output_spec
+                )
             input_spec = self.__dict__.get("_input_spec", None)
             if input_spec is not None:
-                self.__dict__["_input_spec"] = input_spec.to(self.device)
+                self.__dict__["_input_spec"] = (
+                    input_spec.to(self.device)
+                    if self.device is not None
+                    else input_spec
+                )
 
         super().__init__()
         self.dtype = dtype_map.get(dtype, dtype)
@@ -360,8 +442,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     @property
     def device(self) -> torch.device:
         device = self.__dict__.get("_device", None)
-        if device is None:
-            device = self.__dict__["_device"] = torch.device("cpu")
         return device
 
     @device.setter
@@ -618,7 +698,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def action_spec(self, value: TensorSpec) -> None:
         try:
             self.input_spec.unlock_()
-            device = self.input_spec.device
+            device = self.input_spec._device
             try:
                 delattr(self, "_action_keys")
             except AttributeError:
@@ -806,7 +886,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def reward_spec(self, value: TensorSpec) -> None:
         try:
             self.output_spec.unlock_()
-            device = self.output_spec.device
+            device = self.output_spec._device
             try:
                 delattr(self, "_reward_keys")
             except AttributeError:
@@ -873,7 +953,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @full_reward_spec.setter
     def full_reward_spec(self, spec: CompositeSpec) -> None:
-        self.reward_spec = spec
+        self.reward_spec = spec.to(self.device) if self.device is not None else spec
 
     # done spec
     @property
@@ -938,7 +1018,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @full_done_spec.setter
     def full_done_spec(self, spec: CompositeSpec) -> None:
-        self.done_spec = spec
+        self.done_spec = spec.to(self.device) if self.device is not None else spec
 
     # Done spec: done specs belong to output_spec
     @property
@@ -1168,7 +1248,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def observation_spec(self, value: TensorSpec) -> None:
         try:
             self.output_spec.unlock_()
-            device = self.output_spec.device
             if not isinstance(value, CompositeSpec):
                 raise TypeError("The type of an observation_spec must be Composite.")
             elif value.shape[: len(self.batch_size)] != self.batch_size:
@@ -1179,7 +1258,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 raise ValueError(
                     f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
-            self.output_spec["full_observation_spec"] = value.to(device)
+            device = self.output_spec._device
+            self.output_spec["full_observation_spec"] = (
+                value.to(device) if device is not None else value
+            )
         finally:
             self.output_spec.lock_()
 
@@ -1253,7 +1335,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     raise ValueError(
                         f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                     )
-                self.input_spec["full_state_spec"] = value.to(device)
+                self.input_spec["full_state_spec"] = (
+                    value.to(device) if device is not None else value
+                )
         finally:
             self.input_spec.lock_()
 
@@ -2274,10 +2358,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             [None, 'time']
 
         """
-        try:
-            policy_device = next(policy.parameters()).device
-        except (StopIteration, AttributeError):
-            policy_device = self.device
+        if auto_cast_to_device:
+            try:
+                policy_device = next(policy.parameters()).device
+            except (StopIteration, AttributeError):
+                policy_device = None
+        else:
+            policy_device = None
 
         env_device = self.device
 
@@ -2307,9 +2394,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         else:
             tensordicts = self._rollout_nonstop(**kwargs)
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
-        out_td = torch.stack(tensordicts, len(batch_size), out=out)
         if return_contiguous:
-            out_td = out_td.contiguous()
+            out_td = torch.stack(tensordicts, len(batch_size), out=out)
+        else:
+            out_td = LazyStackedTensorDict.lazy_stack(
+                tensordicts, len(batch_size), out=out
+            )
         out_td.refine_names(..., "time")
         return out_td
 
@@ -2327,10 +2417,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordicts = []
         for i in range(max_steps):
             if auto_cast_to_device:
-                tensordict = tensordict.to(policy_device, non_blocking=True)
+                if policy_device is not None:
+                    tensordict = tensordict.to(policy_device, non_blocking=True)
+                else:
+                    tensordict.clear_device_()
             tensordict = policy(tensordict)
             if auto_cast_to_device:
-                tensordict = tensordict.to(env_device, non_blocking=True)
+                if env_device is not None:
+                    tensordict = tensordict.to(env_device, non_blocking=True)
+                else:
+                    tensordict.clear_device_()
             tensordict = self.step(tensordict)
             tensordicts.append(tensordict.clone(False))
 
@@ -2375,10 +2471,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict_ = tensordict
         for i in range(max_steps):
             if auto_cast_to_device:
-                tensordict_ = tensordict_.to(policy_device, non_blocking=True)
+                if policy_device is not None:
+                    tensordict_ = tensordict_.to(policy_device, non_blocking=True)
+                else:
+                    tensordict_.clear_device_()
             tensordict_ = policy(tensordict_)
             if auto_cast_to_device:
-                tensordict_ = tensordict_.to(env_device, non_blocking=True)
+                if env_device is not None:
+                    tensordict_ = tensordict_.to(env_device, non_blocking=True)
+                else:
+                    tensordict_.clear_device_()
             tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
             tensordicts.append(tensordict)
             if i == max_steps - 1:
@@ -2408,7 +2510,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             ...     for i in range(n):
             ...         data, data_ = env.step_and_maybe_reset(data_)
             ...         result.append(data)
-            ...     return torch.stack(result).contiguous()
+            ...     return torch.stack(result)
             >>> env = ParallelEnv(2, lambda: GymEnv("CartPole-v1"))
             >>> print(rollout(env, 2))
             TensorDict(

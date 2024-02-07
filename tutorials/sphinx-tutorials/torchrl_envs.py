@@ -30,6 +30,23 @@ TorchRL envs
 import warnings
 
 warnings.filterwarnings("ignore")
+
+from torch import multiprocessing
+
+# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
+# `__main__` method call, but for the easy of reading the code switch to fork
+# which is also a default spawn method in Google's Colaboratory
+try:
+    is_sphinx = __sphinx_build__
+except NameError:
+    is_sphinx = False
+
+try:
+    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
+except RuntimeError:
+    pass
+
+
 # sphinx_gallery_end_ignore
 
 import torch
@@ -563,7 +580,7 @@ def env_make(env_name):
 parallel_env = ParallelEnv(
     2,
     [env_make, env_make],
-    [{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
+    create_env_kwargs=[{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
 )
 tensordict = parallel_env.reset()
 
@@ -607,7 +624,7 @@ def env_make(env_name):
 parallel_env = ParallelEnv(
     2,
     [env_make, env_make],
-    [{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
+    create_env_kwargs=[{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
 )
 parallel_env = TransformedEnv(parallel_env, GrayScale())  # transforms on main process
 tensordict = parallel_env.reset()

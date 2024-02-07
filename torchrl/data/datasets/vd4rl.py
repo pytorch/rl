@@ -4,15 +4,15 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import functools
+
 import importlib
 import json
-import logging
 import os
 import pathlib
 import shutil
 import tempfile
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, List
 
@@ -20,8 +20,9 @@ import numpy as np
 
 import torch
 from tensordict import PersistentTensorDict, TensorDict
+from torch import multiprocessing as mp
 
-from torchrl._utils import KeyDependentDefaultDict
+from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
@@ -50,6 +51,8 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
     that is not reward, done-state, action or pixels is moved under a `"state"`
     node.
 
+    The data format follows the :ref:`TED convention <TED-format>`.
+
     Args:
         dataset_id (str): the dataset to be downloaded. Must be part of
             VD4RLExperienceReplay.available_datasets.
@@ -67,7 +70,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
-            a default RoundRobinWriter() will be used.
+            a default :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter` will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset.
@@ -76,7 +79,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.transforms.transforms.Compose` class.
         split_trajs (bool, optional): if ``True``, the trajectories will be split
             along the first dimension and padded to have a matching shape.
             To split the trajectories, the ``"done"`` signal will be used, which
@@ -94,6 +97,8 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
             transform that will be appended to the transform list. Supports
             `int` types (square resizing) or a list/tuple of `int` (rectangular
             resizing). Defaults to ``None`` (no resizing).
+        num_workers (int, optional): the number of workers to download the files.
+            Defaults to ``0`` (no multiprocessing).
 
     Attributes:
         available_datasets: a list of accepted entries to be downloaded. These
@@ -171,6 +176,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
         split_trajs: bool = False,
         totensor: bool = True,
         image_size: int | List[int] | None = None,
+        num_workers: int = 0,
         **env_kwargs,
     ):
         if not _has_h5py or not _has_hf_hub:
@@ -189,6 +195,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
         self.root = root
         self.split_trajs = split_trajs
         self.download = download
+        self.num_workers = num_workers
         if self.download == "force" or (self.download and not self._is_downloaded()):
             if self.download == "force":
                 try:
@@ -197,7 +204,9 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
                         shutil.rmtree(self.data_path)
                 except FileNotFoundError:
                     pass
-            storage = self._download_and_preproc(dataset_id, data_path=self.data_path)
+            storage = self._download_and_preproc(
+                dataset_id, data_path=self.data_path, num_workers=self.num_workers
+            )
         elif self.split_trajs and not os.path.exists(self.data_path):
             storage = self._make_split()
         else:
@@ -249,14 +258,23 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
         return sibs
 
     @classmethod
-    def _download_and_preproc(cls, dataset_id, data_path):
+    def _hf_hub_download(cls, subfolder, filename, *, tmpdir):
         from huggingface_hub import hf_hub_download
 
-        files = []
+        return hf_hub_download(
+            "conglu/vd4rl",
+            subfolder=subfolder,
+            filename=filename,
+            repo_type="dataset",
+            cache_dir=str(tmpdir),
+        )
+
+    @classmethod
+    def _download_and_preproc(cls, dataset_id, data_path, num_workers):
+
         tds = []
         with tempfile.TemporaryDirectory() as tmpdir:
             sibs = cls._parse_datasets()
-            # files = []
             total_steps = 0
 
             paths_to_proc = []
@@ -268,20 +286,20 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
                 for file in sibs[path]:
                     paths_to_proc.append(str(path))
                     files_to_proc.append(str(file.parts[-1]))
-
-            with ThreadPoolExecutor(32) as executor:
-                files = executor.map(
-                    lambda path_file: hf_hub_download(
-                        "conglu/vd4rl",
-                        subfolder=path_file[0],
-                        filename=path_file[1],
-                        repo_type="dataset",
-                        cache_dir=str(tmpdir),
-                    ),
-                    zip(paths_to_proc, files_to_proc),
-                )
-                files = list(files)
-            logging.info("Downloaded, processing files")
+            func = functools.partial(cls._hf_hub_download, tmpdir=tmpdir)
+            if num_workers > 0:
+                with mp.Pool(num_workers) as pool:
+                    files = pool.starmap(
+                        func,
+                        zip(paths_to_proc, files_to_proc),
+                    )
+                    files = list(files)
+            else:
+                files = [
+                    func(subfolder, filename)
+                    for (subfolder, filename) in zip(paths_to_proc, files_to_proc)
+                ]
+            torchrl_logger.info("Downloaded, processing files")
             if _has_tqdm:
                 import tqdm
 
@@ -309,7 +327,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
 
         # From this point, the local paths are non needed anymore
         td_save = td_save.expand(total_steps).memmap_like(data_path, num_threads=32)
-        logging.info("Saved tensordict:", td_save)
+        torchrl_logger.info(f"Saved tensordict: {td_save}")
         idx0 = 0
         idx1 = 0
         while len(files):

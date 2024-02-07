@@ -7,14 +7,13 @@ from __future__ import annotations
 import collections
 
 import importlib
-import logging
 import os
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
 
-from torchrl._utils import VERBOSE
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
@@ -33,7 +32,7 @@ if torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
     os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
     if VERBOSE:
-        logging.info("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
+        torchrl_logger.info(f"EGL_DEVICE_ID: {os.environ['EGL_DEVICE_ID']}")
 
 _has_dmc = _has_dm_control = importlib.util.find_spec("dm_control") is not None
 
@@ -102,9 +101,9 @@ def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
 
 def _robust_to_tensor(array: Union[float, np.ndarray]) -> torch.Tensor:
     if isinstance(array, np.ndarray):
-        return torch.tensor(array.copy())
+        return torch.as_tensor(array.copy())
     else:
-        return torch.tensor(array)
+        return torch.as_tensor(array)
 
 
 class DMControlWrapper(GymLikeEnv):

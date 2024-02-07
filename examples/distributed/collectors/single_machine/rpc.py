@@ -17,7 +17,6 @@ The default task is `Pong-v5` but a different one can be picked through the
 `--env` flag. Any available gym env will work.
 
 """
-import logging
 import time
 from argparse import ArgumentParser
 
@@ -25,6 +24,7 @@ import gym
 
 import torch.cuda
 import tqdm
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.distributed import RPCDataCollector
@@ -96,7 +96,11 @@ if __name__ == "__main__":
     if num_workers == 1:
         action_spec = make_env().action_spec
     else:
-        make_env = ParallelEnv(num_workers, make_env)
+        make_env = ParallelEnv(
+            num_workers,
+            make_env,
+            serial_for_single=True,
+        )
         action_spec = make_env.action_spec
 
     collector = RPCDataCollector(
@@ -124,5 +128,5 @@ if __name__ == "__main__":
             t0 = time.time()
     collector.shutdown()
     t1 = time.time()
-    logging.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    torchrl_logger.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
     exit()

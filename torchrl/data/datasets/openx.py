@@ -42,6 +42,8 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
 
     Paper: https://arxiv.org/abs/2310.08864
 
+    The data format follows the :ref:`TED convention <TED-format>`.
+
     .. note::
         Non-tensor data will be written in the tensordict data using the
         :class:`~tensordict.tensorclass.NonTensorData` primitive.
@@ -114,10 +116,10 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
             0s. If another value is provided, it will be used for padding. If
             ``False`` or ``None`` (default) any encounter with a trajectory of
             insufficient length will raise an exception.
-        root (Path or str, optional): The Minari dataset root directory.
+        root (Path or str, optional): The OpenX dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/minari`.
+            ``~/.cache/torchrl/openx`.
         streaming (bool, optional): if ``True``, the data won't be downloaded but
             read from a stream instead.
 
@@ -139,7 +141,7 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
-            a default RoundRobinWriter() will be used.
+            a default :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter` will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset.
@@ -148,15 +150,13 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.transforms.transforms.Compose` class.
         split_trajs (bool, optional): if ``True``, the trajectories will be split
             along the first dimension and padded to have a matching shape.
             To split the trajectories, the ``"done"`` signal will be used, which
             is recovered via ``done = truncated | terminated``. In other words,
             it is assumed that any ``truncated`` or ``terminated`` signal is
-            equivalent to the end of a trajectory. For some datasets from
-            ``D4RL``, this may not be true. It is up to the user to make
-            accurate choices regarding this usage of ``split_trajs``.
+            equivalent to the end of a trajectory.
             Defaults to ``False``.
         strict_length (bool, optional): if ``False``, trajectories of length
             shorter than `slice_len` (or `batch_size // num_slices`) will be
@@ -684,7 +684,7 @@ def _slice_data(data: TensorDict, slice_len, pad_value):
         truncated,
         dim=data.ndim - 1,
         value=True,
-        index=torch.tensor(-1, device=truncated.device),
+        index=torch.as_tensor(-1, device=truncated.device),
     )
     done = data.get(("next", "done"))
     data.set(("next", "truncated"), truncated)

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
-from tensordict.tensordict import TensorDict
+from tensordict import TensorDict
 
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import (
@@ -27,6 +27,8 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
     This class provides an easy entry point for public datasets.
     See "Dua, D. and Graff, C. (2017) UCI Machine Learning Repository. http://archive.ics.uci.edu/ml"
 
+    The data format follows the :ref:`TED convention <TED-format>`.
+
     The data is accessed via scikit-learn. Make sure sklearn and pandas are
     installed before retrieving the data:
 
@@ -42,7 +44,7 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
-            a default RoundRobinWriter() will be used.
+            a default :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter` will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset.
@@ -51,7 +53,7 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.transforms.transforms.Compose` class.
 
     """
 

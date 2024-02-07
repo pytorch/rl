@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import math
-import warnings
 from dataclasses import dataclass
 from numbers import Number
 from typing import Tuple, Union
@@ -11,9 +10,8 @@ from typing import Tuple, Union
 import numpy as np
 import torch
 
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
-from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 
@@ -23,7 +21,7 @@ from torchrl.objectives import default_value_kwargs, distance_loss, ValueEstimat
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _vmap_func,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
@@ -175,22 +173,24 @@ class REDQLoss_deprecated(LossModule):
         except AttributeError:
             device = torch.device("cpu")
 
-        self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
+        self.register_buffer("alpha_init", torch.as_tensor(alpha_init, device=device))
         self.register_buffer(
-            "min_log_alpha", torch.tensor(min_alpha, device=device).log()
+            "min_log_alpha", torch.as_tensor(min_alpha, device=device).log()
         )
         self.register_buffer(
-            "max_log_alpha", torch.tensor(max_alpha, device=device).log()
+            "max_log_alpha", torch.as_tensor(max_alpha, device=device).log()
         )
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
             self.register_buffer(
-                "log_alpha", torch.tensor(math.log(alpha_init), device=device)
+                "log_alpha", torch.as_tensor(math.log(alpha_init), device=device)
             )
         else:
             self.register_parameter(
                 "log_alpha",
-                torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
+                torch.nn.Parameter(
+                    torch.as_tensor(math.log(alpha_init), device=device)
+                ),
             )
 
         self._target_entropy = target_entropy
@@ -201,8 +201,7 @@ class REDQLoss_deprecated(LossModule):
         self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
     @property
     def target_entropy(self):
@@ -231,7 +230,7 @@ class REDQLoss_deprecated(LossModule):
                     np.prod(action_spec[self.tensor_keys.action].shape)
                 )
             self.register_buffer(
-                "target_entropy_buffer", torch.tensor(target_entropy, device=device)
+                "target_entropy_buffer", torch.as_tensor(target_entropy, device=device)
             )
             return self.target_entropy_buffer
         return target_entropy
