@@ -435,8 +435,10 @@ class PrioritizedSampler(Sampler):
                 indexed elements.
 
         """
-        priority = torch.as_tensor(priority, dtype=torch.long)
-        index = torch.as_tensor(index, dtype=torch.long)
+        priority = torch.as_tensor(
+            priority, dtype=torch.long, device=torch.device("cpu")
+        )
+        index = torch.as_tensor(index, dtype=torch.long, device=torch.device("cpu"))
         # we need to reshape priority if it has more than one elements or if it has
         # a different shape than index
         if priority.numel() > 1 and priority.shape != index.shape:
