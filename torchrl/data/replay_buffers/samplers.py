@@ -1095,7 +1095,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         eps (float, optional): delta added to the priorities to ensure that the buffer
             does not contain null priorities. Defaults to 1e-8.
         reduction (str, optional): the reduction method for multidimensional
-            tensordicts (ie stored trajectory). Can be one of "max", "min",
+            tensordicts (i.e., stored trajectory). Can be one of "max", "min",
             "median" or "mean".
 
     Keyword Args:
