@@ -2,8 +2,14 @@
 """
 TorchRL envs
 ============================
+
+**Author**: `Vincent Moens <https://github.com/vmoens>`_
+
+.. _envs_tuto:
+
 """
 ##############################################################################
+#
 # Environments play a crucial role in RL settings, often somewhat similar to
 # datasets in supervised and unsupervised settings. The RL community has
 # become quite familiar with OpenAI gym API which offers a flexible way of

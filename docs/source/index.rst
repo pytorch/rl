@@ -62,6 +62,17 @@ or via a ``git clone`` if you're willing to contribute to the library:
   $ cd ../rl
   $ python setup.py develop
 
+Getting started
+===============
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/getting-started-0
+   tutorials/getting-started-1
+   tutorials/getting-started-2
+   tutorials/getting-started-3
+   tutorials/getting-started-4
 
 Tutorials
 =========
