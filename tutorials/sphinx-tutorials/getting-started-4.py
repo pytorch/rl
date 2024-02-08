@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Getting started with TorchRL
-============================
-
-Logging your results
---------------------
+Get started with logging
+========================
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 

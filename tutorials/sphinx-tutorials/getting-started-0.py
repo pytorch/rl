@@ -1,34 +1,38 @@
 # -*- coding: utf-8 -*-
 """
-Getting started with TorchRL
-============================
 
-Environments, TED and transforms
---------------------------------
+Get started with Environments, TED and transforms
+=================================================
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
 """
 
 ################################
-# The typical RL training loop consist of a model (a policy) that is trained to solve
-# a task in an environment. In many cases, this environment consists of a simulator
-# which takes actions as input and outputs an observation as well as some metadata.
+# The standard RL (Reinforcement Learning) training loop involves a model,
+# also known as a policy, which is trained to accomplish a task within a
+# specific environment. Often, this environment is a simulator that accepts
+# actions as input and produces an observation along with some metadata as
+# output.
 #
-# In this document, we'll learn about TorchRL's environment API: how to create an
-# environment, how to interact with it, and what data format is used.
+# In this document, we will explore the environment API of TorchRL: we will
+# learn how to create an environment, interact with it, and understand the
+# data format it uses.
 #
 # Creating an environment
 # ~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Per se, TorchRL does not provide environments but wrappers for other libraries
-# that encode the simulators. You can think of :mod:`~torchrl.envs` as a provider for
-# a generic environment API as well as a common hub for simulation backends such
-# as `gym <https://arxiv.org/abs/1606.01540>`_, `Brax <https://arxiv.org/abs/2106.13281>`_
-# or `DeepMind Control Suite <https://arxiv.org/abs/1801.00690>`_.
+# In essence, TorchRL does not directly provide environments, but instead
+# offers wrappers for other libraries that encapsulate the simulators. The
+# :mod:`~torchrl.envs` module can be viewed as a provider for a generic
+# environment API, as well as a central hub for simulation backends like
+# `gym <https://arxiv.org/abs/1606.01540>`_ (:class:`~torchrl.envs.GymEnv`),
+# `Brax <https://arxiv.org/abs/2106.13281>`_ (:class:`~torchrl.envs.BraxEnv`)
+# or `DeepMind Control Suite <https://arxiv.org/abs/1801.00690>`_
+# (:class:`~torchrl.envs.DMControlEnv`).
 #
-# Creating your environment is usually as easy as the underlying backend API permits.
-# Here's an example with gym:
+# Creating your environment is typically as straightforward as the underlying
+# backend API allows. Here's an example using gym:
 
 from torchrl.envs import GymEnv
 
@@ -39,51 +43,67 @@ env = GymEnv("Pendulum-v1")
 # Running an environment
 # ~~~~~~~~~~~~~~~~~~~~~~
 #
-# Environments have two important methods: :meth:`~torchrl.envs.EnvBase.reset`
-# which initiates an episode and :meth:`~torchrl.envs.EnvBase.step` which enacts an
-# action chosen by the actor.
-# In TorchRL, environments methods read and write :class:`~tensordict.TensorDict` instances.
-# In short, :class:`~tensordict.TensorDict` is a generic key-based data carrier
-# for tensors. The advantage of using :class:`~tensordict.TensorDict` instead of
-# plain tensors is that it allows us to work with simple and complex data structures
-# interchangeably: since the our function signatures are very generic, it removes
-# the difficulty of accounting for different data formats. In other words: after
-# this short tutorial, you will be able to act on simple as well as very complex
-# environments!
+# Environments in TorchRL have two crucial methods:
+# :meth:`~torchrl.envs.EnvBase.reset`, which initiates
+# an episode, and :meth:`~torchrl.envs.EnvBase.step`, which executes an
+# action selected by the actor.
+# In TorchRL, environment methods read and write
+# :class:`~tensordict.TensorDict` instances.
+# Essentially, :class:`~tensordict.TensorDict` is a generic key-based data
+# carrier for tensors.
+# The benefit of using TensorDict over plain tensors is that it enables us to
+# handle simple and complex data structures interchangeably. As our function
+# signatures are very generic, it eliminates the challenge of accommodating
+# different data formats. In simpler terms, after this brief tutorial,
+# you will be capable of operating on both simple and highly complex
+# environments, as their user-facing API is identical and simple!
 #
-# Let's put the environment into action:
+# Let's put the environment into action and see what a tensordict instance
+# looks like:
 
 reset = env.reset()
 print(reset)
 
 ################################
-# Let's take a random action in the action space. First, sample the action:
+# Now let's take a random action in the action space. First, sample the action:
 reset_with_action = env.rand_action(reset)
 print(reset_with_action)
 
 ################################
-# This tensordict has the same structure as the one from :meth:`~torchrl.envs.EnvBase`
-# with an additional ``"action"`` entry.
+# This tensordict has the same structure as the one obtained from
+# :meth:`~torchrl.envs.EnvBase` with an additional ``"action"`` entry.
+# You can access the action easily, like you would do with a regular
+# dictionary:
 #
-# Next, let's pass this action in the environment:
+
+print(reset_with_action["action"])
+
+################################
+# We now need to pass this action tp the environment.
+# We'll be passing the entire tensordict to the ``step`` method, since there
+# might be more than one tensor to be read in more advanced cases like
+# Multi-Agent RL or stateless environments:
 
 stepped_data = env.step(reset_with_action)
 print(stepped_data)
 
 ################################
-# This new tensordict is identical to the previous one except for the fact that it has
-# a ``"next"`` entry containing the observation, reward and done state resulting from
+# Again, this new tensordict is identical to the previous one except for the
+# fact that it has a ``"next"`` entry (itself a tensordict!) containing the
+# observation, reward and done state resulting from
 # our action.
 #
-# This format is called TED, for :ref:`TorchRL Episode Data format <TED-format>`_ amd is
-# ubiquituous in the library.
+# We call this format TED, for
+# :ref:`TorchRL Episode Data format <reference/data:TED-format>`. It is
+# the ubiquitous way of representing data in the library, both dynamically like
+# here, or statically with offline datasets.
 #
 # The last bit of information you need to run a rollout in the environment is
 # how to bring that ``"next"`` entry at the root to perform the next step.
 # TorchRL provides a dedicated :func:`~torchrl.envs.utils.step_mdp` function
-# that does just that, filtering out the information you won't need and delivering
-# a data structure corresponding to your observation after a step in the Markov
-# Decision Process, or MDP.
+# that does just that: it filters out the information you won't need and
+# delivers a data structure corresponding to your observation after a step in
+# the Markov Decision Process, or MDP.
 
 from torchrl.envs import step_mdp
 
@@ -91,45 +111,60 @@ data = step_mdp(stepped_data)
 print(data)
 
 ################################
-# Writing down those three steps can be a bit tedious and repetitive. Fortunately,
+# Writing down those three steps (computing an action, making a step,
+# moving in the MDP) can be a bit tedious and repetitive. Fortunately,
 # TorchRL provides a nice :meth:`~torchrl.envs.EnvBase.rollout` function that
-# allows you to run them in a closed loop at will.
+# allows you to run them in a closed loop at will:
 #
 
 rollout = env.rollout(max_steps=10)
 print(rollout)
 
 ################################
-# This data looks pretty much like the ``stepped_data`` above with the exception
-# of its batch-size which now equates the number of steps we provided through
-# the ``max_steps`` argument. The magic of tensordict doesn't end there: if you're
-# interested in a single transition of this environment, you can index the tensordict
-# like you would index a tensor:
+# This data looks pretty much like the ``stepped_data`` above with the
+# exception of its batch-size, which now equates the number of steps we
+# provided through the ``max_steps`` argument. The magic of tensordict
+# doesn't end there: if you're interested in a single transition of this
+# environment, you can index the tensordict like you would index a tensor:
 
 transition = rollout[3]
 print(transition)
 
 ################################
-# As such, the rollout may seem rather useless (it just runs random actions if no
-# policy is provided) but it is useful to check what is to be expected from an environment
-# at a glance.
+# :class:`~tensordict.TensorDict` will automatically check if the index you
+# provided is a key (in which case we index along the key-dimension) or a
+# spatial index like here.
 #
-# If you need to be convinced of how generic TorchRL's API is, think about the
-# fact that the rollout method works across **all** use cases, whether you're working
-# with a single environment like this one, several copies on multiple processes,
-# a multi-agent environment or a stateless version of it! Let's compare the output
-# of the rollout method with the
+# Executed as such (without a policy), the ``rollout`` method may seem rather
+# useless: it just runs random actions. If a policy is available, it can
+# be passed to the method and used to collect data.
+#
+# Nevertheless, it can useful to run a naive, policyless rollout at first to
+# check what is to be expected from an environment at a glance.
+#
+# To appreciate the versatility of TorchRL's API, consider the fact that the
+# rollout method is universally applicable. It functions across **all** use
+# cases, whether you're working with a single environment like this one,
+# multiple copies across various processes, a multi-agent environment, or even
+# a stateless version of it!
+#
 #
 # Transforming an environment
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Most of the time, you will want to change the output of the environment to
-# make it more suited for your needs. For instance, you may want to keep track
-# of how many steps have been run since the last reset, resize images or stack
-# consecutive observations together. We'll just see a simple transform here, the
-# :class:`~torchrl.envs.transforms.StepCounter` transform, but the full list can be
-# accessed :ref:`here <transforms>`_. The transform is combined with the environment
-# through a :class:`~torchrl.envs.TransformedEnv`:
+# Most of the time, you'll want to modify the output of the environment to
+# better suit your requirements. For example, you might want to monitor the
+# number of steps executed since the last reset, resize images, or stack
+# consecutive observations together.
+#
+# In this section, we'll examine a simple transform, the
+# :class:`~torchrl.envs.transforms.StepCounter` transform.
+# The complete list of transforms can be found
+# :ref:`here <reference/envs:transforms>`.
+#
+# The transform is integrated with the environment through a
+# :class:`~torchrl.envs.TransformedEnv`:
+#
 
 from torchrl.envs import StepCounter, TransformedEnv
 
@@ -139,27 +174,31 @@ print(rollout)
 
 ################################
 # As you can see, our environment now has one more entry, ``"step_count"`` that
-# tracks the number of steps since the last reset. Since we passed the optional
+# tracks the number of steps since the last reset.
+# Given that we passed the optional
 # argument ``max_steps=10`` to the transform constructor, we also truncated the
 # trajectory after 10 steps (not completing a full rollout of 100 steps like
-# we asked with the ``rollout`` call). We can see that the trajectory was truncated
-# by looking at the truncated entry:
+# we asked with the ``rollout`` call). We can see that the trajectory was
+# truncated by looking at the truncated entry:
 
 print(rollout["next", "truncated"])
 
 ################################
 #
-# We've now explored the basic functionality of TorchRL's environment.
+# This is all for this short introduction to TorchRL's environment API!
 #
 # Next steps
 # ~~~~~~~~~~
 #
 # To explore further what TorchRL's environments can do, go and check:
-# - The :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset` method that packs together
-#   :meth:`~torchrl.envs.EnvBase.step`, :func:`~torchrl.envs.step_mdp` and :meth:`~torchrl.envs.EnvBase.reset`.
+#
+# - The :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset` method that packs
+#   together :meth:`~torchrl.envs.EnvBase.step`,
+#   :func:`~torchrl.envs.step_mdp` and
+#   :meth:`~torchrl.envs.EnvBase.reset`.
 # - The batched environments, in particular :class:`~torchrl.envs.ParallelEnv` which
 #   allows you to run multiple copies of one same (or different!) environments on multiple processes.
-# - Design your own environment with the :ref:`Pendulum tutorial <>`_ and learn
+# - Design your own environment with the :ref:`Pendulum tutorial <pendulum_tuto>` and learn
 #   about specs and stateless environments.
-# - See the more in-depth tutorial about environments :ref:`here <env_tuto>`
+# - See the more in-depth tutorial about environments :ref:`in the dedicated tutorial <env_tuto>`.
 #

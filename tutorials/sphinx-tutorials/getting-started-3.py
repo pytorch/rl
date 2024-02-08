@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Getting started with TorchRL
-============================
-
-Collecting and storing data
----------------------------
+Get started with data collection and storage
+============================================
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 

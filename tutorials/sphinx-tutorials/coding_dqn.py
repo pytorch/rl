@@ -404,9 +404,9 @@ def get_replay_buffer(buffer_size, n_optim, batch_size):
 # environment executed in parallel in each collector (controlled by the
 # ``num_workers`` hyperparameter).
 #
-# When building the collector, we can choose on which device we want the
-# environment and policy to execute the operations through the ``device``
-# keyword argument. The ``storing_devices`` argument will modify the
+# Collector's devices are fully parametrizable through the ``device`` (general),
+# ``policy_device``, ``env_device`` and ``storing_device`` arguments.
+# The ``storing_device`` argument will modify the
 # location of the data being collected: if the batches that we are gathering
 # have a considerable size, we may want to store them on a different location
 # than the device where the computation is happening. For asynchronous data

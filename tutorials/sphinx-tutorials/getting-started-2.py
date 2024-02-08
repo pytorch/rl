@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Getting started with TorchRL
-============================
-
-Optimizing your policy
-----------------------
+Getting started with model optimization
+=======================================
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
