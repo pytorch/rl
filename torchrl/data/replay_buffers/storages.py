@@ -619,6 +619,7 @@ class TensorStorage(Storage):
                 "Cannot get an item from an unitialized LazyMemmapStorage"
             )
         if is_tc:
+            print("storage", storage)
             out = storage[index]
             return _reset_batch_size(out)
         else:

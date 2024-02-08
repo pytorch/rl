@@ -970,7 +970,9 @@ class TensorDictReplayBuffer(ReplayBuffer):
         with self._replay_lock:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
+            print('index in _sample', index)
             data = self._storage.get(index)
+            print('collected data', data)
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):

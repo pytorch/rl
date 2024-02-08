@@ -755,36 +755,41 @@ class SliceSampler(Sampler):
             raise RuntimeError(
                 f"Expected the end-of-trajectory signal to be at least 1-dimensional."
             )
-        stop_idx = end.nonzero()
+        # Using transpose ensures the start and stop are sorted the same way
+        stop_idx = end.transpose(0, -1).nonzero()
         beginnings = torch.cat([torch.ones_like(end[:1]), end[:-1]], 0)
-        start_idx = beginnings.nonzero()
-        sort = start_idx[:, 1].sort(-1)[1]
-        start_idx = start_idx[sort]
-        print("stop_idx", stop_idx)
-        print("start_idx", start_idx)
+        start_idx = beginnings.transpose(0, -1).nonzero()
+        start_idx = torch.cat([start_idx[:, -1:], start_idx[:, :-1]], -1)
+        stop_idx = torch.cat([stop_idx[:, -1:], stop_idx[:, :-1]], -1)
+
         lengths = stop_idx[:, 0] - start_idx[:, 0] + 1
-        print("lengths", lengths)
+        assert (lengths >= 0).all()
         return start_idx, stop_idx, lengths
 
     def _tensor_slices_from_startend(self, seq_length, start):
-        if isinstance(seq_length, int):
-            print('seq_length', seq_length)
-            print('start', start)
+        # start is a 2d tensor resulting from nonzero()
+        # seq_length is a 1d tensor indicating the desired length of each sequence
+        def _start_to_end(st: torch.Tensor, length: int):
             arange = torch.arange(
-                    seq_length, device=start.device, dtype=start.dtype
+                    length, device=st.device, dtype=st.dtype
                 )
-            arange = torch.stack([arange, torch.zeros_like(arange)], -1)
-            return arange + start
-        else:
-            raise NotImplementedError
-            # when padding is needed
-            return torch.cat(
+            arange = torch.stack([arange]+[torch.zeros_like(arange)]*(st.shape[-1] - 1), -1)
+            return arange + st
+
+        if isinstance(seq_length, int):
+            result = torch.cat(
                 [
-                    _start
-                    + torch.arange(_seq_len, device=start.device, dtype=start.dtype)
-                    for _start, _seq_len in zip(start, seq_length)
+                    _start_to_end(_start, length=seq_length) for _start in start
                 ]
             )
+        else:
+            # when padding is needed
+            result = torch.cat(
+                [
+                    _start_to_end(_start, _seq_len) for _start, _seq_len in zip(start, seq_length)
+                ]
+            )
+        return result
 
     def _get_stop_and_length(self, storage, fallback=True):
         if self.cache_values and "stop-and-length" in self._cache:
@@ -884,7 +889,7 @@ class SliceSampler(Sampler):
 
     def _sample_slices(
         self, lengths, start_idx, stop_idx, seq_length, num_slices, traj_idx=None
-    ) -> Tuple[torch.Tensor, dict]:
+    ) -> Tuple[Tuple[torch.Tensor], Dict[str, Any]]:
         if traj_idx is None:
             traj_idx = torch.randint(
                 lengths.shape[0], (num_slices,), device=lengths.device
@@ -892,7 +897,6 @@ class SliceSampler(Sampler):
         else:
             num_slices = traj_idx.shape[0]
 
-        print('lengths', lengths, 'seq_length', seq_length)
         if (lengths < seq_length).any():
             if self.strict_length:
                 raise RuntimeError(
@@ -911,16 +915,15 @@ class SliceSampler(Sampler):
             .floor()
             .to(start_idx.dtype)
         )
-        starts = torch.stack([start_idx[traj_idx, 0] + relative_starts, start_idx[traj_idx, 1]], -1)
+        starts = torch.cat([start_idx[traj_idx, :1] + relative_starts.unsqueeze(-1), start_idx[traj_idx, 1:]], 1)
         index = self._tensor_slices_from_startend(seq_length, starts)
-        print("index", index)
         if self.truncated_key is not None:
             truncated_key = self.truncated_key
             done_key = _replace_last(truncated_key, "done")
             terminated_key = _replace_last(truncated_key, "terminated")
 
             truncated = torch.zeros(
-                (*index.shape, 1), dtype=torch.bool, device=index.device
+                (index.numel(), 1), dtype=torch.bool, device=index.device
             )
             if isinstance(seq_length, int):
                 truncated.view(num_slices, -1)[:, -1] = 1
@@ -935,12 +938,13 @@ class SliceSampler(Sampler):
                     truncated[(seq_length.cumsum(0) - 1)[traj_terminated]] = 1
             truncated = truncated & ~terminated
             done = terminated | truncated
-            return index.to(torch.long), {
+            return index.to(torch.long).unbind(-1), {
                 truncated_key: truncated,
                 done_key: done,
                 terminated_key: terminated,
             }
-        return index.to(torch.long), {}
+        index = index.to(torch.long).unbind(-1)
+        return index, {}
 
     @property
     def _used_traj_key(self):
