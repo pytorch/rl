@@ -186,6 +186,40 @@ class ObsDecoder(nn.Module):
         return obs_decoded
 
 
+class DenseEncoder(nn.Module):
+    """Dense encoder network."""
+
+    def __init__(self, num_layer=3, hidden_dim=300, embedding_dim=1024):
+        super().__init__()
+
+        layers = [nn.LazyLinear(hidden_dim), nn.ReLU()]
+        for _ in range(num_layer - 2):
+            layers += [nn.LazyLinear(hidden_dim), nn.ReLU()]
+        layers += [nn.LazyLinear(embedding_dim), nn.ReLU()]
+
+        self.encoder = nn.Sequential(*layers)
+
+    def forward(self, state):
+        return self.encoder(state)
+
+
+class DenseDecoder(nn.Module):
+    """Dense decoder network."""
+
+    def __init__(self, observation_dim, num_layer=3, hidden_dim=300):
+        super().__init__()
+
+        layers = [nn.LazyLinear(hidden_dim), nn.ReLU()]
+        for _ in range(num_layer - 2):
+            layers += [nn.LazyLinear(hidden_dim), nn.ReLU()]
+        layers += [nn.LazyLinear(observation_dim), nn.ReLU()]
+
+        self.decoder = nn.Sequential(*layers)
+
+    def forward(self, state):
+        return self.decoder(state)
+
+
 class RSSMRollout(TensorDictModuleBase):
     """Rollout the RSSM network.
 

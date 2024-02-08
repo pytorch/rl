@@ -33,11 +33,8 @@ from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import (
     Compose,
-    # CatFrames,
     # CenterCrop,
     DoubleToFloat,
-    # DTypeCastTransform,
-    # ExcludeTransform,
     FrameSkipTransform,
     GrayScale,
     # NoopResetEnv,
@@ -63,6 +60,8 @@ from torchrl.modules import (
 )
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.models.model_based import (
+    DenseDecoder,
+    DenseEncoder,
     DreamerActor,
     ObsDecoder,
     ObsEncoder,
@@ -99,11 +98,6 @@ def transform_env(cfg, env, parallel_envs, dummy=False):
             env.append_transform(GrayScale())
         img_size = cfg.env.image_size
         env.append_transform(Resize(img_size, img_size))
-    else:
-        # TODO:
-        # concatenate vel and pos to observation
-        # .apppend_transform(C)
-        pass
 
     env.append_transform(DoubleToFloat())
     env.append_transform(RewardSum())
@@ -156,6 +150,8 @@ def make_dreamer(
     value_key: str = "state_value",
     use_decoder_in_env: bool = False,
 ):
+    test_env = _make_env(config, device=device)
+    test_env = transform_env(config, test_env, parallel_envs=1, dummy=True)
     # Make encoder and decoder
     if config.env.from_pixels:
         encoder = ObsEncoder()
@@ -163,12 +159,14 @@ def make_dreamer(
         observation_in_key = "pixels"
         obsevation_out_key = "reco_pixels"
     else:
+        encoder = DenseEncoder()
+        decoder = DenseDecoder(
+            observation_dim=test_env.observation_spec["observation"].shape[-1]
+        )
         observation_in_key = "observation"
         obsevation_out_key = "reco_observation"
-        raise NotImplementedError("Currently only pixel observations are supported.")
+        # raise NotImplementedError("Currently only pixel observations are supported.")
 
-    test_env = _make_env(config, device=device)
-    test_env = transform_env(config, test_env, parallel_envs=1, dummy=True)
     # Make RSSM
     rssm_prior = RSSMPrior(
         hidden_dim=config.networks.rssm_hidden_dim,
@@ -272,7 +270,6 @@ def make_collector(cfg, train_env, actor_model_explore):
 def make_replay_buffer(
     batch_size,
     batch_seq_len,
-    prb=False,
     buffer_size=1000000,
     buffer_scratch_dir=None,
     device="cpu",

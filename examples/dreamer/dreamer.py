@@ -22,12 +22,6 @@ from torchrl.objectives.dreamer import (
 
 from torchrl.record.loggers import generate_exp_name, get_logger
 
-# from torchrl.trainers.helpers.envs import (
-#     correct_for_frame_skip,
-#     initialize_observation_norm_transforms,
-#     retrieve_observation_norms_state_dict,
-# )
-
 
 @hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
@@ -78,8 +72,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         value_model,
         model_based_env,
         imagination_horizon=cfg.optimization.imagination_horizon,
+        discount_loss=True,
     )
-    value_loss = DreamerValueLoss(value_model)
+    value_loss = DreamerValueLoss(value_model, discount_loss=True)
 
     # Make collector
     collector = make_collector(cfg, train_env, policy)
