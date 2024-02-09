@@ -129,20 +129,17 @@ class DreamerModelLoss(LossModule):
             tensordict.get(("next", self.tensor_keys.posterior_mean)),
             tensordict.get(("next", self.tensor_keys.posterior_std)),
         ).unsqueeze(-1)
-        reco_loss = distance_loss(
-            tensordict.get(("next", self.tensor_keys.pixels)),
-            tensordict.get(("next", self.tensor_keys.reco_pixels)),
-            self.reco_loss,
-        )
-        if not self.global_average:
-            reco_loss = reco_loss.sum((-3, -2, -1))
-        reco_loss = reco_loss.mean().unsqueeze(-1)
 
-        reward_loss = distance_loss(
-            tensordict.get(("next", self.tensor_keys.true_reward)),
-            tensordict.get(("next", self.tensor_keys.reward)),
-            self.reward_loss,
+        decoder = self.world_model[0][-1]
+        dist = decoder.get_dist(tensordict)
+        reco_loss = -dist.log_prob(tensordict.get(("next", self.tensor_keys.pixels)))
+
+        reward_model = self.world_model[1]
+        dist = reward_model.get_dist(tensordict)
+        reward_loss = -dist.log_prob(
+            tensordict.get(("next", self.tensor_keys.true_reward))
         )
+
         if not self.global_average:
             reward_loss = reward_loss.squeeze(-1)
         reward_loss = reward_loss.mean().unsqueeze(-1)
@@ -236,7 +233,7 @@ class DreamerActorLoss(LossModule):
         model_based_env: DreamerEnv,
         *,
         imagination_horizon: int = 15,
-        discount_loss: bool = False,  # for consistency with paper
+        discount_loss: bool = True,  # for consistency with paper
         gamma: int = None,
         lmbda: int = None,
     ):
@@ -392,7 +389,7 @@ class DreamerValueLoss(LossModule):
         self,
         value_model: TensorDictModule,
         value_loss: Optional[str] = None,
-        discount_loss: bool = False,  # for consistency with paper
+        discount_loss: bool = True,  # for consistency with paper
         gamma: int = 0.99,
     ):
         super().__init__()

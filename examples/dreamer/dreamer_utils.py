@@ -51,8 +51,7 @@ from torchrl.envs.transforms.transforms import TensorDictPrimer  # FlattenObserv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     MLP,
-    # NoisyLinear,
-    # NormalParamWrapper,
+    NormalParamWrapper,
     SafeModule,
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
@@ -159,7 +158,7 @@ def make_dreamer(
         observation_in_key = "pixels"
         obsevation_out_key = "reco_pixels"
     else:
-        encoder = DenseEncoder()
+        encoder = DenseEncoder()  # TODO: make them just MLPs
         decoder = DenseDecoder(
             observation_dim=test_env.observation_spec["observation"].shape[-1]
         )
@@ -179,7 +178,7 @@ def make_dreamer(
     )
     # Make reward module
     reward_module = MLP(
-        out_features=1,
+        out_features=2,
         depth=2,
         num_cells=config.networks.hidden_dim,
         activation_class=get_activation(config.networks.activation),
@@ -316,16 +315,26 @@ def make_replay_buffer(
 def _dreamer_make_value_model(
     hidden_dim: int = 400, activation: str = "elu", value_key: str = "state_value"
 ):
-    value_model = SafeModule(
-        MLP(
-            out_features=1,
-            depth=3,
-            num_cells=hidden_dim,
-            activation_class=get_activation(activation),
-        ),
-        in_keys=["state", "belief"],
-        out_keys=[value_key],
+    value_model = MLP(
+        out_features=2,
+        depth=3,
+        num_cells=hidden_dim,
+        activation_class=get_activation(activation),
     )
+    value_model = SafeProbabilisticTensorDictSequential(
+        SafeModule(
+            NormalParamWrapper(value_model),
+            in_keys=["state", "belief"],
+            out_keys=["loc", "scale"],
+        ),
+        SafeProbabilisticModule(
+            in_keys=["loc", "scale"],
+            out_keys=[value_key],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"tanh_loc": False},
+        ),
+    )
+
     return value_model
 
 
@@ -489,11 +498,31 @@ def _dreamer_make_mbenv(
             ],
         ),
     )
-    reward_model = SafeModule(
-        reward_module,
-        in_keys=["state", "belief"],
-        out_keys=["reward"],
+
+    reward_model = SafeProbabilisticTensorDictSequential(
+        SafeModule(
+            NormalParamWrapper(reward_module),
+            in_keys=["state", "belief"],
+            out_keys=["reward_loc", "reward_scale"],
+            # spec=CompositeSpec(
+            #     **{
+            #         "reward_loc": UnboundedContinuousTensorSpec(
+            #             1,
+            #         ),
+            #         "reward_scale": UnboundedContinuousTensorSpec(
+            #             1,
+            #         ),
+            #     }
+            # ),
+        ),
+        SafeProbabilisticModule(
+            in_keys=["reward_loc", "reward_scale"],
+            out_keys=["reward"],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"tanh_loc": False},
+        ),
     )
+
     model_based_env = DreamerEnv(
         world_model=WorldModelWrapper(
             transition_model,
@@ -548,6 +577,20 @@ def _dreamer_make_world_model(
         ),
     )
 
+    decoder = SafeProbabilisticTensorDictSequential(
+        SafeModule(
+            decoder,
+            in_keys=[("next", "state"), ("next", "belief")],
+            out_keys=["loc"],
+        ),
+        SafeProbabilisticModule(
+            in_keys=["loc"],
+            out_keys=[("next", observation_out_key)],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"tanh_loc": False},
+        ),
+    )
+
     transition_model = SafeSequential(
         SafeModule(
             encoder,
@@ -555,17 +598,23 @@ def _dreamer_make_world_model(
             out_keys=[("next", "encoded_latents")],
         ),
         rssm_rollout,
+        decoder,
+    )
+
+    reward_model = SafeProbabilisticTensorDictSequential(
         SafeModule(
-            decoder,
+            NormalParamWrapper(reward_module),
             in_keys=[("next", "state"), ("next", "belief")],
-            out_keys=[("next", observation_out_key)],
+            out_keys=[("next", "loc"), ("next", "scale")],
+        ),
+        SafeProbabilisticModule(
+            in_keys=[("next", "loc"), ("next", "scale")],
+            out_keys=[("next", "reward")],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"tanh_loc": False},
         ),
     )
-    reward_model = SafeModule(
-        reward_module,
-        in_keys=[("next", "state"), ("next", "belief")],
-        out_keys=[("next", "reward")],
-    )
+
     world_model = WorldModelWrapper(
         transition_model,
         reward_model,
