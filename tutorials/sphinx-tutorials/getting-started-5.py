@@ -27,6 +27,8 @@ Get started with your onw first training loop
 # transform. These features are presented in
 # :ref:`the environment tutorial <gs_env_ted>`.
 #
+import pathlib
+
 import torch
 
 torch.manual_seed(0)
@@ -76,7 +78,13 @@ from torchrl.data import LazyTensorStorage, ReplayBuffer
 init_rand_steps = 5000
 frames_per_batch = 100
 optim_steps = 10
-collector = SyncDataCollector(env, policy, frames_per_batch=frames_per_batch, total_frames=-1, init_random_frames=init_rand_steps)
+collector = SyncDataCollector(
+    env,
+    policy,
+    frames_per_batch=frames_per_batch,
+    total_frames=-1,
+    init_random_frames=init_rand_steps,
+)
 rb = ReplayBuffer(storage=LazyTensorStorage(100_000))
 
 from torch.optim import Adam
@@ -94,9 +102,19 @@ optim = Adam(loss.parameters(), lr=0.02)
 #################################
 # Logger
 # ------
-# TODO
+#
+# We'll be using a CSV logger to log our results, and save rendered videos.
+#
 
 from torchrl._utils import logger as torchrl_logger
+from torchrl.record import CSVLogger, VideoRecorder
+
+path = pathlib.Path(__file__).parent / "training_loop"
+logger = CSVLogger(exp_name="dqn", log_dir=path, video_format="mp4")
+video_recorder = VideoRecorder(logger, tag="video")
+record_env = TransformedEnv(
+    GymEnv("CartPole-v1", from_pixels=True, pixels_only=False), video_recorder
+)
 
 #################################
 # Training loop
@@ -134,3 +152,18 @@ t1 = time.time()
 torchrl_logger.info(
     f"solved after {total_count} steps, {total_episodes} episodes and in {t1-t0}s."
 )
+
+#################################
+# Rendering
+# ---------
+#
+# Finally, we run the environment for as many steps as we can and save the
+# video locally (notice that we are not exploring).
+
+record_env.rollout(max_steps=1000, policy=policy)
+video_recorder.dump()
+
+#################################
+#
+# .. figure:: ./training_loop/dqn/videos/video_0.mp4
+#

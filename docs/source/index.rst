@@ -65,6 +65,11 @@ or via a ``git clone`` if you're willing to contribute to the library:
 Getting started
 ===============
 
+A series of quick tutorials to get ramped up with the basic features of the
+library. If you're in a hurry, you can start by
+:ref:`the last item of the series <gs_first_training>`
+and navigate to the previous ones whenever you want to learn more!
+
 .. toctree::
    :maxdepth: 1
 
