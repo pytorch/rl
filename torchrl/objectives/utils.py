@@ -506,10 +506,12 @@ def _vmap_func(module, *args, func=None, **kwargs):
 
 def _reduce(tensor: torch.Tensor, reduction: str) -> Union[float, torch.Tensor]:
     """Reduces a tensor given the reduction method."""
-    if reduction == "mean":
+    if reduction is None:
+        return tensor
+    elif reduction == "mean":
         result = tensor.mean()
     elif reduction == "sum":
         result = tensor.sum()
     else:
         raise NotImplementedError(f"Unknown reduction method {reduction}")
-    return result.item()
+    return result

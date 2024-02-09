@@ -5960,6 +5960,7 @@ class TestPPO(LossModuleTestBase):
             value,
             loss_critic_type="l2",
             separate_losses=True,
+            reduction=reduction,
         )
 
         if advantage is not None:
