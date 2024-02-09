@@ -803,7 +803,8 @@ value = TensorDictModule(
     value_module, in_keys=["observation", "action"], out_keys=["state_action_value"]
 )
 
-loss_fn = DDPGLoss(actor, value, gamma=0.99)
+loss_fn = DDPGLoss(actor, value)
+loss_fn.make_value_estimator(loss_fn.default_value_estimator, gamma=0.99)
 
 ###############################################################################
 
