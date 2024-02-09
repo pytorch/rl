@@ -15,6 +15,7 @@ import torch
 
 import torch.nn as nn
 from tensordict.nn import InteractionType
+from torch.distributions import Normal
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -51,7 +52,7 @@ from torchrl.envs.transforms.transforms import TensorDictPrimer  # FlattenObserv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     MLP,
-    NormalParamWrapper,
+    # NormalParamWrapper,
     SafeModule,
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
@@ -178,7 +179,7 @@ def make_dreamer(
     )
     # Make reward module
     reward_module = MLP(
-        out_features=2,
+        out_features=1,
         depth=2,
         num_cells=config.networks.hidden_dim,
         activation_class=get_activation(config.networks.activation),
@@ -316,22 +317,22 @@ def _dreamer_make_value_model(
     hidden_dim: int = 400, activation: str = "elu", value_key: str = "state_value"
 ):
     value_model = MLP(
-        out_features=2,
+        out_features=1,
         depth=3,
         num_cells=hidden_dim,
         activation_class=get_activation(activation),
     )
     value_model = SafeProbabilisticTensorDictSequential(
         SafeModule(
-            NormalParamWrapper(value_model),
+            value_model,
             in_keys=["state", "belief"],
-            out_keys=["loc", "scale"],
+            out_keys=["loc"],
         ),
         SafeProbabilisticModule(
-            in_keys=["loc", "scale"],
+            in_keys=["loc"],
             out_keys=[value_key],
-            distribution_class=TanhNormal,
-            distribution_kwargs={"tanh_loc": False},
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
         ),
     )
 
@@ -501,25 +502,15 @@ def _dreamer_make_mbenv(
 
     reward_model = SafeProbabilisticTensorDictSequential(
         SafeModule(
-            NormalParamWrapper(reward_module),
+            reward_module,
             in_keys=["state", "belief"],
-            out_keys=["reward_loc", "reward_scale"],
-            # spec=CompositeSpec(
-            #     **{
-            #         "reward_loc": UnboundedContinuousTensorSpec(
-            #             1,
-            #         ),
-            #         "reward_scale": UnboundedContinuousTensorSpec(
-            #             1,
-            #         ),
-            #     }
-            # ),
+            out_keys=["loc"],
         ),
         SafeProbabilisticModule(
-            in_keys=["reward_loc", "reward_scale"],
+            in_keys=["loc"],
             out_keys=["reward"],
-            distribution_class=TanhNormal,
-            distribution_kwargs={"tanh_loc": False},
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
         ),
     )
 
@@ -586,8 +577,8 @@ def _dreamer_make_world_model(
         SafeProbabilisticModule(
             in_keys=["loc"],
             out_keys=[("next", observation_out_key)],
-            distribution_class=TanhNormal,
-            distribution_kwargs={"tanh_loc": False},
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
         ),
     )
 
@@ -603,15 +594,15 @@ def _dreamer_make_world_model(
 
     reward_model = SafeProbabilisticTensorDictSequential(
         SafeModule(
-            NormalParamWrapper(reward_module),
+            reward_module,
             in_keys=[("next", "state"), ("next", "belief")],
-            out_keys=[("next", "loc"), ("next", "scale")],
+            out_keys=[("next", "loc")],
         ),
         SafeProbabilisticModule(
-            in_keys=[("next", "loc"), ("next", "scale")],
+            in_keys=[("next", "loc")],
             out_keys=[("next", "reward")],
-            distribution_class=TanhNormal,
-            distribution_kwargs={"tanh_loc": False},
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
         ),
     )
 

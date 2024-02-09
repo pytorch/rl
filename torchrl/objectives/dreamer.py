@@ -17,7 +17,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
-    distance_loss,
+    # distance_loss,
     hold_out_net,
     ValueEstimators,
 )
@@ -132,18 +132,16 @@ class DreamerModelLoss(LossModule):
 
         decoder = self.world_model[0][-1]
         dist = decoder.get_dist(tensordict)
-        reco_loss = -dist.log_prob(tensordict.get(("next", self.tensor_keys.pixels)))
+        reco_loss = -dist.log_prob(
+            tensordict.get(("next", self.tensor_keys.pixels))
+        ).mean()
 
         reward_model = self.world_model[1]
         dist = reward_model.get_dist(tensordict)
         reward_loss = -dist.log_prob(
             tensordict.get(("next", self.tensor_keys.true_reward))
-        )
+        ).mean()
 
-        if not self.global_average:
-            reward_loss = reward_loss.squeeze(-1)
-        reward_loss = reward_loss.mean().unsqueeze(-1)
-        # import ipdb; ipdb.set_trace()
         return (
             TensorDict(
                 {
@@ -168,14 +166,8 @@ class DreamerModelLoss(LossModule):
             + (posterior_std**2 + (prior_mean - posterior_mean) ** 2)
             / (2 * prior_std**2)
             - 0.5
-        )
-        if not self.global_average:
-            kl = kl.sum(-1)
-        if self.delayed_clamp:
-            kl = kl.mean().clamp_min(self.free_nats)
-        else:
-            kl = kl.clamp_min(self.free_nats).mean()
-        return kl
+        ).mean()
+        return kl.clamp_min(self.free_nats)
 
 
 class DreamerActorLoss(LossModule):
@@ -262,7 +254,7 @@ class DreamerActorLoss(LossModule):
             tensordict = tensordict.reshape(-1)
 
         with hold_out_net(self.model_based_env), set_exploration_type(
-            ExplorationType.RANDOM
+            ExplorationType.MODE
         ):
             tensordict = self.model_based_env.reset(tensordict.clone(recurse=False))
             fake_data = self.model_based_env.rollout(
@@ -289,9 +281,9 @@ class DreamerActorLoss(LossModule):
             discount = gamma.expand(lambda_target.shape).clone()
             discount[..., 0, :] = 1
             discount = discount.cumprod(dim=-2)
-            actor_loss = -(lambda_target * discount).sum((-2, -1)).mean()
+            actor_loss = -(lambda_target * discount).mean()
         else:
-            actor_loss = -lambda_target.sum((-2, -1)).mean()
+            actor_loss = -lambda_target.mean()
         loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
         return loss_tensordict, fake_data.detach()
 
@@ -404,35 +396,15 @@ class DreamerValueLoss(LossModule):
     def forward(self, fake_data) -> torch.Tensor:
         lambda_target = fake_data.get("lambda_target")
         tensordict_select = fake_data.select(*self.value_model.in_keys)
-        self.value_model(tensordict_select)
+        dist = self.value_model.get_dist(tensordict_select)
         if self.discount_loss:
             discount = self.gamma * torch.ones_like(
                 lambda_target, device=lambda_target.device
             )
             discount[..., 0, :] = 1
             discount = discount.cumprod(dim=-2)
-            value_loss = (
-                (
-                    discount
-                    * distance_loss(
-                        tensordict_select.get(self.tensor_keys.value),
-                        lambda_target,
-                        self.value_loss,
-                    )
-                )
-                .sum((-1, -2))
-                .mean()
-            )
+            value_loss = -(discount * dist.log_prob(lambda_target)).mean()
         else:
-            value_loss = (
-                distance_loss(
-                    tensordict_select.get(self.tensor_keys.value),
-                    lambda_target,
-                    self.value_loss,
-                )
-                .sum((-1, -2))
-                .mean()
-            )
-
+            value_loss = -dist.log_prob(lambda_target).mean()
         loss_tensordict = TensorDict({"loss_value": value_loss}, [])
         return loss_tensordict, fake_data
