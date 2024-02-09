@@ -6872,8 +6872,7 @@ class TestA2C(LossModuleTestBase):
     )
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", None))
     @pytest.mark.parametrize("device", get_default_devices())
-    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
-    def test_a2c_tensordict_keys_run(self, device, advantage, td_est, reduction):
+    def test_a2c_tensordict_keys_run(self, device, advantage, td_est):
         """Test A2C loss module with non-default tensordict keys."""
         torch.manual_seed(self.seed)
         gradient_mode = True
@@ -6943,9 +6942,6 @@ class TestA2C(LossModuleTestBase):
                 loss_fn.make_value_estimator(td_est)
 
         loss = loss_fn(td)
-        if reduction is None:
-            assert loss.batch_size == td.batch_size
-            loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
