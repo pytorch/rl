@@ -188,7 +188,25 @@ from tensordict.nn import TensorDictSequential
 from torchrl.modules import EGreedyModule
 
 policy = Actor(MLP(3, 1, num_cells=[32, 64]))
-exploration_policy = TensorDictSequential(policy, EGreedyModule(spec=env.action_spec))
+
+###################################
+# Our :math:`\epsilon`-greedy exploration module will usually be customized
+# with a number of annealing frames and an initial value for the
+# :math:`\epsilon` parameter. A value of :math:`\epsilon = 1` means that every
+# action taken is random, while :math:`\epsilon=0` means that there is no
+# exploration at all. To anneal (i.e., decrease) the exploration factor, a call
+# to :meth:`~torchrl.modules.EGreedyModule.step` is required (see the last
+# :ref:`tutorial <gs_first_training>` for an example).
+#
+exploration_module = EGreedyModule(spec=env.action_spec, annealing_num_steps=1000, eps_init=0.5)
+
+###################################
+# To build our explorative policy, we only had to concatenate the
+# deterministic policy module with the exploration module within a
+# :class:`~tensordict.nn.TensorDictSequential` module (which is the analogous
+# to :class:`~torch.nn.Sequential` in the tensordict realm).
+
+exploration_policy = TensorDictSequential(policy, exploration_module)
 
 with set_exploration_type(ExplorationType.MEAN):
     # Turns off exploration
@@ -198,14 +216,10 @@ with set_exploration_type(ExplorationType.RANDOM):
     rollout = env.rollout(max_steps=10, policy=exploration_policy)
 
 ###################################
-# To build our explorative policy, we only had to concatenate the
-# deterministic policy module with the exploration module within a
-# :class:`~tensordict.nn.TensorDictSequential` module (which is the analogous
-# to :class:`~torch.nn.Sequential` in the tensordict realm).
-#
 # Because it must be able to sample random actions in the action space, the
-# :class:`~torchrl.modules.EGreedyModule` must be equipped with the action_space
-# from the environment to know what strategy to use to sample actions.
+# :class:`~torchrl.modules.EGreedyModule` must be equipped with the
+# ``action_space`` from the environment to know what strategy to use to
+# sample actions randomly.
 #
 # Q-Value actors
 # ~~~~~~~~~~~~~~

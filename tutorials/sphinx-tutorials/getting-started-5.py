@@ -10,7 +10,8 @@ Get started with your onw first training loop
 """
 
 #################################
-# Time to wrap up everything we've learned in this Getting Started series.
+# Time to wrap up everything we've learned so far in this Getting Started
+# series!
 #
 # In this tutorial, we will be writing the most basic training loop there is
 # using only components we have presented in the previous lessons.
@@ -24,7 +25,7 @@ Get started with your onw first training loop
 # ------------------------
 #
 # We'll be using a gym environment with a :class:`~torchrl.envs.StepCounter`
-# transform. These features are presented in
+# transform. If you need a refresher, check our these features are presented in
 # :ref:`the environment tutorial <gs_env_ted>`.
 #
 import pathlib
@@ -47,8 +48,8 @@ from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 # ------------------
 #
 # The next step is to build our policy. We'll be making a regular, deterministic
-# version used within the :ref:`loss module <gs_optim>` and during
-# :ref:`exploration <gs_logging>`, and one augmented by an exploration module
+# version to be used within the :ref:`loss module <gs_optim>` and during
+# :ref:`evaluation <gs_logging>`, and one augmented by an exploration module
 # for :ref:`inference <gs_storage>`.
 
 from torchrl.modules import EGreedyModule, MLP, QValueModule
@@ -56,7 +57,6 @@ from torchrl.modules import EGreedyModule, MLP, QValueModule
 value_mlp = MLP(out_features=env.action_spec.shape[-1], num_cells=[64, 64])
 value_net = Mod(value_mlp, in_keys=["observation"], out_keys=["action_value"])
 policy = Seq(value_net, QValueModule(env.action_spec))
-# TODO: explain annealing in other tuto
 exploration_module = EGreedyModule(
     env.action_spec, annealing_num_steps=100_000, eps_init=0.5
 )
