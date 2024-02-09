@@ -73,7 +73,10 @@ policy_explore = Seq(policy, exploration_module)
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 
-collector = SyncDataCollector(env, policy, frames_per_batch=100, total_frames=-1)
+init_rand_steps = 5000
+frames_per_batch = 100
+optim_steps = 10
+collector = SyncDataCollector(env, policy, frames_per_batch=frames_per_batch, total_frames=-1, init_random_frames=init_rand_steps)
 rb = ReplayBuffer(storage=LazyTensorStorage(100_000))
 
 from torch.optim import Adam
@@ -86,7 +89,7 @@ from torch.optim import Adam
 from torchrl.objectives import DQNLoss
 
 loss = DQNLoss(value_network=policy, action_space=env.action_spec)
-optim = Adam(loss.parameters())
+optim = Adam(loss.parameters(), lr=0.02)
 
 #################################
 # Logger
@@ -110,17 +113,19 @@ total_episodes = 0
 t0 = time.time()
 for i, data in enumerate(collector):
     rb.extend(data)
-    sample = rb.sample(128)
-    loss_vals = loss(sample)
-    loss_vals["loss"].backward()
-    optim.step()
-    optim.zero_grad()
-    exploration_module.step(data.numel())
     max_length = rb[:]["next", "step_count"].max()
-    if i % 10:
-        torchrl_logger.info(f"Max num steps: {max_length}, rb length {len(rb)}")
-    total_count += data.numel()
-    total_episodes += data["next", "done"].sum()
+    if len(rb) > init_rand_steps:
+        for _ in range(optim_steps):
+            sample = rb.sample(128)
+            loss_vals = loss(sample)
+            loss_vals["loss"].backward()
+            optim.step()
+            optim.zero_grad()
+            exploration_module.step(data.numel())
+            if i % 10:
+                torchrl_logger.info(f"Max num steps: {max_length}, rb length {len(rb)}")
+            total_count += data.numel()
+            total_episodes += data["next", "done"].sum()
     if max_length > 200:
         break
 
