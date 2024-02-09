@@ -451,7 +451,7 @@ class PPOLoss(LossModule):
             entropy = dist.entropy()
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
-            entropy = -dist.log_prob(x)
+            entropy = -dist.log_prob(x).mean(0)
         return entropy.unsqueeze(-1)
 
     def _log_weight(
@@ -538,19 +538,18 @@ class PPOLoss(LossModule):
 
         log_weight, dist = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
-        td_out = TensorDict({"loss_objective": -neg_loss}, batch_size=tensordict.batch_size)
+        td_out = TensorDict(
+            {"loss_objective": -neg_loss}, batch_size=tensordict.batch_size
+        )
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set(
-                "entropy", entropy.detach()
-            )  # for logging
+            td_out.set("entropy", entropy.detach())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
-
         if self.reduction is not None:
-            td_out.apply(lambda x: _reduce(x, self.reduction), batch_size=[])
+            td_out = td_out.apply(lambda x: _reduce(x, self.reduction), batch_size=[])
 
         return td_out
 
@@ -787,20 +786,15 @@ class ClipPPOLoss(PPOLoss):
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set(
-                "entropy", entropy.detach()
-            )  # for logging
-            td_out.set(
-                "loss_entropy", -self.entropy_coef * entropy
-            )
+            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
-        td_out.set("ESS", ess / batch)
 
         if self.reduction is not None:
-            td_out.apply(lambda x: _reduce(x, self.reduction), batch_size=[])
-
+            td_out.set("ESS", ess / batch)
+            td_out = td_out.apply(lambda x: _reduce(x, self.reduction), batch_size=[])
         return td_out
 
 
@@ -1018,19 +1012,13 @@ class KLPENPPOLoss(PPOLoss):
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set(
-                "entropy", entropy.detach()
-            )  # for logging
-            td_out.set(
-                "loss_entropy", -self.entropy_coef * entropy
-            )
-
+            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
-
         if self.reduction is not None:
-            td_out.apply(lambda x: _reduce(x, self.reduction), batch_size=[])
+            td_out = td_out.apply(lambda x: _reduce(x, self.reduction), batch_size=[])
 
         return td_out
 

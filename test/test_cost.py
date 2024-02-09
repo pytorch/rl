@@ -5873,7 +5873,7 @@ class TestPPO(LossModuleTestBase):
         loss = loss_fn(td)
         if reduction is None:
             assert loss.batch_size == td.batch_size
-            loss.apply(lambda x: x.float().mean(), batch_size=[])
+            loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
 
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -5967,7 +5967,7 @@ class TestPPO(LossModuleTestBase):
         loss = loss_fn(td)
         if reduction is None:
             assert loss.batch_size == td.batch_size
-            loss.apply(lambda x: x.float().mean(), batch_size=[])
+            loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
 
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -6068,7 +6068,7 @@ class TestPPO(LossModuleTestBase):
         loss = loss_fn(td).exclude("entropy")
         if reduction is None:
             assert loss.batch_size == td.batch_size
-            loss.apply(lambda x: x.float().mean(), batch_size=[])
+            loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
 
         sum(val for key, val in loss.items() if key.startswith("loss_")).backward()
         grad = TensorDict(dict(model.named_parameters()), []).apply(
@@ -6144,7 +6144,7 @@ class TestPPO(LossModuleTestBase):
             loss = loss_fn(td)
             if reduction is None:
                 assert loss.batch_size == td.batch_size
-                loss.apply(lambda x: x.float().mean(), batch_size=[])
+                loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
 
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -6304,7 +6304,7 @@ class TestPPO(LossModuleTestBase):
         loss = loss_fn(td)
         if reduction is None:
             assert loss.batch_size == td.batch_size
-            loss.apply(lambda x: x.float().mean(), batch_size=[])
+            loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
 
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
