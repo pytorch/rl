@@ -2,12 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import argparse
 import contextlib
 import functools
 import itertools
 import operator
+import sys
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass
@@ -153,6 +153,10 @@ from torchrl.objectives.value.utils import (
     _make_gammas_tensor,
     _split_and_pad_sequence,
 )
+
+
+# Increase recursion limit, some objectives have more than 1000 tests
+sys.setrecursionlimit(2000)
 
 
 class _check_td_steady:
@@ -7286,7 +7290,10 @@ class TestReinforce(LossModuleTestBase):
         torch.manual_seed(self.seed)
         actor, critic, common, td = self._create_mock_common_layer_setup()
         loss_fn = ReinforceLoss(
-            actor_network=actor, critic_network=critic, separate_losses=separate_losses, reduction=reduction
+            actor_network=actor,
+            critic_network=critic,
+            separate_losses=separate_losses,
+            reduction=reduction,
         )
 
         loss = loss_fn(td)
