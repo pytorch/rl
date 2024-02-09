@@ -7290,7 +7290,7 @@ class TestReinforce(LossModuleTestBase):
         torch.manual_seed(self.seed)
         actor, critic, common, td = self._create_mock_common_layer_setup()
         loss_fn = ReinforceLoss(
-            actor_network=actor, critic_network=critic, separate_losses=separate_losses
+            actor_network=actor, critic_network=critic, separate_losses=separate_losses, reduction=reduction
         )
 
         loss = loss_fn(td)

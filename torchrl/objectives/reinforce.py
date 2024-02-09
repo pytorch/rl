@@ -396,7 +396,6 @@ class ReinforceLoss(LossModule):
         if log_prob.shape == advantage.shape[:-1]:
             log_prob = log_prob.unsqueeze(-1)
         loss_actor = -log_prob * advantage.detach()
-        loss_actor = loss_actor.mean()
         td_out = TensorDict(
             {"loss_actor": loss_actor}, batch_size=tensordict.batch_size
         )
