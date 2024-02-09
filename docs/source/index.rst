@@ -73,6 +73,7 @@ Getting started
    tutorials/getting-started-2
    tutorials/getting-started-3
    tutorials/getting-started-4
+   tutorials/getting-started-5
 
 Tutorials
 =========
