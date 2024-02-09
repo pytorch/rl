@@ -6054,6 +6054,7 @@ class TestPPO(LossModuleTestBase):
             loss_critic_type="l2",
             separate_losses=separate_losses,
             entropy_coef=0.0,
+            reduction=reduction,
         )
 
         loss_fn2 = loss_class(
@@ -6062,6 +6063,7 @@ class TestPPO(LossModuleTestBase):
             loss_critic_type="l2",
             separate_losses=separate_losses,
             entropy_coef=0.0,
+            reduction=reduction,
         )
 
         if advantage is not None:
@@ -6127,7 +6129,7 @@ class TestPPO(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(actor, value, loss_critic_type="l2")
+        loss_fn = loss_class(actor, value, loss_critic_type="l2", reduction=reduction)
 
         params = TensorDict.from_module(loss_fn, as_module=True)
 
@@ -6287,7 +6289,7 @@ class TestPPO(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(actor, value, loss_critic_type="l2")
+        loss_fn = loss_class(actor, value, loss_critic_type="l2", reduction=reduction)
         loss_fn.set_keys(**tensor_keys)
         if advantage is not None:
             # collect tensordict key names for the advantage module
