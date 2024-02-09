@@ -6,7 +6,7 @@ import contextlib
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Tuple, overload
+from typing import overload, Tuple
 
 import torch
 from tensordict import TensorDict, TensorDictBase, unravel_key
@@ -448,9 +448,17 @@ class A2CLoss(LossModule):
             return None
         return self.critic_network_params.detach()
 
-
     @overload
-    def forward(self, *, action, next_reward, next_terminated, next_truncated, next_observation, observation):
+    def forward(
+        self,
+        *,
+        action,
+        next_reward,
+        next_terminated,
+        next_truncated,
+        next_observation,
+        observation,
+    ):
         # The key names can be extrapolated from test_a2c_notensordict in test/test_cost.py
         ...
 
