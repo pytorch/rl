@@ -198,7 +198,9 @@ policy = Actor(MLP(3, 1, num_cells=[32, 64]))
 # to :meth:`~torchrl.modules.EGreedyModule.step` is required (see the last
 # :ref:`tutorial <gs_first_training>` for an example).
 #
-exploration_module = EGreedyModule(spec=env.action_spec, annealing_num_steps=1000, eps_init=0.5)
+exploration_module = EGreedyModule(
+    spec=env.action_spec, annealing_num_steps=1000, eps_init=0.5
+)
 
 ###################################
 # To build our explorative policy, we only had to concatenate the

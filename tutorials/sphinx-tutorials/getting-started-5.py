@@ -93,11 +93,14 @@ from torch.optim import Adam
 # Loss module and optimizer
 # -------------------------
 #
+# We build our loss as indicated in the :ref:`dedicated tutorial <gs_optim>`, with
+# its optimizer and target parameter updater:
 
-from torchrl.objectives import DQNLoss
+from torchrl.objectives import DQNLoss, SoftUpdate
 
-loss = DQNLoss(value_network=policy, action_space=env.action_spec)
+loss = DQNLoss(value_network=policy, action_space=env.action_spec, delay_value=True)
 optim = Adam(loss.parameters(), lr=0.02)
+updater = SoftUpdate(loss, eps=0.99)
 
 #################################
 # Logger
@@ -109,7 +112,7 @@ optim = Adam(loss.parameters(), lr=0.02)
 from torchrl._utils import logger as torchrl_logger
 from torchrl.record import CSVLogger, VideoRecorder
 
-path = pathlib.Path(__file__).parent / "training_loop"
+path = "./training_loop"
 logger = CSVLogger(exp_name="dqn", log_dir=path, video_format="mp4")
 video_recorder = VideoRecorder(logger, tag="video")
 record_env = TransformedEnv(
@@ -144,6 +147,7 @@ for i, data in enumerate(collector):
                 torchrl_logger.info(f"Max num steps: {max_length}, rb length {len(rb)}")
             total_count += data.numel()
             total_episodes += data["next", "done"].sum()
+            updater.step()
     if max_length > 200:
         break
 

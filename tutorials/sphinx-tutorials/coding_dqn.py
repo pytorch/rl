@@ -4,6 +4,8 @@ TorchRL trainer: A DQN example
 ==============================
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
+.. _coding_dqn:
+
 """
 
 ##############################################################################
