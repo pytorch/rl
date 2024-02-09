@@ -338,13 +338,17 @@ sample = rb.sample(10)
 ######################################################################
 # With pytrees, any callable can be used as a transform:
 
+
 def transform(x):
     # Zeros all the data in the pytree
     return tree_map(lambda y: y * 0, x)
 
+
 rb.append_transform(transform)
 sample = rb.sample(batch_size=12)
 
+
+######################################################################
 # let's check that our transform did its job:
 def assert0(x):
     assert (x == 0).all()
