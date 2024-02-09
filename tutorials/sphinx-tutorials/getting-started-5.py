@@ -28,7 +28,6 @@ Get started with your onw first training loop
 # transform. If you need a refresher, check our these features are presented in
 # :ref:`the environment tutorial <gs_env_ted>`.
 #
-import pathlib
 
 import torch
 
