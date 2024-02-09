@@ -6,10 +6,10 @@ import contextlib
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, overload
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -351,7 +351,12 @@ class A2CLoss(LossModule):
         ]
         if self.critic_coef:
             keys.extend(self.critic.in_keys)
-        return list(set(keys))
+        out_keys = []
+        for key in keys:
+            key = unravel_key(key)
+            if key not in keys:
+                out_keys.append(key)
+        return out_keys
 
     @property
     def out_keys(self):
@@ -442,6 +447,12 @@ class A2CLoss(LossModule):
         if not self.functional:
             return None
         return self.critic_network_params.detach()
+
+
+    @overload
+    def forward(self, *, action, next_reward, next_terminated, next_truncated, next_observation, observation):
+        # The key names can be extrapolated from test_a2c_notensordict in test/test_cost.py
+        ...
 
     @dispatch()
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
