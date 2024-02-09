@@ -538,16 +538,20 @@ class PPOLoss(LossModule):
 
         log_weight, dist = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
-        td_out = TensorDict({"loss_objective": -_reduce(neg_loss, self.reduction)}, [])
+        td_out = TensorDict({"loss_objective": -neg_loss}, batch_size=tensordict.batch_size)
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set(
-                "entropy", _reduce(entropy.detach(), self.reduction)
+                "entropy", entropy.detach()
             )  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * _reduce(entropy))
+            td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
-            td_out.set("loss_critic", _reduce(loss_critic, self.reduction))
+            td_out.set("loss_critic", loss_critic)
+
+        if self.reduction is not None:
+            td_out.apply(lambda x: _reduce(x, self.reduction), batch_size=[])
+
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
@@ -779,20 +783,24 @@ class ClipPPOLoss(PPOLoss):
         gain2 = log_weight_clip.exp() * advantage
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
-        td_out = TensorDict({"loss_objective": -_reduce(gain, self.reduction)}, [])
+        td_out = TensorDict({"loss_objective": -gain}, batch_size=tensordict.batch_size)
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set(
-                "entropy", _reduce(entropy, self.reduction).detach()
+                "entropy", entropy.detach()
             )  # for logging
             td_out.set(
-                "loss_entropy", -self.entropy_coef * _reduce(entropy, self.reduction)
+                "loss_entropy", -self.entropy_coef * entropy
             )
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
-            td_out.set("loss_critic", _reduce(loss_critic, self.reduction))
-        td_out.set("ESS", _reduce(ess, self.reduction) / batch)
+            td_out.set("loss_critic", loss_critic)
+        td_out.set("ESS", ess / batch)
+
+        if self.reduction is not None:
+            td_out.apply(lambda x: _reduce(x, self.reduction), batch_size=[])
+
         return td_out
 
 
@@ -1002,24 +1010,27 @@ class KLPENPPOLoss(PPOLoss):
             self.beta.data *= self.decrement
         td_out = TensorDict(
             {
-                "loss_objective": -_reduce(neg_loss, self.reduction),
-                "kl": _reduce(kl.detach(), self.reduction),
+                "loss_objective": -neg_loss,
+                "kl": kl.detach(),
             },
-            [],
+            batch_size=tensordict.batch_size,
         )
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set(
-                "entropy", _reduce(entropy, self.reduction).detach()
+                "entropy", entropy.detach()
             )  # for logging
             td_out.set(
-                "loss_entropy", -self.entropy_coef * _reduce(entropy, self.reduction)
+                "loss_entropy", -self.entropy_coef * entropy
             )
 
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
-            td_out.set("loss_critic", _reduce(loss_critic, self.reduction))
+            td_out.set("loss_critic", loss_critic)
+
+        if self.reduction is not None:
+            td_out.apply(lambda x: _reduce(x, self.reduction), batch_size=[])
 
         return td_out
 
