@@ -168,7 +168,10 @@ video_recorder.dump()
 
 #################################
 #
-# .. figure:: ./training_loop/dqn/videos/video_0.mp4
+# This is what your rendered CartPole video will look like after a full
+# training loop:
+#
+# .. figure:: /_static/img/cartpole.gif
 #
 # This concludes our series of "Getting started with TorchRL" tutorials!
 # Feel free to share feedback about it on GitHub.

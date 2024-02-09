@@ -5,6 +5,8 @@ Using Replay Buffers
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
+.. _rb_tuto:
+
 """
 ######################################################################
 # Replay buffers are a central piece of any RL or control algorithm.
@@ -30,9 +32,13 @@ Using Replay Buffers
 #
 #
 # In this tutorial, you will learn:
-# - How to build a Replay Buffer (RB) and use it with any datatype;
-# - How to use RBs with TensorDict;
-# - How to sample from or iterate over a replay buffer, and how to define the sampling strategy;
+#
+# - How to build a :ref:`Replay Buffer (RB) <vanilla_rb>` and use it with
+#   any datatype;
+# - How to customize the :ref:`buffer's storage <buffer_storage>`;
+# - How to use :ref:`RBs with TensorDict <td_rb>`;
+# - How to :ref:`sample from or iterate over a replay buffer <sampling_rb>`,
+#   and how to define the sampling strategy;
 # - How to use prioritized replay buffers;
 # - How to transform data coming in and out from the buffer;
 # - How to store trajectories in the buffer.
@@ -40,6 +46,8 @@ Using Replay Buffers
 #
 # Basics: building a vanilla replay buffer
 # ----------------------------------------
+#
+# .. _vanilla_rb:
 #
 # TorchRL's replay buffers are designed to prioritize modularity,
 # composability, efficiency, and simplicity. For instance, creating a basic
@@ -77,7 +85,7 @@ buffer = ReplayBuffer()
 
 ######################################################################
 # By default, this replay buffer will have a size of 1000. Let's check this
-# by populating our buffer using the :meth:`torchrl.data.ReplayBuffer.extend`
+# by populating our buffer using the :meth:`~torchrl.data.ReplayBuffer.extend`
 # method:
 #
 
@@ -87,24 +95,24 @@ buffer.extend(range(2000))
 
 print("length after adding elements:", len(buffer))
 
-import torch
-from tensordict import TensorDict
-
 ######################################################################
-# We have used the :meth:`torchrl.data.ReplayBuffer.extend` method which is
+# We have used the :meth:`~torchrl.data.ReplayBuffer.extend` method which is
 # designed to add multiple items all at once. If the object that is passed
 # to ``extend`` has more than one dimension, its first dimension is
 # considered to be the one to be split in separate elements in the buffer.
+#
 # This essentially means that when adding multidimensional tensors or
 # tensordicts to the buffer, the buffer will only look at the first dimension
 # when counting the elements it holds in memory.
 # If the object passed it not iterable, an exception will be thrown.
 #
-# To add items one at a time, the :meth:`torchrl.data.ReplayBuffer.add` method
+# To add items one at a time, the :meth:`~torchrl.data.ReplayBuffer.add` method
 # should be used instead.
 #
 # Customizing the storage
-# ~~~~~~~~~~~~~~~~~~~~~~~
+# -----------------------
+#
+# .. _buffer_storage:
 #
 # We see that the buffer has been capped to the first 1000 elements that we
 # passed to it.
@@ -112,25 +120,27 @@ from tensordict import TensorDict
 #
 # TorchRL proposes three types of storages:
 #
-# - The :class:`torchrl.dataListStorage` stores elements independently in a
+# - The :class:`~torchrl.data.ListStorage` stores elements independently in a
 #   list. It supports any data type, but this flexibility comes at the cost
 #   of efficiency;
-# - The :class:`torchrl.dataLazyTensorStorage` stores tensors or
-#   :class:`tensordidct.TensorDict` (or :class:`torchrl.data.tensorclass`)
+# - The :class:`~torchrl.data.LazyTensorStorage` stores tensors data
+#   structures contiguously.
+#   It works naturally with :class:`~tensordidct.TensorDict`
+#   (or :class:`~torchrl.data.tensorclass`)
 #   objects. The storage is contiguous on a per-tensor basis, meaning that
 #   sampling will be more efficient than when using a list, but the
 #   implicit restriction is that any data passed to it must have the same
-#   basic properties as the
-#   first batch of data that was used to instantiate the buffer.
+#   basic properties (such as shape and dtype) as the first batch of data that
+#   was used to instantiate the buffer.
 #   Passing data that does not match this requirement will either raise an
 #   exception or lead to some undefined behaviours.
-# - The :class:`torchrl.dataLazyMemmapStorage` works as the
-#   :class:`torchrl.data.LazyTensorStorage` in that it is lazy (ie. it
+# - The :class:`~torchrl.data.LazyMemmapStorage` works as the
+#   :class:`~torchrl.data.LazyTensorStorage` in that it is lazy (i.e., it
 #   expects the first batch of data to be instantiated), and it requires data
 #   that match in shape and dtype for each batch stored. What makes this
-#   storage unique is that it points to disk files, meaning that it can
-#   support very large datasets while still accessing data in a contiguous
-#   manner.
+#   storage unique is that it points to disk files (or uses the filesystem
+#   storage), meaning that it can support very large datasets while still
+#   accessing data in a contiguous manner.
 #
 # Let us see how we can use each of these storages:
 
@@ -149,9 +159,9 @@ print(buffer_list.sample(3))
 
 ######################################################################
 # Because it is the one with the lowest amount of assumption, the
-# :class:`torchrl.data.ListStorage` is the default storage in TorchRL.
+# :class:`~torchrl.data.ListStorage` is the default storage in TorchRL.
 #
-# A :class:`torchrl.data.LazyTensorStorage` can store data contiguously.
+# A :class:`~torchrl.data.LazyTensorStorage` can store data contiguously.
 # This should be the preferred option when dealing with complicated but
 # unchanging data structures of medium size:
 
@@ -161,6 +171,10 @@ buffer_lazytensor = ReplayBuffer(storage=LazyTensorStorage(size))
 # Let us create a batch of data of size ``torch.Size([3])` with 2 tensors
 # stored in it:
 #
+
+import torch
+from tensordict import TensorDict
+
 data = TensorDict(
     {
         "a": torch.arange(12).view(3, 4),
@@ -171,7 +185,7 @@ data = TensorDict(
 print(data)
 
 ######################################################################
-# The first call to :meth:`torchrl.data.ReplayBuffer.extend` will
+# The first call to :meth:`~torchrl.data.ReplayBuffer.extend` will
 # instantiate the storage. The first dimension of the data is unbound into
 # separate datapoints:
 
@@ -186,7 +200,7 @@ sample = buffer_lazytensor.sample(5)
 print("samples", sample["a"], sample["b", "c"])
 
 ######################################################################
-# A :class:`torchrl.data.LazyMemmapStorage` is created in the same manner:
+# A :class:`~torchrl.data.LazyMemmapStorage` is created in the same manner:
 #
 
 buffer_lazymemmap = ReplayBuffer(storage=LazyMemmapStorage(size))
@@ -213,16 +227,20 @@ print(
 # Integration with TensorDict
 # ---------------------------
 #
+# .. _td_rb:
+#
 # The tensor location follows the same structure as the TensorDict that
 # contains them: this makes it easy to save and load buffers during training.
 #
-# To use :class:`tensordict.TensorDict` as a data carrier at its fullest
-# potential, the :class:`torchrl.data.TensorDictReplayBuffer` class should
+# To use :class:`~tensordict.TensorDict` as a data carrier at its fullest
+# potential, the :class:`~torchrl.data.TensorDictReplayBuffer` class can
 # be used.
 # One of its key benefits is its ability to handle the organization of sampled
 # data, along with any additional information that may be required
 # (such as sample indices).
-# It can be built in the same manner as a standard :class:`torchrl.data.ReplayBuffer` and can
+#
+# It can be built in the same manner as a standard
+# :class:`~torchrl.data.ReplayBuffer` and can
 # generally be used interchangeably.
 #
 
@@ -250,7 +268,7 @@ print(sample["index"])
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # The ReplayBuffer class and associated subclasses also work natively with
-# :class:`tensordict.tensorclass` classes, which can conviniently be used to
+# :class:`~tensordict.tensorclass` classes, which can conveniently be used to
 # encode datasets in a more explicit manner:
 
 from tensordict import tensorclass
@@ -284,31 +302,28 @@ print("sample:", sample)
 ######################################################################
 # As expected. the data has the proper class and shape!
 #
-# Integration with PyTree
-# ~~~~~~~~~~~~~~~~~~~~~~~
+# Integration with other tensor structures (PyTrees)
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # TorchRL's replay buffers also work with any pytree data structure.
 # A PyTree is a nested structure of arbitrary depth made of dicts, lists and/or
 # tuples where the leaves are tensors.
 # This means that one can store in contiguous memory any such tree structure!
 # Various storages can be used:
-# :class:`~torchrl.data.replay_buffers.TensorStorage`, :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`
-# or :class:`~torchrl.data.replay_buffers.LazyTensorStorage` all accept this kind of data.
+# :class:`~torchrl.data.replay_buffers.TensorStorage`,
+# :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`
+# or :class:`~torchrl.data.replay_buffers.LazyTensorStorage` all accept this
+# kind of data.
 #
-# Here is a bried demonstration of what this feature looks like:
+# Here is a brief demonstration of what this feature looks like:
 #
 
 from torch.utils._pytree import tree_map
 
 
-# With pytrees, any callable can be used as a transform:
-def transform(x):
-    # Zeros all the data in the pytree
-    return tree_map(lambda y: y * 0, x)
-
-
+######################################################################
 # Let's build our replay buffer on disk:
-rb = ReplayBuffer(storage=LazyMemmapStorage(size), transform=transform)
+rb = ReplayBuffer(storage=LazyMemmapStorage(size))
 data = {
     "a": torch.randn(3),
     "b": {"c": (torch.zeros(2), [torch.ones(1)])},
@@ -320,6 +335,16 @@ rb.add(data)
 sample = rb.sample(10)
 
 
+######################################################################
+# With pytrees, any callable can be used as a transform:
+
+def transform(x):
+    # Zeros all the data in the pytree
+    return tree_map(lambda y: y * 0, x)
+
+rb.append_transform(transform)
+sample = rb.sample(batch_size=12)
+
 # let's check that our transform did its job:
 def assert0(x):
     assert (x == 0).all()
@@ -328,8 +353,11 @@ def assert0(x):
 tree_map(assert0, sample)
 
 
+######################################################################
 # Sampling and iterating over buffers
 # -----------------------------------
+#
+# .. _sampling_rb:
 #
 # Replay Buffers support multiple sampling strategies:
 #
@@ -338,7 +366,7 @@ tree_map(assert0, sample)
 # - With a fixed batch-size, the replay buffer can be iterated over to gather
 #   samples;
 # - If the batch-size is dynamic, it can be passed to the
-#   :class:`torchrl.data.ReplayBuffer.sample` method
+#   :class:`~torchrl.data.ReplayBuffer.sample` method
 #   on-the-fly.
 #
 # Sampling can be done using multithreading, but this is incompatible with the
@@ -349,6 +377,7 @@ tree_map(assert0, sample)
 #
 # Fixed batch-size
 # ~~~~~~~~~~~~~~~~
+#
 # If the batch-size is passed during construction, it should be omited when
 # sampling:
 
@@ -398,7 +427,8 @@ for i, data in enumerate(buffer_lazymemmap):
 ######################################################################
 # Due to the fact that our sampling technique is entirely random and does not
 # prevent replacement, the iterator in question is infinite. However, we can
-# make use of the :class:`torchrl.data.replay_buffers.SamplerWithoutReplacement`
+# make use of the
+# :class:`~torchrl.data.replay_buffers.SamplerWithoutReplacement`
 # instead, which will transform our buffer into a finite iterator:
 #
 
@@ -512,7 +542,7 @@ print(info)
 # only if a prioritized buffer is being used.
 #
 # Let us see how we can improve this with TensorDict. We saw that the
-# :class:`torchrl.data.TensorDictReplayBuffer` returns data augmented with
+# :class:`~torchrl.data.TensorDictReplayBuffer` returns data augmented with
 # their relative storage indices. One feature we did not mention is that
 # this class also ensures that the priority
 # signal is automatically parsed to the prioritized sampler if present during
@@ -685,7 +715,7 @@ print(rb.sample())
 # A more complex examples: using CatFrames
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# The :class:`torchrl.envs.CatFrames` transform unfolds the observations
+# The :class:`~torchrl.envs.CatFrames` transform unfolds the observations
 # through time, creating a n-back memory of past events that allow the model
 # to take the past events into account (in the case of POMDPs or with
 # recurrent policies such as Decision Transformers). Storing these concatenated
