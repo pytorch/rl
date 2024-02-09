@@ -6,9 +6,29 @@ Get started with Environments, TED and transforms
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
+.. _gs_env_ted:
+
 """
 
 ################################
+# Welcome to the getting started tutorials!
+#
+# Below is the list of the topics we will be covering.
+#
+# - :ref:`Environments, TED and transforms <gs_env_ted>`;
+# - :ref:`TorchRL's modules <gs_modules>`;
+# - :ref:`Losses and optimization <gs_optim>`;
+# - :ref:`Data collection and storage <gs_storage>`;
+# - :ref:`TorchRL's logging API <gs_logging>`.
+#
+# If you are in a hurry, you can jump straight away to the last tutorial,
+# :ref:`Your onw first training loop <gs_first_training>`, from where you can
+# backtrack every other "Getting Started" tutorial if things are not clear or
+# if you want to learn more about a specific topic!
+#
+# Environments in RL
+# ~~~~~~~~~~~~~~~~~~
+#
 # The standard RL (Reinforcement Learning) training loop involves a model,
 # also known as a policy, which is trained to accomplish a task within a
 # specific environment. Often, this environment is a simulator that accepts
@@ -196,9 +216,15 @@ print(rollout["next", "truncated"])
 #   together :meth:`~torchrl.envs.EnvBase.step`,
 #   :func:`~torchrl.envs.step_mdp` and
 #   :meth:`~torchrl.envs.EnvBase.reset`.
-# - The batched environments, in particular :class:`~torchrl.envs.ParallelEnv` which
-#   allows you to run multiple copies of one same (or different!) environments on multiple processes.
-# - Design your own environment with the :ref:`Pendulum tutorial <pendulum_tuto>` and learn
-#   about specs and stateless environments.
-# - See the more in-depth tutorial about environments :ref:`in the dedicated tutorial <env_tuto>`.
+# - Some environments like :class:`~torchrl.envs.GymEnv` support rendering
+#   through the ``from_pixels`` argument. Check the class docstrings to know
+#   more!
+# - The batched environments, in particular :class:`~torchrl.envs.ParallelEnv`
+#   which allows you to run multiple copies of one same (or different!)
+#   environments on multiple processes.
+# - Design your own environment with the
+#   :ref:`Pendulum tutorial <pendulum_tuto>` and learn about specs and
+#   stateless environments.
+# - See the more in-depth tutorial about environments
+#   :ref:`in the dedicated tutorial <envs_tuto>`.
 #
