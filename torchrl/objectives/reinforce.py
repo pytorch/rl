@@ -29,6 +29,8 @@ from torchrl.objectives.value import (
     VTrace,
 )
 
+from .utils import _reduce
+
 
 class ReinforceLoss(LossModule):
     """Reinforce loss module.
@@ -60,6 +62,10 @@ class ReinforceLoss(LossModule):
             Functionalizing permits features like meta-RL, but makes it
             impossible to use distributed models (DDP, FSDP, ...) and comes
             with a little cost. Defaults to ``True``.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -223,6 +229,7 @@ class ReinforceLoss(LossModule):
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
+        reduction: str = "mean",
     ) -> None:
         if actor is not None:
             actor_network = actor
@@ -249,6 +256,7 @@ class ReinforceLoss(LossModule):
 
         self.delay_value = delay_value
         self.loss_critic_type = loss_critic_type
+        self.reduction = reduction
 
         # Actor
         if self.functional:
@@ -389,9 +397,13 @@ class ReinforceLoss(LossModule):
             log_prob = log_prob.unsqueeze(-1)
         loss_actor = -log_prob * advantage.detach()
         loss_actor = loss_actor.mean()
-        td_out = TensorDict({"loss_actor": loss_actor}, [])
+        td_out = TensorDict(
+            {"loss_actor": loss_actor}, batch_size=tensordict.batch_size
+        )
 
-        td_out.set("loss_value", self.loss_critic(tensordict).mean())
+        td_out.set("loss_value", self.loss_critic(tensordict))
+        if self.reduction is not None:
+            td_out = td_out.apply(lambda x: _reduce(x, self.reduction), batch_size=[])
 
         return td_out
 

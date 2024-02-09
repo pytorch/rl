@@ -6080,7 +6080,7 @@ class TestPPO(LossModuleTestBase):
         loss2 = loss_fn2(td).exclude("entropy")
         if reduction is None:
             assert loss2.batch_size == td.batch_size
-            loss2.apply(lambda x: x.float().mean(), batch_size=[])
+            loss2 = loss2.apply(lambda x: x.float().mean(), batch_size=[])
 
         model.zero_grad()
         sum(val for key, val in loss2.items() if key.startswith("loss_")).backward()
@@ -6582,7 +6582,8 @@ class TestA2C(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("functional", (True, False))
-    def test_a2c(self, device, gradient_mode, advantage, td_est, functional):
+    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
+    def test_a2c(self, device, gradient_mode, advantage, td_est, functional, reduction):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_a2c(device=device)
 
@@ -6612,7 +6613,13 @@ class TestA2C(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = A2CLoss(actor, value, loss_critic_type="l2", functional=functional)
+        loss_fn = A2CLoss(
+            actor,
+            value,
+            loss_critic_type="l2",
+            functional=functional,
+            reduction=reduction,
+        )
 
         # Check error is raised when actions require grads
         td["action"].requires_grad = True
@@ -6629,6 +6636,9 @@ class TestA2C(LossModuleTestBase):
         elif td_est is not None:
             loss_fn.make_value_estimator(td_est)
         loss = loss_fn(td)
+        if reduction is None:
+            assert loss.batch_size == td.batch_size
+            loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
@@ -6671,11 +6681,15 @@ class TestA2C(LossModuleTestBase):
         loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("separate_losses", [False, True])
-    def test_a2c_separate_losses(self, separate_losses):
+    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
+    def test_a2c_separate_losses(self, separate_losses, reduction):
         torch.manual_seed(self.seed)
         actor, critic, common, td = self._create_mock_common_layer_setup()
         loss_fn = A2CLoss(
-            actor_network=actor, critic_network=critic, separate_losses=separate_losses
+            actor_network=actor,
+            critic_network=critic,
+            separate_losses=separate_losses,
+            reduction=reduction,
         )
 
         # Check error is raised when actions require grads
@@ -6689,6 +6703,9 @@ class TestA2C(LossModuleTestBase):
 
         td = td.exclude(loss_fn.tensor_keys.value_target)
         loss = loss_fn(td)
+        if reduction is None:
+            assert loss.batch_size == td.batch_size
+            loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
@@ -6729,7 +6746,8 @@ class TestA2C(LossModuleTestBase):
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_a2c_diff(self, device, gradient_mode, advantage):
+    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
+    def test_a2c_diff(self, device, gradient_mode, advantage, reduction):
         if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
             raise pytest.skip("make_functional_with_buffers needs to be changed")
         torch.manual_seed(self.seed)
@@ -6761,13 +6779,16 @@ class TestA2C(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
+        loss_fn = A2CLoss(actor, value, loss_critic_type="l2", reduction=reduction)
 
         floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
 
         if advantage is not None:
             advantage(td)
         loss = floss_fn(params, buffers, td)
+        if reduction is None:
+            assert loss.batch_size == td.batch_size
+            loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
@@ -6851,7 +6872,8 @@ class TestA2C(LossModuleTestBase):
     )
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", None))
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_a2c_tensordict_keys_run(self, device, advantage, td_est):
+    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
+    def test_a2c_tensordict_keys_run(self, device, advantage, td_est, reduction):
         """Test A2C loss module with non-default tensordict keys."""
         torch.manual_seed(self.seed)
         gradient_mode = True
@@ -6921,6 +6943,9 @@ class TestA2C(LossModuleTestBase):
                 loss_fn.make_value_estimator(td_est)
 
         loss = loss_fn(td)
+        if reduction is None:
+            assert loss.batch_size == td.batch_size
+            loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
@@ -7028,8 +7053,9 @@ class TestReinforce(LossModuleTestBase):
     @pytest.mark.parametrize(
         "delay_value,functional", [[False, True], [False, False], [True, True]]
     )
+    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
     def test_reinforce_value_net(
-        self, advantage, gradient_mode, delay_value, td_est, functional
+        self, advantage, gradient_mode, delay_value, td_est, functional, reduction
     ):
         n_obs = 3
         n_act = 5
@@ -7077,6 +7103,7 @@ class TestReinforce(LossModuleTestBase):
             critic_network=value_net,
             delay_value=delay_value,
             functional=functional,
+            reduction=reduction,
         )
 
         td = TensorDict(
@@ -7108,6 +7135,9 @@ class TestReinforce(LossModuleTestBase):
             elif td_est is not None:
                 loss_fn.make_value_estimator(td_est)
             loss_td = loss_fn(td)
+            if reduction is None:
+                assert loss_td.batch_size == td.batch_size
+                loss_td = loss_td.apply(lambda x: x.float().mean(), batch_size=[])
             autograd.grad(
                 loss_td.get("loss_actor"),
                 actor_net.parameters(),
@@ -7255,7 +7285,8 @@ class TestReinforce(LossModuleTestBase):
         return actor, critic, common, td
 
     @pytest.mark.parametrize("separate_losses", [False, True])
-    def test_reinforce_tensordict_separate_losses(self, separate_losses):
+    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
+    def test_reinforce_tensordict_separate_losses(self, separate_losses, reduction):
         torch.manual_seed(self.seed)
         actor, critic, common, td = self._create_mock_common_layer_setup()
         loss_fn = ReinforceLoss(
@@ -7263,6 +7294,9 @@ class TestReinforce(LossModuleTestBase):
         )
 
         loss = loss_fn(td)
+        if reduction is None:
+            assert loss.batch_size == td.batch_size
+            loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
 
         assert all(
             (p.grad is None) or (p.grad == 0).all()
