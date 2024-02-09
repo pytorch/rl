@@ -25,6 +25,7 @@ from torchrl.modules.utils import mappings
 
 __all__ = [
     "NormalParamWrapper",
+    "ConstantNormalScaleWrapper",
     "TanhNormal",
     "Delta",
     "TanhDelta",
@@ -159,6 +160,65 @@ class NormalParamWrapper(nn.Module):
             net_output, *others = net_output
         loc, scale = net_output.chunk(2, -1)
         scale = mappings(self.scale_mapping)(scale).clamp_min(self.scale_lb)
+        return (loc, scale, *others)
+
+
+class ConstantNormalScaleWrapper(nn.Module):
+    """A wrapper for normal distribution parameters to use a constant scale.
+
+    Args:
+        operator (nn.Module): operator whose output will be transformed_in in location and scale parameters
+        scale_value (float, optional): constant value for the scale. Default is 1.0.
+
+    Examples:
+        >>> from torch import nn
+        >>> import torch
+        >>> module = nn.Linear(3, 4)
+        >>> scale_value = 0.5
+        >>> module_normal = ConstantNormalScaleWrapper(module, scale_value=scale_value)
+        >>> tensor = torch.randn(3)
+        >>> loc, scale = module_normal(tensor)
+        >>> print(loc.shape, scale.shape)
+        torch.Size([4]) torch.Size([4])
+        >>> assert (scale == scale_value).all()
+        >>> # with modules that return more than one tensor
+        >>> module = nn.LSTM(3, 4)
+        >>> module_normal = ConstantNormalScaleWrapper(module)
+        >>> tensor = torch.randn(4, 2, 3)
+        >>> loc, scale, others = module_normal(tensor)
+        >>> print(loc.shape, scale.shape)
+        torch.Size([4, 2, 4]) torch.Size([4, 2, 4])
+        >>> assert (scale == 1).all()
+
+    """
+
+    arg_constraints = {
+        "scale_value": constraints.greater_than_eq(0),
+    }
+
+    def __init__(
+        self,
+        operator: nn.Module,
+        scale_value: float = 1.0,
+    ) -> None:
+        super().__init__()
+
+        if not self.arg_constraints["scale_value"].check(torch.tensor(scale_value)):
+            raise ValueError(
+                f"scale_value must be greater than or equal to 0, got {scale_value}"
+            )
+
+        self.operator = operator
+        self.scale_value = scale_value
+
+    def forward(self, *tensors: torch.Tensor) -> Tuple[torch.Tensor]:
+        net_output = self.operator(*tensors)
+        others = ()
+        if not isinstance(net_output, torch.Tensor):
+            loc, *others = net_output
+        else:
+            loc = net_output
+        scale = torch.full_like(loc, self.scale_value).to(loc.device)
         return (loc, scale, *others)
 
 

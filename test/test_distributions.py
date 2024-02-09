@@ -13,6 +13,7 @@ from _utils_internal import get_default_devices
 from tensordict import TensorDictBase
 from torch import autograd, nn
 from torchrl.modules import (
+    ConstantNormalScaleWrapper,
     NormalParamWrapper,
     OneHotCategorical,
     ReparamGradientStrategy,
@@ -210,6 +211,44 @@ def test_normal_mapping(batch_size, device, scale_mapping, action_dim=11, state_
                 NotImplementedError, match="Unknown mapping " "raise_error"
             ):
                 loc, scale = module(torch.randn(*batch_size, state_dim, device=device))
+
+
+@pytest.mark.parametrize(
+    "batch_size",
+    [
+        (3,),
+        (
+            5,
+            7,
+        ),
+    ],
+)
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize(
+    "scale_value",
+    [1, 0.4, 0, -1],
+)
+def test_constant_normal_scale_mapping(
+    batch_size, device, scale_value, action_dim=11, state_dim=3
+):
+    torch.manual_seed(0)
+    for _ in range(100):
+        module = nn.LazyLinear(action_dim).to(device)
+        if scale_value < 0:
+            with pytest.raises(
+                ValueError,
+                match=f"scale_value must be greater than or equal to 0, got {scale_value}",
+            ):
+                _ = ConstantNormalScaleWrapper(module, scale_value=scale_value).to(
+                    device
+                )
+        else:
+            module = ConstantNormalScaleWrapper(module, scale_value=scale_value).to(
+                device
+            )
+            loc, scale = module(torch.randn(*batch_size, state_dim, device=device))
+            assert (scale >= 0).all()
+            assert (scale == scale_value).all()
 
 
 @pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])

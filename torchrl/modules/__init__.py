@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from .distributions import (
+    ConstantNormalScaleWrapper,
     Delta,
     distributions_maps,
     IndependentNormal,

@@ -5,6 +5,7 @@
 
 from .continuous import (
     __all__ as _all_continuous,
+    ConstantNormalScaleWrapper,
     Delta,
     IndependentNormal,
     NormalParamWrapper,
