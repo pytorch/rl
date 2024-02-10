@@ -42,7 +42,7 @@ Using Replay Buffers
 # - How to use :ref:`prioritized replay buffers <tuto_rb_prb>`;
 # - How to :ref:`transform data <tuto_rb_transform>` coming in and out from 
 #   the buffer;
-# - How to store :ref:`trajectories <_tuto_rb_traj>` in the buffer.
+# - How to store :ref:`trajectories <tuto_rb_traj>` in the buffer.
 #
 #
 # Basics: building a vanilla replay buffer
