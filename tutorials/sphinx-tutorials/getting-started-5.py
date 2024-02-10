@@ -46,9 +46,12 @@ from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 # Designing a policy
 # ------------------
 #
-# The next step is to build our policy. We'll be making a regular, deterministic
-# version to be used within the :ref:`loss module <gs_optim>` and during
-# :ref:`evaluation <gs_logging>`, and one augmented by an exploration module
+# The next step is to build our policy. 
+# We'll be making a regular, deterministic
+# version of the actor to be used within the 
+# :ref:`loss module <gs_optim>` and during
+# :ref:`evaluation <gs_logging>`. 
+# Next, we will augment it with an exploration module
 # for :ref:`inference <gs_storage>`.
 
 from torchrl.modules import EGreedyModule, MLP, QValueModule
