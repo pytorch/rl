@@ -8,6 +8,14 @@ Get started with Environments, TED and transforms
 
 .. _gs_env_ted:
 
+.. note:: To run this tutorial in a notebook, add an installation cell
+  at the beginning containing:
+
+    .. code-block::
+
+        !pip install tensordict
+        !pip install torchrl
+
 """
 
 ################################
