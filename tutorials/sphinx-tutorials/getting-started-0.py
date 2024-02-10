@@ -27,7 +27,7 @@ Get started with Environments, TED and transforms
 # if you want to learn more about a specific topic!
 #
 # Environments in RL
-# ~~~~~~~~~~~~~~~~~~
+# ------------------
 #
 # The standard RL (Reinforcement Learning) training loop involves a model,
 # also known as a policy, which is trained to accomplish a task within a
@@ -40,7 +40,7 @@ Get started with Environments, TED and transforms
 # data format it uses.
 #
 # Creating an environment
-# ~~~~~~~~~~~~~~~~~~~~~~~
+# -----------------------
 #
 # In essence, TorchRL does not directly provide environments, but instead
 # offers wrappers for other libraries that encapsulate the simulators. The
@@ -61,7 +61,7 @@ env = GymEnv("Pendulum-v1")
 ################################
 #
 # Running an environment
-# ~~~~~~~~~~~~~~~~~~~~~~
+# ----------------------
 #
 # Environments in TorchRL have two crucial methods:
 # :meth:`~torchrl.envs.EnvBase.reset`, which initiates
@@ -131,6 +131,11 @@ data = step_mdp(stepped_data)
 print(data)
 
 ################################
+# Environment rollouts
+# --------------------
+#
+# .. _gs_env_ted_rollout:
+#
 # Writing down those three steps (computing an action, making a step,
 # moving in the MDP) can be a bit tedious and repetitive. Fortunately,
 # TorchRL provides a nice :meth:`~torchrl.envs.EnvBase.rollout` function that
@@ -170,7 +175,7 @@ print(transition)
 #
 #
 # Transforming an environment
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ---------------------------
 #
 # Most of the time, you'll want to modify the output of the environment to
 # better suit your requirements. For example, you might want to monitor the
@@ -208,7 +213,7 @@ print(rollout["next", "truncated"])
 # This is all for this short introduction to TorchRL's environment API!
 #
 # Next steps
-# ~~~~~~~~~~
+# ----------
 #
 # To explore further what TorchRL's environments can do, go and check:
 #
@@ -226,5 +231,15 @@ print(rollout["next", "truncated"])
 #   :ref:`Pendulum tutorial <pendulum_tuto>` and learn about specs and
 #   stateless environments.
 # - See the more in-depth tutorial about environments
-#   :ref:`in the dedicated tutorial <envs_tuto>`.
+#   :ref:`in the dedicated tutorial <envs_tuto>`;
+# - Check the
+#   :ref:`multi-agent  environment API <MARL-environment-API>`
+#   if you're interested in MARL;
+# - TorchRL has many tools to interact with the Gym API such as
+#   a way to register TorchRL envs in the Gym register through
+#   :meth:`~torchrl.envs.EnvBase.register_gym`, an API to read
+#   the info dictionaries through
+#   :meth:`~torchrl.envs.EnvBase.set_info_dict_reader` or a way
+#   to control the gym backend thanks to
+#   :func:`~torchrl.envs.set_gym_backend`.
 #

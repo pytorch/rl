@@ -24,7 +24,7 @@ Get started with your onw first training loop
 # Building the environment
 # ------------------------
 #
-# We'll be using a gym environment with a :class:`~torchrl.envs.StepCounter`
+# We'll be using a gym environment with a :class:`~torchrl.envs.transforms.StepCounter`
 # transform. If you need a refresher, check our these features are presented in
 # :ref:`the environment tutorial <gs_env_ted>`.
 #
@@ -132,21 +132,26 @@ total_count = 0
 total_episodes = 0
 t0 = time.time()
 for i, data in enumerate(collector):
+    # Write data in replay buffer
     rb.extend(data)
     max_length = rb[:]["next", "step_count"].max()
     if len(rb) > init_rand_steps:
+        # Optim loop (we do several optim steps
+        # per batch collected for efficiency)
         for _ in range(optim_steps):
             sample = rb.sample(128)
             loss_vals = loss(sample)
             loss_vals["loss"].backward()
             optim.step()
             optim.zero_grad()
+            # Update exploration factor
             exploration_module.step(data.numel())
+            # Update target params
+            updater.step()
             if i % 10:
                 torchrl_logger.info(f"Max num steps: {max_length}, rb length {len(rb)}")
             total_count += data.numel()
             total_episodes += data["next", "done"].sum()
-            updater.step()
     if max_length > 200:
         break
 

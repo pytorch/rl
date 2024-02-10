@@ -40,7 +40,7 @@ Using Replay Buffers
 # - How to :ref:`sample from or iterate over a replay buffer <tuto_rb_sampling>`,
 #   and how to define the sampling strategy;
 # - How to use :ref:`prioritized replay buffers <tuto_rb_prb>`;
-# - How to :ref:`transform data <tuto_rb_transform>` coming in and out from 
+# - How to :ref:`transform data <tuto_rb_transform>` coming in and out from
 #   the buffer;
 # - How to store :ref:`trajectories <tuto_rb_traj>` in the buffer.
 #
@@ -515,7 +515,7 @@ indices = rb.extend([1, "foo", None])
 # buffer, the priority is set to a default value of 1. Once the priority has
 # been computed (usually through the loss), it must be updated in the buffer.
 #
-# This is done via the :meth:`~torchrl.data.ReplayBuffer.update_priority` 
+# This is done via the :meth:`~torchrl.data.ReplayBuffer.update_priority`
 # method, which requires the indices as well as the priority.
 # We assign an artificially high priority to the second sample in the dataset
 # to observe its effect on sampling:
@@ -538,7 +538,7 @@ print(info)
 ######################################################################
 # We see that using a prioritized replay buffer requires a series of extra
 # steps in the training loop compared with a regular buffer:
-# 
+#
 # - After collecting data and extending the buffer, the priority of the
 #   items must be updated;
 # - After computing the loss and getting a "priority signal" from it, we must
@@ -551,9 +551,9 @@ print(info)
 # that the appropriate methods are called at the appropriate place, if and
 # only if a prioritized buffer is being used.
 #
-# Let us see how we can improve this with :class:`~tensordict.TensorDict`. 
-# We saw that the :class:`~torchrl.data.TensorDictReplayBuffer` returns data 
-# augmented with their relative storage indices. One feature we did not mention 
+# Let us see how we can improve this with :class:`~tensordict.TensorDict`.
+# We saw that the :class:`~torchrl.data.TensorDictReplayBuffer` returns data
+# augmented with their relative storage indices. One feature we did not mention
 # is that this class also ensures that the priority
 # signal is automatically parsed to the prioritized sampler if present during
 # extension.
@@ -623,7 +623,7 @@ plt.hist(sample["index"].numpy())
 # ----------------
 #
 # .. _tuto_rb_transform:
-# 
+#
 # The data stored in a replay buffer may not be ready to be presented to a
 # loss module.
 # In some cases, the data produced by a collector can be too heavy to be
@@ -647,8 +647,14 @@ plt.hist(sample["index"].numpy())
 
 
 from torchrl.collectors import RandomPolicy, SyncDataCollector
-from torchrl.envs.transforms import Compose, GrayScale, Resize, ToTensorImage, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.transforms import (
+    Compose,
+    GrayScale,
+    Resize,
+    ToTensorImage,
+    TransformedEnv,
+)
 
 env = TransformedEnv(
     GymEnv("CartPole-v1", from_pixels=True),
@@ -836,7 +842,8 @@ data = TensorDict(
         "act": torch.randn((20,)).expand(10, 20),
         "other": torch.randn((20, 50)).expand(10, 20, 50),
         "steps": steps,
-    }, [10]
+    },
+    [10],
 )
 rb.extend(data)
 sample = rb.sample()

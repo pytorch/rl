@@ -12,16 +12,19 @@ Get started with data collection and storage
 #################################
 #
 # There is no learning without data. In supervised learning, users are
-# accustomed to using :class:`~torch.utils.data.DataLoader` and the like.
+# accustomed to using :class:`~torch.utils.data.DataLoader` and the like
+# to integrate data in their training loop.
 # Dataloaders are iterable objects that provide you with the data that you will
 # be using to train your model.
 #
 # TorchRL approaches the problem of dataloading in a similar manner, although
-# it is suprisingly unique in the ecosystem of RL libraries. TorchRL's
-# dataloaders are referred to as DataCollectors. Most of the time, the problem
-# of data collection does not stop there and the data needs to be stored
-# temporarily in a buffer (or equivalent for on-policy algorithms). This
-# tutorial will explore these two classes.
+# it is surprisingly unique in the ecosystem of RL libraries. TorchRL's
+# dataloaders are referred to as ``DataCollectors``. Most of the time,
+# data collection does not stop at the collection of raw data,
+# as the data needs to be stored temporarily in a buffer
+# (or equivalent structure for on-policy algorithms) before being consumed
+# by the :ref:`loss module <gs_optim>`. This tutorial will explore
+# these two classes.
 #
 # Data collectors
 # ---------------
@@ -29,20 +32,21 @@ Get started with data collection and storage
 # .. _gs_storage_collector:
 #
 #
-# The most basic data collector is the
-# :clas:`~torchrl.collectors.SyncDataCollector` and this is the one that we
-# will be focusing on in this doc. At a high level, a collector is a simple
-# class that runs your policy in the environment, resets the environment when
-# needed and delivers batches of a preestablished size. Unlike
-# :meth:`~torchrl.envs.EnvBase.rollout` that we saw in
-# :ref:`the env tutorial <gs_env_ted>`, collectors do not reset in between two batches
-# of data. This means that two consecutive batches of data may have elements
-# that belong to the same trajectory!
+# The primary data collector discussed here is the
+# :class:~torchrl.collectors.SyncDataCollector, which is the focus of this
+# documentation. At a fundamental level, a collector is a straightforward
+# class responsible for executing your policy within the environment,
+# resetting the environment when necessary, and providing batches of a
+# predefined size. Unlike the :meth:~torchrl.envs.EnvBase.rollout method
+# demonstrated in :ref:the env tutorial <gs_env_ted>, collectors do not
+# reset between consecutive batches of data. Consequently, two successive
+# batches of data may contain elements from the same trajectory.
 #
 # The basic arguments you need to pass to your collector are the size of the
 # batches you want to collect (``frames_per_batch``), the length (possibly
 # infinite) of the iterator, the policy and the environment. For simplicity,
 # we will use a dummy, random policy in this example.
+
 import torch
 
 torch.manual_seed(0)
@@ -59,7 +63,11 @@ collector = SyncDataCollector(env, policy, frames_per_batch=200, total_frames=-1
 #################################
 # We now expect that our collector will deliver batches of size ``200`` no
 # matter what happens during collection. In other words, we may have multiple
-# trajectories in this batch! Let's iterate over the collector to get a sense
+# trajectories in this batch! The ``total_frames`` indicates how long the
+# collector should be. A value of ``-1`` will produce a never
+# ending collector.
+#
+# Let's iterate over the collector to get a sense
 # of what this data looks like:
 
 for data in collector:
@@ -68,7 +76,8 @@ for data in collector:
 
 #################################
 # As you can see, our data is augmented with some collector-specific metadata
-# grouped in a ``"collector"`` sub-tensordict. This is useful to keep track of
+# grouped in a ``"collector"`` sub-tensordict that we did not see during
+# :ref:`environment rollouts <gs_env_ted_rollout>`. This is useful to keep track of
 # the trajectory ids. In the following list, each item marks the trajectory
 # number the corresponding transition belongs to:
 
@@ -110,14 +119,15 @@ print(data["collector", "traj_ids"])
 # leave the fancy stuff for a dedicated in-depth tutorial. The generic replay
 # buffer only needs to know what storage it has to use. In general, we
 # recommend a :class:`~torchrl.data.TensorStorage` subclass, which will work
-# fine in most cases. We'll be using :class:`~torchrl.data.LazyMemmapStorage`
+# fine in most cases. We'll be using
+# :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`
 # in this tutorial, which enjoys two nice properties: first, being "lazy",
 # you don't  need to explicitly tell it what your data looks like in advance.
-# Second, it uses :classL:`~tensordict.MemoryMappedTensor` as a backend to save
+# Second, it uses :class:`~tensordict.MemoryMappedTensor` as a backend to save
 # your data on disk in an efficient way. The only thing you need to know is
 # how big you want your buffer to be.
 
-from torchrl.data import LazyMemmapStorage, ReplayBuffer
+from torchrl.data.replay_buffers import LazyMemmapStorage, ReplayBuffer
 
 buffer = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
 
@@ -127,7 +137,7 @@ buffer = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
 # :meth:`~torchrl.data.ReplayBuffer.extend` (multiple elements) methods. Using
 # the data we just collected, we initialize and populate the buffer in one go:
 
-buffer.extend(data)
+indices = buffer.extend(data)
 
 #################################
 # We can check that the buffer now has the same number of elements than what
@@ -153,8 +163,8 @@ print(sample)
 # ----------
 #
 # - You can have look at other multirpocessed
-#   collectors such as :class:`~torchrl.collectors.MultiSyncDataCollector` or
-#   :class:`~torchrl.collectors.MultiaSyncDataCollector`.
+#   collectors such as :class:`~torchrl.collectors.collectors.MultiSyncDataCollector` or
+#   :class:`~torchrl.collectors.collectors.MultiaSyncDataCollector`.
 # - TorchRL also offers distributed collectors if you have multiple nodes to
 #   use for inference. Check them out in the
 #   :ref:`API reference <ref_collectors>`.
