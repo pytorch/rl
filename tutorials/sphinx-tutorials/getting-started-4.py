@@ -19,9 +19,9 @@ Get started with logging
 # Logging is crucial for reporting your results to the outside world and for
 # you to check that your algorithm is learning properly. TorchRL has several
 # loggers that interface with custom backends such as
-# wandb (:class:`~torchrl.record.loggers.WandbLogger`),
-# tensorboard (:class:`~torchrl.record.loggers.TensorBoardLogger`) or a lightweight and
-# portable CSV logger (:class:`~torchrl.record.loggers.CSVLogger`) that you can use
+# wandb (:class:`~torchrl.record.loggers.wandb.WandbLogger`),
+# tensorboard (:class:`~torchrl.record.loggers.tensorboard.TensorBoardLogger`) or a lightweight and
+# portable CSV logger (:class:`~torchrl.record.loggers.csv.CSVLogger`) that you can use
 # pretty much everywhere.
 #
 # Loggers are located in the ``torchrl.record`` module and the various classes
