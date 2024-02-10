@@ -7,7 +7,6 @@ import contextlib
 import functools
 import itertools
 import operator
-import sys
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass
@@ -153,10 +152,6 @@ from torchrl.objectives.value.utils import (
     _make_gammas_tensor,
     _split_and_pad_sequence,
 )
-
-
-# Increase recursion limit, some objectives have more than 1000 tests
-sys.setrecursionlimit(2000)
 
 
 class _check_td_steady:
