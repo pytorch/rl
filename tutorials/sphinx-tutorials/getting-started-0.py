@@ -188,7 +188,7 @@ print(transition)
 # :ref:`here <transforms>`.
 #
 # The transform is integrated with the environment through a
-# :class:`~torchrl.envs.TransformedEnv`:
+# :class:`~torchrl.envs.transforms.TransformedEnv`:
 #
 
 from torchrl.envs import StepCounter, TransformedEnv
