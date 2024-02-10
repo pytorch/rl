@@ -97,7 +97,6 @@ class LossModule(TensorDictModuleBase):
         return self._tensor_keys
 
     def __new__(cls, *args, **kwargs):
-        # cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
         self = super().__new__(cls)
         return self
 
@@ -120,7 +119,6 @@ class LossModule(TensorDictModuleBase):
 
         self.register_forward_pre_hook(_pre_hook)
         self.register_forward_hook(_post_hook)
-        # self.register_forward_pre_hook(_parameters_to_tensordict)
 
     def _set_deprecated_ctor_keys(self, **kwargs) -> None:
         for key, value in kwargs.items():
