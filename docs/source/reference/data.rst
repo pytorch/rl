@@ -3,6 +3,8 @@
 torchrl.data package
 ====================
 
+.. _ref_data:
+
 Replay Buffers
 --------------
 

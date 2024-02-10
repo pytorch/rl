@@ -1,9 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 TorchRL envs
-============================
+============
+
+**Author**: `Vincent Moens <https://github.com/vmoens>`_
+
+.. _envs_tuto:
+
 """
 ##############################################################################
+#
 # Environments play a crucial role in RL settings, often somewhat similar to
 # datasets in supervised and unsupervised settings. The RL community has
 # become quite familiar with OpenAI gym API which offers a flexible way of
@@ -19,7 +25,10 @@ TorchRL envs
 # To run this part of the tutorial, you will need to have a recent version of
 # the gym library installed, as well as the atari suite. You can get this
 # installed by installing the following packages:
-#   $ pip install gym atari-py ale-py gym[accept-rom-license] pygame
+#
+#   .. code-block::
+#     $ pip install gym atari-py ale-py gym[accept-rom-license] pygame
+#
 # To unify all frameworks, torchrl environments are built inside the
 # ``__init__`` method with a private method called ``_build_env`` that
 # will pass the arguments and keyword arguments to the root library builder.

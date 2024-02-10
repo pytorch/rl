@@ -6,6 +6,8 @@ Pendulum: Writing your environment and transforms with TorchRL
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
+.. _pendulum_tuto:
+
 Creating an environment (a simulator or an interface to a physical control system)
 is an integrative part of reinforcement learning and control engineering.
 

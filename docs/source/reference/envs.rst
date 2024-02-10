@@ -475,6 +475,9 @@ single agent standards.
 
 Transforms
 ----------
+
+.. _transforms:
+
 .. currentmodule:: torchrl.envs.transforms
 
 In most cases, the raw output of an environment must be treated before being passed to another object (such as a

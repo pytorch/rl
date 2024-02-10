@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Introduction to TorchRL
-============================
+=======================
 This demo was presented at ICML 2022 on the industry demo day.
 """
 ##############################################################################
@@ -746,8 +746,7 @@ collector = MultiSyncDataCollector(
     total_frames=240,
     max_frames_per_traj=-1,  # envs are terminating, we don't need to stop them early
     frames_per_batch=60,  # we want 60 frames at a time (we have 3 envs per sub-collector)
-    storing_devices=devices,  # len must match len of env created
-    devices=devices,
+    device=devices,
 )
 
 ###############################################################################
@@ -769,8 +768,7 @@ collector = MultiaSyncDataCollector(
     total_frames=240,
     max_frames_per_traj=-1,  # envs are terminating, we don't need to stop them early
     frames_per_batch=60,  # we want 60 frames at a time (we have 3 envs per sub-collector)
-    storing_devices=devices,  # len must match len of env created
-    devices=devices,
+    device=devices,
 )
 
 for i, d in enumerate(collector):
@@ -805,7 +803,8 @@ value = TensorDictModule(
     value_module, in_keys=["observation", "action"], out_keys=["state_action_value"]
 )
 
-loss_fn = DDPGLoss(actor, value, gamma=0.99)
+loss_fn = DDPGLoss(actor, value)
+loss_fn.make_value_estimator(loss_fn.default_value_estimator, gamma=0.99)
 
 ###############################################################################
 
