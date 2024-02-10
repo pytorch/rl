@@ -3,7 +3,7 @@
 torchrl.modules package
 =======================
 
-.. _modules:
+.. _ref_modules:
 
 TensorDict modules: Actors, exploration, value models and generative models
 ---------------------------------------------------------------------------

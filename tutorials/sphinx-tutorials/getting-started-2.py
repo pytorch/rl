@@ -140,7 +140,7 @@ updater.step()
 #
 # To further explore the topic, have a look at:
 #
-# - The :ref:`loss module reference page <reference/objectives>`;
+# - The :ref:`loss module reference page <ref_objectives>`;
 # - The :ref:`Coding a DDPG loss tutorial <coding_ddpg>`;
 # - Losses in action in :ref:`PPO <coding_ppo>` or :ref:`DQN <coding_dqn>`.
 #

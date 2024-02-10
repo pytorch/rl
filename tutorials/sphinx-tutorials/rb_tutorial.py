@@ -804,7 +804,7 @@ assert (data.exclude("collector") == s.squeeze(0).exclude("index", "collector"))
 # than simple transitions. TorchRL offers multiple ways of achieving this.
 #
 # The preferred way is currently to store trajectories along the first
-# dimension of the buffer and use a :class`~torchrl.data.SliceSampler` to
+# dimension of the buffer and use a :class:`~torchrl.data.SliceSampler` to
 # sample these batches of data. This class only needs a couple of information
 # about your data structure to do its job (not that as of now it is only
 # compatible with tensordict-structured data): the number of slices or their

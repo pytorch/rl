@@ -157,10 +157,10 @@ print(sample)
 #   :class:`~torchrl.collectors.MultiaSyncDataCollector`.
 # - TorchRL also offers distributed collectors if you have multiple nodes to
 #   use for inference. Check them out in the
-#   :ref:`API reference <reference/collectors>`.
+#   :ref:`API reference <ref_collectors>`.
 # - Check the dedicated :ref:`Replay Buffer tutorial <rb_tuto>` to know
 #   more about the options you have when building a buffer, or the
-#   :ref:`API reference <reference/data>` which covers all the features in
+#   :ref:`API reference <ref_data>` which covers all the features in
 #   details. Replay buffers have countless features such as multithreaded
 #   sampling, prioritized experience replay, and many more...
 # - We left out the capacity of replay buffers to be iterated over for

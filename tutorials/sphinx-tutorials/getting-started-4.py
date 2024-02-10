@@ -25,7 +25,7 @@ Get started with logging
 # pretty much everywhere.
 #
 # Loggers are located in the ``torchrl.record`` module and the various classes
-# can be found in the :ref:`API reference <reference/trainers:loggers>`.
+# can be found in the :ref:`API reference <ref_loggers>`.
 #
 # We tried to keep the loggers APIs as similar as we could, given the
 # differences in the underlying backends. While execution of the loggers will

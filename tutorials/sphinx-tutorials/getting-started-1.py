@@ -294,7 +294,7 @@ with set_exploration_type(ExplorationType.RANDOM):
 # This is it for our short tutorial on building a policy with TorchRL!
 #
 # There are many more things you can do with the library. A good place to start
-# is to look at the :ref:`API reference for modules <reference/modules:modules>`.
+# is to look at the :ref:`API reference for modules <ref_modules>`.
 #
 # Next steps:
 #

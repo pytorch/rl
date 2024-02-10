@@ -218,7 +218,7 @@ Utils
 Loggers
 -------
 
-.. _loggers:
+.. _ref_loggers:
 
 .. currentmodule:: torchrl.record.loggers
 
