@@ -7,6 +7,14 @@ Get started with your onw first training loop
 
 .. _gs_first_training:
 
+.. note:: To run this tutorial in a notebook, add an installation cell
+  at the beginning containing:
+
+    .. code-block::
+
+        !pip install tensordict
+        !pip install torchrl
+
 """
 
 #################################
@@ -46,11 +54,11 @@ from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 # Designing a policy
 # ------------------
 #
-# The next step is to build our policy. 
+# The next step is to build our policy.
 # We'll be making a regular, deterministic
-# version of the actor to be used within the 
+# version of the actor to be used within the
 # :ref:`loss module <gs_optim>` and during
-# :ref:`evaluation <gs_logging>`. 
+# :ref:`evaluation <gs_logging>`.
 # Next, we will augment it with an exploration module
 # for :ref:`inference <gs_storage>`.
 

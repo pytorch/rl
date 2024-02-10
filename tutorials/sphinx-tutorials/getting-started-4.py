@@ -7,6 +7,14 @@ Get started with logging
 
 .. _gs_logging:
 
+.. note:: To run this tutorial in a notebook, add an installation cell
+  at the beginning containing:
+
+    .. code-block::
+
+        !pip install tensordict
+        !pip install torchrl
+
 """
 
 #####################################

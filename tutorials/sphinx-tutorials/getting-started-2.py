@@ -7,6 +7,14 @@ Getting started with model optimization
 
 .. _gs_optim:
 
+.. note:: To run this tutorial in a notebook, add an installation cell
+  at the beginning containing:
+
+    .. code-block::
+
+        !pip install tensordict
+        !pip install torchrl
+
 """
 
 ###################################

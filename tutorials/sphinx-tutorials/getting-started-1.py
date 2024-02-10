@@ -7,6 +7,14 @@ Get started with TorchRL's modules
 
 .. _gs_modules:
 
+.. note:: To run this tutorial in a notebook, add an installation cell
+  at the beginning containing:
+
+    .. code-block::
+
+        !pip install tensordict
+        !pip install torchrl
+
 """
 ###################################
 # Reinforcement Learning is designed to create policies that can effectively
