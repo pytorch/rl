@@ -3,6 +3,8 @@
 torchrl.collectors package
 ==========================
 
+.. _data_collectors:
+
 Data collectors are somewhat equivalent to pytorch dataloaders, except that (1) they
 collect data over non-static data sources and (2) the data is collected using a model
 (likely a version of the model that is being trained).

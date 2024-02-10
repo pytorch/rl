@@ -33,21 +33,22 @@ Using Replay Buffers
 #
 # In this tutorial, you will learn:
 #
-# - How to build a :ref:`Replay Buffer (RB) <vanilla_rb>` and use it with
+# - How to build a :ref:`Replay Buffer (RB) <tuto_rb_vanilla>` and use it with
 #   any datatype;
-# - How to customize the :ref:`buffer's storage <buffer_storage>`;
-# - How to use :ref:`RBs with TensorDict <td_rb>`;
-# - How to :ref:`sample from or iterate over a replay buffer <sampling_rb>`,
+# - How to customize the :ref:`buffer's storage <tuto_rb_storage>`;
+# - How to use :ref:`RBs with TensorDict <tuto_rb_td>`;
+# - How to :ref:`sample from or iterate over a replay buffer <tuto_rb_sampling>`,
 #   and how to define the sampling strategy;
-# - How to use prioritized replay buffers;
-# - How to transform data coming in and out from the buffer;
-# - How to store trajectories in the buffer.
+# - How to use :ref:`prioritized replay buffers <tuto_rb_prb>`;
+# - How to :ref:`transform data <tuto_rb_transform>` coming in and out from 
+#   the buffer;
+# - How to store :ref:`trajectories <_tuto_rb_traj>` in the buffer.
 #
 #
 # Basics: building a vanilla replay buffer
 # ----------------------------------------
 #
-# .. _vanilla_rb:
+# .. _tuto_rb_vanilla:
 #
 # TorchRL's replay buffers are designed to prioritize modularity,
 # composability, efficiency, and simplicity. For instance, creating a basic
@@ -112,7 +113,7 @@ print("length after adding elements:", len(buffer))
 # Customizing the storage
 # -----------------------
 #
-# .. _buffer_storage:
+# .. _tuto_rb_storage:
 #
 # We see that the buffer has been capped to the first 1000 elements that we
 # passed to it.
@@ -227,7 +228,7 @@ print(
 # Integration with TensorDict
 # ---------------------------
 #
-# .. _td_rb:
+# .. _tuto_rb_td:
 #
 # The tensor location follows the same structure as the TensorDict that
 # contains them: this makes it easy to save and load buffers during training.
@@ -361,7 +362,7 @@ tree_map(assert0, sample)
 # Sampling and iterating over buffers
 # -----------------------------------
 #
-# .. _sampling_rb:
+# .. _tuto_rb_sampling:
 #
 # Replay Buffers support multiple sampling strategies:
 #
@@ -382,21 +383,21 @@ tree_map(assert0, sample)
 # Fixed batch-size
 # ~~~~~~~~~~~~~~~~
 #
-# If the batch-size is passed during construction, it should be omited when
+# If the batch-size is passed during construction, it should be omitted when
 # sampling:
 
 data = MyData(
     images=torch.randint(
         255,
-        (10, 64, 64, 3),
+        (200, 64, 64, 3),
     ),
-    labels=torch.randint(100, (10,)),
-    batch_size=[10],
+    labels=torch.randint(100, (200,)),
+    batch_size=[200],
 )
 
 buffer_lazymemmap = ReplayBuffer(storage=LazyMemmapStorage(size), batch_size=128)
-buffer_lazymemmap.add(data)
-buffer_lazymemmap.sample()  # will produces 128 identical samples
+buffer_lazymemmap.extend(data)
+buffer_lazymemmap.sample()
 
 
 ######################################################################
@@ -404,19 +405,20 @@ buffer_lazymemmap.sample()  # will produces 128 identical samples
 #
 # To enable multithreaded sampling, just pass a positive integer to the
 # ``prefetch`` keyword argument during construction. This should speed up
-# sampling considerably:
+# sampling considerably whenever sampling is time consuming (e.g., when
+# using prioritized samplers):
 
 
 buffer_lazymemmap = ReplayBuffer(
     storage=LazyMemmapStorage(size), batch_size=128, prefetch=10
 )  # creates a queue of 10 elements to be prefetched in the background
-buffer_lazymemmap.add(data)
+buffer_lazymemmap.extend(data)
 print(buffer_lazymemmap.sample())
 
 
 ######################################################################
-# Fixed batch-size, iterating over the buffer
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Iterating over the buffer with a fixed batch-size
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # We can also iterate over the buffer like we would do with a regular
 # dataloader, as long as the batch-size is predefined:
@@ -462,7 +464,7 @@ print(f"A total of {_i+1} batches have been collected")
 # ~~~~~~~~~~~~~~~~~~
 #
 # In contrast to what we have seen earlier, the ``batch_size`` keyword
-# argument can be omitted and passed directly to the `sample` method:
+# argument can be omitted and passed directly to the ``sample`` method:
 
 
 buffer_lazymemmap = ReplayBuffer(
@@ -476,7 +478,10 @@ print("sampling 5 elements:", buffer_lazymemmap.sample(5))
 # Prioritized Replay buffers
 # --------------------------
 #
-# TorchRL also provides an interface for prioritized replay buffers.
+# .. _tuto_rb_prb:
+#
+# TorchRL also provides an interface for
+# `prioritized replay buffers <https://arxiv.org/abs/1511.05952>`_.
 # This buffer class samples data according to a priority signal that is passed
 # through the data.
 #
@@ -510,8 +515,8 @@ indices = rb.extend([1, "foo", None])
 # buffer, the priority is set to a default value of 1. Once the priority has
 # been computed (usually through the loss), it must be updated in the buffer.
 #
-# This is done via the `update_priority` method, which requires the indices
-# as well as the priority.
+# This is done via the :meth:`~torchrl.data.ReplayBuffer.update_priority` 
+# method, which requires the indices as well as the priority.
 # We assign an artificially high priority to the second sample in the dataset
 # to observe its effect on sampling:
 #
@@ -533,6 +538,7 @@ print(info)
 ######################################################################
 # We see that using a prioritized replay buffer requires a series of extra
 # steps in the training loop compared with a regular buffer:
+# 
 # - After collecting data and extending the buffer, the priority of the
 #   items must be updated;
 # - After computing the loss and getting a "priority signal" from it, we must
@@ -545,10 +551,10 @@ print(info)
 # that the appropriate methods are called at the appropriate place, if and
 # only if a prioritized buffer is being used.
 #
-# Let us see how we can improve this with TensorDict. We saw that the
-# :class:`~torchrl.data.TensorDictReplayBuffer` returns data augmented with
-# their relative storage indices. One feature we did not mention is that
-# this class also ensures that the priority
+# Let us see how we can improve this with :class:`~tensordict.TensorDict`. 
+# We saw that the :class:`~torchrl.data.TensorDictReplayBuffer` returns data 
+# augmented with their relative storage indices. One feature we did not mention 
+# is that this class also ensures that the priority
 # signal is automatically parsed to the prioritized sampler if present during
 # extension.
 #
@@ -616,6 +622,8 @@ plt.hist(sample["index"].numpy())
 # Using transforms
 # ----------------
 #
+# .. _tuto_rb_transform:
+# 
 # The data stored in a replay buffer may not be ready to be presented to a
 # loss module.
 # In some cases, the data produced by a collector can be too heavy to be
@@ -639,7 +647,7 @@ plt.hist(sample["index"].numpy())
 
 
 from torchrl.collectors import RandomPolicy, SyncDataCollector
-from torchrl.envs import Compose, GrayScale, Resize, ToTensorImage, TransformedEnv
+from torchrl.envs.transforms import Compose, GrayScale, Resize, ToTensorImage, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
 
 env = TransformedEnv(
@@ -664,7 +672,7 @@ print(env.rollout(3))
 # To do this, we will append a transform to the collector to select the keys
 # we want to see appearing:
 
-from torchrl.envs import ExcludeTransform
+from torchrl.envs.transforms import ExcludeTransform
 
 collector = SyncDataCollector(
     env,
@@ -719,7 +727,7 @@ print(rb.sample())
 # A more complex examples: using CatFrames
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# The :class:`~torchrl.envs.CatFrames` transform unfolds the observations
+# The :class:`~torchrl.envs.transforms.CatFrames` transform unfolds the observations
 # through time, creating a n-back memory of past events that allow the model
 # to take the past events into account (in the case of POMDPs or with
 # recurrent policies such as Decision Transformers). Storing these concatenated
@@ -787,6 +795,55 @@ print(s)
 assert (data.exclude("collector") == s.squeeze(0).exclude("index", "collector")).all()
 
 ######################################################################
+# Storing trajectories
+# --------------------
+#
+# .. _tuto_rb_traj:
+#
+# In many cases, it is desirable to access trajectories from the buffer rather
+# than simple transitions. TorchRL offers multiple ways of achieving this.
+#
+# The preferred way is currently to store trajectories along the first
+# dimension of the buffer and use a :class`~torchrl.data.SliceSampler` to
+# sample these batches of data. This class only needs a couple of information
+# about your data structure to do its job (not that as of now it is only
+# compatible with tensordict-structured data): the number of slices or their
+# length and some information about where the separation between the
+# episodes can be found (e.g. :ref:`recall that <gs_storage_collector>` with a
+# :ref:`DataCollector <data_collectors>`, the trajectory id is stored in
+# ``("collector", "traj_ids")``). In this simple example, we construct a data
+# with 4 consecutive short trajectories and sample 4 slices out of it, each of
+# length 2 (since the batch size is 8, and 8 items // 4 slices = 2 time steps).
+# We mark the steps as well.
+
+from torchrl.data import SliceSampler
+
+rb = TensorDictReplayBuffer(
+    storage=LazyMemmapStorage(size),
+    sampler=SliceSampler(traj_key="episode", num_slices=4),
+    batch_size=8,
+)
+episode = torch.zeros(10, dtype=torch.int)
+episode[:3] = 1
+episode[3:5] = 2
+episode[5:7] = 3
+episode[7:] = 4
+steps = torch.cat([torch.arange(3), torch.arange(2), torch.arange(2), torch.arange(3)])
+data = TensorDict(
+    {
+        "episode": episode,
+        "obs": torch.randn((3, 4, 5)).expand(10, 3, 4, 5),
+        "act": torch.randn((20,)).expand(10, 20),
+        "other": torch.randn((20, 50)).expand(10, 20, 50),
+        "steps": steps,
+    }, [10]
+)
+rb.extend(data)
+sample = rb.sample()
+print("episode are grouped", sample["episode"])
+print("steps are successive", sample["steps"])
+
+######################################################################
 # Conclusion
 # ----------
 #
@@ -799,3 +856,13 @@ assert (data.exclude("collector") == s.squeeze(0).exclude("index", "collector"))
 # - Choose the best storage type for your problem (list, memory or disk-based);
 # - Minimize the memory footprint of your buffer.
 #
+# Next steps
+# ----------
+#
+# - Check the data API reference to learn about offline datasets in TorchRL,
+#   which are based on our Replay Buffer API;
+# - Check other samplers such as
+#   :class:`~torchrl.data.SamplerWithoutReplacement`,
+#   :class:`~torchrl.data.PrioritizedSliceSampler` and
+#   :class:`~torchrl.data.SliceSamplerWithoutReplacement`, or other writers
+#   such as :class:`~torchrl.data.TensorDictMaxValueWriter`.

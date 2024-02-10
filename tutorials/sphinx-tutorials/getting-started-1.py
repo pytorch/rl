@@ -65,13 +65,13 @@ print(rollout)
 #
 # To simplify the incorporation of :class:`~torch.nn.Module`s into your
 # codebase, TorchRL offers a range of specialized wrappers designed to be
-# used as actors, including :class:`~torchrl.modules.Actor`,
-# # :class:`~torchrl.modules.ProbabilisticActor`,
-# # :class:`~torchrl.modules.ActorValueOperator` or
-# # :class:`~torchrl.modules.ActorCriticOperator`.
-# For example, :class:`~torchrl.modules.Actor` provides default values for the
-# ``in_keys`` and ``out_keys``, making integration with many common
-# environments straightforward:
+# used as actors, including :class:`~torchrl.modules.tensordict_module.Actor`,
+# # :class:`~torchrl.modules.tensordict_module.ProbabilisticActor`,
+# # :class:`~torchrl.modules.tensordict_module.ActorValueOperator` or
+# # :class:`~torchrl.modules.tensordict_module.ActorCriticOperator`.
+# For example, :class:`~torchrl.modules.tensordict_module.Actor` provides
+# default values for the ``in_keys`` and ``out_keys``, making integration
+# with many common environments straightforward:
 #
 
 from torchrl.modules import Actor
@@ -82,7 +82,7 @@ print(rollout)
 
 ###################################
 # The list of available specialized TensorDictModules is available in the
-# :ref:`API reference <reference/modules:tdmodules>`.
+# :ref:`API reference <tdmodules>`.
 #
 # Networks
 # --------
@@ -126,8 +126,8 @@ rollout = env.rollout(max_steps=10, policy=policy)
 #   will split this output on two chunks, a mean and a standard deviation of
 #   size ``[1]``;
 # - A :class:`~torchrl.modules.tensordict_module.ProbabilisticActor` that will
-#   read those parameters, create a distribution with them and populate our
-#   tensordict with samples and log-probabilities.
+#   read those parameters as ``in_keys``, create a distribution with them and
+#   populate our tensordict with samples and log-probabilities.
 #
 
 from tensordict.nn.distributions import NormalParamExtractor
@@ -140,7 +140,7 @@ module = torch.nn.Sequential(backbone, extractor)
 td_module = TensorDictModule(module, in_keys=["observation"], out_keys=["loc", "scale"])
 policy = ProbabilisticActor(
     td_module,
-    in_keys=["observation"],
+    in_keys=["loc", "scale"],
     out_keys=["action"],
     distribution_class=Normal,
     return_log_prob=True,

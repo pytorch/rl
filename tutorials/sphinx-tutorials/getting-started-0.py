@@ -114,7 +114,7 @@ print(stepped_data)
 # our action.
 #
 # We call this format TED, for
-# :ref:`TorchRL Episode Data format <reference/data:TED-format>`. It is
+# :ref:`TorchRL Episode Data format <TED-format>`. It is
 # the ubiquitous way of representing data in the library, both dynamically like
 # here, or statically with offline datasets.
 #
@@ -180,7 +180,7 @@ print(transition)
 # In this section, we'll examine a simple transform, the
 # :class:`~torchrl.envs.transforms.StepCounter` transform.
 # The complete list of transforms can be found
-# :ref:`here <reference/envs:transforms>`.
+# :ref:`here <transforms>`.
 #
 # The transform is integrated with the environment through a
 # :class:`~torchrl.envs.TransformedEnv`:
@@ -214,7 +214,7 @@ print(rollout["next", "truncated"])
 #
 # - The :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset` method that packs
 #   together :meth:`~torchrl.envs.EnvBase.step`,
-#   :func:`~torchrl.envs.step_mdp` and
+#   :func:`~torchrl.envs.utils.step_mdp` and
 #   :meth:`~torchrl.envs.EnvBase.reset`.
 # - Some environments like :class:`~torchrl.envs.GymEnv` support rendering
 #   through the ``from_pixels`` argument. Check the class docstrings to know
