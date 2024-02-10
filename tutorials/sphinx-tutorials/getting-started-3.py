@@ -33,12 +33,12 @@ Get started with data collection and storage
 #
 #
 # The primary data collector discussed here is the
-# :class:~torchrl.collectors.SyncDataCollector, which is the focus of this
+# :class:`~torchrl.collectors.SyncDataCollector`, which is the focus of this
 # documentation. At a fundamental level, a collector is a straightforward
 # class responsible for executing your policy within the environment,
 # resetting the environment when necessary, and providing batches of a
-# predefined size. Unlike the :meth:~torchrl.envs.EnvBase.rollout method
-# demonstrated in :ref:the env tutorial <gs_env_ted>, collectors do not
+# predefined size. Unlike the :meth:`~torchrl.envs.EnvBase.rollout` method
+# demonstrated in :ref:`the env tutorial <gs_env_ted>`, collectors do not
 # reset between consecutive batches of data. Consequently, two successive
 # batches of data may contain elements from the same trajectory.
 #
