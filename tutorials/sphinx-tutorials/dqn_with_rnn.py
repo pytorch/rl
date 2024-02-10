@@ -6,6 +6,8 @@ Recurrent DQN: Training recurrent policies
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
+.. _RNN_tuto:
+
 .. grid:: 2
 
     .. grid-item-card:: :octicon:`mortar-board;1em;` What you will learn

@@ -213,7 +213,10 @@ class DQNLoss(LossModule):
                 try:
                     action_space = value_network.action_space
                 except AttributeError:
-                    raise ValueError(self.ACTION_SPEC_ERROR)
+                    raise ValueError(
+                        "The action space could not be retrieved from the value_network. "
+                        "Make sure it is available to the DQN loss module."
+                    )
         if action_space is None:
             warnings.warn(
                 "action_space was not specified. DQNLoss will default to 'one-hot'."

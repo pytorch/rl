@@ -718,7 +718,7 @@ class SliceSampler(Sampler):
             if end_key is None:
                 end_key = ("next", "done")
             if traj_key is None:
-                traj_key = "run"
+                traj_key = "episode"
             self.end_key = end_key
             self.traj_key = traj_key
 
