@@ -4,6 +4,8 @@ TorchRL objectives: Coding a DDPG loss
 ======================================
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
+.. _coding_ddpg:
+
 """
 
 ##############################################################################

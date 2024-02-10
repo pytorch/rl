@@ -218,6 +218,8 @@ Utils
 Loggers
 -------
 
+.. _ref_loggers:
+
 .. currentmodule:: torchrl.record.loggers
 
 .. autosummary::

@@ -791,7 +791,7 @@ but got an object of type {type(transform)}."""
         return tensordict_reset
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
-        # self._complete_done(self.full_done_spec, tensordict_reset)
+        # self._complete_done(self.full_done_spec, reset)
         self._reset_check_done(tensordict, tensordict_reset)
         if tensordict is not None:
             tensordict_reset = _update_during_reset(
@@ -802,7 +802,7 @@ but got an object of type {type(transform)}."""
         # # doesn't do anything special
         # mt_mode = self.transform.missing_tolerance
         # self.set_missing_tolerance(True)
-        # tensordict_reset = self.transform._call(tensordict_reset)
+        # reset = self.transform._call(reset)
         # self.set_missing_tolerance(mt_mode)
         return tensordict_reset
 

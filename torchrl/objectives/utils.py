@@ -301,8 +301,7 @@ class SoftUpdate(TargetNetUpdater):
     ):
         if eps is None and tau is None:
             raise RuntimeError(
-                "Neither eps nor tau was provided. " "This behaviour is deprecated.",
-                category=DeprecationWarning,
+                "Neither eps nor tau was provided. This behaviour is deprecated.",
             )
             eps = 0.999
         if (eps is None) ^ (tau is None):

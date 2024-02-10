@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import os
 from collections import defaultdict
 from pathlib import Path
@@ -126,7 +128,7 @@ class CSVLogger(Logger):
     def __init__(
         self,
         exp_name: str,
-        log_dir: Optional[str] = None,
+        log_dir: str | None = None,
         video_format: str = "pt",
         video_fps: int = 30,
     ) -> None:

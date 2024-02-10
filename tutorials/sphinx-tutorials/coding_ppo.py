@@ -4,6 +4,8 @@ Reinforcement Learning (PPO) with TorchRL Tutorial
 ==================================================
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
+.. _coding_ppo:
+
 This tutorial demonstrates how to use PyTorch and :py:mod:`torchrl` to train a parametric policy
 network to solve the Inverted Pendulum task from the `OpenAI-Gym/Farama-Gymnasium
 control library <https://github.com/Farama-Foundation/Gymnasium>`__.

@@ -33,6 +33,11 @@ On the low-level end, torchrl comes with a set of highly re-usable functionals f
 
 TorchRL aims at (1) a high modularity and (2) good runtime performance. Read the [full paper](https://arxiv.org/abs/2306.00577) for a more curated description of the library.
 
+## Getting started
+
+Check our [Getting Started tutorials](https://pytorch.org/rl/index.html#getting-started) for quickly ramp up with the basic 
+features of the library!
+
 ## Documentation and knowledge base
 
 The TorchRL documentation can be found [here](https://pytorch.org/rl).
