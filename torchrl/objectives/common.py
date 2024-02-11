@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import abc
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
@@ -31,7 +32,13 @@ def _updater_check_forward_prehook(module, *args, **kwargs):
         )
 
 
-class LossModule(TensorDictModuleBase):
+class _LossMeta(abc.ABCMeta):
+    def __init__(cls, name, bases, attr_dict):
+        super().__init__(name, bases, attr_dict)
+        cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
+
+
+class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     """A parent class for RL losses.
 
     LossModule inherits from nn.Module. It is designed to read an input
@@ -109,16 +116,6 @@ class LossModule(TensorDictModuleBase):
         self.value_type = self.default_value_estimator
         self._tensor_keys = self._AcceptedKeys()
         self.register_forward_pre_hook(_updater_check_forward_prehook)
-        expl_mode = set_exploration_type(ExplorationType.MODE)
-
-        def _pre_hook(*args, expl_mode=expl_mode, **kwargs):
-            expl_mode.__enter__()
-
-        def _post_hook(*args, expl_mode=expl_mode, **kwargs):
-            expl_mode.__exit__(exc_type=None, exc_value=None, traceback=None)
-
-        self.register_forward_pre_hook(_pre_hook)
-        self.register_forward_hook(_post_hook)
 
     def _set_deprecated_ctor_keys(self, **kwargs) -> None:
         for key, value in kwargs.items():
