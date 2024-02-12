@@ -1665,3 +1665,7 @@ def _run_worker_pipe_shared_mem(
 
 def _filter_empty(tensordict):
     return tensordict.select(*tensordict.keys(True, True))
+
+
+# Create an alias for possible imports
+_BatchedEnv = BatchedEnvBase
