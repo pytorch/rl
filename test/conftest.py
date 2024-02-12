@@ -53,7 +53,7 @@ def measure_duration(request: pytest.FixtureRequest):
     request.addfinalizer(fin)
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(autouse=True)
 def set_warnings() -> None:
     warnings.filterwarnings(
         "ignore",
