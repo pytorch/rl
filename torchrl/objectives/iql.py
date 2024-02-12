@@ -2,12 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
@@ -24,6 +26,20 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+
+@tensorclass
+class IQLLosses:
+    """The tensorclass for The PPOLoss Loss class."""
+
+    loss_objective: torch.Tensor
+    loss_critic: torch.Tensor | None = None
+    loss_entropy: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+
+    @property
+    def aggregate_loss(self):
+        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class IQLLoss(LossModule):
@@ -236,6 +252,7 @@ class IQLLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        return_tensorclass: bool = False,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -289,6 +306,7 @@ class IQLLoss(LossModule):
         self._vmap_qvalue_networkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
+        self.return_tensorclass = return_tensorclass
 
     @property
     def device(self) -> torch.device:
@@ -336,7 +354,7 @@ class IQLLoss(LossModule):
         self._set_in_keys()
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> IQLLosses:
         shape = None
         if tensordict.ndimension() > 1:
             shape = tensordict.shape
@@ -368,11 +386,13 @@ class IQLLoss(LossModule):
             "loss_value": loss_value.mean(),
             "entropy": entropy.mean(),
         }
-
-        return TensorDict(
+        td_out = TensorDict(
             out,
             [],
         )
+        if self.return_tensorclass:
+            return IQLLosses._from_tensordict(td_out)
+        return td_out
 
     def actor_loss(self, tensordict: TensorDictBase) -> Tensor:
         # KL loss

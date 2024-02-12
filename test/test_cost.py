@@ -491,7 +491,11 @@ class TestDQN(LossModuleTestBase):
             action_spec_type=action_spec_type, device=device
         )
         loss_fn = DQNLoss(
-            actor, loss_function="l2", delay_value=delay_value, double_dqn=double_dqn
+            actor,
+            loss_function="l2",
+            delay_value=delay_value,
+            double_dqn=double_dqn,
+            return_tensorclass=False,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -1490,6 +1494,7 @@ class TestDDPG(LossModuleTestBase):
             loss_function="l2",
             delay_actor=delay_actor,
             delay_value=delay_value,
+            return_tensorclass=False,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -2118,6 +2123,7 @@ class TestTD3(LossModuleTestBase):
             noise_clip=noise_clip,
             delay_actor=delay_actor,
             delay_qvalue=delay_qvalue,
+            return_tensorclass=False,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -4216,6 +4222,7 @@ class TestREDQ(LossModuleTestBase):
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
             delay_qvalue=delay_qvalue,
+            return_tensorclass=False,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -5013,6 +5020,7 @@ class TestCQL(LossModuleTestBase):
             with_lagrange=with_lagrange,
             delay_actor=delay_actor,
             delay_qvalue=delay_qvalue,
+            return_tensorclass=False,
         )
 
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
@@ -6648,7 +6656,13 @@ class TestA2C(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = A2CLoss(actor, value, loss_critic_type="l2", functional=functional)
+        loss_fn = A2CLoss(
+            actor,
+            value,
+            loss_critic_type="l2",
+            functional=functional,
+            return_tensorclass=False,
+        )
 
         # Check error is raised when actions require grads
         td["action"].requires_grad = True
@@ -7113,6 +7127,7 @@ class TestReinforce(LossModuleTestBase):
             critic_network=value_net,
             delay_value=delay_value,
             functional=functional,
+            return_tensorclass=False,
         )
 
         td = TensorDict(
@@ -7705,6 +7720,7 @@ class TestDreamer(LossModuleTestBase):
             reco_loss=reco_loss,
             delayed_clamp=delayed_clamp,
             free_nats=free_nats,
+            return_tensorclass=False,
         )
         loss_td, _ = loss_module(tensordict)
         for loss_str, lmbda in zip(
@@ -8525,6 +8541,7 @@ class TestIQL(LossModuleTestBase):
             temperature=temperature,
             expectile=expectile,
             loss_function="l2",
+            return_tensorclass=False,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):

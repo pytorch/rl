@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
 
 from tensordict.utils import NestedKey, unravel_key
@@ -24,6 +24,20 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+
+@tensorclass
+class DDPGLosses:
+    """The tensorclass for The DDPGLoss class."""
+
+    loss_objective: torch.Tensor
+    loss_critic: torch.Tensor | None = None
+    loss_entropy: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+
+    @property
+    def aggregate_loss(self):
+        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class DDPGLoss(LossModule):
@@ -189,6 +203,7 @@ class DDPGLoss(LossModule):
         delay_value: bool = True,
         gamma: float = None,
         separate_losses: bool = False,
+        return_tensorclass: bool = False,
     ) -> None:
         self._in_keys = None
         super().__init__()
@@ -229,6 +244,7 @@ class DDPGLoss(LossModule):
         )
 
         self.loss_function = loss_function
+        self.return_tensorclass = return_tensorclass
 
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
@@ -266,7 +282,7 @@ class DDPGLoss(LossModule):
         self._in_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> DDPGLosses:
         """Computes the DDPG losses given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
@@ -283,10 +299,13 @@ class DDPGLoss(LossModule):
         loss_value, metadata = self.loss_value(tensordict)
         loss_actor, metadata_actor = self.loss_actor(tensordict)
         metadata.update(metadata_actor)
-        return TensorDict(
+        td_out = TensorDict(
             source={"loss_actor": loss_actor, "loss_value": loss_value, **metadata},
             batch_size=[],
         )
+        if self.return_tensorclass:
+            return DDPGLosses._from_tensordict(td_out)
+        return td_out
 
     def loss_actor(
         self,

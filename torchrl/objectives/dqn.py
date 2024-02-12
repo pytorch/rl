@@ -2,12 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import warnings
 from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch
 from tensordict.utils import NestedKey
 from torch import nn
@@ -31,6 +33,20 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value import TDLambdaEstimator
 from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator
+
+
+@tensorclass
+class DQNLosses:
+    """The tensorclass for The DQN Loss class."""
+
+    loss_objective: torch.Tensor
+    loss_critic: torch.Tensor | None = None
+    loss_entropy: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+
+    @property
+    def aggregate_loss(self):
+        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class DQNLoss(LossModule):
@@ -171,6 +187,7 @@ class DQNLoss(LossModule):
         gamma: float = None,
         action_space: Union[str, TensorSpec] = None,
         priority_key: str = None,
+        return_tensorclass: bool = False,
     ) -> None:
         if delay_value is None:
             warnings.warn(
@@ -225,6 +242,7 @@ class DQNLoss(LossModule):
             )
             action_space = "one-hot"
         self.action_space = _find_action_space(action_space)
+        self.return_tensorclass = return_tensorclass
 
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
@@ -292,7 +310,7 @@ class DQNLoss(LossModule):
         self._value_estimator.set_keys(**tensor_keys)
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> DQNLosses:
         """Computes the DQN loss given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
@@ -362,7 +380,10 @@ class DQNLoss(LossModule):
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
-        return TensorDict({"loss": loss.mean()}, [])
+        td_out = TensorDict({"loss": loss.mean()}, [])
+        if self.return_tensorclass:
+            return DQNLosses._from_tensordict(td_out)
+        return td_out
 
 
 class DistributionalDQNLoss(LossModule):
@@ -435,6 +456,7 @@ class DistributionalDQNLoss(LossModule):
         gamma: float,
         delay_value: bool = None,
         priority_key: str = None,
+        return_tensorclass: bool = False,
     ):
         if delay_value is None:
             warnings.warn(
@@ -461,6 +483,7 @@ class DistributionalDQNLoss(LossModule):
             create_target_params=self.delay_value,
         )
         self.action_space = self.value_network.action_space
+        self.return_tensorclass = return_tensorclass
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
@@ -483,7 +506,7 @@ class DistributionalDQNLoss(LossModule):
         action = action.expand(new_shape)
         return torch.gather(action_log_softmax, -1, index=action).squeeze(-1)
 
-    def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
+    def forward(self, input_tensordict: TensorDictBase) -> DQNLosses:
         # from https://github.com/Kaixhin/Rainbow/blob/9ff5567ad1234ae0ed30d8471e8f13ae07119395/agent.py
         tensordict = TensorDict(
             source=input_tensordict, batch_size=input_tensordict.batch_size
@@ -597,6 +620,8 @@ class DistributionalDQNLoss(LossModule):
             inplace=True,
         )
         loss_td = TensorDict({"loss": loss.mean()}, [])
+        if self.return_tensorclass:
+            return DQNLosses._from_tensordict(loss_td)
         return loss_td
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):

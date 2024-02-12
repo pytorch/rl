@@ -10,7 +10,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
@@ -28,6 +28,20 @@ from torchrl.objectives.value import (
     TDLambdaEstimator,
     VTrace,
 )
+
+
+@tensorclass
+class ReinforceLosses:
+    """The tensorclass for The Reinforce Loss class."""
+
+    loss_objective: torch.Tensor
+    loss_critic: torch.Tensor | None = None
+    loss_entropy: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+
+    @property
+    def aggregate_loss(self):
+        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class ReinforceLoss(LossModule):
@@ -223,6 +237,7 @@ class ReinforceLoss(LossModule):
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
+        return_tensorclass: bool = False,
     ) -> None:
         if actor is not None:
             actor_network = actor
@@ -281,6 +296,7 @@ class ReinforceLoss(LossModule):
 
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+        self.return_tensorclass = return_tensorclass
 
     @property
     def functional(self):
@@ -366,7 +382,7 @@ class ReinforceLoss(LossModule):
         self._in_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> ReinforceLosses:
         advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
@@ -392,7 +408,8 @@ class ReinforceLoss(LossModule):
         td_out = TensorDict({"loss_actor": loss_actor}, [])
 
         td_out.set("loss_value", self.loss_critic(tensordict).mean())
-
+        if self.return_tensorclass:
+            return ReinforceLosses._from_tensordict(td_out)
         return td_out
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:

@@ -2,13 +2,15 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import math
 from dataclasses import dataclass
 from numbers import Number
 from typing import Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, TensorDictModule, TensorDictSequential
 from tensordict.utils import NestedKey
@@ -27,6 +29,20 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+
+@tensorclass
+class REDQLosses:
+    """The tensorclass for The REDQLoss Loss class."""
+
+    loss_objective: torch.Tensor
+    loss_critic: torch.Tensor | None = None
+    loss_entropy: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+
+    @property
+    def aggregate_loss(self):
+        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class REDQLoss(LossModule):
@@ -252,6 +268,7 @@ class REDQLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        return_tensorclass: bool = False,
     ):
         super().__init__()
         self._in_keys = None
@@ -320,6 +337,7 @@ class REDQLoss(LossModule):
         self._vmap_getdist = _vmap_func(
             self.actor_network, func="get_dist_params", randomness=self.vmap_randomness
         )
+        self.return_tensorclass = return_tensorclass
 
     @property
     def target_entropy(self):
@@ -421,7 +439,7 @@ class REDQLoss(LossModule):
         return qvalue_params
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> REDQLosses:
         obs_keys = self.actor_network.in_keys
         tensordict_select = tensordict.clone(False).select(
             "next", *obs_keys, self.tensor_keys.action
@@ -565,6 +583,8 @@ class REDQLoss(LossModule):
             },
             [],
         )
+        if self.return_tensorclass:
+            return REDQLosses._from_tensordict(td_out)
 
         return td_out
 

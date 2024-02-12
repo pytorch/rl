@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import math
 import warnings
 from copy import deepcopy
@@ -12,7 +14,7 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
@@ -34,6 +36,20 @@ from torchrl.objectives.utils import (
 )
 
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+
+@tensorclass
+class CQLLosses:
+    """The tensorclass for The CQLLoss Loss class."""
+
+    loss_objective: torch.Tensor
+    loss_critic: torch.Tensor | None = None
+    loss_entropy: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+
+    @property
+    def aggregate_loss(self):
+        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class CQLLoss(LossModule):
@@ -269,6 +285,7 @@ class CQLLoss(LossModule):
         num_random: int = 10,
         with_lagrange: bool = False,
         lagrange_thresh: float = 0.0,
+        return_tensorclass: bool = False,
     ) -> None:
         self._out_keys = None
         super().__init__()
@@ -354,6 +371,7 @@ class CQLLoss(LossModule):
         self._vmap_qvalue_network00 = _vmap_func(
             self.qvalue_network, randomness=self.vmap_randomness
         )
+        self.return_tensorclass = return_tensorclass
 
     @property
     def target_entropy(self):
@@ -521,7 +539,10 @@ class CQLLoss(LossModule):
         }
         if self.with_lagrange:
             out["loss_alpha_prime"] = alpha_prime_loss.mean()
-        return TensorDict(out, [])
+        td_out = TensorDict(out, [])
+        if self.return_tensorclass:
+            return CQLLosses._from_tensordict(td_out)
+        return td_out
 
     @property
     @_cache_values
@@ -1000,6 +1021,7 @@ class DiscreteCQLLoss(LossModule):
         delay_value: bool = True,
         gamma: float = None,
         action_space=None,
+        return_tensorclass: bool = False,
     ) -> None:
         super().__init__()
         self._in_keys = None
@@ -1040,6 +1062,7 @@ class DiscreteCQLLoss(LossModule):
 
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+        self.return_tensorclass = return_tensorclass
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -1171,7 +1194,7 @@ class DiscreteCQLLoss(LossModule):
         return loss, metadata
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> CQLLosses:
         """Computes the (DQN) CQL loss given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
@@ -1196,6 +1219,8 @@ class DiscreteCQLLoss(LossModule):
             source=source,
             batch_size=[],
         )
+        if self.return_tensorclass:
+            return CQLLosses._from_tensordict(td_out)
 
         return td_out
 

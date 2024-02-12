@@ -2,13 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import math
 from dataclasses import dataclass
 from typing import Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch
 from tensordict.utils import NestedKey
 
@@ -17,6 +18,20 @@ from torchrl.modules import ProbabilisticActor
 
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import distance_loss
+
+
+@tensorclass
+class OnlineDTLosses:
+    """The tensorclass for The OnlineDTLoss Loss class."""
+
+    loss_objective: torch.Tensor
+    loss_critic: torch.Tensor | None = None
+    loss_entropy: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+
+    @property
+    def aggregate_loss(self):
+        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class OnlineDTLoss(LossModule):
@@ -78,6 +93,7 @@ class OnlineDTLoss(LossModule):
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         samples_mc_entropy: int = 1,
+        return_tensorclass: bool = False,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -146,6 +162,7 @@ class OnlineDTLoss(LossModule):
         )
 
         self.samples_mc_entropy = samples_mc_entropy
+        self.return_tensorclass = return_tensorclass
         self._set_in_keys()
 
     def _set_in_keys(self):
@@ -223,7 +240,10 @@ class OnlineDTLoss(LossModule):
             "entropy": entropy.detach(),
             "alpha": self.alpha.detach(),
         }
-        return TensorDict(out, [])
+        td_out = TensorDict(out, [])
+        if self.return_tensorclass:
+            return OnlineDTLosses._from_tensordict(td_out)
+        return td_out
 
 
 class DTLoss(LossModule):
@@ -265,6 +285,7 @@ class DTLoss(LossModule):
         actor_network: ProbabilisticActor,
         *,
         loss_function: str = "l2",
+        return_tensorclass: bool = False,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -277,6 +298,7 @@ class DTLoss(LossModule):
             create_target_params=False,
         )
         self.loss_function = loss_function
+        self.return_tensorclass = return_tensorclass
 
     def _set_in_keys(self):
         keys = self.actor_network.in_keys
@@ -310,7 +332,7 @@ class DTLoss(LossModule):
         self._out_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> OnlineDTLosses:
         """Compute the loss for the Online Decision Transformer."""
         # extract action targets
         tensordict = tensordict.clone(False)
@@ -328,4 +350,7 @@ class DTLoss(LossModule):
         out = {
             "loss": loss,
         }
-        return TensorDict(out, [])
+        td_out = TensorDict(out, [])
+        if self.return_tensorclass:
+            return OnlineDTLosses._from_tensordict(td_out)
+        return td_out

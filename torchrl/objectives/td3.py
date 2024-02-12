@@ -2,12 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
 
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec, TensorSpec
@@ -24,6 +26,20 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+
+@tensorclass
+class TD3Losses:
+    """The tensorclass for The TD3 Loss class."""
+
+    loss_objective: torch.Tensor
+    loss_critic: torch.Tensor | None = None
+    loss_entropy: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+
+    @property
+    def aggregate_loss(self):
+        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class TD3Loss(LossModule):
@@ -217,6 +233,7 @@ class TD3Loss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        return_tensorclass: bool = False,
     ) -> None:
         super().__init__()
         self._in_keys = None
@@ -299,6 +316,7 @@ class TD3Loss(LossModule):
         self._vmap_actor_network00 = _vmap_func(
             self.actor_network, randomness=self.vmap_randomness
         )
+        self.return_tensorclass = return_tensorclass
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -447,7 +465,7 @@ class TD3Loss(LossModule):
         return loss_qval, metadata
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> TD3Losses:
         tensordict_save = tensordict
         loss_actor, metadata_actor = self.actor_loss(tensordict)
         loss_qval, metadata_value = self.value_loss(tensordict_save)
@@ -467,6 +485,8 @@ class TD3Loss(LossModule):
             },
             batch_size=[],
         )
+        if self.return_tensorclass:
+            return TD3Losses._from_tensordict(td_out)
 
         return td_out
 

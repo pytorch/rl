@@ -2,11 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-from tensordict import TensorDict
+from tensordict import tensorclass, TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
 
@@ -21,6 +23,20 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+
+@tensorclass
+class DreamerModelLosses:
+    """The tensorclass for The Dreamer Model Loss class."""
+
+    loss_objective: torch.Tensor
+    loss_critic: torch.Tensor | None = None
+    loss_entropy: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+
+    @property
+    def aggregate_loss(self):
+        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class DreamerModelLoss(LossModule):
@@ -99,6 +115,7 @@ class DreamerModelLoss(LossModule):
         free_nats: int = 3,
         delayed_clamp: bool = False,
         global_average: bool = False,
+        return_tensorclass: bool = False,
     ):
         super().__init__()
         self.world_model = world_model
@@ -110,6 +127,7 @@ class DreamerModelLoss(LossModule):
         self.free_nats = free_nats
         self.delayed_clamp = delayed_clamp
         self.global_average = global_average
+        self.return_tensorclass = return_tensorclass
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
@@ -238,6 +256,7 @@ class DreamerActorLoss(LossModule):
         discount_loss: bool = False,  # for consistency with paper
         gamma: int = None,
         lmbda: int = None,
+        return_tensorclass: bool = False,
     ):
         super().__init__()
         self.actor_model = actor_model
@@ -249,6 +268,7 @@ class DreamerActorLoss(LossModule):
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         if lmbda is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+        self.return_tensorclass = return_tensorclass
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -256,7 +276,9 @@ class DreamerActorLoss(LossModule):
                 value=self._tensor_keys.value,
             )
 
-    def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
+    def forward(
+        self, tensordict: TensorDict
+    ) -> Tuple[DreamerModelLosses, DreamerModelLosses]:
         with torch.no_grad():
             tensordict = tensordict.select("state", self.tensor_keys.belief)
             tensordict = tensordict.reshape(-1)
@@ -293,6 +315,10 @@ class DreamerActorLoss(LossModule):
         else:
             actor_loss = -lambda_target.sum((-2, -1)).mean()
         loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
+        if self.return_tensorclass:
+            return DreamerModelLosses._from_tensordict(
+                loss_tensordict
+            ), DreamerModelLosses._from_tensordict(fake_data.detach())
         return loss_tensordict, fake_data.detach()
 
     def lambda_target(self, reward: torch.Tensor, value: torch.Tensor) -> torch.Tensor:

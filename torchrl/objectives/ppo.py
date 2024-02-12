@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -28,6 +28,20 @@ from torchrl.objectives.utils import (
 
 from .common import LossModule
 from .value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator, VTrace
+
+
+@tensorclass
+class PPOLosses:
+    """The tensorclass for The PPOLoss Loss class."""
+
+    loss_objective: torch.Tensor
+    loss_critic: torch.Tensor | None = None
+    loss_entropy: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+
+    @property
+    def aggregate_loss(self):
+        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class PPOLoss(LossModule):
@@ -278,6 +292,7 @@ class PPOLoss(LossModule):
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
+        return_tensorclass: bool = False,
     ):
         if actor is not None:
             actor_network = actor
@@ -336,6 +351,7 @@ class PPOLoss(LossModule):
             value_target=value_target_key,
             value=value_key,
         )
+        self.return_tensorclass = return_tensorclass
 
     @property
     def functional(self):
@@ -514,7 +530,7 @@ class PPOLoss(LossModule):
         return self.critic_network_params.detach()
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> PPOLosses:
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
@@ -539,6 +555,8 @@ class PPOLoss(LossModule):
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict).mean()
             td_out.set("loss_critic", loss_critic.mean())
+        if self.return_tensorclass:
+            return PPOLosses._from_tensordict(td_out)
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):

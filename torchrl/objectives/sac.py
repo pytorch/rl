@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import math
 import warnings
 from dataclasses import dataclass
@@ -11,7 +13,7 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
@@ -41,6 +43,20 @@ def _delezify(func):
         return func(self, *args, **kwargs)
 
     return new_func
+
+
+@tensorclass
+class SACLosses:
+    """The tensorclass for The SACLoss Loss class."""
+
+    loss_objective: torch.Tensor
+    loss_critic: torch.Tensor | None = None
+    loss_entropy: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+
+    @property
+    def aggregate_loss(self):
+        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class SACLoss(LossModule):
@@ -280,6 +296,7 @@ class SACLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        return_tensorclass: bool = False,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -381,6 +398,7 @@ class SACLoss(LossModule):
             self._vmap_qnetwork00 = _vmap_func(
                 qvalue_network, randomness=self.vmap_randomness
             )
+        self.return_tensorclass = return_tensorclass
 
     @property
     def target_entropy_buffer(self):
@@ -532,7 +550,7 @@ class SACLoss(LossModule):
         self._out_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> SACLosses:
         shape = None
         if tensordict.ndimension() > 1:
             shape = tensordict.shape
@@ -567,7 +585,10 @@ class SACLoss(LossModule):
         }
         if self._version == 1:
             out["loss_value"] = loss_value.mean()
-        return TensorDict(out, [])
+        td_out = TensorDict(out, [])
+        if self.return_tensorclass:
+            return SACLosses._from_tensordict(td_out)
+        return td_out
 
     @property
     @_cache_values
