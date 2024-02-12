@@ -24,6 +24,7 @@ from tensordict.nn import (
     TensorDictSequential,
     TensorDictSequential as Seq,
 )
+from torchrl.envs.utils import exploration_type, ExplorationType, set_exploration_type
 
 from torchrl.modules.models import QMixer
 
@@ -12466,6 +12467,22 @@ class TestBuffer:
                 assert p.device == dest
             for p in mod.value_params.values(True, True):
                 assert p.device == dest
+
+
+def test_loss_exploration():
+    class DummyLoss(LossModule):
+        def forward(self, td):
+            assert exploration_type() == InteractionType.MODE
+            with set_exploration_type(ExplorationType.RANDOM):
+                assert exploration_type() == ExplorationType.RANDOM
+            assert exploration_type() == ExplorationType.MODE
+            return td
+
+    loss_fn = DummyLoss()
+    with set_exploration_type(ExplorationType.RANDOM):
+        assert exploration_type() == ExplorationType.RANDOM
+        loss_fn(None)
+        assert exploration_type() == ExplorationType.RANDOM
 
 
 if __name__ == "__main__":
