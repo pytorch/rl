@@ -339,7 +339,7 @@ class BatchedEnvBase(EnvBase):
         nb = self._non_blocking
         if nb is None:
             nb = self.device is not None and self.device.type == "cuda"
-            self._non_blocking = rb
+            self._non_blocking = nb
         return nb
 
     def _get_metadata(
@@ -620,7 +620,6 @@ class BatchedEnvBase(EnvBase):
         self._shared_tensordict_parent_root = self.shared_tensordict_parent.exclude(
             "next", *self.reset_keys
         )
-        print("self.shared_tensordict_parent", self.shared_tensordict_parent)
 
     def _start_workers(self) -> None:
         """Starts the various envs."""
@@ -786,7 +785,7 @@ class SerialEnv(BatchedEnvBase):
                     env_device = _env.device
                     if env_device != self.device and env_device is not None:
                         tensordict_ = tensordict_.to(
-                            env_device, non_blocking=self.non_blockin / g
+                            env_device, non_blocking=self.non_blocking
                         )
                     else:
                         tensordict_ = tensordict_.clone(False)
