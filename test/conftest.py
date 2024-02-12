@@ -53,7 +53,7 @@ def measure_duration(request: pytest.FixtureRequest):
     request.addfinalizer(fin)
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(autouse=True)
 def set_warnings() -> None:
     warnings.filterwarnings(
         "ignore",
@@ -64,6 +64,11 @@ def set_warnings() -> None:
         "ignore",
         category=UserWarning,
         message=r"Couldn't cast the policy onto the desired device on remote process",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Skipping device Apple Paravirtual device",
     )
     warnings.filterwarnings(
         "ignore",
