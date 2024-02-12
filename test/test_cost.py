@@ -6648,7 +6648,13 @@ class TestA2C(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = A2CLoss(actor, value, loss_critic_type="l2", functional=functional)
+        loss_fn = A2CLoss(
+            actor,
+            value,
+            loss_critic_type="l2",
+            functional=functional,
+            return_tensorclass=False,
+        )
 
         # Check error is raised when actions require grads
         td["action"].requires_grad = True
