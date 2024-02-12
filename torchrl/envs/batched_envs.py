@@ -182,8 +182,8 @@ class BatchedEnvBase(EnvBase):
         >>> env = ParallelEnv(2, [
         ...     lambda: DMControlEnv("humanoid", "stand"),
         ...     lambda: DMControlEnv("humanoid", "walk")])  # Creates two independent copies of Humanoid, one that walks one that stands
-        >>> r = env.rollout(10)  # executes 10 random steps in the environment
-        >>> r[0]  # data for Humanoid stand
+        >>> rollout = env.rollout(10)  # executes 10 random steps in the environment
+        >>> rollout[0]  # data for Humanoid stand
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
@@ -214,7 +214,7 @@ class BatchedEnvBase(EnvBase):
             batch_size=torch.Size([10]),
             device=cpu,
             is_shared=False)
-        >>> r[1]  # data for Humanoid walk
+        >>> rollout[1]  # data for Humanoid walk
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([10, 21]), device=cpu, dtype=torch.float64, is_shared=False),
@@ -245,6 +245,7 @@ class BatchedEnvBase(EnvBase):
             batch_size=torch.Size([10]),
             device=cpu,
             is_shared=False)
+        >>> # serial_for_single to avoid creating parallel envs if not necessary
         >>> env = ParallelEnv(1, make_env, serial_for_single=True)
         >>> assert isinstance(env, SerialEnv)  # serial_for_single allows you to avoid creating parallel envs when not necessary
     """
@@ -668,6 +669,7 @@ class BatchedEnvBase(EnvBase):
         self._start_workers()
 
     def to(self, device: DEVICE_TYPING):
+        self._non_blocking = None
         device = torch.device(device)
         if device == self.device:
             return self
