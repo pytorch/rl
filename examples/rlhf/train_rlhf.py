@@ -100,9 +100,7 @@ def main(cfg):
     # using a Gym-like API (querying steps etc) introduces some
     # extra code that we can spare.
     #
-    kl_scheduler = AdaptiveKLController(
-        model, init_kl_coef=0.1, target=6, horizon=10000
-    )
+    kl_scheduler = AdaptiveKLController(init_kl_coef=0.1, target=6, horizon=10000)
     rollout_from_model = RolloutFromModel(
         model,
         ref_model,
