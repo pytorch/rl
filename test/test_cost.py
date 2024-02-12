@@ -12386,10 +12386,14 @@ class TestSingleCall:
 
 
 def test_instantiate_with_different_keys():
-    loss_1 = DQNLoss(value_network=nn.Linear(3, 3), action_space="one_hot")
+    loss_1 = DQNLoss(
+        value_network=nn.Linear(3, 3), action_space="one_hot", delay_value=True
+    )
     loss_1.set_keys(reward="a")
     assert loss_1.tensor_keys.reward == "a"
-    loss_2 = DQNLoss(value_network=nn.Linear(3, 3), action_space="one_hot")
+    loss_2 = DQNLoss(
+        value_network=nn.Linear(3, 3), action_space="one_hot", delay_value=True
+    )
     loss_2.set_keys(reward="b")
     assert loss_1.tensor_keys.reward == "a"
 
