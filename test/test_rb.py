@@ -672,6 +672,8 @@ class TestStorages:
     def test_storage_dumps_loads(
         self, device_data, storage_type, data_type, isinit, tmpdir
     ):
+        torch.manual_seed(0)
+
         dir_rb = tmpdir / "rb"
         dir_save = tmpdir / "save"
         dir_rb.mkdir()
@@ -716,15 +718,18 @@ class TestStorages:
             )
         else:
             raise NotImplementedError
+
         if storage_type in (LazyMemmapStorage,):
             storage = storage_type(max_size=10, scratch_dir=dir_rb)
         else:
             storage = storage_type(max_size=10)
+
         # We cast the device to CPU as CUDA isn't automatically cast to CPU when using range() index
         if data_type == "pytree":
             storage.set(range(3), tree_map(lambda x: x.cpu(), data))
         else:
             storage.set(range(3), data.cpu())
+
         storage.dumps(dir_save)
         # check we can dump twice
         storage.dumps(dir_save)
@@ -732,9 +737,11 @@ class TestStorages:
         storage_recover = storage_type(max_size=10)
         if isinit:
             if data_type == "pytree":
-                storage_recover.set(range(3), tree_map(lambda x: x.cpu().zero_(), data))
+                storage_recover.set(
+                    range(3), tree_map(lambda x: x.cpu().clone().zero_(), data)
+                )
             else:
-                storage_recover.set(range(3), data.cpu().zero_())
+                storage_recover.set(range(3), data.cpu().clone().zero_())
 
         if data_type in ("tensor", "pytree") and not isinit:
             with pytest.raises(
