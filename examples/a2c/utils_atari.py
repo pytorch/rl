@@ -20,8 +20,8 @@ from torchrl.envs import (
     NoopResetEnv,
     ParallelEnv,
     Resize,
-    RewardClipping,
     RewardSum,
+    SignTransform,
     StepCounter,
     ToTensorImage,
     TransformedEnv,
@@ -73,7 +73,7 @@ def make_parallel_env(env_name, num_envs, device, is_test=False):
     env.append_transform(RewardSum())
     env.append_transform(StepCounter(max_steps=4500))
     if not is_test:
-        env.append_transform(RewardClipping(-1, 1))
+        env.append_transform(SignTransform(in_keys=["reward"]))
     env.append_transform(DoubleToFloat())
     env.append_transform(VecNorm(in_keys=["pixels"]))
     return env
