@@ -734,7 +734,7 @@ class LazyTensorStorage(TensorStorage):
                 .to(self.device)
             )
             if self.names is not None:
-                names = self.names + [None] * (out.batch_dims - len(self.names))
+                names = self.names + out.names[1:]
                 out.refine_names(*names)
         else:
             # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
@@ -911,7 +911,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             out = out.expand(self.max_size, *data.shape)
             out = out.memmap_like(prefix=self.scratch_dir)
             if self.names is not None:
-                names = self.names + [None] * (out.batch_dims - len(self.names))
+                names = self.names + out.names[1:]
                 out.refine_names(*names)
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
