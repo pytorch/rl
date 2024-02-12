@@ -3,8 +3,12 @@
 torchrl.modules package
 =======================
 
+.. _ref_modules:
+
 TensorDict modules: Actors, exploration, value models and generative models
 ---------------------------------------------------------------------------
+
+.. _tdmodules:
 
 TorchRL offers a series of module wrappers aimed at making it easy to build
 RL models from the ground up. These wrappers are exclusively based on
