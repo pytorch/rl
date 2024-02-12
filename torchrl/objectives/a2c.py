@@ -30,7 +30,7 @@ from torchrl.objectives.value import (
     VTrace,
 )
 
-from .utils import _reduce
+from torchrl.objectives.utils import _reduce
 
 
 class A2CLoss(LossModule):
