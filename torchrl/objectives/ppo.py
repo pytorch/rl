@@ -793,7 +793,7 @@ class ClipPPOLoss(PPOLoss):
             td_out.set("loss_critic", loss_critic)
 
         if self.reduction is not None:
-            td_out = td_out.apply(lambda x: _reduce(x, self.reduction), batch_size=[])
+            td_out = td_out.apply(functools.partial(_reduce, reduction=self.reduction), batch_size=[])
             td_out.set("ESS", _reduce(ess, self.reduction) / batch)
         return td_out
 
