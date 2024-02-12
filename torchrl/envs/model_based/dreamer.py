@@ -57,10 +57,15 @@ class DreamerEnv(ModelBasedEnvBase):
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
         batch_size = tensordict.batch_size if tensordict is not None else []
         device = tensordict.device if tensordict is not None else self.device
-        td = self.state_spec.rand(shape=batch_size).to(device)
-        td.set("action", self.action_spec.rand(shape=batch_size).to(device))
-        td[("next", "reward")] = self.reward_spec.rand(shape=batch_size).to(device)
-        td.update(self.observation_spec.rand(shape=batch_size).to(device))
+        # TODO: why do we overright here incoming belief and states that are correct
+        if tensordict is None:
+            td = self.state_spec.rand(shape=batch_size).to(device)
+            # why dont we reuse actions taken at those steps?
+            td.set("action", self.action_spec.rand(shape=batch_size).to(device))
+            td[("next", "reward")] = self.reward_spec.rand(shape=batch_size).to(device)
+            td.update(self.observation_spec.rand(shape=batch_size).to(device))
+        else:
+            td = tensordict.clone()
         return td
 
     def decode_obs(self, tensordict: TensorDict, compute_latents=False) -> TensorDict:

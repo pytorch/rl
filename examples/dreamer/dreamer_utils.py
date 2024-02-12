@@ -525,14 +525,14 @@ def _dreamer_make_mbenv(
     )
 
     model_based_env.set_specs_from_env(test_env)
-    model_based_env = TransformedEnv(model_based_env)
-    default_dict = {
-        "state": UnboundedContinuousTensorSpec(shape=(state_dim)),
-        "belief": UnboundedContinuousTensorSpec(shape=(rssm_hidden_dim)),
-    }
-    model_based_env.append_transform(
-        TensorDictPrimer(random=False, default_value=0, **default_dict)
-    )
+    # model_based_env = TransformedEnv(model_based_env)
+    # default_dict = {
+    #     "state": UnboundedContinuousTensorSpec(shape=(state_dim)),
+    #     "belief": UnboundedContinuousTensorSpec(shape=(rssm_hidden_dim)),
+    # }
+    # model_based_env.append_transform(
+    #     TensorDictPrimer(random=False, default_value=0, **default_dict)
+    # )
     return model_based_env
 
 

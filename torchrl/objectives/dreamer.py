@@ -128,7 +128,7 @@ class DreamerModelLoss(LossModule):
             tensordict.get(("next", self.tensor_keys.prior_std)),
             tensordict.get(("next", self.tensor_keys.posterior_mean)),
             tensordict.get(("next", self.tensor_keys.posterior_std)),
-        ).unsqueeze(-1)
+        )
 
         decoder = self.world_model[0][-1]
         dist = decoder.get_dist(tensordict)
@@ -250,13 +250,24 @@ class DreamerActorLoss(LossModule):
 
     def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
         with torch.no_grad():
+            # TODO: I think we need to take the "next" state and "next" beliefs
             tensordict = tensordict.select("state", self.tensor_keys.belief)
             tensordict = tensordict.reshape(-1)
 
+            # td = tensordict.select(("next", self.tensor_keys.state), ("next", self.tensor_keys.belief))
+            # td = td.rename_key_(("next", "state"), "state")
+            # td = td.rename_key_(("next", "belief"), "belief")
+            # td = td.reshape(-1)
+
+        # TODO: do we need exploration here?
         with hold_out_net(self.model_based_env), set_exploration_type(
             ExplorationType.MODE
         ):
+            # action_td = self.actor_model(td)
+
+            # TODO: we are not using the actual batch beliefs as starting ones - should be solved! took of the primer for the mb_env
             tensordict = self.model_based_env.reset(tensordict.clone(recurse=False))
+            # TODO: do we detach state gradients when passing again for new actions: action = self.actor(state.detach())
             fake_data = self.model_based_env.rollout(
                 max_steps=self.imagination_horizon,
                 policy=self.actor_model,
@@ -332,6 +343,7 @@ class DreamerActorLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
+                vectorized=False,  # TODO: vectorized version seems not to be similar to the non vectoried
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
@@ -395,6 +407,7 @@ class DreamerValueLoss(LossModule):
 
     def forward(self, fake_data) -> torch.Tensor:
         lambda_target = fake_data.get("lambda_target")
+        # TODO: I think this should be next state and belief
         tensordict_select = fake_data.select(*self.value_model.in_keys)
         dist = self.value_model.get_dist(tensordict_select)
         if self.discount_loss:
