@@ -67,6 +67,11 @@ def set_warnings() -> None:
     )
     warnings.filterwarnings(
         "ignore",
+        category=UserWarning,
+        message=r"Skipping device Apple Paravirtual device",
+    )
+    warnings.filterwarnings(
+        "ignore",
         category=DeprecationWarning,
         message=r"Deprecated call to `pkg_resources.declare_namespace",
     )
