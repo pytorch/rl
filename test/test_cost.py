@@ -6009,7 +6009,11 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("separate_losses", [True, False])
     def test_ppo_shared_seq(
-        self, loss_class, device, advantage, separate_losses,
+        self,
+        loss_class,
+        device,
+        advantage,
+        separate_losses,
     ):
         """Tests PPO with shared module with and without passing twice across the common module."""
         torch.manual_seed(self.seed)
@@ -6067,9 +6071,6 @@ class TestPPO(LossModuleTestBase):
             lambda x: x.grad.clone()
         )
         loss2 = loss_fn2(td).exclude("entropy")
-        if reduction is None:
-            assert loss2.batch_size == td.batch_size
-            loss2 = loss2.apply(lambda x: x.float().mean(), batch_size=[])
 
         model.zero_grad()
         sum(val for key, val in loss2.items() if key.startswith("loss_")).backward()

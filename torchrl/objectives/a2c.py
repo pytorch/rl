@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import contextlib
+import functools
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
@@ -15,9 +16,11 @@ from tensordict.utils import NestedKey
 from torch import distributions as d
 
 from torchrl.objectives.common import LossModule
+
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -29,8 +32,6 @@ from torchrl.objectives.value import (
     TDLambdaEstimator,
     VTrace,
 )
-
-from torchrl.objectives.utils import _reduce
 
 
 class A2CLoss(LossModule):
@@ -474,7 +475,9 @@ class A2CLoss(LossModule):
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
         if self.reduction is not None:
-            td_out = td_out.apply(functools.partial(_reduce, reduction=self.reduction), batch_size=[])
+            td_out = td_out.apply(
+                functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+            )
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):

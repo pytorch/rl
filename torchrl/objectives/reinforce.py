@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
@@ -15,8 +16,10 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torchrl.objectives.common import LossModule
+
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -28,8 +31,6 @@ from torchrl.objectives.value import (
     TDLambdaEstimator,
     VTrace,
 )
-
-from .utils import _reduce
 
 
 class ReinforceLoss(LossModule):
@@ -402,7 +403,9 @@ class ReinforceLoss(LossModule):
 
         td_out.set("loss_value", self.loss_critic(tensordict))
         if self.reduction is not None:
-            td_out = td_out.apply(functools.partial(_reduce, reduction=self.reduction), batch_size=[])
+            td_out = td_out.apply(
+                functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+            )
 
         return td_out
 

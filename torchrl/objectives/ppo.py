@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 
 import math
 import warnings
@@ -18,17 +19,23 @@ from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDic
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
+from torchrl.objectives.common import LossModule
+
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
-
-from .common import LossModule
-from .utils import _reduce
-from .value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator, VTrace
+from torchrl.objectives.value import (
+    GAE,
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+    VTrace,
+)
 
 
 class PPOLoss(LossModule):
@@ -549,7 +556,9 @@ class PPOLoss(LossModule):
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
         if self.reduction is not None:
-            td_out = td_out.apply(functools.partial(_reduce, reduction=self.reduction), batch_size=[])
+            td_out = td_out.apply(
+                functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+            )
 
         return td_out
 
@@ -793,7 +802,9 @@ class ClipPPOLoss(PPOLoss):
             td_out.set("loss_critic", loss_critic)
 
         if self.reduction is not None:
-            td_out = td_out.apply(functools.partial(_reduce, reduction=self.reduction), batch_size=[])
+            td_out = td_out.apply(
+                functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+            )
             td_out.set("ESS", _reduce(ess, self.reduction) / batch)
         return td_out
 
@@ -1018,7 +1029,9 @@ class KLPENPPOLoss(PPOLoss):
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
         if self.reduction is not None:
-            td_out = td_out.apply(functools.partial(_reduce, reduction=self.reduction), batch_size=[])
+            td_out = td_out.apply(
+                functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+            )
 
         return td_out
 
