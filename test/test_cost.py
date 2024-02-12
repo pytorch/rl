@@ -156,6 +156,10 @@ from torchrl.objectives.value.utils import (
 )
 
 
+# Capture all warnings
+pytestmark = pytest.mark.filterwarnings("error")
+
+
 class _check_td_steady:
     def __init__(self, td):
         self.td_clone = td.clone()
@@ -501,6 +505,11 @@ class TestDQN(LossModuleTestBase):
             else contextlib.nullcontext()
         ), _check_td_steady(td):
             loss = loss_fn(td)
+
+        if delay_value:
+            # remove warning
+            SoftUpdate(loss_fn, eps=0.5)
+
         assert loss_fn.tensor_keys.priority in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
@@ -562,6 +571,10 @@ class TestDQN(LossModuleTestBase):
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
+        if delay_value:
+            # remove warning
+            SoftUpdate(loss_fn, eps=0.5)
+
         with torch.no_grad():
             loss = loss_fn(td)
         if n == 0:
@@ -601,7 +614,7 @@ class TestDQN(LossModuleTestBase):
         torch.manual_seed(self.seed)
         action_spec_type = "one_hot"
         actor = self._create_mock_actor(action_spec_type=action_spec_type)
-        loss_fn = DQNLoss(actor)
+        loss_fn = DQNLoss(actor, delay_value=True)
 
         default_keys = {
             "advantage": "advantage",
@@ -617,7 +630,7 @@ class TestDQN(LossModuleTestBase):
 
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
 
-        loss_fn = DQNLoss(actor)
+        loss_fn = DQNLoss(actor, delay_value=True)
         key_mapping = {
             "advantage": ("advantage", "advantage_2"),
             "value_target": ("value_target", ("value_target", "nested")),
@@ -630,7 +643,7 @@ class TestDQN(LossModuleTestBase):
         actor = self._create_mock_actor(
             action_spec_type=action_spec_type, action_value_key="chosen_action_value_2"
         )
-        loss_fn = DQNLoss(actor)
+        loss_fn = DQNLoss(actor, delay_value=True)
         key_mapping = {
             "value": ("value", "chosen_action_value_2"),
         }
@@ -657,11 +670,14 @@ class TestDQN(LossModuleTestBase):
             action_value_key=tensor_keys["action_value"],
         )
 
-        loss_fn = DQNLoss(actor, loss_function="l2")
+        loss_fn = DQNLoss(actor, loss_function="l2", delay_value=True)
         loss_fn.set_keys(**tensor_keys)
 
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
+
+        SoftUpdate(loss_fn, eps=0.5)
+
         with _check_td_steady(td):
             _ = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
@@ -707,6 +723,10 @@ class TestDQN(LossModuleTestBase):
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
+        if delay_value:
+            # remove warning
+            SoftUpdate(loss_fn, eps=0.5)
+
         # Check param update effect on targets
         target_value = loss_fn.target_value_network_params.clone()
         for p in loss_fn.parameters():
@@ -744,7 +764,7 @@ class TestDQN(LossModuleTestBase):
             module=module,
             in_keys=[observation_key],
         )
-        dqn_loss = DQNLoss(actor)
+        dqn_loss = DQNLoss(actor, delay_value=True)
         dqn_loss.set_keys(reward=reward_key, done=done_key, terminated=terminated_key)
         # define data
         observation = torch.randn(n_obs)
@@ -5510,7 +5530,7 @@ class TestDiscreteCQL(LossModuleTestBase):
         torch.manual_seed(self.seed)
         action_spec_type = "one_hot"
         actor = self._create_mock_actor(action_spec_type=action_spec_type)
-        loss_fn = DQNLoss(actor)
+        loss_fn = DQNLoss(actor, delay_value=True)
 
         default_keys = {
             "value_target": "value_target",
