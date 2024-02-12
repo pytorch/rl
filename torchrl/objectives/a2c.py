@@ -255,7 +255,7 @@ class A2CLoss(LossModule):
 
         if functional:
             self.convert_to_functional(
-                actor_network, "actor_network", funs_to_decorate=["forward", "get_dist"]
+                actor_network, "actor_network",
             )
         else:
             self.actor_network = actor_network

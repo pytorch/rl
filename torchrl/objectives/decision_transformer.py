@@ -275,7 +275,6 @@ class DTLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=False,
-            funs_to_decorate=["forward"],
         )
         self.loss_function = loss_function
 
