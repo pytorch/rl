@@ -13,7 +13,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDict
-from torch import Tensor
+from torch import nn, Tensor
 from torch.nn import functional as F
 
 from torchrl.data.rlhf.prompt import PromptData
@@ -30,8 +30,8 @@ class KLControllerBase(abc.ABC):
     """
 
     @abc.abstractmethod
-    def update(self, kl_values: float):
-        pass
+    def update(self, kl_values: float) -> float:
+        ...
 
 
 class ConstantKLController(KLControllerBase):
@@ -40,30 +40,39 @@ class ConstantKLController(KLControllerBase):
     This controller maintains a fixed coefficient no matter what values it is updated
     with.
 
-    Arguments:
-        model: wrapped model that needs to be controlled. Must have attribute 'kl_coef'
+    Keyword Arguments:
         kl_coef (float): The coefficient to multiply KL with when calculating the
             reward.
+        model (nn.Module, optional): wrapped model that needs to be controlled.
+            Must have an attribute ``"kl_coef"``. If provided, the ``"kl_coef"`` will
+            be updated in-place.
     """
 
-    def __init__(self, model, kl_coef):
+    def __init__(
+        self,
+        *,
+        kl_coef: float = None,
+        model: nn.Module | None = None,
+    ):
         self.model = model
-        if not hasattr(model, "kl_coef"):
+        if model is not None and not hasattr(model, "kl_coef"):
             raise AttributeError(
                 "Model input to ConstantKLController doesn't have attribute 'kl_coef'"
             )
         self.coef = kl_coef
-        self.model.kl_coef = self.coef
+        if model is not None:
+            self.model.kl_coef = self.coef
 
-    def update(self, kl_values: Sequence[float] = None):
-        self.model.kl_coef = self.coef
+    def update(self, kl_values: Sequence[float] = None) -> float:
+        if self.model is not None:
+            self.model.kl_coef = self.coef
+        return self.coef
 
 
 class AdaptiveKLController(KLControllerBase):
     """Adaptive KL Controller as described in Ziegler et al. "Fine-Tuning Language Models from Human Preferences".
 
-    Arguments:
-        model: wrapped model that needs to be controlled. Must have attribute 'kl_coef'
+    Keyword Arguments:
         init_kl_coef (float): The starting value of the coefficient.
         target (float): The target KL value. When the observed KL is smaller, the
             coefficient is decreased, thereby relaxing the KL penalty in the training
@@ -72,17 +81,28 @@ class AdaptiveKLController(KLControllerBase):
             increased, thereby pulling the model back towards the reference model.
         horizon (int): Scaling factor to control how aggressively we update the
             coefficient.
+        model (nn.Module, optional): wrapped model that needs to be controlled.
+            Must have an attribute ``"kl_coef"``. If provided, the ``"kl_coef"`` will
+            be updated in-place.
 
     Reference: Section 2.2 https://arxiv.org/pdf/1909.08593.pdf#page=2
     Source: https://github.com/openai/lm-human-preferences/blob/master/lm_human_preferences/train_policy.py
     """
 
-    def __init__(self, model, init_kl_coef: float, target: float, horizon: int):
+    def __init__(
+        self,
+        *,
+        init_kl_coef: float,
+        target: float,
+        horizon: int,
+        model: nn.Module | None = None,
+    ):
         self.model = model
         self.coef = init_kl_coef
         self.target = target
         self.horizon = horizon
-        self.model.kl_coef = self.coef
+        if model is not None:
+            self.model.kl_coef = self.coef
 
     def update(self, kl_values: Sequence[float]):
         """Update ``self.coef`` adaptively.
@@ -104,6 +124,9 @@ class AdaptiveKLController(KLControllerBase):
         proportional_error = np.clip(kl_value / self.target - 1, -0.2, 0.2)  # ϵₜ
         mult = 1 + proportional_error * n_steps / self.horizon
         self.coef *= mult  # βₜ₊₁
+        if self.model is not None:
+            self.model.kl_coef = self.coef
+        return self.coef
 
 
 class RolloutFromModel:

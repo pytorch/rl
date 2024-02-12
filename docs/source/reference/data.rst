@@ -702,6 +702,9 @@ efficient sampling.
     TokenizedDatasetLoader
     create_infinite_iterator
     get_dataloader
+    ConstantKLController
+    AdaptiveKLController
+
 
 Utils
 -----
