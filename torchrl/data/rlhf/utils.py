@@ -7,7 +7,7 @@ from __future__ import annotations
 import abc
 import collections
 import importlib
-from typing import Sequence, Tuple
+from typing import List, Tuple
 
 import numpy as np
 import torch
@@ -30,7 +30,7 @@ class KLControllerBase(abc.ABC):
     """
 
     @abc.abstractmethod
-    def update(self, kl_values: float) -> float:
+    def update(self, kl_values: List[float]) -> float:
         ...
 
 
@@ -63,7 +63,7 @@ class ConstantKLController(KLControllerBase):
         if model is not None:
             self.model.kl_coef = self.coef
 
-    def update(self, kl_values: Sequence[float] = None) -> float:
+    def update(self, kl_values: List[float] = None) -> float:
         if self.model is not None:
             self.model.kl_coef = self.coef
         return self.coef
@@ -104,7 +104,7 @@ class AdaptiveKLController(KLControllerBase):
         if model is not None:
             self.model.kl_coef = self.coef
 
-    def update(self, kl_values: Sequence[float]):
+    def update(self, kl_values: List[float]):
         """Update ``self.coef`` adaptively.
 
         Arguments:
@@ -256,8 +256,6 @@ class RolloutFromModel:
             log_ratio (torch.Tensor): The log ratio of the probabilities of the generated tokens
                 according to the generative model and the reference model. Can be
                 obtained by calling the ``generate`` method.
-            kl_coef (float, optional): Coefficient with which to multiply the KL term before subtracting
-                from the reward. Defaults to 0.1.
 
         Returns:
             A :class:`~tensordict.TensorDict` with the following keys:
@@ -537,7 +535,7 @@ class RolloutFromModel:
 
     def step_scheduler(self):
         # recover true kl
-        self.kl_scheduler.update(self._kl_queue)
+        self.kl_coef = self.kl_scheduler.update(self._kl_queue)
         if isinstance(self._kl_queue, (list, collections.deque)):
             # remove all values
             while len(self._kl_queue):
