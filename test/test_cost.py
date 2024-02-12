@@ -9839,6 +9839,10 @@ def test_param_buffer_types(create_target_params, cast):
         out_keys=["action"],
     )
     loss = MyLoss(actor_module)
+
+    if create_target_params:
+        SoftUpdate(loss, eps=0.5)
+
     if cast is not None:
         loss.to(cast)
     for name in ("weight", "bias"):
@@ -9968,11 +9972,13 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             self.convert_to_functional(
                 module1, "module1", create_target_params=delay_module
             )
+
             module2 = torch.nn.BatchNorm2d(10).eval()
             self.module2 = module2
-            iterator_params = self.target_module1_params.values(
-                include_nested=True, leaves_only=True
-            )
+            tparam = self._modules.get("target_module1_params", None)
+            if tparam is None:
+                tparam = self._modules.get("module1_params").data
+            iterator_params = tparam.values(include_nested=True, leaves_only=True)
             for target in iterator_params:
                 if target.dtype is not torch.int64:
                     target.data.normal_()
