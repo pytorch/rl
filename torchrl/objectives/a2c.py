@@ -474,7 +474,7 @@ class A2CLoss(LossModule):
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
         if self.reduction is not None:
-            td_out = td_out.apply(lambda x: _reduce(x, self.reduction), batch_size=[])
+            td_out = td_out.apply(functools.partial(_reduce, reduction=self.reduction), batch_size=[])
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
