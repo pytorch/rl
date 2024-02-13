@@ -261,7 +261,7 @@ class DreamerActorLoss(LossModule):
 
         # TODO: do we need exploration here?
         with hold_out_net(self.model_based_env), set_exploration_type(
-            ExplorationType.MODE
+            ExplorationType.MEAN
         ):
             # action_td = self.actor_model(td)
 
@@ -408,7 +408,10 @@ class DreamerValueLoss(LossModule):
     def forward(self, fake_data) -> torch.Tensor:
         lambda_target = fake_data.get("lambda_target")
         # TODO: I think this should be next state and belief
-        tensordict_select = fake_data.select(*self.value_model.in_keys)
+        td = fake_data.select(("next", "state"), ("next", "belief"))
+        td = td.rename_key_(("next", "state"), "state")
+        tensordict_select = td.rename_key_(("next", "belief"), "belief")
+        # tensordict_select = fake_data.select(*self.value_model.in_keys)
         dist = self.value_model.get_dist(tensordict_select)
         if self.discount_loss:
             discount = self.gamma * torch.ones_like(

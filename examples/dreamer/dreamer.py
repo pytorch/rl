@@ -115,10 +115,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         current_frames = tensordict.numel()
         collected_frames += current_frames
 
-        tensordict["pixels"] = (tensordict["pixels"] * 255).to(torch.uint8)
-        tensordict["next", "pixels"] = (tensordict["next", "pixels"] * 255).to(
-            torch.uint8
-        )
+        # tensordict["pixels"] = (tensordict["pixels"] * 255).to(torch.uint8)
+        # tensordict["next", "pixels"] = (tensordict["next", "pixels"] * 255).to(
+        #     torch.uint8
+        # )
         ep_reward = tensordict.get("episode_reward")[:, -1]
         replay_buffer.extend(tensordict.cpu())
 

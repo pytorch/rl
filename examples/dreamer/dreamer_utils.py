@@ -39,7 +39,7 @@ from torchrl.envs.transforms import (
     FrameSkipTransform,
     GrayScale,
     # NoopResetEnv,
-    ObservationNorm,
+    # ObservationNorm,
     RandomCropTensorDict,
     Resize,
     # RewardScaling,
@@ -285,17 +285,17 @@ def make_replay_buffer(
         crop_seq = RandomCropTensorDict(sub_seq_len=batch_seq_len, sample_dim=-1)
         transforms.append(crop_seq)
 
-        if pixel_obs:
-            # dtype_transform = DTypeCastTransform(torch.double, torch.float32, in_keys=["pixels"])
-            # from 0-255 to 0-1
-            norm_obs = ObservationNorm(
-                loc=0,
-                scale=255,
-                standard_normal=True,
-                in_keys=["pixels", ("next", "pixels")],
-            )
-            # transforms.append(dtype_transform)
-            transforms.append(norm_obs)
+        # if pixel_obs:
+        #     # dtype_transform = DTypeCastTransform(torch.double, torch.float32, in_keys=["pixels"])
+        #     # from 0-255 to 0-1
+        #     norm_obs = ObservationNorm(
+        #         loc=0,
+        #         scale=255,
+        #         standard_normal=True,
+        #         in_keys=["pixels", ("next", "pixels")],
+        #     )
+        #     # transforms.append(dtype_transform)
+        #     transforms.append(norm_obs)
 
         transforms = Compose(*transforms)
 
