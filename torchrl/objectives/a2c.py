@@ -255,7 +255,8 @@ class A2CLoss(LossModule):
 
         if functional:
             self.convert_to_functional(
-                actor_network, "actor_network", funs_to_decorate=["forward", "get_dist"]
+                actor_network,
+                "actor_network",
             )
         else:
             self.actor_network = actor_network
@@ -350,7 +351,7 @@ class A2CLoss(LossModule):
             *[("next", key) for key in self.actor_network.in_keys],
         ]
         if self.critic_coef:
-            keys.extend(self.critic.in_keys)
+            keys.extend(self.critic_network.in_keys)
         return list(set(keys))
 
     @property
@@ -414,11 +415,11 @@ class A2CLoss(LossModule):
             # TODO: if the advantage is gathered by forward, this introduces an
             # overhead that we could easily reduce.
             target_return = tensordict.get(self.tensor_keys.value_target)
-            tensordict_select = tensordict.select(*self.critic.in_keys)
+            tensordict_select = tensordict.select(*self.critic_network.in_keys)
             with self.critic_network_params.to_module(
-                self.critic
+                self.critic_network
             ) if self.functional else contextlib.nullcontext():
-                state_value = self.critic(
+                state_value = self.critic_network(
                     tensordict_select,
                 ).get(self.tensor_keys.value)
             loss_value = distance_loss(
@@ -477,13 +478,19 @@ class A2CLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(value_network=self.critic, **hp)
+            self._value_estimator = TD1Estimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(value_network=self.critic, **hp)
+            self._value_estimator = TD0Estimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(value_network=self.critic, **hp)
+            self._value_estimator = GAE(value_network=self.critic_network, **hp)
         elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
+            self._value_estimator = TDLambdaEstimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.VTrace:
             # VTrace currently does not support functional call on the actor
             if self.functional:

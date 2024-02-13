@@ -292,7 +292,6 @@ class SACLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
-            funs_to_decorate=["forward", "get_dist"],
         )
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
@@ -980,7 +979,6 @@ class DiscreteSACLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
-            funs_to_decorate=["forward", "get_dist"],
         )
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
@@ -1036,7 +1034,7 @@ class DiscreteSACLoss(LossModule):
         if action_space is None:
             warnings.warn(
                 "action_space was not specified. DiscreteSACLoss will default to 'one-hot'."
-                "This behaviour will be deprecated soon and a space will have to be passed."
+                "This behaviour will be deprecated soon and a space will have to be passed. "
                 "Check the DiscreteSACLoss documentation to see how to pass the action space. "
             )
             action_space = "one-hot"

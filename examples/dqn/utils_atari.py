@@ -14,8 +14,8 @@ from torchrl.envs import (
     GymEnv,
     NoopResetEnv,
     Resize,
-    RewardClipping,
     RewardSum,
+    SignTransform,
     StepCounter,
     ToTensorImage,
     TransformedEnv,
@@ -42,7 +42,7 @@ def make_env(env_name, frame_skip, device, is_test=False):
     env.append_transform(NoopResetEnv(noops=30, random=True))
     if not is_test:
         env.append_transform(EndOfLifeTransform())
-        env.append_transform(RewardClipping(-1, 1))
+        env.append_transform(SignTransform(in_keys=["reward"]))
     env.append_transform(ToTensorImage())
     env.append_transform(GrayScale())
     env.append_transform(Resize(84, 84))

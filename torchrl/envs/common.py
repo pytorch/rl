@@ -2055,8 +2055,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         tensordict_reset = self._reset(tensordict, **kwargs)
         #        We assume that this is done properly
-        #        if tensordict_reset.device != self.device:
-        #            tensordict_reset = tensordict_reset.to(self.device, non_blocking=True)
+        #        if reset.device != self.device:
+        #            reset = reset.to(self.device, non_blocking=True)
         if tensordict_reset is tensordict:
             raise RuntimeError(
                 "EnvBase._reset should return outplace changes to the input "

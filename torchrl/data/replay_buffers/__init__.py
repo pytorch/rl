@@ -13,6 +13,7 @@ from .replay_buffers import (
 )
 from .samplers import (
     PrioritizedSampler,
+    PrioritizedSliceSampler,
     RandomSampler,
     Sampler,
     SamplerEnsemble,

@@ -54,6 +54,7 @@ from torchrl.modules.tensordict_module.exploration import (
 class TestEGreedy:
     @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1])
     @pytest.mark.parametrize("module", [True, False])
+    @set_exploration_type(InteractionType.RANDOM)
     def test_egreedy(self, eps_init, module):
         torch.manual_seed(0)
         spec = BoundedTensorSpec(1, 1, torch.Size([4]))

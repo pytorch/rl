@@ -3,6 +3,8 @@
 torchrl.data package
 ====================
 
+.. _ref_data:
+
 Replay Buffers
 --------------
 
@@ -134,6 +136,7 @@ using the following components:
 
     Sampler
     PrioritizedSampler
+    PrioritizedSliceSampler
     RandomSampler
     SamplerWithoutReplacement
     SliceSampler
@@ -699,6 +702,9 @@ efficient sampling.
     TokenizedDatasetLoader
     create_infinite_iterator
     get_dataloader
+    ConstantKLController
+    AdaptiveKLController
+
 
 Utils
 -----

@@ -577,7 +577,7 @@ class SyncDataCollector(DataCollectorBase):
         reset_when_done: bool = True,
         interruptor=None,
     ):
-        from torchrl.envs.batched_envs import _BatchedEnv
+        from torchrl.envs.batched_envs import BatchedEnvBase
 
         self.closed = True
 
@@ -591,7 +591,7 @@ class SyncDataCollector(DataCollectorBase):
         else:
             env = create_env_fn
             if create_env_kwargs:
-                if not isinstance(env, _BatchedEnv):
+                if not isinstance(env, BatchedEnvBase):
                     raise RuntimeError(
                         "kwargs were passed to SyncDataCollector but they can't be set "
                         f"on environment of type {type(create_env_fn)}."
@@ -1201,11 +1201,11 @@ class SyncDataCollector(DataCollectorBase):
             `"env_state_dict"`.
 
         """
-        from torchrl.envs.batched_envs import _BatchedEnv
+        from torchrl.envs.batched_envs import BatchedEnvBase
 
         if isinstance(self.env, TransformedEnv):
             env_state_dict = self.env.transform.state_dict()
-        elif isinstance(self.env, _BatchedEnv):
+        elif isinstance(self.env, BatchedEnvBase):
             env_state_dict = self.env.state_dict()
         else:
             env_state_dict = OrderedDict()
