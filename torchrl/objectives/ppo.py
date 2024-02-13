@@ -290,7 +290,7 @@ class PPOLoss(LossModule):
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
-        reduction: str = "mean",
+        reduction: str = None,
     ):
         if actor is not None:
             actor_network = actor
@@ -302,6 +302,8 @@ class PPOLoss(LossModule):
             raise TypeError(
                 "Missing positional arguments actor_network or critic_network."
             )
+        if reduction is None:
+            reduction = "mean"
 
         self._functional = functional
         self._in_keys = None
@@ -555,10 +557,9 @@ class PPOLoss(LossModule):
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
-        if self.reduction is not None:
-            td_out = td_out.apply(
-                functools.partial(_reduce, reduction=self.reduction), batch_size=[]
-            )
+        td_out = td_out.apply(
+            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        )
 
         return td_out
 
@@ -717,7 +718,7 @@ class ClipPPOLoss(PPOLoss):
         normalize_advantage: bool = True,
         gamma: float = None,
         separate_losses: bool = False,
-        reduction: str = "mean",
+        reduction: str = None,
         **kwargs,
     ):
         super(ClipPPOLoss, self).__init__(
@@ -801,10 +802,10 @@ class ClipPPOLoss(PPOLoss):
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
 
-        if self.reduction is not None:
-            td_out = td_out.apply(
-                functools.partial(_reduce, reduction=self.reduction), batch_size=[]
-            )
+        td_out = td_out.apply(
+            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        )
+        if self.reduction != "none":
             td_out.set("ESS", _reduce(ess, self.reduction) / batch)
         return td_out
 
@@ -930,7 +931,7 @@ class KLPENPPOLoss(PPOLoss):
         normalize_advantage: bool = True,
         gamma: float = None,
         separate_losses: bool = False,
-        reduction: str = "mean",
+        reduction: str = None,
         **kwargs,
     ):
         super(KLPENPPOLoss, self).__init__(
@@ -1028,10 +1029,9 @@ class KLPENPPOLoss(PPOLoss):
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
-        if self.reduction is not None:
-            td_out = td_out.apply(
-                functools.partial(_reduce, reduction=self.reduction), batch_size=[]
-            )
+        td_out = td_out.apply(
+            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        )
 
         return td_out
 

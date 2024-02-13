@@ -230,7 +230,7 @@ class ReinforceLoss(LossModule):
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
-        reduction: str = "mean",
+        reduction: str = None,
     ) -> None:
         if actor is not None:
             actor_network = actor
@@ -246,6 +246,8 @@ class ReinforceLoss(LossModule):
             raise RuntimeError(
                 "delay_value and ~functional are incompatible, as delayed value currently relies on functional calls."
             )
+        if reduction is None:
+            reduction = "mean"
 
         self._functional = functional
 
@@ -402,10 +404,9 @@ class ReinforceLoss(LossModule):
         )
 
         td_out.set("loss_value", self.loss_critic(tensordict))
-        if self.reduction is not None:
-            td_out = td_out.apply(
-                functools.partial(_reduce, reduction=self.reduction), batch_size=[]
-            )
+        td_out = td_out.apply(
+            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        )
 
         return td_out
 
