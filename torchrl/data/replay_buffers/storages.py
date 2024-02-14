@@ -20,7 +20,7 @@ import tensordict
 import torch
 from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.memmap import MemmapTensor, MemoryMappedTensor
-from tensordict.utils import _STRDTYPE2DTYPE, expand_right
+from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
 
 from torch.utils._pytree import LeafSpec, tree_flatten, tree_map, tree_unflatten
@@ -135,7 +135,16 @@ class Storage:
             return torch.randint(0, len(self), (batch_size,))
         raise RuntimeError(
             f"Random number generation is not implemented for storage of type {type(self)} with ndim {self.ndim}. "
-            f"Please report this exception as well as the use case (incl. buffer constrution) on github."
+            f"Please report this exception as well as the use case (incl. buffer construction) on github."
+        )
+
+    @property
+    def shape(self):
+        if self.ndim == 1:
+            return torch.Size([self.max_size])
+        raise RuntimeError(
+            f"storage.shape is not supported for storages of type {type(self)} when ndim > 1."
+            f"Please report this exception as well as the use case (incl. buffer construction) on github."
         )
 
     def flatten(self):
@@ -143,7 +152,7 @@ class Storage:
             return self
         raise RuntimeError(
             f"storage.flatten is not supported for storages of type {type(self)} when ndim > 1."
-            f"Please report this exception as well as the use case (incl. buffer constrution) on github."
+            f"Please report this exception as well as the use case (incl. buffer construction) on github."
         )
 
 
@@ -700,8 +709,7 @@ class TensorStorage(Storage):
                 "Cannot get an item from an unitialized LazyMemmapStorage"
             )
         if is_tc:
-            out = storage[index]
-            return _reset_batch_size(out)
+            return storage[index]
         else:
             return tree_map(lambda x: x[index], storage)
 
@@ -807,7 +815,7 @@ class LazyTensorStorage(TensorStorage):
 
         def max_size_along_dim0(data_shape):
             if self.ndim > 1:
-                return (-(self.max_size // data.shape[: self.ndim - 1]), *data_shape)
+                return (-(self.max_size // data_shape[: self.ndim - 1]), *data_shape)
             return (self.max_size, *data_shape)
 
         if is_tensor_collection(data):
@@ -997,7 +1005,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         def max_size_along_dim0(data_shape):
             if self.ndim > 1:
                 return (
-                    -(self.max_size // -data.shape[: self.ndim - 1].numel()),
+                    -(self.max_size // -data_shape[: self.ndim - 1].numel()),
                     *data_shape,
                 )
             return (self.max_size, *data_shape)
@@ -1215,50 +1223,8 @@ def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
         return mem_map_tensor._tensor
 
 
-def _reset_batch_size(x):
-    """Resets the batch size of a tensordict.
-
-    In some cases we save the original shape of the tensordict as a tensor (or memmap tensor).
-
-    This function will read that tensor, extract its items and reset the shape
-    of the tensordict to it. If items have an incompatible shape (e.g. "index")
-    they will be expanded to the right to match it.
-
-    """
-    shape = x.get("_rb_batch_size", None)
-    if shape is not None:
-        warnings.warn(
-            "Reshaping nested tensordicts will be deprecated in v0.4.0.",
-            category=DeprecationWarning,
-        )
-        data = x.get("_data")
-        # we need to reset the batch-size
-        if isinstance(shape, MemmapTensor):
-            shape = shape.as_tensor()
-        locked = data.is_locked
-        if locked:
-            data.unlock_()
-        shape = [s.item() for s in shape[0]]
-        shape = torch.Size([x.shape[0], *shape])
-        # we may need to update some values in the data
-        for key, value in x.items():
-            if value.ndim >= len(shape):
-                continue
-            value = expand_right(value, shape)
-            data.set(key, value)
-        if locked:
-            data.lock_()
-        return data
-    data = x.get("_data", None)
-    if data is not None:
-        return data
-    return x
-
-
 def _collate_list_tensordict(x):
     out = torch.stack(x, 0)
-    if is_tensor_collection(out):
-        return _reset_batch_size(out)
     return out
 
 

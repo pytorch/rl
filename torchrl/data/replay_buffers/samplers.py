@@ -334,6 +334,10 @@ class PrioritizedSampler(Sampler):
         self.dtype = dtype
         self._init()
 
+    @property
+    def max_size(self):
+        return self._max_capacity
+
     def __getstate__(self):
         if get_spawning_popen() is not None:
             raise RuntimeError(
@@ -392,6 +396,10 @@ class PrioritizedSampler(Sampler):
         #   weight_i = (p_i / min(p)) ^ (-beta)
         # weight = np.power(weight / (p_min + self._eps), -self._beta)
         weight = torch.pow(weight / p_min, -self._beta)
+        if storage.ndim > 1:
+            shape = storage.shape[1:]
+            shape = (index.numel() // shape.numel(), *shape)
+            index = torch.unravel_index(index, shape)
         return index, {"_weight": weight}
 
     @torch.no_grad()
@@ -684,7 +692,6 @@ class SliceSampler(Sampler):
         self.truncated_key = truncated_key
         self.cache_values = cache_values
         self._fetch_traj = True
-        self._uses_data_prefix = False
         self.strict_length = strict_length
         self._cache = {}
         if trajectories is not None:
@@ -798,21 +805,8 @@ class SliceSampler(Sampler):
         if self._fetch_traj:
             # We first try with the traj_key
             try:
-                # In some cases, the storage hides the data behind "_data".
-                # In the future, this may be deprecated, and we don't want to mess
-                # with the keys provided by the user so we fall back on a proxy to
-                # the traj key.
                 if isinstance(storage, TensorStorage):
-                    try:
-                        trajectory = storage._storage.get(self._used_traj_key)
-                    except KeyError:
-                        trajectory = storage._storage.get(("_data", self.traj_key))
-                        # cache that value for future use
-                        self._used_traj_key = ("_data", self.traj_key)
-                    self._uses_data_prefix = (
-                        isinstance(self._used_traj_key, tuple)
-                        and self._used_traj_key[0] == "_data"
-                    )
+                    trajectory = storage._storage.get(self._used_traj_key)
                 else:
                     try:
                         trajectory = storage[:].get(self.traj_key)
@@ -832,28 +826,12 @@ class SliceSampler(Sampler):
 
         else:
             try:
-                # In some cases, the storage hides the data behind "_data".
-                # In the future, this may be deprecated, and we don't want to mess
-                # with the keys provided by the user so we fall back on a proxy to
-                # the traj key.
-                if isinstance(storage, TensorStorage):
-                    try:
-                        done = storage._storage.get(self._used_end_key)
-                    except KeyError:
-                        done = storage._storage.get(("_data", self.end_key))
-                        # cache that value for future use
-                        self._used_end_key = ("_data", self.end_key)
-                    self._uses_data_prefix = (
-                        isinstance(self._used_end_key, tuple)
-                        and self._used_end_key[0] == "_data"
+                try:
+                    done = storage[:].get(self.end_key)
+                except Exception:
+                    raise RuntimeError(
+                        "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                     )
-                else:
-                    try:
-                        done = storage[:].get(self.end_key)
-                    except Exception:
-                        raise RuntimeError(
-                            "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
-                        )
                 vals = self._find_start_stop_traj(end=done.squeeze()[: len(storage)])
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals

@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import heapq
 import json
@@ -15,13 +16,13 @@ from typing import Any, Dict, Sequence
 import numpy as np
 import torch
 
-from tensordict import is_tensor_collection, MemoryMappedTensor
-from tensordict.utils import _STRDTYPE2DTYPE
+from tensordict import is_tensor_collection, MemoryMappedTensor, TensorDictBase
+from tensordict.utils import _STRDTYPE2DTYPE, expand_as_right, is_tensorclass
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten
 
 from torchrl.data.replay_buffers.storages import Storage
-from torchrl.data.replay_buffers.utils import _reduce
+from torchrl.data.replay_buffers.utils import _is_int, _reduce
 
 
 class Writer(ABC):
@@ -62,6 +63,25 @@ class Writer(ABC):
     @abstractmethod
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         ...
+
+    def _replicate_index(self, index):
+        # replicates the index in a non-zero format to have as many indices as
+        # elements truly written when the storage is multidim
+        if self._storage.ndim == 1:
+            return index
+        mesh = torch.stack(
+            torch.meshgrid(*(torch.arange(dim) for dim in self._storage.shape[1:])), -1
+        ).flatten(0, -2)
+        if _is_int(index):
+            index0 = torch.as_tensor(int(index)).expand(mesh.shape[0], 1)
+            return torch.cat([index0, mesh], 1)
+        return torch.cat(
+            [
+                index.repeat_interleave(mesh.shape[0]).unsqueeze(1),
+                mesh.repeat(index.numel(), 1),
+            ],
+            1,
+        )
 
 
 class ImmutableDatasetWriter(Writer):
@@ -110,13 +130,13 @@ class RoundRobinWriter(Writer):
             metadata = json.load(file)
             self._cursor = metadata["cursor"]
 
-    def add(self, data: Any) -> int:
-        ret = self._cursor
+    def add(self, data: Any) -> int | torch.Tensor:
+        index = self._cursor
         _cursor = self._cursor
         # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (self._cursor + 1) % self._storage.max_size
         self._storage[_cursor] = data
-        return ret
+        return self._replicate_index(index)
 
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
@@ -138,7 +158,7 @@ class RoundRobinWriter(Writer):
         # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (batch_size + cur_size) % self._storage.max_size
         self._storage[index] = data
-        return index
+        return self._replicate_index(index)
 
     def state_dict(self) -> Dict[str, Any]:
         return {"_cursor": self._cursor}
@@ -182,13 +202,14 @@ class RoundRobinWriter(Writer):
 class TensorDictRoundRobinWriter(RoundRobinWriter):
     """A RoundRobin Writer class for composable, tensordict-based replay buffers."""
 
-    def add(self, data: Any) -> int:
-        ret = self._cursor
+    def add(self, data: Any) -> int | torch.Tensor:
+        index = self._cursor
         # we need to update the cursor first to avoid race conditions between workers
-        self._cursor = (ret + 1) % self._storage.max_size
-        data["index"] = ret
-        self._storage[ret] = data
-        return ret
+        self._cursor = (index + 1) % self._storage.max_size
+        if not is_tensorclass(data):
+            data.set("index", index)
+        self._storage[index] = data
+        return self._replicate_index(index)
 
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
@@ -203,9 +224,10 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (batch_size + cur_size) % self._storage.max_size
         # storage must convert the data to the appropriate format if needed
-        data["index"] = index
+        if not is_tensorclass(data):
+            data.set("index", expand_as_right(index, data))
         self._storage[index] = data
-        return index
+        return self._replicate_index(index)
 
 
 class TensorDictMaxValueWriter(Writer):
@@ -272,7 +294,7 @@ class TensorDictMaxValueWriter(Writer):
             )
 
         ret = None
-        rank_data = data.get("_data", default=data).get(self._rank_key)
+        rank_data = data.get(self._rank_key)
 
         # If time dimension, sum along it.
         if rank_data.numel() > 1:
@@ -303,7 +325,7 @@ class TensorDictMaxValueWriter(Writer):
 
         return ret
 
-    def add(self, data: Any) -> int:
+    def add(self, data: Any) -> int | torch.Tensor:
         """Inserts a single element of data at an appropriate index, and returns that index.
 
         The ``rank_key`` in the data passed to this module should be structured as [].
@@ -313,9 +335,9 @@ class TensorDictMaxValueWriter(Writer):
         if index is not None:
             data.set("index", index)
             self._storage[index] = data
-        return index
+        return self._replicate_index(index)
 
-    def extend(self, data: Sequence) -> None:
+    def extend(self, data: TensorDictBase) -> None:
         """Inserts a series of data points at appropriate indices.
 
         The ``rank_key`` in the data passed to this module should be structured as [B].
@@ -327,6 +349,8 @@ class TensorDictMaxValueWriter(Writer):
             if index is not None:
                 data_to_replace[index] = i
 
+        # -1 will be interpreted as invalid by prioritized buffers
+        out_index = torch.full(data.shape, -1, dtype=torch.long)
         # Replace the data in the storage all at once
         if len(data_to_replace) > 0:
             keys, values = zip(*data_to_replace.items())
@@ -335,12 +359,13 @@ class TensorDictMaxValueWriter(Writer):
             device = index.device if index is not None else data.device
             values = list(values)
             keys = torch.tensor(keys, dtype=dtype, device=device)
+            out_index[values] = keys
             if index is not None:
                 index[values] = keys
                 data.set("index", index)
             self._storage.set(keys, data[values])
-            return keys.long()
-        return None
+            return self._replicate_index(out_index)
+        return out_index
 
     def _empty(self) -> None:
         self._cursor = 0

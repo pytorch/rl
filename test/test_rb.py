@@ -5,6 +5,7 @@
 
 import argparse
 import contextlib
+import functools
 import importlib
 import os
 import pickle
@@ -1856,7 +1857,6 @@ class TestSamplers:
     @pytest.mark.parametrize("episode_key", ["episode", ("some", "episode")])
     @pytest.mark.parametrize("done_key", ["done", ("some", "done")])
     @pytest.mark.parametrize("match_episode", [True, False])
-    @pytest.mark.parametrize("_data_prefix", [True, False])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_slice_sampler(
         self,
@@ -1867,7 +1867,6 @@ class TestSamplers:
         episode_key,
         done_key,
         match_episode,
-        _data_prefix,
         device,
     ):
         torch.manual_seed(0)
@@ -1899,8 +1898,6 @@ class TestSamplers:
             [100],
             device=device,
         )
-        if _data_prefix:
-            data = TensorDict({"_data": data}, [100])
         storage.set(range(100), data)
         if slice_len is not None and slice_len > 15:
             # we may have to sample trajs shorter than slice_len
@@ -1937,10 +1934,7 @@ class TestSamplers:
         count_unique = set()
         for _ in range(30):
             index, info = sampler.sample(storage, batch_size=batch_size)
-            if _data_prefix:
-                samples = storage._storage["_data"][index]
-            else:
-                samples = storage._storage[index]
+            samples = storage._storage[index]
             if strict_length:
                 # check that trajs are ok
                 samples = samples.view(num_slices, -1)
@@ -1980,7 +1974,6 @@ class TestSamplers:
 
     def test_slice_sampler_errors(self):
         device = "cpu"
-        _data_prefix = False
         batch_size, num_slices = 100, 20
 
         episode = torch.zeros(100, dtype=torch.int, device=device)
@@ -2009,8 +2002,6 @@ class TestSamplers:
             [100],
             device=device,
         )
-        if _data_prefix:
-            data = TensorDict({"_data": data}, [100])
 
         data_wrong_done = data.clone(False)
         data_wrong_done.rename_key_("episode", "_")
@@ -2037,7 +2028,6 @@ class TestSamplers:
     @pytest.mark.parametrize("episode_key", ["episode", ("some", "episode")])
     @pytest.mark.parametrize("done_key", ["done", ("some", "done")])
     @pytest.mark.parametrize("match_episode", [True, False])
-    @pytest.mark.parametrize("_data_prefix", [True, False])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_slice_sampler_without_replacement(
         self,
@@ -2046,7 +2036,6 @@ class TestSamplers:
         episode_key,
         done_key,
         match_episode,
-        _data_prefix,
         device,
     ):
         torch.manual_seed(0)
@@ -2074,8 +2063,6 @@ class TestSamplers:
             [100],
             device=device,
         )
-        if _data_prefix:
-            data = TensorDict({"_data": data}, [100])
         storage.set(range(100), data)
         sampler = SliceSamplerWithoutReplacement(
             num_slices=num_slices, traj_key=episode_key, end_key=done_key
@@ -2083,10 +2070,7 @@ class TestSamplers:
         trajs_unique_id = set()
         for i in range(5):
             index, info = sampler.sample(storage, batch_size=batch_size)
-            if _data_prefix:
-                samples = storage._storage["_data"][index]
-            else:
-                samples = storage._storage[index]
+            samples = storage._storage[index]
 
             # check that trajs are ok
             samples = samples.view(num_slices, -1)
@@ -2488,6 +2472,79 @@ class TestEnsemble:
         assert isinstance(rb._writer[np.array([0, 1])], WriterEnsemble)
         assert isinstance(rb._writer[[0, 1]], WriterEnsemble)
         assert isinstance(rb._writer[0], RoundRobinWriter)
+
+
+def _rbtype(datatype):
+    if datatype in ("pytree", "tensorclass"):
+        return [ReplayBuffer, PrioritizedReplayBuffer]
+    return [
+        ReplayBuffer,
+        PrioritizedReplayBuffer,
+        TensorDictReplayBuffer,
+        TensorDictPrioritizedReplayBuffer,
+    ]
+
+
+class TestRBMultidim:
+    @tensorclass
+    class MyData:
+        x: torch.Tensor
+        y: torch.Tensor
+        z: torch.Tensor
+
+    def _make_data(self, datatype, datadim):
+        if datadim == 1:
+            shape = [12]
+        elif datadim == 2:
+            shape = [4, 3]
+        else:
+            raise NotImplementedError
+        if datatype == "pytree":
+            return {
+                "x": (torch.ones(*shape, 2), (torch.ones(*shape, 3))),
+                "y": [
+                    {"z": torch.ones(shape)},
+                    torch.ones((*shape, 1), dtype=torch.bool),
+                ],
+            }
+        elif datatype == "tensordict":
+            return TensorDict(
+                {"x": torch.ones(*shape, 2), "y": {"z": torch.ones(*shape, 3)}}, shape
+            )
+        elif datatype == "tensorclass":
+            return self.MyData(
+                x=torch.ones(*shape, 2),
+                y=torch.ones(*shape, 3),
+                z=torch.ones((*shape, 1), dtype=torch.bool),
+                batch_size=shape,
+            )
+
+    datatype_rb_pairs = [
+        [datatype, rbtype]
+        for datatype in ["pytree", "tensordict", "tensorclass"]
+        for rbtype in _rbtype(datatype)
+    ]
+
+    @pytest.mark.parametrize("datatype,rbtype", datatype_rb_pairs)
+    @pytest.mark.parametrize("datadim", [1, 2])
+    def test_rb_multidim(self, datatype, datadim, rbtype):
+        data = self._make_data(datatype, datadim)
+        if rbtype not in (PrioritizedReplayBuffer, TensorDictPrioritizedReplayBuffer):
+            rbtype = functools.partial(rbtype, sampler=RandomSampler())
+        else:
+            rbtype = functools.partial(rbtype, alpha=0.9, beta=1.1)
+
+        rb = rbtype(storage=LazyMemmapStorage(100, ndim=datadim), batch_size=4)
+        rb.extend(data)
+        assert len(rb) == 12
+        s = rb.sample()
+        if datatype in ("tensordict", "tensorclass"):
+            assert (s.exclude("index") == 1).all()
+            assert s.numel() == 4
+        else:
+            for leaf in torch.utils._pytree.tree_leaves(s):
+                assert leaf.shape[0] == 4
+                assert (leaf == 1).all()
 
 
 if __name__ == "__main__":

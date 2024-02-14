@@ -43,6 +43,7 @@ from torchrl.data.replay_buffers.storages import (
     StorageEnsemble,
 )
 from torchrl.data.replay_buffers.utils import (
+    _is_int,
     _reduce,
     _to_numpy,
     _to_torch,
@@ -97,8 +98,7 @@ class ReplayBuffer:
               batch-size in advance) as well as with samplers that have a
               ``drop_last`` argument.
         dim_extend (int, optional): indicates the dim to consider for
-            extension when calling :meth:`~.extend`. Defaults to ``0`` (the
-            storage is written along the first dimension of the data).
+            extension when calling :meth:`~.extend`. Defaults to ``storage.ndim-1``.
             When using ``dim_extend > 0``, we recommend using the ``ndim``
             argument in the storage instantiation if that argument is
             available, to let storages know that the data is
@@ -199,7 +199,7 @@ class ReplayBuffer:
         prefetch: int | None = None,
         transform: "Transform" | None = None,  # noqa-F821
         batch_size: int | None = None,
-        dim_extend: int = 0,
+        dim_extend: int | None = None,
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
         self._storage.attach(self)
@@ -251,13 +251,42 @@ class ReplayBuffer:
                 "Please pass the batch-size to the ReplayBuffer constructor."
             )
         self._batch_size = batch_size
-        if dim_extend < 0:
+        if dim_extend is not None and dim_extend < 0:
             raise ValueError("dim_extend must be a positive value.")
-        self.dim_extend = dim_extend
+        self._dim_extend = dim_extend
         if self.dim_extend > 0:
             from torchrl.envs.transforms.transforms import _TransposeTransform
 
             if self._storage.ndim <= self.dim_extend:
+                raise ValueError(
+                    "The storage `ndim` attribute must be greater "
+                    "than the `dim_extend` attribute of the buffer."
+                )
+            self.append_transform(_TransposeTransform(self.dim_extend))
+
+    @property
+    def dim_extend(self):
+        dim_extend = self._dim_extend
+        if dim_extend is None:
+            if self._storage is not None:
+                ndim = self._storage.ndim
+                dim_extend = ndim - 1
+            else:
+                dim_extend = 1
+            self.dim_extend = dim_extend
+        return dim_extend
+
+    @dim_extend.setter
+    def dim_extend(self, value):
+        if self._dim_extend is not None and self._dim_extend != value:
+            raise RuntimeError(
+                "dim_extend cannot be reset. Please create a new replay buffer."
+            )
+        self._dim_extend = value
+        if value is not None and value > 0:
+            from torchrl.envs.transforms.transforms import _TransposeTransform
+
+            if self._storage is not None and self._storage.ndim <= self.dim_extend:
                 raise ValueError(
                     "The storage `ndim` attribute must be greater "
                     "than the `dim_extend` attribute of the buffer."
@@ -674,8 +703,12 @@ class PrioritizedReplayBuffer(ReplayBuffer):
               batch-size in advance) as well as with samplers that have a
               ``drop_last`` argument.
         dim_extend (int, optional): indicates the dim to consider for
-            extension when calling :meth:`~.extend`. Defaults to ``0`` (the
-            storage is written along the first dimension of the data).
+            extension when calling :meth:`~.extend`. Defaults to ``storage.ndim-1``.
+            When using ``dim_extend > 0``, we recommend using the ``ndim``
+            argument in the storage instantiation if that argument is
+            available, to let storages know that the data is
+            multi-dimensional and keep consistent notions of storage-capacity
+            and batch-size during sampling.
 
             .. note:: This argument has no effect on :meth:`~.add` and
                 therefore should be used with caution when both :meth:`~.add`
@@ -739,7 +772,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         prefetch: int | None = None,
         transform: "Transform" | None = None,  # noqa-F821
         batch_size: int | None = None,
-        dim_extend: int = 0,
+        dim_extend: int | None = None,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -800,8 +833,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
             :class:`~torchrl.data.PrioritizedSampler`.
             Defaults to ``"td_error"``.
         dim_extend (int, optional): indicates the dim to consider for
-            extension when calling :meth:`~.extend`. Defaults to ``0`` (the
-            storage is written along the first dimension of the data).
+            extension when calling :meth:`~.extend`. Defaults to ``storage.ndim-1``.
+            When using ``dim_extend > 0``, we recommend using the ``ndim``
+            argument in the storage instantiation if that argument is
+            available, to let storages know that the data is
+            multi-dimensional and keep consistent notions of storage-capacity
+            and batch-size during sampling.
 
             .. note:: This argument has no effect on :meth:`~.add` and
                 therefore should be used with caution when both :meth:`~.add`
@@ -886,9 +923,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
         self.priority_key = priority_key
 
     def _get_priority_item(self, tensordict: TensorDictBase) -> float:
-        if "_data" in tensordict.keys():
-            tensordict = tensordict.get("_data")
-
         priority = tensordict.get(self.priority_key, None)
         if priority is None:
             return self._sampler.default_priority
@@ -906,9 +940,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
         return priority
 
     def _get_priority_vector(self, tensordict: TensorDictBase) -> torch.Tensor:
-        if "_data" in tensordict.keys():
-            tensordict = tensordict.get("_data")
-
         priority = tensordict.get(self.priority_key, None)
         if priority is None:
             return torch.tensor(
@@ -927,51 +958,38 @@ class TensorDictReplayBuffer(ReplayBuffer):
             with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
                 data = self._transform.inv(data)
 
-        if is_tensor_collection(data):
-            data_add = TensorDict(
-                {
-                    "_data": data,
-                },
-                batch_size=[],
-                device=data.device,
-            )
-            if data.batch_size:
-                data_add["_rb_batch_size"] = torch.as_tensor(data.batch_size)
-
-        else:
-            data_add = data
-
-        index = super()._add(data_add)
+        index = super()._add(data)
         if index is not None:
-            if is_tensor_collection(data_add):
-                data_add.set("index", index)
+            if is_tensor_collection(data):
+                self._set_index_in_td(data, index)
 
-            # priority = self._get_priority(data)
-            # if priority:
-            self.update_tensordict_priority(data_add)
+            self.update_tensordict_priority(data)
         return index
 
     def extend(self, tensordicts: TensorDictBase) -> torch.Tensor:
-        _data = tensordicts
-
+        if not isinstance(tensordicts, TensorDictBase):
+            raise ValueError(
+                f"{self.__class__.__name__} only accepts TensorDictBase subclasses. tensorclasses and other types are not compatible with that class. "
+                "Please use a regular `ReplayBuffer` instead."
+            )
         if self._transform is not None:
-            _data = self._transform.inv(_data)
-
-        tensordicts = TensorDict(
-            {"_data": _data},
-            batch_size=_data.shape[:1],
-            device=_data.device,
-            names=_data.names[:1] if _data._has_names() else None,
-        )
-
-        tensordicts.set(
-            "index",
-            torch.zeros(tensordicts.shape, device=tensordicts.device, dtype=torch.long),
-        )
+            tensordicts = self._transform.inv(tensordicts)
 
         index = super()._extend(tensordicts)
+        self._set_index_in_td(tensordicts, index)
         self.update_tensordict_priority(tensordicts)
         return index
+
+    def _set_index_in_td(self, tensordict, index):
+        if index is None:
+            return
+        if _is_int(index):
+            index = torch.as_tensor(index, device=tensordict.device)
+        elif index.shape[0] != tensordict.shape:
+            index = index.unflatten(0, tensordict.shape)
+            tensordict.set("index", index)
+            return
+        tensordict.set("index", expand_as_right(index, tensordict))
 
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
         if not isinstance(self._sampler, PrioritizedSampler):
@@ -981,10 +999,14 @@ class TensorDictReplayBuffer(ReplayBuffer):
         else:
             priority = torch.as_tensor(self._get_priority_item(data))
         index = data.get("index")
+        if data.ndim:
+            valid_index = index >= 0
         while index.shape != priority.shape:
             # reduce index
             index = index[..., 0]
-        self.update_priority(index, priority)
+        if data.ndim:
+            return self.update_priority(index[valid_index], priority[valid_index])
+        return self.update_priority(index, priority)
 
     def sample(
         self,
@@ -1022,6 +1044,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
             if is_locked:
                 data.unlock_()
             for k, v in info.items():
+                if k == "index" and isinstance(v, tuple):
+                    v = torch.stack(v, -1)
                 v = _to_torch(v, data.device)
                 if v.shape[: data.batch_dims] != data.batch_size:
                     v = expand_as_right(v, data)
@@ -1100,8 +1124,12 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             tensordicts (ie stored trajectories). Can be one of "max", "min",
             "median" or "mean".
         dim_extend (int, optional): indicates the dim to consider for
-            extension when calling :meth:`~.extend`. Defaults to ``0`` (the
-            storage is written along the first dimension of the data).
+            extension when calling :meth:`~.extend`. Defaults to ``storage.ndim-1``.
+            When using ``dim_extend > 0``, we recommend using the ``ndim``
+            argument in the storage instantiation if that argument is
+            available, to let storages know that the data is
+            multi-dimensional and keep consistent notions of storage-capacity
+            and batch-size during sampling.
 
             .. note:: This argument has no effect on :meth:`~.add` and
                 therefore should be used with caution when both :meth:`~.add`
@@ -1187,6 +1215,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         transform: "Transform" | None = None,  # noqa-F821
         reduction: str = "max",
         batch_size: int | None = None,
+        dim_extend: int | None = None,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -1202,6 +1231,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             prefetch=prefetch,
             transform=transform,
             batch_size=batch_size,
+            dim_extend=dim_extend,
         )
 
 

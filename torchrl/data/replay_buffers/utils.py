@@ -10,6 +10,8 @@ from typing import Any, Callable, Union
 
 import numpy as np
 import torch
+
+from tensordict import NonTensorData
 from torch import Tensor
 
 INT_CLASSES_TYPING = Union[int, np.integer]
