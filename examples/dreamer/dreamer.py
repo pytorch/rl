@@ -3,6 +3,7 @@ import torch
 import torch.cuda
 import tqdm
 from dreamer_utils import (
+    cast_to_uint8,
     log_metrics,
     make_collector,
     make_dreamer,
@@ -10,16 +11,16 @@ from dreamer_utils import (
     make_replay_buffer,
 )
 
-# float16
-from torch.cuda.amp import autocast  # , GradScaler
+# mixed precision training
+from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
     DreamerModelLoss,
     DreamerValueLoss,
 )
-
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 
@@ -87,6 +88,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         buffer_scratch_dir=cfg.replay_buffer.scratch_dir,
         device=cfg.networks.device,
         pixel_obs=cfg.env.from_pixels,
+        cast_to_uint8=cfg.replay_buffer.uint8_casting,
     )
 
     # Training loop
@@ -100,25 +102,29 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.optimization.actor_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.optimization.value_lr)
 
-    # Not sure we need those
-    # scaler1 = GradScaler()
-    # scaler2 = GradScaler()
-    # scaler3 = GradScaler()
+    # Grad scaler for mixed precision training https://pytorch.org/docs/stable/amp.html
+    scaler1 = GradScaler()
+    scaler2 = GradScaler()
+    scaler3 = GradScaler()
 
     init_random_frames = cfg.collector.init_random_frames
     batch_size = cfg.optimization.batch_size
     optim_steps_per_batch = cfg.optimization.optim_steps_per_batch
     grad_clip = cfg.optimization.grad_clip
+    uint8_casting = cfg.replay_buffer.uint8_casting
+    pixel_obs = cfg.env.from_pixels
+    frames_per_batch = cfg.collector.frames_per_batch
+    eval_iter = cfg.logger.eval_iter
+    eval_rollout_steps = cfg.logger.eval_rollout_steps
 
     for _, tensordict in enumerate(collector):
         pbar.update(tensordict.numel())
         current_frames = tensordict.numel()
         collected_frames += current_frames
 
-        # tensordict["pixels"] = (tensordict["pixels"] * 255).to(torch.uint8)
-        # tensordict["next", "pixels"] = (tensordict["next", "pixels"] * 255).to(
-        #     torch.uint8
-        # )
+        if uint8_casting and pixel_obs:
+            tensordict = cast_to_uint8(tensordict)
+
         ep_reward = tensordict.get("episode_reward")[:, -1]
         replay_buffer.extend(tensordict.cpu())
 
@@ -140,39 +146,33 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     )
 
                 world_model_opt.zero_grad()
-                loss_world_model.backward()
-                # scaler1.scale(loss_world_model).backward()
-                # scaler1.unscale_(world_model_opt)
+                scaler1.scale(loss_world_model).backward()
+                scaler1.unscale_(world_model_opt)
                 clip_grad_norm_(world_model.parameters(), grad_clip)
-                world_model_opt.step()
-                # scaler1.step(world_model_opt)
-                # scaler1.update()
+                scaler1.step(world_model_opt)
+                scaler1.update()
 
                 # update actor network
                 with autocast(dtype=torch.float16):
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
 
                 actor_opt.zero_grad()
-                actor_loss_td["loss_actor"].backward()
-                # scaler2.scale(actor_loss_td["loss_actor"]).backward()
-                # scaler2.unscale_(actor_opt)
+                scaler2.scale(actor_loss_td["loss_actor"]).backward()
+                scaler2.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), grad_clip)
-                actor_opt.step()
-                # scaler2.step(actor_opt)
-                # scaler2.update()
+                scaler2.step(actor_opt)
+                scaler2.update()
 
                 # update value network
                 with autocast(dtype=torch.float16):
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
                 value_opt.zero_grad()
-                value_loss_td["loss_value"].backward()
-                # scaler3.scale(value_loss_td["loss_value"]).backward()
-                # scaler3.unscale_(value_opt)
+                scaler3.scale(value_loss_td["loss_value"]).backward()
+                scaler3.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), grad_clip)
-                value_opt.step()
-                # scaler3.step(value_opt)
-                # scaler3.update()
+                scaler3.step(value_opt)
+                scaler3.update()
 
         metrics_to_log = {
             "reward": ep_reward.item(),
@@ -188,6 +188,19 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         policy.step(current_frames)
         collector.update_policy_weights_()
+        # Evaluation
+        if abs(collected_frames % eval_iter) < frames_per_batch:
+            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+                eval_rollout = test_env.rollout(
+                    eval_rollout_steps,
+                    policy,
+                    auto_cast_to_device=True,
+                    break_when_any_done=True,
+                )
+                eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
+                metrics_to_log["eval/reward"] = eval_reward
+                if logger is not None:
+                    log_metrics(logger, metrics_to_log, collected_frames)
 
 
 if __name__ == "__main__":

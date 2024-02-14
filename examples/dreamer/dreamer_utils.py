@@ -5,13 +5,7 @@
 import tempfile
 from contextlib import nullcontext
 
-# from torchrl.record.loggers import Logger
-# from torchrl.record.recorder import VideoRecorder
-
 import torch
-
-# from dataclasses import dataclass, field as dataclass_field
-# from typing import Any, Callable, Optional, Sequence, Union
 
 import torch.nn as nn
 from tensordict.nn import InteractionType
@@ -20,35 +14,27 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    # DiscreteTensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs import ParallelEnv
 
-# from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import (
     Compose,
-    # CenterCrop,
     DoubleToFloat,
     FrameSkipTransform,
     GrayScale,
     # NoopResetEnv,
-    # ObservationNorm,
+    ObservationNorm,
     RandomCropTensorDict,
     Resize,
-    # RewardScaling,
     RewardSum,
     ToTensorImage,
     TransformedEnv,
-    # UnsqueezeTransform,
 )
-from torchrl.envs.transforms.transforms import TensorDictPrimer  # FlattenObservation
+from torchrl.envs.transforms.transforms import TensorDictPrimer
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     MLP,
@@ -159,13 +145,12 @@ def make_dreamer(
         observation_in_key = "pixels"
         obsevation_out_key = "reco_pixels"
     else:
-        encoder = DenseEncoder()  # TODO: make them just MLPs
+        encoder = DenseEncoder()
         decoder = DenseDecoder(
             observation_dim=test_env.observation_spec["observation"].shape[-1]
         )
         observation_in_key = "observation"
         obsevation_out_key = "reco_observation"
-        # raise NotImplementedError("Currently only pixel observations are supported.")
 
     # Make RSSM
     rssm_prior = RSSMPrior(
@@ -275,6 +260,7 @@ def make_replay_buffer(
     device="cpu",
     prefetch=3,
     pixel_obs=True,
+    cast_to_uint8=True,
 ):
     with (
         tempfile.TemporaryDirectory()
@@ -285,17 +271,15 @@ def make_replay_buffer(
         crop_seq = RandomCropTensorDict(sub_seq_len=batch_seq_len, sample_dim=-1)
         transforms.append(crop_seq)
 
-        # if pixel_obs:
-        #     # dtype_transform = DTypeCastTransform(torch.double, torch.float32, in_keys=["pixels"])
-        #     # from 0-255 to 0-1
-        #     norm_obs = ObservationNorm(
-        #         loc=0,
-        #         scale=255,
-        #         standard_normal=True,
-        #         in_keys=["pixels", ("next", "pixels")],
-        #     )
-        #     # transforms.append(dtype_transform)
-        #     transforms.append(norm_obs)
+        if pixel_obs and cast_to_uint8:
+            # from 0-255 to 0-1
+            norm_obs = ObservationNorm(
+                loc=0,
+                scale=255,
+                standard_normal=True,
+                in_keys=["pixels", ("next", "pixels")],
+            )
+            transforms.append(norm_obs)
 
         transforms = Compose(*transforms)
 
@@ -525,14 +509,6 @@ def _dreamer_make_mbenv(
     )
 
     model_based_env.set_specs_from_env(test_env)
-    # model_based_env = TransformedEnv(model_based_env)
-    # default_dict = {
-    #     "state": UnboundedContinuousTensorSpec(shape=(state_dim)),
-    #     "belief": UnboundedContinuousTensorSpec(shape=(rssm_hidden_dim)),
-    # }
-    # model_based_env.append_transform(
-    #     TensorDictPrimer(random=False, default_value=0, **default_dict)
-    # )
     return model_based_env
 
 
@@ -611,6 +587,12 @@ def _dreamer_make_world_model(
         reward_model,
     )
     return world_model
+
+
+def cast_to_uint8(tensordict):
+    tensordict["pixels"] = (tensordict["pixels"] * 255).to(torch.uint8)
+    tensordict["next", "pixels"] = (tensordict["next", "pixels"] * 255).to(torch.uint8)
+    return tensordict
 
 
 def log_metrics(logger, metrics, step):

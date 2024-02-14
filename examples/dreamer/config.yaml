@@ -58,9 +58,11 @@ networks:
 
 
 replay_buffer: 
+  uint8_casting: True
   buffer_size: 20000
   batch_size: 50
   scratch_dir: ${logger.exp_name}_${env.seed}
+
 
 
 logger:
@@ -70,3 +72,5 @@ logger:
   mode: online
   record_interval: 30
   record_frames: 1000
+  eval_iter: 1000
+  eval_rollout_steps: 1000
