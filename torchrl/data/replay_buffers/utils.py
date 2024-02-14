@@ -87,3 +87,11 @@ def _reduce(
     if isinstance(result, tuple):
         result = result[0]
     return result.item() if dim is None else result
+
+
+def _is_int(index):
+    if isinstance(index, INT_CLASSES):
+        return True
+    if isinstance(index, (np.ndarray, torch.Tensor)):
+        return index.ndim == 0
+    return False

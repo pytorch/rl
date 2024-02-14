@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Sequence, Union
 import numpy as np
 import tensordict
 import torch
-from tensordict import is_tensor_collection, is_tensorclass, TensorDict, TensorDictBase
+from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.memmap import MemmapTensor, MemoryMappedTensor
 from tensordict.utils import _STRDTYPE2DTYPE, expand_right
 from torch import multiprocessing as mp
@@ -31,7 +31,7 @@ from torchrl._utils import (
     logger as torchrl_logger,
     VERBOSE,
 )
-from torchrl.data.replay_buffers.utils import INT_CLASSES
+from torchrl.data.replay_buffers.utils import _is_int, INT_CLASSES
 
 try:
     from torchsnapshot.serialization import tensor_from_memoryview
@@ -55,6 +55,8 @@ class Storage:
     make sure that it is compatible with the buffer size.
 
     """
+
+    ndim = 1
 
     def __init__(self, max_size: int) -> None:
         self.max_size = int(max_size)
@@ -126,6 +128,23 @@ class Storage:
     @abc.abstractmethod
     def _empty(self):
         ...
+
+    def _rand_given_ndim(self, batch_size):
+        # a method to return random indices given the storage ndim
+        if self.ndim == 1:
+            return torch.randint(0, len(self), (batch_size,))
+        raise RuntimeError(
+            f"Random number generation is not implemented for storage of type {type(self)} with ndim {self.ndim}. "
+            f"Please report this exception as well as the use case (incl. buffer constrution) on github."
+        )
+
+    def flatten(self):
+        if self.ndim == 1:
+            return self
+        raise RuntimeError(
+            f"storage.flatten is not supported for storages of type {type(self)} when ndim > 1."
+            f"Please report this exception as well as the use case (incl. buffer constrution) on github."
+        )
 
 
 class ListStorage(Storage):
@@ -254,16 +273,17 @@ class TensorStorage(Storage):
         storage (tensor or TensorDict): the data buffer to be used.
         max_size (int): size of the storage, i.e. maximum number of elements stored
             in the buffer.
+
+    Keyword Args:
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is :obj:`torch.device("cpu")`.
             If "auto" is passed, the device is automatically gathered from the
             first batch of data passed. This is not enabled by default to avoid
             data placed on GPU by mistake, causing OOM issues.
-        names (list of str): the names of the dimensions of the storage if it is
-            a TensorDict or equivalent. This option has no effect for non-tensordict
-            storages. Defaults to ``None`` (no name, or name of the first dimension
-            of the first batch provided if initialized through
-            :meth:`~torchrl.data.ReplayBuffer.extend`).
+        ndim (int, optional): the number of dimensions to be accounted for when
+            measuring the storage size. For instance, a storage of shape ``[3, 4]``
+            has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
+            Defaults to ``1``.
 
     Examples:
         >>> data = TensorDict({
@@ -319,8 +339,9 @@ class TensorStorage(Storage):
         self,
         storage,
         max_size=None,
+        *,
         device: torch.device = "cpu",
-        names: List[str] | None = None,
+        ndim: int = 1,
     ):
         if not ((storage is None) ^ (max_size is None)):
             if storage is None:
@@ -335,8 +356,8 @@ class TensorStorage(Storage):
                 max_size = storage.shape[0]
             else:
                 max_size = tree_flatten(storage)[0][0].shape[0]
+        self.ndim = ndim
         super().__init__(max_size)
-        self.names = names
         self.initialized = storage is not None
         if self.initialized:
             self._len = max_size
@@ -441,6 +462,63 @@ class TensorStorage(Storage):
             _len_value = self._len_value = mp.Value("i", 0)
         _len_value.value = value
 
+    @property
+    def _total_shape(self):
+        # Total shape, irrespective of how full the storage is
+        _total_shape = self.__dict__.get("_total_shape_value", None)
+        if _total_shape is None:
+            if is_tensor_collection(self._storage):
+                _total_shape = self._storage.shape[: self.ndim]
+            else:
+                leaf, *_ = torch.utils._pytree.tree_leaves(self._storage)
+                _total_shape = leaf.shape[: self.ndim]
+            self.__dict__["_total_shape_value"] = _total_shape
+        return _total_shape
+
+    @property
+    def _is_full(self):
+        # whether the storage is full
+        return len(self) == self.max_size
+
+    @property
+    def _len_along_dim0(self):
+        # returns the length of the buffer along dim0
+        len_along_dim = len(self)
+        if self.ndim:
+            len_along_dim = len_along_dim // self._total_shape[1:].numel()
+        return len_along_dim
+
+    @property
+    def _max_size_along_dim0(self):
+        # returns the max_size of the buffer along dim0
+        max_size = self.max_size
+        if self.ndim:
+            max_size = max_size // self._total_shape[1:].numel()
+        return max_size
+
+    @property
+    def shape(self):
+        # Shape, turncated where needed to accomodate for the length of the storage
+        if self._is_full:
+            return self._total_shape
+        _total_shape = self._total_shape
+        return torch.Size([self._len_along_dim0] + list(_total_shape[1:]))
+
+    def _rand_given_ndim(self, batch_size):
+        if self.ndim == 1:
+            return super()._rand_given_ndim(batch_size)
+        shape = self.shape
+        return tuple(torch.randint(_dim, (batch_size,)) for _dim in shape)
+
+    def flatten(self):
+        if self.ndim == 1:
+            return self.get(slice(None))
+        if is_tensor_collection(self._storage):
+            return self._storage[: self._len_along_dim0].flatten(0, self.ndim)
+        return tree_map(
+            lambda x: x[: self._len_along_dim0].flatten(0, self.ndim), self._storage
+        )
+
     def __getstate__(self):
         state = copy(self.__dict__)
         if get_spawning_popen() is None:
@@ -541,20 +619,26 @@ class TensorStorage(Storage):
         for datum, store in zip(data_flat, storage_flat):
             store[cursor] = datum
 
+    def _get_new_len(self, data, cursor):
+        int_cursor = _is_int(cursor)
+        ndim = self.ndim - int_cursor
+        if is_tensor_collection(data) or isinstance(data, torch.Tensor):
+            numel = data.shape[:ndim].numel()
+        else:
+            # unfortunately tree_flatten isn't an iterator so we will have to flatten it all
+            leaf, *_ = torch.utils._pytree.tree_leaves(data)
+            numel = leaf.shape[:ndim].numel()
+        self._len = min(self._len + numel, self.max_size)
+
     @implement_for("torch", "2.0", None)
     def set(
         self,
         cursor: Union[int, Sequence[int], slice],
         data: Union[TensorDictBase, torch.Tensor],
     ):
-        if isinstance(cursor, INT_CLASSES):
-            self._len = max(self._len, cursor + 1)
-        else:
-            self._len = max(self._len, max(cursor) + 1)
+        self._get_new_len(data, cursor)
 
         if not self.initialized:
-            if self.names is None and is_tensor_collection(data):
-                self.names = data.names[:1]
             if not isinstance(cursor, INT_CLASSES):
                 if is_tensor_collection(data):
                     self._init(data[0])
@@ -573,10 +657,7 @@ class TensorStorage(Storage):
         cursor: Union[int, Sequence[int], slice],
         data: Union[TensorDictBase, torch.Tensor],
     ):
-        if isinstance(cursor, INT_CLASSES):
-            self._len = max(self._len, cursor + 1)
-        else:
-            self._len = max(self._len, max(cursor) + 1)
+        self._get_new_len(data, cursor)
 
         if not is_tensor_collection(data) and not isinstance(data, torch.Tensor):
             raise NotImplementedError(
@@ -593,7 +674,7 @@ class TensorStorage(Storage):
                 cursor = torch.tensor(cursor, dtype=torch.long)
             elif cursor.dtype != torch.long:
                 cursor = cursor.to(dtype=torch.long)
-            if len(cursor) > len(self._storage):
+            if len(cursor) > self._len_along_dim0:
                 warnings.warn(
                     "A cursor of length superior to the storage capacity was provided. "
                     "To accomodate for this, the cursor will be truncated to its last "
@@ -607,11 +688,11 @@ class TensorStorage(Storage):
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         _storage = self._storage
         is_tc = is_tensor_collection(_storage)
-        if self._len < self.max_size:
+        if not self._is_full:
             if is_tc:
-                storage = self._storage[: self._len]
+                storage = self._storage[: self._len_along_dim0]
             else:
-                storage = tree_map(lambda x: x[: self._len], self._storage)
+                storage = tree_map(lambda x: x[: self._len_along_dim0], self._storage)
         else:
             storage = self._storage
         if not self.initialized:
@@ -644,16 +725,17 @@ class LazyTensorStorage(TensorStorage):
     Args:
         max_size (int): size of the storage, i.e. maximum number of elements stored
             in the buffer.
+
+    Keyword Args:
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is :obj:`torch.device("cpu")`.
             If "auto" is passed, the device is automatically gathered from the
             first batch of data passed. This is not enabled by default to avoid
             data placed on GPU by mistake, causing OOM issues.
-        names (list of str): the names of the dimensions of the storage if it is
-            a TensorDict or equivalent. This option has no effect for non-tensordict
-            storages. Defaults to ``None`` (no name, or name of the first dimension
-            of the first batch provided if initialized through
-            :meth:`~torchrl.data.ReplayBuffer.extend`).
+        ndim (int, optional): the number of dimensions to be accounted for when
+            measuring the storage size. For instance, a storage of shape ``[3, 4]``
+            has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
+            Defaults to ``1``.
 
     Examples:
         >>> data = TensorDict({
@@ -708,10 +790,11 @@ class LazyTensorStorage(TensorStorage):
     def __init__(
         self,
         max_size: int,
+        *,
         device: torch.device = "cpu",
-        names: List[str] | None = None,
+        ndim: int = 1,
     ):
-        super().__init__(storage=None, max_size=max_size, device=device, names=names)
+        super().__init__(storage=None, max_size=max_size, device=device, ndim=ndim)
 
     def _init(
         self,
@@ -721,27 +804,31 @@ class LazyTensorStorage(TensorStorage):
             torchrl_logger.info("Creating a TensorStorage...")
         if self.device == "auto":
             self.device = data.device
-        if is_tensorclass(data):
+
+        def max_size_along_dim0(data_shape):
+            if self.ndim > 1:
+                return (-(self.max_size // data.shape[: self.ndim - 1]), *data_shape)
+            return (self.max_size, *data_shape)
+
+        if is_tensor_collection(data):
             out = (
-                data.expand(self.max_size, *data.shape).clone().zero_().to(self.device)
+                data.expand(max_size_along_dim0(data.shape))
+                .clone()
+                .zero_()
+                .to(self.device)
             )
         elif is_tensor_collection(data):
             out = (
-                data.expand(self.max_size, *data.shape)
-                .to_tensordict()
-                .zero_()
+                data.expand(max_size_along_dim0(data.shape))
                 .clone()
+                .zero_()
                 .to(self.device)
             )
-            if self.names is not None:
-                names = self.names + out.names[1:]
-                out.refine_names(*names)
         else:
             # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
             out = tree_map(
                 lambda data: torch.empty(
-                    self.max_size,
-                    *data.shape,
+                    max_size_along_dim0(data.shape),
                     device=self.device,
                     dtype=data.dtype,
                 ),
@@ -764,11 +851,10 @@ class LazyMemmapStorage(LazyTensorStorage):
             If ``None`` is provided, the device is automatically gathered from the
             first batch of data passed. This is not enabled by default to avoid
             data placed on GPU by mistake, causing OOM issues.
-        names (list of str): the names of the dimensions of the storage if it is
-            a TensorDict or equivalent. This option has no effect for non-tensordict
-            storages. Defaults to ``None`` (no name, or name of the first dimension
-            of the first batch provided if initialized through
-            :meth:`~torchrl.data.ReplayBuffer.extend`).
+        ndim (int, optional): the number of dimensions to be accounted for when
+            measuring the storage size. For instance, a storage of shape ``[3, 4]``
+            has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
+            Defaults to ``1``.
 
     Examples:
         >>> data = TensorDict({
@@ -822,11 +908,12 @@ class LazyMemmapStorage(LazyTensorStorage):
     def __init__(
         self,
         max_size: int,
+        *,
         scratch_dir=None,
         device: torch.device = "cpu",
-        names: List[str] | None = None,
+        ndim: int = 1,
     ):
-        super().__init__(max_size, names=names)
+        super().__init__(max_size, ndim=ndim)
         self.initialized = False
         self.scratch_dir = None
         if scratch_dir is not None:
@@ -906,13 +993,19 @@ class LazyMemmapStorage(LazyTensorStorage):
                 "Using a 'cuda' device may be suboptimal.",
                 category=DeprecationWarning,
             )
+
+        def max_size_along_dim0(data_shape):
+            if self.ndim > 1:
+                return (
+                    -(self.max_size // -data.shape[: self.ndim - 1].numel()),
+                    *data_shape,
+                )
+            return (self.max_size, *data_shape)
+
         if is_tensor_collection(data):
             out = data.clone().to(self.device)
-            out = out.expand(self.max_size, *data.shape)
+            out = out.expand(max_size_along_dim0(data.shape))
             out = out.memmap_like(prefix=self.scratch_dir)
-            if self.names is not None:
-                names = self.names + out.names[1:]
-                out.refine_names(*names)
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
@@ -922,7 +1015,7 @@ class LazyMemmapStorage(LazyTensorStorage):
                         f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
                     )
         else:
-            out = _init_pytree(self.scratch_dir, self.max_size, data)
+            out = _init_pytree(self.scratch_dir, max_size_along_dim0, data)
         self._storage = out
         self.initialized = True
 
@@ -1299,7 +1392,7 @@ def _save_pytree(_storage, metadata, path):  # noqa: F811
         save_tensor(tensor_path, tensor)
 
 
-def _init_pytree_common(tensor_path, scratch_dir, max_size, tensor):
+def _init_pytree_common(tensor_path, scratch_dir, max_size_fn, tensor):
     if "." in tensor_path:
         tensor_path.replace(".", "_<dot>_")
     if scratch_dir is not None:
@@ -1314,7 +1407,7 @@ def _init_pytree_common(tensor_path, scratch_dir, max_size, tensor):
     else:
         total_tensor_path = None
     out = MemoryMappedTensor.empty(
-        shape=(max_size, *tensor.shape),
+        shape=max_size_fn(tensor.shape),
         filename=total_tensor_path,
         dtype=tensor.dtype,
     )
@@ -1327,14 +1420,14 @@ def _init_pytree_common(tensor_path, scratch_dir, max_size, tensor):
 
 
 @implement_for("torch", "2.3", None)
-def _init_pytree(scratch_dir, max_size, data):
+def _init_pytree(scratch_dir, max_size_fn, data):
     from torch.utils._pytree import tree_map_with_path
 
     # If not a tensorclass/tensordict, it must be a tensor(-like) or a PyTree
     # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
     def save_tensor(tensor_path: tuple, tensor: torch.Tensor):
         tensor_path = _path2str(tensor_path)
-        return _init_pytree_common(tensor_path, scratch_dir, max_size, tensor)
+        return _init_pytree_common(tensor_path, scratch_dir, max_size_fn, tensor)
 
     out = tree_map_with_path(save_tensor, data)
     return out

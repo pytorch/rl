@@ -96,6 +96,28 @@ class ReplayBuffer:
               incompatible with prefetching (since this requires to know the
               batch-size in advance) as well as with samplers that have a
               ``drop_last`` argument.
+        dim_extend (int, optional): indicates the dim to consider for
+            extension when calling :meth:`~.extend`. Defaults to ``0`` (the
+            storage is written along the first dimension of the data).
+            When using ``dim_extend > 0``, we recommend using the ``ndim``
+            argument in the storage instantiation if that argument is
+            available, to let storages know that the data is
+            multi-dimensional and keep consistent notions of storage-capacity
+            and batch-size during sampling.
+
+            .. note:: This argument has no effect on :meth:`~.add` and
+                therefore should be used with caution when both :meth:`~.add`
+                and :meth:`~.extend` are used in a codebase. For example:
+
+                    >>> data = torch.zeros(3, 4)
+                    >>> rb = ReplayBuffer(
+                    ...     storage=LazyTensorStorage(10, ndim=2),
+                    ...     dim_extend=1)
+                    >>> # these two approaches are equivalent:
+                    >>> for d in data.unbind(1):
+                    ...     rb.add(d)
+                    >>> rb.extend(data)
+
 
     Examples:
         >>> import torch
@@ -177,6 +199,7 @@ class ReplayBuffer:
         prefetch: int | None = None,
         transform: "Transform" | None = None,  # noqa-F821
         batch_size: int | None = None,
+        dim_extend: int = 0,
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
         self._storage.attach(self)
@@ -228,6 +251,18 @@ class ReplayBuffer:
                 "Please pass the batch-size to the ReplayBuffer constructor."
             )
         self._batch_size = batch_size
+        if dim_extend < 0:
+            raise ValueError("dim_extend must be a positive value.")
+        self.dim_extend = dim_extend
+        if self.dim_extend > 0:
+            from torchrl.envs.transforms.transforms import _TransposeTransform
+
+            if self._storage.ndim <= self.dim_extend:
+                raise ValueError(
+                    "The storage `ndim` attribute must be greater "
+                    "than the `dim_extend` attribute of the buffer."
+                )
+            self.append_transform(_TransposeTransform(self.dim_extend))
 
     def _get_collate_fn(self, collate_fn):
         self._collate_fn = (
@@ -638,6 +673,22 @@ class PrioritizedReplayBuffer(ReplayBuffer):
               incompatible with prefetching (since this requires to know the
               batch-size in advance) as well as with samplers that have a
               ``drop_last`` argument.
+        dim_extend (int, optional): indicates the dim to consider for
+            extension when calling :meth:`~.extend`. Defaults to ``0`` (the
+            storage is written along the first dimension of the data).
+
+            .. note:: This argument has no effect on :meth:`~.add` and
+                therefore should be used with caution when both :meth:`~.add`
+                and :meth:`~.extend` are used in a codebase. For example:
+
+                    >>> data = torch.zeros(3, 4)
+                    >>> rb = ReplayBuffer(
+                    ...     storage=LazyTensorStorage(10, ndim=2),
+                    ...     dim_extend=1)
+                    >>> # these two approaches are equivalent:
+                    >>> for d in data.unbind(1):
+                    ...     rb.add(d)
+                    >>> rb.extend(data)
 
     .. note::
         Generic prioritized replay buffers (ie. non-tensordict backed) require
@@ -688,6 +739,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         prefetch: int | None = None,
         transform: "Transform" | None = None,  # noqa-F821
         batch_size: int | None = None,
+        dim_extend: int = 0,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -700,6 +752,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             prefetch=prefetch,
             transform=transform,
             batch_size=batch_size,
+            dim_extend=dim_extend,
         )
 
 
@@ -746,6 +799,22 @@ class TensorDictReplayBuffer(ReplayBuffer):
             This is to be used when the sampler is of type
             :class:`~torchrl.data.PrioritizedSampler`.
             Defaults to ``"td_error"``.
+        dim_extend (int, optional): indicates the dim to consider for
+            extension when calling :meth:`~.extend`. Defaults to ``0`` (the
+            storage is written along the first dimension of the data).
+
+            .. note:: This argument has no effect on :meth:`~.add` and
+                therefore should be used with caution when both :meth:`~.add`
+                and :meth:`~.extend` are used in a codebase. For example:
+
+                    >>> data = torch.zeros(3, 4)
+                    >>> rb = ReplayBuffer(
+                    ...     storage=LazyTensorStorage(10, ndim=2),
+                    ...     dim_extend=1)
+                    >>> # these two approaches are equivalent:
+                    >>> for d in data.unbind(1):
+                    ...     rb.add(d)
+                    >>> rb.extend(data)
 
     Examples:
         >>> import torch
@@ -970,9 +1039,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         with self._replay_lock:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
-            print('index in _sample', index)
             data = self._storage.get(index)
-            print('collected data', data)
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
@@ -1032,6 +1099,22 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectories). Can be one of "max", "min",
             "median" or "mean".
+        dim_extend (int, optional): indicates the dim to consider for
+            extension when calling :meth:`~.extend`. Defaults to ``0`` (the
+            storage is written along the first dimension of the data).
+
+            .. note:: This argument has no effect on :meth:`~.add` and
+                therefore should be used with caution when both :meth:`~.add`
+                and :meth:`~.extend` are used in a codebase. For example:
+
+                    >>> data = torch.zeros(3, 4)
+                    >>> rb = ReplayBuffer(
+                    ...     storage=LazyTensorStorage(10, ndim=2),
+                    ...     dim_extend=1)
+                    >>> # these two approaches are equivalent:
+                    >>> for d in data.unbind(1):
+                    ...     rb.add(d)
+                    >>> rb.extend(data)
 
     Examples:
         >>> import torch

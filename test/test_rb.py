@@ -218,7 +218,8 @@ class TestComposableBuffers:
                 rb.add(data)
             return
         rb.add(data)
-        s = rb.sample(1)
+        s, info = rb.sample(1, return_info=True)
+        assert len(rb) == 1
         if isinstance(s, (torch.Tensor, TensorDictBase)):
             assert s.ndim, s
             s = s[0]
@@ -1950,7 +1951,12 @@ class TestSamplers:
                 assert (
                     samples["steps"][..., 1:] - 1 == samples["steps"][..., :-1]
                 ).all()
-            too_short = too_short or index.numel() < batch_size
+            if isinstance(index, tuple):
+                index_numel = index[0].numel()
+            else:
+                index_numel = index.numel()
+
+            too_short = too_short or index_numel < batch_size
             trajs_unique_id = trajs_unique_id.union(
                 samples["another_episode"].view(-1).tolist()
             )
