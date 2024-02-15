@@ -23,9 +23,9 @@ from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import (
     Compose,
     DoubleToFloat,
+    ExcludeTransform,
     FrameSkipTransform,
     GrayScale,
-    # NoopResetEnv,
     ObservationNorm,
     RandomCropTensorDict,
     Resize,
@@ -55,7 +55,6 @@ from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrappe
 from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 
 
-# TODO make env with action repeat transform
 def _make_env(cfg, device):
     lib = cfg.env.backend
     if lib in ("gym", "gymnasium"):
@@ -65,9 +64,7 @@ def _make_env(cfg, device):
                 device=device,
             )
     elif lib == "dm_control":
-        env = DMControlEnv(
-            cfg.env.name, cfg.env.task, from_pixels=cfg.env.from_pixels, device=device
-        )
+        env = DMControlEnv(cfg.env.name, cfg.env.task, from_pixels=cfg.env.from_pixels)
         return env
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
@@ -80,6 +77,7 @@ def transform_env(cfg, env, parallel_envs, dummy=False):
         env.append_transform(ToTensorImage(from_int=True))
         if cfg.env.grayscale:
             env.append_transform(GrayScale())
+
         img_size = cfg.env.image_size
         env.append_transform(Resize(img_size, img_size))
 
@@ -194,7 +192,11 @@ def make_dreamer(
 
     # Initialize world model
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        tensordict = test_env.rollout(5, auto_cast_to_device=True).unsqueeze(-1)
+        tensordict = (
+            test_env.rollout(5, auto_cast_to_device=True)
+            .unsqueeze(-1)
+            .to(world_model.device)
+        )
         tensordict = tensordict.to_tensordict()
         world_model(tensordict)
 
@@ -245,7 +247,9 @@ def make_dreamer(
 
     # Initialize model-based environment, actor and critic
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        tensordict = model_based_env.fake_tensordict().unsqueeze(-1)
+        tensordict = (
+            model_based_env.fake_tensordict().unsqueeze(-1).to(value_model.device)
+        )
         tensordict = tensordict
         tensordict = actor_simulator(tensordict)
         value_model(tensordict)
@@ -263,8 +267,12 @@ def make_collector(cfg, train_env, actor_model_explore):
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.device,
         reset_at_each_iter=True,
+        postproc=ExcludeTransform(
+            "belief", "state", ("next", "belief"), ("next", "state"), "encoded_latents"
+        ),
     )
     collector.set_seed(cfg.env.seed)
+
     return collector
 
 
