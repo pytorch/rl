@@ -24,6 +24,7 @@ from torchrl._extension import EXTENSION_WARNING
 
 from torchrl._utils import _replace_last
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
+from torchrl.data.replay_buffers.utils import _is_int
 
 try:
     from torchrl._torchrl import (
@@ -416,10 +417,18 @@ class PrioritizedSampler(Sampler):
                 "length as index"
             )
         # make sure everything is cast to cpu
-        if isinstance(index, torch.Tensor) and not index.is_cpu:
-            index = index.cpu()
-        if isinstance(priority, torch.Tensor) and not priority.is_cpu:
-            priority = priority.cpu()
+        index = torch.as_tensor(index, device=torch.device("cpu"), dtype=torch.long)
+        priority = torch.as_tensor(priority, device=torch.device("cpu"))
+        # MaxValueWriter will set -1 for items in the data that we don't want
+        # to update. We therefore have to keep only the non-negative indices.
+        valid_index = index >= 0
+        if not valid_index.all():
+            if valid_index.any():
+                index = index[valid_index]
+                if priority.numel() > 1:
+                    priority = priority[valid_index]
+            else:
+                return
 
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
@@ -451,9 +460,7 @@ class PrioritizedSampler(Sampler):
 
         """
         priority = torch.as_tensor(priority, device=torch.device("cpu")).detach()
-        index = torch.as_tensor(
-            index, dtype=torch.long, device=torch.device("cpu")
-        ).detach()
+        index = torch.as_tensor(index, dtype=torch.long, device=torch.device("cpu"))
         # we need to reshape priority if it has more than one elements or if it has
         # a different shape than index
         if priority.numel() > 1 and priority.shape != index.shape:
@@ -467,6 +474,22 @@ class PrioritizedSampler(Sampler):
                 ) from err
         elif priority.numel() <= 1:
             priority = priority.squeeze()
+
+        # MaxValueWriter will set -1 for items in the data that we don't want
+        # to update. We therefore have to keep only the non-negative indices.
+        if _is_int(index):
+            if index == -1:
+                return
+        else:
+            if index.ndim > 1:
+                raise ValueError(f"Unsupported index shape: {index.shape}.")
+            valid_index = index >= 0
+            if not valid_index.any():
+                return
+            if not valid_index.all():
+                index = index[valid_index]
+                if priority.numel():
+                    priority = priority[valid_index]
 
         self._max_priority = priority.max().clamp_min(self._max_priority).item()
         priority = torch.pow(priority + self._eps, self._alpha)

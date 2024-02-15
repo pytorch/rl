@@ -999,13 +999,9 @@ class TensorDictReplayBuffer(ReplayBuffer):
         else:
             priority = torch.as_tensor(self._get_priority_item(data))
         index = data.get("index")
-        if data.ndim:
-            valid_index = index >= 0
         while index.shape != priority.shape:
             # reduce index
             index = index[..., 0]
-        if data.ndim:
-            return self.update_priority(index[valid_index], priority[valid_index])
         return self.update_priority(index, priority)
 
     def sample(

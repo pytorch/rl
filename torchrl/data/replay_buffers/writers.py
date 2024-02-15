@@ -343,29 +343,26 @@ class TensorDictMaxValueWriter(Writer):
         The ``rank_key`` in the data passed to this module should be structured as [B].
         If it has more dimensions, it will be reduced to a single value using the ``reduction`` method.
         """
+        # a map of [idx_in_storage, idx_in_data]
         data_to_replace = {}
-        for i, sample in enumerate(data):
-            index = self.get_insert_index(sample)
-            if index is not None:
-                data_to_replace[index] = i
+        for data_idx, sample in enumerate(data):
+            storage_idx = self.get_insert_index(sample)
+            if storage_idx is not None:
+                data_to_replace[storage_idx] = data_idx
 
         # -1 will be interpreted as invalid by prioritized buffers
         out_index = torch.full(data.shape, -1, dtype=torch.long)
         # Replace the data in the storage all at once
         if len(data_to_replace) > 0:
-            keys, values = zip(*data_to_replace.items())
+            storage_idx, data_idx = zip(*data_to_replace.items())
             index = data.get("index", None)
             dtype = index.dtype if index is not None else torch.long
             device = index.device if index is not None else data.device
-            values = list(values)
-            keys = torch.tensor(keys, dtype=dtype, device=device)
-            out_index[values] = keys
-            if index is not None:
-                index[values] = keys
-                data.set("index", index)
-            self._storage.set(keys, data[values])
-            return self._replicate_index(out_index)
-        return out_index
+            data_idx = torch.as_tensor(data_idx, dtype=dtype, device=device)
+            storage_idx = torch.as_tensor(storage_idx, dtype=dtype, device=device)
+            out_index[data_idx] = storage_idx
+            self._storage.set(storage_idx, data[data_idx])
+        return self._replicate_index(out_index)
 
     def _empty(self) -> None:
         self._cursor = 0

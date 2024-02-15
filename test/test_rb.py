@@ -6,6 +6,7 @@
 import argparse
 import contextlib
 import functools
+import gc
 import importlib
 import os
 import pickle
@@ -157,44 +158,20 @@ class TestComposableBuffers:
 
     def _get_data(self, datatype, size):
         if datatype is None:
-            data = torch.randint(
-                100,
-                (
-                    size,
-                    1,
-                ),
-            )
+            data = torch.randint(100, (size, 1))
         elif datatype == "tensor":
-            data = torch.randint(
-                100,
-                (
-                    size,
-                    1,
-                ),
-            )
+            data = torch.randint(100, (size, 1))
         elif datatype == "tensordict":
             data = TensorDict(
                 {
-                    "a": torch.randint(
-                        100,
-                        (
-                            size,
-                            1,
-                        ),
-                    ),
+                    "a": torch.randint(100, (size, 1)),
                     "next": {"reward": torch.randn(size, 1)},
                 },
                 [size],
             )
         elif datatype == "pytree":
             data = {
-                "a": torch.randint(
-                    100,
-                    (
-                        size,
-                        1,
-                    ),
-                ),
+                "a": torch.randint(100, (size, 1)),
                 "b": {"c": [torch.zeros(size, 3), (torch.ones(size, 2),)]},
                 30: torch.zeros(size, 2),
             }
