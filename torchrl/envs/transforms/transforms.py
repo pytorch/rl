@@ -4767,9 +4767,14 @@ class TensorDictPrimer(Transform):
         return observation_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        input_spec["full_state_spec"] = self.transform_observation_spec(
+        new_state_spec = self.transform_observation_spec(
             input_spec["full_state_spec"]
         )
+        for action_key in list(input_spec["full_action_spec"].keys(True, True)):
+            if action_key in new_state_spec.keys(True, True):
+                input_spec["full_action_spec", action_key] = new_state_spec[action_key]
+                del new_state_spec[action_key]
+        input_spec["full_state_spec"] = new_state_spec
         return input_spec
 
     @property
