@@ -1051,6 +1051,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         >>> # If no cuda device is available
         >>> env = ParallelEnv(N, MyEnv(..., device="cpu"))
 
+    .. warning::
+      ParallelEnv disable gradients in all operations (:meth:`~.step`,
+      :meth:`~.reset` and :meth:`~.step_and_maybe_reset`) because gradients
+      cannot be passed through :class:`multiprocessing.Pipe` objects.
+      Only :class:`~torchrl.envs.SerialEnv` will support backpropagation.
+
     """
 
     def _start_workers(self) -> None:
@@ -1154,6 +1160,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             event.wait()
             event.clear()
 
+    @torch.no_grad()
     @_check_start
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
@@ -1216,6 +1223,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         tensordict.set("next", next_td)
         return tensordict, tensordict_
 
+    @torch.no_grad()
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # We must use the in_keys and nothing else for the following reasons:
@@ -1272,6 +1280,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 out = out.to(device, non_blocking=self.non_blocking)
         return out
 
+    @torch.no_grad()
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         if tensordict is not None:
