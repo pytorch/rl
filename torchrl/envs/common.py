@@ -189,14 +189,23 @@ class _EnvPostInit(abc.ABCMeta):
 
         done_keys = set(instance.full_done_spec.keys(True, True))
         obs_keys = set(instance.full_observation_spec.keys(True, True))
-        action_keys = set(instance.full_action_spec.keys(True, True))
         reward_keys = set(instance.full_reward_spec.keys(True, True))
         # state_keys can match obs_keys so we don't test that
-        # state_keys = set(instance.full_state_spec.keys(True, True))
+        action_keys = set(instance.full_action_spec.keys(True, True))
+        state_keys = set(instance.full_state_spec.keys(True, True))
         total_set = set()
-        for keyset in (done_keys, obs_keys, action_keys, reward_keys):
+        for keyset in (done_keys, obs_keys, reward_keys):
             if total_set.intersection(keyset):
-                raise RuntimeError("The set of keys of one spec collides with another.")
+                raise RuntimeError(
+                    f"The set of keys of one spec collides (culprit: {total_set.intersection(keyset)}) with another."
+                )
+            total_set = total_set.union(keyset)
+        total_set = set()
+        for keyset in (state_keys, action_keys):
+            if total_set.intersection(keyset):
+                raise RuntimeError(
+                    f"The set of keys of one spec collides (culprit: {total_set.intersection(keyset)}) with another."
+                )
             total_set = total_set.union(keyset)
         return instance
 
