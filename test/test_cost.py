@@ -5951,7 +5951,7 @@ class TestPPO(LossModuleTestBase):
                 loss_fn.make_value_estimator(td_est)
 
         loss = loss_fn(td)
-        if reduction is None:
+        if reduction == "none":
             assert loss.batch_size == td.batch_size
             loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
 
@@ -6698,7 +6698,7 @@ class TestA2C(LossModuleTestBase):
         elif td_est is not None:
             loss_fn.make_value_estimator(td_est)
         loss = loss_fn(td)
-        if reduction is None:
+        if reduction == "none":
             assert loss.batch_size == td.batch_size
             loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
         loss_critic = loss["loss_critic"]
@@ -7184,7 +7184,7 @@ class TestReinforce(LossModuleTestBase):
             elif td_est is not None:
                 loss_fn.make_value_estimator(td_est)
             loss_td = loss_fn(td)
-            if reduction is None:
+            if reduction == "none":
                 assert loss_td.batch_size == td.batch_size
                 loss_td = loss_td.apply(lambda x: x.float().mean(), batch_size=[])
             autograd.grad(
@@ -7346,7 +7346,7 @@ class TestReinforce(LossModuleTestBase):
         )
 
         loss = loss_fn(td)
-        if reduction is None:
+        if reduction == "none":
             assert loss.batch_size == td.batch_size
             loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
 
