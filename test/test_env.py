@@ -66,8 +66,14 @@ from torchrl.data.tensor_specs import (
     DiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator, ParallelEnv, \
-    SerialEnv, EnvBase
+from torchrl.envs import (
+    CatTensors,
+    DoubleToFloat,
+    EnvBase,
+    EnvCreator,
+    ParallelEnv,
+    SerialEnv,
+)
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
@@ -2482,25 +2488,39 @@ def test_backprop(device):
     class DifferentiableEnv(EnvBase):
         def __init__(self, device):
             super().__init__(device=device)
-            self.observation_spec = CompositeSpec(observation=UnboundedContinuousTensorSpec(3, device=device), device=device)
-            self.action_spec = CompositeSpec(action=UnboundedContinuousTensorSpec(3, device=device), device=device)
-            self.reward_spec = CompositeSpec(reward=UnboundedContinuousTensorSpec(1, device=device), device=device)
+            self.observation_spec = CompositeSpec(
+                observation=UnboundedContinuousTensorSpec(3, device=device),
+                device=device,
+            )
+            self.action_spec = CompositeSpec(
+                action=UnboundedContinuousTensorSpec(3, device=device), device=device
+            )
+            self.reward_spec = CompositeSpec(
+                reward=UnboundedContinuousTensorSpec(1, device=device), device=device
+            )
             self.seed = 0
+
         def _set_seed(self, seed):
             self.seed = seed
             return seed
+
         def _reset(self, tensordict):
             td = self.observation_spec.zero().update(self.done_spec.zero())
-            td["observation"] = (td["observation"].clone()+self.seed % 10).requires_grad_()
+            td["observation"] = (
+                td["observation"].clone() + self.seed % 10
+            ).requires_grad_()
             return td
+
         def _step(self, tensordict):
             action = tensordict.get("action")
-            obs = (tensordict.get("observation")+action) / action.norm()
-            return TensorDict({
-                "reward": action.sum().unsqueeze(0),
-                **self.full_done_spec.zero(),
-                "observation": obs,
-            })
+            obs = (tensordict.get("observation") + action) / action.norm()
+            return TensorDict(
+                {
+                    "reward": action.sum().unsqueeze(0),
+                    **self.full_done_spec.zero(),
+                    "observation": obs,
+                }
+            )
 
     torch.manual_seed(0)
     policy = Actor(torch.nn.Linear(3, 3))
@@ -2517,16 +2537,22 @@ def test_backprop(device):
         env = DifferentiableEnv(device=device)
         env.set_seed(seed)
         return env
-    serial_env = SerialEnv(2, [functools.partial(make_env, seed=0), functools.partial(make_env, seed=seed)])
+
+    serial_env = SerialEnv(
+        2, [functools.partial(make_env, seed=0), functools.partial(make_env, seed=seed)]
+    )
     r_serial = serial_env.rollout(10, policy)
 
-    g_serial = torch.autograd.grad(r_serial["next", "reward"].sum(), policy.parameters())
+    g_serial = torch.autograd.grad(
+        r_serial["next", "reward"].sum(), policy.parameters()
+    )
     torch.testing.assert_close(g, g_serial)
 
-    p_env = ParallelEnv(2, [functools.partial(make_env, seed=0), functools.partial(make_env, seed=seed)])
+    p_env = ParallelEnv(
+        2, [functools.partial(make_env, seed=0), functools.partial(make_env, seed=seed)]
+    )
     r_parallel = p_env.rollout(10, policy)
     assert not r_parallel.exclude("action").requires_grad
-
 
 
 if __name__ == "__main__":

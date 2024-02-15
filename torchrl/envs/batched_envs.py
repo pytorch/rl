@@ -1042,7 +1042,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         >>> env = ParallelEnv(N, MyEnv(..., device="cpu"))
 
     .. warning::
-      ParallelEnv disable gradients in all operations (:meth:`~.step`, 
+      ParallelEnv disable gradients in all operations (:meth:`~.step`,
       :meth:`~.reset` and :meth:`~.step_and_maybe_reset`) because gradients
       cannot be passed through :class:`multiprocessing.Pipe` objects.
       Only :class:`~torchrl.envs.SerialEnv` will support backpropagation.
