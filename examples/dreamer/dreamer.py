@@ -28,7 +28,6 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 def main(cfg: "DictConfig"):  # noqa: F821
     # cfg = correct_for_frame_skip(cfg)
 
-    # TODO really needed? if so then also needed for collector device
     if torch.cuda.is_available() and cfg.networks.device == "":
         device = torch.device("cuda:0")
     elif cfg.networks.device:

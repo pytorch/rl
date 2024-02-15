@@ -33,7 +33,7 @@ optimization:
 
 networks:
   exploration_noise: 0.3
-  device: cuda:1
+  device: cuda:0
   state_dim: 30
   rssm_hidden_dim: 200
   hidden_dim: 400

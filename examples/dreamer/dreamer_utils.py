@@ -23,7 +23,7 @@ from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import (
     Compose,
     DoubleToFloat,
-    ExcludeTransform,
+    # ExcludeTransform,
     FrameSkipTransform,
     GrayScale,
     ObservationNorm,
@@ -132,7 +132,7 @@ def make_dreamer(
     value_key: str = "state_value",
     use_decoder_in_env: bool = False,
 ):
-    test_env = _make_env(config, device=device)
+    test_env = _make_env(config, device="cpu")
     test_env = transform_env(config, test_env, parallel_envs=1, dummy=True)
     # Make encoder and decoder
     if config.env.from_pixels:
@@ -267,9 +267,9 @@ def make_collector(cfg, train_env, actor_model_explore):
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.device,
         reset_at_each_iter=True,
-        postproc=ExcludeTransform(
-            "belief", "state", ("next", "belief"), ("next", "state"), "encoded_latents"
-        ),
+        # postproc=ExcludeTransform(
+        #     "belief", "state", ("next", "belief"), ("next", "state"), "encoded_latents"
+        # ),
     )
     collector.set_seed(cfg.env.seed)
 
