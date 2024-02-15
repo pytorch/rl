@@ -5817,16 +5817,8 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("functional", [True, False])
-    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
     def test_ppo(
-        self,
-        loss_class,
-        device,
-        gradient_mode,
-        advantage,
-        td_est,
-        functional,
-        reduction,
+        self, loss_class, device, gradient_mode, advantage, td_est, functional
     ):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
@@ -5857,13 +5849,7 @@ class TestPPO(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(
-            actor,
-            value,
-            loss_critic_type="l2",
-            functional=functional,
-            reduction=reduction,
-        )
+        loss_fn = loss_class(actor, value, loss_critic_type="l2", functional=functional)
         if advantage is not None:
             advantage(td)
         else:
@@ -5871,10 +5857,6 @@ class TestPPO(LossModuleTestBase):
                 loss_fn.make_value_estimator(td_est)
 
         loss = loss_fn(td)
-        if reduction is None:
-            assert loss.batch_size == td.batch_size
-            loss.apply(lambda x: x.float().mean(), batch_size=[])
-
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
@@ -5922,8 +5904,7 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
-    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
-    def test_ppo_shared(self, loss_class, device, advantage, reduction):
+    def test_ppo_shared(self, loss_class, device, advantage):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
 
@@ -5965,10 +5946,6 @@ class TestPPO(LossModuleTestBase):
         if advantage is not None:
             advantage(td)
         loss = loss_fn(td)
-        if reduction is None:
-            assert loss.batch_size == td.batch_size
-            loss.apply(lambda x: x.float().mean(), batch_size=[])
-
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
@@ -6012,10 +5989,7 @@ class TestPPO(LossModuleTestBase):
     )
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("separate_losses", [True, False])
-    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
-    def test_ppo_shared_seq(
-        self, loss_class, device, advantage, separate_losses, reduction
-    ):
+    def test_ppo_shared_seq(self, loss_class, device, advantage, separate_losses):
         """Tests PPO with shared module with and without passing twice across the common module."""
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
@@ -6066,19 +6040,11 @@ class TestPPO(LossModuleTestBase):
         if advantage is not None:
             advantage(td)
         loss = loss_fn(td).exclude("entropy")
-        if reduction is None:
-            assert loss.batch_size == td.batch_size
-            loss.apply(lambda x: x.float().mean(), batch_size=[])
-
         sum(val for key, val in loss.items() if key.startswith("loss_")).backward()
         grad = TensorDict(dict(model.named_parameters()), []).apply(
             lambda x: x.grad.clone()
         )
         loss2 = loss_fn2(td).exclude("entropy")
-        if reduction is None:
-            assert loss2.batch_size == td.batch_size
-            loss2.apply(lambda x: x.float().mean(), batch_size=[])
-
         model.zero_grad()
         sum(val for key, val in loss2.items() if key.startswith("loss_")).backward()
         grad2 = TensorDict(dict(model.named_parameters()), []).apply(
@@ -6095,8 +6061,7 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
-    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
-    def test_ppo_diff(self, loss_class, device, gradient_mode, advantage, reduction):
+    def test_ppo_diff(self, loss_class, device, gradient_mode, advantage):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
 
@@ -6142,9 +6107,6 @@ class TestPPO(LossModuleTestBase):
             if advantage is not None:
                 advantage(td)
             loss = loss_fn(td)
-            if reduction is None:
-                assert loss.batch_size == td.batch_size
-                loss.apply(lambda x: x.float().mean(), batch_size=[])
 
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -6232,8 +6194,7 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
-    def test_ppo_tensordict_keys_run(self, loss_class, advantage, td_est, reduction):
+    def test_ppo_tensordict_keys_run(self, loss_class, advantage, td_est):
         """Test PPO loss module with non-default tensordict keys."""
         torch.manual_seed(self.seed)
         gradient_mode = True
@@ -6302,9 +6263,6 @@ class TestPPO(LossModuleTestBase):
                 loss_fn.make_value_estimator(td_est)
 
         loss = loss_fn(td)
-        if reduction is None:
-            assert loss.batch_size == td.batch_size
-            loss.apply(lambda x: x.float().mean(), batch_size=[])
 
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
