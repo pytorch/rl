@@ -678,7 +678,7 @@ class RayCollector(DataCollectorBase):
 
         # Wait for the in-process collections tasks to finish.
         refs = list(pending_tasks.keys())
-        ray.wait(num_returns=len(refs))
+        ray.wait(refs, num_returns=len(refs))
 
         # Cancel the in-process collections tasks
         # for ref in refs:
