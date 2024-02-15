@@ -419,7 +419,7 @@ class DreamerValueLoss(LossModule):
             )
             discount[..., 0, :] = 1
             discount = discount.cumprod(dim=-2)
-            value_loss = -(discount * dist.log_prob(lambda_target)).mean()
+            value_loss = -(discount * dist.log_prob(lambda_target).unsqueeze(-1)).mean()
         else:
             value_loss = -dist.log_prob(lambda_target).mean()
         loss_tensordict = TensorDict({"loss_value": value_loss}, [])

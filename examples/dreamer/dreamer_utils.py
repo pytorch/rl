@@ -9,7 +9,6 @@ import torch
 
 import torch.nn as nn
 from tensordict.nn import InteractionType
-from torch.distributions import Normal
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -38,16 +37,13 @@ from torchrl.envs.transforms.transforms import TensorDictPrimer
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     MLP,
-    # NormalParamWrapper,
     SafeModule,
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
     SafeSequential,
 )
-from torchrl.modules.distributions import TanhNormal
+from torchrl.modules.distributions import IndependentNormal, TanhNormal
 from torchrl.modules.models.model_based import (
-    DenseDecoder,
-    DenseEncoder,
     DreamerActor,
     ObsDecoder,
     ObsEncoder,
@@ -69,7 +65,9 @@ def _make_env(cfg, device):
                 device=device,
             )
     elif lib == "dm_control":
-        env = DMControlEnv(cfg.env.name, cfg.env.task, from_pixels=cfg.env.from_pixels)
+        env = DMControlEnv(
+            cfg.env.name, cfg.env.task, from_pixels=cfg.env.from_pixels, device=device
+        )
         return env
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
@@ -145,10 +143,22 @@ def make_dreamer(
         observation_in_key = "pixels"
         obsevation_out_key = "reco_pixels"
     else:
-        encoder = DenseEncoder()
-        decoder = DenseDecoder(
-            observation_dim=test_env.observation_spec["observation"].shape[-1]
+        encoder = MLP(
+            out_features=1024,
+            depth=2,
+            num_cells=config.networks.hidden_dim,
+            activation_class=get_activation(config.networks.activation),
         )
+        decoder = MLP(
+            out_features=test_env.observation_spec["observation"].shape[-1],
+            depth=2,
+            num_cells=config.networks.hidden_dim,
+            activation_class=get_activation(config.networks.activation),
+        )
+        # if config.env.backend == "dm_control":
+        #     observation_in_key = ("position", "velocity")
+        #     obsevation_out_key = "reco_observation"
+        # else:
         observation_in_key = "observation"
         obsevation_out_key = "reco_observation"
 
@@ -180,10 +190,11 @@ def make_dreamer(
         observation_in_key=observation_in_key,
         observation_out_key=obsevation_out_key,
     )
+    world_model.to(device)
 
     # Initialize world model
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        tensordict = test_env.rollout(5).unsqueeze(-1)
+        tensordict = test_env.rollout(5, auto_cast_to_device=True).unsqueeze(-1)
         tensordict = tensordict.to_tensordict()
         world_model(tensordict)
 
@@ -226,6 +237,11 @@ def make_dreamer(
         activation=config.networks.activation,
         value_key=value_key,
     )
+
+    actor_simulator.to(device)
+    value_model.to(device)
+    actor_realworld.to(device)
+    model_based_env.to(device)
 
     # Initialize model-based environment, actor and critic
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
@@ -315,8 +331,8 @@ def _dreamer_make_value_model(
         SafeProbabilisticModule(
             in_keys=["loc"],
             out_keys=[value_key],
-            distribution_class=Normal,
-            distribution_kwargs={"scale": 1.0},
+            distribution_class=IndependentNormal,
+            distribution_kwargs={"scale": 1.0, "event_dim": 1},
         ),
     )
 
@@ -493,8 +509,8 @@ def _dreamer_make_mbenv(
         SafeProbabilisticModule(
             in_keys=["loc"],
             out_keys=["reward"],
-            distribution_class=Normal,
-            distribution_kwargs={"scale": 1.0},
+            distribution_class=IndependentNormal,
+            distribution_kwargs={"scale": 1.0, "event_dim": 1},
         ),
     )
 
@@ -543,7 +559,7 @@ def _dreamer_make_world_model(
             ],
         ),
     )
-
+    event_dim = 3 if observation_out_key == "reco_pixels" else 1  # 3 for RGB
     decoder = SafeProbabilisticTensorDictSequential(
         SafeModule(
             decoder,
@@ -553,8 +569,8 @@ def _dreamer_make_world_model(
         SafeProbabilisticModule(
             in_keys=["loc"],
             out_keys=[("next", observation_out_key)],
-            distribution_class=Normal,
-            distribution_kwargs={"scale": 1.0},
+            distribution_class=IndependentNormal,
+            distribution_kwargs={"scale": 1.0, "event_dim": event_dim},
         ),
     )
 
@@ -577,8 +593,8 @@ def _dreamer_make_world_model(
         SafeProbabilisticModule(
             in_keys=[("next", "loc")],
             out_keys=[("next", "reward")],
-            distribution_class=Normal,
-            distribution_kwargs={"scale": 1.0},
+            distribution_class=IndependentNormal,
+            distribution_kwargs={"scale": 1.0, "event_dim": 1},
         ),
     )
 

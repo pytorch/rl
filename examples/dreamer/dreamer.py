@@ -60,14 +60,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         use_decoder_in_env=False,
     )
 
-    world_model.to(device)
-    model_based_env.to(device)
-    actor_model.to(device)
-    value_model.to(device)
-    policy.to(device)
-
     # Losses
     world_model_loss = DreamerModelLoss(world_model)
+    # Adapt loss keys to gym backend
+    if cfg.env.backend == "gym":
+        world_model_loss.set_keys(pixels="observation", reco_pixels="reco_observation")
+
     actor_loss = DreamerActorLoss(
         actor_model,
         value_model,
@@ -174,14 +172,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 scaler3.step(value_opt)
                 scaler3.update()
 
-        metrics_to_log = {
-            "reward": ep_reward.item(),
-            "loss_model_kl": model_loss_td["loss_model_kl"].item(),
-            "loss_model_reco": model_loss_td["loss_model_reco"].item(),
-            "loss_model_reward": model_loss_td["loss_model_reward"].item(),
-            "loss_actor": actor_loss_td["loss_actor"].item(),
-            "loss_value": value_loss_td["loss_value"].item(),
-        }
+        metrics_to_log = {"reward": ep_reward.item()}
+        if collected_frames >= init_random_frames:
+            loss_metrics = {
+                "loss_model_kl": model_loss_td["loss_model_kl"].item(),
+                "loss_model_reco": model_loss_td["loss_model_reco"].item(),
+                "loss_model_reward": model_loss_td["loss_model_reward"].item(),
+                "loss_actor": actor_loss_td["loss_actor"].item(),
+                "loss_value": value_loss_td["loss_value"].item(),
+            }
+            metrics_to_log.update(loss_metrics)
 
         if logger is not None:
             log_metrics(logger, metrics_to_log, collected_frames)
@@ -198,9 +198,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     break_when_any_done=True,
                 )
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-                metrics_to_log["eval/reward"] = eval_reward
+                eval_metrics = {"eval/reward": eval_reward}
                 if logger is not None:
-                    log_metrics(logger, metrics_to_log, collected_frames)
+                    log_metrics(logger, eval_metrics, collected_frames)
 
 
 if __name__ == "__main__":
