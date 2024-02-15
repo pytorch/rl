@@ -3,22 +3,24 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import contextlib
-import logging
+import functools
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
 from torchrl.objectives.common import LossModule
+
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -69,6 +71,10 @@ class A2CLoss(LossModule):
             Functionalizing permits features like meta-RL, but makes it
             impossible to use distributed models (DDP, FSDP, ...) and comes
             with a little cost. Defaults to ``True``.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -89,7 +95,7 @@ class A2CLoss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.a2c import A2CLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
@@ -235,6 +241,7 @@ class A2CLoss(LossModule):
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
+        reduction: str = None,
     ):
         if actor is not None:
             actor_network = actor
@@ -246,6 +253,8 @@ class A2CLoss(LossModule):
             raise TypeError(
                 "Missing positional arguments actor_network or critic_network."
             )
+        if reduction is None:
+            reduction = "mean"
 
         self._functional = functional
         self._out_keys = None
@@ -256,7 +265,8 @@ class A2CLoss(LossModule):
 
         if functional:
             self.convert_to_functional(
-                actor_network, "actor_network", funs_to_decorate=["forward", "get_dist"]
+                actor_network,
+                "actor_network",
             )
         else:
             self.actor_network = actor_network
@@ -277,17 +287,19 @@ class A2CLoss(LossModule):
 
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_coef
+        self.reduction = reduction
 
         try:
             device = next(self.parameters()).device
         except AttributeError:
             device = torch.device("cpu")
 
-        self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
-        self.register_buffer("critic_coef", torch.tensor(critic_coef, device=device))
+        self.register_buffer(
+            "entropy_coef", torch.as_tensor(entropy_coef, device=device)
+        )
+        self.register_buffer("critic_coef", torch.as_tensor(critic_coef, device=device))
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.loss_critic_type = loss_critic_type
 
     @property
@@ -296,41 +308,46 @@ class A2CLoss(LossModule):
 
     @property
     def actor(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.actor is deprecated, use {self.__class__.__name__}.actor_network instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.actor_network
 
     @property
     def critic(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.critic is deprecated, use {self.__class__.__name__}.critic_network instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.critic_network
 
     @property
     def actor_params(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.actor_network_params
 
     @property
     def critic_params(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.critic_params is deprecated, use {self.__class__.__name__}.critic_network_params instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.critic_network_params
 
     @property
     def target_critic_params(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.target_critic_params is deprecated, use {self.__class__.__name__}.target_critic_network_params instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.target_critic_network_params
 
@@ -345,7 +362,7 @@ class A2CLoss(LossModule):
             *[("next", key) for key in self.actor_network.in_keys],
         ]
         if self.critic_coef:
-            keys.extend(self.critic.in_keys)
+            keys.extend(self.critic_network.in_keys)
         return list(set(keys))
 
     @property
@@ -383,7 +400,7 @@ class A2CLoss(LossModule):
             entropy = dist.entropy()
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
-            entropy = -dist.log_prob(x)
+            entropy = -dist.log_prob(x).mean(0)
         return entropy.unsqueeze(-1)
 
     def _log_probs(
@@ -409,11 +426,11 @@ class A2CLoss(LossModule):
             # TODO: if the advantage is gathered by forward, this introduces an
             # overhead that we could easily reduce.
             target_return = tensordict.get(self.tensor_keys.value_target)
-            tensordict_select = tensordict.select(*self.critic.in_keys)
+            tensordict_select = tensordict.select(*self.critic_network.in_keys)
             with self.critic_network_params.to_module(
-                self.critic
+                self.critic_network
             ) if self.functional else contextlib.nullcontext():
-                state_value = self.critic(
+                state_value = self.critic_network(
                     tensordict_select,
                 ).get(self.tensor_keys.value)
             loss_value = distance_loss(
@@ -452,14 +469,17 @@ class A2CLoss(LossModule):
         assert not advantage.requires_grad
         log_probs, dist = self._log_probs(tensordict)
         loss = -(log_probs * advantage)
-        td_out = TensorDict({"loss_objective": loss.mean()}, [])
+        td_out = TensorDict({"loss_objective": loss}, batch_size=[])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.mean().detach())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy.mean())
+            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict).mean()
-            td_out.set("loss_critic", loss_critic.mean())
+            loss_critic = self.loss_critic(tensordict)
+            td_out.set("loss_critic", loss_critic)
+        td_out = td_out.apply(
+            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        )
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
@@ -472,13 +492,19 @@ class A2CLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(value_network=self.critic, **hp)
+            self._value_estimator = TD1Estimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(value_network=self.critic, **hp)
+            self._value_estimator = TD0Estimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(value_network=self.critic, **hp)
+            self._value_estimator = GAE(value_network=self.critic_network, **hp)
         elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
+            self._value_estimator = TDLambdaEstimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.VTrace:
             # VTrace currently does not support functional call on the actor
             if self.functional:

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import logging
 import os.path
 import shutil
 import tempfile
@@ -20,7 +19,7 @@ from typing import Callable
 import torch
 
 from tensordict import PersistentTensorDict, TensorDict
-from torchrl._utils import KeyDependentDefaultDict
+from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
@@ -58,6 +57,10 @@ _DTYPE_DIR = {
 
 class MinariExperienceReplay(TensorDictReplayBuffer):
     """Minari Experience replay dataset.
+
+    Learn more about Minari on their website: https://minari.farama.org/
+
+    The data format follows the :ref:`TED convention <TED-format>`.
 
     Args:
         dataset_id (str): The dataset to be downloaded. Must be part of MinariExperienceReplay.available_datasets
@@ -106,7 +109,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         >>> from torchrl.data.datasets.minari_data import MinariExperienceReplay
         >>> data = MinariExperienceReplay("door-human-v1", batch_size=32, download="force")
         >>> for sample in data:
-        ...     logging.info(sample)
+        ...     torchrl_logger.info(sample)
         ...     break
         TensorDict(
             fields={
@@ -248,7 +251,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
 
             td_data = TensorDict({}, [])
             total_steps = 0
-            logging.info("first read through data to create data structure...")
+            torchrl_logger.info("first read through data to create data structure...")
             h5_data = PersistentTensorDict.from_h5(parent_dir / "main_data.hdf5")
             # populate the tensordict
             episode_dict = {}
@@ -287,13 +290,11 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
                 td_data["done"] = td_data["truncated"] | td_data["terminated"]
             td_data = td_data.expand(total_steps)
             # save to designated location
-            logging.info(
-                f"creating tensordict data in {self.data_path_root}: ", end="\t"
-            )
+            torchrl_logger.info(f"creating tensordict data in {self.data_path_root}: ")
             td_data = td_data.memmap_like(self.data_path_root)
-            logging.info("tensordict structure:", td_data)
+            torchrl_logger.info(f"tensordict structure: {td_data}")
 
-            logging.info(f"Reading data from {max(*episode_dict) + 1} episodes")
+            torchrl_logger.info(f"Reading data from {max(*episode_dict) + 1} episodes")
             index = 0
             with tqdm(total=total_steps) if _has_tqdm else nullcontext() as pbar:
                 # iterate over episodes and populate the tensordict
@@ -408,8 +409,8 @@ def _proc_spec(spec):
             )
         return BoundedTensorSpec(
             shape=spec["shape"],
-            low=torch.tensor(spec["low"]),
-            high=torch.tensor(spec["high"]),
+            low=torch.as_tensor(spec["low"]),
+            high=torch.as_tensor(spec["high"]),
             dtype=_DTYPE_DIR[spec["dtype"]],
         )
     elif spec["type"] == "Discrete":

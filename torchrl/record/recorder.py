@@ -8,7 +8,7 @@ from typing import Optional, Sequence
 
 import torch
 
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDictBase
 
 from tensordict.utils import NestedKey
 

@@ -11,9 +11,9 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from tensordict import TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
@@ -25,7 +25,7 @@ from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -106,7 +106,7 @@ class SACLoss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.sac import SACLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
@@ -292,7 +292,6 @@ class SACLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
-            funs_to_decorate=["forward", "get_dist"],
         )
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
@@ -374,8 +373,7 @@ class SACLoss(LossModule):
                 self.actor_network, self.value_network
             )
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self._vmap_qnetworkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
@@ -981,7 +979,6 @@ class DiscreteSACLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
-            funs_to_decorate=["forward", "get_dist"],
         )
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
@@ -1037,7 +1034,7 @@ class DiscreteSACLoss(LossModule):
         if action_space is None:
             warnings.warn(
                 "action_space was not specified. DiscreteSACLoss will default to 'one-hot'."
-                "This behaviour will be deprecated soon and a space will have to be passed."
+                "This behaviour will be deprecated soon and a space will have to be passed. "
                 "Check the DiscreteSACLoss documentation to see how to pass the action space. "
             )
             action_space = "one-hot"

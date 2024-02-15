@@ -77,6 +77,7 @@ def make_environment(cfg):
     parallel_env = ParallelEnv(
         cfg.collector.env_per_collector,
         EnvCreator(lambda cfg=cfg: env_maker(cfg)),
+        serial_for_single=True,
     )
     parallel_env.set_seed(cfg.env.seed)
 
@@ -88,6 +89,7 @@ def make_environment(cfg):
         ParallelEnv(
             cfg.collector.env_per_collector,
             EnvCreator(lambda cfg=cfg: env_maker(cfg)),
+            serial_for_single=True,
         ),
         train_env.transform.clone(),
     )
@@ -118,14 +120,14 @@ def make_replay_buffer(
     batch_size,
     prb=False,
     buffer_size=1000000,
-    buffer_scratch_dir=None,
+    scratch_dir=None,
     device="cpu",
     prefetch=3,
 ):
     with (
         tempfile.TemporaryDirectory()
-        if buffer_scratch_dir is None
-        else nullcontext(buffer_scratch_dir)
+        if scratch_dir is None
+        else nullcontext(scratch_dir)
     ) as scratch_dir:
         if prb:
             replay_buffer = TensorDictPrioritizedReplayBuffer(

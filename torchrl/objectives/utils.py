@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import functools
 import re
@@ -10,8 +11,8 @@ from enum import Enum
 from typing import Iterable, Optional, Union
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
 from torch.nn.modules import dropout
@@ -25,9 +26,9 @@ except ImportError as err:
         raise err_ft from err
 from torchrl.envs.utils import step_mdp
 
-_GAMMA_LMBDA_DEPREC_WARNING = (
+_GAMMA_LMBDA_DEPREC_ERROR = (
     "Passing gamma / lambda parameters through the loss constructor "
-    "is deprecated and will be removed soon. To customize your value function, "
+    "is a deprecated feature. To customize your value function, "
     "run `loss_module.make_value_estimator(ValueEstimators.<value_fun>, gamma=val)`."
 )
 
@@ -299,10 +300,8 @@ class SoftUpdate(TargetNetUpdater):
         tau: Optional[float] = None,
     ):
         if eps is None and tau is None:
-            warnings.warn(
-                "Neither eps nor tau was provided. Taking the default value "
-                "eps=0.999. This behaviour will soon be deprecated.",
-                category=DeprecationWarning,
+            raise RuntimeError(
+                "Neither eps nor tau was provided. This behaviour is deprecated.",
             )
             eps = 0.999
         if (eps is None) ^ (tau is None):
@@ -461,7 +460,7 @@ def _cache_values(fun):
 
     def new_fun(self, netname=None):
         __dict__ = self.__dict__
-        _cache = __dict__["_cache"]
+        _cache = __dict__.setdefault("_cache", {})
         attr_name = name
         if netname is not None:
             attr_name += "_" + netname
@@ -502,3 +501,16 @@ def _vmap_func(module, *args, func=None, **kwargs):
             raise RuntimeError(
                 "Please use <loss_module>.set_vmap_randomness('different') to handle random operations during vmap."
             ) from err
+
+
+def _reduce(tensor: torch.Tensor, reduction: str) -> Union[float, torch.Tensor]:
+    """Reduces a tensor given the reduction method."""
+    if reduction == "none":
+        result = tensor
+    elif reduction == "mean":
+        result = tensor.mean()
+    elif reduction == "sum":
+        result = tensor.sum()
+    else:
+        raise NotImplementedError(f"Unknown reduction method {reduction}")
+    return result

@@ -12,6 +12,7 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 export PYTORCH_TEST_WITH_SLOW='1'
+export LAZY_LEGACY_OP=False
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'

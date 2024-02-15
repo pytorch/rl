@@ -21,6 +21,7 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     UnboundedContinuousTensorSpec,
 )
+from torchrl.envs import EnvCreator, SerialEnv
 from torchrl.envs.utils import set_exploration_type, step_mdp
 from torchrl.modules import (
     AdditiveGaussianWrapper,
@@ -1782,9 +1783,12 @@ class TestLSTMModule:
         )
 
     @pytest.mark.parametrize("python_based", [True, False])
-    def test_lstm_parallel_env(self, python_based):
+    @pytest.mark.parametrize("parallel", [True, False])
+    @pytest.mark.parametrize("heterogeneous", [True, False])
+    def test_lstm_parallel_env(self, python_based, parallel, heterogeneous):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
+        torch.manual_seed(0)
         device = "cuda" if torch.cuda.device_count() else "cpu"
         # tests that hidden states are carried over with parallel envs
         lstm_module = LSTMModule(
@@ -1796,6 +1800,10 @@ class TestLSTMModule:
             device=device,
             python_based=python_based,
         )
+        if parallel:
+            cls = ParallelEnv
+        else:
+            cls = SerialEnv
 
         def create_transformed_env():
             primer = lstm_module.make_tensordict_primer()
@@ -1807,7 +1815,12 @@ class TestLSTMModule:
             env.append_transform(primer)
             return env
 
-        env = ParallelEnv(
+        if heterogeneous:
+            create_transformed_env = [
+                EnvCreator(create_transformed_env),
+                EnvCreator(create_transformed_env),
+            ]
+        env = cls(
             create_env_fn=create_transformed_env,
             num_workers=2,
         )
@@ -2109,8 +2122,12 @@ class TestGRUModule:
         )
 
     @pytest.mark.parametrize("python_based", [True, False])
-    def test_gru_parallel_env(self, python_based):
+    @pytest.mark.parametrize("parallel", [True, False])
+    @pytest.mark.parametrize("heterogeneous", [True, False])
+    def test_gru_parallel_env(self, python_based, parallel, heterogeneous):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
+
+        torch.manual_seed(0)
 
         device = "cuda" if torch.cuda.device_count() else "cpu"
         # tests that hidden states are carried over with parallel envs
@@ -2134,7 +2151,17 @@ class TestGRUModule:
             env.append_transform(primer)
             return env
 
-        env = ParallelEnv(
+        if parallel:
+            cls = ParallelEnv
+        else:
+            cls = SerialEnv
+        if heterogeneous:
+            create_transformed_env = [
+                EnvCreator(create_transformed_env),
+                EnvCreator(create_transformed_env),
+            ]
+
+        env = cls(
             create_env_fn=create_transformed_env,
             num_workers=2,
         )

@@ -5,21 +5,20 @@
 
 from __future__ import annotations
 
-import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 
 from tensordict.utils import NestedKey, unravel_key
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -49,7 +48,7 @@ class DDPGLoss(LossModule):
         >>> from torchrl.data import BoundedTensorSpec
         >>> from torchrl.modules.tensordict_module.actors import Actor, ValueOperator
         >>> from torchrl.objectives.ddpg import DDPGLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> actor = Actor(spec=spec, module=nn.Linear(n_obs, n_act))
@@ -198,7 +197,9 @@ class DDPGLoss(LossModule):
 
         actor_critic = ActorCriticWrapper(actor_network, value_network)
         params = TensorDict.from_module(actor_critic)
-        params_meta = params.apply(self._make_meta_params, device=torch.device("meta"))
+        params_meta = params.apply(
+            self._make_meta_params, device=torch.device("meta"), filter_empty=False
+        )
         with params_meta.to_module(actor_critic):
             self.__dict__["actor_critic"] = deepcopy(actor_critic)
 
@@ -230,8 +231,7 @@ class DDPGLoss(LossModule):
         self.loss_function = loss_function
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:

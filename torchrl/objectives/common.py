@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import abc
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
@@ -31,7 +32,13 @@ def _updater_check_forward_prehook(module, *args, **kwargs):
         )
 
 
-class LossModule(TensorDictModuleBase):
+class _LossMeta(abc.ABCMeta):
+    def __init__(cls, name, bases, attr_dict):
+        super().__init__(name, bases, attr_dict)
+        cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
+
+
+class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     """A parent class for RL losses.
 
     LossModule inherits from nn.Module. It is designed to read an input
@@ -97,7 +104,6 @@ class LossModule(TensorDictModuleBase):
         return self._tensor_keys
 
     def __new__(cls, *args, **kwargs):
-        cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
         self = super().__new__(cls)
         return self
 
@@ -110,17 +116,13 @@ class LossModule(TensorDictModuleBase):
         self.value_type = self.default_value_estimator
         self._tensor_keys = self._AcceptedKeys()
         self.register_forward_pre_hook(_updater_check_forward_prehook)
-        # self.register_forward_pre_hook(_parameters_to_tensordict)
 
     def _set_deprecated_ctor_keys(self, **kwargs) -> None:
-        """Helper function to set a tensordict key from a constructor and raise a warning simultaneously."""
         for key, value in kwargs.items():
             if value is not None:
-                warnings.warn(
+                raise RuntimeError(
                     f"Setting '{key}' via the constructor is deprecated, use .set_keys(<key>='some_key') instead.",
-                    category=DeprecationWarning,
                 )
-                self.set_keys(**{key: value})
 
     def set_keys(self, **kwargs) -> None:
         """Set tensordict key names.
@@ -217,7 +219,8 @@ class LossModule(TensorDictModuleBase):
         """
         if kwargs.pop("funs_to_decorate", None) is not None:
             warnings.warn(
-                "funs_to_decorate is without effect with the new objective API.",
+                "funs_to_decorate is without effect with the new objective API. This "
+                "warning will be replaced by an error in v0.4.0.",
                 category=DeprecationWarning,
             )
         if kwargs:
@@ -264,7 +267,9 @@ class LossModule(TensorDictModuleBase):
 
             params = TensorDictParams(
                 params.apply(
-                    _compare_and_expand, batch_size=[expand_dim, *params.shape]
+                    _compare_and_expand,
+                    batch_size=[expand_dim, *params.shape],
+                    filter_empty=False,
                 ),
                 no_convert=True,
             )
@@ -285,7 +290,7 @@ class LossModule(TensorDictModuleBase):
         # set the functional module: we need to convert the params to non-differentiable params
         # otherwise they will appear twice in parameters
         with params.apply(
-            self._make_meta_params, device=torch.device("meta")
+            self._make_meta_params, device=torch.device("meta"), filter_empty=False
         ).to_module(module):
             # avoid buffers and params being exposed
             self.__dict__[module_name] = deepcopy(module)
@@ -295,7 +300,9 @@ class LossModule(TensorDictModuleBase):
             # if create_target_params:
             # we create a TensorDictParams to keep the target params as Buffer instances
             target_params = TensorDictParams(
-                params.apply(_make_target_param(clone=create_target_params)),
+                params.apply(
+                    _make_target_param(clone=create_target_params), filter_empty=False
+                ),
                 no_convert=True,
             )
             setattr(self, name_params_target + "_params", target_params)

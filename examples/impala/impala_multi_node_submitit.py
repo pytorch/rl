@@ -7,9 +7,8 @@
 This script reproduces the IMPALA Algorithm
 results from Espeholt et al. 2018 for the on Atari Environments.
 """
-import logging
-
 import hydra
+from torchrl._utils import logger as torchrl_logger
 
 
 @hydra.main(
@@ -133,7 +132,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
             cfg.logger.backend,
             logger_name="impala",
             experiment_name=exp_name,
-            project="impala",
+            wandb_kwargs={
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
         )
 
     # Create test environment
@@ -265,7 +268,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
-    logging.info(f"Training took {execution_time:.2f} seconds to finish")
+    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

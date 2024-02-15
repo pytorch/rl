@@ -20,12 +20,14 @@ import torch
 from tensordict import (
     is_tensor_collection,
     NonTensorData,
+    set_lazy_legacy,
+    TensorDict,
+    TensorDictBase,
     unravel_key,
     unravel_key_list,
 )
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.nn import dispatch, TensorDictModuleBase
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn, Tensor
 from torch.utils._pytree import tree_map
@@ -789,7 +791,7 @@ but got an object of type {type(transform)}."""
         return tensordict_reset
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
-        # self._complete_done(self.full_done_spec, tensordict_reset)
+        # self._complete_done(self.full_done_spec, reset)
         self._reset_check_done(tensordict, tensordict_reset)
         if tensordict is not None:
             tensordict_reset = _update_during_reset(
@@ -800,7 +802,7 @@ but got an object of type {type(transform)}."""
         # # doesn't do anything special
         # mt_mode = self.transform.missing_tolerance
         # self.set_missing_tolerance(True)
-        # tensordict_reset = self.transform._call(tensordict_reset)
+        # reset = self.transform._call(reset)
         # self.set_missing_tolerance(mt_mode)
         return tensordict_reset
 
@@ -1330,7 +1332,7 @@ class ClipTransform(Transform):
             if val is None:
                 return None, None, torch.finfo(torch.get_default_dtype()).max
             if not isinstance(val, torch.Tensor):
-                val = torch.tensor(val)
+                val = torch.as_tensor(val)
             if not val.dtype.is_floating_point:
                 val = val.float()
             eps = torch.finfo(val.dtype).resolution
@@ -1624,10 +1626,10 @@ class RewardClipping(Transform):
             out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         clamp_min_tensor = (
-            clamp_min if isinstance(clamp_min, Tensor) else torch.tensor(clamp_min)
+            clamp_min if isinstance(clamp_min, Tensor) else torch.as_tensor(clamp_min)
         )
         clamp_max_tensor = (
-            clamp_max if isinstance(clamp_max, Tensor) else torch.tensor(clamp_max)
+            clamp_max if isinstance(clamp_max, Tensor) else torch.as_tensor(clamp_max)
         )
         self.register_buffer("clamp_min", clamp_min_tensor)
         self.register_buffer("clamp_max", clamp_max_tensor)
@@ -2370,15 +2372,9 @@ class ObservationNorm(ObservationTransform):
         standard_normal: bool = False,
     ):
         if in_keys is None:
-            warnings.warn(
-                "Not passing in_keys to ObservationNorm will soon be deprecated. "
-                "Ensure you specify the entries to be normalized",
-                category=DeprecationWarning,
+            raise RuntimeError(
+                "Not passing in_keys to ObservationNorm is a deprecated behaviour."
             )
-            in_keys = [
-                "observation",
-                "pixels",
-            ]
 
         if out_keys is None:
             out_keys = copy(in_keys)
@@ -2394,7 +2390,7 @@ class ObservationNorm(ObservationTransform):
             out_keys_inv=out_keys_inv,
         )
         if not isinstance(standard_normal, torch.Tensor):
-            standard_normal = torch.tensor(standard_normal)
+            standard_normal = torch.as_tensor(standard_normal)
         self.register_buffer("standard_normal", standard_normal)
         self.eps = 1e-6
 
@@ -2717,7 +2713,7 @@ class CatFrames(ObservationTransform):
             raise ValueError(f"padding must be one of {self.ACCEPTED_PADDING}")
         if padding == "zeros":
             warnings.warn(
-                "Padding option 'zeros' will be deprecated in the future. "
+                "Padding option 'zeros' will be deprecated in v0.4.0. "
                 "Please use 'constant' padding with padding_value 0 instead.",
                 category=DeprecationWarning,
             )
@@ -2883,6 +2879,7 @@ class CatFrames(ObservationTransform):
         else:
             return self.unfolding(tensordict)
 
+    @set_lazy_legacy(False)
     def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
         if not tensordict.ndim:
@@ -2972,6 +2969,8 @@ class CatFrames(ObservationTransform):
                 *range(data.ndim + self.dim, data.ndim - 1),
             )
             tensordict.set(out_key, data)
+        if tensordict_orig is not tensordict:
+            tensordict_orig = tensordict.transpose(tensordict.ndim - 1, i)
         return tensordict_orig
 
     def __repr__(self) -> str:
@@ -3064,7 +3063,7 @@ class FiniteTensorDictCheck(Transform):
         super().__init__(in_keys=[])
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict.apply(check_finite)
+        tensordict.apply(check_finite, filter_empty=True)
         return tensordict
 
     def _reset(
@@ -3668,13 +3667,18 @@ class CatTensors(Transform):
             the transform is used. This behaviour will only work if a parent is set.
         out_key (NestedKey): key of the resulting tensor.
         dim (int, optional): dimension along which the concatenation will occur.
-            Default is -1.
+            Default is ``-1``.
+
+    Keyword Args:
         del_keys (bool, optional): if ``True``, the input values will be deleted after
-            concatenation. Default is True.
+            concatenation. Default is ``True``.
         unsqueeze_if_oor (bool, optional): if ``True``, CatTensor will check that
             the dimension indicated exist for the tensors to concatenate. If not,
             the tensors will be unsqueezed along that dimension.
             Default is ``False``.
+        sort (bool, optional): if ``True``, the keys will be sorted in the
+            transform. Otherwise, the order provided by the user will prevail.
+            Defaults to ``True``.
 
     Examples:
         >>> transform = CatTensors(in_keys=["key1", "key2"])
@@ -3699,8 +3703,10 @@ class CatTensors(Transform):
         in_keys: Sequence[NestedKey] | None = None,
         out_key: NestedKey = "observation_vector",
         dim: int = -1,
+        *,
         del_keys: bool = True,
         unsqueeze_if_oor: bool = False,
+        sort: bool = True,
     ):
         self._initialized = in_keys is not None
         if not self._initialized:
@@ -3708,7 +3714,7 @@ class CatTensors(Transform):
                 raise ValueError(
                     "Lazy call to CatTensors is only supported when `dim=-1`."
                 )
-        else:
+        elif sort:
             in_keys = sorted(in_keys, key=_sort_keys)
         if not isinstance(out_key, (str, tuple)):
             raise Exception("CatTensors requires out_key to be of type NestedKey")
@@ -5064,21 +5070,6 @@ class StepCounter(Transform):
         return truncated_keys
 
     @property
-    def completed_keys(self):
-        done_keys = self.__dict__.get("_done_keys", None)
-        if done_keys is None:
-            # make the default done keys
-            done_keys = []
-            for reset_key in self.parent._filtered_reset_keys:
-                if isinstance(reset_key, str):
-                    key = "done"
-                else:
-                    key = (*reset_key[:-1], "done")
-                done_keys.append(key)
-        self.__dict__["_done_keys"] = done_keys
-        return done_keys
-
-    @property
     def done_keys(self):
         done_keys = self.__dict__.get("_done_keys", None)
         if done_keys is None:
@@ -5169,6 +5160,7 @@ class StepCounter(Transform):
             tensordict_reset.set(step_count_key, step_count)
             if self.max_steps is not None:
                 truncated = step_count >= self.max_steps
+                truncated = truncated | tensordict_reset.get(truncated_key, False)
                 if self.update_done:
                     # we assume no done after reset
                     tensordict_reset.set(done_key, truncated)
@@ -5178,22 +5170,26 @@ class StepCounter(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        for step_count_key, truncated_key, done_key, terminated_key in zip(
+        for step_count_key, truncated_key, done_key in zip(
             self.step_count_keys,
             self.truncated_keys,
             self.done_keys,
-            self.terminated_keys,
         ):
             step_count = tensordict.get(step_count_key)
             next_step_count = step_count + 1
             next_tensordict.set(step_count_key, next_step_count)
+
             if self.max_steps is not None:
                 truncated = next_step_count >= self.max_steps
+                truncated = truncated | next_tensordict.get(truncated_key, False)
                 if self.update_done:
                     done = next_tensordict.get(done_key, None)
-                    terminated = next_tensordict.get(terminated_key, None)
-                    if terminated is not None:
-                        truncated = truncated & ~terminated
+
+                    # we can have terminated and truncated
+                    # terminated = next_tensordict.get(terminated_key, None)
+                    # if terminated is not None:
+                    #     truncated = truncated & ~terminated
+
                     done = truncated | done  # we assume no done after reset
                     next_tensordict.set(done_key, done)
                 next_tensordict.set(truncated_key, truncated)

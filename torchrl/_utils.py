@@ -8,6 +8,7 @@ import collections
 
 import functools
 import inspect
+
 import logging
 
 import math
@@ -28,6 +29,20 @@ from packaging.version import parse
 
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
+
+LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "DEBUG")
+logger = logging.getLogger("torchrl")
+logger.setLevel(getattr(logging, LOGGING_LEVEL))
+# Disable propagation to the root logger
+logger.propagate = False
+# Remove all attached handlers
+while logger.hasHandlers():
+    logger.removeHandler(logger.handlers[0])
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s")
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
@@ -76,7 +91,7 @@ class timeit:
             strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
-            logging.info(" -- ".join(strings))
+            logger.info(" -- ".join(strings))
 
     @staticmethod
     def erase():
@@ -424,7 +439,7 @@ class implement_for:
 
         """
         if VERBOSE:
-            logging.info("resetting implement_for")
+            logger.info("resetting implement_for")
         if setters_dict is None:
             setters_dict = copy(cls._implementations)
         for setter in setters_dict.values():
@@ -565,7 +580,7 @@ def context_decorator(ctx, func):
 
     if inspect.isclass(func):
         raise RuntimeError(
-            "Cannot decorate classes; it is ambiguous whether or not only the "
+            "Cannot decorate classes; it is ambiguous whether only the "
             "constructor or all methods should have the context manager applied; "
             "additionally, decorating a class at definition-site will prevent "
             "use of the identifier as a conventional type.  "
@@ -671,17 +686,17 @@ def print_directory_tree(path, indent="", display_metadata=True):
 
         total_size_bytes = get_directory_size(path)
         formatted_size = format_size(total_size_bytes)
-        logging.info(f"Directory size: {formatted_size}")
+        logger.info(f"Directory size: {formatted_size}")
 
     if os.path.isdir(path):
-        logging.info(indent + os.path.basename(path) + "/")
+        logger.info(indent + os.path.basename(path) + "/")
         indent += "    "
         for item in os.listdir(path):
             print_directory_tree(
                 os.path.join(path, item), indent=indent, display_metadata=False
             )
     else:
-        logging.info(indent + os.path.basename(path))
+        logger.info(indent + os.path.basename(path))
 
 
 def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
@@ -689,3 +704,40 @@ def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
         return new_ending
     else:
         return key[:-1] + (new_ending,)
+
+
+class _rng_decorator(_DecoratorContextManager):
+    """Temporarily sets the seed and sets back the rng state when exiting."""
+
+    def __init__(self, seed, device=None):
+        self.seed = seed
+        self.device = device
+        self.has_cuda = torch.cuda.is_available()
+
+    def __enter__(self):
+        self._get_state()
+        torch.manual_seed(self.seed)
+
+    def _get_state(self):
+        if self.has_cuda:
+            if self.device is None:
+                self._state = (torch.random.get_rng_state(), torch.cuda.get_rng_state())
+            else:
+                self._state = (
+                    torch.random.get_rng_state(),
+                    torch.cuda.get_rng_state(self.device),
+                )
+
+        else:
+            self._state = torch.random.get_rng_state()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.has_cuda:
+            torch.random.set_rng_state(self._state[0])
+            if self.device is not None:
+                torch.cuda.set_rng_state(self._state[1], device=self.device)
+            else:
+                torch.cuda.set_rng_state(self._state[1])
+
+        else:
+            torch.random.set_rng_state(self._state)

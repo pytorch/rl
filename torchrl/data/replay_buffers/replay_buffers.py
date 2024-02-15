@@ -17,14 +17,15 @@ import numpy as np
 
 import torch
 
-from tensordict import is_tensorclass, unravel_key
-from tensordict.nn.utils import _set_dispatch_td_nn_modules
-from tensordict.tensordict import (
+from tensordict import (
     is_tensor_collection,
+    is_tensorclass,
     LazyStackedTensorDict,
     TensorDict,
     TensorDictBase,
+    unravel_key,
 )
+from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
 
@@ -866,7 +867,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 device=data.device,
             )
             if data.batch_size:
-                data_add["_rb_batch_size"] = torch.tensor(data.batch_size)
+                data_add["_rb_batch_size"] = torch.as_tensor(data.batch_size)
 
         else:
             data_add = data
@@ -924,7 +925,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if data.ndim:
             priority = self._get_priority_vector(data)
         else:
-            priority = self._get_priority_item(data)
+            priority = torch.as_tensor(self._get_priority_item(data))
         index = data.get("index")
         while index.shape != priority.shape:
             # reduce index
@@ -1440,7 +1441,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
         if isinstance(index, slice) and index == slice(None):
             return self
         if isinstance(index, (list, range, np.ndarray)):
-            index = torch.tensor(index)
+            index = torch.as_tensor(index)
         if isinstance(index, torch.Tensor):
             if index.ndim > 1:
                 raise RuntimeError(

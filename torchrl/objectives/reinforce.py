@@ -5,19 +5,21 @@
 from __future__ import annotations
 
 import contextlib
-import logging
+import functools
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torchrl.objectives.common import LossModule
+
 from torchrl.objectives.utils import (
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -61,6 +63,10 @@ class ReinforceLoss(LossModule):
             Functionalizing permits features like meta-RL, but makes it
             impossible to use distributed models (DDP, FSDP, ...) and comes
             with a little cost. Defaults to ``True``.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -95,7 +101,7 @@ class ReinforceLoss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.reinforce import ReinforceLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_obs, n_act = 3, 5
         >>> value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
         >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
@@ -224,6 +230,7 @@ class ReinforceLoss(LossModule):
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
+        reduction: str = None,
     ) -> None:
         if actor is not None:
             actor_network = actor
@@ -239,6 +246,8 @@ class ReinforceLoss(LossModule):
             raise RuntimeError(
                 "delay_value and ~functional are incompatible, as delayed value currently relies on functional calls."
             )
+        if reduction is None:
+            reduction = "mean"
 
         self._functional = functional
 
@@ -250,6 +259,7 @@ class ReinforceLoss(LossModule):
 
         self.delay_value = delay_value
         self.loss_critic_type = loss_critic_type
+        self.reduction = reduction
 
         # Actor
         if self.functional:
@@ -281,8 +291,7 @@ class ReinforceLoss(LossModule):
                 self.target_critic_network_params = None
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
     @property
     def functional(self):
@@ -290,41 +299,46 @@ class ReinforceLoss(LossModule):
 
     @property
     def actor(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.actor is deprecated, use {self.__class__.__name__}.actor_network instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.actor_network
 
     @property
     def critic(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.critic is deprecated, use {self.__class__.__name__}.critic_network instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.critic_network
 
     @property
     def actor_params(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.actor_network_params
 
     @property
     def critic_params(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.critic_params is deprecated, use {self.__class__.__name__}.critic_network_params instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.critic_network_params
 
     @property
     def target_critic_params(self):
-        logging.warning(
+        warnings.warn(
             f"{self.__class__.__name__}.target_critic_params is deprecated, use {self.__class__.__name__}.target_critic_network_params instead. This "
-            "link will be removed in v0.4."
+            "link will be removed in v0.4.",
+            category=DeprecationWarning,
         )
         return self.target_critic_network_params
 
@@ -348,7 +362,7 @@ class ReinforceLoss(LossModule):
             ("next", self.tensor_keys.terminated),
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
-            *self.critic.in_keys,
+            *self.critic_network.in_keys,
         ]
         self._in_keys = list(set(keys))
 
@@ -385,21 +399,25 @@ class ReinforceLoss(LossModule):
         if log_prob.shape == advantage.shape[:-1]:
             log_prob = log_prob.unsqueeze(-1)
         loss_actor = -log_prob * advantage.detach()
-        loss_actor = loss_actor.mean()
-        td_out = TensorDict({"loss_actor": loss_actor}, [])
+        td_out = TensorDict({"loss_actor": loss_actor}, batch_size=[])
 
-        td_out.set("loss_value", self.loss_critic(tensordict).mean())
+        td_out.set("loss_value", self.loss_critic(tensordict))
+        td_out = td_out.apply(
+            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        )
 
         return td_out
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         try:
             target_return = tensordict.get(self.tensor_keys.value_target)
-            tensordict_select = tensordict.select(*self.critic.in_keys)
+            tensordict_select = tensordict.select(*self.critic_network.in_keys)
             with self.critic_network_params.to_module(
-                self.critic
+                self.critic_network
             ) if self.functional else contextlib.nullcontext():
-                state_value = self.critic(tensordict_select).get(self.tensor_keys.value)
+                state_value = self.critic_network(tensordict_select).get(
+                    self.tensor_keys.value
+                )
             loss_value = distance_loss(
                 target_return,
                 state_value,
@@ -424,13 +442,19 @@ class ReinforceLoss(LossModule):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(value_network=self.critic, **hp)
+            self._value_estimator = TD1Estimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(value_network=self.critic, **hp)
+            self._value_estimator = TD0Estimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(value_network=self.critic, **hp)
+            self._value_estimator = GAE(value_network=self.critic_network, **hp)
         elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
+            self._value_estimator = TDLambdaEstimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.VTrace:
             # VTrace currently does not support functional call on the actor
             if self.functional:

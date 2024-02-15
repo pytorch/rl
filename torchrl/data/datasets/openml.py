@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
-from tensordict.tensordict import TensorDict
+from tensordict import TensorDict
 
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import (
@@ -26,6 +26,8 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
 
     This class provides an easy entry point for public datasets.
     See "Dua, D. and Graff, C. (2017) UCI Machine Learning Repository. http://archive.ics.uci.edu/ml"
+
+    The data format follows the :ref:`TED convention <TED-format>`.
 
     The data is accessed via scikit-learn. Make sure sklearn and pandas are
     installed before retrieving the data:

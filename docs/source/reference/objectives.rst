@@ -3,6 +3,8 @@
 torchrl.objectives package
 ==========================
 
+.. _ref_objectives:
+
 TorchRL provides a series of losses to use in your training scripts.
 The aim is to have losses that are easily reusable/swappable and that have
 a simple signature.

@@ -28,7 +28,7 @@ from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -224,7 +224,7 @@ class QMixerLoss(LossModule):
         global_value_network = SafeSequential(local_value_network, mixer_network)
         params = TensorDict.from_module(global_value_network)
         with params.apply(
-            self._make_meta_params, device=torch.device("meta")
+            self._make_meta_params, device=torch.device("meta"), filter_empty=False
         ).to_module(global_value_network):
             self.__dict__["global_value_network"] = deepcopy(global_value_network)
 
@@ -265,8 +265,7 @@ class QMixerLoss(LossModule):
         self.action_space = _find_action_space(action_space)
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:

@@ -2,8 +2,7 @@
 env:
   name: CartPole-v1
   task: ""
-  backend: gym
-  exp_name: cql_cartpole_gym
+  backend: gymnasium
   n_samples_stats: 1000
   max_episode_steps: 200
   seed: 0
@@ -24,6 +23,9 @@ collector:
 # Logger
 logger:
   backend: wandb
+  project_name: torchrl_example_cql
+  group_name: null
+  exp_name: cql_cartpole_gym
   log_interval: 5000 # record interval in frames
   eval_steps: 200
   mode: online
@@ -34,7 +36,7 @@ replay_buffer:
   prb: 0
   buffer_prefetch: 64
   size: 1_000_000
-  scratch_dir: ${env.exp_name}_${env.seed}
+  scratch_dir: null
 
 # Optimization
 optim:

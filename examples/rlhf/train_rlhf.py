@@ -56,7 +56,14 @@ def main(cfg):
     ctx = setup(cfg.sys)
 
     logger = get_logger(
-        logger_type=cfg.io.logger, logger_name="./log", experiment_name="torchrlhf-gpt2"
+        logger_type=cfg.io.logger,
+        logger_name="./log",
+        experiment_name="torchrlhf-gpt2",
+        wandb_kwargs={
+            "config": dict(cfg),
+            "project": cfg.io.project_name,
+            "group": cfg.io.group_name,
+        },
     )
 
     # =============== Dataloaders =============== #
@@ -93,9 +100,7 @@ def main(cfg):
     # using a Gym-like API (querying steps etc) introduces some
     # extra code that we can spare.
     #
-    kl_scheduler = AdaptiveKLController(
-        model, init_kl_coef=0.1, target=6, horizon=10000
-    )
+    kl_scheduler = AdaptiveKLController(init_kl_coef=0.1, target=6, horizon=10000)
     rollout_from_model = RolloutFromModel(
         model,
         ref_model,

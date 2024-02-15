@@ -84,6 +84,7 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1):
     parallel_env = ParallelEnv(
         train_num_envs,
         EnvCreator(lambda: env_maker(cfg)),
+        serial_for_single=True,
     )
     parallel_env.set_seed(cfg.env.seed)
 
@@ -93,6 +94,7 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1):
         ParallelEnv(
             eval_num_envs,
             EnvCreator(lambda: env_maker(cfg)),
+            serial_for_single=True,
         ),
         train_env.transform.clone(),
     )
@@ -123,7 +125,7 @@ def make_replay_buffer(
     batch_size,
     prb=False,
     buffer_size=1000000,
-    buffer_scratch_dir=None,
+    scratch_dir=None,
     device="cpu",
     prefetch=3,
 ):
@@ -135,7 +137,7 @@ def make_replay_buffer(
             prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
-                scratch_dir=buffer_scratch_dir,
+                scratch_dir=scratch_dir,
                 device=device,
             ),
             batch_size=batch_size,
@@ -146,7 +148,7 @@ def make_replay_buffer(
             prefetch=prefetch,
             storage=LazyMemmapStorage(
                 buffer_size,
-                scratch_dir=buffer_scratch_dir,
+                scratch_dir=scratch_dir,
                 device=device,
             ),
             batch_size=batch_size,
@@ -201,8 +203,8 @@ def make_iql_model(cfg, train_env, eval_env, device="cpu"):
         spec=action_spec,
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": action_spec.space.minimum,
-            "max": action_spec.space.maximum,
+            "min": action_spec.space.low,
+            "max": action_spec.space.high,
             "tanh_loc": False,
         },
         default_interaction_type=ExplorationType.RANDOM,

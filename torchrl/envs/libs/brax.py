@@ -7,7 +7,7 @@ import importlib.util
 from typing import Dict, Optional, Union
 
 import torch
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,

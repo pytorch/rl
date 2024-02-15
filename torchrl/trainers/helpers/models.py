@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import torch
+
+from tensordict import set_lazy_legacy
 from tensordict.nn import InteractionType
 from torch import distributions as d, nn
 
@@ -245,7 +247,7 @@ def make_redq_model(
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
         >>> import dataclasses
-        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["observation"]),
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v4"), Compose(DoubleToFloat(["observation"]),
         ...    CatTensors(["observation"], "observation_vector")))
         >>> device = torch.device("cpu")
         >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
@@ -450,6 +452,7 @@ def make_redq_model(
     return model
 
 
+@set_lazy_legacy(False)
 def make_dreamer(
     cfg: "DictConfig",  # noqa: F821
     proof_environment: EnvBase = None,
@@ -511,7 +514,6 @@ def make_dreamer(
     ).to(device)
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         tensordict = proof_environment.fake_tensordict().unsqueeze(-1)
-        tensordict = tensordict.to_tensordict().to(device)
         tensordict = tensordict.to(device)
         world_model(tensordict)
 

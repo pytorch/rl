@@ -7,14 +7,13 @@ from __future__ import annotations
 
 import abc
 import itertools
-import logging
 import warnings
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import TensorDict
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -84,7 +83,7 @@ class default_info_dict_reader(BaseInfoDictReader):
             _info_spec = None
         elif spec is None:
             _info_spec = CompositeSpec(
-                {key: UnboundedContinuousTensorSpec() for key in keys}, shape=[]
+                {key: UnboundedContinuousTensorSpec(()) for key in keys}, shape=[]
             )
         elif not isinstance(spec, CompositeSpec):
             if self.keys is not None and len(spec) != len(self.keys):
@@ -455,7 +454,7 @@ class GymLikeEnv(_EnvWrapper):
                 isinstance(info_dict_reader, default_info_dict_reader)
                 and info_dict_reader.info_spec is None
             ):
-                logging.info(
+                torchrl_logger.info(
                     "The info_dict_reader does not have specs. The only way to palliate to this issue automatically "
                     "is to run a dummy rollout and gather the specs automatically. "
                     "To silence this message, provide the specs directly to your spec reader."
@@ -478,7 +477,7 @@ class GymLikeEnv(_EnvWrapper):
         within the tensordict.
 
         This method returns a (possibly transformed) environment where we make sure that
-        the :func:`torchrl.envs.utils.check_env_specs` succeeds, whether or not
+        the :func:`torchrl.envs.utils.check_env_specs` succeeds, whether
         the info is filled at reset time.
 
         This method requires running a few iterations in the environment to
@@ -521,7 +520,7 @@ class GymLikeEnv(_EnvWrapper):
         warnings.warn(
             f"Please use {type(self)}.set_info_dict_reader method to set a new info reader. "
             f"This method will append a reader to the list of existing readers (if any). "
-            f"Setting info_dict_reader directly will be soon deprecated.",
+            f"Setting info_dict_reader directly will be deprecated in v0.4.0.",
             category=DeprecationWarning,
         )
         self._info_dict_reader.append(value)

@@ -142,7 +142,7 @@ def make_parallel_env(env_cfg, obs_loc, obs_std, train=False):
             return make_base_env(env_cfg)
 
     env = make_transformed_env(
-        ParallelEnv(num_envs, EnvCreator(make_env)),
+        ParallelEnv(num_envs, EnvCreator(make_env), serial_for_single=True),
         env_cfg,
         obs_loc,
         obs_std,
@@ -296,7 +296,7 @@ def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
     )
     storage = LazyMemmapStorage(
         max_size=rb_cfg.capacity,
-        scratch_dir=rb_cfg.buffer_scratch_dir,
+        scratch_dir=rb_cfg.scratch_dir,
         device=rb_cfg.device,
     )
 
@@ -493,17 +493,18 @@ def make_dt_optimizer(optim_cfg, loss_module):
 
 
 def make_logger(cfg):
-    from omegaconf import OmegaConf
-
     if not cfg.logger.backend:
         return None
     exp_name = generate_exp_name(cfg.logger.model_name, cfg.logger.exp_name)
-    cfg.logger.exp_name = exp_name
     logger = get_logger(
         cfg.logger.backend,
         logger_name=cfg.logger.model_name,
         experiment_name=exp_name,
-        wandb_kwargs={"config": OmegaConf.to_container(cfg)},
+        wandb_kwargs={
+            "config": dict(cfg),
+            "project": cfg.logger.project_name,
+            "group": cfg.logger.group_name,
+        },
     )
     return logger
 

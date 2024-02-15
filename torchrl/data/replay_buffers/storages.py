@@ -5,7 +5,6 @@
 
 import abc
 import json
-import logging
 import os
 import textwrap
 import warnings
@@ -18,15 +17,19 @@ from typing import Any, Dict, List, Sequence, Union
 import numpy as np
 import tensordict
 import torch
-from tensordict import is_tensorclass
+from tensordict import is_tensor_collection, is_tensorclass, TensorDict, TensorDictBase
 from tensordict.memmap import MemmapTensor, MemoryMappedTensor
-from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.utils import _STRDTYPE2DTYPE, expand_right
 from torch import multiprocessing as mp
 
 from torch.utils._pytree import LeafSpec, tree_flatten, tree_map, tree_unflatten
 
-from torchrl._utils import _CKPT_BACKEND, implement_for, VERBOSE
+from torchrl._utils import (
+    _CKPT_BACKEND,
+    implement_for,
+    logger as torchrl_logger,
+    VERBOSE,
+)
 from torchrl.data.replay_buffers.utils import INT_CLASSES
 
 try:
@@ -223,7 +226,9 @@ class ListStorage(Storage):
             if isinstance(elt, torch.Tensor):
                 self._storage.append(elt)
             elif isinstance(elt, (dict, OrderedDict)):
-                self._storage.append(TensorDict({}, []).load_state_dict(elt))
+                self._storage.append(
+                    TensorDict({}, []).load_state_dict(elt, strict=False)
+                )
             else:
                 raise TypeError(
                     f"Objects of type {type(elt)} are not supported by ListStorage.load_state_dict"
@@ -494,9 +499,11 @@ class TensorStorage(Storage):
                 )
         elif isinstance(_storage, (dict, OrderedDict)):
             if is_tensor_collection(self._storage):
-                self._storage.load_state_dict(_storage)
+                self._storage.load_state_dict(_storage, strict=False)
             elif self._storage is None:
-                self._storage = TensorDict({}, []).load_state_dict(_storage)
+                self._storage = TensorDict({}, []).load_state_dict(
+                    _storage, strict=False
+                )
             else:
                 raise RuntimeError(
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}. If your storage is pytree-based, use the dumps/load API instead."
@@ -689,7 +696,7 @@ class LazyTensorStorage(TensorStorage):
         data: Union[TensorDictBase, torch.Tensor, "PyTree"],  # noqa: F821
     ) -> None:
         if VERBOSE:
-            logging.info("Creating a TensorStorage...")
+            torchrl_logger.info("Creating a TensorStorage...")
         if self.device == "auto":
             self.device = data.device
         if is_tensorclass(data):
@@ -829,7 +836,7 @@ class LazyMemmapStorage(LazyTensorStorage):
                 )
         elif isinstance(_storage, (dict, OrderedDict)):
             if is_tensor_collection(self._storage):
-                self._storage.load_state_dict(_storage)
+                self._storage.load_state_dict(_storage, strict=False)
                 self._storage.memmap_()
             elif self._storage is None:
                 warnings.warn(
@@ -837,7 +844,9 @@ class LazyMemmapStorage(LazyTensorStorage):
                     "It is preferable to load a storage onto a"
                     "pre-allocated one whenever possible."
                 )
-                self._storage = TensorDict({}, []).load_state_dict(_storage)
+                self._storage = TensorDict({}, []).load_state_dict(
+                    _storage, strict=False
+                )
                 self._storage.memmap_()
             else:
                 raise RuntimeError(
@@ -852,7 +861,7 @@ class LazyMemmapStorage(LazyTensorStorage):
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         if VERBOSE:
-            logging.info("Creating a MemmapStorage...")
+            torchrl_logger.info("Creating a MemmapStorage...")
         if self.device == "auto":
             self.device = data.device
         if self.device.type != "cpu":
@@ -871,7 +880,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             ):
                 if VERBOSE:
                     filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                    logging.info(
+                    torchrl_logger.info(
                         f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
                     )
         else:
@@ -1006,7 +1015,7 @@ class StorageEnsemble(Storage):
         if isinstance(index, slice) and index == slice(None):
             return self
         if isinstance(index, (list, range, np.ndarray)):
-            index = torch.tensor(index)
+            index = torch.as_tensor(index)
         if isinstance(index, torch.Tensor):
             if index.ndim > 1:
                 raise RuntimeError(
@@ -1088,7 +1097,7 @@ def _reset_batch_size(x):
     shape = x.get("_rb_batch_size", None)
     if shape is not None:
         warnings.warn(
-            "Reshaping nested tensordicts will be deprecated soon.",
+            "Reshaping nested tensordicts will be deprecated in v0.4.0.",
             category=DeprecationWarning,
         )
         data = x.get("_data")
@@ -1273,7 +1282,7 @@ def _init_pytree_common(tensor_path, scratch_dir, max_size, tensor):
     )
     if VERBOSE:
         filesize = os.path.getsize(out.filename) / 1024 / 1024
-        logging.info(
+        torchrl_logger.info(
             f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
         )
     return out

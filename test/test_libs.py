@@ -4,8 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import importlib
-import logging
 from contextlib import nullcontext
+
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.datasets.gen_dgrl import GenDGRLExperienceReplay
 
@@ -43,13 +44,12 @@ from _utils_internal import (
     rollout_consistency_assertion,
 )
 from packaging import version
-from tensordict import LazyStackedTensorDict
+from tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
     TensorDictModule,
     TensorDictSequential,
 )
-from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl._utils import implement_for
 from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
@@ -555,7 +555,7 @@ class TestGym:
             env_type = type(env0._env)
 
         assert_allclose_td(*tdreset, rtol=RTOL, atol=ATOL)
-        tdrollout = torch.stack(tdrollout, 0).contiguous()
+        tdrollout = torch.stack(tdrollout, 0)
 
         # custom filtering of non-null obs: mujoco rendering sometimes fails
         # and renders black images. To counter this in the tests, we select
@@ -597,7 +597,7 @@ class TestGym:
         assert_allclose_td(tdreset[0], tdreset2, rtol=RTOL, atol=ATOL)
         assert final_seed0 == final_seed2
         # same magic trick for mujoco as above
-        tdrollout = torch.stack([tdrollout[0], rollout2], 0).contiguous()
+        tdrollout = torch.stack([tdrollout[0], rollout2], 0)
         idx = non_null_obs(tdrollout)
         assert_allclose_td(
             tdrollout[0][..., idx], tdrollout[1][..., idx], rtol=RTOL, atol=ATOL
@@ -2351,7 +2351,7 @@ class TestD4RL:
     def test_d4rl_dummy(self, task):
         t0 = time.time()
         _ = D4RLExperienceReplay(task, split_trajs=True, from_env=True, batch_size=2)
-        logging.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -2372,7 +2372,7 @@ class TestD4RL:
             offline = sample.get(key)
             # assert sim.dtype == offline.dtype, key
             assert sim.shape[-1] == offline.shape[-1], key
-        logging.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -2391,7 +2391,7 @@ class TestD4RL:
         for sample in data:  # noqa: B007
             i += 1
         assert len(data) // i == batch_size
-        logging.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
 
 
 _MINARI_DATASETS = []
@@ -2426,14 +2426,14 @@ _minari_selected_datasets()
 @pytest.mark.slow
 class TestMinari:
     def test_load(self, selected_dataset, split):
-        logging.info("dataset", selected_dataset)
+        torchrl_logger.info(f"dataset {selected_dataset}")
         data = MinariExperienceReplay(
             selected_dataset, batch_size=32, split_trajs=split
         )
         t0 = time.time()
         for i, sample in enumerate(data):
             t1 = time.time()
-            logging.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
             assert data.metadata["action_space"].is_in(sample["action"])
             assert data.metadata["observation_space"].is_in(sample["observation"])
             t0 = time.time()
@@ -2452,7 +2452,7 @@ class TestRoboset:
         t0 = time.time()
         for i, _ in enumerate(data):
             t1 = time.time()
-            logging.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
             t0 = time.time()
             if i == 10:
                 break
@@ -2485,7 +2485,7 @@ class TestVD4RL:
                 assert (batch.get("pixels") != 0).any()
                 assert (batch.get(("next", "pixels")) != 0).any()
                 t1 = time.time()
-                logging.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+                torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
                 t0 = time.time()
                 if i == 10:
                     break
@@ -3001,16 +3001,16 @@ class TestRoboHive:
                     substr in envname
                     for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")
                 ):
-                    logging.info("not testing envs with prebuilt rendering")
+                    torchrl_logger.info("not testing envs with prebuilt rendering")
                     return
                 if "Adroit" in envname:
-                    logging.info("tcdm are broken")
+                    torchrl_logger.info("tcdm are broken")
                     return
                 try:
                     env = RoboHiveEnv(envname)
                 except AttributeError as err:
                     if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
-                        logging.info("tcdm are broken")
+                        torchrl_logger.info("tcdm are broken")
                         return
                     else:
                         raise err
@@ -3018,7 +3018,7 @@ class TestRoboHive:
                     from_pixels
                     and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0
                 ):
-                    logging.info("no camera")
+                    torchrl_logger.info("no camera")
                     return
                 check_env_specs(env)
             except Exception as err:

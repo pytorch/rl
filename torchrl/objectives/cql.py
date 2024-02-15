@@ -12,8 +12,8 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
 
@@ -26,7 +26,7 @@ from torchrl.modules.tensordict_module.common import ensure_tensordict_compatibl
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -90,7 +90,7 @@ class CQLLoss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.cql import CQLLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
@@ -332,8 +332,7 @@ class CQLLoss(LossModule):
         self.target_entropy_buffer = None
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
         self.temperature = temperature
         self.min_q_weight = min_q_weight
@@ -578,9 +577,14 @@ class CQLLoss(LossModule):
     def _get_policy_actions(self, data, actor_params, num_actions=10):
         batch_size = data.batch_size
         batch_size = list(batch_size[:-1]) + [batch_size[-1] * num_actions]
-        tensordict = data.select(*self.actor_network.in_keys).apply(
-            lambda x: x.repeat_interleave(num_actions, dim=data.ndim - 1),
-            batch_size=batch_size,
+        in_keys = [unravel_key(key) for key in self.actor_network.in_keys]
+
+        def filter_and_repeat(name, x):
+            if name in in_keys:
+                return x.repeat_interleave(num_actions, dim=data.ndim - 1)
+
+        tensordict = data.named_apply(
+            filter_and_repeat, batch_size=batch_size, filter_empty=True
         )
         with torch.no_grad():
             with set_exploration_type(ExplorationType.RANDOM), actor_params.to_module(
@@ -732,13 +736,18 @@ class CQLLoss(LossModule):
 
         batch_size = tensordict_q_random.batch_size
         batch_size = list(batch_size[:-1]) + [batch_size[-1] * self.num_random]
-        tensordict_q_random = tensordict_q_random.select(
-            *self.actor_network.in_keys
-        ).apply(
-            lambda x: x.repeat_interleave(
-                self.num_random, dim=tensordict_q_random.ndim - 1
-            ),
+        in_keys = [unravel_key(key) for key in self.actor_network.in_keys]
+
+        def filter_and_repeat(name, x):
+            if name in in_keys:
+                return x.repeat_interleave(
+                    self.num_random, dim=tensordict_q_random.ndim - 1
+                )
+
+        tensordict_q_random = tensordict_q_random.named_apply(
+            filter_and_repeat,
             batch_size=batch_size,
+            filter_empty=True,
         )
         tensordict_q_random.set(self.tensor_keys.action, random_actions_tensor)
         cql_tensordict = torch.cat(
@@ -1030,8 +1039,7 @@ class DiscreteCQLLoss(LossModule):
         self.action_space = _find_action_space(action_space)
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:

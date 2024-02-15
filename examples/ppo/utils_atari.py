@@ -19,8 +19,8 @@ from torchrl.envs import (
     NoopResetEnv,
     ParallelEnv,
     Resize,
-    RewardClipping,
     RewardSum,
+    SignTransform,
     StepCounter,
     ToTensorImage,
     TransformedEnv,
@@ -41,15 +41,13 @@ from torchrl.modules import (
 # --------------------------------------------------------------------
 
 
-def make_base_env(
-    env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False
-):
+def make_base_env(env_name="BreakoutNoFrameskip-v4", frame_skip=4, is_test=False):
     env = GymEnv(
         env_name,
         frame_skip=frame_skip,
         from_pixels=True,
         pixels_only=False,
-        device=device,
+        device="cpu",
     )
     env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
@@ -60,7 +58,10 @@ def make_base_env(
 
 def make_parallel_env(env_name, num_envs, device, is_test=False):
     env = ParallelEnv(
-        num_envs, EnvCreator(lambda: make_base_env(env_name, device=device))
+        num_envs,
+        EnvCreator(lambda: make_base_env(env_name)),
+        serial_for_single=True,
+        device=device,
     )
     env = TransformedEnv(env)
     env.append_transform(ToTensorImage())
@@ -70,7 +71,7 @@ def make_parallel_env(env_name, num_envs, device, is_test=False):
     env.append_transform(RewardSum())
     env.append_transform(StepCounter(max_steps=4500))
     if not is_test:
-        env.append_transform(RewardClipping(-1, 1))
+        env.append_transform(SignTransform(in_keys=["reward"]))
     env.append_transform(DoubleToFloat())
     env.append_transform(VecNorm(in_keys=["pixels"]))
     return env

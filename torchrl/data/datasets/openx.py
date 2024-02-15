@@ -42,6 +42,8 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
 
     Paper: https://arxiv.org/abs/2310.08864
 
+    The data format follows the :ref:`TED convention <TED-format>`.
+
     .. note::
         Non-tensor data will be written in the tensordict data using the
         :class:`~tensordict.tensorclass.NonTensorData` primitive.
@@ -682,7 +684,7 @@ def _slice_data(data: TensorDict, slice_len, pad_value):
         truncated,
         dim=data.ndim - 1,
         value=True,
-        index=torch.tensor(-1, device=truncated.device),
+        index=torch.as_tensor(-1, device=truncated.device),
     )
     done = data.get(("next", "done"))
     data.set(("next", "truncated"), truncated)

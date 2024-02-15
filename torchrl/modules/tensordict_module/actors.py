@@ -33,12 +33,13 @@ from torchrl.modules.tensordict_module.sequence import SafeSequential
 class Actor(SafeModule):
     """General class for deterministic actors in RL.
 
-    The Actor class comes with default values for the out_keys (["action"])
-    and if the spec is provided but not as a CompositeSpec object, it will be
-    automatically translated into :obj:`spec = CompositeSpec(action=spec)`
+    The Actor class comes with default values for the out_keys (``["action"]``)
+    and if the spec is provided but not as a
+    :class:`~torchrl.data.CompositeSpec` object, it will be
+    automatically translated into ``spec = CompositeSpec(action=spec)``.
 
     Args:
-        module (nn.Module): a :class:`torch.nn.Module` used to map the input to
+        module (nn.Module): a :class:`~torch.nn.Module` used to map the input to
             the output parameter space.
         in_keys (iterable of str, optional): keys to be read from input
             tensordict and passed to the module. If it
@@ -47,9 +48,11 @@ class Actor(SafeModule):
             Defaults to ``["observation"]``.
         out_keys (iterable of str): keys to be written to the input tensordict.
             The length of out_keys must match the
-            number of tensors returned by the embedded module. Using "_" as a
+            number of tensors returned by the embedded module. Using ``"_"`` as a
             key avoid writing tensor to output.
             Defaults to ``["action"]``.
+
+    Keyword Args:
         spec (TensorSpec, optional): Keyword-only argument.
             Specs of the output tensor. If the module
             outputs multiple output tensors,
@@ -59,7 +62,7 @@ class Actor(SafeModule):
             input spec. Out-of-domain sampling can
             occur because of exploration policies or numerical under/overflow
             issues. If this value is out of bounds, it is projected back onto the
-            desired space using the :obj:`TensorSpec.project`
+            desired space using the :meth:`~torchrl.data.TensorSpec.project`
             method. Default is ``False``.
 
     Examples:
@@ -148,17 +151,23 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
             issues. If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
             method. Default is ``False``.
-        default_interaction_type=InteractionType.RANDOM (str, optional): keyword-only argument.
+        default_interaction_type (str, optional): keyword-only argument.
             Default method to be used to retrieve
-            the output value. Should be one of: 'mode', 'median', 'mean' or 'random'
-            (in which case the value is sampled randomly from the distribution). Default
-            is 'mode'.
-            Note: When a sample is drawn, the :obj:`ProbabilisticTDModule` instance will
-            first look for the interaction mode dictated by the `interaction_typ()`
-            global function. If this returns `None` (its default value), then the
-            `default_interaction_type` of the `ProbabilisticTDModule` instance will be
-            used. Note that DataCollector instances will use `set_interaction_type` to
-            :class:`tensordict.nn.InteractionType.RANDOM` by default.
+            the output value. Should be one of: 'InteractionType.MODE',
+            'InteractionType.MEDIAN', 'InteractionType.MEAN' or
+            'InteractionType.RANDOM' (in which case the value is sampled
+            randomly from the distribution). Defaults to is 'InteractionType.RANDOM'.
+
+            .. note:: When a sample is drawn, the :class:`ProbabilisticActor` instance will
+              first look for the interaction mode dictated by the
+              :func:`~tensordict.nn.probabilistic.interaction_type`
+              global function. If this returns `None` (its default value), then the
+              `default_interaction_type` of the `ProbabilisticTDModule`
+              instance will be used. Note that
+              :class:`~torchrl.collectors.collectors.DataCollectorBase`
+              instances will use `set_interaction_type` to
+              :class:`tensordict.nn.InteractionType.RANDOM` by default.
+
         distribution_class (Type, optional): keyword-only argument.
             A :class:`torch.distributions.Distribution` class to
             be used for sampling.
@@ -197,9 +206,7 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
         ...    in_keys=["loc", "scale"],
         ...    distribution_class=TanhNormal,
         ...    )
-        >>> params = TensorDict.from_module(td_module)
-        >>> with params.to_module(td_module):
-        ...     td = td_module(td)
+        >>> td = td_module(td)
         >>> td
         TensorDict(
             fields={
@@ -315,7 +322,8 @@ class ValueOperator(TensorDictModule):
             The length of out_keys must match the
             number of tensors returned by the embedded module. Using "_" as a
             key avoid writing tensor to output.
-            Defaults to ``["action"]``.
+            Defaults to ``["state_value"]`` or
+            ``["state_action_value"]`` if ``"action"`` is part of the ``in_keys``.
 
     Examples:
         >>> import torch
@@ -334,9 +342,7 @@ class ValueOperator(TensorDictModule):
         >>> td_module = ValueOperator(
         ...    in_keys=["observation", "action"], module=module
         ... )
-        >>> params = TensorDict.from_module(td_module)
-        >>> with params.to_module(td_module):
-        ...     td = td_module(td)
+        >>> td = td_module(td)
         >>> print(td)
         TensorDict(
             fields={
@@ -445,7 +451,7 @@ class QValueModule(TensorDictModuleBase):
     ):
         if isinstance(action_space, TensorSpec):
             warnings.warn(
-                "Using specs in action_space will be deprecated soon,"
+                "Using specs in action_space will be deprecated in v0.4.0,"
                 " please use the 'spec' argument if you want to provide an action spec",
                 category=DeprecationWarning,
             )
@@ -825,7 +831,7 @@ class QValueHook:
     ):
         if isinstance(action_space, TensorSpec):
             warnings.warn(
-                "Using specs in action_space will be deprecated soon,"
+                "Using specs in action_space will be deprecated in v0.4.0,"
                 " please use the 'spec' argument if you want to provide an action spec",
                 category=DeprecationWarning,
             )
@@ -922,7 +928,7 @@ class DistributionalQValueHook(QValueHook):
     ):
         if isinstance(action_space, TensorSpec):
             warnings.warn(
-                "Using specs in action_space will be deprecated soon,"
+                "Using specs in action_space will be deprecated in v0.4.0,"
                 " please use the 'spec' argument if you want to provide an action spec",
                 category=DeprecationWarning,
             )
@@ -1043,7 +1049,7 @@ class QValueActor(SafeSequential):
     ):
         if isinstance(action_space, TensorSpec):
             warnings.warn(
-                "Using specs in action_space will be deprecated soon,"
+                "Using specs in action_space will be deprecated v0.4.0,"
                 " please use the 'spec' argument if you want to provide an action spec",
                 category=DeprecationWarning,
             )
@@ -1189,7 +1195,7 @@ class DistributionalQValueActor(QValueActor):
     ):
         if isinstance(action_space, TensorSpec):
             warnings.warn(
-                "Using specs in action_space will be deprecated soon,"
+                "Using specs in action_space will be deprecated in v0.4.0,"
                 " please use the 'spec' argument if you want to provide an action spec",
                 category=DeprecationWarning,
             )

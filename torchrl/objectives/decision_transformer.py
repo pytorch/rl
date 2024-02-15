@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from typing import Union
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 
 from torch import distributions as d
@@ -275,7 +275,6 @@ class DTLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=False,
-            funs_to_decorate=["forward"],
         )
         self.loss_function = loss_function
 

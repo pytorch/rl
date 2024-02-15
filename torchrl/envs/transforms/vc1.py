@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import importlib
-import logging
 import os
 import subprocess
 from functools import partial
@@ -13,6 +12,7 @@ from typing import Union
 import torch
 from tensordict import TensorDictBase
 from torch import nn
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -132,8 +132,8 @@ class VC1Transform(Transform):
         elif isinstance(model_transforms, transforms.Normalize):
             return ObservationNorm(
                 in_keys=in_keys,
-                loc=torch.tensor(model_transforms.mean).reshape(3, 1, 1),
-                scale=torch.tensor(model_transforms.std).reshape(3, 1, 1),
+                loc=torch.as_tensor(model_transforms.mean).reshape(3, 1, 1),
+                scale=torch.as_tensor(model_transforms.std).reshape(3, 1, 1),
                 standard_normal=True,
             )
         elif isinstance(model_transforms, transforms.ToTensor):
@@ -167,8 +167,8 @@ class VC1Transform(Transform):
                 if in_key != out_key
             ]
             saved_td = tensordict.select(*in_keys)
-        tensordict_view = tensordict.view(-1)
-        super()._call(self.model_transforms(tensordict_view))
+        with tensordict.view(-1) as tensordict_view:
+            super()._call(self.model_transforms(tensordict_view))
         if self.del_keys:
             tensordict.exclude(*self.in_keys, inplace=True)
         else:
@@ -237,7 +237,7 @@ class VC1Transform(Transform):
         try:
             from vc_models import models  # noqa: F401
 
-            logging.info("vc_models found, no need to install.")
+            torchrl_logger.info("vc_models found, no need to install.")
         except ModuleNotFoundError:
             HOME = os.environ.get("HOME")
             vcdir = HOME + "/.cache/torchrl/eai-vc"

@@ -8,7 +8,7 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 from torchrl.envs.utils import _classproperty
 
 _has_jumanji = importlib.util.find_spec("jumanji") is not None
