@@ -2523,7 +2523,7 @@ def test_backprop(device):
             )
 
     torch.manual_seed(0)
-    policy = Actor(torch.nn.Linear(3, 3))
+    policy = Actor(torch.nn.Linear(3, 3, device=device))
     env0 = DifferentiableEnv(device=device)
     seed = env0.set_seed(0)
     env1 = DifferentiableEnv(device=device)
