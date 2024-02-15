@@ -472,7 +472,7 @@ class RayCollector(DataCollectorBase):
         pending_samples = [
             e.print_remote_collector_info.remote() for e in self.remote_collectors()
         ]
-        ray.wait(object_refs=pending_samples)
+        ray.wait(pending_samples)
 
     @property
     def num_workers(self):
@@ -602,7 +602,7 @@ class RayCollector(DataCollectorBase):
             samples_ready = []
             while len(samples_ready) < self.num_collectors:
                 samples_ready, samples_not_ready = ray.wait(
-                    object_refs=pending_tasks, num_returns=len(pending_tasks)
+                    pending_tasks, num_returns=len(pending_tasks)
                 )
 
             # Retrieve and concatenate Tensordicts
@@ -645,7 +645,7 @@ class RayCollector(DataCollectorBase):
                 raise RuntimeError("Missing pending tasks, something went wrong")
 
             # Wait for first worker to finish
-            wait_results = ray.wait(object_refs=list(pending_tasks.keys()))
+            wait_results = ray.wait(list(pending_tasks.keys()))
             future = wait_results[0][0]
             collector_index = pending_tasks.pop(future)
             collector = self.remote_collectors()[collector_index]
@@ -678,7 +678,7 @@ class RayCollector(DataCollectorBase):
 
         # Wait for the in-process collections tasks to finish.
         refs = list(pending_tasks.keys())
-        ray.wait(object_refs=refs, num_returns=len(refs))
+        ray.wait(num_returns=len(refs))
 
         # Cancel the in-process collections tasks
         # for ref in refs:
