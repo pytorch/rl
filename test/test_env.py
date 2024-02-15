@@ -2551,8 +2551,11 @@ def test_backprop(device):
     p_env = ParallelEnv(
         2, [functools.partial(make_env, seed=0), functools.partial(make_env, seed=seed)]
     )
-    r_parallel = p_env.rollout(10, policy)
-    assert not r_parallel.exclude("action").requires_grad
+    try:
+        r_parallel = p_env.rollout(10, policy)
+        assert not r_parallel.exclude("action").requires_grad
+    finally:
+        p_env.close()
 
 
 if __name__ == "__main__":
