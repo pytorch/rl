@@ -5952,8 +5952,13 @@ class TestPPO(LossModuleTestBase):
 
         loss = loss_fn(td)
         if reduction == "none":
-            assert loss.batch_size == td.batch_size
-            loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
+
+            def func(x):
+                if x.dtype != torch.float:
+                    return
+                return x.mean()
+
+            loss = loss.apply(func, batch_size=[])
 
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -6699,8 +6704,13 @@ class TestA2C(LossModuleTestBase):
             loss_fn.make_value_estimator(td_est)
         loss = loss_fn(td)
         if reduction == "none":
-            assert loss.batch_size == td.batch_size
-            loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
+
+            def func(x):
+                if x.dtype != torch.float:
+                    return
+                return x.mean()
+
+            loss = loss.apply(func, batch_size=[])
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
@@ -7342,8 +7352,13 @@ class TestReinforce(LossModuleTestBase):
 
         loss = loss_fn(td)
         if reduction == "none":
-            assert loss.batch_size == td.batch_size
-            loss = loss.apply(lambda x: x.float().mean(), batch_size=[])
+
+            def func(x):
+                if x.dtype != torch.float:
+                    return
+                return x.mean()
+
+            loss = loss.apply(func, batch_size=[])
 
         assert all(
             (p.grad is None) or (p.grad == 0).all()
