@@ -5179,8 +5179,11 @@ class StepCounter(Transform):
                 if self.update_done:
                     done = next_tensordict.get(done_key, None)
                     terminated = next_tensordict.get(terminated_key, None)
-                    if terminated is not None:
-                        truncated = truncated & ~terminated
+
+                    # we can have terminated and truncated
+                    # if terminated is not None:
+                    #     truncated = truncated & ~terminated
+
                     done = truncated | done  # we assume no done after reset
                     next_tensordict.set(done_key, done)
                 next_tensordict.set(truncated_key, truncated)
