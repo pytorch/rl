@@ -155,6 +155,10 @@ from torchrl.objectives.value.utils import (
 )
 
 
+# Capture all warnings
+pytestmark = pytest.mark.filterwarnings("error")
+
+
 class _check_td_steady:
     def __init__(self, td):
         self.td_clone = td.clone()
@@ -500,6 +504,11 @@ class TestDQN(LossModuleTestBase):
             else contextlib.nullcontext()
         ), _check_td_steady(td):
             loss = loss_fn(td)
+
+        if delay_value:
+            # remove warning
+            SoftUpdate(loss_fn, eps=0.5)
+
         assert loss_fn.tensor_keys.priority in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
@@ -561,6 +570,10 @@ class TestDQN(LossModuleTestBase):
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
+        if delay_value:
+            # remove warning
+            SoftUpdate(loss_fn, eps=0.5)
+
         with torch.no_grad():
             loss = loss_fn(td)
         if n == 0:
@@ -600,7 +613,7 @@ class TestDQN(LossModuleTestBase):
         torch.manual_seed(self.seed)
         action_spec_type = "one_hot"
         actor = self._create_mock_actor(action_spec_type=action_spec_type)
-        loss_fn = DQNLoss(actor)
+        loss_fn = DQNLoss(actor, delay_value=True)
 
         default_keys = {
             "advantage": "advantage",
@@ -616,7 +629,7 @@ class TestDQN(LossModuleTestBase):
 
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
 
-        loss_fn = DQNLoss(actor)
+        loss_fn = DQNLoss(actor, delay_value=True)
         key_mapping = {
             "advantage": ("advantage", "advantage_2"),
             "value_target": ("value_target", ("value_target", "nested")),
@@ -629,7 +642,7 @@ class TestDQN(LossModuleTestBase):
         actor = self._create_mock_actor(
             action_spec_type=action_spec_type, action_value_key="chosen_action_value_2"
         )
-        loss_fn = DQNLoss(actor)
+        loss_fn = DQNLoss(actor, delay_value=True)
         key_mapping = {
             "value": ("value", "chosen_action_value_2"),
         }
@@ -656,11 +669,14 @@ class TestDQN(LossModuleTestBase):
             action_value_key=tensor_keys["action_value"],
         )
 
-        loss_fn = DQNLoss(actor, loss_function="l2")
+        loss_fn = DQNLoss(actor, loss_function="l2", delay_value=True)
         loss_fn.set_keys(**tensor_keys)
 
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
+
+        SoftUpdate(loss_fn, eps=0.5)
+
         with _check_td_steady(td):
             _ = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
@@ -706,6 +722,10 @@ class TestDQN(LossModuleTestBase):
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
+        if delay_value:
+            # remove warning
+            SoftUpdate(loss_fn, eps=0.5)
+
         # Check param update effect on targets
         target_value = loss_fn.target_value_network_params.clone()
         for p in loss_fn.parameters():
@@ -743,7 +763,7 @@ class TestDQN(LossModuleTestBase):
             module=module,
             in_keys=[observation_key],
         )
-        dqn_loss = DQNLoss(actor)
+        dqn_loss = DQNLoss(actor, delay_value=True)
         dqn_loss.set_keys(reward=reward_key, done=done_key, terminated=terminated_key)
         # define data
         observation = torch.randn(n_obs)
@@ -761,6 +781,8 @@ class TestDQN(LossModuleTestBase):
             "action": action,
         }
         td = TensorDict(kwargs, []).unflatten_keys("_")
+        # Disable warning
+        SoftUpdate(dqn_loss, eps=0.5)
         loss_val = dqn_loss(**kwargs)
         loss_val_td = dqn_loss(td)
         torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
@@ -774,7 +796,7 @@ class TestDQN(LossModuleTestBase):
             action_spec_type=action_spec_type, atoms=atoms
         )
 
-        loss_fn = DistributionalDQNLoss(actor, gamma=gamma)
+        loss_fn = DistributionalDQNLoss(actor, gamma=gamma, delay_value=True)
 
         default_keys = {
             "priority": "td_error",
@@ -809,10 +831,13 @@ class TestDQN(LossModuleTestBase):
             action_key=tensor_keys["action"],
             action_value_key=tensor_keys["action_value"],
         )
-        loss_fn = DistributionalDQNLoss(actor, gamma=0.9)
+        loss_fn = DistributionalDQNLoss(actor, gamma=0.9, delay_value=True)
         loss_fn.set_keys(**tensor_keys)
 
         loss_fn.make_value_estimator(td_est)
+
+        # remove warnings
+        SoftUpdate(loss_fn, eps=0.5)
 
         with _check_td_steady(td):
             _ = loss_fn(td)
@@ -983,6 +1008,10 @@ class TestQMixer(LossModuleTestBase):
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
+        if delay_value:
+            # remove warning
+            SoftUpdate(loss_fn, eps=0.5)
+
         # Check param update effect on targets
         target_value = loss_fn.target_local_value_network_params.clone()
         for p in loss_fn.parameters():
@@ -1050,6 +1079,11 @@ class TestQMixer(LossModuleTestBase):
             else contextlib.nullcontext()
         ), _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
+
+        if delay_value:
+            # remove warning
+            SoftUpdate(loss_fn, eps=0.5)
+
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
         with torch.no_grad():
@@ -1104,7 +1138,7 @@ class TestQMixer(LossModuleTestBase):
         action_spec_type = "one_hot"
         actor = self._create_mock_actor(action_spec_type=action_spec_type)
         mixer = self._create_mock_mixer()
-        loss_fn = QMixerLoss(actor, mixer)
+        loss_fn = QMixerLoss(actor, mixer, delay_value=True)
 
         default_keys = {
             "advantage": "advantage",
@@ -1121,7 +1155,7 @@ class TestQMixer(LossModuleTestBase):
 
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
 
-        loss_fn = QMixerLoss(actor, mixer)
+        loss_fn = QMixerLoss(actor, mixer, delay_value=True)
         key_mapping = {
             "advantage": ("advantage", "advantage_2"),
             "value_target": ("value_target", ("value_target", "nested")),
@@ -1137,7 +1171,7 @@ class TestQMixer(LossModuleTestBase):
         mixer = self._create_mock_mixer(
             global_chosen_action_value_key=("some", "nested")
         )
-        loss_fn = QMixerLoss(actor, mixer)
+        loss_fn = QMixerLoss(actor, mixer, delay_value=True)
         key_mapping = {
             "global_value": ("value", ("some", "nested")),
         }
@@ -1172,9 +1206,9 @@ class TestQMixer(LossModuleTestBase):
             action_value_key=tensor_keys["action_value"],
         )
 
-        loss_fn = QMixerLoss(actor, mixer, loss_function="l2")
+        loss_fn = QMixerLoss(actor, mixer, loss_function="l2", delay_value=True)
         loss_fn.set_keys(**tensor_keys)
-
+        SoftUpdate(loss_fn, eps=0.5)
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
         with _check_td_steady(td):
@@ -1230,7 +1264,9 @@ class TestQMixer(LossModuleTestBase):
         )
         td = actor(td)
 
-        loss = QMixerLoss(actor, mixer)
+        loss = QMixerLoss(actor, mixer, delay_value=True)
+
+        SoftUpdate(loss, eps=0.5)
 
         # Wthout etting the keys
         if mixer_local_chosen_action_value_key != ("agents", "chosen_action_value"):
@@ -1244,7 +1280,10 @@ class TestQMixer(LossModuleTestBase):
         else:
             loss(td)
 
-        loss = QMixerLoss(actor, mixer)
+        loss = QMixerLoss(actor, mixer, delay_value=True)
+
+        SoftUpdate(loss, eps=0.5)
+
         # When setting the key
         loss.set_keys(global_value=mixer_global_chosen_action_value_key)
         if mixer_local_chosen_action_value_key != ("agents", "chosen_action_value"):
@@ -1465,6 +1504,10 @@ class TestDDPG(LossModuleTestBase):
         ):
             loss = loss_fn(td)
 
+        if delay_value:
+            # remove warning
+            SoftUpdate(loss_fn, eps=0.5)
+
         assert all(
             (p.grad is None) or (p.grad == 0).all()
             for p in loss_fn.value_network_params.values(True, True)
@@ -1580,6 +1623,9 @@ class TestDDPG(LossModuleTestBase):
 
         with pytest.warns(UserWarning, match="No target network updater has been"):
             loss = loss_fn(td)
+
+        # remove warning
+        SoftUpdate(loss_fn, eps=0.5)
 
         assert all(
             (p.grad is None) or (p.grad == 0).all()
@@ -1701,6 +1747,11 @@ class TestDDPG(LossModuleTestBase):
             else contextlib.nullcontext()
         ), _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
+
+        if delay_value:
+            # remove warning
+            SoftUpdate(loss_fn, eps=0.5)
+
         with torch.no_grad():
             loss = loss_fn(td)
         if n == 0:
@@ -2303,10 +2354,14 @@ class TestTD3(LossModuleTestBase):
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
+        if delay_qvalue or delay_actor:
+            SoftUpdate(loss_fn, eps=0.5)
+
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
             np.random.seed(0)
             loss = loss_fn(td)
+
         if n == 0:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum([item for _, item in loss.items()])
@@ -3290,6 +3345,9 @@ class TestSAC(LossModuleTestBase):
             loss_val = loss(**kwargs)
 
         torch.manual_seed(self.seed)
+
+        SoftUpdate(loss, eps=0.5)
+
         loss_val_td = loss(td)
 
         if version == 1:
@@ -3537,6 +3595,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             target_entropy_weight=target_entropy_weight,
             target_entropy=target_entropy,
             loss_function="l2",
+            action_space="one-hot",
             **kwargs,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
@@ -3647,6 +3706,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             target_entropy_weight=target_entropy_weight,
             target_entropy=target_entropy,
             loss_function="l2",
+            action_space="one-hot",
             **kwargs,
         )
         sd = loss_fn.state_dict()
@@ -3658,6 +3718,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             target_entropy_weight=target_entropy_weight,
             target_entropy=target_entropy,
             loss_function="l2",
+            action_space="one-hot",
             **kwargs,
         )
         loss_fn2.load_state_dict(sd)
@@ -3695,6 +3756,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             loss_function="l2",
             target_entropy_weight=target_entropy_weight,
             target_entropy=target_entropy,
+            action_space="one-hot",
             **kwargs,
         )
 
@@ -3710,6 +3772,8 @@ class TestDiscreteSAC(LossModuleTestBase):
         ):
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
+
+        SoftUpdate(loss_fn, eps=0.5)
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -3799,6 +3863,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             qvalue_network=qvalue,
             num_actions=actor.spec["action"].space.n,
             loss_function="l2",
+            action_space="one-hot",
         )
 
         default_keys = {
@@ -3821,6 +3886,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             qvalue_network=qvalue,
             num_actions=actor.spec["action"].space.n,
             loss_function="l2",
+            action_space="one-hot",
         )
 
         key_mapping = {
@@ -3859,6 +3925,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             actor_network=actor,
             qvalue_network=qvalue,
             num_actions=actor.spec[action_key].space.n,
+            action_space="one-hot",
         )
         loss.set_keys(
             action=action_key,
@@ -4368,6 +4435,8 @@ class TestREDQ(LossModuleTestBase):
             match="No target network updater has been associated with this loss module",
         ):
             loss = loss_fn(td)
+
+        SoftUpdate(loss_fn, eps=0.5)
 
         # check that losses are independent
         for k in loss.keys():
@@ -5407,6 +5476,9 @@ class TestDiscreteCQL(LossModuleTestBase):
             loss = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys(True)
 
+        if delay_value:
+            SoftUpdate(loss_fn, eps=0.5)
+
         sum([item for key, item in loss.items() if key.startswith("loss")]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
@@ -5466,6 +5538,9 @@ class TestDiscreteCQL(LossModuleTestBase):
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
+        if delay_value:
+            SoftUpdate(loss_fn, eps=0.5)
+
         with torch.no_grad():
             loss = loss_fn(td)
         if n == 0:
@@ -5509,7 +5584,7 @@ class TestDiscreteCQL(LossModuleTestBase):
         torch.manual_seed(self.seed)
         action_spec_type = "one_hot"
         actor = self._create_mock_actor(action_spec_type=action_spec_type)
-        loss_fn = DQNLoss(actor)
+        loss_fn = DQNLoss(actor, delay_value=True)
 
         default_keys = {
             "value_target": "value_target",
@@ -5565,6 +5640,8 @@ class TestDiscreteCQL(LossModuleTestBase):
         loss_fn = DiscreteCQLLoss(actor, loss_function="l2")
         loss_fn.set_keys(**tensor_keys)
 
+        SoftUpdate(loss_fn, eps=0.5)
+
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
         with _check_td_steady(td):
@@ -5589,6 +5666,9 @@ class TestDiscreteCQL(LossModuleTestBase):
             in_keys=[observation_key],
         )
         loss = DiscreteCQLLoss(actor)
+
+        SoftUpdate(loss, eps=0.5)
+
         loss.set_keys(reward=reward_key, done=done_key, terminated=terminated_key)
         # define data
         observation = torch.randn(n_obs)
@@ -8833,6 +8913,9 @@ class TestIQL(LossModuleTestBase):
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
+        # Remove warnings
+        SoftUpdate(loss_fn, eps=0.5)
+
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
             np.random.seed(0)
@@ -9256,6 +9339,7 @@ class TestDiscreteIQL(LossModuleTestBase):
             temperature=temperature,
             expectile=expectile,
             loss_function="l2",
+            action_space="one-hot",
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -9378,6 +9462,7 @@ class TestDiscreteIQL(LossModuleTestBase):
             temperature=temperature,
             expectile=expectile,
             loss_function="l2",
+            action_space="one-hot",
         )
         sd = loss_fn.state_dict()
         loss_fn2 = DiscreteIQLLoss(
@@ -9388,6 +9473,7 @@ class TestDiscreteIQL(LossModuleTestBase):
             temperature=temperature,
             expectile=expectile,
             loss_function="l2",
+            action_space="one-hot",
         )
         loss_fn2.load_state_dict(sd)
 
@@ -9401,6 +9487,7 @@ class TestDiscreteIQL(LossModuleTestBase):
             value_network=value,
             loss_function="l2",
             separate_losses=separate_losses,
+            action_space="one-hot",
         )
         with pytest.warns(UserWarning, match="No target network updater has been"):
             loss = loss_fn(td)
@@ -9579,6 +9666,7 @@ class TestDiscreteIQL(LossModuleTestBase):
             temperature=temperature,
             expectile=expectile,
             loss_function="l2",
+            action_space="one-hot",
         )
 
         ms = MultiStep(gamma=gamma, n_steps=n).to(device)
@@ -9593,6 +9681,8 @@ class TestDiscreteIQL(LossModuleTestBase):
         ):
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
+
+        SoftUpdate(loss_fn, eps=0.5)
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -9665,6 +9755,7 @@ class TestDiscreteIQL(LossModuleTestBase):
             qvalue_network=qvalue,
             value_network=value,
             loss_function="l2",
+            action_space="one-hot",
         )
 
         default_keys = {
@@ -9690,6 +9781,7 @@ class TestDiscreteIQL(LossModuleTestBase):
             qvalue_network=qvalue,
             value_network=value,
             loss_function="l2",
+            action_space="one-hot",
         )
 
         key_mapping = {
@@ -9725,7 +9817,10 @@ class TestDiscreteIQL(LossModuleTestBase):
         value = self._create_mock_value(observation_key=observation_key)
 
         loss = DiscreteIQLLoss(
-            actor_network=actor, qvalue_network=qvalue, value_network=value
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            action_space="one-hot",
         )
         loss.set_keys(
             action=action_key,
@@ -9794,6 +9889,10 @@ def test_param_buffer_types(create_target_params, cast):
         out_keys=["action"],
     )
     loss = MyLoss(actor_module)
+
+    if create_target_params:
+        SoftUpdate(loss, eps=0.5)
+
     if cast is not None:
         loss.to(cast)
     for name in ("weight", "bias"):
@@ -9923,11 +10022,13 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             self.convert_to_functional(
                 module1, "module1", create_target_params=delay_module
             )
+
             module2 = torch.nn.BatchNorm2d(10).eval()
             self.module2 = module2
-            iterator_params = self.target_module1_params.values(
-                include_nested=True, leaves_only=True
-            )
+            tparam = self._modules.get("target_module1_params", None)
+            if tparam is None:
+                tparam = self._modules.get("module1_params").data
+            iterator_params = tparam.values(include_nested=True, leaves_only=True)
             for target in iterator_params:
                 if target.dtype is not torch.int64:
                     target.data.normal_()
@@ -12335,10 +12436,14 @@ class TestSingleCall:
 
 
 def test_instantiate_with_different_keys():
-    loss_1 = DQNLoss(value_network=nn.Linear(3, 3), action_space="one_hot")
+    loss_1 = DQNLoss(
+        value_network=nn.Linear(3, 3), action_space="one_hot", delay_value=True
+    )
     loss_1.set_keys(reward="a")
     assert loss_1.tensor_keys.reward == "a"
-    loss_2 = DQNLoss(value_network=nn.Linear(3, 3), action_space="one_hot")
+    loss_2 = DQNLoss(
+        value_network=nn.Linear(3, 3), action_space="one_hot", delay_value=True
+    )
     loss_2.set_keys(reward="b")
     assert loss_1.tensor_keys.reward == "a"
 

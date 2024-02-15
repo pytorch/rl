@@ -362,7 +362,7 @@ class ReinforceLoss(LossModule):
             ("next", self.tensor_keys.terminated),
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
-            *self.critic.in_keys,
+            *self.critic_network.in_keys,
         ]
         self._in_keys = list(set(keys))
 
@@ -413,11 +413,13 @@ class ReinforceLoss(LossModule):
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         try:
             target_return = tensordict.get(self.tensor_keys.value_target)
-            tensordict_select = tensordict.select(*self.critic.in_keys)
+            tensordict_select = tensordict.select(*self.critic_network.in_keys)
             with self.critic_network_params.to_module(
-                self.critic
+                self.critic_network
             ) if self.functional else contextlib.nullcontext():
-                state_value = self.critic(tensordict_select).get(self.tensor_keys.value)
+                state_value = self.critic_network(tensordict_select).get(
+                    self.tensor_keys.value
+                )
             loss_value = distance_loss(
                 target_return,
                 state_value,
@@ -442,13 +444,19 @@ class ReinforceLoss(LossModule):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(value_network=self.critic, **hp)
+            self._value_estimator = TD1Estimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(value_network=self.critic, **hp)
+            self._value_estimator = TD0Estimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(value_network=self.critic, **hp)
+            self._value_estimator = GAE(value_network=self.critic_network, **hp)
         elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
+            self._value_estimator = TDLambdaEstimator(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.VTrace:
             # VTrace currently does not support functional call on the actor
             if self.functional:
