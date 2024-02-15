@@ -469,7 +469,7 @@ class A2CLoss(LossModule):
         assert not advantage.requires_grad
         log_probs, dist = self._log_probs(tensordict)
         loss = -(log_probs * advantage)
-        td_out = TensorDict({"loss_objective": loss}, batch_size=tensordict.batch_size)
+        td_out = TensorDict({"loss_objective": loss}, batch_size=[])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach())  # for logging

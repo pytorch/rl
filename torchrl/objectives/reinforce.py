@@ -400,7 +400,7 @@ class ReinforceLoss(LossModule):
             log_prob = log_prob.unsqueeze(-1)
         loss_actor = -log_prob * advantage.detach()
         td_out = TensorDict(
-            {"loss_actor": loss_actor}, batch_size=tensordict.batch_size
+            {"loss_actor": loss_actor}, batch_size=[]
         )
 
         td_out.set("loss_value", self.loss_critic(tensordict))

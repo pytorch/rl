@@ -548,7 +548,7 @@ class PPOLoss(LossModule):
         log_weight, dist = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
         td_out = TensorDict(
-            {"loss_objective": -neg_loss}, batch_size=tensordict.batch_size
+            {"loss_objective": -neg_loss}, batch_size=[]
         )
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
@@ -792,7 +792,7 @@ class ClipPPOLoss(PPOLoss):
         gain2 = log_weight_clip.exp() * advantage
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
-        td_out = TensorDict({"loss_objective": -gain}, batch_size=tensordict.batch_size)
+        td_out = TensorDict({"loss_objective": -gain}, batch_size=[])
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
@@ -802,11 +802,10 @@ class ClipPPOLoss(PPOLoss):
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
 
+        td_out.set("ESS", _reduce(ess, self.reduction) / batch)
         td_out = td_out.apply(
             functools.partial(_reduce, reduction=self.reduction), batch_size=[]
         )
-        if self.reduction != "none":
-            td_out.set("ESS", _reduce(ess, self.reduction) / batch)
         return td_out
 
 
@@ -1019,7 +1018,7 @@ class KLPENPPOLoss(PPOLoss):
                 "loss_objective": -neg_loss,
                 "kl": kl.detach(),
             },
-            batch_size=tensordict.batch_size,
+            batch_size=[],
         )
 
         if self.entropy_bonus:
