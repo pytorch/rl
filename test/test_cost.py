@@ -5897,7 +5897,7 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("functional", [True, False])
-    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_ppo(
         self,
         loss_class,
@@ -6644,7 +6644,7 @@ class TestA2C(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("functional", (True, False))
-    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_a2c(self, device, gradient_mode, advantage, td_est, functional, reduction):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_a2c(device=device)
@@ -7102,9 +7102,8 @@ class TestReinforce(LossModuleTestBase):
     @pytest.mark.parametrize(
         "delay_value,functional", [[False, True], [False, False], [True, True]]
     )
-    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
     def test_reinforce_value_net(
-        self, advantage, gradient_mode, delay_value, td_est, functional, reduction
+        self, advantage, gradient_mode, delay_value, td_est, functional
     ):
         n_obs = 3
         n_act = 5
@@ -7152,7 +7151,6 @@ class TestReinforce(LossModuleTestBase):
             critic_network=value_net,
             delay_value=delay_value,
             functional=functional,
-            reduction=reduction,
         )
 
         td = TensorDict(
@@ -7184,9 +7182,6 @@ class TestReinforce(LossModuleTestBase):
             elif td_est is not None:
                 loss_fn.make_value_estimator(td_est)
             loss_td = loss_fn(td)
-            if reduction == "none":
-                assert loss_td.batch_size == td.batch_size
-                loss_td = loss_td.apply(lambda x: x.float().mean(), batch_size=[])
             autograd.grad(
                 loss_td.get("loss_actor"),
                 actor_net.parameters(),
@@ -7334,7 +7329,7 @@ class TestReinforce(LossModuleTestBase):
         return actor, critic, common, td
 
     @pytest.mark.parametrize("separate_losses", [False, True])
-    @pytest.mark.parametrize("reduction", [None, "mean", "sum"])
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_reinforce_tensordict_separate_losses(self, separate_losses, reduction):
         torch.manual_seed(self.seed)
         actor, critic, common, td = self._create_mock_common_layer_setup()
