@@ -914,7 +914,7 @@ def test_replay_buffer_trajectories(stack, reduction, datatype):
     rb.extend(traj_td)
     if datatype == "tc":
         sampled_td, info = rb.sample(return_info=True)
-        index=  info["index"]
+        index = info["index"]
     else:
         sampled_td = rb.sample()
     if datatype == "tc":
