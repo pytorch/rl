@@ -1162,7 +1162,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         #   and this transform overrides an observation key (eg, CatFrames)
         #   the shape, dtype or device may not necessarily match and writing
         #   the value in-place will fail.
-        assert not self.shared_tensordict_parent.requires_grad
         self.shared_tensordict_parent.update_(
             tensordict, keys_to_update=self._env_input_keys
         )
@@ -1224,7 +1223,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         #   and this transform overrides an observation key (eg, CatFrames)
         #   the shape, dtype or device may not necessarily match and writing
         #   the value in-place will fail.
-        assert not self.shared_tensordict_parent.requires_grad
         self.shared_tensordict_parent.update_(
             tensordict, keys_to_update=list(self._env_input_keys)
         )
