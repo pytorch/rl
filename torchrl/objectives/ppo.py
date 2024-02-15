@@ -547,9 +547,7 @@ class PPOLoss(LossModule):
 
         log_weight, dist = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
-        td_out = TensorDict(
-            {"loss_objective": -neg_loss}, batch_size=[]
-        )
+        td_out = TensorDict({"loss_objective": -neg_loss}, batch_size=[])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach())  # for logging
