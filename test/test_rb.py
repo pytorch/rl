@@ -6,7 +6,6 @@
 import argparse
 import contextlib
 import functools
-import gc
 import importlib
 import os
 import pickle
@@ -891,8 +890,10 @@ def test_replay_buffer_trajectories(stack, reduction, datatype):
         {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
         batch_size=[3, 4],
     )
+    rbcls = functools.partial(TensorDictReplayBuffer, priority_key="td_error")
     if datatype == "tc":
         c = make_tc(traj_td)
+        rbcls = functools.partial(ReplayBuffer, storage=LazyTensorStorage(100))
         traj_td = c(**traj_td, batch_size=traj_td.batch_size)
         assert is_tensorclass(traj_td)
     elif datatype != "tb":
@@ -901,27 +902,36 @@ def test_replay_buffer_trajectories(stack, reduction, datatype):
     if stack:
         traj_td = torch.stack(list(traj_td), 0)
 
-    rb = TensorDictReplayBuffer(
+    rb = rbcls(
         sampler=samplers.PrioritizedSampler(
             5,
             alpha=0.7,
             beta=0.9,
             reduction=reduction,
         ),
-        priority_key="td_error",
         batch_size=3,
     )
     rb.extend(traj_td)
-    sampled_td = rb.sample()
+    if datatype == "tc":
+        sampled_td, info = rb.sample(return_info=True)
+        index=  info["index"]
+    else:
+        sampled_td = rb.sample()
     if datatype == "tc":
         assert is_tensorclass(traj_td)
         return
 
     sampled_td.set("td_error", torch.rand(sampled_td.shape))
-    rb.update_tensordict_priority(sampled_td)
-    sampled_td = rb.sample(include_info=True)
-    assert (sampled_td.get("_weight") > 0).all()
-    assert sampled_td.batch_size == torch.Size([3, 4])
+    if datatype == "tc":
+        rb.update_priority(index, sampled_td)
+        sampled_td, info = rb.sample(return_info=True)
+        assert (info["_weight"] > 0).all()
+        assert sampled_td.batch_size == torch.Size([3, 4])
+    else:
+        rb.update_tensordict_priority(sampled_td)
+        sampled_td = rb.sample(include_info=True)
+        assert (sampled_td.get("_weight") > 0).all()
+        assert sampled_td.batch_size == torch.Size([3, 4])
 
     # # set back the trajectory length
     # sampled_td_filtered = sampled_td.to_tensordict().exclude(

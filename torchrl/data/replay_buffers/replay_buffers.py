@@ -969,7 +969,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
     def extend(self, tensordicts: TensorDictBase) -> torch.Tensor:
         if not isinstance(tensordicts, TensorDictBase):
             raise ValueError(
-                f"{self.__class__.__name__} only accepts TensorDictBase subclasses. tensorclasses and other types are not compatible with that class. "
+                f"{self.__class__.__name__} only accepts TensorDictBase subclasses. tensorclasses "
+                f"and other types are not compatible with that class. "
                 "Please use a regular `ReplayBuffer` instead."
             )
         if self._transform is not None:
