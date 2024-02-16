@@ -2514,14 +2514,15 @@ class TestRBMultidim:
 
     @pytest.mark.parametrize("datatype,rbtype", datatype_rb_pairs)
     @pytest.mark.parametrize("datadim", [1, 2])
-    def test_rb_multidim(self, datatype, datadim, rbtype):
+    @pytest.mark.parametrize("storage_cls", [LazyMemmapStorage, LazyTensorStorage])
+    def test_rb_multidim(self, datatype, datadim, rbtype, storage_cls):
         data = self._make_data(datatype, datadim)
         if rbtype not in (PrioritizedReplayBuffer, TensorDictPrioritizedReplayBuffer):
             rbtype = functools.partial(rbtype, sampler=RandomSampler())
         else:
             rbtype = functools.partial(rbtype, alpha=0.9, beta=1.1)
 
-        rb = rbtype(storage=LazyMemmapStorage(100, ndim=datadim), batch_size=4)
+        rb = rbtype(storage=storage_cls(100, ndim=datadim), batch_size=4)
         rb.extend(data)
         assert len(rb) == 12
         s = rb.sample()

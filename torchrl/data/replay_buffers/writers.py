@@ -134,7 +134,9 @@ class RoundRobinWriter(Writer):
         index = self._cursor
         _cursor = self._cursor
         # we need to update the cursor first to avoid race conditions between workers
-        self._cursor = (self._cursor + 1) % self._storage.max_size
+        self._cursor = (self._cursor + 1) % self._storage._max_size_along_dim0(
+            single_data=data
+        )
         self._storage[_cursor] = data
         return self._replicate_index(index)
 
@@ -149,14 +151,15 @@ class RoundRobinWriter(Writer):
         if batch_size == 0:
             raise RuntimeError("Expected at least one element in extend.")
         device = data.device if hasattr(data, "device") else None
+        max_size_along0 = self._storage._max_size_along_dim0(batched_data=data)
         index = (
             torch.arange(
                 cur_size, batch_size + cur_size, dtype=torch.long, device=device
             )
-            % self._storage.max_size
+            % max_size_along0
         )
         # we need to update the cursor first to avoid race conditions between workers
-        self._cursor = (batch_size + cur_size) % self._storage.max_size
+        self._cursor = (batch_size + cur_size) % max_size_along0
         self._storage[index] = data
         return self._replicate_index(index)
 
@@ -205,7 +208,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
     def add(self, data: Any) -> int | torch.Tensor:
         index = self._cursor
         # we need to update the cursor first to avoid race conditions between workers
-        self._cursor = (index + 1) % self._storage.max_size
+        self._cursor = (index + 1) % self._storage.shape[0]
         if not is_tensorclass(data):
             data.set(
                 "index",
@@ -224,10 +227,10 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
             torch.arange(
                 cur_size, batch_size + cur_size, dtype=torch.long, device=device
             )
-            % self._storage.max_size
+            % self._storage.shape[0]
         )
         # we need to update the cursor first to avoid race conditions between workers
-        self._cursor = (batch_size + cur_size) % self._storage.max_size
+        self._cursor = (batch_size + cur_size) % self._storage.shape[0]
         # storage must convert the data to the appropriate format if needed
         if not is_tensorclass(data):
             data.set(

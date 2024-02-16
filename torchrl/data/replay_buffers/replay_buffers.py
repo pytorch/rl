@@ -253,35 +253,30 @@ class ReplayBuffer:
         self._batch_size = batch_size
         if dim_extend is not None and dim_extend < 0:
             raise ValueError("dim_extend must be a positive value.")
-        self._dim_extend = dim_extend
-        if self.dim_extend > 0:
-            from torchrl.envs.transforms.transforms import _TransposeTransform
-
-            if self._storage.ndim <= self.dim_extend:
-                raise ValueError(
-                    "The storage `ndim` attribute must be greater "
-                    "than the `dim_extend` attribute of the buffer."
-                )
-            self.append_transform(_TransposeTransform(self.dim_extend))
+        self.dim_extend = dim_extend
 
     @property
     def dim_extend(self):
-        dim_extend = self._dim_extend
-        if dim_extend is None:
-            if self._storage is not None:
-                ndim = self._storage.ndim
-                dim_extend = ndim - 1
-            else:
-                dim_extend = 1
-            self.dim_extend = dim_extend
-        return dim_extend
+        return self._dim_extend
 
     @dim_extend.setter
     def dim_extend(self, value):
-        if self._dim_extend is not None and self._dim_extend != value:
+        if (
+            hasattr(self, "_dim_extend")
+            and self._dim_extend is not None
+            and self._dim_extend != value
+        ):
             raise RuntimeError(
                 "dim_extend cannot be reset. Please create a new replay buffer."
             )
+
+        if value is None:
+            if self._storage is not None:
+                ndim = self._storage.ndim
+                value = ndim - 1
+            else:
+                value = 1
+
         self._dim_extend = value
         if value is not None and value > 0:
             from torchrl.envs.transforms.transforms import _TransposeTransform

@@ -910,7 +910,8 @@ class SliceSampler(Sampler):
         if (lengths < seq_length).any():
             if self.strict_length:
                 raise RuntimeError(
-                    "Some stored trajectories have a length shorter than the slice that was asked for. "
+                    "Some stored trajectories have a length shorter than the slice that was asked for ("
+                    f"min length={lengths.min()}). "
                     "Create the sampler with `strict_length=False` to allow shorter trajectories to appear "
                     "in you batch."
                 )

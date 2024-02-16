@@ -147,6 +147,14 @@ class Storage:
             f"Please report this exception as well as the use case (incl. buffer construction) on github."
         )
 
+    def _max_size_along_dim0(self, *, single_data, batched_data):
+        if self.ndim == 1:
+            return self.max_size
+        raise RuntimeError(
+            f"storage._max_size_along_dim0 is not supported for storages of type {type(self)} when ndim > 1."
+            f"Please report this exception as well as the use case (incl. buffer construction) on github."
+        )
+
     def flatten(self):
         if self.ndim == 1:
             return self
@@ -475,7 +483,7 @@ class TensorStorage(Storage):
     def _total_shape(self):
         # Total shape, irrespective of how full the storage is
         _total_shape = self.__dict__.get("_total_shape_value", None)
-        if _total_shape is None:
+        if _total_shape is None and self.initialized:
             if is_tensor_collection(self._storage):
                 _total_shape = self._storage.shape[: self.ndim]
             else:
@@ -497,12 +505,29 @@ class TensorStorage(Storage):
             len_along_dim = len_along_dim // self._total_shape[1:].numel()
         return len_along_dim
 
-    @property
-    def _max_size_along_dim0(self):
+    def _max_size_along_dim0(self, *, single_data=None, batched_data=None):
         # returns the max_size of the buffer along dim0
         max_size = self.max_size
         if self.ndim:
-            max_size = max_size // self._total_shape[1:].numel()
+            shape = self.shape
+            if shape is None:
+                if single_data is not None:
+                    data = single_data
+                elif batched_data is not None:
+                    data = batched_data
+                else:
+                    raise ValueError("single_data or batched_data must be passed.")
+                if is_tensor_collection(data):
+                    datashape = data.shape[: self.ndim]
+                else:
+                    for leaf in torch.utils._pytree.tree_leaves(data):
+                        datashape = leaf.shape[: self.ndim]
+                        break
+                if batched_data is not None:
+                    datashape = datashape[1:]
+                max_size = max_size // datashape.numel()
+            else:
+                max_size = max_size // self._total_shape[1:].numel()
         return max_size
 
     @property
@@ -511,7 +536,8 @@ class TensorStorage(Storage):
         if self._is_full:
             return self._total_shape
         _total_shape = self._total_shape
-        return torch.Size([self._len_along_dim0] + list(_total_shape[1:]))
+        if _total_shape is not None:
+            return torch.Size([self._len_along_dim0] + list(_total_shape[1:]))
 
     def _rand_given_ndim(self, batch_size):
         if self.ndim == 1:
@@ -815,7 +841,10 @@ class LazyTensorStorage(TensorStorage):
 
         def max_size_along_dim0(data_shape):
             if self.ndim > 1:
-                return (-(self.max_size // data_shape[: self.ndim - 1]), *data_shape)
+                return (
+                    -(self.max_size // -data_shape[: self.ndim - 1].numel()),
+                    *data_shape,
+                )
             return (self.max_size, *data_shape)
 
         if is_tensor_collection(data):
