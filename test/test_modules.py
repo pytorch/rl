@@ -858,24 +858,15 @@ class TestMultiAgent:
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
     @pytest.mark.parametrize("centralised", [True, False])
-    @pytest.mark.parametrize(
-        "batch",
-        [
-            (10,),
-            (
-                10,
-                3,
-            ),
-            (),
-        ],
-    )
-    def test_mlp(
+    @pytest.mark.parametrize("n_agent_inputs", [6, None])
+    @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
+    def test_multiagent_mlp(
         self,
         n_agents,
         centralised,
         share_params,
         batch,
-        n_agent_inputs=6,
+        n_agent_inputs,
         n_agent_outputs=2,
     ):
         torch.manual_seed(0)
@@ -887,6 +878,8 @@ class TestMultiAgent:
             share_params=share_params,
             depth=2,
         )
+        if n_agent_inputs is None:
+            n_agent_inputs = 6
         td = self._get_mock_input_td(n_agents, n_agent_inputs, batch=batch)
         obs = td.get(("agents", "observation"))
 
@@ -924,14 +917,27 @@ class TestMultiAgent:
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
     @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("channels", [3, None])
     @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
-    def test_cnn(
-        self, n_agents, centralised, share_params, batch, x=50, y=50, channels=3
+    def test_multiagent_cnn(
+        self,
+        n_agents,
+        centralised,
+        share_params,
+        batch,
+        channels,
+        x=50,
+        y=50,
     ):
         torch.manual_seed(0)
         cnn = MultiAgentConvNet(
-            n_agents=n_agents, centralised=centralised, share_params=share_params
+            n_agents=n_agents,
+            centralised=centralised,
+            share_params=share_params,
+            in_features=channels,
         )
+        if channels is None:
+            channels = 3
         td = TensorDict(
             {
                 "agents": TensorDict(
