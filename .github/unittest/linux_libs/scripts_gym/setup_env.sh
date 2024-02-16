@@ -57,7 +57,7 @@ mkdir -p mujoco_py/binaries/linux \
     && wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz -O mujoco.tar.gz \
     && tar -xf mujoco.tar.gz -C mujoco_py/binaries/linux \
     && rm mujoco.tar.gz
-wget https://www.roboti.us/file/mjkey.txt
+wget https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/mjkey.txt
 cp mjkey.txt mujoco_py/binaries/
 pip install -e .
 cd ..

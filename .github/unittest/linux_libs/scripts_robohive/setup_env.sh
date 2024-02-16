@@ -47,7 +47,7 @@ conda activate "${env_dir}"
 #    && wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz -O mujoco.tar.gz \
 #    && tar -xf mujoco.tar.gz -C mujoco_py/binaries/linux \
 #    && rm mujoco.tar.gz
-#wget https://www.roboti.us/file/mjkey.txt
+#wget https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/mjkey.txt
 #cp mjkey.txt mujoco_py/binaries/
 #pip install -e .
 #cd ..
@@ -66,7 +66,8 @@ conda env config vars set \
   DISPLAY=unix:0.0 \
   PYOPENGL_PLATFORM=egl \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
-  sim_backend=MUJOCO
+  sim_backend=MUJOCO \
+  LAZY_LEGACY_OP=False
 
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
@@ -74,9 +75,5 @@ conda deactivate && conda activate "${env_dir}"
 pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
-#conda install -c conda-forge fltk -y
 
-#pip install git+https://github.com/vmoens/mj_envs@patch-2
-pip install git+https://github.com/vikashplus/robohive@dev
-
-#pip uninstall free-mujoco-py -y
+pip install git+https://github.com/vikashplus/robohive@main

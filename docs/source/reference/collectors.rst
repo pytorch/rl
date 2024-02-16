@@ -3,6 +3,8 @@
 torchrl.collectors package
 ==========================
 
+.. _ref_collectors:
+
 Data collectors are somewhat equivalent to pytorch dataloaders, except that (1) they
 collect data over non-static data sources and (2) the data is collected using a model
 (likely a version of the model that is being trained).
@@ -105,6 +107,11 @@ node or across multiple nodes.
   building a parallel environment or collector can result in a slower collection
   than using ``device="cuda"`` when available.
 
+.. note::
+  Given the library's many optional dependencies (eg, Gym, Gymnasium, and many others)
+  warnings can quickly become quite annoying in multiprocessed / distributed settings.
+  By default, TorchRL filters out these warnings in sub-processes. If one still wishes to
+  see these warnings, they can be displayed by setting ``torchrl.filter_warnings_subprocess=False``.
 
 .. currentmodule:: torchrl.collectors.distributed
 

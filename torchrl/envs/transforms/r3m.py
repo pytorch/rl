@@ -6,7 +6,7 @@
 from typing import List, Optional, Union
 
 import torch
-from tensordict import TensorDict
+from tensordict import set_lazy_legacy, TensorDict, TensorDictBase
 from torch.hub import load_state_dict_from_url
 from torch.nn import Identity
 
@@ -26,6 +26,7 @@ from torchrl.envs.transforms.transforms import (
     Transform,
     UnsqueezeTransform,
 )
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 try:
     from torchvision import models
@@ -83,14 +84,23 @@ class _R3MNet(Transform):
         self.convnet = convnet
         self.del_keys = del_keys
 
+    @set_lazy_legacy(False)
     def _call(self, tensordict):
-        tensordict_view = tensordict.view(-1)
-        super()._call(tensordict_view)
+        with tensordict.view(-1) as tensordict_view:
+            super()._call(tensordict_view)
         if self.del_keys:
             tensordict.exclude(*self.in_keys, inplace=True)
         return tensordict
 
     forward = _call
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        # TODO: Check this makes sense
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
 
     @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:
@@ -282,8 +292,8 @@ class R3MTransform(Compose):
         std = [0.229, 0.224, 0.225]
         normalize = ObservationNorm(
             in_keys=in_keys,
-            loc=torch.tensor(mean).view(3, 1, 1),
-            scale=torch.tensor(std).view(3, 1, 1),
+            loc=torch.as_tensor(mean).view(3, 1, 1),
+            scale=torch.as_tensor(std).view(3, 1, 1),
             standard_normal=True,
         )
         transforms.append(normalize)
@@ -293,7 +303,7 @@ class R3MTransform(Compose):
         transforms.append(resize)
 
         # R3M
-        if out_keys is None:
+        if out_keys in (None, []):
             if stack_images:
                 out_keys = ["r3m_vec"]
             else:

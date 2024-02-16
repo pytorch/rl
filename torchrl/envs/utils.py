@@ -9,11 +9,17 @@ import contextlib
 import importlib.util
 import os
 import re
-from typing import List, Union
+from enum import Enum
+from typing import Dict, List, Union
 
 import torch
 
-from tensordict import is_tensor_collection, unravel_key
+from tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDictBase,
+    unravel_key,
+)
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
@@ -24,7 +30,15 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
+from tensordict.utils import NestedKey
+from torchrl._utils import _replace_last, _rng_decorator, logger as torchrl_logger
+
+from torchrl.data.tensor_specs import (
+    CompositeSpec,
+    TensorSpec,
+    UnboundedContinuousTensorSpec,
+)
+from torchrl.data.utils import check_no_exclusive_keys
 
 __all__ = [
     "exploration_mode",
@@ -35,14 +49,19 @@ __all__ = [
     "check_env_specs",
     "step_mdp",
     "make_composite_from_td",
+    "MarlGroupMapType",
+    "check_marl_grouping",
 ]
 
 
-from torchrl.data import CompositeSpec
-from torchrl.data.utils import check_no_exclusive_keys
-
-DONE_AFTER_RESET_ERROR = RuntimeError(
-    "Env was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
+ACTION_MASK_ERROR = RuntimeError(
+    "An out-of-bounds actions has been provided to an env with an 'action_mask' output."
+    " If you are using a custom policy, make sure to take the action mask into account when computing the output."
+    " If you are using a default policy, please add the torchrl.envs.transforms.ActionMask transform to your environment."
+    "If you are using a ParallelEnv or another batched inventor, "
+    "make sure to add the transform to the ParallelEnv (and not to the sub-environments)."
+    " For more info on using action masks, see the docs at: "
+    "https://pytorch.org/rl/reference/envs.html#environments-with-masked-actions"
 )
 
 
@@ -172,7 +191,7 @@ def step_mdp(
             next_tensordicts = next_tensordict.unbind(tensordict.stack_dim)
         else:
             next_tensordicts = [None] * len(tensordict.tensordicts)
-        out = torch.stack(
+        out = LazyStackedTensorDict.lazy_stack(
             [
                 step_mdp(
                     td,
@@ -227,7 +246,13 @@ def step_mdp(
         return out
 
 
-def _set_single_key(source, dest, key, clone=False):
+def _set_single_key(
+    source: TensorDictBase,
+    dest: TensorDictBase,
+    key: str | tuple,
+    clone: bool = False,
+    device=None,
+):
     # key should be already unraveled
     if isinstance(key, str):
         key = (key,)
@@ -242,7 +267,9 @@ def _set_single_key(source, dest, key, clone=False):
                 source = val
                 dest = new_val
             else:
-                if clone:
+                if device is not None and val.device != device:
+                    val = val.to(device, non_blocking=True)
+                elif clone:
                     val = val.clone()
                 dest._set_str(k, val, inplace=False, validated=True)
         # This is a temporary solution to understand if a key is heterogeneous
@@ -251,7 +278,7 @@ def _set_single_key(source, dest, key, clone=False):
             if re.match(r"Found more than one unique shape in the tensors", str(err)):
                 # this is a het key
                 for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
-                    _set_single_key(s_td, d_td, k, clone)
+                    _set_single_key(s_td, d_td, k, clone=clone, device=device)
                 break
             else:
                 raise err
@@ -380,7 +407,7 @@ def _per_level_env_check(data0, data1, check_dtype):
             if _data0.shape != _data1.shape:
                 raise AssertionError(
                     f"The shapes of the real and fake tensordict don't match for key {key}. "
-                    f"Got fake={_data0.shape} and real={_data0.shape}."
+                    f"Got fake={_data0.shape} and real={_data1.shape}."
                 )
             if isinstance(_data0, TensorDictBase):
                 _per_level_env_check(_data0, _data1, check_dtype=check_dtype)
@@ -392,7 +419,9 @@ def _per_level_env_check(data0, data1, check_dtype):
                     )
 
 
-def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
+def check_env_specs(
+    env, return_contiguous=True, check_dtype=True, seed: int | None = None
+):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
@@ -409,15 +438,27 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
             of inputs/outputs). Defaults to True.
         check_dtype (bool, optional): if False, dtype checks will be skipped.
             Defaults to True.
-        seed (int, optional): for reproducibility, a seed is set.
+        seed (int, optional): for reproducibility, a seed can be set.
+            The seed will be set in pytorch temporarily, then the RNG state will
+            be reverted to what it was before. For the env, we set the seed but since
+            setting the rng state back to what is was isn't a feature of most environment,
+            we leave it to the user to accomplish that.
+            Defaults to ``None``.
 
     Caution: this function resets the env seed. It should be used "offline" to
     check that an env is adequately constructed, but it may affect the seeding
     of an experiment and as such should be kept out of training scripts.
 
     """
-    torch.manual_seed(seed)
-    env.set_seed(seed)
+    if seed is not None:
+        device = (
+            env.device if env.device is not None and env.device.type == "cuda" else None
+        )
+        with _rng_decorator(seed, device=device):
+            env.set_seed(seed)
+            return check_env_specs(
+                env, return_contiguous=return_contiguous, check_dtype=check_dtype
+            )
 
     fake_tensordict = env.fake_tensordict()
     real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
@@ -426,7 +467,9 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
         fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
     else:
-        fake_tensordict = torch.stack([fake_tensordict.clone() for _ in range(3)], -1)
+        fake_tensordict = LazyStackedTensorDict.lazy_stack(
+            [fake_tensordict.clone() for _ in range(3)], -1
+        )
     # eliminate empty containers
     fake_tensordict_select = fake_tensordict.select(*fake_tensordict.keys(True, True))
     real_tensordict_select = real_tensordict.select(*real_tensordict.keys(True, True))
@@ -494,7 +537,7 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )
 
-    print("check_env_specs succeeded!")
+    torchrl_logger.info("check_env_specs succeeded!")
 
 
 def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int = -1):
@@ -512,19 +555,6 @@ def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int 
     if shape_len == len(batch_size):
         return tensor.unsqueeze(dim=dim)
     return tensor
-
-
-class classproperty:
-    """A class-property object.
-
-    Usage: Allows for iterators coded as properties.
-    """
-
-    def __init__(self, fget):
-        self.fget = fget
-
-    def __get__(self, owner_self, owner_cls):
-        return self.fget(owner_cls)
 
 
 def _sort_keys(element):
@@ -561,8 +591,6 @@ def make_composite_from_td(data):
                      shape=torch.Size([1]), space=ContinuousBox(low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True), high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)), device=cpu, dtype=torch.float32, domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
         >>> assert (spec.zero() == data.zero_()).all()
     """
-    from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
-
     # custom funtion to convert a tensordict in a similar spec structure
     # of unbounded values.
     composite = CompositeSpec(
@@ -607,8 +635,483 @@ def clear_mpi_env_vars():
         os.environ.update(removed_environment)
 
 
-def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
+class MarlGroupMapType(Enum):
+    """Marl Group Map Type.
+
+    As a feature of torchrl multiagent, you are able to control the grouping of agents in your environment.
+    You can group agents together (stacking their tensors) to leverage vectorization when passing them through the same
+    neural network. You can split agents in different groups where they are heterogenous or should be processed by
+    different neural networks. To group, you just need to pass a ``group_map`` at env constructiuon time.
+
+    Otherwise, you can choose one of the premade grouping strategies from this class.
+
+    - With ``group_map=MarlGroupMapType.ALL_IN_ONE_GROUP`` and
+      agents ``["agent_0", "agent_1", "agent_2", "agent_3"]``,
+      the tensordicts coming and going from your environment will look
+      something like:
+
+        >>> print(env.rand_action(env.reset()))
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([4, 9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([4, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([4]))},
+            batch_size=torch.Size([]))
+        >>> print(env.group_map)
+        {"agents": ["agent_0", "agent_1", "agent_2", "agent_3]}
+
+    - With ``group_map=MarlGroupMapType.ONE_GROUP_PER_AGENT`` and
+      agents ``["agent_0", "agent_1", "agent_2", "agent_3"]``,
+      the tensordicts coming and going from your environment will look
+      something like:
+
+        >>> print(env.rand_action(env.reset()))
+        TensorDict(
+            fields={
+                agent_0: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([]))},
+                agent_1: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([]))},
+                agent_2: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([]))},
+                agent_3: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([]))},
+            batch_size=torch.Size([]))
+        >>> print(env.group_map)
+        {"agent_0": ["agent_0"], "agent_1": ["agent_1"], "agent_2": ["agent_2"], "agent_3": ["agent_3"]}
+    """
+
+    ALL_IN_ONE_GROUP = 1
+    ONE_GROUP_PER_AGENT = 2
+
+    def get_group_map(self, agent_names: List[str]):
+        if self == MarlGroupMapType.ALL_IN_ONE_GROUP:
+            return {"agents": agent_names}
+        elif self == MarlGroupMapType.ONE_GROUP_PER_AGENT:
+            return {agent_name: [agent_name] for agent_name in agent_names}
+
+
+def check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str]):
+    """Check MARL group map.
+
+    Performs checks on the group map of a marl environment to assess its validity.
+    Raises an error in cas of an invalid group_map.
+
+    Args:
+        group_map (Dict[str, List[str]]): the group map mapping group names to list of agent names in the group
+        agent_names (List[str]): a list of all the agent names in the environment4
+
+    Examples:
+        >>> from torchrl.envs.utils import MarlGroupMapType, check_marl_grouping
+        >>> agent_names = ["agent_0", "agent_1", "agent_2"]
+        >>> check_marl_grouping(MarlGroupMapType.ALL_IN_ONE_GROUP.get_group_map(agent_names), agent_names)
+
+    """
+    n_agents = len(agent_names)
+    if n_agents == 0:
+        raise ValueError("No agents passed")
+    if len(set(agent_names)) != n_agents:
+        raise ValueError("There are agents with the same name")
+    if len(group_map.keys()) > n_agents:
+        raise ValueError(
+            f"Number of groups {len(group_map.keys())} greater than number of agents {n_agents}"
+        )
+    found_agents = {agent_name: False for agent_name in agent_names}
+    for group_name, group in group_map.items():
+        if not len(group):
+            raise ValueError(f"Group {group_name} is empty")
+        for agent_name in group:
+            if agent_name not in found_agents:
+                raise ValueError(f"Agent {agent_name} not present in environment")
+            if not found_agents[agent_name]:
+                found_agents[agent_name] = True
+            else:
+                raise ValueError(f"Agent {agent_name} present more than once")
+    for agent_name, found in found_agents.items():
+        if not found:
+            raise ValueError(f"Agent {agent_name} not found in any group")
+
+
+def _terminated_or_truncated(
+    data: TensorDictBase,
+    full_done_spec: TensorSpec | None = None,
+    key: str | None = "_reset",
+    write_full_false: bool = False,
+) -> bool:
+    """Reads the done / terminated / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
+
+    The modification occurs in-place within the TensorDict instance provided.
+    This function can be used to compute the `"_reset"` signals in batched
+    or multiagent settings, hence the default name of the output key.
+
+    Args:
+        data (TensorDictBase): the input data, generally resulting from a call
+            to :meth:`~torchrl.envs.EnvBase.step`.
+        full_done_spec (TensorSpec, optional): the done_spec from the env,
+            indicating where the done leaves have to be found.
+            If not provided, the default
+            ``"done"``, ``"terminated"`` and ``"truncated"`` entries will be
+            searched for in the data.
+        key (NestedKey, optional): where the aggregated result should be written.
+            If ``None``, then the function will not write any key but just output
+            whether any of the done values was true.
+            .. note:: if a value is already present for the ``key`` entry,
+                the previous value will prevail and no update will be achieved.
+        write_full_false (bool, optional): if ``True``, the reset keys will be
+            written even if the output is ``False`` (ie, no done is ``True``
+            in the provided data structure).
+            Defaults to ``False``.
+
+    Returns: a boolean value indicating whether any of the done states found in the data
+        contained a ``True``.
+
+    Examples:
+        >>> from torchrl.data.tensor_specs import DiscreteTensorSpec
+        >>> from tensordict import TensorDict
+        >>> spec = CompositeSpec(
+        ...     done=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...     truncated=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...     nested=CompositeSpec(
+        ...         done=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...         truncated=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...     )
+        ... )
+        >>> data = TensorDict({
+        ...     "done": True, "truncated": False,
+        ...     "nested": {"done": False, "truncated": True}},
+        ...     batch_size=[]
+        ... )
+        >>> data = _terminated_or_truncated(data, spec)
+        >>> print(data["_reset"])
+        tensor(True)
+        >>> print(data["nested", "_reset"])
+        tensor(True)
+    """
+    list_of_keys = []
+
+    def inner_terminated_or_truncated(data, full_done_spec, key, curr_done_key=()):
+        any_eot = False
+        aggregate = None
+        if full_done_spec is None:
+            tds = {}
+            found_leaf = 0
+            for eot_key, item in data.items():
+                if eot_key in ("terminated", "truncated", "done"):
+                    done = item
+                    if aggregate is None:
+                        aggregate = False
+                    aggregate = aggregate | done
+                    found_leaf += 1
+                elif isinstance(item, TensorDictBase):
+                    tds[eot_key] = item
+            # The done signals in a root td prevail over done in the leaves
+            if tds:
+                for eot_key, item in tds.items():
+                    any_eot_td = inner_terminated_or_truncated(
+                        data=item,
+                        full_done_spec=None,
+                        key=key,
+                        curr_done_key=curr_done_key + (eot_key,),
+                    )
+                    if not found_leaf:
+                        any_eot = any_eot | any_eot_td
+        else:
+            composite_spec = {}
+            found_leaf = 0
+            for eot_key, item in full_done_spec.items():
+                if isinstance(item, CompositeSpec):
+                    composite_spec[eot_key] = item
+                else:
+                    found_leaf += 1
+                    stop = data.get(eot_key, None)
+                    if stop is None:
+                        stop = torch.zeros(
+                            (*data.shape, 1), dtype=torch.bool, device=data.device
+                        )
+                    if aggregate is None:
+                        aggregate = False
+                    aggregate = aggregate | stop
+            # The done signals in a root td prevail over done in the leaves
+            if composite_spec:
+                for eot_key, item in composite_spec.items():
+                    any_eot_td = inner_terminated_or_truncated(
+                        data=data.get(eot_key),
+                        full_done_spec=item,
+                        key=key,
+                        curr_done_key=curr_done_key + (eot_key,),
+                    )
+                    if not found_leaf:
+                        any_eot = any_eot_td | any_eot
+
+        if aggregate is not None:
+            if key is not None:
+                if aggregate.ndim > data.ndim:
+                    # accounts for trailing singleton dim in done.
+                    # _reset is always expanded on the right if needed so this can only be useful
+                    aggregate = aggregate.squeeze(-1)
+                data.set(key, aggregate)
+                list_of_keys.append(curr_done_key + (key,))
+            any_eot = any_eot | aggregate.any()
+        return any_eot
+
+    any_eot = inner_terminated_or_truncated(data, full_done_spec, key)
+    if not any_eot and not write_full_false:
+        # remove the list of reset keys
+        data.exclude(*list_of_keys, inplace=True)
+    return any_eot
+
+
+def terminated_or_truncated(
+    data: TensorDictBase,
+    full_done_spec: TensorSpec | None = None,
+    key: str = "_reset",
+    write_full_false: bool = False,
+) -> bool:
+    """Reads the done / terminated / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
+
+    The modification occurs in-place within the TensorDict instance provided.
+    This function can be used to compute the `"_reset"` signals in batched
+    or multiagent settings, hence the default name of the output key.
+
+    Args:
+        data (TensorDictBase): the input data, generally resulting from a call
+            to :meth:`~torchrl.envs.EnvBase.step`.
+        full_done_spec (TensorSpec, optional): the done_spec from the env,
+            indicating where the done leaves have to be found.
+            If not provided, the default
+            ``"done"``, ``"terminated"`` and ``"truncated"`` entries will be
+            searched for in the data.
+        key (NestedKey, optional): where the aggregated result should be written.
+            If ``None``, then the function will not write any key but just output
+            whether any of the done values was true.
+            .. note:: if a value is already present for the ``key`` entry,
+                the previous value will prevail and no update will be achieved.
+        write_full_false (bool, optional): if ``True``, the reset keys will be
+            written even if the output is ``False`` (ie, no done is ``True``
+            in the provided data structure).
+            Defaults to ``False``.
+
+    Returns: a boolean value indicating whether any of the done states found in the data
+        contained a ``True``.
+
+    Examples:
+        >>> from torchrl.data.tensor_specs import DiscreteTensorSpec
+        >>> from tensordict import TensorDict
+        >>> spec = CompositeSpec(
+        ...     done=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...     truncated=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...     nested=CompositeSpec(
+        ...         done=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...         truncated=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...     )
+        ... )
+        >>> data = TensorDict({
+        ...     "done": True, "truncated": False,
+        ...     "nested": {"done": False, "truncated": True}},
+        ...     batch_size=[]
+        ... )
+        >>> data = _terminated_or_truncated(data, spec)
+        >>> print(data["_reset"])
+        tensor(True)
+        >>> print(data["nested", "_reset"])
+        tensor(True)
+    """
+    list_of_keys = []
+
+    def inner_terminated_or_truncated(data, full_done_spec, key, curr_done_key=()):
+        any_eot = False
+        aggregate = None
+        if full_done_spec is None:
+            for eot_key, item in data.items():
+                if eot_key == "done":
+                    done = data.get(eot_key, None)
+                    if done is None:
+                        done = torch.zeros(
+                            (*data.shape, 1), dtype=torch.bool, device=data.device
+                        )
+                    if aggregate is None:
+                        aggregate = torch.tensor(False, device=done.device)
+                    aggregate = aggregate | done
+                elif eot_key in ("terminated", "truncated"):
+                    done = data.get(eot_key, None)
+                    if done is None:
+                        done = torch.zeros(
+                            (*data.shape, 1), dtype=torch.bool, device=data.device
+                        )
+                    if aggregate is None:
+                        aggregate = torch.tensor(False, device=done.device)
+                    aggregate = aggregate | done
+                elif isinstance(item, TensorDictBase):
+                    any_eot = any_eot | inner_terminated_or_truncated(
+                        data=item,
+                        full_done_spec=None,
+                        key=key,
+                        curr_done_key=curr_done_key + (eot_key,),
+                    )
+        else:
+            for eot_key, item in full_done_spec.items():
+                if isinstance(item, CompositeSpec):
+                    any_eot = any_eot | inner_terminated_or_truncated(
+                        data=data.get(eot_key),
+                        full_done_spec=item,
+                        key=key,
+                        curr_done_key=curr_done_key + (eot_key,),
+                    )
+                else:
+                    sop = data.get(eot_key, None)
+                    if sop is None:
+                        sop = torch.zeros(
+                            (*data.shape, 1), dtype=torch.bool, device=data.device
+                        )
+                    if aggregate is None:
+                        aggregate = torch.tensor(False, device=sop.device)
+                    aggregate = aggregate | sop
+        if aggregate is not None:
+            if key is not None:
+                data.set(key, aggregate)
+                list_of_keys.append(curr_done_key + (key,))
+            any_eot = any_eot | aggregate.any()
+        return any_eot
+
+    any_eot = inner_terminated_or_truncated(data, full_done_spec, key)
+    if not any_eot and not write_full_false:
+        # remove the list of reset keys
+        data.exclude(*list_of_keys, inplace=True)
+    return any_eot
+
+
+PARTIAL_MISSING_ERR = "Some reset keys were present but not all. Either all the `'_reset'` entries must be present, or none."
+
+
+def _aggregate_end_of_traj(
+    data: TensorDictBase, reset_keys=None, done_keys=None
+) -> torch.Tensor:
+    # goes through the tensordict and brings the _reset information to
+    # a boolean tensor of the shape of the tensordict.
+    batch_size = data.batch_size
+    n = len(batch_size)
+    if done_keys is not None and reset_keys is None:
+        reset_keys = {_replace_last(key, "done") for key in done_keys}
+    if reset_keys is not None:
+        reset = False
+        has_missing = None
+        for key in reset_keys:
+            local_reset = data.get(key, None)
+            if local_reset is None:
+                if has_missing is False:
+                    raise ValueError(PARTIAL_MISSING_ERR)
+                has_missing = True
+                continue
+            elif has_missing:
+                raise ValueError(PARTIAL_MISSING_ERR)
+            has_missing = False
+            if local_reset.ndim > n:
+                local_reset = local_reset.flatten(n, local_reset.ndim - 1)
+                local_reset = local_reset.any(-1)
+            reset = reset | local_reset
+        if has_missing:
+            return torch.ones(batch_size, dtype=torch.bool, device=data.device)
+        return reset
+
+    reset = torch.tensor(False, device=data.device)
+
+    def skim_through(td, reset=reset):
+        for key in td.keys():
+            if key == "_reset":
+                local_reset = td.get(key)
+                if local_reset.ndim > n:
+                    local_reset = local_reset.flatten(n, local_reset.ndim - 1)
+                    local_reset = local_reset.any(-1)
+                reset = reset | local_reset
+            # we need to check the entry class without getting the value,
+            # because some lazy tensordicts may prevent calls to items().
+            # This introduces some slight overhead as when we encounter a
+            # tensordict item, we'll need to get it twice.
+            elif is_tensor_collection(td.entry_class(key)):
+                value = td.get(key)
+                reset = skim_through(value, reset=reset)
+        return reset
+
+    reset = skim_through(data)
+    return reset
+
+
+def _update_during_reset(
+    tensordict_reset: TensorDictBase,
+    tensordict: TensorDictBase,
+    reset_keys: List[NestedKey],
+):
+    """Updates the input tensordict with the reset data, based on the reset keys."""
+    roots = set()
+    for reset_key in reset_keys:
+        # get the node of the reset key
+        if isinstance(reset_key, tuple):
+            # the reset key *must* have gone through unravel_key
+            # we don't test it to avoid induced overhead
+            node_key = reset_key[:-1]
+            node_reset = tensordict_reset.get(node_key)
+            node = tensordict.get(node_key)
+            reset_key_tuple = reset_key
+        else:
+            node_reset = tensordict_reset
+            node = tensordict
+            reset_key_tuple = (reset_key,)
+        # get the reset signal
+        reset = tensordict.pop(reset_key, None)
+
+        # check if this reset should be ignored -- this happens whenever the a
+        # root node has already been updated
+        root = () if isinstance(reset_key, str) else reset_key[:-1]
+        processed = any(reset_key_tuple[: len(x)] == x for x in roots)
+        roots.add(root)
+        if processed:
+            continue
+
+        if reset is None or reset.all():
+            # perform simple update, at a single level.
+            # by contract, a reset signal at one level cannot
+            # be followed by other resets at nested levels, so it's safe to
+            # simply update
+            node.update(node_reset)
+        else:
+            # there can be two cases: (1) the key is present in both tds,
+            # in which case we use the reset mask to update
+            # (2) the key is not present in the input tensordict, in which
+            # case we just return the data
+
+            # empty tensordicts won't be returned
+            if reset.ndim > node.ndim:
+                reset = reset.flatten(node.ndim, reset.ndim - 1)
+                reset = reset.any(-1)
+            reset = reset.reshape(node.shape)
+            # node.update(node.where(~reset, other=node_reset, pad=0))
+            node.where(~reset, other=node_reset, out=node, pad=0)
+    return tensordict
+
+
+def _repr_by_depth(key):
+    """Used to sort keys based on nesting level."""
+    key = unravel_key(key)
     if isinstance(key, str):
-        return new_ending
+        return (0, key)
     else:
-        return key[:-1] + (new_ending,)
+        return (len(key) - 1, ".".join(key))

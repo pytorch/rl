@@ -1,11 +1,18 @@
-import logging
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+from __future__ import annotations
+
 import warnings
 from typing import Callable, Dict, Iterator, List, OrderedDict, Union
 
 import torch
 import torch.nn as nn
-from tensordict import TensorDict
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
+
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
@@ -14,9 +21,9 @@ from torchrl.collectors.collectors import (
     SyncDataCollector,
 )
 from torchrl.collectors.utils import split_trajectories
-from torchrl.envs import EnvBase, EnvCreator
+from torchrl.envs.common import EnvBase
+from torchrl.envs.env_creator import EnvCreator
 
-logger = logging.getLogger(__name__)
 
 RAY_ERR = None
 try:
@@ -62,8 +69,8 @@ def print_remote_collector_info(self):
         f"Created remote collector with in machine "
         f"{get_node_ip_address()} using gpus {ray.get_gpu_ids()}"
     )
-    # logger.warning(s)
-    print(s)
+    # torchrl_logger.warning(s)
+    torchrl_logger.info(s)
 
 
 @classmethod
@@ -116,27 +123,81 @@ class RayCollector(DataCollectorBase):
     Args:
         create_env_fn (Callable or List[Callabled]): list of Callables, each returning an
             instance of :class:`~torchrl.envs.EnvBase`.
-        policy (Callable): Instance of TensorDictModule class.
-            Must accept TensorDictBase object as input.
+        policy (Callable): Policy to be executed in the environment.
+            Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
+            If ``None`` is provided, the policy used will be a
+            :class:`~torchrl.collectors.RandomPolicy` instance with the environment
+            ``action_spec``.
+            Accepted policies are usually subclasses of :class:`~tensordict.nn.TensorDictModuleBase`.
+            This is the recommended usage of the collector.
+            Other callables are accepted too:
+            If the policy is not a ``TensorDictModuleBase`` (e.g., a regular :class:`~torch.nn.Module`
+            instances) it will be wrapped in a `nn.Module` first.
+            Then, the collector will try to assess if these
+            modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+            - If the policy forward signature matches any of ``forward(self, tensordict)``,
+              ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
+              any typing with a single argument typed as a subclass of ``TensorDictBase``)
+              then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
+
+    Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the
             total number of elements in a batch.
         total_frames (int, Optional): lower bound of the total number of frames returned by the collector.
             The iterator will stop once the total number of frames equates or exceeds the total number of
             frames passed to the collector. Default value is -1, which mean no target total number of frames
             (i.e. the collector will run indefinitely).
-                max_frames_per_traj (int, optional): Maximum steps per trajectory.
-            Note that a trajectory can span over multiple batches (unless
+        device (int, str or torch.device, optional): The generic device of the
+            collector. The ``device`` args fills any non-specified device: if
+            ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or
+            ``env_device`` is not specified, its value will be set to ``device``.
+            Defaults to ``None`` (No default device).
+            Lists of devices are supported.
+        storing_device (int, str or torch.device, optional): The *remote* device on which
+            the output :class:`~tensordict.TensorDict` will be stored.
+            If ``device`` is passed and ``storing_device`` is ``None``, it will
+            default to the value indicated by ``device``.
+            For long trajectories, it may be necessary to store the data on a different
+            device than the one where the policy and env are executed.
+            Defaults to ``None`` (the output tensordict isn't on a specific device,
+            leaf tensors sit on the device where they were created).
+            Lists of devices are supported.
+        env_device (int, str or torch.device, optional): The *remote* device on which
+            the environment should be cast (or executed if that functionality is
+            supported). If not specified and the env has a non-``None`` device,
+            ``env_device`` will default to that value. If ``device`` is passed
+            and ``env_device=None``, it will default to ``device``. If the value
+            as such specified of ``env_device`` differs from ``policy_device``
+            and one of them is not ``None``, the data will be cast to ``env_device``
+            before being passed to the env (i.e., passing different devices to
+            policy and env is supported). Defaults to ``None``.
+            Lists of devices are supported.
+        policy_device (int, str or torch.device, optional): The *remote* device on which
+            the policy should be cast.
+            If ``device`` is passed and ``policy_device=None``, it will default
+            to ``device``. If the value as such specified of ``policy_device``
+            differs from ``env_device`` and one of them is not ``None``,
+            the data will be cast to ``policy_device`` before being passed to
+            the policy (i.e., passing different devices to policy and env is
+            supported). Defaults to ``None``.
+            Lists of devices are supported.
+        create_env_kwargs (dict, optional): Dictionary of kwargs for
+            ``create_env_fn``.
+        max_frames_per_traj (int, optional): Maximum steps per trajectory.
+            Note that a trajectory can span across multiple batches (unless
             ``reset_at_each_iter`` is set to ``True``, see below).
             Once a trajectory reaches ``n_steps``, the environment is reset.
             If the environment wraps multiple environments together, the number
             of steps is tracked for each environment independently. Negative
             values are allowed, in which case this argument is ignored.
-            Defaults to ``-1`` (i.e. no maximum number of steps).
+            Defaults to ``None`` (i.e., no maximum number of steps).
         init_random_frames (int, optional): Number of frames for which the
             policy is ignored before it is called. This feature is mainly
             intended to be used in offline/model-based settings, where a
             batch of random trajectories can be used to initialize training.
-            Defaults to ``-1`` (i.e. no random frames).
+            If provided, it will be rounded up to the closest multiple of frames_per_batch.
+            Defaults to ``None`` (i.e. no random frames).
         reset_at_each_iter (bool, optional): Whether environments should be reset
             at the beginning of a batch collection.
             Defaults to ``False``.
@@ -149,13 +210,10 @@ class RayCollector(DataCollectorBase):
             See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
-        exploration_type (str, optional): interaction mode to be used when
-            collecting data. Must be one of ``ExplorationType.RANDOM``, ``ExplorationType.MODE`` or
-            ``ExplorationType.MEAN``.
-            Defaults to ``"random"``
-        reset_when_done (bool, optional): if ``True`` (default), an environment
-            that return a ``True`` value in its ``"done"`` or ``"truncated"``
-            entry will be reset at the corresponding indices.
+        exploration_type (ExplorationType, optional): interaction mode to be used when
+            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.RANDOM``,
+            ``torchrl.envs.utils.ExplorationType.MODE`` or ``torchrl.envs.utils.ExplorationType.MEAN``.
+            Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.
         collector_class (Python class): a collector class to be remotely instantiated. Can be
             :class:`~torchrl.collectors.SyncDataCollector`,
             :class:`~torchrl.collectors.MultiSyncDataCollector`,
@@ -181,8 +239,6 @@ class RayCollector(DataCollectorBase):
             tensordicts collected on each node. If ``False`` (default), each
             tensordict results from a separate node in a "first-ready,
             first-served" fashion.
-        storing_device (torch.device, optional): if specified, collected tensordicts will be moved
-            to these devices before returning them to the user.
         update_after_each_batch (bool, optional): if ``True``, the weights will
             be updated after each collection. For ``sync=True``, this means that
             all workers will see their weights updated. For ``sync=False``,
@@ -236,13 +292,16 @@ class RayCollector(DataCollectorBase):
         *,
         frames_per_batch: int,
         total_frames: int = -1,
+        device: torch.device | List[torch.device] = None,
+        storing_device: torch.device | List[torch.device] = None,
+        env_device: torch.device | List[torch.device] = None,
+        policy_device: torch.device | List[torch.device] = None,
         max_frames_per_traj=-1,
         init_random_frames=-1,
         reset_at_each_iter=False,
         postproc=None,
         split_trajs=False,
         exploration_type=DEFAULT_EXPLORATION_TYPE,
-        reset_when_done=True,
         collector_class: Callable[[TensorDict], TensorDict] = SyncDataCollector,
         collector_kwargs: Union[Dict, List[Dict]] = None,
         num_workers_per_collector: int = 1,
@@ -250,7 +309,6 @@ class RayCollector(DataCollectorBase):
         ray_init_config: Dict = None,
         remote_configs: Union[Dict, List[Dict]] = None,
         num_collectors: int = None,
-        storing_device: torch.device = "cpu",
         update_after_each_batch=False,
         max_weight_update_interval=-1,
     ):
@@ -357,7 +415,10 @@ class RayCollector(DataCollectorBase):
         self.collector_kwargs = (
             collector_kwargs if collector_kwargs is not None else [{}]
         )
+        self.device = device
         self.storing_device = storing_device
+        self.env_device = env_device
+        self.policy_device = policy_device
         self._batches_since_weight_update = [0 for _ in range(self.num_collectors)]
         self._sync = sync
 
@@ -372,7 +433,7 @@ class RayCollector(DataCollectorBase):
             self._frames_per_batch_corrected = frames_per_batch
 
         # update collector kwargs
-        for collector_kwarg in self.collector_kwargs:
+        for i, collector_kwarg in enumerate(self.collector_kwargs):
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (
                 init_random_frames // self.num_collectors
@@ -387,14 +448,14 @@ class RayCollector(DataCollectorBase):
                 )
             collector_kwarg["reset_at_each_iter"] = reset_at_each_iter
             collector_kwarg["exploration_type"] = exploration_type
-            collector_kwarg["reset_when_done"] = reset_when_done
             collector_kwarg["split_trajs"] = False
             collector_kwarg["frames_per_batch"] = self._frames_per_batch_corrected
+            collector_kwarg["device"] = self.device[i]
+            collector_kwarg["storing_device"] = self.storing_device[i]
+            collector_kwarg["env_device"] = self.env_device[i]
+            collector_kwarg["policy_device"] = self.policy_device[i]
 
-        if postproc is not None and hasattr(postproc, "to"):
-            self.postproc = postproc.to(self.storing_device)
-        else:
-            self.postproc = postproc
+        self.postproc = postproc
 
         # Create remote instances of the collector class
         self._remote_collectors = []
@@ -411,7 +472,55 @@ class RayCollector(DataCollectorBase):
         pending_samples = [
             e.print_remote_collector_info.remote() for e in self.remote_collectors()
         ]
-        ray.wait(object_refs=pending_samples)
+        ray.wait(pending_samples)
+
+    @property
+    def num_workers(self):
+        return self.num_collectors
+
+    @property
+    def device(self) -> List[torch.device]:
+        return self._device
+
+    @property
+    def storing_device(self) -> List[torch.device]:
+        return self._storing_device
+
+    @property
+    def env_device(self) -> List[torch.device]:
+        return self._env_device
+
+    @property
+    def policy_device(self) -> List[torch.device]:
+        return self._policy_device
+
+    @device.setter
+    def device(self, value):
+        if isinstance(value, (tuple, list)):
+            self._device = value
+        else:
+            self._device = [value] * self.num_collectors
+
+    @storing_device.setter
+    def storing_device(self, value):
+        if isinstance(value, (tuple, list)):
+            self._storing_device = value
+        else:
+            self._storing_device = [value] * self.num_collectors
+
+    @env_device.setter
+    def env_device(self, value):
+        if isinstance(value, (tuple, list)):
+            self._env_device = value
+        else:
+            self._env_device = [value] * self.num_collectors
+
+    @policy_device.setter
+    def policy_device(self, value):
+        if isinstance(value, (tuple, list)):
+            self._policy_device = value
+        else:
+            self._policy_device = [value] * self.num_collectors
 
     @staticmethod
     def _make_collector(cls, env_maker, policy, other_params):
@@ -493,7 +602,7 @@ class RayCollector(DataCollectorBase):
             samples_ready = []
             while len(samples_ready) < self.num_collectors:
                 samples_ready, samples_not_ready = ray.wait(
-                    object_refs=pending_tasks, num_returns=len(pending_tasks)
+                    pending_tasks, num_returns=len(pending_tasks)
                 )
 
             # Retrieve and concatenate Tensordicts
@@ -511,7 +620,7 @@ class RayCollector(DataCollectorBase):
 
             self.collected_frames += out_td.numel()
 
-            yield out_td.to(self.storing_device)
+            yield out_td
 
             if self.max_weight_update_interval > -1:
                 for j in range(self.num_collectors):
@@ -536,7 +645,7 @@ class RayCollector(DataCollectorBase):
                 raise RuntimeError("Missing pending tasks, something went wrong")
 
             # Wait for first worker to finish
-            wait_results = ray.wait(object_refs=list(pending_tasks.keys()))
+            wait_results = ray.wait(list(pending_tasks.keys()))
             future = wait_results[0][0]
             collector_index = pending_tasks.pop(future)
             collector = self.remote_collectors()[collector_index]
@@ -548,7 +657,7 @@ class RayCollector(DataCollectorBase):
             )  # should not be necessary, deleted automatically when ref count is down to 0
             self.collected_frames += out_td.numel()
 
-            yield out_td.to(self.storing_device)
+            yield out_td
 
             for j in range(self.num_collectors):
                 self._batches_since_weight_update[j] += 1
@@ -569,7 +678,7 @@ class RayCollector(DataCollectorBase):
 
         # Wait for the in-process collections tasks to finish.
         refs = list(pending_tasks.keys())
-        ray.wait(object_refs=refs, num_returns=len(refs))
+        ray.wait(refs, num_returns=len(refs))
 
         # Cancel the in-process collections tasks
         # for ref in refs:

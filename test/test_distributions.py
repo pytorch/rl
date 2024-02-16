@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 
 from _utils_internal import get_default_devices
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDictBase
 from torch import autograd, nn
 from torchrl.modules import (
     NormalParamWrapper,
@@ -30,40 +30,46 @@ from torchrl.modules.distributions.continuous import SafeTanhTransform
 
 @pytest.mark.skipif(torch.__version__ < "2.0", reason="torch 2.0 is required")
 @pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("div_up", [1, 2])
-@pytest.mark.parametrize("div_down", [1, 2])
-def test_delta(device, div_up, div_down):
-    x = torch.randn(1000000, 4, device=device, dtype=torch.double)
-    d = Delta(x)
-    assert d.log_prob(d.mode).shape == x.shape[:-1]
-    assert (d.log_prob(d.mode) == float("inf")).all()
+class TestDelta:
+    def test_delta_logprob(self, device):
+        x = torch.randn(1000000, 4, device=device, dtype=torch.double)
+        d = Delta(x)
+        assert d.log_prob(d.mode).shape == x.shape[:-1]
+        assert (d.log_prob(d.mode) == float("inf")).all()
 
-    x = torch.randn(1000000, 4, device=device, dtype=torch.double)
-    d = TanhDelta(x, -1 / div_down, 1.0 / div_up, atol=1e-4, rtol=1e-4)
-    xinv = d.transforms[0].inv(d.mode)
-    assert d.base_dist._is_equal(xinv).all()
-    assert d.log_prob(d.mode).shape == x.shape[:-1]
-    assert (d.log_prob(d.mode) == float("inf")).all()
+    @pytest.mark.parametrize("div_up", [1, 2])
+    @pytest.mark.parametrize("div_down", [1, 2])
+    def test_tanhdelta_logprob(self, device, div_up, div_down):
+        x = torch.randn(1000000, 4, device=device, dtype=torch.double)
+        d = TanhDelta(x, -1 / div_down, 1.0 / div_up, atol=1e-4, rtol=1e-4)
+        xinv = d.transforms[0].inv(d.mode)
+        assert d.base_dist._is_equal(xinv).all()
+        assert d.log_prob(d.mode).shape == x.shape[:-1]
+        assert (d.log_prob(d.mode) == float("inf")).all()
 
-    x = torch.randn(1000000, 4, device=device, dtype=torch.double)
-    d = TanhDelta(
-        x,
-        -torch.ones_like(x) / div_down,
-        torch.ones_like(x) / div_up,
-        atol=1e-4,
-        rtol=1e-4,
-    )
-    xinv = d.transforms[0].inv(d.mode)
-    assert d.base_dist._is_equal(xinv).all()
-    assert d.log_prob(d.mode).shape == x.shape[:-1]
-    assert (d.log_prob(d.mode) == float("inf")).all()
+    @pytest.mark.parametrize("div_up", [1, 2])
+    @pytest.mark.parametrize("div_down", [1, 2])
+    def test_tanhdelta_inv(self, device, div_up, div_down):
+        x = torch.randn(1000000, 4, device=device, dtype=torch.double)
+        d = TanhDelta(
+            x,
+            -torch.ones_like(x) / div_down,
+            torch.ones_like(x) / div_up,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+        xinv = d.transforms[0].inv(d.mode)
+        assert d.base_dist._is_equal(xinv).all()
+        assert d.log_prob(d.mode).shape == x.shape[:-1]
+        assert (d.log_prob(d.mode) == float("inf")).all()
 
-    x = torch.randn(1000000, 4, device=device)
-    d = TanhDelta(x, -torch.ones_like(x), torch.ones_like(x), atol=1e-4, rtol=1e-4)
-    xinv = d.transforms[0].inv(d.mode)
-    assert d.base_dist._is_equal(xinv).all()
-    assert d.log_prob(d.mode).shape == x.shape[:-1]
-    assert (d.log_prob(d.mode) == float("inf")).all()
+    def test_tanhdelta_inv_ones(self, device):
+        x = torch.randn(1000000, 4, device=device)
+        d = TanhDelta(x, -torch.ones_like(x), torch.ones_like(x), atol=1e-4, rtol=1e-4)
+        xinv = d.transforms[0].inv(d.mode)
+        assert d.base_dist._is_equal(xinv).all()
+        assert d.log_prob(d.mode).shape == x.shape[:-1]
+        assert (d.log_prob(d.mode) == float("inf")).all()
 
 
 def _map_all(*tensors_or_other, device):
@@ -74,42 +80,43 @@ def _map_all(*tensors_or_other, device):
             yield t
 
 
-@pytest.mark.parametrize(
-    "min", [-torch.ones(3), -1, 3 * torch.tensor([-1.0, -2.0, -0.5]), -0.1]
-)
-@pytest.mark.parametrize(
-    "max", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 0.1]
-)
-@pytest.mark.parametrize(
-    "vecs",
-    [
-        (torch.tensor([0.1, 10.0, 5.0]), torch.tensor([0.1, 10.0, 5.0])),
-        (torch.zeros(7, 3), torch.ones(7, 3)),
-    ],
-)
-@pytest.mark.parametrize(
-    "upscale", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 3]
-)
-@pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])
-@pytest.mark.parametrize("device", get_default_devices())
-def test_tanhnormal(min, max, vecs, upscale, shape, device):
-    min, max, vecs, upscale, shape = _map_all(
-        min, max, vecs, upscale, shape, device=device
+class TestTanhNormal:
+    @pytest.mark.parametrize(
+        "min", [-torch.ones(3), -1, 3 * torch.tensor([-1.0, -2.0, -0.5]), -0.1]
     )
-    torch.manual_seed(0)
-    d = TanhNormal(
-        *vecs,
-        upscale=upscale,
-        min=min,
-        max=max,
+    @pytest.mark.parametrize(
+        "max", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 0.1]
     )
-    for _ in range(100):
-        a = d.rsample(shape)
-        assert a.shape[: len(shape)] == shape
-        assert (a >= d.min).all()
-        assert (a <= d.max).all()
-        lp = d.log_prob(a)
-        assert torch.isfinite(lp).all()
+    @pytest.mark.parametrize(
+        "vecs",
+        [
+            (torch.tensor([0.1, 10.0, 5.0]), torch.tensor([0.1, 10.0, 5.0])),
+            (torch.zeros(7, 3), torch.ones(7, 3)),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "upscale", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 3]
+    )
+    @pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_tanhnormal(self, min, max, vecs, upscale, shape, device):
+        min, max, vecs, upscale, shape = _map_all(
+            min, max, vecs, upscale, shape, device=device
+        )
+        torch.manual_seed(0)
+        d = TanhNormal(
+            *vecs,
+            upscale=upscale,
+            min=min,
+            max=max,
+        )
+        for _ in range(100):
+            a = d.rsample(shape)
+            assert a.shape[: len(shape)] == shape
+            assert (a >= d.min).all()
+            assert (a <= d.max).all()
+            lp = d.log_prob(a)
+            assert torch.isfinite(lp).all()
 
 
 @pytest.mark.parametrize(
@@ -130,24 +137,40 @@ def test_tanhnormal(min, max, vecs, upscale, shape, device):
 )
 @pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])
 @pytest.mark.parametrize("device", get_default_devices())
-def test_truncnormal(min, max, vecs, upscale, shape, device):
-    torch.manual_seed(0)
-    min, max, vecs, upscale, shape = _map_all(
-        min, max, vecs, upscale, shape, device=device
-    )
-    d = TruncatedNormal(
-        *vecs,
-        upscale=upscale,
-        min=min,
-        max=max,
-    )
-    for _ in range(100):
-        a = d.rsample(shape)
-        assert a.shape[: len(shape)] == shape
-        assert (a >= d.min).all()
-        assert (a <= d.max).all()
-        lp = d.log_prob(a)
-        assert torch.isfinite(lp).all()
+class TestTruncatedNormal:
+    def test_truncnormal(self, min, max, vecs, upscale, shape, device):
+        torch.manual_seed(0)
+        min, max, vecs, upscale, shape = _map_all(
+            min, max, vecs, upscale, shape, device=device
+        )
+        d = TruncatedNormal(
+            *vecs,
+            upscale=upscale,
+            min=min,
+            max=max,
+        )
+        for _ in range(100):
+            a = d.rsample(shape)
+            assert a.shape[: len(shape)] == shape
+            assert (a >= d.min).all()
+            assert (a <= d.max).all()
+            lp = d.log_prob(a)
+            assert torch.isfinite(lp).all()
+
+    def test_truncnormal_mode(self, min, max, vecs, upscale, shape, device):
+        torch.manual_seed(0)
+        min, max, vecs, upscale, shape = _map_all(
+            min, max, vecs, upscale, shape, device=device
+        )
+        d = TruncatedNormal(
+            *vecs,
+            upscale=upscale,
+            min=min,
+            max=max,
+        )
+        assert d.mode is not None
+        assert d.entropy() is not None
+        assert d.mean is not None
 
 
 @pytest.mark.parametrize(

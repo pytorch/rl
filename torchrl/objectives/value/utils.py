@@ -8,6 +8,7 @@ from typing import Union
 import torch
 
 from tensordict import TensorDictBase
+from tensordict.utils import expand_right
 
 
 def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
@@ -191,20 +192,20 @@ def _flatten_batch(tensor):
     return tensor.flatten(0, -1)
 
 
-def _get_num_per_traj(dones_and_truncated):
+def _get_num_per_traj(done):
     """Because we mark the end of each batch with a truncated signal, we can concatenate them.
 
     Args:
-        dones_and_truncated (torch.Tensor): A done or truncated mark of shape [*B, T]
+        done (torch.Tensor): A done or truncated mark of shape [*B, T]
 
     Returns:
         A list of integers representing the number of steps in each trajectory
 
     """
-    dones_and_truncated = dones_and_truncated.clone()
-    dones_and_truncated[..., -1] = True
+    done = done.clone()
+    done[..., -1] = True
     # TODO: find a way of copying once only, eg not using reshape
-    num_per_traj = torch.where(dones_and_truncated.reshape(-1))[0] + 1
+    num_per_traj = torch.where(done.reshape(-1))[0] + 1
     num_per_traj[1:] = num_per_traj[1:] - num_per_traj[:-1]
     return num_per_traj
 
@@ -294,8 +295,8 @@ def _split_and_pad_sequence(
             dtype=tensor.dtype,
             device=tensor.device,
         )
-        empty_tensor[mask] = tensor
-        return empty_tensor
+        mask_expand = expand_right(mask, (*mask.shape, *tensor.shape[1:]))
+        return torch.masked_scatter(empty_tensor, mask_expand, tensor.reshape(-1))
 
     if isinstance(tensor, TensorDictBase):
         tensor = tensor.apply(_fill_tensor, batch_size=[*shape])

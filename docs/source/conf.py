@@ -69,11 +69,12 @@ extensions = [
     "sphinx_gallery.gen_gallery",
     "sphinxcontrib.aafig",
     "myst_parser",
+    "sphinx_design",
 ]
 
 intersphinx_mapping = {
     "torch": ("https://pytorch.org/docs/stable/", None),
-    "tensordict": ("https://pytorch-labs.github.io/tensordict/", None),
+    "tensordict": ("https://pytorch.github.io/tensordict/", None),
     # "torchrl": ("https://pytorch.org/rl/", None),
     "torchaudio": ("https://pytorch.org/audio/stable/", None),
     "torchtext": ("https://pytorch.org/text/stable/", None),
@@ -188,3 +189,8 @@ generate_knowledge_base_references("../../knowledge_base")
 generate_tutorial_references("../../tutorials/sphinx-tutorials/", "tutorial")
 # generate_tutorial_references("../../tutorials/src/", "src")
 generate_tutorial_references("../../tutorials/media/", "media")
+
+# We do this to indicate that the script is run by sphinx
+import builtins
+
+builtins.__sphinx_build__ = True

@@ -102,8 +102,6 @@ def make_env_transforms(
             obs_stats = stats
         obs_stats["standard_normal"] = True
         obs_norm = ObservationNorm(**obs_stats, in_keys=["pixels"])
-        # if obs_norm_state_dict:
-        #     obs_norm.load_state_dict(obs_norm_state_dict)
         env.append_transform(obs_norm)
     if norm_rewards:
         reward_scaling = 1.0
@@ -132,7 +130,6 @@ def make_env_transforms(
     env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
     )
-
     return env
 
 
@@ -150,6 +147,7 @@ def transformed_env_constructor(
     state_dim_gsde: Optional[int] = None,
     batch_dims: Optional[int] = 0,
     obs_norm_state_dict: Optional[dict] = None,
+    ignore_device: bool = False,
 ) -> Union[Callable, EnvCreator]:
     """
     Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
@@ -182,6 +180,7 @@ def transformed_env_constructor(
             it should be set to 1 (or the number of dims of the batch).
         obs_norm_state_dict (dict, optional): the state_dict of the ObservationNorm transform to be loaded
             into the environment
+        ignore_device (bool, optional): if True, the device is ignored.
     """
 
     def make_transformed_env(**kwargs) -> TransformedEnv:
@@ -192,14 +191,17 @@ def transformed_env_constructor(
         from_pixels = cfg.from_pixels
 
         if custom_env is None and custom_env_maker is None:
-            if isinstance(cfg.collector_device, str):
-                device = cfg.collector_device
-            elif isinstance(cfg.collector_device, Sequence):
-                device = cfg.collector_device[0]
+            if not ignore_device:
+                if isinstance(cfg.collector_device, str):
+                    device = cfg.collector_device
+                elif isinstance(cfg.collector_device, Sequence):
+                    device = cfg.collector_device[0]
+                else:
+                    raise ValueError(
+                        "collector_device must be either a string or a sequence of strings"
+                    )
             else:
-                raise ValueError(
-                    "collector_device must be either a string or a sequence of strings"
-                )
+                device = None
             env_kwargs = {
                 "env_name": env_name,
                 "device": device,
@@ -255,19 +257,20 @@ def parallel_env_constructor(
         kwargs: keyword arguments for the `transformed_env_constructor` method.
     """
     batch_transform = cfg.batch_transform
+    kwargs.update({"cfg": cfg, "use_env_creator": True})
     if cfg.env_per_collector == 1:
-        kwargs.update({"cfg": cfg, "use_env_creator": True})
         make_transformed_env = transformed_env_constructor(**kwargs)
         return make_transformed_env
-    kwargs.update({"cfg": cfg, "use_env_creator": True})
     make_transformed_env = transformed_env_constructor(
-        return_transformed_envs=not batch_transform, **kwargs
+        return_transformed_envs=not batch_transform, ignore_device=True, **kwargs
     )
     parallel_env = ParallelEnv(
         num_workers=cfg.env_per_collector,
         create_env_fn=make_transformed_env,
         create_env_kwargs=None,
         pin_memory=cfg.pin_memory,
+        device=cfg.collector_device,
+        serial_for_single=True,
     )
     if batch_transform:
         kwargs.update(

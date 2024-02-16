@@ -96,7 +96,7 @@ def _find_depth(depth: Optional[int], *list_or_ints: Sequence):
             if isinstance(item, (list, tuple)):
                 depth = len(item)
     if depth is None:
-        raise Exception(
+        raise ValueError(
             f"depth=None requires one of the input args (kernel_sizes, strides, "
             f"num_cells) to be a a list or tuple. Got {tuple(type(item) for item in list_or_ints)}"
         )

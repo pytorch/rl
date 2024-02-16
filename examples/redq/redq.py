@@ -3,55 +3,30 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import dataclasses
 import uuid
 from datetime import datetime
 
 import hydra
 import torch.cuda
-from hydra.core.config_store import ConfigStore
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 from torchrl.record import VideoRecorder
-from torchrl.record.loggers import generate_exp_name, get_logger
-from torchrl.trainers.helpers.collectors import (
-    make_collector_offpolicy,
-    OffPolicyCollectorConfig,
-)
-from torchrl.trainers.helpers.envs import (
+from torchrl.record.loggers import get_logger
+from utils import (
     correct_for_frame_skip,
-    EnvConfig,
     get_norm_state_dict,
     initialize_observation_norm_transforms,
+    make_collector_offpolicy,
+    make_redq_loss,
+    make_redq_model,
+    make_replay_buffer,
+    make_trainer,
     parallel_env_constructor,
     retrieve_observation_norms_state_dict,
     transformed_env_constructor,
 )
-from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.losses import LossConfig, make_redq_loss
-from torchrl.trainers.helpers.models import make_redq_model, REDQModelConfig
-from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
-from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
-
-config_fields = [
-    (config_field.name, config_field.type, config_field)
-    for config_cls in (
-        TrainerConfig,
-        OffPolicyCollectorConfig,
-        EnvConfig,
-        LossConfig,
-        REDQModelConfig,
-        LoggerConfig,
-        ReplayArgsConfig,
-    )
-    for config_field in dataclasses.fields(config_cls)
-]
-
-Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
-cs = ConfigStore.instance()
-cs.store(name="config", node=Config)
 
 DEFAULT_REWARD_SCALING = {
     "Hopper-v1": 5,
@@ -69,8 +44,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
 
-    if not isinstance(cfg.reward_scaling, float):
-        cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(cfg.env_name, 5.0)
+    if not isinstance(cfg.env.reward_scaling, float):
+        cfg.env.reward_scaling = DEFAULT_REWARD_SCALING.get(cfg.env.name, 5.0)
+        cfg.env.reward_loc = 0.0
 
     device = (
         torch.device("cpu")
@@ -81,26 +57,35 @@ def main(cfg: "DictConfig"):  # noqa: F821
     exp_name = "_".join(
         [
             "REDQ",
-            cfg.exp_name,
+            cfg.logger.exp_name,
             str(uuid.uuid4())[:8],
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
 
-    exp_name = generate_exp_name("REDQ", cfg.exp_name)
     logger = get_logger(
-        logger_type=cfg.logger, logger_name="redq_logging", experiment_name=exp_name
+        logger_type=cfg.logger.backend,
+        logger_name="redq_logging",
+        experiment_name=exp_name,
+        wandb_kwargs={
+            "mode": cfg.logger.mode,
+            "config": dict(cfg),
+            "project": cfg.logger.project_name,
+            "group": cfg.logger.group_name,
+        },
     )
-    video_tag = exp_name if cfg.record_video else ""
+    video_tag = exp_name if cfg.logger.record_video else ""
 
     key, init_env_steps, stats = None, None, None
-    if not cfg.vecnorm and cfg.norm_stats:
-        if not hasattr(cfg, "init_env_steps"):
-            raise AttributeError("init_env_steps missing from arguments.")
-        key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
-        init_env_steps = cfg.init_env_steps
+    if not cfg.env.vecnorm and cfg.env.norm_stats:
+        key = (
+            ("next", "pixels")
+            if cfg.env.from_pixels
+            else ("next", "observation_vector")
+        )
+        init_env_steps = cfg.env.init_env_steps
         stats = {"loc": None, "scale": None}
-    elif cfg.from_pixels:
+    elif cfg.env.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
 
     proof_env = transformed_env_constructor(
@@ -121,20 +106,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module, target_net_updater = make_redq_loss(model, cfg)
 
     actor_model_explore = model[0]
-    if cfg.ou_exploration:
-        if cfg.gSDE:
+    if cfg.exploration.ou_exploration:
+        if cfg.exploration.gSDE:
             raise RuntimeError("gSDE and ou_exploration are incompatible")
         actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
             actor_model_explore,
-            annealing_num_steps=cfg.annealing_frames,
-            sigma=cfg.ou_sigma,
-            theta=cfg.ou_theta,
+            annealing_num_steps=cfg.exploration.annealing_frames,
+            sigma=cfg.exploration.ou_sigma,
+            theta=cfg.exploration.ou_theta,
         ).to(device)
     if device == torch.device("cpu"):
         # mostly for debugging
         actor_model_explore.share_memory()
 
-    if cfg.gSDE:
+    if cfg.exploration.gSDE:
         with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
             # get dimensions to build the parallel env
             proof_td = actor_model_explore(proof_env.reset().to(device))
@@ -155,13 +140,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_env=create_env_fn,
         actor_model_explore=actor_model_explore,
         cfg=cfg,
-        # make_env_kwargs=[
-        #     {"device": device} if device >= 0 else {}
-        #     for device in args.env_rendering_devices
-        # ],
     )
 
-    replay_buffer = make_replay_buffer(device, cfg)
+    replay_buffer = make_replay_buffer("cpu", cfg)
 
     recorder = transformed_env_constructor(
         cfg,
@@ -201,11 +182,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cfg,
     )
 
-    final_seed = collector.set_seed(cfg.seed)
-    print(f"init seed: {cfg.seed}, final seed: {final_seed}")
-
     trainer.train()
-    return (logger.log_dir, trainer._log_dict)
+    if logger is not None:
+        return (logger.log_dir, trainer._log_dict)
 
 
 if __name__ == "__main__":

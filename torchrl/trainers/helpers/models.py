@@ -2,12 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import itertools
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import torch
+
+from tensordict import set_lazy_legacy
 from tensordict.nn import InteractionType
 from torch import distributions as d, nn
 
@@ -17,9 +19,9 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs import TensorDictPrimer, TransformedEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
+from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     NoisyLinear,
@@ -245,7 +247,7 @@ def make_redq_model(
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
         >>> import dataclasses
-        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["observation"]),
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v4"), Compose(DoubleToFloat(["observation"]),
         ...    CatTensors(["observation"], "observation_vector")))
         >>> device = torch.device("cpu")
         >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
@@ -290,6 +292,10 @@ def make_redq_model(
             is_shared=False)
 
     """
+    warnings.warn(
+        "This helper function will be deprecated in v0.4. Consider using the local helper in the REDQ example.",
+        category=DeprecationWarning,
+    )
     tanh_loc = cfg.tanh_loc
     default_policy_scale = cfg.default_policy_scale
     gSDE = cfg.gSDE
@@ -446,6 +452,7 @@ def make_redq_model(
     return model
 
 
+@set_lazy_legacy(False)
 def make_dreamer(
     cfg: "DictConfig",  # noqa: F821
     proof_environment: EnvBase = None,
@@ -507,7 +514,6 @@ def make_dreamer(
     ).to(device)
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         tensordict = proof_environment.fake_tensordict().unsqueeze(-1)
-        tensordict = tensordict.to_tensordict().to(device)
         tensordict = tensordict.to(device)
         world_model(tensordict)
 
@@ -653,6 +659,7 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
             out_keys=[action_key],
             default_interaction_type=InteractionType.RANDOM,
             distribution_class=TanhNormal,
+            distribution_kwargs={"tanh_loc": True},
             spec=CompositeSpec(**{action_key: proof_environment.action_spec}),
         ),
     )
@@ -699,8 +706,9 @@ def _dreamer_make_actor_real(
             SafeProbabilisticModule(
                 in_keys=["loc", "scale"],
                 out_keys=[action_key],
-                default_interaction_type=InteractionType.RANDOM,
+                default_interaction_type=InteractionType.MODE,
                 distribution_class=TanhNormal,
+                distribution_kwargs={"tanh_loc": True},
                 spec=CompositeSpec(
                     **{action_key: proof_environment.action_spec.to("cpu")}
                 ),

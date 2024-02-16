@@ -17,10 +17,13 @@ import pytest
 import torch
 import torch.cuda
 
-from tensordict import tensorclass
-from torchrl._utils import implement_for, seed_generator
+from tensordict import tensorclass, TensorDict
+from torchrl._utils import implement_for, logger as torchrl_logger, seed_generator
+from torchrl.data.utils import CloudpickleWrapper
 
-from torchrl.envs import ObservationNorm
+from torchrl.envs import MultiThreadedEnv, ObservationNorm
+from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
+from torchrl.envs.libs.envpool import _has_envpool
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import (
     Compose,
@@ -28,7 +31,6 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
 )
-from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnv, ParallelEnv, SerialEnv
 
 # Specified for test_utils.py
 __version__ = "0.3"
@@ -60,7 +62,7 @@ def _set_gym_environments():  # noqa: F811
     PONG_VERSIONED = "ALE/Pong-v5"
 
 
-@implement_for("gymnasium", "0.27.0", None)
+@implement_for("gymnasium")
 def _set_gym_environments():  # noqa: F811
     global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
 
@@ -117,7 +119,7 @@ def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
                     return f(*args, **kwargs)
                 except ExceptionToCheck as e:
                     msg = "%s, Retrying in %d seconds..." % (str(e), mdelay)
-                    print(msg)
+                    torchrl_logger.info(msg)
                     time.sleep(mdelay)
                     mtries -= 1
             try:
@@ -320,3 +322,148 @@ def make_tc(td):
     for key in td.keys():
         MyClass.__annotations__[key] = torch.Tensor
     return tensorclass(MyClass)
+
+
+def rollout_consistency_assertion(
+    rollout, *, done_key="done", observation_key="observation", done_strict=False
+):
+    """Tests that observations in "next" match observations in the next root tensordict when done is False, and don't match otherwise."""
+
+    done = rollout[..., :-1]["next", done_key].squeeze(-1)
+    # data resulting from step, when it's not done
+    r_not_done = rollout[..., :-1]["next"][~done]
+    # data resulting from step, when it's not done, after step_mdp
+    r_not_done_tp1 = rollout[:, 1:][~done]
+    torch.testing.assert_close(
+        r_not_done[observation_key],
+        r_not_done_tp1[observation_key],
+        msg=f"Key {observation_key} did not match",
+    )
+
+    if done_strict and not done.any():
+        raise RuntimeError("No done detected, test could not complete.")
+    if done.any():
+        # data resulting from step, when it's done
+        r_done = rollout[..., :-1]["next"][done]
+        # data resulting from step, when it's done, after step_mdp and reset
+        r_done_tp1 = rollout[..., 1:][done]
+        # check that at least one obs after reset does not match the version before reset
+        assert not torch.isclose(
+            r_done[observation_key], r_done_tp1[observation_key]
+        ).all()
+
+
+def rand_reset(env):
+    """Generates a tensordict with reset keys that mimic the done spec.
+
+    Values are drawn at random until at least one reset is present.
+
+    """
+    full_done_spec = env.full_done_spec
+    result = {}
+    for reset_key, list_of_done in zip(env.reset_keys, env.done_keys_groups):
+        val = full_done_spec[list_of_done[0]].rand()
+        while not val.any():
+            val = full_done_spec[list_of_done[0]].rand()
+        result[reset_key] = val
+    # create a data structure that keeps the batch size of the nested specs
+    result = (
+        full_done_spec.zero().update(result).exclude(*full_done_spec.keys(True, True))
+    )
+    return result
+
+
+def check_rollout_consistency_multikey_env(td: TensorDict, max_steps: int):
+    index_batch_size = (0,) * (len(td.batch_size) - 1)
+
+    # Check done and reset for root
+    observation_is_max = td["next", "observation"][..., 0, 0, 0] == max_steps + 1
+    next_is_done = td["next", "done"][index_batch_size][:-1].squeeze(-1)
+    assert (td["next", "done"][observation_is_max]).all()
+    assert (~td["next", "done"][~observation_is_max]).all()
+    # Obs after done is 0
+    assert (td["observation"][index_batch_size][1:][next_is_done] == 0).all()
+    # Obs after not done is previous obs
+    assert (
+        td["observation"][index_batch_size][1:][~next_is_done]
+        == td["next", "observation"][index_batch_size][:-1][~next_is_done]
+    ).all()
+    # Check observation and reward update with count action for root
+    action_is_count = td["action"].long().argmax(-1).to(torch.bool)
+    assert (
+        td["next", "observation"][action_is_count]
+        == td["observation"][action_is_count] + 1
+    ).all()
+    assert (td["next", "reward"][action_is_count] == 1).all()
+    # Check observation and reward do not update with no-count action for root
+    assert (
+        td["next", "observation"][~action_is_count]
+        == td["observation"][~action_is_count]
+    ).all()
+    assert (td["next", "reward"][~action_is_count] == 0).all()
+
+    # Check done and reset for nested_1
+    observation_is_max = td["next", "nested_1", "observation"][..., 0] == max_steps + 1
+    # done at the root always prevail
+    next_is_done = td["next", "done"][index_batch_size][:-1].squeeze(-1)
+    assert (td["next", "nested_1", "done"][observation_is_max]).all()
+    assert (~td["next", "nested_1", "done"][~observation_is_max]).all()
+    # Obs after done is 0
+    assert (
+        td["nested_1", "observation"][index_batch_size][1:][next_is_done] == 0
+    ).all()
+    # Obs after not done is previous obs
+    assert (
+        td["nested_1", "observation"][index_batch_size][1:][~next_is_done]
+        == td["next", "nested_1", "observation"][index_batch_size][:-1][~next_is_done]
+    ).all()
+    # Check observation and reward update with count action for nested_1
+    action_is_count = td["nested_1"]["action"].to(torch.bool)
+    assert (
+        td["next", "nested_1", "observation"][action_is_count]
+        == td["nested_1", "observation"][action_is_count] + 1
+    ).all()
+    assert (td["next", "nested_1", "gift"][action_is_count] == 1).all()
+    # Check observation and reward do not update with no-count action for nested_1
+    assert (
+        td["next", "nested_1", "observation"][~action_is_count]
+        == td["nested_1", "observation"][~action_is_count]
+    ).all()
+    assert (td["next", "nested_1", "gift"][~action_is_count] == 0).all()
+
+    # Check done and reset for nested_2
+    observation_is_max = td["next", "nested_2", "observation"][..., 0] == max_steps + 1
+    # done at the root always prevail
+    next_is_done = td["next", "done"][index_batch_size][:-1].squeeze(-1)
+    assert (td["next", "nested_2", "done"][observation_is_max]).all()
+    assert (~td["next", "nested_2", "done"][~observation_is_max]).all()
+    # Obs after done is 0
+    assert (
+        td["nested_2", "observation"][index_batch_size][1:][next_is_done] == 0
+    ).all()
+    # Obs after not done is previous obs
+    assert (
+        td["nested_2", "observation"][index_batch_size][1:][~next_is_done]
+        == td["next", "nested_2", "observation"][index_batch_size][:-1][~next_is_done]
+    ).all()
+    # Check observation and reward update with count action for nested_2
+    action_is_count = td["nested_2"]["azione"].squeeze(-1).to(torch.bool)
+    assert (
+        td["next", "nested_2", "observation"][action_is_count]
+        == td["nested_2", "observation"][action_is_count] + 1
+    ).all()
+    assert (td["next", "nested_2", "reward"][action_is_count] == 1).all()
+    # Check observation and reward do not update with no-count action for nested_2
+    assert (
+        td["next", "nested_2", "observation"][~action_is_count]
+        == td["nested_2", "observation"][~action_is_count]
+    ).all()
+    assert (td["next", "nested_2", "reward"][~action_is_count] == 0).all()
+
+
+def decorate_thread_sub_func(func, num_threads):
+    def new_func(*args, **kwargs):
+        assert torch.get_num_threads() == num_threads
+        return func(*args, **kwargs)
+
+    return CloudpickleWrapper(new_func)

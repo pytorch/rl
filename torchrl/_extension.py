@@ -23,3 +23,10 @@ def _init_extension():
     if not is_module_available("torchrl._torchrl"):
         warnings.warn("torchrl C++ extension is not available.")
         return
+
+
+EXTENSION_WARNING = (
+    "Failed to import torchrl C++ binaries. Some modules (eg, prioritized replay buffers) may not work with your installation. "
+    "If you installed TorchRL from PyPI, please report the bug on TorchRL github. "
+    "If you installed TorchRL locally and/or in development mode, check that you have all the required compiling packages."
+)

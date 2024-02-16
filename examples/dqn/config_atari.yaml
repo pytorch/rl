@@ -1,0 +1,40 @@
+device: cuda:0
+
+# Environment
+env:
+  env_name: PongNoFrameskip-v4
+
+# collector
+collector:
+  total_frames: 40_000_100
+  frames_per_batch: 16
+  eps_start: 1.0
+  eps_end: 0.01
+  annealing_frames: 4_000_000
+  init_random_frames: 200_000
+
+# buffer
+buffer:
+  buffer_size: 1_000_000
+  batch_size: 32
+  scratch_dir: null
+
+# logger
+logger:
+  backend: wandb
+  project_name: torchrl_example_dqn
+  group_name: null
+  exp_name: DQN
+  test_interval: 1_000_000
+  num_test_episodes: 3
+
+# Optim
+optim:
+  lr: 0.00025
+  max_grad_norm: 10
+
+# loss
+loss:
+  gamma: 0.99
+  hard_update_freq: 10_000
+  num_updates: 1

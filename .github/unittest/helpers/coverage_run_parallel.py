@@ -11,7 +11,6 @@ This script is a drop-in wrapper to conveniently pass command line arguments
 nevertheless. It writes temporary coverage config files on the fly and
 invokes coverage with proper arguments
 """
-
 import os
 import shlex
 import subprocess
@@ -45,7 +44,9 @@ command_line={cmdline}
 
 def main(argv: List[str]) -> int:
     if len(argv) < 1:
-        print("Usage: 'python coverage_run_parallel.py <command> [command arguments]'")
+        print(  # noqa
+            "Usage: 'python coverage_run_parallel.py <command> [command arguments]'"
+        )
         sys.exit(1)
     # The temporary config is written into a temp dir that will be deleted
     # including all contents on context exit.

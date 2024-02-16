@@ -1,0 +1,35 @@
+# Environment
+env:
+  env_name: PongNoFrameskip-v4
+  num_envs: 1
+
+# collector
+collector:
+  frames_per_batch: 80
+  total_frames: 40_000_000
+
+# logger
+logger:
+  backend: wandb
+  project_name: torchrl_example_a2c
+  group_name: null
+  exp_name: Atari_Schulman17
+  test_interval: 40_000_000
+  num_test_episodes: 3
+
+# Optim
+optim:
+  lr: 0.0001
+  eps: 1.0e-8
+  weight_decay: 0.0
+  max_grad_norm: 40.0
+  anneal_lr: True
+
+# loss
+loss:
+  gamma: 0.99
+  mini_batch_size: 80
+  gae_lambda: 0.95
+  critic_coef: 0.25
+  entropy_coef: 0.01
+  loss_critic_type: l2

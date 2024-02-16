@@ -9,6 +9,7 @@ apt-get update && apt-get install -y git gcc
 ln -s /usr/bin/swig3.0 /usr/bin/swig
 
 export PYTORCH_TEST_WITH_SLOW='1'
+export LAZY_LEGACY_OP=False
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
@@ -22,6 +23,6 @@ conda deactivate && conda activate ./env
 # this workflow only tests the libs
 python -c "import sklearn, pandas"
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestOpenML --error-for-skips
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestOpenML --error-for-skips --runslow
 coverage combine
 coverage xml -i

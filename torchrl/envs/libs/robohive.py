@@ -11,27 +11,17 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from tensordict import TensorDict
-from tensordict.tensordict import make_tensordict
+from tensordict import make_tensordict, TensorDict
 from torchrl._utils import implement_for
-from torchrl.data import UnboundedContinuousTensorSpec
-from torchrl.envs.libs.gym import (
-    _gym_to_torchrl_spec_transform,
-    GymEnv,
-    set_gym_backend,
-)
-from torchrl.envs.utils import make_composite_from_td
+from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
+from torchrl.envs.libs.gym import _AsyncMeta, _gym_to_torchrl_spec_transform, GymEnv
+from torchrl.envs.utils import _classproperty, make_composite_from_td
 
-_has_robohive = importlib.util.find_spec("robohive") is not None
+_has_gym = importlib.util.find_spec("gym") is not None
+_has_robohive = importlib.util.find_spec("robohive") is not None and _has_gym
 
 if _has_robohive:
     os.environ.setdefault("sim_backend", "MUJOCO")
-    import gym
-
-    with set_gym_backend("gym"):
-        existing_envs = set(GymEnv.available_envs)
-    import robohive.envs.multi_task.substeps1
-    from robohive.envs.env_variants import register_env_variant
 
 
 class set_directory(object):
@@ -59,55 +49,118 @@ class set_directory(object):
         return new_fun
 
 
-class RoboHiveEnv(GymEnv):
+class _RoboHiveBuild(_AsyncMeta):
+    def __call__(self, *args, **kwargs):
+        instance: RoboHiveEnv = super().__call__(*args, **kwargs)
+        instance._refine_specs()
+        return instance
+
+
+class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
     """A wrapper for RoboHive gym environments.
 
     RoboHive is a collection of environments/tasks simulated with the MuJoCo physics engine exposed using the OpenAI-Gym API.
 
     Github: https://github.com/vikashplus/robohive/
 
-    RoboHive requires gym 0.13.
+    Doc: https://github.com/vikashplus/robohive/wiki
+
+    Paper: https://arxiv.org/abs/2310.06828
+
+    .. warning::
+        RoboHive requires gym 0.13.
 
     Args:
-        env_name (str): the environment name to build.
-        read_info (bool, optional): whether the the info should be parsed.
-            Defaults to ``True``.
-        device (torch.device, optional): the device on which the input/output
-            are expected. Defaults to torch default device.
+        env_name (str): the environment name to build. Must be one of :attr:`.available_envs`
+        categorical_action_encoding (bool, optional): if ``True``, categorical
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            Defaults to ``False``.
+
+    Keyword Args:
+        from_pixels (bool, optional): if ``True``, an attempt to return the pixel
+            observations from the env will be performed. By default, these observations
+            will be written under the ``"pixels"`` entry.
+            The method being used varies
+            depending on the gym version and may involve a ``wrappers.pixel_observation.PixelObservationWrapper``.
+            Defaults to ``False``.
+        pixels_only (bool, optional): if ``True``, only the pixel observations will
+            be returned (by default under the ``"pixels"`` entry in the output tensordict).
+            If ``False``, observations (eg, states) and pixels will be returned
+            whenever ``from_pixels=True``. Defaults to ``True``.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        batch_size (torch.Size, optional): Only ``torch.Size([])`` will work with
+            ``RoboHiveEnv`` since vectorized environments are not supported within the
+            class. To execute more than one environment at a time, see :class:`~torchrl.envs.ParallelEnv`.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+
+    Attributes:
+        available_envs (list): a list of available envs to build.
+
+    Examples:
+        >>> from torchrl.envs import RoboHiveEnv
+        >>> env = RoboHiveEnv(RoboHiveEnv.available_envs[0])
+        >>> env.rollout(3)
+
     """
 
     env_list = []
-    if _has_robohive:
-        CURR_DIR = robohive.envs.multi_task.substeps1.CURR_DIR
-    else:
-        CURR_DIR = None
+
+    @_classproperty
+    def CURR_DIR(cls):
+        if _has_robohive:
+            import robohive.envs.multi_task.substeps1
+
+            return robohive.envs.multi_task.substeps1.CURR_DIR
+        else:
+            return None
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_robohive:
+            return []
+        RoboHiveEnv.register_envs()
+        return cls.env_list
 
     @classmethod
     def register_envs(cls):
-
         if not _has_robohive:
-            raise ImportError("Cannot load robohive.")
+            raise ImportError(
+                "Cannot load robohive from the current virtual environment."
+            )
         from robohive import robohive_env_suite as robohive_envs
         from robohive.utils.prompt_utils import Prompt, set_prompt_verbosity
 
         set_prompt_verbosity(Prompt.WARN)
-        # with set_gym_backend("gym"):
-        # robo_envs = set(GymEnv.available_envs) - existing_envs
         cls.env_list += robohive_envs
-        # cls.env_list = sorted(cls.env_list)
         if not len(robohive_envs):
             raise RuntimeError("did not load any environment.")
 
     @implement_for(
+        "gymnasium",
+    )  # make sure gym 0.13 is installed, otherwise raise an exception
+    def _build_env(self, *args, **kwargs):  # noqa: F811
+        raise NotImplementedError(
+            "Your gym version is too recent, RoboHiveEnv is only compatible with gym==0.13."
+        )
+
+    @implement_for(
         "gym", "0.14", None
     )  # make sure gym 0.13 is installed, otherwise raise an exception
-    def _build_env(self, *args, **kwargs):
+    def _build_env(self, *args, **kwargs):  # noqa: F811
         raise NotImplementedError(
             "Your gym version is too recent, RoboHiveEnv is only compatible with gym 0.13."
         )
 
     @implement_for(
-        "gym", "0.13", "0.14"
+        "gym", None, "0.14"
     )  # make sure gym 0.13 is installed, otherwise raise an exception
     def _build_env(  # noqa: F811
         self,
@@ -115,7 +168,7 @@ class RoboHiveEnv(GymEnv):
         from_pixels: bool = False,
         pixels_only: bool = False,
         **kwargs,
-    ) -> "gym.core.Env":
+    ) -> "gym.core.Env":  # noqa: F821
         if from_pixels:
             if "cameras" not in kwargs:
                 warnings.warn(
@@ -139,8 +192,8 @@ class RoboHiveEnv(GymEnv):
             render_device = 0
 
         if not _has_robohive:
-            raise RuntimeError(
-                f"gym not found, unable to create {env_name}. "
+            raise ImportError(
+                f"gym/robohive not found, unable to create {env_name}. "
                 f"Consider downloading and installing dm_control from"
                 f" {self.git_url}"
             )
@@ -170,12 +223,14 @@ class RoboHiveEnv(GymEnv):
         self.from_pixels = from_pixels
         self.render_device = render_device
         if kwargs.get("read_info", True):
-            self.info_dict_reader = self.read_info
+            self.set_info_dict_reader(self.read_info)
         return env
 
     @classmethod
     def register_visual_env(cls, env_name, cams):
         with set_directory(cls.CURR_DIR):
+            from robohive.envs.env_variants import register_env_variant
+
             if not len(cams):
                 raise RuntimeError("Cannot create a visual envs without cameras.")
             cams = sorted(cams)
@@ -194,15 +249,8 @@ class RoboHiveEnv(GymEnv):
             cls.env_list += [env_name]
             return env_name
 
-    def _make_specs(self, env: "gym.Env") -> None:
-        # if self.from_pixels:
-        #     num_cams = len(env.visual_keys)
-        # n_pix = 224 * 224 * 3 * num_cams
-        # env.observation_space = gym.spaces.Box(
-        #     -8 * np.ones(env.obs_dim - n_pix),
-        #     8 * np.ones(env.obs_dim - n_pix),
-        #     dtype=np.float32,
-        # )
+    def _refine_specs(self) -> None:  # noqa: F821
+        env = self._env
         self.action_spec = _gym_to_torchrl_spec_transform(
             env.action_space, device=self.device
         )
@@ -254,7 +302,7 @@ class RoboHiveEnv(GymEnv):
 
         rollout = self.rollout(2, return_contiguous=False).get("next")
         rollout = rollout.exclude(
-            self.reward_key, self.done_key, *self.observation_spec.keys(True, True)
+            self.reward_key, *self.done_keys, *self.observation_spec.keys(True, True)
         )
         rollout = rollout[..., 0]
         spec = make_composite_from_td(rollout)
@@ -270,7 +318,7 @@ class RoboHiveEnv(GymEnv):
         if from_pixels is self.from_pixels:
             return
         self.from_pixels = from_pixels
-        self._make_specs(self.env)
+        self._refine_specs()
 
     def read_obs(self, observation):
         # the info is missing from the reset
@@ -319,6 +367,9 @@ class RoboHiveEnv(GymEnv):
         )
         return tensordict_out
 
+    def _init_env(self):
+        pass
+
     def to(self, *args, **kwargs):
         out = super().to(*args, **kwargs)
         try:
@@ -331,10 +382,8 @@ class RoboHiveEnv(GymEnv):
 
     @classmethod
     def get_available_cams(cls, env_name):
+        import gym
+
         env = gym.make(env_name)
         cams = [env.sim.model.id2name(ic, 7) for ic in range(env.sim.model.ncam)]
         return cams
-
-
-if _has_robohive:
-    RoboHiveEnv.register_envs()

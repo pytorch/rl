@@ -3,6 +3,8 @@
 torchrl.objectives package
 ==========================
 
+.. _ref_objectives:
+
 TorchRL provides a series of losses to use in your training scripts.
 The aim is to have losses that are easily reusable/swappable and that have
 a simple signature.
@@ -127,6 +129,7 @@ IQL
     :template: rl_template_noinherit.rst
 
     IQLLoss
+    DiscreteIQLLoss
 
 CQL
 ----
@@ -136,6 +139,7 @@ CQL
     :template: rl_template_noinherit.rst
 
     CQLLoss
+    DiscreteCQLLoss
 
 DT
 ----

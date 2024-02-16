@@ -4,6 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 
 """Script used to generate the mini datasets."""
+import multiprocessing as mp
+
+try:
+    mp.set_start_method("spawn")
+except Exception:
+    pass
 from tempfile import TemporaryDirectory
 
 from datasets import Dataset, DatasetDict, load_dataset
@@ -21,7 +27,7 @@ def generate_small_dataset(comparison=True):
     smalld = {}
     for key in list(d.keys()):
         if any(key.startswith(sub) for sub in ("train", "valid", "test")):
-            smalld[key] = Dataset.from_dict(d[key][:1000])
+            smalld[key] = Dataset.from_dict(d[key][:50])
     smalld = DatasetDict(smalld)
 
     if comparison:
@@ -36,8 +42,9 @@ def get_minibatch():
             batch_size=16,
             block_size=33,
             tensorclass_type=PromptData,
-            dataset_name="test/datasets_mini/openai_summarize_tldr",
+            dataset_name="../datasets_mini/openai_summarize_tldr",
             device="cpu",
+            num_workers=2,
             infinite=False,
             prefetch=0,
             split="train",
@@ -47,3 +54,7 @@ def get_minibatch():
         for data in dl:
             data = data.clone().memmap_("test/datasets_mini/tldr_batch/")
             break
+
+
+if __name__ == "__main__":
+    get_minibatch()

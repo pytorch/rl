@@ -40,11 +40,13 @@ if [ ! -d "${env_dir}" ]; then
 fi
 conda activate "${env_dir}"
 
+python3 -m pip install pip --upgrade
+
 #pip3 uninstall cython -y
 #pip uninstall cython -y
 #conda uninstall cython -y
-pip3 install "cython<3"
-conda install -c anaconda cython="<3.0.0" -y
+python3 -m pip install "cython<3" --upgrade
+#conda install -c anaconda cython="<3.0.0" -y
 
 
 # 3. Install mujoco
@@ -54,9 +56,9 @@ cd $root_dir/.mujoco/
 #wget https://github.com/deepmind/mujoco/releases/download/2.1.1/mujoco-2.1.1-linux-x86_64.tar.gz
 #tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
 #wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
-wget https://www.roboti.us/download/mujoco200_linux.zip
+wget https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/mujoco200_linux.zip
 unzip mujoco200_linux.zip
-wget https://www.roboti.us/file/mjkey.txt
+wget https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/mjkey.txt
 cp mjkey.txt ./mujoco200_linux/bin/
 # install mujoco-py locally
 git clone https://github.com/vmoens/mujoco-py.git

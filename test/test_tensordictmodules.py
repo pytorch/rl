@@ -21,11 +21,13 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     UnboundedContinuousTensorSpec,
 )
+from torchrl.envs import EnvCreator, SerialEnv
 from torchrl.envs.utils import set_exploration_type, step_mdp
 from torchrl.modules import (
     AdditiveGaussianWrapper,
     DecisionTransformerInferenceWrapper,
     DTActor,
+    GRUModule,
     LSTMModule,
     MLP,
     NormalParamWrapper,
@@ -1645,9 +1647,9 @@ class TestLSTMModule:
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
         )
         assert lstm_module.set_recurrent_mode(False) is lstm_module
-        assert not lstm_module.set_recurrent_mode(False).temporal_mode
+        assert not lstm_module.set_recurrent_mode(False).recurrent_mode
         assert lstm_module.set_recurrent_mode(True) is not lstm_module
-        assert lstm_module.set_recurrent_mode(True).temporal_mode
+        assert lstm_module.set_recurrent_mode(True).recurrent_mode
         assert set(lstm_module.set_recurrent_mode(True).parameters()) == set(
             lstm_module.parameters()
         )
@@ -1671,7 +1673,8 @@ class TestLSTMModule:
         lstm_module(padded)
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
-    def test_singel_step(self, shape):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_single_step(self, shape, python_based):
         td = TensorDict(
             {
                 "observation": torch.zeros(*shape, 3),
@@ -1685,6 +1688,7 @@ class TestLSTMModule:
             batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+            python_based=python_based,
         )
         td = lstm_module(td)
         td_next = step_mdp(td, keep_other=True)
@@ -1696,7 +1700,8 @@ class TestLSTMModule:
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
     @pytest.mark.parametrize("t", [1, 10])
-    def test_single_step_vs_multi(self, shape, t):
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_single_step_vs_multi(self, shape, t, python_based):
         td = TensorDict(
             {
                 "observation": torch.arange(t, dtype=torch.float32)
@@ -1712,6 +1717,7 @@ class TestLSTMModule:
             batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+            python_based=python_based,
         )
         lstm_module_ms = lstm_module_ss.set_recurrent_mode()
         lstm_module_ms(td)
@@ -1731,7 +1737,8 @@ class TestLSTMModule:
         )
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
-    def test_multi_consecutive(self, shape):
+    @pytest.mark.parametrize("python_based", [False, True])
+    def test_multi_consecutive(self, shape, python_based):
         t = 20
         td = TensorDict(
             {
@@ -1750,9 +1757,11 @@ class TestLSTMModule:
         lstm_module_ss = LSTMModule(
             input_size=3,
             hidden_size=12,
+            num_layers=4,
             batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+            python_based=python_based,
         )
         lstm_module_ms = lstm_module_ss.set_recurrent_mode()
         lstm_module_ms(td)
@@ -1768,13 +1777,19 @@ class TestLSTMModule:
             lstm_module_ss(td_ss)
             td_ss = step_mdp(td_ss, keep_other=True)
             td_ss["observation"][:] = _t + 1
+        # import ipdb; ipdb.set_trace()  # assert fails when python_based is True, why?
         torch.testing.assert_close(
             td_ss["intermediate"], td["intermediate"][..., -1, :]
         )
 
-    def test_lstm_parallel_env(self):
+    @pytest.mark.parametrize("python_based", [True, False])
+    @pytest.mark.parametrize("parallel", [True, False])
+    @pytest.mark.parametrize("heterogeneous", [True, False])
+    def test_lstm_parallel_env(self, python_based, parallel, heterogeneous):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
+        torch.manual_seed(0)
+        device = "cuda" if torch.cuda.device_count() else "cpu"
         # tests that hidden states are carried over with parallel envs
         lstm_module = LSTMModule(
             input_size=7,
@@ -1782,17 +1797,30 @@ class TestLSTMModule:
             num_layers=2,
             in_key="observation",
             out_key="features",
+            device=device,
+            python_based=python_based,
         )
+        if parallel:
+            cls = ParallelEnv
+        else:
+            cls = SerialEnv
 
         def create_transformed_env():
             primer = lstm_module.make_tensordict_primer()
-            env = DiscreteActionVecMockEnv(categorical_action_encoding=True)
+            env = DiscreteActionVecMockEnv(
+                categorical_action_encoding=True, device=device
+            )
             env = TransformedEnv(env)
             env.append_transform(InitTracker())
             env.append_transform(primer)
             return env
 
-        env = ParallelEnv(
+        if heterogeneous:
+            create_transformed_env = [
+                EnvCreator(create_transformed_env),
+                EnvCreator(create_transformed_env),
+            ]
+        env = cls(
             create_env_fn=create_transformed_env,
             num_workers=2,
         )
@@ -1802,6 +1830,7 @@ class TestLSTMModule:
                 in_features=12,
                 out_features=7,
                 num_cells=[],
+                device=device,
             ),
             in_keys=["features"],
             out_keys=["logits"],
@@ -1818,8 +1847,406 @@ class TestLSTMModule:
         )
         for break_when_any_done in [False, True]:
             data = env.rollout(10, actor, break_when_any_done=break_when_any_done)
-            assert (data.get("recurrent_state_c") != 0.0).any()
             assert (data.get(("next", "recurrent_state_c")) != 0.0).all()
+            assert (data.get("recurrent_state_c") != 0.0).any()
+
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
+    def test_lstm_vmap_complex_model(self):
+        # Tests that all ops in GRU are compatible with VMAP (when build using
+        # the PT backend).
+        # This used to fail when splitting the input based on the is_init mask.
+        # This test is intended not only as a non-regression test but also
+        # to make sure that any change provided to RNNs is compliant with vmap
+        torch.manual_seed(0)
+        input_size = 4
+        hidden_size = 5
+        num_layers = 1
+        output_size = 3
+        out_key = "out"
+
+        embedding_module = TensorDictModule(
+            in_keys=["observation"],
+            out_keys=["embed"],
+            module=torch.nn.Linear(input_size, input_size),
+        )
+
+        lstm_module = LSTMModule(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            in_key="embed",
+            out_key="features",
+            python_based=True,
+        )
+        mlp = TensorDictModule(
+            MLP(
+                in_features=hidden_size,
+                out_features=output_size,
+                num_cells=[],
+            ),
+            in_keys=["features"],
+            out_keys=[out_key],
+        )
+        training_model = TensorDictSequential(
+            embedding_module, lstm_module.set_recurrent_mode(), mlp
+        )
+        is_init = torch.zeros(50, 11, 1, dtype=torch.bool).bernoulli_(0.1)
+        data = TensorDict(
+            {"observation": torch.randn(50, 11, input_size), "is_init": is_init},
+            [50, 11],
+        )
+        training_model(data)
+        params = TensorDict.from_module(training_model)
+        params = params.expand(2)
+
+        def call(data, params):
+            with params.to_module(training_model):
+                return training_model(data)
+
+        assert vmap(call, (None, 0))(data, params).shape == torch.Size((2, 50, 11))
+
+
+class TestGRUModule:
+    def test_errs(self):
+        with pytest.raises(ValueError, match="batch_first"):
+            gru_module = GRUModule(
+                input_size=3,
+                hidden_size=12,
+                batch_first=False,
+                in_keys=["observation", "hidden"],
+                out_keys=["intermediate", ("next", "hidden")],
+            )
+        with pytest.raises(ValueError, match="in_keys"):
+            gru_module = GRUModule(
+                input_size=3,
+                hidden_size=12,
+                batch_first=True,
+                in_keys=[
+                    "observation",
+                    "hidden0",
+                    "hidden1",
+                ],
+                out_keys=["intermediate", ("next", "hidden")],
+            )
+        with pytest.raises(TypeError, match="incompatible function arguments"):
+            gru_module = GRUModule(
+                input_size=3,
+                hidden_size=12,
+                batch_first=True,
+                in_keys="abc",
+                out_keys=["intermediate", ("next", "hidden")],
+            )
+        with pytest.raises(ValueError, match="in_keys"):
+            gru_module = GRUModule(
+                input_size=3,
+                hidden_size=12,
+                batch_first=True,
+                in_key="smth",
+                in_keys=["observation", "hidden0", "hidden1"],
+                out_keys=["intermediate", ("next", "hidden")],
+            )
+        with pytest.raises(ValueError, match="out_keys"):
+            gru_module = GRUModule(
+                input_size=3,
+                hidden_size=12,
+                batch_first=True,
+                in_keys=["observation", "hidden"],
+                out_keys=["intermediate", ("next", "hidden"), "other"],
+            )
+        with pytest.raises(TypeError, match="incompatible function arguments"):
+            gru_module = GRUModule(
+                input_size=3,
+                hidden_size=12,
+                batch_first=True,
+                in_keys=["observation", "hidden"],
+                out_keys="abc",
+            )
+        with pytest.raises(ValueError, match="out_keys"):
+            gru_module = GRUModule(
+                input_size=3,
+                hidden_size=12,
+                batch_first=True,
+                in_keys=["observation", "hidden"],
+                out_key="smth",
+                out_keys=["intermediate", ("next", "hidden"), "other"],
+            )
+        gru_module = GRUModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["observation", "hidden"],
+            out_keys=["intermediate", ("next", "hidden")],
+        )
+        td = TensorDict({"observation": torch.randn(3)}, [])
+        with pytest.raises(KeyError, match="is_init"):
+            gru_module(td)
+
+    def test_set_temporal_mode(self):
+        gru_module = GRUModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["observation", "hidden"],
+            out_keys=["intermediate", ("next", "hidden")],
+        )
+        assert gru_module.set_recurrent_mode(False) is gru_module
+        assert not gru_module.set_recurrent_mode(False).recurrent_mode
+        assert gru_module.set_recurrent_mode(True) is not gru_module
+        assert gru_module.set_recurrent_mode(True).recurrent_mode
+        assert set(gru_module.set_recurrent_mode(True).parameters()) == set(
+            gru_module.parameters()
+        )
+
+    def test_noncontiguous(self):
+        gru_module = GRUModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["bork", "h"],
+            out_keys=["dork", ("next", "h")],
+        )
+        td = TensorDict(
+            {
+                "bork": torch.randn(3, 3),
+                "is_init": torch.zeros(3, 1, dtype=torch.bool),
+            },
+            [3],
+        )
+        padded = pad(td, [0, 5])
+        gru_module(padded)
+
+    @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_single_step(self, shape, python_based):
+        td = TensorDict(
+            {
+                "observation": torch.zeros(*shape, 3),
+                "is_init": torch.zeros(*shape, 1, dtype=torch.bool),
+            },
+            shape,
+        )
+        gru_module = GRUModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["observation", "hidden"],
+            out_keys=["intermediate", ("next", "hidden")],
+            python_based=python_based,
+        )
+        td = gru_module(td)
+        td_next = step_mdp(td, keep_other=True)
+        td_next = gru_module(td_next)
+
+        assert not torch.isclose(td_next["next", "hidden"], td["next", "hidden"]).any()
+
+    @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
+    @pytest.mark.parametrize("t", [1, 10])
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_single_step_vs_multi(self, shape, t, python_based):
+        td = TensorDict(
+            {
+                "observation": torch.arange(t, dtype=torch.float32)
+                .unsqueeze(-1)
+                .expand(*shape, t, 3),
+                "is_init": torch.zeros(*shape, t, 1, dtype=torch.bool),
+            },
+            [*shape, t],
+        )
+        gru_module_ss = GRUModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["observation", "hidden"],
+            out_keys=["intermediate", ("next", "hidden")],
+            python_based=python_based,
+        )
+        gru_module_ms = gru_module_ss.set_recurrent_mode()
+        gru_module_ms(td)
+        td_ss = TensorDict(
+            {
+                "observation": torch.zeros(*shape, 3),
+                "is_init": torch.zeros(*shape, 1, dtype=torch.bool),
+            },
+            shape,
+        )
+        for _t in range(t):
+            gru_module_ss(td_ss)
+            td_ss = step_mdp(td_ss, keep_other=True)
+            td_ss["observation"][:] = _t + 1
+        torch.testing.assert_close(td_ss["hidden"], td["next", "hidden"][..., -1, :, :])
+
+    @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
+    @pytest.mark.parametrize("python_based", [True, False])
+    def test_multi_consecutive(self, shape, python_based):
+        t = 20
+        td = TensorDict(
+            {
+                "observation": torch.arange(t, dtype=torch.float32)
+                .unsqueeze(-1)
+                .expand(*shape, t, 3),
+                "is_init": torch.zeros(*shape, t, 1, dtype=torch.bool),
+            },
+            [*shape, t],
+        )
+        if shape:
+            td["is_init"][0, ..., 13, :] = True
+        else:
+            td["is_init"][13, :] = True
+
+        gru_module_ss = GRUModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["observation", "hidden"],
+            out_keys=["intermediate", ("next", "hidden")],
+            python_based=python_based,
+        )
+        gru_module_ms = gru_module_ss.set_recurrent_mode()
+        gru_module_ms(td)
+        td_ss = TensorDict(
+            {
+                "observation": torch.zeros(*shape, 3),
+                "is_init": torch.zeros(*shape, 1, dtype=torch.bool),
+            },
+            shape,
+        )
+        for _t in range(t):
+            td_ss["is_init"][:] = td["is_init"][..., _t, :]
+            gru_module_ss(td_ss)
+            td_ss = step_mdp(td_ss, keep_other=True)
+            td_ss["observation"][:] = _t + 1
+        torch.testing.assert_close(
+            td_ss["intermediate"], td["intermediate"][..., -1, :]
+        )
+
+    @pytest.mark.parametrize("python_based", [True, False])
+    @pytest.mark.parametrize("parallel", [True, False])
+    @pytest.mark.parametrize("heterogeneous", [True, False])
+    def test_gru_parallel_env(self, python_based, parallel, heterogeneous):
+        from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
+
+        torch.manual_seed(0)
+
+        device = "cuda" if torch.cuda.device_count() else "cpu"
+        # tests that hidden states are carried over with parallel envs
+        gru_module = GRUModule(
+            input_size=7,
+            hidden_size=12,
+            num_layers=2,
+            in_key="observation",
+            out_key="features",
+            device=device,
+            python_based=python_based,
+        )
+
+        def create_transformed_env():
+            primer = gru_module.make_tensordict_primer()
+            env = DiscreteActionVecMockEnv(
+                categorical_action_encoding=True, device=device
+            )
+            env = TransformedEnv(env)
+            env.append_transform(InitTracker())
+            env.append_transform(primer)
+            return env
+
+        if parallel:
+            cls = ParallelEnv
+        else:
+            cls = SerialEnv
+        if heterogeneous:
+            create_transformed_env = [
+                EnvCreator(create_transformed_env),
+                EnvCreator(create_transformed_env),
+            ]
+
+        env = cls(
+            create_env_fn=create_transformed_env,
+            num_workers=2,
+        )
+
+        mlp = TensorDictModule(
+            MLP(
+                in_features=12,
+                out_features=7,
+                num_cells=[],
+                device=device,
+            ),
+            in_keys=["features"],
+            out_keys=["logits"],
+        )
+
+        actor_model = TensorDictSequential(gru_module, mlp)
+
+        actor = ProbabilisticActor(
+            module=actor_model,
+            in_keys=["logits"],
+            out_keys=["action"],
+            distribution_class=torch.distributions.Categorical,
+            return_log_prob=True,
+        )
+        for break_when_any_done in [False, True]:
+            data = env.rollout(10, actor, break_when_any_done=break_when_any_done)
+            assert (data.get("recurrent_state") != 0.0).any()
+            assert (data.get(("next", "recurrent_state")) != 0.0).all()
+
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
+    def test_gru_vmap_complex_model(self):
+        # Tests that all ops in GRU are compatible with VMAP (when build using
+        # the PT backend).
+        # This used to fail when splitting the input based on the is_init mask.
+        # This test is intended not only as a non-regression test but also
+        # to make sure that any change provided to RNNs is compliant with vmap
+        torch.manual_seed(0)
+        input_size = 4
+        hidden_size = 5
+        num_layers = 1
+        output_size = 3
+        out_key = "out"
+
+        embedding_module = TensorDictModule(
+            in_keys=["observation"],
+            out_keys=["embed"],
+            module=torch.nn.Linear(input_size, input_size),
+        )
+
+        lstm_module = GRUModule(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            in_key="embed",
+            out_key="features",
+            python_based=True,
+        )
+        mlp = TensorDictModule(
+            MLP(
+                in_features=hidden_size,
+                out_features=output_size,
+                num_cells=[],
+            ),
+            in_keys=["features"],
+            out_keys=[out_key],
+        )
+        training_model = TensorDictSequential(
+            embedding_module, lstm_module.set_recurrent_mode(), mlp
+        )
+        is_init = torch.zeros(50, 11, 1, dtype=torch.bool).bernoulli_(0.1)
+        data = TensorDict(
+            {"observation": torch.randn(50, 11, input_size), "is_init": is_init},
+            [50, 11],
+        )
+        training_model(data)
+        params = TensorDict.from_module(training_model)
+        params = params.expand(2)
+
+        def call(data, params):
+            with params.to_module(training_model):
+                return training_model(data)
+
+        assert vmap(call, (None, 0))(data, params).shape == torch.Size((2, 50, 11))
 
 
 def test_safe_specs():
@@ -1923,10 +2350,10 @@ class TestDecisionTransformerInferenceWrapper:
         )
         with pytest.raises(
             ValueError,
-            match="The action key action was not found in the policy out_keys",
+            match="The value of out_action_key",
         ):
             result = inference_actor(td)
-        inference_actor.set_tensor_keys(action=action_key)
+        inference_actor.set_tensor_keys(action=action_key, out_action=action_key)
         result = inference_actor(td)
         # checks that the seq length has disappeared
         assert result.get(action_key).shape == torch.Size([1, 2])

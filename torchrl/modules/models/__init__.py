@@ -8,6 +8,8 @@ from .decision_transformer import DecisionTransformer
 from .exploration import NoisyLazyLinear, NoisyLinear, reset_noise
 from .model_based import DreamerActor, ObsDecoder, ObsEncoder, RSSMPosterior, RSSMPrior
 from .models import (
+    Conv2dNet,
+    Conv3dNet,
     ConvNet,
     DdpgCnnActor,
     DdpgCnnQNet,
@@ -20,5 +22,5 @@ from .models import (
     MLP,
     OnlineDTActor,
 )
-from .multiagent import MultiAgentMLP, QMixer, VDNMixer
+from .multiagent import MultiAgentConvNet, MultiAgentMLP, QMixer, VDNMixer
 from .utils import Squeeze2dLayer, SqueezeLayer

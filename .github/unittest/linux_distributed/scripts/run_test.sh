@@ -18,6 +18,8 @@ lib_dir="${env_dir}/lib"
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
+export LAZY_LEGACY_OP=False
+export BATCHED_PIPE_TIMEOUT=60
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'

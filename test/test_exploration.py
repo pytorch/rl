@@ -14,10 +14,11 @@ from mocking_classes import (
     NestedCountingEnv,
 )
 from scipy.stats import ttest_1samp
+from tensordict import TensorDict
 
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
-from tensordict.tensordict import TensorDict
 from torch import nn
+from torchrl._utils import _replace_last
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
@@ -51,8 +52,9 @@ from torchrl.modules.tensordict_module.exploration import (
 
 
 class TestEGreedy:
-    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1.0])
+    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1])
     @pytest.mark.parametrize("module", [True, False])
+    @set_exploration_type(InteractionType.RANDOM)
     def test_egreedy(self, eps_init, module):
         torch.manual_seed(0)
         spec = BoundedTensorSpec(1, 1, torch.Size([4]))
@@ -78,7 +80,7 @@ class TestEGreedy:
             assert (action == 0).any()
             assert ((action == 1) | (action == 0)).all()
 
-    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1.0])
+    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1])
     @pytest.mark.parametrize("module", [True, False])
     @pytest.mark.parametrize("spec_class", ["discrete", "one_hot"])
     def test_egreedy_masked(self, module, eps_init, spec_class):
@@ -154,14 +156,6 @@ class TestEGreedy:
 
         assert not (action[~action_mask] == 0).all()
         assert (masked_action[~action_mask] == 0).all()
-
-    def test_egreedy_wrapper_deprecation(self):
-        torch.manual_seed(0)
-        spec = BoundedTensorSpec(1, 1, torch.Size([4]))
-        module = torch.nn.Linear(4, 4, bias=False)
-        policy = Actor(spec=spec, module=module)
-        with pytest.deprecated_call():
-            EGreedyWrapper(policy)
 
     def test_no_spec_error(
         self,
@@ -335,7 +329,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
 
     @pytest.mark.parametrize("nested_obs_action", [True, False])
     @pytest.mark.parametrize("nested_done", [True, False])
-    @pytest.mark.parametrize("is_init_key", ["some", ("one", "nested")])
+    @pytest.mark.parametrize("is_init_key", ["some"])
     def test_nested(
         self,
         device,
@@ -381,7 +375,11 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             device=device,
         )
         for _td in collector:
-            assert _td[is_init_key].shape == _td[env.done_key].shape
+            for done_key in env.done_keys:
+                assert (
+                    _td[_replace_last(done_key, is_init_key)].shape
+                    == _td[done_key].shape
+                )
             break
 
         return
@@ -605,7 +603,10 @@ def test_gsde(
         device=device,
     )
     if gSDE:
-        gSDENoise(shape=[batch]).reset(td)
+        td_reset = td.empty()
+        gsde = gSDENoise(shape=[batch], reset_key="_reset").to(device)
+        gsde._reset(td, td_reset)
+        td.update(td_reset)
         assert "_eps_gSDE" in td.keys()
         assert td.get("_eps_gSDE").device == device
     actor(td)

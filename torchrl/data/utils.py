@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import typing
 from typing import Any, Callable, List, Tuple, Union
@@ -222,22 +223,6 @@ def contains_lazy_spec(spec: TensorSpec) -> bool:
     return False
 
 
-def _check_only_one_entry(
-    spec: CompositeSpec,
-    error: RuntimeError,
-    recursive: bool = True,
-):
-    found_entry = False
-    for value in spec.values():
-        if isinstance(value, CompositeSpec):
-            _check_only_one_entry(value, error, recursive)
-        else:
-            if not found_entry:
-                found_entry = True
-            else:
-                raise error
-
-
 class CloudpickleWrapper(object):
     """A wrapper for functions that allow for serialization in multiprocessed settings."""
 
@@ -261,9 +246,8 @@ class CloudpickleWrapper(object):
         self.fn, self.kwargs = pickle.loads(ob)
 
     def __call__(self, *args, **kwargs) -> Any:
-        kwargs = {k: item for k, item in kwargs.items()}
         kwargs.update(self.kwargs)
-        return self.fn(**kwargs)
+        return self.fn(*args, **kwargs)
 
 
 def _process_action_space_spec(action_space, spec):

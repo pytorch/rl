@@ -13,10 +13,9 @@ from typing import Iterable, List, Optional, Type, Union
 
 import torch
 
-from tensordict import unravel_key_list
+from tensordict import TensorDictBase, unravel_key_list
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
-from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 
 from torch import nn
@@ -138,7 +137,6 @@ class SafeModule(TensorDictModule):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torchrl.data import UnboundedContinuousTensorSpec
         >>> from torchrl.modules import TensorDictModule
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
@@ -150,8 +148,9 @@ class SafeModule(TensorDictModule):
         ...    in_keys=["input", "hidden"],
         ...    out_keys=["output"],
         ...    )
-        >>> params = make_functional(td_fmodule)
-        >>> td_functional = td_fmodule(td.clone(), params=params)
+        >>> params = TensorDict.from_module(td_fmodule)
+        >>> with params.to_module(td_module):
+        ...     td_functional = td_fmodule(td.clone())
         >>> print(td_functional)
         TensorDict(
             fields={

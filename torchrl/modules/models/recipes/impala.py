@@ -6,7 +6,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDictBase
 
 
 # TODO: code small architecture ref in Impala paper

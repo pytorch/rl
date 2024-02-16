@@ -13,7 +13,7 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     RandomPolicy,
 )
-from torchrl.envs import EnvCreator, StepCounter, TransformedEnv
+from torchrl.envs import EnvCreator, GymEnv, StepCounter, TransformedEnv
 from torchrl.envs.libs.dm_control import DMControlEnv
 
 
@@ -78,9 +78,10 @@ def async_collector_setup():
 
 def single_collector_setup_pixels():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
-    env = TransformedEnv(
-        DMControlEnv("cheetah", "run", device=device, from_pixels=True), StepCounter(50)
-    )
+    # env = TransformedEnv(
+    #     DMControlEnv("cheetah", "run", device=device, from_pixels=True), StepCounter(50)
+    # )
+    env = TransformedEnv(GymEnv("ALE/Pong-v5"), StepCounter(50))
     c = SyncDataCollector(
         env,
         RandomPolicy(env.action_spec),
@@ -99,7 +100,8 @@ def sync_collector_setup_pixels():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
     env = EnvCreator(
         lambda: TransformedEnv(
-            DMControlEnv("cheetah", "run", device=device, from_pixels=True),
+            # DMControlEnv("cheetah", "run", device=device, from_pixels=True),
+            GymEnv("ALE/Pong-v5"),
             StepCounter(50),
         )
     )
@@ -121,7 +123,8 @@ def async_collector_setup_pixels():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
     env = EnvCreator(
         lambda: TransformedEnv(
-            DMControlEnv("cheetah", "run", device=device, from_pixels=True),
+            # DMControlEnv("cheetah", "run", device=device, from_pixels=True),
+            GymEnv("ALE/Pong-v5"),
             StepCounter(50),
         )
     )

@@ -1,0 +1,39 @@
+device: cuda:0
+
+# Environment
+env:
+  env_name: CartPole-v1
+
+# collector
+collector:
+  total_frames: 500_100
+  frames_per_batch: 10
+  eps_start: 1.0
+  eps_end: 0.05
+  annealing_frames: 250_000
+  init_random_frames: 10_000
+
+# buffer
+buffer:
+  buffer_size: 10_000
+  batch_size: 128
+
+# logger
+logger:
+  backend: wandb
+  project_name: torchrl_example_dqn
+  group_name: null
+  exp_name: DQN
+  test_interval: 50_000
+  num_test_episodes: 5
+
+# Optim
+optim:
+  lr: 2.5e-4
+  max_grad_norm: 10
+
+# loss
+loss:
+  gamma: 0.99
+  hard_update_freq: 50
+  num_updates: 1

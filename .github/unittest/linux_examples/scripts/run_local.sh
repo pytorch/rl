@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+set -v
 
 # Read script from line 29
 filename=".github/unittest/linux_examples/scripts/run_test.sh"
@@ -12,7 +13,7 @@ script="set -e"$'\n'"$script"
 script="${script//cuda:0/cpu}"
 
 # Remove any instances of ".github/unittest/helpers/coverage_run_parallel.py"
-script="${script//.circleci\/unittest\/helpers\/coverage_run_parallel.py}"
+script="${script//.github\/unittest\/helpers\/coverage_run_parallel.py}"
 script="${script//coverage combine}"
 script="${script//coverage xml -i}"
 

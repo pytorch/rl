@@ -3,8 +3,12 @@
 torchrl.modules package
 =======================
 
+.. _ref_modules:
+
 TensorDict modules: Actors, exploration, value models and generative models
 ---------------------------------------------------------------------------
+
+.. _tdmodules:
 
 TorchRL offers a series of module wrappers aimed at making it easy to build
 RL models from the ground up. These wrappers are exclusively based on
@@ -69,6 +73,7 @@ other cases, the action written in the tensordict is simply the network output.
 
     AdditiveGaussianWrapper
     EGreedyModule
+    EGreedyWrapper
     OrnsteinUhlenbeckProcessWrapper
 
 Probabilistic actors
@@ -308,6 +313,7 @@ Regular modules
 
     MLP
     ConvNet
+    Conv3dNet
     LSTMNet
     SqueezeLayer
     Squeeze2dLayer
@@ -331,6 +337,11 @@ algorithms, such as DQN, DDPG or Dreamer.
     DistributionalDQNnet
     DreamerActor
     DuelingCnnDQNet
+    GRUCell
+    GRU
+    GRUModule
+    LSTMCell
+    LSTM
     LSTMModule
     ObsDecoder
     ObsEncoder
@@ -349,6 +360,7 @@ multi-agent contexts.
     :template: rl_template_noinherit.rst
 
     MultiAgentMLP
+    MultiAgentConvNet
     QMixer
     VDNMixer
 

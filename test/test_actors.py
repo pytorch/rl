@@ -8,12 +8,12 @@ import pytest
 import torch
 
 from _utils_internal import get_default_devices
-
 from mocking_classes import NestedCountingEnv
 from tensordict import TensorDict
-from tensordict.nn import TensorDictModule
+from tensordict.nn import CompositeDistribution, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
-from torch import nn
+
+from torch import distributions as dist, nn
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -800,12 +800,47 @@ def test_actorcritic(device):
     ) == len(policy_params)
 
 
+def test_compound_actor():
+    class Module(nn.Module):
+        def forward(self, x):
+            return x[..., :3], x[..., 3:6], x[..., 6:]
+
+    module = TensorDictModule(
+        Module(),
+        in_keys=["x"],
+        out_keys=[
+            ("params", "normal", "loc"),
+            ("params", "normal", "scale"),
+            ("params", "categ", "logits"),
+        ],
+    )
+    actor = ProbabilisticActor(
+        module,
+        in_keys=["params"],
+        distribution_class=CompositeDistribution,
+        distribution_kwargs={
+            "distribution_map": {"normal": dist.Normal, "categ": dist.Categorical}
+        },
+    )
+    data = TensorDict({"x": torch.rand(10)}, [])
+    actor(data)
+    assert set(data.keys(True, True)) == {
+        "categ",
+        "normal",
+        ("params", "categ", "logits"),
+        ("params", "normal", "loc"),
+        ("params", "normal", "scale"),
+        "x",
+    }
+
+
 @pytest.mark.skipif(not _has_transformers, reason="missing dependencies")
 @pytest.mark.parametrize("device", get_default_devices())
 def test_lmhead_actorvalueoperator(device):
-    from transformers import AutoModelForCausalLM
+    from transformers import AutoModelForCausalLM, GPT2Config
 
-    base_model = AutoModelForCausalLM.from_pretrained("gpt2", return_dict=False)
+    config = GPT2Config(return_dict=False)
+    base_model = AutoModelForCausalLM.from_config(config).eval()
     aco = LMHeadActorValueOperator(base_model).to(device)
 
     # check common

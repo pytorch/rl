@@ -3,41 +3,30 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import math
-import warnings
 from dataclasses import dataclass
 from numbers import Number
 from typing import Union
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, TensorDictModule, TensorDictSequential
-from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 
-from torchrl.data import CompositeSpec
+from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
+
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
+    _vmap_func,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-try:
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap
-
-    FUNCTORCH_ERR = ""
-    _has_functorch = True
-except ImportError as err:
-    FUNCTORCH_ERR = str(err)
-    _has_functorch = False
 
 
 class REDQLoss(LossModule):
@@ -96,7 +85,7 @@ class REDQLoss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.redq import REDQLoss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
@@ -123,6 +112,7 @@ class REDQLoss(LossModule):
         ...         "observation": torch.randn(*batch, n_obs),
         ...         "action": action,
         ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...         ("next", "reward"): torch.randn(*batch, 1),
         ...         ("next", "observation"): torch.randn(*batch, n_obs),
         ...     }, batch)
@@ -145,10 +135,9 @@ class REDQLoss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["action", "next_reward", "next_done"]`` + in_keys of the actor and qvalue network
+    ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and qvalue network
     The return value is a tuple of tensors in the following order:
-    ``["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy",
-        "state_action_value_actor", "action_log_prob_actor", "next.state_value", "target_value",]``.
+    ``["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy", "state_action_value_actor", "action_log_prob_actor", "next.state_value", "target_value",]``.
 
     Examples:
         >>> import torch
@@ -186,6 +175,7 @@ class REDQLoss(LossModule):
         ...         observation=torch.randn(*batch, n_obs),
         ...         action=action,
         ...         next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...         next_reward=torch.randn(*batch, 1),
         ...         next_observation=torch.randn(*batch, n_obs))
         >>> loss_actor.backward()
@@ -214,6 +204,9 @@ class REDQLoss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         action: NestedKey = "action"
@@ -223,6 +216,7 @@ class REDQLoss(LossModule):
         state_action_value: NestedKey = "state_action_value"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     delay_actor: bool = False
@@ -259,9 +253,6 @@ class REDQLoss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
     ):
-        if not _has_functorch:
-            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
-
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority_key=priority_key)
@@ -270,7 +261,6 @@ class REDQLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
-            funs_to_decorate=["forward", "get_dist_params"],
         )
 
         # let's make sure that actor_network has `return_log_prob` set to True
@@ -322,11 +312,14 @@ class REDQLoss(LossModule):
 
         self.gSDE = gSDE
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
-        self._vmap_qvalue_network00 = vmap(self.qvalue_network)
-        self._vmap_getdist = vmap(self.actor_network.get_dist_params)
+        self._vmap_qvalue_network00 = _vmap_func(
+            self.qvalue_network, randomness=self.vmap_randomness
+        )
+        self._vmap_getdist = _vmap_func(
+            self.actor_network, func="get_dist_params", randomness=self.vmap_randomness
+        )
 
     @property
     def target_entropy(self):
@@ -377,6 +370,7 @@ class REDQLoss(LossModule):
                 value=self._tensor_keys.value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
         self._set_in_keys()
 
@@ -393,6 +387,7 @@ class REDQLoss(LossModule):
             self.tensor_keys.sample_log_prob,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
             *self.qvalue_network.in_keys,
@@ -612,5 +607,6 @@ class REDQLoss(LossModule):
             "value": self.tensor_keys.value,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)

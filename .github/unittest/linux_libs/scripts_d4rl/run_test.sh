@@ -24,6 +24,7 @@ cd ..
 #cd ..
 
 export PYTORCH_TEST_WITH_SLOW='1'
+export LAZY_LEGACY_OP=False
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
@@ -35,8 +36,13 @@ lib_dir="${env_dir}/lib"
 conda deactivate && conda activate ./env
 
 # this workflow only tests the libs
-python -c "import gym, d4rl"
+printf "* Smoke test\n"
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestD4RL --error-for-skips
+python -c """import gym
+import d4rl
+"""
+
+printf "* Tests"
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestD4RL --error-for-skips --runslow
 coverage combine
 coverage xml -i

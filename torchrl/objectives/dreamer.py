@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -15,7 +14,7 @@ from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
     distance_loss,
     hold_out_net,
@@ -216,12 +215,15 @@ class DreamerActorLoss(LossModule):
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
             done (NestedKey): The input tensordict key where the flag if a
                 trajectory is done is expected ("next", done). Defaults to ``"done"``.
+            terminated (NestedKey): The input tensordict key where the flag if a
+                trajectory is terminated is expected ("next", terminated). Defaults to ``"terminated"``.
         """
 
         belief: NestedKey = "belief"
         reward: NestedKey = "reward"
         value: NestedKey = "state_value"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TDLambda
@@ -244,11 +246,9 @@ class DreamerActorLoss(LossModule):
         self.imagination_horizon = imagination_horizon
         self.discount_loss = discount_loss
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         if lmbda is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.lmbda = lmbda
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -286,7 +286,7 @@ class DreamerActorLoss(LossModule):
 
         if self.discount_loss:
             gamma = self.value_estimator.gamma.to(tensordict.device)
-            discount = gamma.expand(lambda_target.shape)
+            discount = gamma.expand(lambda_target.shape).clone()
             discount[..., 0, :] = 1
             discount = discount.cumprod(dim=-2)
             actor_loss = -(lambda_target * discount).sum((-2, -1)).mean()
@@ -297,11 +297,13 @@ class DreamerActorLoss(LossModule):
 
     def lambda_target(self, reward: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
         done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
+        terminated = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
         input_tensordict = TensorDict(
             {
                 ("next", self.tensor_keys.reward): reward,
                 ("next", self.tensor_keys.value): value,
                 ("next", self.tensor_keys.done): done,
+                ("next", self.tensor_keys.terminated): terminated,
             },
             [],
         )

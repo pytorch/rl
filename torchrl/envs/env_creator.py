@@ -9,7 +9,9 @@ from collections import OrderedDict
 from typing import Callable, Dict, Optional, Union
 
 import torch
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDictBase
+
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase, EnvMetaData
@@ -97,7 +99,7 @@ class EnvCreator:
                 if not item.is_shared():
                     item.share_memory_()
                 else:
-                    print(
+                    torchrl_logger.info(
                         f"{self.env_type}: {item} is already shared"
                     )  # , deleting key')
                     del state_dict[key]

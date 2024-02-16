@@ -3,6 +3,8 @@
 torchrl.envs package
 ====================
 
+.. _Environment-API:
+
 TorchRL offers an API to handle environments of different backends, such as gym,
 dm-control, dm-lab, model-based environments as well as custom environments.
 The goal is to be able to swap environments in an experiment with little or no effort,
@@ -36,7 +38,7 @@ Each env will have the following attributes:
 - :obj:`env.reward_spec`: a :class:`~torchrl.data.TensorSpec` object representing
   the reward spec.
 - :obj:`env.done_spec`: a :class:`~torchrl.data.TensorSpec` object representing
-  the done-flag spec.
+  the done-flag spec. See the section on trajectory termination below.
 - :obj:`env.input_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
   all the input keys (:obj:`"full_action_spec"` and :obj:`"full_state_spec"`).
   It is locked and should not be modified directly.
@@ -58,6 +60,23 @@ With these, the following methods are implemented:
 - :meth:`env.step`: a step method that takes a :class:`tensordict.TensorDict` input
   containing an input action as well as other inputs (for model-based or stateless
   environments, for instance).
+- :meth:`env.step_and_maybe_reset`: executes a step, and (partially) resets the
+  environments if it needs to. It returns the updated input with a ``"next"``
+  key containing the data of the next step, as well as a tensordict containing
+  the input data for the next step (ie, reset or result or
+  :func:`~torchrl.envs.utils.step_mdp`)
+  This is done by reading the ``done_keys`` and
+  assigning a ``"_reset"`` signal to each done state. This method allows
+  to code non-stopping rollout functions with little effort:
+
+    >>> data_ = env.reset()
+    >>> result = []
+    >>> for i in range(N):
+    ...     data, data_ = env.step_and_maybe_reset(data_)
+    ...     result.append(data)
+    ...
+    >>> result = torch.stack(result)
+
 - :meth:`env.set_seed`: a seeding method that will return the next seed
   to be used in a multi-env setting. This next seed is deterministically computed
   from the preceding one, such that one can seed multiple environments with a different
@@ -79,22 +98,25 @@ The following figure summarizes how a rollout is executed in torchrl.
 
 In brief, a TensorDict is created by the :meth:`~.EnvBase.reset` method,
 then populated with an action by the policy before being passed to the
-:meth:`~.EnvBase.step` method which writes the observations, done flag and
+:meth:`~.EnvBase.step` method which writes the observations, done flag(s) and
 reward under the ``"next"`` entry. The result of this call is stored for
 delivery and the ``"next"`` entry is gathered by the :func:`~.utils.step_mdp`
 function.
 
 .. note::
-
-  The Gym(nasium) API recently shifted to a splitting of the ``"done"`` state
-  into a ``terminated`` (the env is done and results should not be trusted)
-  and ``truncated`` (the maximum number of steps is reached) flags.
-  In TorchRL, ``"done"`` usually refers to ``"terminated"``. Truncation is
-  achieved via the :class:`~.StepCounter` transform class, and the output
-  key will be ``"truncated"`` if not chosen to be something else (e.g.
-  ``StepCounter(max_steps=100, truncated_key="done")``).
-  TorchRL's collectors and rollout methods will be looking for one of these
-  keys when assessing if the env should be reset.
+  In general, all TorchRL environment have a ``"done"`` and ``"terminated"``
+  entry in their output tensordict. If they are not present by design,
+  the :class:`~.EnvBase` metaclass will ensure that every done or terminated
+  is flanked with its dual.
+  In TorchRL, ``"done"`` strictly refers to the union of all the end-of-trajectory
+  signals and should be interpreted as "the last step of a trajectory" or
+  equivalently "a signal indicating the need to reset".
+  If the environment provides it (eg, Gymnasium), the truncation entry is also
+  written in the :meth:`EnvBase.step` output under a ``"truncated"`` entry.
+  If the environment carries a single value, it will interpreted as a ``"terminated"``
+  signal by default.
+  By default, TorchRL's collectors and rollout methods will be looking for the ``"done"``
+  entry to assess if the environment should be reset.
 
 .. note::
 
@@ -136,6 +158,12 @@ environments in parallel.
 As this class inherits from :class:`SerialEnv`, it enjoys the exact same API as other environment.
 Of course, a :class:`ParallelEnv` will have a batch size that corresponds to its environment count:
 
+.. note::
+  Given the library's many optional dependencies (eg, Gym, Gymnasium, and many others)
+  warnings can quickly become quite annoying in multiprocessed / distributed settings.
+  By default, TorchRL filters out these warnings in sub-processes. If one still wishes to
+  see these warnings, they can be displayed by setting ``torchrl.filter_warnings_subprocess=False``.
+
 It is important that your environment specs match the input and output that it sends and receives, as
 :class:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
 Check the :func:`~torchrl.envs.utils.check_env_specs` method for a sanity check.
@@ -160,18 +188,107 @@ one can simply call:
         >>> print(a)
         9.81
 
-It is also possible to reset some but not all of the environments:
+TorchRL uses a private ``"_reset"`` key to indicate to the environment which
+component (sub-environments or agents) should be reset.
+This allows to reset some but not all of the components.
+
+The ``"_reset"`` key has two distinct functionalities:
+1. During a call to :meth:`~.EnvBase._reset`, the ``"_reset"`` key may or may
+   not be present in the input tensordict. TorchRL's convention is that the
+   absence of the ``"_reset"`` key at a given ``"done"`` level indicates
+   a total reset of that level (unless a ``"_reset"`` key was found at a level
+   above, see details below).
+   If it is present, it is expected that those entries and only those components
+   where the ``"_reset"`` entry is ``True`` (along key and shape dimension) will be reset.
+
+   The way an environment deals with the ``"_reset"`` keys in its :meth:`~.EnvBase._reset`
+   method is proper to its class.
+   Designing an environment that behaves according to ``"_reset"`` inputs is the
+   developer's responsibility, as TorchRL has no control over the inner logic
+   of :meth:`~.EnvBase._reset`. Nevertheless, the following point should be
+   kept in mind when desiging that method.
+
+2. After a call to :meth:`~.EnvBase._reset`, the output will be masked with the
+   ``"_reset"`` entries and the output of the previous :meth:`~.EnvBase.step`
+   will be written wherever the ``"_reset"`` was ``False``. In practice, this
+   means that if a ``"_reset"`` modifies data that isn't exposed by it, this
+   modification will be lost. After this masking operation, the ``"_reset"``
+   entries will be erased from the :meth:`~.EnvBase.reset` outputs.
+
+It must be pointed that ``"_reset"`` is a private key, and it should only be
+used when coding specific environment features that are internal facing.
+In other words, this should NOT be used outside of the library, and developers
+will keep the right to modify the logic of partial resets through ``"_reset"``
+setting without preliminary warranty, as long as they don't affect TorchRL
+internal tests.
+
+Finally, the following assumptions are made and should be kept in mind when
+designing reset functionalities:
+
+- Each ``"_reset"`` is paired with a ``"done"`` entry (+ ``"terminated"`` and,
+  possibly, ``"truncated"``). This means that the following structure is not
+  allowed: ``TensorDict({"done": done, "nested": {"_reset": reset}}, [])``, as
+  the ``"_reset"`` lives at a different nesting level than the ``"done"``.
+- A reset at one level does not preclude the presence of a ``"_reset"`` at lower
+  levels, but it annihilates its effects. The reason is simply that
+  whether the ``"_reset"`` at the root level corresponds to an ``all()``, ``any()``
+  or custom call to the nested ``"done"`` entries cannot be known in advance,
+  and it is explicitly assumed that the ``"_reset"`` at the root was placed
+  there to superseed the nested values (for an example, have a look at
+  :class:`~.PettingZooWrapper` implementation where each group has one or more
+  ``"done"`` entries associated which is aggregated at the root level with a
+  ``any`` or ``all`` logic depending on the task).
+- When calling :meth:`env.reset(tensordict)` with a partial ``"_reset"`` entry
+  that will reset some but not all the done sub-environments, the input data
+  should contain the data of the sub-environemtns that are __not__ being reset.
+  The reason for this constrain lies in the fact that the output of the
+  ``env._reset(data)`` can only be predicted for the entries that are reset.
+  For the others, TorchRL cannot know in advance if they will be meaningful or
+  not. For instance, one could perfectly just pad the values of the non-reset
+  components, in which case the non-reset data will be meaningless and should
+  be discarded.
+
+Below, we give some examples of the expected effect that ``"_reset"`` keys will
+have on an environment returning zeros after reset:
+
+    >>> # single reset at the root
+    >>> data = TensorDict({"val": [1, 1], "_reset": [False, True]}, [])
+    >>> env.reset(data)
+    >>> print(data.get("val"))  # only the second value is 0
+    tensor([1, 0])
+    >>> # nested resets
+    >>> data = TensorDict({
+    ...     ("agent0", "val"): [1, 1], ("agent0", "_reset"): [False, True],
+    ...     ("agent1", "val"): [2, 2], ("agent1", "_reset"): [True, False],
+    ... }, [])
+    >>> env.reset(data)
+    >>> print(data.get(("agent0", "val")))  # only the second value is 0
+    tensor([1, 0])
+    >>> print(data.get(("agent1", "val")))  # only the second value is 0
+    tensor([0, 2])
+    >>> # nested resets are overridden by a "_reset" at the root
+    >>> data = TensorDict({
+    ...     "_reset": [True, True],
+    ...     ("agent0", "val"): [1, 1], ("agent0", "_reset"): [False, True],
+    ...     ("agent1", "val"): [2, 2], ("agent1", "_reset"): [True, False],
+    ... }, [])
+    >>> env.reset(data)
+    >>> print(data.get(("agent0", "val")))  # reset at the root overrides nested
+    tensor([0, 0])
+    >>> print(data.get(("agent1", "val")))  # reset at the root overrides nested
+    tensor([0, 0])
 
 .. code-block::
    :caption: Parallel environment reset
 
         >>> tensordict = TensorDict({"_reset": [[True], [False], [True], [True]]}, [4])
-        >>> env.reset(tensordict)
+        >>> env.reset(tensordict)  # eliminates the "_reset" entry
         TensorDict(
             fields={
+                terminated: Tensor(torch.Size([4, 1]), dtype=torch.bool),
                 done: Tensor(torch.Size([4, 1]), dtype=torch.bool),
                 pixels: Tensor(torch.Size([4, 500, 500, 3]), dtype=torch.uint8),
-                _reset: Tensor(torch.Size([4, 1]), dtype=torch.bool)},
+                truncated: Tensor(torch.Size([4, 1]), dtype=torch.bool),
             batch_size=torch.Size([4]),
             device=None,
             is_shared=True)
@@ -213,11 +330,14 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
 
     SerialEnv
     ParallelEnv
-    MultiThreadedEnv
     EnvCreator
 
 Multi-agent environments
 ------------------------
+
+.. _MARL-environment-API:
+
+.. currentmodule:: torchrl.envs
 
 TorchRL supports multi-agent learning out-of-the-box.
 *The same classes used in a single-agent learning pipeline can be seamlessly used in multi-agent contexts,
@@ -231,7 +351,7 @@ Some of the main differences between these paradigms include:
 
 - **observation** can be per-agent and also have some shared components
 - **reward** can be per-agent or shared
-- **done** can be per-agent or shared
+- **done** (and ``"truncated"`` or ``"terminated"``) can be per-agent or shared.
 
 TorchRL accommodates all these possible paradigms thanks to its :class:`tensordict.TensorDict` data carrier.
 In particular, in multi-agent environments, per-agent keys will be carried in a nested "agents" TensorDict.
@@ -344,8 +464,20 @@ single agent standards.
   Note that `env.reward_spec == env.output_spec["full_reward_spec"][env.reward_key]`.
 
 
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    MarlGroupMapType
+    check_marl_grouping
+
+
+
 Transforms
 ----------
+
+.. _transforms:
+
 .. currentmodule:: torchrl.envs.transforms
 
 In most cases, the raw output of an environment must be treated before being passed to another object (such as a
@@ -447,6 +579,7 @@ to be able to create this other composition:
     TransformedEnv
     ActionMask
     BinarizeReward
+    BurnInTransform
     CatFrames
     CatTensors
     CenterCrop
@@ -456,6 +589,7 @@ to be able to create this other composition:
     DiscreteActionProjection
     DoubleToFloat
     DTypeCastTransform
+    EndOfLifeTransform
     ExcludeTransform
     FiniteTensorDictCheck
     FlattenObservation
@@ -467,6 +601,7 @@ to be able to create this other composition:
     NoopResetEnv
     ObservationNorm
     ObservationTransform
+    PermuteTransform
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict
@@ -476,7 +611,9 @@ to be able to create this other composition:
     RewardScaling
     RewardSum
     Reward2GoTransform
+    RemoveEmptySpecs
     SelectTransform
+    SignTransform
     SqueezeTransform
     StepCounter
     TargetReturn
@@ -484,10 +621,59 @@ to be able to create this other composition:
     TimeMaxPool
     ToTensorImage
     UnsqueezeTransform
+    VecGymEnvTransform
     VecNorm
     VC1Transform
     VIPRewardTransform
     VIPTransform
+
+Environments with masked actions
+--------------------------------
+
+In some environments with discrete actions, the actions available to the agent might change throughout execution.
+In such cases the environments will output an action mask (under the ``"action_mask"`` key by default).
+This mask needs to be used to filter out unavailable actions for that step.
+
+If you are using a custom policy you can pass this mask to your probability distribution like so:
+
+.. code-block::
+   :caption: Categorical policy with action mask
+
+        >>> from tensordict.nn import TensorDictModule, ProbabilisticTensorDictModule, TensorDictSequential
+        >>> import torch.nn as nn
+        >>> from torchrl.modules import MaskedCategorical
+        >>> module = TensorDictModule(
+        >>>     nn.Linear(in_feats, out_feats),
+        >>>     in_keys=["observation"],
+        >>>     out_keys=["logits"],
+        >>> )
+        >>> dist = ProbabilisticTensorDictModule(
+        >>>     in_keys={"logits": "logits", "mask": "action_mask"},
+        >>>     out_keys=["action"],
+        >>>     distribution_class=MaskedCategorical,
+        >>> )
+        >>> actor = TensorDictSequential(module, dist)
+
+If you want to use a default policy, you will need to wrap your environment in the :class:`~torchrl.envs.transforms.ActionMask`
+transform. This transform can take care of updating the action mask in the action spec in order for the default policy
+to always know what the latest available actions are. You can do this like so:
+
+.. code-block::
+   :caption: How to use the action mask transform
+
+        >>> from tensordict.nn import TensorDictModule, ProbabilisticTensorDictModule, TensorDictSequential
+        >>> import torch.nn as nn
+        >>> from torchrl.envs.transforms import TransformedEnv, ActionMask
+        >>> env = TransformedEnv(
+        >>>     your_base_env
+        >>>     ActionMask(action_key="action", mask_key="action_mask"),
+        >>> )
+
+.. note::
+  In case you are using a parallel environment it is important to add the transform to the parallel enviornment itself
+  and not to its sub-environments.
+
+
 
 Recorders
 ---------
@@ -520,6 +706,7 @@ Helpers
     exploration_type
     check_env_specs
     make_composite_from_td
+    terminated_or_truncated
 
 Domain-specific
 ---------------
@@ -536,7 +723,7 @@ Domain-specific
 Libraries
 ---------
 
-.. currentmodule:: torchrl.envs.libs
+.. currentmodule:: torchrl.envs
 
 TorchRL's mission is to make the training of control and decision algorithm as
 easy as it gets, irrespective of the simulator being used (if any).
@@ -612,19 +799,28 @@ the following function will return ``1`` when queried:
     :toctree: generated/
     :template: rl_template_fun.rst
 
-    brax.BraxEnv
-    brax.BraxWrapper
-    dm_control.DMControlEnv
-    dm_control.DMControlWrapper
-    gym.GymEnv
-    gym.GymWrapper
-    gym.MOGymEnv
-    gym.MOGymWrapper
-    gym.set_gym_backend
-    gym.gym_backend
-    habitat.HabitatEnv
-    jumanji.JumanjiEnv
-    jumanji.JumanjiWrapper
-    openml.OpenMLEnv
-    vmas.VmasEnv
-    vmas.VmasWrapper
+    BraxEnv
+    BraxWrapper
+    DMControlEnv
+    DMControlWrapper
+    GymEnv
+    GymWrapper
+    HabitatEnv
+    IsaacGymEnv
+    IsaacGymWrapper
+    JumanjiEnv
+    JumanjiWrapper
+    MOGymEnv
+    MOGymWrapper
+    MultiThreadedEnv
+    MultiThreadedEnvWrapper
+    OpenMLEnv
+    PettingZooEnv
+    PettingZooWrapper
+    RoboHiveEnv
+    SMACv2Env
+    SMACv2Wrapper
+    VmasEnv
+    VmasWrapper
+    gym_backend
+    set_gym_backend

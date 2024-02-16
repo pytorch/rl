@@ -2,39 +2,28 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-from tensordict.nn import dispatch, TensorDictModule
 
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
-from torchrl.data import BoundedTensorSpec, CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec, TensorSpec
 
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
+
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_WARNING,
+    _GAMMA_LMBDA_DEPREC_ERROR,
+    _vmap_func,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-try:
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap
-
-    FUNCTORCH_ERR = ""
-    _has_functorch = True
-except ImportError as err:
-    FUNCTORCH_ERR = str(err)
-    _has_functorch = False
 
 
 class TD3Loss(LossModule):
@@ -85,7 +74,7 @@ class TD3Loss(LossModule):
         >>> from torchrl.modules.tensordict_module.actors import Actor, ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.td3 import TD3Loss
-        >>> from tensordict.tensordict import TensorDict
+        >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> module = nn.Linear(n_obs, n_act)
@@ -109,6 +98,7 @@ class TD3Loss(LossModule):
         ...      "observation": torch.randn(*batch, n_obs),
         ...      "action": action,
         ...      ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...      ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...      ("next", "reward"): torch.randn(*batch, 1),
         ...      ("next", "observation"): torch.randn(*batch, n_obs),
         ...  }, batch)
@@ -128,7 +118,7 @@ class TD3Loss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["action", "next_reward", "next_done"]`` + in_keys of the actor and qvalue network
+    ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and qvalue network
     The return value is a tuple of tensors in the following order:
     ``["loss_actor", "loss_qvalue", "pred_value", "state_action_value_actor", "next_state_value", "target_value",]``.
 
@@ -162,6 +152,7 @@ class TD3Loss(LossModule):
         ...         observation=torch.randn(*batch, n_obs),
         ...         action=action,
         ...         next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...         next_reward=torch.randn(*batch, 1),
         ...         next_observation=torch.randn(*batch, n_obs))
         >>> loss_actor.backward()
@@ -187,6 +178,9 @@ class TD3Loss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         action: NestedKey = "action"
@@ -194,6 +188,7 @@ class TD3Loss(LossModule):
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -223,11 +218,6 @@ class TD3Loss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
     ) -> None:
-        if not _has_functorch:
-            raise ImportError(
-                f"Failed to import functorch with error message:\n{FUNCTORCH_ERR}"
-            )
-
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
@@ -266,7 +256,7 @@ class TD3Loss(LossModule):
         if not ((action_spec is not None) ^ (bounds is not None)):
             raise ValueError(
                 "One of 'bounds' and 'action_spec' must be provided, "
-                f"but not both. Got bounds={bounds} and action_spec={action_spec}."
+                f"but not both or none. Got bounds={bounds} and action_spec={action_spec}."
             )
         elif action_spec is not None:
             if isinstance(action_spec, CompositeSpec):
@@ -302,10 +292,13 @@ class TD3Loss(LossModule):
         self.register_buffer("max_action", high)
         self.register_buffer("min_action", low)
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
-        self._vmap_qvalue_network00 = vmap(self.qvalue_network)
-        self._vmap_actor_network00 = vmap(self.actor_network)
+            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+        self._vmap_qvalue_network00 = _vmap_func(
+            self.qvalue_network, randomness=self.vmap_randomness
+        )
+        self._vmap_actor_network00 = _vmap_func(
+            self.actor_network, randomness=self.vmap_randomness
+        )
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -313,6 +306,7 @@ class TD3Loss(LossModule):
                 value=self._tensor_keys.state_action_value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
         self._set_in_keys()
 
@@ -321,6 +315,7 @@ class TD3Loss(LossModule):
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
             *self.qvalue_network.in_keys,
@@ -349,129 +344,126 @@ class TD3Loss(LossModule):
             [self.actor_network_params, self.target_actor_network_params], 0
         )
 
-    @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        obs_keys = self.actor_network.in_keys
-        tensordict_save = tensordict
-        tensordict = tensordict.clone(False)
-        act = tensordict.get(self.tensor_keys.action)
-        action_shape = act.shape
-        action_device = act.device
-        # computing early for reprod
-        noise = torch.normal(
-            mean=torch.zeros(action_shape),
-            std=torch.full(action_shape, self.policy_noise),
-        ).to(action_device)
-        noise = noise.clamp(-self.noise_clip, self.noise_clip)
-
-        tensordict_actor_grad = tensordict.select(
-            *obs_keys
-        )  # to avoid overwriting keys
-        next_td_actor = step_mdp(tensordict).select(
-            *self.actor_network.in_keys
-        )  # next_observation ->
-        tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
-        # DO NOT call contiguous bc we'll update the tds later
-        actor_output_td = self._vmap_actor_network00(
-            tensordict_actor,
-            self._cached_stack_actor_params,
-        )
-        # add noise to target policy
-        actor_output_td1 = actor_output_td[1]
-        next_action = (actor_output_td1.get(self.tensor_keys.action) + noise).clamp(
-            self.min_action, self.max_action
-        )
-        actor_output_td1.set(self.tensor_keys.action, next_action)
-        tensordict_actor.set(
-            self.tensor_keys.action,
-            actor_output_td.get(self.tensor_keys.action),
-        )
-
-        # repeat tensordict_actor to match the qvalue size
-        _actor_loss_td = (
-            tensordict_actor[0]
-            .select(*self.qvalue_network.in_keys)
-            .expand(self.num_qvalue_nets, *tensordict_actor[0].batch_size)
+    def actor_loss(self, tensordict):
+        tensordict_actor_grad = tensordict.select(*self.actor_network.in_keys)
+        with self.actor_network_params.to_module(self.actor_network):
+            tensordict_actor_grad = self.actor_network(tensordict_actor_grad)
+        actor_loss_td = tensordict_actor_grad.select(
+            *self.qvalue_network.in_keys
+        ).expand(
+            self.num_qvalue_nets, *tensordict_actor_grad.batch_size
         )  # for actor loss
-        _qval_td = tensordict.select(*self.qvalue_network.in_keys).expand(
-            self.num_qvalue_nets,
-            *tensordict.select(*self.qvalue_network.in_keys).batch_size,
-        )  # for qvalue loss
-        _next_val_td = (
-            tensordict_actor[1]
-            .select(*self.qvalue_network.in_keys)
-            .expand(self.num_qvalue_nets, *tensordict_actor[1].batch_size)
-        )  # for next value estimation
-        tensordict_qval = torch.cat(
-            [
-                _actor_loss_td,
-                _next_val_td,
-                _qval_td,
-            ],
-            0,
-        )
-
-        # cat params
-        qvalue_params = torch.cat(
-            [
+        state_action_value_actor = (
+            self._vmap_qvalue_network00(
+                actor_loss_td,
                 self._cached_detach_qvalue_network_params,
-                self.target_qvalue_network_params,
-                self.qvalue_network_params,
-            ],
-            0,
+            )
+            .get(self.tensor_keys.state_action_value)
+            .squeeze(-1)
         )
-        tensordict_qval = self._vmap_qvalue_network00(
-            tensordict_qval,
-            qvalue_params,
-        )
+        loss_actor = -(state_action_value_actor[0]).mean()
+        metadata = {
+            "state_action_value_actor": state_action_value_actor.mean().detach(),
+        }
+        return loss_actor, metadata
 
-        state_action_value = tensordict_qval.get(
-            self.tensor_keys.state_action_value
-        ).squeeze(-1)
-        (
-            state_action_value_actor,
-            next_state_action_value_qvalue,
-            state_action_value_qvalue,
-        ) = state_action_value.split(
-            [self.num_qvalue_nets, self.num_qvalue_nets, self.num_qvalue_nets],
-            dim=0,
+    def value_loss(self, tensordict):
+        tensordict = tensordict.clone(False)
+
+        act = tensordict.get(self.tensor_keys.action)
+
+        # computing early for reprod
+        noise = (torch.randn_like(act) * self.policy_noise).clamp(
+            -self.noise_clip, self.noise_clip
         )
 
-        loss_actor = -(state_action_value_actor.min(0)[0]).mean()
+        with torch.no_grad():
+            next_td_actor = step_mdp(tensordict).select(
+                *self.actor_network.in_keys
+            )  # next_observation ->
+            with self.target_actor_network_params.to_module(self.actor_network):
+                next_td_actor = self.actor_network(next_td_actor)
+            next_action = (next_td_actor.get(self.tensor_keys.action) + noise).clamp(
+                self.min_action, self.max_action
+            )
+            next_td_actor.set(
+                self.tensor_keys.action,
+                next_action,
+            )
+            next_val_td = next_td_actor.select(*self.qvalue_network.in_keys).expand(
+                self.num_qvalue_nets, *next_td_actor.batch_size
+            )  # for next value estimation
+            next_target_q1q2 = (
+                self._vmap_qvalue_network00(
+                    next_val_td,
+                    self.target_qvalue_network_params,
+                )
+                .get(self.tensor_keys.state_action_value)
+                .squeeze(-1)
+            )
+        # min over the next target qvalues
+        next_target_qvalue = next_target_q1q2.min(0)[0]
 
-        next_state_value = next_state_action_value_qvalue.min(0)[0]
+        # set next target qvalues
         tensordict.set(
             ("next", self.tensor_keys.state_action_value),
-            next_state_value.unsqueeze(-1),
+            next_target_qvalue.unsqueeze(-1),
         )
+
+        qval_td = tensordict.select(*self.qvalue_network.in_keys).expand(
+            self.num_qvalue_nets,
+            *tensordict.batch_size,
+        )
+        # preditcted current qvalues
+        current_qvalue = (
+            self._vmap_qvalue_network00(
+                qval_td,
+                self.qvalue_network_params,
+            )
+            .get(self.tensor_keys.state_action_value)
+            .squeeze(-1)
+        )
+
+        # compute target values for the qvalue loss (reward + gamma * next_target_qvalue * (1 - done))
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
-        pred_val = state_action_value_qvalue
-        td_error = (pred_val - target_value).pow(2)
+
+        td_error = (current_qvalue - target_value).pow(2)
         loss_qval = (
             distance_loss(
-                pred_val,
-                target_value.expand_as(pred_val),
+                current_qvalue,
+                target_value.expand_as(current_qvalue),
                 loss_function=self.loss_function,
             )
             .mean(-1)
             .sum()
-            * 0.5
         )
+        metadata = {
+            "td_error": td_error,
+            "next_state_value": next_target_qvalue.mean().detach(),
+            "pred_value": current_qvalue.mean().detach(),
+            "target_value": target_value.mean().detach(),
+        }
 
-        tensordict_save.set(self.tensor_keys.priority, td_error.detach().max(0)[0])
+        return loss_qval, metadata
 
+    @dispatch
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        tensordict_save = tensordict
+        loss_actor, metadata_actor = self.actor_loss(tensordict)
+        loss_qval, metadata_value = self.value_loss(tensordict_save)
+        tensordict_save.set(
+            self.tensor_keys.priority, metadata_value.pop("td_error").detach().max(0)[0]
+        )
         if not loss_qval.shape == loss_actor.shape:
             raise RuntimeError(
                 f"QVal and actor loss have different shape: {loss_qval.shape} and {loss_actor.shape}"
             )
         td_out = TensorDict(
             source={
-                "loss_actor": loss_actor.mean(),
-                "loss_qvalue": loss_qval.mean(),
-                "pred_value": pred_val.mean().detach(),
-                "state_action_value_actor": state_action_value_actor.mean().detach(),
-                "next_state_value": next_state_value.mean().detach(),
-                "target_value": target_value.mean().detach(),
+                "loss_actor": loss_actor,
+                "loss_qvalue": loss_qval,
+                **metadata_actor,
+                **metadata_value,
             },
             batch_size=[],
         )
@@ -504,5 +496,6 @@ class TD3Loss(LossModule):
             "value": self.tensor_keys.state_action_value,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)
