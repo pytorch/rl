@@ -5824,6 +5824,10 @@ class TestPPO(LossModuleTestBase):
         reward = torch.randn(batch, 1, device=device)
         done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
         terminated = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        loc_key = "loc"
+        scale_key = "scale"
+        loc = torch.randn(batch, 2, device=device)
+        scale = torch.rand(batch, 2, device=device)
         td = TensorDict(
             batch_size=(batch,),
             source={
@@ -5836,6 +5840,8 @@ class TestPPO(LossModuleTestBase):
                 },
                 action_key: action,
                 sample_log_prob_key: torch.randn_like(action[..., 1]) / 10,
+                loc_key: loc,
+                scale_key: scale,
             },
             device=device,
         )

@@ -962,6 +962,21 @@ class KLPENPPOLoss(PPOLoss):
         self.decrement = decrement
         self.samples_mc_kl = samples_mc_kl
 
+    def _set_in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            self.tensor_keys.sample_log_prob,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
+            *self.critic_network.in_keys,
+            self.tensor_keys.loc,
+            self.tensor_keys.scale,
+        ]
+        self._in_keys = list(set(keys))
+
     @property
     def out_keys(self):
         if self._out_keys is None:
