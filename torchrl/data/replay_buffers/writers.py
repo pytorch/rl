@@ -208,7 +208,8 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
     def add(self, data: Any) -> int | torch.Tensor:
         index = self._cursor
         # we need to update the cursor first to avoid race conditions between workers
-        self._cursor = (index + 1) % self._storage.shape[0]
+        max_size_along_dim0 = self._storage._max_size_along_dim0(single_data=data)
+        self._cursor = (index + 1) % max_size_along_dim0
         if not is_tensorclass(data):
             data.set(
                 "index",
@@ -223,14 +224,15 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         cur_size = self._cursor
         batch_size = len(data)
         device = data.device if hasattr(data, "device") else None
+        max_size_along_dim0 = self._storage._max_size_along_dim0(batched_data=data)
         index = (
             torch.arange(
                 cur_size, batch_size + cur_size, dtype=torch.long, device=device
             )
-            % self._storage.shape[0]
+            % max_size_along_dim0
         )
         # we need to update the cursor first to avoid race conditions between workers
-        self._cursor = (batch_size + cur_size) % self._storage.shape[0]
+        self._cursor = (batch_size + cur_size) % max_size_along_dim0
         # storage must convert the data to the appropriate format if needed
         if not is_tensorclass(data):
             data.set(
@@ -252,37 +254,102 @@ class TensorDictMaxValueWriter(Writer):
             Can be ``"max"``, ``"min"``, ``"mean"``, ``"median"`` or ``"sum"``.
 
     Examples:
-    >>> import torch
-    >>> from tensordict import TensorDict
-    >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer, TensorDictMaxValueWriter
-    >>> from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-    >>> rb = TensorDictReplayBuffer(
-    ...     storage=LazyTensorStorage(1),
-    ...     sampler=SamplerWithoutReplacement(),
-    ...     batch_size=1,
-    ...     writer=TensorDictMaxValueWriter(rank_key="key"),
-    ... )
-    >>> td = TensorDict({
-    ...     "key": torch.tensor(range(10)),
-    ...     "obs": torch.tensor(range(10))
-    ... }, batch_size=10)
-    >>> rb.extend(td)
-    >>> print(rb.sample().get("obs").item())
-    9
-    >>> td = TensorDict({
-    ...     "key": torch.tensor(range(10, 20)),
-    ...     "obs": torch.tensor(range(10, 20))
-    ... }, batch_size=10)
-    >>> rb.extend(td)
-    >>> print(rb.sample().get("obs").item())
-    19
-    >>> td = TensorDict({
-    ...     "key": torch.tensor(range(10)),
-    ...     "obs": torch.tensor(range(10))
-    ... }, batch_size=10)
-    >>> rb.extend(td)
-    >>> print(rb.sample().get("obs").item())
-    19
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer, TensorDictMaxValueWriter
+        >>> from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
+        >>> rb = TensorDictReplayBuffer(
+        ...     storage=LazyTensorStorage(1),
+        ...     sampler=SamplerWithoutReplacement(),
+        ...     batch_size=1,
+        ...     writer=TensorDictMaxValueWriter(rank_key="key"),
+        ... )
+        >>> td = TensorDict({
+        ...     "key": torch.tensor(range(10)),
+        ...     "obs": torch.tensor(range(10))
+        ... }, batch_size=10)
+        >>> rb.extend(td)
+        >>> print(rb.sample().get("obs").item())
+        9
+        >>> td = TensorDict({
+        ...     "key": torch.tensor(range(10, 20)),
+        ...     "obs": torch.tensor(range(10, 20))
+        ... }, batch_size=10)
+        >>> rb.extend(td)
+        >>> print(rb.sample().get("obs").item())
+        19
+        >>> td = TensorDict({
+        ...     "key": torch.tensor(range(10)),
+        ...     "obs": torch.tensor(range(10))
+        ... }, batch_size=10)
+        >>> rb.extend(td)
+        >>> print(rb.sample().get("obs").item())
+        19
+
+    .. note::
+        This class isn't compatible with storages with more than one dimension.
+        This doesn't mean that storing trajectories is prohibited, but that
+        the trajectories stored must be stored on a per-trajectory basis.
+        Here are some examples of valid and invalid usages of the class.
+        First, a flat buffer where we store individual transitions:
+
+            >>> from torchrl.data import TensorStorage
+            >>> # Simplest use case: data comes in 1d and is stored as such
+            >>> data = TensorDict({
+            ...     "obs": torch.zeros(10, 3),
+            ...     "reward": torch.zeros(10, 1),
+            ... }, batch_size=[10])
+            >>> rb = TensorDictReplayBuffer(
+            ...     storage=LazyTensorStorage(max_size=100),
+            ...     writer=TensorDictMaxValueWriter(rank_key="reward")
+            ... )
+            >>> # We initialize the buffer: a total of 100 *transitions* can be stored
+            >>> rb.extend(data)
+            >>> # Samples 5 *transitions* at random
+            >>> sample = rb.sample(5)
+            >>> assert sample.shape == (5,)
+
+        Second, a buffer where we store trajectories. The max signal is aggregated
+        in each batch (e.g. the reward of each rollout is summed):
+
+            >>> # One can also store batches of data, each batch being a sub-trajectory
+            >>> env = ParallelEnv(2, lambda: GymEnv("Pendulum-v1"))
+            >>> # Get a batch of [2, 10] -- format is [Batch, Time]
+            >>> rollout = env.rollout(max_steps=10)
+            >>> rb = TensorDictReplayBuffer(
+            ...     storage=LazyTensorStorage(max_size=100),
+            ...     writer=TensorDictMaxValueWriter(rank_key="reward")
+            ... )
+            >>> # We initialize the buffer: a total of 100 *trajectories* (!) can be stored
+            >>> rb.extend(rollout)
+            >>> # Sample 5 trajectories at random
+            >>> sample = rb.sample(5)
+            >>> assert sample.shape == (5, 10)
+
+        If data come in batch but a flat buffer is needed, we can simply flatten
+        the data before extending the buffer:
+
+            >>> rb = TensorDictReplayBuffer(
+            ...     storage=LazyTensorStorage(max_size=100),
+            ...     writer=TensorDictMaxValueWriter(rank_key="reward")
+            ... )
+            >>> # We initialize the buffer: a total of 100 *transitions* can be stored
+            >>> rb.extend(rollout.reshape(-1))
+            >>> # Sample 5 trajectories at random
+            >>> sample = rb.sample(5)
+            >>> assert sample.shape == (5,)
+
+        It is not possible to create a buffer that is extended along the time
+        dimension, which is usually the recommended way of using buffers with
+        batches of trajectories. Since trajectories are overlapping, it's hard
+        if not impossible to aggregate the reward values and compare them.
+        This constructor isn't valid (notice the ndim argument):
+
+            >>> rb = TensorDictReplayBuffer(
+            ...     storage=LazyTensorStorage(max_size=100, ndim=2),  # Breaks!
+            ...     writer=TensorDictMaxValueWriter(rank_key="reward")
+            ... )
+
     """
 
     def __init__(self, rank_key=None, reduction: str = "sum", **kwargs) -> None:
@@ -293,6 +360,12 @@ class TensorDictMaxValueWriter(Writer):
         self._reduction = reduction
         if self._rank_key is None:
             self._rank_key = ("next", "reward")
+
+    def register_storage(self, storage: Storage) -> None:
+        if storage.ndim > 1:
+            raise ValueError("TensorDictMaxValueWriter is not compatible with storages with more than one dimension. "
+                             "See the docstring constructor note about storing trajectories with TensorDictMaxValueWriter.")
+        return super().register_storage(storage)
 
     def get_insert_index(self, data: Any) -> int:
         """Returns the index where the data should be inserted, or ``None`` if it should not be inserted."""

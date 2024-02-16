@@ -30,6 +30,8 @@ from tensordict import (
 )
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
+
+from torchrl.collectors import SyncDataCollector, RandomPolicy
 from torchrl.data import (
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
@@ -62,6 +64,7 @@ from torchrl.data.replay_buffers.writers import (
     TensorDictRoundRobinWriter,
     WriterEnsemble,
 )
+from torchrl.envs import GymEnv, SerialEnv
 from torchrl.envs.transforms.transforms import (
     BinarizeReward,
     CatFrames,
@@ -2533,6 +2536,29 @@ class TestRBMultidim:
             for leaf in torch.utils._pytree.tree_leaves(s):
                 assert leaf.shape[0] == 4
                 assert (leaf == 1).all()
+
+    @pytest.mark.parametrize("writer_cls", [TensorDictMaxValueWriter, RoundRobinWriter, TensorDictRoundRobinWriter])
+    @pytest.mark.parametrize("storage_cls", [LazyMemmapStorage, LazyTensorStorage])
+    @pytest.mark.parametrize("rbtype", [functools.partial(ReplayBuffer, batch_size=8), functools.partial(TensorDictReplayBuffer, batch_size=8)])
+    @pytest.mark.parametrize("sampler_cls", [functools.partial(SliceSampler, num_slices=2, strict_length=False),
+                                             RandomSampler,
+                                             functools.partial(SliceSamplerWithoutReplacement, num_slices=2, strict_length=False),
+                                             functools.partial(PrioritizedSampler, alpha=1.0, beta=1.0, max_capacity=10),
+                                             functools.partial(PrioritizedSliceSampler, alpha=1.0, beta=1.0, max_capacity=10, num_slices=2, strict_length=False)])
+    def test_rb_multidim_collector(self, rbtype, storage_cls, writer_cls, sampler_cls):
+        from _utils_internal import CARTPOLE_VERSIONED
+        torch.manual_seed(0)
+        env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED))
+        env.set_seed(0)
+        collector = SyncDataCollector(env, RandomPolicy(env.action_spec), frames_per_batch=4, total_frames=16)
+        if writer_cls is TensorDictMaxValueWriter:
+            with pytest.raises(ValueError, match="TensorDictMaxValueWriter is not compatible with storages with more than one dimension"):
+                rb = rbtype(storage=storage_cls(max_size=10, ndim=2), sampler=sampler_cls(), writer=writer_cls())
+            return
+        rb = rbtype(storage=storage_cls(max_size=10, ndim=2), sampler=sampler_cls(), writer=writer_cls())
+        for data in collector:
+            rb.extend(data)
+            rb.sample()
 
 
 if __name__ == "__main__":

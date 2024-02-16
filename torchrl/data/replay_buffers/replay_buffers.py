@@ -919,6 +919,10 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
     def _get_priority_item(self, tensordict: TensorDictBase) -> float:
         priority = tensordict.get(self.priority_key, None)
+        if self._storage.ndim > 1:
+            # We have to flatten the priority otherwise we'll be aggregating
+            # the priority across batches
+            priority = priority.flatten(0, self._storage.ndim-1)
         if priority is None:
             return self._sampler.default_priority
         try:
@@ -932,6 +936,10 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 f" {tensordict.get(self.priority_key).shape} but expected "
                 f"scalar value"
             )
+
+        if self._storage.ndim > 1:
+            priority = priority.unflatten(0, tensordict.shape[:self._storage.ndim])
+
         return priority
 
     def _get_priority_vector(self, tensordict: TensorDictBase) -> torch.Tensor:
@@ -942,9 +950,16 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 dtype=torch.float,
                 device=tensordict.device,
             ).expand(tensordict.shape[0])
+        if self._storage.ndim > 1:
+            # We have to flatten the priority otherwise we'll be aggregating
+            # the priority across batches
+            priority = priority.flatten(0, self._storage.ndim-1)
 
         priority = priority.reshape(priority.shape[0], -1)
         priority = _reduce(priority, self._sampler.reduction, dim=1)
+
+        if self._storage.ndim > 1:
+            priority = priority.unflatten(0, tensordict.shape[:self._storage.ndim])
 
         return priority
 
@@ -1043,13 +1058,13 @@ class TensorDictReplayBuffer(ReplayBuffer):
             is_locked = data.is_locked
             if is_locked:
                 data.unlock_()
-            for k, v in info.items():
-                if k == "index" and isinstance(v, tuple):
-                    v = torch.stack(v, -1)
-                v = _to_torch(v, data.device)
-                if v.shape[: data.batch_dims] != data.batch_size:
-                    v = expand_as_right(v, data)
-                data.set(k, v)
+            for key, val in info.items():
+                if key == "index" and isinstance(val, tuple):
+                    val = torch.stack(val, -1)
+                val = _to_torch(val, data.device)
+                if val.ndim < data.ndim:
+                    val = expand_as_right(val, data)
+                data.set(key, val)
             if is_locked:
                 data.lock_()
         elif not is_tc and include_info in (True, None):

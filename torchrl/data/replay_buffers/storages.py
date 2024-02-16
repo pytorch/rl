@@ -549,9 +549,9 @@ class TensorStorage(Storage):
         if self.ndim == 1:
             return self.get(slice(None))
         if is_tensor_collection(self._storage):
-            return self._storage[: self._len_along_dim0].flatten(0, self.ndim)
+            return self._storage[: self._len_along_dim0].flatten(0, self.ndim-1)
         return tree_map(
-            lambda x: x[: self._len_along_dim0].flatten(0, self.ndim), self._storage
+            lambda x: x[: self._len_along_dim0].flatten(0, self.ndim-1), self._storage
         )
 
     def __getstate__(self):
