@@ -979,27 +979,33 @@ class KLPENPPOLoss(PPOLoss):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
-        tensordict = tensordict.clone(False)
-        advantage = tensordict.get(self.tensor_keys.advantage, None)
+        tensordict_copy = tensordict.clone(False)
+        try:
+            previous_dist = self.actor_network.build_dist_from_params(tensordict)
+        except KeyError:
+            raise KeyError(
+                "The parameters of the distribution were not found. "
+                f"Make sure they are provided to {type(self).__name__}."
+            )
+        advantage = tensordict_copy.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
-                tensordict,
+                tensordict_copy,
                 params=self._cached_critic_network_params_detached,
                 target_params=self.target_critic_network_params,
             )
-            advantage = tensordict.get(self.tensor_keys.advantage)
+            advantage = tensordict_copy.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
             loc = advantage.mean()
             scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
-        log_weight, dist = self._log_weight(tensordict)
+        log_weight, dist = self._log_weight(tensordict_copy)
         neg_loss = log_weight.exp() * advantage
 
-        previous_dist = self.actor_network.build_dist_from_params(tensordict)
         with self.actor_network_params.to_module(
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
-            current_dist = self.actor_network.get_dist(tensordict)
+            current_dist = self.actor_network.get_dist(tensordict_copy)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
@@ -1024,7 +1030,7 @@ class KLPENPPOLoss(PPOLoss):
             td_out.set("entropy", entropy.detach())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict)
+            loss_critic = self.loss_critic(tensordict_copy)
             td_out.set("loss_critic", loss_critic)
         td_out = td_out.apply(
             functools.partial(_reduce, reduction=self.reduction), batch_size=[]

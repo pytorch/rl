@@ -5951,6 +5951,10 @@ class TestPPO(LossModuleTestBase):
                 loss_fn.make_value_estimator(td_est)
 
         loss = loss_fn(td)
+        if isinstance(loss_fn, KLPENPPOLoss):
+            kl = loss.pop("kl")
+            assert (kl != 0).any()
+
         if reduction == "none":
 
             def func(x):
@@ -6457,6 +6461,9 @@ class TestPPO(LossModuleTestBase):
             f"next_{terminated_key}": td.get(("next", terminated_key)),
             f"next_{observation_key}": td.get(("next", observation_key)),
         }
+        if loss_class is KLPENPPOLoss:
+            kwargs.update({"loc": td.get("loc"), "scale": td.get("scale")})
+
         td = TensorDict(kwargs, td.batch_size, names=["time"]).unflatten_keys("_")
 
         # setting the seed for each loss so that drawing the random samples from
