@@ -207,7 +207,12 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (index + 1) % self._storage.max_size
         if not is_tensorclass(data):
-            data.set("index", index)
+            data.set(
+                "index",
+                expand_as_right(
+                    torch.as_tensor(index, device=data.device, dtype=torch.long), data
+                ),
+            )
         self._storage[index] = data
         return self._replicate_index(index)
 
@@ -225,7 +230,12 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         self._cursor = (batch_size + cur_size) % self._storage.max_size
         # storage must convert the data to the appropriate format if needed
         if not is_tensorclass(data):
-            data.set("index", expand_as_right(index, data))
+            data.set(
+                "index",
+                expand_as_right(
+                    torch.as_tensor(index, device=data.device, dtype=torch.long), data
+                ),
+            )
         self._storage[index] = data
         return self._replicate_index(index)
 
