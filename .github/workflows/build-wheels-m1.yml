@@ -25,7 +25,6 @@ jobs:
       os: macos-arm64
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
-      limit-pr-builds: false # TODO - needs to be removed before merging
   build:
     needs: generate-matrix
     strategy:
