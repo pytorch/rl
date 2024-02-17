@@ -6693,11 +6693,8 @@ class TestA2C(LossModuleTestBase):
             value,
             loss_critic_type="l2",
             functional=functional,
-<<<<<<< HEAD
             return_tensorclass=False,
-=======
             reduction=reduction,
->>>>>>> upstream/main
         )
 
         # Check error is raised when actions require grads

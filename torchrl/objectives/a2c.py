@@ -271,11 +271,8 @@ class A2CLoss(LossModule):
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
-<<<<<<< HEAD
         return_tensorclass: bool = False,
-=======
         reduction: str = None,
->>>>>>> upstream/main
     ):
         if actor is not None:
             actor_network = actor
@@ -510,18 +507,15 @@ class A2CLoss(LossModule):
             td_out.set("entropy", entropy.detach())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-<<<<<<< HEAD
             loss_critic = self.loss_critic(tensordict).mean()
             td_out.set("loss_critic", loss_critic.mean())
         if self.return_tensorclass:
             return A2CLosses._from_tensordict(td_out)
-=======
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
         td_out = td_out.apply(
             functools.partial(_reduce, reduction=self.reduction), batch_size=[]
         )
->>>>>>> upstream/main
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
