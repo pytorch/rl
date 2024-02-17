@@ -20,6 +20,7 @@ from torchrl.modules.models import ConvNet, MLP
 
 class MultiAgentNetBase(nn.Module):
     """A base class for multi-agent networks."""
+
     _empty_net: nn.Module
 
     def __init__(
@@ -42,8 +43,21 @@ class MultiAgentNetBase(nn.Module):
             self._build_single_net(**kwargs)
             for _ in range(self.n_agents if not self.share_params else 1)
         ]
+        initialized = True
+        for p in agent_networks[0].parameters():
+            if isinstance(p, torch.nn.UninitializedParameter):
+                initialized = False
+                break
+        self.initialized = initialized
+        if not self.initialized:
+            self._agents_nets = agent_networks
+        else:
+            self._agents_nets = None
+            self._make_params(agent_networks)
         kwargs["device"] = "meta"
         self.__dict__["_empty_net"] = self._build_single_net(**kwargs)
+
+    def _make_params(self, agent_networks):
         if self.share_params:
             self.params = TensorDict.from_module(agent_networks[0], as_module=True)
         else:
@@ -52,6 +66,25 @@ class MultiAgentNetBase(nn.Module):
     @abc.abstractmethod
     def _build_single_net(self, *, device, **kwargs):
         ...
+
+    def _check_init(self, inputs):
+        if self.initialized:
+            return
+        if not self.share_params:
+            if self.centralised:
+                for model in self._agents_nets:
+                    model(inputs)
+            else:
+                for input, model in zip(
+                    inputs.unbind(self.agent_dim), self._agents_nets
+                ):
+                    model(input)
+        # If parameters are shared, agents use the same network
+        else:
+            self._agents_nets[0](inputs)
+        self._make_params(self._agents_nets)
+        del self._agents_nets
+        self.initialized = True
 
     @abc.abstractmethod
     def _pre_forward_check(self, inputs):
@@ -72,7 +105,7 @@ class MultiAgentNetBase(nn.Module):
             inputs = inputs[0]
 
         inputs = self._pre_forward_check(inputs)
-
+        self._check_init(inputs)
         # If parameters are not shared, each agent has its own network
         if not self.share_params:
             if self.centralised:
@@ -461,8 +494,11 @@ class MultiAgentConvNet(MultiAgentNetBase):
         )
 
     def _build_single_net(self, *, device, **kwargs):
+        in_features = self.in_features
+        if self.centralised and in_features is not None:
+            in_features = in_features * self.n_agents
         return ConvNet(
-            in_features=self.in_features,
+            in_features=in_features,
             num_cells=self.num_cells,
             kernel_sizes=self.kernel_sizes,
             strides=self.strides,
