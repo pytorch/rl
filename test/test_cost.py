@@ -6481,7 +6481,7 @@ class TestPPO(LossModuleTestBase):
         loss_val = loss(**kwargs)
         torch.manual_seed(self.seed)
         if beta is not None:
-            setattr(loss, "beta", beta.clone())
+            loss.beta = beta.clone()
         loss_val_td = loss(td)
 
         for i, out_key in enumerate(loss.out_keys):
@@ -6492,7 +6492,7 @@ class TestPPO(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         if beta is not None:
-            setattr(loss, "beta", beta.clone())
+            loss.beta = beta.clone()
         loss.select_out_keys("loss_objective", "loss_critic")
         if torch.__version__ >= "2.0.0":
             loss_obj, loss_crit = loss(**kwargs)
