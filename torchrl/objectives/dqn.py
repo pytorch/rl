@@ -34,15 +34,15 @@ from torchrl.objectives.utils import (
 from torchrl.objectives.value import TDLambdaEstimator
 from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator
 
+class LossContainerBase:
+    __getitem__ = TensorDictBase.__getitem__
 
 @tensorclass
-class DQNLosses:
+class DQNLosses(LossContainerBase):
     """The tensorclass for The DQN Loss class."""
 
     loss_objective: torch.Tensor
-    loss_critic: torch.Tensor | None = None
-    loss_entropy: torch.Tensor | None = None
-    entropy: torch.Tensor | None = None
+    loss: torch.Tensor
 
     @property
     def aggregate_loss(self):
@@ -95,7 +95,14 @@ class DQNLoss(LossModule):
         >>> loss(data)
         TensorDict(
             fields={
-                loss: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                loss_objective: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> loss = DQNLoss(actor, action_space=spec, return_tensorclass=True)
+        >>> loss(data)
+        DQNLosses(
+            loss_objective=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -380,7 +387,7 @@ class DQNLoss(LossModule):
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
-        td_out = TensorDict({"loss": loss.mean()}, [])
+        td_out = TensorDict({"loss_objective": loss.mean()}, [])
         if self.return_tensorclass:
             return DQNLosses._from_tensordict(td_out)
         return td_out
@@ -619,7 +626,7 @@ class DistributionalDQNLoss(LossModule):
             loss.detach().unsqueeze(1).to(input_tensordict.device),
             inplace=True,
         )
-        loss_td = TensorDict({"loss": loss.mean()}, [])
+        loss_td = TensorDict({"loss_objective": loss.mean()}, [])
         if self.return_tensorclass:
             return DQNLosses._from_tensordict(loss_td)
         return loss_td

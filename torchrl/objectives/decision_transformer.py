@@ -20,10 +20,14 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import distance_loss
 
 
+class LossContainerBase:
+    __getitem__ = TensorDictBase.__getitem__
+
 @tensorclass
-class OnlineDTLosses:
+class OnlineDTLosses(LossContainerBase):
     """The tensorclass for The OnlineDTLoss Loss class."""
 
+    loss_actor: torch.Tensor
     loss_objective: torch.Tensor
     loss_critic: torch.Tensor | None = None
     loss_entropy: torch.Tensor | None = None

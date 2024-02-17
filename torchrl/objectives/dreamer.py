@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-from tensordict import tensorclass, TensorDict
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
 
@@ -24,11 +24,14 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
+class LossContainerBase:
+    __getitem__ = TensorDictBase.__getitem__
 
 @tensorclass
-class DreamerModelLosses:
+class DreamerModelLosses(LossContainerBase):
     """The tensorclass for The Dreamer Model Loss class."""
 
+    loss_actor: torch.Tensor
     loss_objective: torch.Tensor
     loss_critic: torch.Tensor | None = None
     loss_entropy: torch.Tensor | None = None

@@ -29,11 +29,14 @@ from torchrl.objectives.utils import (
 from .common import LossModule
 from .value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator, VTrace
 
+class LossContainerBase:
+    __getitem__ = TensorDictBase.__getitem__
 
 @tensorclass
-class PPOLosses:
+class PPOLosses(LossContainerBase):
     """The tensorclass for The PPOLoss Loss class."""
 
+    loss_actor: torch.Tensor
     loss_objective: torch.Tensor
     loss_critic: torch.Tensor | None = None
     loss_entropy: torch.Tensor | None = None
@@ -182,6 +185,16 @@ class PPOLoss(LossModule):
                 loss_critic: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_objective: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> loss = PPOLoss(actor, value, return_tensorclass=True)
+        >>> loss(data)
+        PPOLosses(
+            entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_critic: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_objective: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)

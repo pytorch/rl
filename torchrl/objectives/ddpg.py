@@ -25,15 +25,20 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
+class LossContainerBase:
+    __getitem__ = TensorDictBase.__getitem__
 
 @tensorclass
-class DDPGLosses:
+class DDPGLosses(LossContainerBase):
     """The tensorclass for The DDPGLoss class."""
 
-    loss_objective: torch.Tensor
-    loss_critic: torch.Tensor | None = None
-    loss_entropy: torch.Tensor | None = None
-    entropy: torch.Tensor | None = None
+    pred_value: torch.Tensor
+    pred_value_max: torch.Tensor
+    td_error: torch.Tensor | None = None
+    target_value: torch.Tensor | None = None
+    loss_actor: torch.Tensor | None = None
+    loss_value: torch.Tensor | None = None
+    target_value_max: torch.Tensor | None = None
 
     @property
     def aggregate_loss(self):
@@ -94,7 +99,21 @@ class DDPGLoss(LossModule):
                 pred_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 pred_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                target_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                target_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                td_error: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> loss = DDPGLoss(actor, value, return_tensorclass=True)
+        >>> loss(data)
+        DDPGLosses(
+            loss_actor=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            pred_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            pred_value_max=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            target_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            target_value_max=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            td_error=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -140,7 +159,7 @@ class DDPGLoss(LossModule):
     method.
 
     Examples:
-        >>> loss.select_out_keys('loss_actor', 'loss_value')
+        >>> out_keys = loss.select_out_keys('loss_actor', 'loss_value')
         >>> loss_actor, loss_value = loss(
         ...     observation=torch.randn(n_obs),
         ...     action=spec.rand(),

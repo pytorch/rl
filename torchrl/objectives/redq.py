@@ -30,15 +30,22 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
+class LossContainerBase:
+    __getitem__ = TensorDictBase.__getitem__
 
 @tensorclass
-class REDQLosses:
+class REDQLosses(LossContainerBase):
     """The tensorclass for The REDQLoss Loss class."""
 
-    loss_objective: torch.Tensor
-    loss_critic: torch.Tensor | None = None
-    loss_entropy: torch.Tensor | None = None
-    entropy: torch.Tensor | None = None
+    loss_actor: torch.Tensor
+    loss_qvalue: torch.Tensor
+    loss_alpha: torch.Tensor
+    alpha : torch.Tensor | None = None
+    entropy : torch.Tensor | None = None
+    state_action_value_actor: torch.Tensor | None = None
+    action_log_prob_actor: torch.Tensor | None = None
+    state_value: torch.Tensor | None = None
+    target_value: torch.Tensor | None = None
 
     @property
     def aggregate_loss(self):
@@ -144,6 +151,21 @@ class REDQLoss(LossModule):
                 next.state_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 state_action_value_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> loss = REDQLoss(actor, qvalue, return_tensorclass=True)
+        >>> loss(data)
+        REDQLosses(
+            action_log_prob_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            next.state_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            state_action_value_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)

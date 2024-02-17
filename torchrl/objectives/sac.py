@@ -45,13 +45,18 @@ def _delezify(func):
     return new_func
 
 
+class LossContainerBase:
+    __getitem__ = TensorDictBase.__getitem__
+
 @tensorclass
-class SACLosses:
+class SACLosses(LossContainerBase):
     """The tensorclass for The SACLoss Loss class."""
 
-    loss_objective: torch.Tensor
-    loss_critic: torch.Tensor | None = None
-    loss_entropy: torch.Tensor | None = None
+    loss_actor: torch.Tensor
+    loss_value: torch.Tensor
+    loss_qvalue: torch.Tensor
+    alpha: torch.Tensor | None = None
+    loss_alpha: torch.Tensor | None = None
     entropy: torch.Tensor | None = None
 
     @property
@@ -169,6 +174,19 @@ class SACLoss(LossModule):
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
+        >>> loss = SACLoss(actor, qvalue, value, return_tensorclass=True)
+        >>> loss(data)
+        SACLosses(
+            alpha=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_actor=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_alpha=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_qvalue=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
 
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,

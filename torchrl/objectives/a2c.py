@@ -33,10 +33,14 @@ from torchrl.objectives.value import (
 )
 
 
+class LossContainerBase:
+    __getitem__ = TensorDictBase.__getitem__
+
 @tensorclass
-class A2CLosses:
+class A2CLosses(LossContainerBase):
     """The tensorclass for The A2CLoss Loss class."""
 
+    loss_actor: torch.Tensor
     loss_objective: torch.Tensor
     loss_critic: torch.Tensor | None = None
     loss_entropy: torch.Tensor | None = None
@@ -136,6 +140,16 @@ class A2CLoss(LossModule):
                 loss_critic: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_objective: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> loss = A2CLoss(actor, value, loss_critic_type="l2", return_tensorclass=True)
+        >>> loss(data)
+        A2CLosses(
+            entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_critic=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_objective=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)

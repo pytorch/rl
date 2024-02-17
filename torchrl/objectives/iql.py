@@ -27,14 +27,16 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
+class LossContainerBase:
+    __getitem__ = TensorDictBase.__getitem__
 
 @tensorclass
-class IQLLosses:
+class IQLLosses(LossContainerBase):
     """The tensorclass for The PPOLoss Loss class."""
 
-    loss_objective: torch.Tensor
-    loss_critic: torch.Tensor | None = None
-    loss_entropy: torch.Tensor | None = None
+    loss_actor: torch.Tensor
+    loss_qvalue: torch.Tensor | None = None
+    loss_value: torch.Tensor | None = None
     entropy: torch.Tensor | None = None
 
     @property
@@ -124,6 +126,16 @@ class IQLLoss(LossModule):
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
+        >>> loss = IQLLoss(actor, qvalue, value, return_tensorclass=True)
+        >>> loss(data)
+        IQLLosses(
+            entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_actor=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_qvalue=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
 
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
@@ -181,7 +193,7 @@ class IQLLoss(LossModule):
     method.
 
     Examples:
-        >>> loss.select_out_keys('loss_actor', 'loss_qvalue')
+        >>> out_keys = loss.select_out_keys('loss_actor', 'loss_qvalue')
         >>> loss_actor, loss_qvalue = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
@@ -653,7 +665,7 @@ class DiscreteIQLLoss(IQLLoss):
     method.
 
     Examples:
-        >>> loss.select_out_keys('loss_actor', 'loss_qvalue', 'loss_value')
+        >>> out_keys = loss.select_out_keys('loss_actor', 'loss_qvalue', 'loss_value')
         >>> loss_actor, loss_qvalue, loss_value = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,

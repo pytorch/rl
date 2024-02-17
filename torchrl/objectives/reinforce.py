@@ -29,15 +29,15 @@ from torchrl.objectives.value import (
     VTrace,
 )
 
+class LossContainerBase:
+    __getitem__ = TensorDictBase.__getitem__
 
 @tensorclass
-class ReinforceLosses:
+class ReinforceLosses(LossContainerBase):
     """The tensorclass for The Reinforce Loss class."""
 
-    loss_objective: torch.Tensor
-    loss_critic: torch.Tensor | None = None
-    loss_entropy: torch.Tensor | None = None
-    entropy: torch.Tensor | None = None
+    loss_actor: torch.Tensor
+    loss_value: torch.Tensor
 
     @property
     def aggregate_loss(self):
@@ -136,6 +136,14 @@ class ReinforceLoss(LossModule):
             fields={
                 loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> loss = ReinforceLoss(actor_net, value_net, return_tensorclass=True)
+        >>> loss(data)
+        ReinforceLosses(
+            loss_actor=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
