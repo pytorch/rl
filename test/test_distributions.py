@@ -156,6 +156,22 @@ class TestTruncatedNormal:
             assert (a <= d.max).all()
             lp = d.log_prob(a)
             assert torch.isfinite(lp).all()
+        assert not torch.isfinite(
+            d.log_prob(
+                torch.as_tensor(d.min, device=device).expand(
+                    (*d.batch_shape, *d.event_shape)
+                )
+                - 1e-2
+            )
+        ).any()
+        assert not torch.isfinite(
+            d.log_prob(
+                torch.as_tensor(d.max, device=device).expand(
+                    (*d.batch_shape, *d.event_shape)
+                )
+                + 1e-2
+            )
+        ).any()
 
     def test_truncnormal_mode(self, min, max, vecs, upscale, shape, device):
         torch.manual_seed(0)
