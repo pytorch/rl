@@ -15,7 +15,8 @@ from typing import Tuple
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
+from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, \
+    TensorDictModule, ProbabilisticTensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
@@ -972,9 +973,21 @@ class KLPENPPOLoss(PPOLoss):
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
             *self.critic_network.in_keys,
-            self.tensor_keys.loc,
-            self.tensor_keys.scale,
         ]
+        # Get the parameter keys from the actor dist
+        actor_dist_module = None
+        for module in self.actor_network.modules():
+            # Ideally we should combine them if there is more than one
+            if isinstance(module, ProbabilisticTensorDictModule):
+                if actor_dist_module is not None:
+                    raise RuntimeError("Actors with one and only one distribution are currently supported "
+                                       f"in {type(self).__name__}. If you need to use more than one "
+                                       f"distribtuion over the action space please submit an issue "
+                                       f"on github.")
+                actor_dist_module = module
+        if actor_dist_module is None:
+            raise RuntimeError("Could not find the probabilistic module in the actor.")
+        keys += list(actor_dist_module.in_keys)
         self._in_keys = list(set(keys))
 
     @property
@@ -994,14 +1007,14 @@ class KLPENPPOLoss(PPOLoss):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
-        tensordict_copy = tensordict.clone(False)
+        tensordict_copy = tensordict.copy()
         try:
             previous_dist = self.actor_network.build_dist_from_params(tensordict)
-        except KeyError:
+        except KeyError as err:
             raise KeyError(
                 "The parameters of the distribution were not found. "
                 f"Make sure they are provided to {type(self).__name__}."
-            )
+            ) from err
         advantage = tensordict_copy.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
