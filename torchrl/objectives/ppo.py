@@ -14,9 +14,16 @@ from typing import Tuple
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
+from tensordict.nn import (
+    dispatch,
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+)
 from tensordict.utils import NestedKey
 from torch import distributions as d
+
+from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -25,9 +32,13 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-
-from .common import LossModule
-from .value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator, VTrace
+from torchrl.objectives.value import (
+    GAE,
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+    VTrace,
+)
 
 
 class PPOLoss(LossModule):
@@ -927,6 +938,35 @@ class KLPENPPOLoss(PPOLoss):
         self.decrement = decrement
         self.samples_mc_kl = samples_mc_kl
 
+    def _set_in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            self.tensor_keys.sample_log_prob,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
+            *self.critic_network.in_keys,
+        ]
+        # Get the parameter keys from the actor dist
+        actor_dist_module = None
+        for module in self.actor_network.modules():
+            # Ideally we should combine them if there is more than one
+            if isinstance(module, ProbabilisticTensorDictModule):
+                if actor_dist_module is not None:
+                    raise RuntimeError(
+                        "Actors with one and only one distribution are currently supported "
+                        f"in {type(self).__name__}. If you need to use more than one "
+                        f"distribtuion over the action space please submit an issue "
+                        f"on github."
+                    )
+                actor_dist_module = module
+        if actor_dist_module is None:
+            raise RuntimeError("Could not find the probabilistic module in the actor.")
+        keys += list(actor_dist_module.in_keys)
+        self._in_keys = list(set(keys))
+
     @property
     def out_keys(self):
         if self._out_keys is None:
@@ -944,27 +984,33 @@ class KLPENPPOLoss(PPOLoss):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
-        tensordict = tensordict.clone(False)
-        advantage = tensordict.get(self.tensor_keys.advantage, None)
+        tensordict_copy = tensordict.copy()
+        try:
+            previous_dist = self.actor_network.build_dist_from_params(tensordict)
+        except KeyError as err:
+            raise KeyError(
+                "The parameters of the distribution were not found. "
+                f"Make sure they are provided to {type(self).__name__}."
+            ) from err
+        advantage = tensordict_copy.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
-                tensordict,
+                tensordict_copy,
                 params=self._cached_critic_network_params_detached,
                 target_params=self.target_critic_network_params,
             )
-            advantage = tensordict.get(self.tensor_keys.advantage)
+            advantage = tensordict_copy.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
             loc = advantage.mean()
             scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
-        log_weight, dist = self._log_weight(tensordict)
+        log_weight, dist = self._log_weight(tensordict_copy)
         neg_loss = log_weight.exp() * advantage
 
-        previous_dist = self.actor_network.build_dist_from_params(tensordict)
         with self.actor_network_params.to_module(
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
-            current_dist = self.actor_network.get_dist(tensordict)
+            current_dist = self.actor_network.get_dist(tensordict_copy)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
