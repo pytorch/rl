@@ -159,7 +159,8 @@ class MultiAgentMLP(MultiAgentNetBase):
     Otherwise, each agent will only use its data as input.
 
     Args:
-        n_agent_inputs (int): number of inputs for each agent.
+        n_agent_inputs (int): number of inputs for each agent. If left to ``None``,
+            the number of inputs is lazily instantiated during the first call.
         n_agent_outputs (int): number of outputs for each agent.
         n_agents (int): number of agents.
         centralised (bool): If `centralised` is True, each agent will use the inputs of all agents to compute its output
