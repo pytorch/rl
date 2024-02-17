@@ -6485,7 +6485,9 @@ class TestPPO(LossModuleTestBase):
         loss_val_td = loss(td)
 
         for i, out_key in enumerate(loss.out_keys):
-            torch.testing.assert_close(loss_val_td.get(out_key), loss_val[i], msg=out_key)
+            torch.testing.assert_close(
+                loss_val_td.get(out_key), loss_val[i], msg=out_key
+            )
 
         # test select
         torch.manual_seed(self.seed)

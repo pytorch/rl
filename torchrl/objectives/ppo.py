@@ -15,8 +15,12 @@ from typing import Tuple
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, \
-    TensorDictModule, ProbabilisticTensorDictModule
+from tensordict.nn import (
+    dispatch,
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+)
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
@@ -980,10 +984,12 @@ class KLPENPPOLoss(PPOLoss):
             # Ideally we should combine them if there is more than one
             if isinstance(module, ProbabilisticTensorDictModule):
                 if actor_dist_module is not None:
-                    raise RuntimeError("Actors with one and only one distribution are currently supported "
-                                       f"in {type(self).__name__}. If you need to use more than one "
-                                       f"distribtuion over the action space please submit an issue "
-                                       f"on github.")
+                    raise RuntimeError(
+                        "Actors with one and only one distribution are currently supported "
+                        f"in {type(self).__name__}. If you need to use more than one "
+                        f"distribtuion over the action space please submit an issue "
+                        f"on github."
+                    )
                 actor_dist_module = module
         if actor_dist_module is None:
             raise RuntimeError("Could not find the probabilistic module in the actor.")
