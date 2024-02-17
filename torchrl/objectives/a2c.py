@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
@@ -17,9 +18,11 @@ from tensordict.utils import NestedKey
 from torch import distributions as d
 
 from torchrl.objectives.common import LossModule
+
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -88,6 +91,10 @@ class A2CLoss(LossModule):
             Functionalizing permits features like meta-RL, but makes it
             impossible to use distributed models (DDP, FSDP, ...) and comes
             with a little cost. Defaults to ``True``.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -264,7 +271,11 @@ class A2CLoss(LossModule):
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
+<<<<<<< HEAD
         return_tensorclass: bool = False,
+=======
+        reduction: str = None,
+>>>>>>> upstream/main
     ):
         if actor is not None:
             actor_network = actor
@@ -276,6 +287,8 @@ class A2CLoss(LossModule):
             raise TypeError(
                 "Missing positional arguments actor_network or critic_network."
             )
+        if reduction is None:
+            reduction = "mean"
 
         self._functional = functional
         self._out_keys = None
@@ -308,6 +321,7 @@ class A2CLoss(LossModule):
 
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_coef
+        self.reduction = reduction
 
         try:
             device = next(self.parameters()).device
@@ -421,7 +435,7 @@ class A2CLoss(LossModule):
             entropy = dist.entropy()
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
-            entropy = -dist.log_prob(x)
+            entropy = -dist.log_prob(x).mean(0)
         return entropy.unsqueeze(-1)
 
     def _log_probs(
@@ -490,16 +504,24 @@ class A2CLoss(LossModule):
         assert not advantage.requires_grad
         log_probs, dist = self._log_probs(tensordict)
         loss = -(log_probs * advantage)
-        td_out = TensorDict({"loss_objective": loss.mean()}, [])
+        td_out = TensorDict({"loss_objective": loss}, batch_size=[])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.mean().detach())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy.mean())
+            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
+<<<<<<< HEAD
             loss_critic = self.loss_critic(tensordict).mean()
             td_out.set("loss_critic", loss_critic.mean())
         if self.return_tensorclass:
             return A2CLosses._from_tensordict(td_out)
+=======
+            loss_critic = self.loss_critic(tensordict)
+            td_out.set("loss_critic", loss_critic)
+        td_out = td_out.apply(
+            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        )
+>>>>>>> upstream/main
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
