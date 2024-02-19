@@ -49,13 +49,15 @@ class MultiAgentNetBase(nn.Module):
                 initialized = False
                 break
         self.initialized = initialized
-        if not self.initialized:
-            self._agents_nets = agent_networks
-        else:
-            self._agents_nets = None
-            self._make_params(agent_networks)
+        self._make_params(agent_networks)
         kwargs["device"] = "meta"
         self.__dict__["_empty_net"] = self._build_single_net(**kwargs)
+
+    @property
+    def _vmap_randomness(self):
+        if self.initialized:
+            return "error"
+        return "same"
 
     def _make_params(self, agent_networks):
         if self.share_params:
@@ -66,25 +68,6 @@ class MultiAgentNetBase(nn.Module):
     @abc.abstractmethod
     def _build_single_net(self, *, device, **kwargs):
         ...
-
-    def _check_init(self, inputs):
-        if self.initialized:
-            return
-        if not self.share_params:
-            if self.centralised:
-                for model in self._agents_nets:
-                    model(inputs)
-            else:
-                for input, model in zip(
-                    inputs.unbind(self.agent_dim), self._agents_nets
-                ):
-                    model(input)
-        # If parameters are shared, agents use the same network
-        else:
-            self._agents_nets[0](inputs)
-        self._make_params(self._agents_nets)
-        del self._agents_nets
-        self.initialized = True
 
     @abc.abstractmethod
     def _pre_forward_check(self, inputs):
@@ -105,16 +88,18 @@ class MultiAgentNetBase(nn.Module):
             inputs = inputs[0]
 
         inputs = self._pre_forward_check(inputs)
-        self._check_init(inputs)
         # If parameters are not shared, each agent has its own network
         if not self.share_params:
             if self.centralised:
-                output = self.vmap_func_module(self._empty_net, (0, None), (-2,))(
-                    self.params, inputs
-                )
+                output = self.vmap_func_module(
+                    self._empty_net, (0, None), (-2,), randomness=self._vmap_randomness
+                )(self.params, inputs)
             else:
                 output = self.vmap_func_module(
-                    self._empty_net, (0, self.agent_dim), (-2,)
+                    self._empty_net,
+                    (0, self.agent_dim),
+                    (-2,),
+                    randomness=self._vmap_randomness,
                 )(self.params, inputs)
 
         # If parameters are shared, agents use the same network
