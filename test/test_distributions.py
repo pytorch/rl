@@ -151,6 +151,7 @@ class TestTruncatedNormal:
         )
         for _ in range(100):
             a = d.rsample(shape)
+            assert a.device == device
             assert a.shape[: len(shape)] == shape
             assert (a >= d.min).all()
             assert (a <= d.max).all()

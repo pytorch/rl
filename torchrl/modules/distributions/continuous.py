@@ -194,6 +194,8 @@ class TruncatedNormal(D.Independent):
 
     num_params: int = 2
 
+    base_dist: _TruncatedNormal
+
     arg_constraints = {
         "loc": constraints.real,
         "scale": constraints.greater_than(1e-6),
@@ -258,7 +260,11 @@ class TruncatedNormal(D.Independent):
         self.scale = scale
 
         base_dist = _TruncatedNormal(
-            loc, scale, self.min.expand_as(loc), self.max.expand_as(scale)
+            loc,
+            scale,
+            self.min.expand_as(loc),
+            self.max.expand_as(scale),
+            device=self.device,
         )
         super().__init__(base_dist, 1, validate_args=False)
 
