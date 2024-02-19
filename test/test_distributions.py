@@ -140,7 +140,7 @@ class TestTanhNormal:
 class TestTruncatedNormal:
     def test_truncnormal(self, min, max, vecs, upscale, shape, device):
         torch.manual_seed(0)
-        *vecs, min, max, vecs, upscale = torch.utils._pytree.map(lambda t: torch.as_tensor(t, device=device),
+        *vecs, min, max, vecs, upscale = torch.utils._pytree.tree_map(lambda t: torch.as_tensor(t, device=device),
             *vecs, min, max, vecs, upscale
         )
         assert all(t.device == device for t in vecs)
