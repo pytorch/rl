@@ -143,6 +143,7 @@ class TestTruncatedNormal:
         *vecs, min, max, vecs, upscale, shape = _map_all(
             *vecs, min, max, vecs, upscale, shape, device=device
         )
+        assert all(t.device == device for t in vecs)
         d = TruncatedNormal(
             *vecs,
             upscale=upscale,
