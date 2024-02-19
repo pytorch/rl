@@ -1146,6 +1146,7 @@ class SyncDataCollector(DataCollectorBase):
             return tensor1
         return tensor1.to(tensor0.device, non_blocking=True)
 
+    @torch.no_grad()
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
         # metadata
