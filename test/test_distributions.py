@@ -140,8 +140,8 @@ class TestTanhNormal:
 class TestTruncatedNormal:
     def test_truncnormal(self, min, max, vecs, upscale, shape, device):
         torch.manual_seed(0)
-        min, max, vecs, upscale, shape = _map_all(
-            min, max, vecs, upscale, shape, device=device
+        *vecs, min, max, vecs, upscale, shape = _map_all(
+            *vecs, min, max, vecs, upscale, shape, device=device
         )
         d = TruncatedNormal(
             *vecs,
