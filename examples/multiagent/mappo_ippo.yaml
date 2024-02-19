@@ -2,7 +2,7 @@ seed: 0
 
 env:
   max_steps: 100
-  scenario_name: "balance"
+  scenario_name: "navigation"
   scenario:
     n_agents: 3
   device: ??? # These values will be populated dynamically

@@ -17,11 +17,12 @@ from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs import RewardSum, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.modules.models.multiagent import MultiAgentMLP
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
 from utils.logging import init_logging, log_evaluation, log_training
-from utils.utils import DoneTransform
+from utils.utils import DoneTransform, swap_last
 
 
 def rendering_callback(env, td):
@@ -168,6 +169,21 @@ def train(cfg: "DictConfig"):  # noqa: F821
     sampling_start = time.time()
     for i, tensordict_data in enumerate(collector):
         torchrl_logger.info(f"\nIteration {i}")
+
+        with set_exploration_type(ExplorationType.RANDOM) and torch.no_grad():
+            tensordict_data = env.rollout(
+                max_steps=cfg.env.max_steps,
+                policy=policy,
+                break_when_any_done=False,
+            )
+        for done_key in env.done_keys:
+            new_name = swap_last(env.reward_key, done_key)
+            tensordict_data.set(
+                ("next", new_name),
+                tensordict_data.get(("next", done_key))
+                .unsqueeze(-1)
+                .expand(tensordict_data.get(("next", env.reward_key)).shape),
+            )
 
         sampling_time = time.time() - sampling_start
 
