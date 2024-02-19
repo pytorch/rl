@@ -12,7 +12,7 @@ from torch import nn
 
 from torchrl.data.utils import DEVICE_TYPING
 
-from torchrl.modules.models import ConvNet, MLP
+from torchrl.modules.models import AbsLinear, ConvNet, HyperLinear, MLP
 
 
 class MultiAgentMLP(nn.Module):
@@ -820,3 +820,102 @@ class QMixer(Mixer):
         # Reshape and return
         q_tot = y.view(*bs, 1)
         return q_tot
+
+
+class QGNNMixer(Mixer):
+    """QGNN Mixer.
+
+    From https://arxiv.org/abs/2205.13005
+
+    """
+
+    def __init__(
+        self,
+        n_agents: int,
+        device,
+        mixing_embed_dim=8,
+        state_shape=None,
+        use_state=False,
+    ):
+        super().__init__(
+            needs_state=use_state,
+            state_shape=state_shape if use_state else torch.Size([]),
+            n_agents=n_agents,
+            device=device,
+        )
+
+        self.use_state = use_state
+        self.embed_dim = mixing_embed_dim
+        self.state_dim = int(np.prod(state_shape)) if self.use_state else None
+
+        self.psi_hyper = MLP(
+            in_features=1,
+            out_features=self.embed_dim,
+            depth=3,
+            num_cells=self.embed_dim,
+            activation_class=nn.ReLU,
+            activate_last_layer=False,
+            layer_class=HyperLinear if self.use_state else AbsLinear,
+            layer_kwargs={"pos": True} if self.use_state else {},
+            device=device,
+        )
+
+        self.phi_hyper = MLP(
+            in_features=self.embed_dim,
+            out_features=1,
+            depth=3,
+            num_cells=self.embed_dim,
+            activation_class=nn.ReLU,
+            activate_last_layer=False,
+            layer_class=HyperLinear if self.use_state else AbsLinear,
+            layer_kwargs={"pos": True} if self.use_state else {},
+            device=device,
+        )
+
+        if self.use_state:
+            self.psi_param_net = MLP(
+                in_features=self.state_dim,
+                out_features=self.num_params(self.psi_hyper),
+                depth=2,
+                num_cells=self.state_dim,
+                activation_class=nn.Mish,
+                activate_last_layer=False,
+                device=device,
+            )
+            self.phi_param_net = MLP(
+                in_features=self.state_dim,
+                out_features=self.num_params(self.phi_hyper),
+                depth=2,
+                num_cells=self.state_dim,
+                activation_class=nn.Mish,
+                activate_last_layer=False,
+                device=device,
+            )
+
+    def mix(self, chosen_action_value: torch.Tensor, state: torch.Tensor):
+        if self.use_state:
+            state = state.view(-1, self.state_dim)
+            psi_params = self.psi_param_net(state)
+            phi_params = self.phi_param_net(state)
+            self.update_params(self.psi_hyper, psi_params)
+            self.update_params(self.phi_hyper, phi_params)
+        psi_out = self.psi_hyper(chosen_action_value)
+        summed = psi_out.sum(dim=-2)
+        phi_out = self.phi_hyper(summed)
+        return phi_out
+
+    def num_params(self, net):
+        num_params = 0
+        for layer in net:
+            if isinstance(layer, HyperLinear):
+                num_params += layer.num_params()
+        return num_params
+
+    def update_params(self, net, params):
+        i = 0
+        for layer in net:
+            if isinstance(layer, HyperLinear):
+                layer_num_params = layer.num_params()
+                layer_params = params[:, i : i + layer_num_params]
+                i += layer_num_params
+                layer.update_params(layer_params)
