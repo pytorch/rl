@@ -149,6 +149,7 @@ class TestTruncatedNormal:
             min=min,
             max=max,
         )
+        assert d.device == device
         for _ in range(100):
             a = d.rsample(shape)
             assert a.device == device
