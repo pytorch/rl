@@ -161,7 +161,6 @@ class TestTruncatedNormal:
             lp = d.log_prob(a)
             assert torch.isfinite(lp).all()
         oob_min = d.min.expand((*d.batch_shape, *d.event_shape)) - 1e-2
-
         assert not torch.isfinite(d.log_prob(oob_min)).any()
         oob_max = d.max.expand((*d.batch_shape, *d.event_shape)) + 1e-2
         assert not torch.isfinite(d.log_prob(oob_max)).any()
