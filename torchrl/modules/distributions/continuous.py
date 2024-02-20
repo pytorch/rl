@@ -194,6 +194,8 @@ class TruncatedNormal(D.Independent):
 
     num_params: int = 2
 
+    base_dist: _TruncatedNormal
+
     arg_constraints = {
         "loc": constraints.real,
         "scale": constraints.greater_than(1e-6),
@@ -231,20 +233,10 @@ class TruncatedNormal(D.Independent):
         self.tanh_loc = tanh_loc
 
         self.device = loc.device
-        self.upscale = (
-            upscale
-            if not isinstance(upscale, torch.Tensor)
-            else upscale.to(self.device)
-        )
+        self.upscale = torch.as_tensor(upscale, device=self.device)
 
-        if isinstance(max, torch.Tensor):
-            max = max.to(self.device)
-        else:
-            max = torch.as_tensor(max, device=self.device)
-        if isinstance(min, torch.Tensor):
-            min = min.to(self.device)
-        else:
-            min = torch.as_tensor(min, device=self.device)
+        max = torch.as_tensor(max, device=self.device)
+        min = torch.as_tensor(min, device=self.device)
         self.min = min
         self.max = max
         self.update(loc, scale)
@@ -258,7 +250,11 @@ class TruncatedNormal(D.Independent):
         self.scale = scale
 
         base_dist = _TruncatedNormal(
-            loc, scale, self.min.expand_as(loc), self.max.expand_as(scale)
+            loc,
+            scale,
+            self.min.expand_as(loc),
+            self.max.expand_as(scale),
+            device=self.device,
         )
         super().__init__(base_dist, 1, validate_args=False)
 
