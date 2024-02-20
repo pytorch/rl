@@ -144,7 +144,7 @@ class MultiAgentMLP(MultiAgentNetBase):
     Otherwise, each agent will only use its data as input.
 
     Args:
-        n_agent_inputs (int): number of inputs for each agent. If left to ``None``,
+        n_agent_inputs (int or None): number of inputs for each agent. If ``None``,
             the number of inputs is lazily instantiated during the first call.
         n_agent_outputs (int): number of outputs for each agent.
         n_agents (int): number of agents.
@@ -251,7 +251,7 @@ class MultiAgentMLP(MultiAgentNetBase):
 
     def __init__(
         self,
-        n_agent_inputs: int,
+        n_agent_inputs: int | None,
         n_agent_outputs: int,
         n_agents: int,
         centralised: bool,
