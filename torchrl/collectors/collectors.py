@@ -720,7 +720,8 @@ class SyncDataCollector(DataCollectorBase):
         self.return_same_td = return_same_td
 
         # Shuttle is a deviceless tensordict that just carried data from env to policy and policy to env
-        self._shuttle = self.env.reset()
+        with torch.no_grad():
+            self._shuttle = self.env.reset()
         if self.policy_device != self.env_device or self.env_device is None:
             self._shuttle_has_no_device = True
             self._shuttle.clear_device_()
@@ -1145,6 +1146,7 @@ class SyncDataCollector(DataCollectorBase):
             return tensor1
         return tensor1.to(tensor0.device, non_blocking=True)
 
+    @torch.no_grad()
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
         # metadata
