@@ -419,6 +419,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @property
     def batch_size(self) -> torch.Size:
+        """Number of envs batched in this environment instance organised in a `torch.Size()` object.
+
+        Environment may be similar or different but it is assumed that they have little if
+        not no interactions between them (e.g., multi-task or batched execution
+        in parallel).
+
+        """
         _batch_size = self.__dict__["_batch_size"]
         if _batch_size is None:
             _batch_size = self._batch_size = torch.Size([])
@@ -438,6 +445,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self.input_spec.unlock_()
             self.input_spec.shape = value
             self.input_spec.lock_()
+
+    @property
+    def shape(self):
+        """Equivalent to :attr:`~.batch_size`."""
+        return self.batch_size
 
     @property
     def device(self) -> torch.device:
@@ -2162,7 +2174,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self.batch_locked or self.batch_size != ()
         ) and tensordict.batch_size != self.batch_size:
             raise RuntimeError(
-                f"Expected a tensordict with shape==env.shape, "
+                f"Expected a tensordict with shape==env.batch_size, "
                 f"got {tensordict.batch_size} and {self.batch_size}"
             )
 
