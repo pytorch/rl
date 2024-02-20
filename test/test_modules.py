@@ -858,24 +858,15 @@ class TestMultiAgent:
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
     @pytest.mark.parametrize("centralised", [True, False])
-    @pytest.mark.parametrize(
-        "batch",
-        [
-            (10,),
-            (
-                10,
-                3,
-            ),
-            (),
-        ],
-    )
-    def test_mlp(
+    @pytest.mark.parametrize("n_agent_inputs", [6, None])
+    @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
+    def test_multiagent_mlp(
         self,
         n_agents,
         centralised,
         share_params,
         batch,
-        n_agent_inputs=6,
+        n_agent_inputs,
         n_agent_outputs=2,
     ):
         torch.manual_seed(0)
@@ -887,6 +878,8 @@ class TestMultiAgent:
             share_params=share_params,
             depth=2,
         )
+        if n_agent_inputs is None:
+            n_agent_inputs = 6
         td = self._get_mock_input_td(n_agents, n_agent_inputs, batch=batch)
         obs = td.get(("agents", "observation"))
 
@@ -921,17 +914,63 @@ class TestMultiAgent:
                     # same input different output
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
 
+    def test_multiagent_mlp_lazy(self):
+        mlp = MultiAgentMLP(
+            n_agent_inputs=None,
+            n_agent_outputs=6,
+            n_agents=3,
+            centralised=True,
+            share_params=False,
+            depth=2,
+        )
+        optim = torch.optim.Adam(mlp.parameters())
+        for p in mlp.parameters():
+            if isinstance(p, torch.nn.parameter.UninitializedParameter):
+                break
+        else:
+            raise AssertionError("No UninitializedParameter found")
+        for p in optim.param_groups[0]["params"]:
+            if isinstance(p, torch.nn.parameter.UninitializedParameter):
+                break
+        else:
+            raise AssertionError("No UninitializedParameter found")
+        for _ in range(2):
+            td = self._get_mock_input_td(3, 4, batch=(10,))
+            obs = td.get(("agents", "observation"))
+            out = mlp(obs)
+            out.mean().backward()
+            optim.step()
+        for p in mlp.parameters():
+            if isinstance(p, torch.nn.parameter.UninitializedParameter):
+                raise AssertionError("UninitializedParameter found")
+        for p in optim.param_groups[0]["params"]:
+            if isinstance(p, torch.nn.parameter.UninitializedParameter):
+                raise AssertionError("UninitializedParameter found")
+
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
     @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("channels", [3, None])
     @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
-    def test_cnn(
-        self, n_agents, centralised, share_params, batch, x=50, y=50, channels=3
+    def test_multiagent_cnn(
+        self,
+        n_agents,
+        centralised,
+        share_params,
+        batch,
+        channels,
+        x=50,
+        y=50,
     ):
         torch.manual_seed(0)
         cnn = MultiAgentConvNet(
-            n_agents=n_agents, centralised=centralised, share_params=share_params
+            n_agents=n_agents,
+            centralised=centralised,
+            share_params=share_params,
+            in_features=channels,
         )
+        if channels is None:
+            channels = 3
         td = TensorDict(
             {
                 "agents": TensorDict(
@@ -972,6 +1011,45 @@ class TestMultiAgent:
                 for j in range(i + 1, n_agents):
                     # same input different output
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
+
+    def test_multiagent_cnn_lazy(self):
+        cnn = MultiAgentConvNet(
+            n_agents=5,
+            centralised=False,
+            share_params=False,
+            in_features=None,
+        )
+        optim = torch.optim.Adam(cnn.parameters())
+        for p in cnn.parameters():
+            if isinstance(p, torch.nn.parameter.UninitializedParameter):
+                break
+        else:
+            raise AssertionError("No UninitializedParameter found")
+        for p in optim.param_groups[0]["params"]:
+            if isinstance(p, torch.nn.parameter.UninitializedParameter):
+                break
+        else:
+            raise AssertionError("No UninitializedParameter found")
+        for _ in range(2):
+            td = TensorDict(
+                {
+                    "agents": TensorDict(
+                        {"observation": torch.randn(10, 5, 3, 50, 50)},
+                        [10, 5],
+                    )
+                },
+                batch_size=[10],
+            )
+            obs = td[("agents", "observation")]
+            out = cnn(obs)
+            out.mean().backward()
+            optim.step()
+        for p in cnn.parameters():
+            if isinstance(p, torch.nn.parameter.UninitializedParameter):
+                raise AssertionError("UninitializedParameter found")
+        for p in optim.param_groups[0]["params"]:
+            if isinstance(p, torch.nn.parameter.UninitializedParameter):
+                raise AssertionError("UninitializedParameter found")
 
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize(
