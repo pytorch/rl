@@ -673,6 +673,21 @@ class TensorStorage(Storage):
     ):
         self._get_new_len(data, cursor)
 
+        if isinstance(data, list):
+            # flip list
+            try:
+                data = _flip_list(data)
+            except Exception:
+                raise RuntimeError(
+                    "Stacking the elements of the list resulted in "
+                    "an error. "
+                    f"Storages of type {type(self)} expect all elements of the list "
+                    f"to have the same tree structure. If the list is compact (each "
+                    f"leaf is itself a batch with the appropriate number of elements) "
+                    f"consider using a tuple instead, as lists are used within `extend` "
+                    f"for per-item addition."
+                )
+
         if not self.initialized:
             if not isinstance(cursor, INT_CLASSES):
                 if is_tensor_collection(data):
@@ -1445,3 +1460,10 @@ def _init_pytree(scratch_dir, max_size, data):  # noqa: F811
         out.append(save_tensor(tensor_path, tensor))
 
     return tree_unflatten(out, data_specs)
+
+
+def _flip_list(data):
+    flat_data, flat_specs = zip(*[tree_flatten(item) for item in data])
+    flat_data = zip(*flat_data)
+    stacks = [torch.stack(item) for item in flat_data]
+    return tree_unflatten(stacks, flat_specs[0])

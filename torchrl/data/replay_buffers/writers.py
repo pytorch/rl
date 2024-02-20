@@ -19,7 +19,16 @@ import torch
 from tensordict import is_tensor_collection, MemoryMappedTensor, TensorDictBase
 from tensordict.utils import _STRDTYPE2DTYPE, expand_as_right, is_tensorclass
 from torch import multiprocessing as mp
-from torch.utils._pytree import tree_flatten
+
+try:
+    from torch.utils._pytree import tree_leaves
+except ImportError:
+    from torch.utils._pytree import tree_flatten
+
+    def tree_leaves(data):  # noqa: D103
+        tree_flat, _ = tree_flatten(data)
+        return tree_flat
+
 
 from torchrl.data.replay_buffers.storages import Storage
 from torchrl.data.replay_buffers.utils import _is_int, _reduce
@@ -147,7 +156,7 @@ class RoundRobinWriter(Writer):
         elif isinstance(data, list):
             batch_size = len(data)
         else:
-            batch_size = len(tree_flatten(data)[0][0])
+            batch_size = len(tree_leaves(data)[0])
         if batch_size == 0:
             raise RuntimeError("Expected at least one element in extend.")
         device = data.device if hasattr(data, "device") else None

@@ -819,6 +819,34 @@ class TestLazyStorages:
         tc_sample = mystorage.get(idx)
         assert tc_sample.shape == torch.Size([tc.shape[0] - 2, *tc.shape[1:]])
 
+    def test_extend_list_pytree(self, max_size, shape, storage):
+        memory = ReplayBuffer(
+            storage=storage(max_size=max_size),
+            sampler=SamplerWithoutReplacement(),
+        )
+        data = [
+            (
+                torch.full(shape, i),
+                {"a": torch.full(shape, i), "b": (torch.full(shape, i))},
+                [torch.full(shape, i)],
+            )
+            for i in range(10)
+        ]
+        memory.extend(data)
+        sample = memory.sample(10)
+        for leaf in torch.utils._pytree.tree_leaves(sample):
+            assert (leaf.unique(sorted=True) == torch.arange(10)).all()
+        memory = ReplayBuffer(
+            storage=storage(max_size=max_size),
+            sampler=SamplerWithoutReplacement(),
+        )
+        t1x4 = torch.Tensor([0.1, 0.2, 0.3, 0.4])
+        t1x1 = torch.Tensor([0.01])
+        with pytest.raises(
+            RuntimeError, match="Stacking the elements of the list resulted in an error"
+        ):
+            memory.extend([t1x4, t1x1, t1x4 + 0.4, t1x1 + 0.01])
+
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])

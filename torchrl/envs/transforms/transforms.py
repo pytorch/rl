@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import collections
+import importlib.util
 import multiprocessing as mp
 import warnings
 from copy import copy
@@ -55,25 +56,7 @@ from torchrl.envs.transforms.utils import (
 from torchrl.envs.utils import _sort_keys, _update_during_reset, step_mdp
 from torchrl.objectives.value.functional import reward2go
 
-try:
-    from torchvision.transforms.functional import center_crop
-
-    try:
-        from torchvision.transforms.functional import InterpolationMode, resize
-
-        def interpolation_fn(interpolation):  # noqa: D103
-            return InterpolationMode(interpolation)
-
-    except ImportError:
-
-        def interpolation_fn(interpolation):  # noqa: D103
-            return interpolation
-
-        from torchvision.transforms.functional_tensor import resize
-
-    _has_tv = True
-except ImportError:
-    _has_tv = False
+_has_tv = importlib.util.find_spec("torchvision", None) is not None
 
 IMAGE_KEYS = ["pixels"]
 _MAX_NOOPS_TRIALS = 10
@@ -1748,6 +1731,18 @@ class Resize(ObservationTransform):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.w = int(w)
         self.h = int(h)
+
+        try:
+            from torchvision.transforms.functional import InterpolationMode
+
+            def interpolation_fn(interpolation):  # noqa: D103
+                return InterpolationMode(interpolation)
+
+        except ImportError:
+
+            def interpolation_fn(interpolation):  # noqa: D103
+                return interpolation
+
         self.interpolation = interpolation_fn(interpolation)
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
@@ -1758,6 +1753,10 @@ class Resize(ObservationTransform):
         if ndim > 4:
             sizes = observation.shape[:-3]
             observation = torch.flatten(observation, 0, ndim - 4)
+        try:
+            from torchvision.transforms.functional import resize
+        except ImportError:
+            from torchvision.transforms.functional_tensor import resize
         observation = resize(
             observation,
             [self.w, self.h],
@@ -1827,6 +1826,8 @@ class CenterCrop(ObservationTransform):
         self.h = h if h else w
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        from torchvision.transforms.functional import center_crop
+
         observation = center_crop(observation, [self.w, self.h])
         return observation
 
