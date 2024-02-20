@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import importlib.util
 from copy import copy
 from typing import Optional, Sequence
 
@@ -15,11 +16,7 @@ from tensordict.utils import NestedKey
 from torchrl.envs.transforms import ObservationTransform, Transform
 from torchrl.record.loggers import Logger
 
-try:
-    from torchvision.transforms.functional import center_crop as center_crop_fn
-    from torchvision.utils import make_grid
-except ImportError:
-    center_crop_fn = None
+_has_tv = importlib.util.find_spec("torchvision", None) is not None
 
 
 class VideoRecorder(ObservationTransform):
@@ -95,7 +92,7 @@ class VideoRecorder(ObservationTransform):
         self.count = 0
         self.center_crop = center_crop
         self.make_grid = make_grid
-        if center_crop and not center_crop_fn:
+        if center_crop and not _has_tv:
             raise ImportError(
                 "Could not load center_crop from torchvision. Make sure torchvision is installed."
             )
@@ -118,20 +115,26 @@ class VideoRecorder(ObservationTransform):
                 trailing_dim = range(observation_trsf.ndimension() - 3)
                 observation_trsf = observation_trsf.permute(*trailing_dim, -1, -3, -2)
             if self.center_crop:
-                if center_crop_fn is None:
+                if not _has_tv:
                     raise ImportError(
                         "Could not import torchvision, `center_crop` not available."
                         "Make sure torchvision is installed in your environment."
                     )
+                from torchvision.transforms.functional import (
+                    center_crop as center_crop_fn,
+                )
+
                 observation_trsf = center_crop_fn(
                     observation_trsf, [self.center_crop, self.center_crop]
                 )
             if self.make_grid and observation_trsf.ndimension() == 4:
-                if make_grid is None:
+                if not _has_tv:
                     raise ImportError(
                         "Could not import torchvision, `make_grid` not available."
                         "Make sure torchvision is installed in your environment."
                     )
+                from torchvision.utils import make_grid
+
                 observation_trsf = make_grid(observation_trsf)
             self.obs.append(observation_trsf.to(torch.uint8))
         return observation
