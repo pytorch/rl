@@ -2540,11 +2540,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 is_shared=False)
         """
         tensordict = self.step(tensordict)
-        tensordict_ = self.maybe_reset(tensordict)
-
-        return tensordict, tensordict_
-
-    def maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         # done and truncated are in done_keys
         # We read if any key is done.
         tensordict_ = step_mdp(
@@ -2556,6 +2551,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             action_keys=self.action_keys,
             done_keys=self.done_keys,
         )
+        tensordict_ = self.maybe_reset(tensordict_)
+        return tensordict, tensordict_
+
+    def maybe_reset(self, tensordict_: TensorDictBase) -> TensorDictBase:
         any_done = _terminated_or_truncated(
             tensordict_,
             full_done_spec=self.output_spec["full_done_spec"],
