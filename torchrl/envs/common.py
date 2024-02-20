@@ -2481,7 +2481,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     tensordict_ = tensordict_.to(env_device, non_blocking=True)
                 else:
                     tensordict_.clear_device_()
-            tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
+            if i == max_steps - 1:
+                tensordict = self.step(tensordict_)
+            else:
+                tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
             tensordicts.append(tensordict)
             if i == max_steps - 1:
                 # we don't truncated as one could potentially continue the run
