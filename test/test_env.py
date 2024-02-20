@@ -346,7 +346,7 @@ class TestModelBasedEnvBase:
         mb_env.step(td)
 
         with pytest.raises(
-            RuntimeError, match=re.escape("Expected a tensordict with shape==env.shape")
+            RuntimeError, match=re.escape("Expected a tensordict with shape==env.batch_size")
         ):
             mb_env.step(td_expanded)
 
@@ -1615,7 +1615,7 @@ def test_batch_locked(device):
     _ = env.step(td)
 
     with pytest.raises(
-        RuntimeError, match="Expected a tensordict with shape==env.shape, "
+        RuntimeError, match="Expected a tensordict with shape==env.batch_size, "
     ):
         env.step(td_expanded)
 
