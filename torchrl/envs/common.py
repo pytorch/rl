@@ -2376,6 +2376,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict = self.reset()
         elif tensordict is None:
             raise RuntimeError("tensordict must be provided when auto_reset is False")
+        else:
+            tensordict = self.maybe_reset(tensordict)
+
         if policy is None:
 
             policy = self.rand_action
@@ -2537,6 +2540,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 is_shared=False)
         """
         tensordict = self.step(tensordict)
+        tensordict_ = self.maybe_reset(tensordict)
+
+        return tensordict, tensordict_
+
+    def maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         # done and truncated are in done_keys
         # We read if any key is done.
         tensordict_ = step_mdp(
@@ -2555,7 +2563,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         )
         if any_done:
             tensordict_ = self.reset(tensordict_)
-        return tensordict, tensordict_
+        return tensordict_
 
     def empty_cache(self):
         """Erases all the cached values.
