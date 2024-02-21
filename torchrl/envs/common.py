@@ -2383,7 +2383,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             >>> for i in range(epochs):
             ...     rollout_td = env.rollout(
             ...         max_steps=100,
-            ...         policy=None,
             ...         break_when_any_done=False,
             ...         auto_reset=False,
             ...         tensordict=input_td,
