@@ -737,11 +737,11 @@ class TestStorages:
             if data_type in ("tensor", "pytree"):
                 tree_map(
                     torch.testing.assert_close,
-                    tree_flatten(storage._storage)[0],
-                    tree_flatten(storage_recover._storage)[0],
+                    tree_flatten(storage[:])[0],
+                    tree_flatten(storage_recover[:])[0],
                 )
             else:
-                assert_allclose_td(storage._storage, storage_recover._storage)
+                assert_allclose_td(storage[:], storage_recover[:])
         if data == "tc":
             assert storage._storage.text == storage_recover._storage.text
 
