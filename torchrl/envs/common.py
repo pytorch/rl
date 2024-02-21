@@ -2596,7 +2596,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return tensordict, tensordict_
 
     def maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Checks the done keys of the in put tensordict and, if needed, resets the environment where it is done.
+        """Checks the done keys of the input tensordict and, if needed, resets the environment where it is done.
 
         Args:
             tensordict (TensorDictBase): a tensordict coming from the output of :meth:`step_mdp`
