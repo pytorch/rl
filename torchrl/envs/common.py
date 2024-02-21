@@ -2594,7 +2594,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         Args:
             tensordict (TensorDictBase): a tensordict coming from the output of :func:`~torchrl.envs.utils.step_mdp`.
         Returns:
-            TensorDictBase: a tensordict that is identical to the input one where the environment was
+            A tensordict that is identical to the input where the environment was
             not reset and contains the new reset data where the environment was reset
 
         This method is part of :meth:`~.step_and_maybe_reset` and should be called on the output of a :meth:`~.step`
