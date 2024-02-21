@@ -40,6 +40,7 @@ from mocking_classes import (
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
     DummyModelBasedEnvBase,
+    EnvWithMetadata,
     HeterogeneousCountingEnv,
     HeterogeneousCountingEnvPolicy,
     MockBatchedLockedEnv,
@@ -2227,6 +2228,7 @@ class TestMultiKeyEnvs:
 @pytest.mark.parametrize(
     "envclass",
     [
+        EnvWithMetadata,
         ContinuousActionConvMockEnv,
         ContinuousActionConvMockEnvNumpy,
         ContinuousActionVecMockEnv,
@@ -2251,6 +2253,7 @@ def test_mocking_envs(envclass):
     env.set_seed(100)
     reset = env.reset()
     _ = env.rand_step(reset)
+    r = env.rollout(3)
     check_env_specs(env, seed=100, return_contiguous=False)
 
 
@@ -2590,6 +2593,26 @@ def test_backprop(device):
         assert not r_parallel.exclude("action").requires_grad
     finally:
         p_env.close()
+
+
+class TestNonTensorEnv:
+    @pytest.mark.parametrize("bwad", [True, False])
+    def test_single(self, bwad):
+        env = EnvWithMetadata()
+        r = env.rollout(10, break_when_any_done=bwad)
+        assert r.get("non_tensor").tolist() == list(range(10))
+
+    @pytest.mark.parametrize("bwad", [True, False])
+    def test_serial(self, bwad):
+        env = SerialEnv(2, EnvWithMetadata)
+        r = env.rollout(10, break_when_any_done=bwad)
+        assert r.get("non_tensor").tolist() == [list(range(10))] * 2
+
+    @pytest.mark.parametrize("bwad", [True, False])
+    def test_parallel(self, bwad):
+        env = ParallelEnv(2, EnvWithMetadata)
+        r = env.rollout(10, break_when_any_done=bwad)
+        assert r.get("non_tensor").tolist() == [list(range(10))] * 2
 
 
 if __name__ == "__main__":
