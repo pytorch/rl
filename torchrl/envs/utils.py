@@ -5,18 +5,20 @@
 from __future__ import annotations
 
 import contextlib
-
 import importlib.util
 import os
 import re
 from enum import Enum
 from typing import Dict, List, Union
 
+import tensordict.base
+
 import torch
 
 from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
+    NonTensorData,
     TensorDictBase,
     unravel_key,
 )
@@ -290,7 +292,7 @@ def _set(source, dest, key, total_key, excluded):
     if unravel_key(total_key) not in excluded:
         try:
             val = source.get(key)
-            if is_tensor_collection(val):
+            if is_tensor_collection(val) and not isinstance(val, NonTensorData):
                 new_val = dest.get(key, None)
                 if new_val is None:
                     new_val = val.empty()
@@ -471,11 +473,19 @@ def check_env_specs(
             [fake_tensordict.clone() for _ in range(3)], -1
         )
     # eliminate empty containers
-    fake_tensordict_select = fake_tensordict.select(*fake_tensordict.keys(True, True))
-    real_tensordict_select = real_tensordict.select(*real_tensordict.keys(True, True))
+    fake_tensordict_select = fake_tensordict.select(
+        *fake_tensordict.keys(True, True, is_leaf=tensordict.base._default_is_leaf)
+    )
+    real_tensordict_select = real_tensordict.select(
+        *real_tensordict.keys(True, True, is_leaf=tensordict.base._default_is_leaf)
+    )
     # check keys
-    fake_tensordict_keys = set(fake_tensordict.keys(True, True))
-    real_tensordict_keys = set(real_tensordict.keys(True, True))
+    fake_tensordict_keys = set(
+        fake_tensordict.keys(True, True, is_leaf=tensordict.base._is_leaf_nontensor)
+    )
+    real_tensordict_keys = set(
+        real_tensordict.keys(True, True, is_leaf=tensordict.base._is_leaf_nontensor)
+    )
     if fake_tensordict_keys != real_tensordict_keys:
         raise AssertionError(
             f"""The keys of the specs and data do not match:
@@ -483,9 +493,11 @@ def check_env_specs(
     - List of keys present in fake but not in real: {fake_tensordict_keys-real_tensordict_keys}.
 """
         )
+    print(torch.zeros_like(fake_tensordict_select))
+    print(torch.zeros_like(real_tensordict_select))
     if (
-        fake_tensordict_select.apply(lambda x: torch.zeros_like(x))
-        != real_tensordict_select.apply(lambda x: torch.zeros_like(x))
+        torch.zeros_like(fake_tensordict_select)
+        != torch.zeros_like(real_tensordict_select)
     ).any():
         raise AssertionError(
             "zeroing the two tensordicts did not make them identical. "

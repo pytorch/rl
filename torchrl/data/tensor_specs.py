@@ -31,7 +31,13 @@ from typing import (
 
 import numpy as np
 import torch
-from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase, unravel_key
+from tensordict import (
+    LazyStackedTensorDict,
+    NonTensorData,
+    TensorDict,
+    TensorDictBase,
+    unravel_key,
+)
 from tensordict.utils import _getitem_batch_size, NestedKey
 
 from torchrl._utils import get_binary_env_var
@@ -642,7 +648,7 @@ class TensorSpec:
             indexed tensor
 
         """
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def expand(self, *shape):
@@ -655,7 +661,7 @@ class TensorSpec:
                 from it if the current dimension is a singleton.
 
         """
-        raise NotImplementedError
+        ...
 
     def squeeze(self, dim: int | None = None):
         """Returns a new Spec with all the dimensions of size ``1`` removed.
@@ -689,7 +695,7 @@ class TensorSpec:
             boolean indicating if values belongs to the TensorSpec box
 
         """
-        raise NotImplementedError
+        ...
 
     def project(self, val: torch.Tensor) -> torch.Tensor:
         """If the input tensor is not in the TensorSpec box, it maps it back to it given some heuristic.
@@ -3950,6 +3956,39 @@ class CompositeSpec(TensorSpec):
     @property
     def locked(self):
         return self._locked
+
+
+class NonTensorSpec(TensorSpec):
+    """Tensor spec for non-tensor data.
+
+    This spec has no space or dtype, but the device and shape can be specified
+    (as it is the case for :class:`~tensordict.NonTensorData`).
+
+    """
+
+    shape: torch.Size
+    space: Union[None, Box] = None
+    device: torch.device | None = None
+    dtype: torch.dtype = None
+    domain: str = "continuous"
+
+    def __init__(self, shape=(), device=None):
+        return super().__init__(shape=shape, space=None, device=device, dtype=None)
+
+    def rand(self, shape=None) -> torch.Tensor:
+        return NonTensorData(None, batch_size=self.shape)
+
+    def zero(self, shape=None) -> torch.Tensor:
+        return NonTensorData(None, batch_size=self.shape)
+
+    def expand(self, *shape):
+        return NonTensorSpec(shape=shape)
+
+    def is_in(self, val: torch.Tensor) -> bool:
+        return True
+
+    def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError
 
 
 class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):

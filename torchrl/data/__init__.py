@@ -51,6 +51,7 @@ from .tensor_specs import (
     LazyStackedTensorSpec,
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
+    NonTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
