@@ -547,11 +547,22 @@ class TensorStorage(Storage):
 
     def flatten(self):
         if self.ndim == 1:
-            return self.get(slice(None))
+            return self
         if is_tensor_collection(self._storage):
-            return self._storage[: self._len_along_dim0].flatten(0, self.ndim-1)
-        return tree_map(
-            lambda x: x[: self._len_along_dim0].flatten(0, self.ndim-1), self._storage
+            if self._is_full:
+                return TensorStorage(self._storage.flatten(0, self.ndim - 1))
+            return TensorStorage(
+                self._storage[: self._len_along_dim0].flatten(0, self.ndim - 1)
+            )
+        if self._is_full:
+            return TensorStorage(
+                tree_map(lambda x: x.flatten(0, self.ndim - 1), self._storage)
+            )
+        return TensorStorage(
+            tree_map(
+                lambda x: x[: self._len_along_dim0].flatten(0, self.ndim - 1),
+                self._storage,
+            )
         )
 
     def __getstate__(self):
@@ -671,7 +682,6 @@ class TensorStorage(Storage):
         cursor: Union[int, Sequence[int], slice],
         data: Union[TensorDictBase, torch.Tensor],
     ):
-        self._get_new_len(data, cursor)
 
         if isinstance(data, list):
             # flip list
@@ -687,6 +697,8 @@ class TensorStorage(Storage):
                     f"consider using a tuple instead, as lists are used within `extend` "
                     f"for per-item addition."
                 )
+
+        self._get_new_len(data, cursor)
 
         if not self.initialized:
             if not isinstance(cursor, INT_CLASSES):
@@ -707,6 +719,22 @@ class TensorStorage(Storage):
         cursor: Union[int, Sequence[int], slice],
         data: Union[TensorDictBase, torch.Tensor],
     ):
+
+        if isinstance(data, list):
+            # flip list
+            try:
+                data = _flip_list(data)
+            except Exception:
+                raise RuntimeError(
+                    "Stacking the elements of the list resulted in "
+                    "an error. "
+                    f"Storages of type {type(self)} expect all elements of the list "
+                    f"to have the same tree structure. If the list is compact (each "
+                    f"leaf is itself a batch with the appropriate number of elements) "
+                    f"consider using a tuple instead, as lists are used within `extend` "
+                    f"for per-item addition."
+                )
+
         self._get_new_len(data, cursor)
 
         if not is_tensor_collection(data) and not isinstance(data, torch.Tensor):

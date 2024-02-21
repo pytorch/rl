@@ -372,8 +372,10 @@ class TensorDictMaxValueWriter(Writer):
 
     def register_storage(self, storage: Storage) -> None:
         if storage.ndim > 1:
-            raise ValueError("TensorDictMaxValueWriter is not compatible with storages with more than one dimension. "
-                             "See the docstring constructor note about storing trajectories with TensorDictMaxValueWriter.")
+            raise ValueError(
+                "TensorDictMaxValueWriter is not compatible with storages with more than one dimension. "
+                "See the docstring constructor note about storing trajectories with TensorDictMaxValueWriter."
+            )
         return super().register_storage(storage)
 
     def get_insert_index(self, data: Any) -> int:

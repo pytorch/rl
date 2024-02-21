@@ -922,7 +922,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if self._storage.ndim > 1:
             # We have to flatten the priority otherwise we'll be aggregating
             # the priority across batches
-            priority = priority.flatten(0, self._storage.ndim-1)
+            priority = priority.flatten(0, self._storage.ndim - 1)
         if priority is None:
             return self._sampler.default_priority
         try:
@@ -938,7 +938,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
             )
 
         if self._storage.ndim > 1:
-            priority = priority.unflatten(0, tensordict.shape[:self._storage.ndim])
+            priority = priority.unflatten(0, tensordict.shape[: self._storage.ndim])
 
         return priority
 
@@ -953,13 +953,13 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if self._storage.ndim > 1:
             # We have to flatten the priority otherwise we'll be aggregating
             # the priority across batches
-            priority = priority.flatten(0, self._storage.ndim-1)
+            priority = priority.flatten(0, self._storage.ndim - 1)
 
         priority = priority.reshape(priority.shape[0], -1)
         priority = _reduce(priority, self._sampler.reduction, dim=1)
 
         if self._storage.ndim > 1:
-            priority = priority.unflatten(0, tensordict.shape[:self._storage.ndim])
+            priority = priority.unflatten(0, tensordict.shape[: self._storage.ndim])
 
         return priority
 
