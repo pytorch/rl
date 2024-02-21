@@ -147,7 +147,7 @@ class Storage:
             f"Please report this exception as well as the use case (incl. buffer construction) on github."
         )
 
-    def _max_size_along_dim0(self, *, single_data, batched_data):
+    def _max_size_along_dim0(self, *, single_data=None, batched_data=None):
         if self.ndim == 1:
             return self.max_size
         raise RuntimeError(
