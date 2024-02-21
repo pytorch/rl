@@ -675,6 +675,7 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
     UnboundedDiscreteTensorSpec
     LazyStackedTensorSpec
     LazyStackedCompositeSpec
+    NonTensorSpec
 
 Reinforcement Learning From Human Feedback (RLHF)
 -------------------------------------------------

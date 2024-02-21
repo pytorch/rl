@@ -46,6 +46,9 @@ Each env will have the following attributes:
   all the output keys (:obj:`"full_observation_spec"`, :obj:`"full_reward_spec"` and :obj:`"full_done_spec"`).
   It is locked and should not be modified directly.
 
+If the environment carries non-tensor data, a :class:`~torchrl.data.NonTensorSpec`
+instance can be used.
+
 Importantly, the environment spec shapes should contain the batch size, e.g.
 an environment with :obj:`env.batch_size == torch.Size([4])` should have
 an :obj:`env.action_spec` with shape :obj:`torch.Size([4, action_size])`.

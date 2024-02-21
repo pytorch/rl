@@ -2566,6 +2566,26 @@ def test_backprop(device):
         p_env.close()
 
 
+class TestNonTensorEnv:
+    @pytest.mark.parametrize("bwad", [True, False])
+    def test_single(self, bwad):
+        env = EnvWithMetadata()
+        r = env.rollout(10, break_when_any_done=bwad)
+        assert r.get("non_tensor").tolist() == list(range(10))
+
+    @pytest.mark.parametrize("bwad", [True, False])
+    def test_serial(self, bwad):
+        env = SerialEnv(2, EnvWithMetadata)
+        r = env.rollout(10, break_when_any_done=bwad)
+        assert r.get("non_tensor").tolist() == [list(range(10))] * 2
+
+    @pytest.mark.parametrize("bwad", [True, False])
+    def test_parallel(self, bwad):
+        env = ParallelEnv(2, EnvWithMetadata)
+        r = env.rollout(10, break_when_any_done=bwad)
+        assert r.get("non_tensor").tolist() == [list(range(10))] * 2
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

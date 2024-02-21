@@ -19,6 +19,7 @@ from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorData,
+    NonTensorStack,
     TensorDictBase,
     unravel_key,
 )
@@ -292,7 +293,9 @@ def _set(source, dest, key, total_key, excluded):
     if unravel_key(total_key) not in excluded:
         try:
             val = source.get(key)
-            if is_tensor_collection(val) and not isinstance(val, NonTensorData):
+            if is_tensor_collection(val) and not isinstance(
+                val, (NonTensorData, NonTensorStack)
+            ):
                 new_val = dest.get(key, None)
                 if new_val is None:
                     new_val = val.empty()
@@ -493,8 +496,6 @@ def check_env_specs(
     - List of keys present in fake but not in real: {fake_tensordict_keys-real_tensordict_keys}.
 """
         )
-    print(torch.zeros_like(fake_tensordict_select))
-    print(torch.zeros_like(real_tensordict_select))
     if (
         torch.zeros_like(fake_tensordict_select)
         != torch.zeros_like(real_tensordict_select)
