@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 
 import math
 import warnings
@@ -14,20 +15,32 @@ from typing import Tuple
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
+from tensordict.nn import (
+    dispatch,
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+)
 from tensordict.utils import NestedKey
 from torch import distributions as d
+
+from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
-
-from .common import LossModule
-from .value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator, VTrace
+from torchrl.objectives.value import (
+    GAE,
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+    VTrace,
+)
 
 
 class PPOLoss(LossModule):
@@ -85,6 +98,10 @@ class PPOLoss(LossModule):
             Functionalizing permits features like meta-RL, but makes it
             impossible to use distributed models (DDP, FSDP, ...) and comes
             with a little cost. Defaults to ``True``.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     .. note::
       The advantage (typically GAE) can be computed by the loss function or
@@ -278,6 +295,7 @@ class PPOLoss(LossModule):
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
+        reduction: str = None,
     ):
         if actor is not None:
             actor_network = actor
@@ -289,6 +307,8 @@ class PPOLoss(LossModule):
             raise TypeError(
                 "Missing positional arguments actor_network or critic_network."
             )
+        if reduction is None:
+            reduction = "mean"
 
         self._functional = functional
         self._in_keys = None
@@ -319,6 +339,7 @@ class PPOLoss(LossModule):
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus
         self.separate_losses = separate_losses
+        self.reduction = reduction
 
         try:
             device = next(self.parameters()).device
@@ -444,7 +465,7 @@ class PPOLoss(LossModule):
             entropy = dist.entropy()
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
-            entropy = -dist.log_prob(x)
+            entropy = -dist.log_prob(x).mean(0)
         return entropy.unsqueeze(-1)
 
     def _log_weight(
@@ -530,15 +551,19 @@ class PPOLoss(LossModule):
             advantage = (advantage - loc) / scale
 
         log_weight, dist = self._log_weight(tensordict)
-        neg_loss = (log_weight.exp() * advantage).mean()
-        td_out = TensorDict({"loss_objective": -neg_loss.mean()}, [])
+        neg_loss = log_weight.exp() * advantage
+        td_out = TensorDict({"loss_objective": -neg_loss}, batch_size=[])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.mean().detach())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy.mean())
+            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict).mean()
-            td_out.set("loss_critic", loss_critic.mean())
+            loss_critic = self.loss_critic(tensordict)
+            td_out.set("loss_critic", loss_critic)
+        td_out = td_out.apply(
+            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        )
+
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
@@ -634,6 +659,10 @@ class ClipPPOLoss(PPOLoss):
             Functionalizing permits features like meta-RL, but makes it
             impossible to use distributed models (DDP, FSDP, ...) and comes
             with a little cost. Defaults to ``True``.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -692,6 +721,7 @@ class ClipPPOLoss(PPOLoss):
         normalize_advantage: bool = True,
         gamma: float = None,
         separate_losses: bool = False,
+        reduction: str = None,
         **kwargs,
     ):
         super(ClipPPOLoss, self).__init__(
@@ -705,6 +735,7 @@ class ClipPPOLoss(PPOLoss):
             normalize_advantage=normalize_advantage,
             gamma=gamma,
             separate_losses=separate_losses,
+            reduction=reduction,
             **kwargs,
         )
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
@@ -764,16 +795,20 @@ class ClipPPOLoss(PPOLoss):
         gain2 = log_weight_clip.exp() * advantage
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
-        td_out = TensorDict({"loss_objective": -gain.mean()}, [])
+        td_out = TensorDict({"loss_objective": -gain}, batch_size=[])
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.mean().detach())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy.mean())
+            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
-            td_out.set("loss_critic", loss_critic.mean())
-        td_out.set("ESS", ess.mean() / batch)
+            td_out.set("loss_critic", loss_critic)
+
+        td_out.set("ESS", _reduce(ess, self.reduction) / batch)
+        td_out = td_out.apply(
+            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        )
         return td_out
 
 
@@ -832,7 +867,10 @@ class KLPENPPOLoss(PPOLoss):
             Functionalizing permits features like meta-RL, but makes it
             impossible to use distributed models (DDP, FSDP, ...) and comes
             with a little cost. Defaults to ``True``.
-
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -895,6 +933,7 @@ class KLPENPPOLoss(PPOLoss):
         normalize_advantage: bool = True,
         gamma: float = None,
         separate_losses: bool = False,
+        reduction: str = None,
         **kwargs,
     ):
         super(KLPENPPOLoss, self).__init__(
@@ -908,6 +947,7 @@ class KLPENPPOLoss(PPOLoss):
             normalize_advantage=normalize_advantage,
             gamma=gamma,
             separate_losses=separate_losses,
+            reduction=reduction,
             **kwargs,
         )
 
@@ -927,6 +967,35 @@ class KLPENPPOLoss(PPOLoss):
         self.decrement = decrement
         self.samples_mc_kl = samples_mc_kl
 
+    def _set_in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            self.tensor_keys.sample_log_prob,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
+            *self.critic_network.in_keys,
+        ]
+        # Get the parameter keys from the actor dist
+        actor_dist_module = None
+        for module in self.actor_network.modules():
+            # Ideally we should combine them if there is more than one
+            if isinstance(module, ProbabilisticTensorDictModule):
+                if actor_dist_module is not None:
+                    raise RuntimeError(
+                        "Actors with one and only one distribution are currently supported "
+                        f"in {type(self).__name__}. If you need to use more than one "
+                        f"distribtuion over the action space please submit an issue "
+                        f"on github."
+                    )
+                actor_dist_module = module
+        if actor_dist_module is None:
+            raise RuntimeError("Could not find the probabilistic module in the actor.")
+        keys += list(actor_dist_module.in_keys)
+        self._in_keys = list(set(keys))
+
     @property
     def out_keys(self):
         if self._out_keys is None:
@@ -944,27 +1013,33 @@ class KLPENPPOLoss(PPOLoss):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
-        tensordict = tensordict.clone(False)
-        advantage = tensordict.get(self.tensor_keys.advantage, None)
+        tensordict_copy = tensordict.copy()
+        try:
+            previous_dist = self.actor_network.build_dist_from_params(tensordict)
+        except KeyError as err:
+            raise KeyError(
+                "The parameters of the distribution were not found. "
+                f"Make sure they are provided to {type(self).__name__}."
+            ) from err
+        advantage = tensordict_copy.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
-                tensordict,
+                tensordict_copy,
                 params=self._cached_critic_network_params_detached,
                 target_params=self.target_critic_network_params,
             )
-            advantage = tensordict.get(self.tensor_keys.advantage)
+            advantage = tensordict_copy.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
             loc = advantage.mean()
             scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
-        log_weight, dist = self._log_weight(tensordict)
+        log_weight, dist = self._log_weight(tensordict_copy)
         neg_loss = log_weight.exp() * advantage
 
-        previous_dist = self.actor_network.build_dist_from_params(tensordict)
         with self.actor_network_params.to_module(
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
-            current_dist = self.actor_network.get_dist(tensordict)
+            current_dist = self.actor_network.get_dist(tensordict_copy)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
@@ -978,20 +1053,22 @@ class KLPENPPOLoss(PPOLoss):
             self.beta.data *= self.decrement
         td_out = TensorDict(
             {
-                "loss_objective": -neg_loss.mean(),
-                "kl": kl.detach().mean(),
+                "loss_objective": -neg_loss,
+                "kl": kl.detach(),
             },
-            [],
+            batch_size=[],
         )
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.mean().detach())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy.mean())
-
+            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict)
-            td_out.set("loss_critic", loss_critic.mean())
+            loss_critic = self.loss_critic(tensordict_copy)
+            td_out.set("loss_critic", loss_critic)
+        td_out = td_out.apply(
+            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        )
 
         return td_out
 

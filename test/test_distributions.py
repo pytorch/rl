@@ -140,22 +140,30 @@ class TestTanhNormal:
 class TestTruncatedNormal:
     def test_truncnormal(self, min, max, vecs, upscale, shape, device):
         torch.manual_seed(0)
-        min, max, vecs, upscale, shape = _map_all(
-            min, max, vecs, upscale, shape, device=device
+        *vecs, min, max, vecs, upscale = torch.utils._pytree.tree_map(
+            lambda t: torch.as_tensor(t, device=device),
+            (*vecs, min, max, vecs, upscale),
         )
+        assert all(t.device == device for t in vecs)
         d = TruncatedNormal(
             *vecs,
             upscale=upscale,
             min=min,
             max=max,
         )
+        assert d.device == device
         for _ in range(100):
             a = d.rsample(shape)
+            assert a.device == device
             assert a.shape[: len(shape)] == shape
             assert (a >= d.min).all()
             assert (a <= d.max).all()
             lp = d.log_prob(a)
             assert torch.isfinite(lp).all()
+        oob_min = d.min.expand((*d.batch_shape, *d.event_shape)) - 1e-2
+        assert not torch.isfinite(d.log_prob(oob_min)).any()
+        oob_max = d.max.expand((*d.batch_shape, *d.event_shape)) + 1e-2
+        assert not torch.isfinite(d.log_prob(oob_max)).any()
 
     def test_truncnormal_mode(self, min, max, vecs, upscale, shape, device):
         torch.manual_seed(0)

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import collections
+import importlib.util
 import multiprocessing as mp
 import warnings
 from copy import copy
@@ -55,25 +56,7 @@ from torchrl.envs.transforms.utils import (
 from torchrl.envs.utils import _sort_keys, _update_during_reset, step_mdp
 from torchrl.objectives.value.functional import reward2go
 
-try:
-    from torchvision.transforms.functional import center_crop
-
-    try:
-        from torchvision.transforms.functional import InterpolationMode, resize
-
-        def interpolation_fn(interpolation):  # noqa: D103
-            return InterpolationMode(interpolation)
-
-    except ImportError:
-
-        def interpolation_fn(interpolation):  # noqa: D103
-            return interpolation
-
-        from torchvision.transforms.functional_tensor import resize
-
-    _has_tv = True
-except ImportError:
-    _has_tv = False
+_has_tv = importlib.util.find_spec("torchvision", None) is not None
 
 IMAGE_KEYS = ["pixels"]
 _MAX_NOOPS_TRIALS = 10
@@ -1748,6 +1731,18 @@ class Resize(ObservationTransform):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.w = int(w)
         self.h = int(h)
+
+        try:
+            from torchvision.transforms.functional import InterpolationMode
+
+            def interpolation_fn(interpolation):  # noqa: D103
+                return InterpolationMode(interpolation)
+
+        except ImportError:
+
+            def interpolation_fn(interpolation):  # noqa: D103
+                return interpolation
+
         self.interpolation = interpolation_fn(interpolation)
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
@@ -1758,6 +1753,10 @@ class Resize(ObservationTransform):
         if ndim > 4:
             sizes = observation.shape[:-3]
             observation = torch.flatten(observation, 0, ndim - 4)
+        try:
+            from torchvision.transforms.functional import resize
+        except ImportError:
+            from torchvision.transforms.functional_tensor import resize
         observation = resize(
             observation,
             [self.w, self.h],
@@ -1827,6 +1826,8 @@ class CenterCrop(ObservationTransform):
         self.h = h if h else w
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        from torchvision.transforms.functional import center_crop
+
         observation = center_crop(observation, [self.w, self.h])
         return observation
 
@@ -3667,13 +3668,18 @@ class CatTensors(Transform):
             the transform is used. This behaviour will only work if a parent is set.
         out_key (NestedKey): key of the resulting tensor.
         dim (int, optional): dimension along which the concatenation will occur.
-            Default is -1.
+            Default is ``-1``.
+
+    Keyword Args:
         del_keys (bool, optional): if ``True``, the input values will be deleted after
-            concatenation. Default is True.
+            concatenation. Default is ``True``.
         unsqueeze_if_oor (bool, optional): if ``True``, CatTensor will check that
             the dimension indicated exist for the tensors to concatenate. If not,
             the tensors will be unsqueezed along that dimension.
             Default is ``False``.
+        sort (bool, optional): if ``True``, the keys will be sorted in the
+            transform. Otherwise, the order provided by the user will prevail.
+            Defaults to ``True``.
 
     Examples:
         >>> transform = CatTensors(in_keys=["key1", "key2"])
@@ -3698,8 +3704,10 @@ class CatTensors(Transform):
         in_keys: Sequence[NestedKey] | None = None,
         out_key: NestedKey = "observation_vector",
         dim: int = -1,
+        *,
         del_keys: bool = True,
         unsqueeze_if_oor: bool = False,
+        sort: bool = True,
     ):
         self._initialized = in_keys is not None
         if not self._initialized:
@@ -3707,7 +3715,7 @@ class CatTensors(Transform):
                 raise ValueError(
                     "Lazy call to CatTensors is only supported when `dim=-1`."
                 )
-        else:
+        elif sort:
             in_keys = sorted(in_keys, key=_sort_keys)
         if not isinstance(out_key, (str, tuple)):
             raise Exception("CatTensors requires out_key to be of type NestedKey")
@@ -5163,11 +5171,10 @@ class StepCounter(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        for step_count_key, truncated_key, done_key, terminated_key in zip(
+        for step_count_key, truncated_key, done_key in zip(
             self.step_count_keys,
             self.truncated_keys,
             self.done_keys,
-            self.terminated_keys,
         ):
             step_count = tensordict.get(step_count_key)
             next_step_count = step_count + 1
@@ -5178,9 +5185,12 @@ class StepCounter(Transform):
                 truncated = truncated | next_tensordict.get(truncated_key, False)
                 if self.update_done:
                     done = next_tensordict.get(done_key, None)
-                    terminated = next_tensordict.get(terminated_key, None)
-                    if terminated is not None:
-                        truncated = truncated & ~terminated
+
+                    # we can have terminated and truncated
+                    # terminated = next_tensordict.get(terminated_key, None)
+                    # if terminated is not None:
+                    #     truncated = truncated & ~terminated
+
                     done = truncated | done  # we assume no done after reset
                     next_tensordict.set(done_key, done)
                 next_tensordict.set(truncated_key, truncated)

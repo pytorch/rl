@@ -30,7 +30,7 @@ Get started with Environments, TED and transforms
 # - :ref:`TorchRL's logging API <gs_logging>`.
 #
 # If you are in a hurry, you can jump straight away to the last tutorial,
-# :ref:`Your onw first training loop <gs_first_training>`, from where you can
+# :ref:`Your own first training loop <gs_first_training>`, from where you can
 # backtrack every other "Getting Started" tutorial if things are not clear or
 # if you want to learn more about a specific topic!
 #
