@@ -2273,7 +2273,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 called on the sub-envs that are done. Default is True.
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
             tensordict (TensorDict, optional): if auto_reset is False, an initial
-                tensordict must be provided.
+                tensordict must be provided. Rollout will check if this tensordict has done flags and reset the
+                environment in those dimensions (if needed). This normally should not occur if ``tensordict`` is the
+                output of a reset, but can occur if ``tensordict`` is the last step of a previous rollout.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -2368,6 +2370,26 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             is_shared=False)
             >>> print(rollout.names)
             [None, 'time']
+
+        Rollouts can be used in a loop to emulate data collection.
+        To do so, you need to pass as input the last tensordict coming from the previous rollout after calling
+        :func:`~torchrl.envs.utils.step_mdp` on it.
+
+        Examples:
+            >>> from torchrl.envs import GymEnv, step_mdp
+            >>> env = GymEnv("CartPole-v1")
+            >>> epochs = 10
+            >>> input_td = env.reset()
+            >>> for i in range(epochs):
+            ...     rollout_td = env.rollout(
+            ...         max_steps=100,
+            ...         break_when_any_done=False,
+            ...         auto_reset=False,
+            ...         tensordict=input_td,
+            ...     )
+            ...     input_td = step_mdp(
+            ...         rollout_td[..., -1],
+            ...     )
 
         """
         if auto_cast_to_device:
@@ -2566,15 +2588,24 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
 
-    def maybe_reset(self, tensordict_: TensorDictBase) -> TensorDictBase:
+    def maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Checks the done keys of the input tensordict and, if needed, resets the environment where it is done.
+
+        Args:
+            tensordict (TensorDictBase): a tensordict coming from the output of :func:`~torchrl.envs.utils.step_mdp`.
+        Returns:
+            A tensordict that is identical to the input where the environment was
+            not reset and contains the new reset data where the environment was reset.
+
+        """
         any_done = _terminated_or_truncated(
-            tensordict_,
+            tensordict,
             full_done_spec=self.output_spec["full_done_spec"],
             key="_reset",
         )
         if any_done:
-            tensordict_ = self.reset(tensordict_)
-        return tensordict_
+            tensordict = self.reset(tensordict)
+        return tensordict
 
     def empty_cache(self):
         """Erases all the cached values.
