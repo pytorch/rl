@@ -217,6 +217,25 @@ def test_rollout(env_name, frame_skip, seed=0):
     env.close()
 
 
+@pytest.mark.parametrize("max_steps", [1, 5])
+def test_rollout_done_on_last_step(max_steps):
+    env = CountingEnv(max_steps=max_steps, batch_size=(4,))
+    policy = CountingEnvCountPolicy(
+        action_spec=env.action_spec, action_key=env.action_key
+    )
+
+    input_td = env.reset()
+
+    env.rollout(
+        max_steps=max_steps,
+        policy=policy,
+        auto_reset=False,
+        break_when_any_done=False,
+        tensordict=input_td,
+    )
+    assert (env.count == max_steps).all()
+
+
 @pytest.mark.parametrize("device", get_default_devices())
 def test_rollout_predictability(device):
     env = MockSerialEnv(device=device)
@@ -346,7 +365,8 @@ class TestModelBasedEnvBase:
         mb_env.step(td)
 
         with pytest.raises(
-            RuntimeError, match=re.escape("Expected a tensordict with shape==env.batch_size")
+            RuntimeError,
+            match=re.escape("Expected a tensordict with shape==env.batch_size"),
         ):
             mb_env.step(td_expanded)
 
