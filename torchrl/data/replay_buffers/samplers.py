@@ -1350,7 +1350,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         preceding_stop_idx = stop_idx[..., 0, None] - subtractive_idx[None, ...]
         preceding_stop_idx = preceding_stop_idx.reshape(-1, 1)
         preceding_stop_idx = torch.cat(
-            [preceding_stop_idx, stop_idx[:, 1:].repeat_interleave(seq_length - 1)], -1
+            [preceding_stop_idx, stop_idx[:, 1:].repeat_interleave(seq_length - 1, dim=0)], -1
         )
         if storage.ndim > 1:
             # convert the 2d index into a flat one to accomodate the _sum_tree
@@ -1376,7 +1376,6 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
 
         # extends starting indices of each slice with sequence_length to get indices of all steps
         index = self._tensor_slices_from_startend(seq_length, starts)
-        assert index.ndim == 2
 
         # repeat the weight of each slice to match the number of steps
         info["_weight"] = torch.repeat_interleave(info["_weight"], seq_length)
