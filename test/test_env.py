@@ -217,6 +217,35 @@ def test_rollout(env_name, frame_skip, seed=0):
     env.close()
 
 
+@pytest.mark.parametrize("max_steps", [1, 5])
+def test_rollouts_chaining(max_steps, batch_size=(4,), epochs=4):
+    # CountingEnv is done at max_steps + 1, so to emulate it being done at max_steps, we feed max_steps=max_steps - 1
+    env = CountingEnv(max_steps=max_steps - 1, batch_size=batch_size)
+    policy = CountingEnvCountPolicy(
+        action_spec=env.action_spec, action_key=env.action_key
+    )
+
+    input_td = env.reset()
+    for _ in range(epochs):
+        rollout_td = env.rollout(
+            max_steps=max_steps,
+            policy=policy,
+            auto_reset=False,
+            break_when_any_done=False,
+            tensordict=input_td,
+        )
+        assert (env.count == max_steps).all()
+        input_td = step_mdp(
+            rollout_td[..., -1],
+            keep_other=True,
+            exclude_action=False,
+            exclude_reward=True,
+            reward_keys=env.reward_keys,
+            action_keys=env.action_keys,
+            done_keys=env.done_keys,
+        )
+
+
 @pytest.mark.parametrize("device", get_default_devices())
 def test_rollout_predictability(device):
     env = MockSerialEnv(device=device)
@@ -346,7 +375,8 @@ class TestModelBasedEnvBase:
         mb_env.step(td)
 
         with pytest.raises(
-            RuntimeError, match=re.escape("Expected a tensordict with shape==env.shape")
+            RuntimeError,
+            match=re.escape("Expected a tensordict with shape==env.batch_size"),
         ):
             mb_env.step(td_expanded)
 
@@ -1615,7 +1645,7 @@ def test_batch_locked(device):
     _ = env.step(td)
 
     with pytest.raises(
-        RuntimeError, match="Expected a tensordict with shape==env.shape, "
+        RuntimeError, match="Expected a tensordict with shape==env.batch_size, "
     ):
         env.step(td_expanded)
 

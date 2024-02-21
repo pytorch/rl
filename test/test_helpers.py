@@ -512,7 +512,7 @@ def test_initialize_stats_from_observation_norms(device, keys, composed, initial
         with pytest.raises(
             ValueError, match="Attempted to use an uninitialized parameter"
         ):
-            pre_init_state_dict = t_env.transform.state_dict()
+            t_env.transform.state_dict()
         return
     pre_init_state_dict = t_env.transform.state_dict()
     initialize_observation_norm_transforms(
