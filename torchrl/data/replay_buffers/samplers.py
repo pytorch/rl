@@ -1350,7 +1350,11 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         preceding_stop_idx = stop_idx[..., 0, None] - subtractive_idx[None, ...]
         preceding_stop_idx = preceding_stop_idx.reshape(-1, 1)
         preceding_stop_idx = torch.cat(
-            [preceding_stop_idx, stop_idx[:, 1:].repeat_interleave(seq_length - 1, dim=0)], -1
+            [
+                preceding_stop_idx,
+                stop_idx[:, 1:].repeat_interleave(seq_length - 1, dim=0),
+            ],
+            -1,
         )
         if storage.ndim > 1:
             # convert the 2d index into a flat one to accomodate the _sum_tree
@@ -1386,6 +1390,37 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
                 f"Number of indices is expected to match the batch size ({index.shape[0]} != {batch_size})."
             )
 
+        # if self.truncated_key is not None:
+        #     truncated_key = self.truncated_key
+        #     done_key = _replace_last(truncated_key, "done")
+        #     terminated_key = _replace_last(truncated_key, "terminated")
+        #
+        #     truncated = torch.zeros(
+        #         (index.shape[0], 1), dtype=torch.bool, device=index.device
+        #     )
+        #     if isinstance(seq_length, int):
+        #         truncated.view(num_slices, -1)[:, -1] = 1
+        #     else:
+        #         truncated[seq_length.cumsum(0) - 1] = 1
+        #     # a traj is terminated if the stop index along col 0 (time)
+        #     # equates start + traj length - 1
+        #     traj_terminated = (
+        #         stop_idx[traj_idx, 0] == start_idx[traj_idx, 0] + seq_length - 1
+        #     )
+        #     terminated = torch.zeros_like(truncated)
+        #     if traj_terminated.any():
+        #         if isinstance(seq_length, int):
+        #             truncated.view(num_slices, -1)[traj_terminated] = 1
+        #         else:
+        #             truncated[(seq_length.cumsum(0) - 1)[traj_terminated]] = 1
+        #     truncated = truncated & ~terminated
+        #     done = terminated | truncated
+        #     return index.to(torch.long).unbind(-1), {
+        #         truncated_key: truncated,
+        #         done_key: done,
+        #         terminated_key: terminated,
+        #     }
+
         if self.truncated_key is not None:
             # TODO: fix this part
             # following logics borrowed from SliceSampler
@@ -1394,14 +1429,14 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             terminated_key = _replace_last(truncated_key, "terminated")
 
             truncated = torch.zeros(
-                (*index.shape[:1], 1), dtype=torch.bool, device=index.device
+                (index.shape[0], 1), dtype=torch.bool, device=index.device
             )
             if isinstance(seq_length, int):
                 truncated.view(num_slices, -1)[:, -1] = 1
             else:
                 truncated[seq_length.cumsum(0) - 1] = 1
-            traj_terminated = (
-                (stop_idx[traj_idx] == start_idx[traj_idx]).all(-1) + seq_length - 1
+            traj_terminated = stop_idx[traj_idx, 0] == (
+                start_idx[traj_idx, 0] + seq_length - 1
             )
             terminated = torch.zeros_like(truncated)
             if traj_terminated.any():
