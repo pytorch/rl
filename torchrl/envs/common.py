@@ -2381,14 +2381,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             >>> epochs = 10
             >>> reset_td = env.reset()
             >>> for i in range(epochs):
-            >>>     rollout_td = env.rollout(
+            ...     rollout_td = env.rollout(
             ...         max_steps=100,
             ...         policy=None,
             ...         break_when_any_done=False,
             ...         auto_reset=False,
             ...         tensordict=reset_td,
             ...     )
-            >>>     reset_td = step_mdp(
+            ...     reset_td = step_mdp(
             ...         rollout_td[..., -1],
             ...         keep_other=True,
             ...         exclude_action=False,
