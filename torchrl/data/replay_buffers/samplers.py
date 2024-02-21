@@ -801,10 +801,13 @@ class SliceSampler(Sampler):
         # seq_length is a 1d tensor indicating the desired length of each sequence
         def _start_to_end(st: torch.Tensor, length: int):
             arange = torch.arange(length, device=st.device, dtype=st.dtype)
-            if st.shape:
-                arange = torch.stack(
-                    [arange] + [torch.zeros_like(arange)] * (st.shape[-1] - 1), -1
-                )
+            ndims = st.shape[-1] - 1 if st.ndim else 0
+            arange = torch.stack([arange] + [torch.zeros_like(arange)] * ndims, -1)
+            if st.shape != arange.shape:
+                # we do this to make sure that we're not broadcasting the start
+                # wrong as a tensor with shape [N] can't be expanded to [N, 1]
+                # without getting an error
+                st = st.expand_as(arange)
             return arange + st
 
         if isinstance(seq_length, int):
@@ -1346,7 +1349,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         )
         preceding_stop_idx = stop_idx[..., 0, None] - subtractive_idx[None, ...]
         preceding_stop_idx = preceding_stop_idx.reshape(-1, 1)
-        preceding_stop_idx = torch.cat([preceding_stop_idx, stop_idx[:, 1:]], -1)
+        preceding_stop_idx = torch.cat(
+            [preceding_stop_idx, stop_idx[:, 1:].repeat_interleave(seq_length - 1)], -1
+        )
         if storage.ndim > 1:
             # convert the 2d index into a flat one to accomodate the _sum_tree
             preceding_stop_idx = torch.as_tensor(
@@ -1354,6 +1359,8 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
                     tuple(preceding_stop_idx.transpose(0, 1).numpy()), storage.shape
                 )
             )
+        else:
+            preceding_stop_idx = preceding_stop_idx.squeeze()
 
         # force to not sample index at the end of a trajectory
         self._sum_tree[preceding_stop_idx] = 0.0
@@ -1369,6 +1376,8 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
 
         # extends starting indices of each slice with sequence_length to get indices of all steps
         index = self._tensor_slices_from_startend(seq_length, starts)
+        assert index.ndim == 2
+
         # repeat the weight of each slice to match the number of steps
         info["_weight"] = torch.repeat_interleave(info["_weight"], seq_length)
 
