@@ -27,7 +27,7 @@ from torch import nn, Tensor
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
 
-from torchrl.objectives.utils import _vmap_func, hold_out_net
+from torchrl.objectives.utils import _vmap_func, hold_out_net, RANDOM_MODULE_LIST
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,
@@ -78,6 +78,7 @@ def _call_value_nets(
     single_call: bool,
     value_key: NestedKey,
     detach_next: bool,
+    vmap_randomness: str = "error",
 ):
     in_keys = value_net.in_keys
     if single_call:
@@ -141,9 +142,11 @@ def _call_value_nets(
             )
         elif params is not None:
             params_stack = torch.stack([params, next_params], 0).contiguous()
-            data_out = _vmap_func(value_net, (0, 0))(data_in, params_stack)
+            data_out = _vmap_func(value_net, (0, 0), randomness=vmap_randomness)(
+                data_in, params_stack
+            )
         else:
-            data_out = vmap(value_net, (0,))(data_in)
+            data_out = vmap(value_net, (0,), randomness=vmap_randomness)(data_in)
         value_est = data_out.get(value_key)
         value, value_ = value_est[0], value_est[1]
     data.set(value_key, value)
@@ -214,6 +217,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     default_keys = _AcceptedKeys()
     value_network: Union[TensorDictModule, Callable]
+    _vmap_randomness = None
 
     @property
     def advantage_key(self):
@@ -428,6 +432,28 @@ class ValueEstimatorBase(TensorDictModuleBase):
         next_value = step_td.get(self.tensor_keys.value)
         return next_value
 
+    @property
+    def vmap_randomness(self):
+        if self._vmap_randomness is None:
+            do_break = False
+            for val in self.__dict__.values():
+                if isinstance(val, torch.nn.Module):
+                    for module in val.modules():
+                        if isinstance(module, RANDOM_MODULE_LIST):
+                            self._vmap_randomness = "different"
+                            do_break = True
+                            break
+                if do_break:
+                    # double break
+                    break
+            else:
+                self._vmap_randomness = "error"
+
+        return self._vmap_randomness
+
+    def set_vmap_randomness(self, value):
+        self._vmap_randomness = value
+
 
 class TD0Estimator(ValueEstimatorBase):
     """Temporal Difference (TD(0)) estimate of advantage function.
@@ -589,6 +615,7 @@ class TD0Estimator(ValueEstimatorBase):
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
                     detach_next=True,
+                    vmap_randomness=self.vmap_randomness,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -790,6 +817,7 @@ class TD1Estimator(ValueEstimatorBase):
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
                     detach_next=True,
+                    vmap_randomness=self.vmap_randomness,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -1001,6 +1029,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
                     detach_next=True,
+                    vmap_randomness=self.vmap_randomness,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -1247,6 +1276,7 @@ class GAE(ValueEstimatorBase):
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
                     detach_next=True,
+                    vmap_randomness=self.vmap_randomness,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -1329,6 +1359,7 @@ class GAE(ValueEstimatorBase):
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
                     detach_next=True,
+                    vmap_randomness=self.vmap_randomness,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -1575,6 +1606,7 @@ class VTrace(ValueEstimatorBase):
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
                     detach_next=True,
+                    vmap_randomness=self.vmap_randomness,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
