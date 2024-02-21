@@ -448,17 +448,20 @@ class TensorDictMaxValueWriter(Writer):
                 data_to_replace[storage_idx] = data_idx
 
         # -1 will be interpreted as invalid by prioritized buffers
-        out_index = torch.full(data.shape, -1, dtype=torch.long)
         # Replace the data in the storage all at once
         if len(data_to_replace) > 0:
             storage_idx, data_idx = zip(*data_to_replace.items())
             index = data.get("index", None)
             dtype = index.dtype if index is not None else torch.long
             device = index.device if index is not None else data.device
+            out_index = torch.full(data.shape, -1, dtype=torch.long, device=device)
             data_idx = torch.as_tensor(data_idx, dtype=dtype, device=device)
             storage_idx = torch.as_tensor(storage_idx, dtype=dtype, device=device)
             out_index[data_idx] = storage_idx
             self._storage.set(storage_idx, data[data_idx])
+        else:
+            device = getattr(self._storage, "device", None)
+            out_index = torch.full(data.shape, -1, dtype=torch.long, device=device)
         return self._replicate_index(out_index)
 
     def _empty(self) -> None:
