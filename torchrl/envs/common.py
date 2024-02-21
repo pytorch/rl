@@ -2389,12 +2389,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             ...     )
             ...     input_td = step_mdp(
             ...         rollout_td[..., -1],
-            ...         keep_other=True,
-            ...         exclude_action=False,
-            ...         exclude_reward=True,
-            ...         reward_keys=env.reward_keys,
-            ...         action_keys=env.action_keys,
-            ...         done_keys=env.done_keys,
             ...     )
 
         """
