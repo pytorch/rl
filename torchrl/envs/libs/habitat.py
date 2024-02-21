@@ -102,6 +102,7 @@ class HabitatEnv(GymEnv):
         device_num = torch.device(kwargs.pop("device", 0)).index
         kwargs["override_options"] = [
             f"habitat.simulator.habitat_sim_v0.gpu_device_id={device_num}",
+            "habitat.simulator.concur_render=False",
         ]
         super().__init__(env_name=env_name, **kwargs)
 
