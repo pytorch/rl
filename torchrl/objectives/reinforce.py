@@ -32,8 +32,10 @@ from torchrl.objectives.value import (
     VTrace,
 )
 
+
 class LossContainerBase:
     __getitem__ = TensorDictBase.__getitem__
+
 
 @tensorclass
 class ReinforceLosses(LossContainerBase):

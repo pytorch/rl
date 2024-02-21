@@ -34,8 +34,10 @@ from torchrl.objectives.utils import (
 from torchrl.objectives.value import TDLambdaEstimator
 from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator
 
+
 class LossContainerBase:
     __getitem__ = TensorDictBase.__getitem__
+
 
 @tensorclass
 class DQNLosses(LossContainerBase):
@@ -182,7 +184,7 @@ class DQNLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
-    out_keys = ["loss"]
+    out_keys = ["loss_objective"]
 
     def __init__(
         self,

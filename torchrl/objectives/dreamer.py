@@ -24,8 +24,10 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
+
 class LossContainerBase:
     __getitem__ = TensorDictBase.__getitem__
+
 
 @tensorclass
 class DreamerModelLosses(LossContainerBase):

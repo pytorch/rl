@@ -23,6 +23,7 @@ from torchrl.objectives.utils import distance_loss
 class LossContainerBase:
     __getitem__ = TensorDictBase.__getitem__
 
+
 @tensorclass
 class OnlineDTLosses(LossContainerBase):
     """The tensorclass for The OnlineDTLoss Loss class."""

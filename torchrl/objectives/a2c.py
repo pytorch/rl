@@ -38,6 +38,12 @@ from torchrl.objectives.value import (
 
 class LossContainerBase:
     __getitem__ = TensorDictBase.__getitem__
+    def aggregate_loss(self):
+        result = 0.0
+        for key in self.__dataclass_attr__:
+            if key.startswith("loss_"):
+                result += getattr(self, key)
+        return result
 
 @tensorclass
 class A2CLosses(LossContainerBase):
@@ -205,7 +211,7 @@ class A2CLoss(LossModule):
     method.
 
     Examples:
-        >>> loss.select_out_keys('loss_objective', 'loss_critic')
+        >>> _ = loss.select_out_keys('loss_objective', 'loss_critic')
         >>> loss_obj, loss_critic = loss(
         ...     observation = torch.randn(*batch, n_obs),
         ...     action = spec.rand(batch),

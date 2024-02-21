@@ -31,6 +31,7 @@ from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimat
 class LossContainerBase:
     __getitem__ = TensorDictBase.__getitem__
 
+
 @tensorclass
 class TD3Losses(LossContainerBase):
     """The tensorclass for The TD3 Loss class."""

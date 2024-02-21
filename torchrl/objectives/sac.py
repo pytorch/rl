@@ -48,6 +48,7 @@ def _delezify(func):
 class LossContainerBase:
     __getitem__ = TensorDictBase.__getitem__
 
+
 @tensorclass
 class SACLosses(LossContainerBase):
     """The tensorclass for The SACLoss Loss class."""

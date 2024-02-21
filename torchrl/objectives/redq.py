@@ -30,8 +30,10 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
+
 class LossContainerBase:
     __getitem__ = TensorDictBase.__getitem__
+
 
 @tensorclass
 class REDQLosses(LossContainerBase):
@@ -40,8 +42,8 @@ class REDQLosses(LossContainerBase):
     loss_actor: torch.Tensor
     loss_qvalue: torch.Tensor
     loss_alpha: torch.Tensor
-    alpha : torch.Tensor | None = None
-    entropy : torch.Tensor | None = None
+    alpha: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
     state_action_value_actor: torch.Tensor | None = None
     action_log_prob_actor: torch.Tensor | None = None
     state_value: torch.Tensor | None = None

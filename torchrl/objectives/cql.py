@@ -41,6 +41,7 @@ from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimat
 class LossContainerBase:
     __getitem__ = TensorDictBase.__getitem__
 
+
 @tensorclass
 class CQLLosses(LossContainerBase):
     """The tensorclass for The CQLLoss Loss class."""
@@ -205,16 +206,17 @@ class CQLLoss(LossModule):
         >>> qvalue = ValueOperator(
         ...     module=module,
         ...     in_keys=['observation', 'action'])
-        >>> loss = CQLLoss(actor, qvalue, value)
+        >>> loss = CQLLoss(actor, qvalue)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
-        >>> loss_actor, loss_qvalue, _, _, _, _ = loss(
+        >>> loss_actor, loss_qvalue, *_ = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_observation=torch.zeros(*batch, n_obs),
-        ...     next_reward=torch.randn(*batch, 1))
+        ...     next_reward=torch.randn(*batch, 1),
+        ... )
         >>> loss_actor.backward()
 
     The output keys can also be filtered using the :meth:`CQLLoss.select_out_keys`
@@ -509,10 +511,11 @@ class CQLLoss(LossModule):
                 "loss_qvalue",
                 "loss_cql",
                 "loss_alpha",
-                "loss_alpha_prime",
                 "alpha",
                 "entropy",
             ]
+            if self.with_lagrange:
+                keys.append("loss_alpha_prime")
             self._out_keys = keys
         return self._out_keys
 
