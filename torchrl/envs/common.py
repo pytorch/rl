@@ -2373,7 +2373,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Rollouts can be used in a loop to emulate data collection.
         To do so, you need to pass as input the last tensordict coming from the previous rollout after calling
-        :meth:`step_mdp` on it.
+        :func:`~torchrl.envs.utils.step_mdp` on it.
 
         Examples:
             >>> from torchrl.envs import GymEnv, step_mdp
