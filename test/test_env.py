@@ -218,22 +218,31 @@ def test_rollout(env_name, frame_skip, seed=0):
 
 
 @pytest.mark.parametrize("max_steps", [1, 5])
-def test_rollout_done_on_last_step(max_steps):
-    env = CountingEnv(max_steps=max_steps, batch_size=(4,))
+def test_rollouts_chaining(max_steps, batch_size=(4,), epochs=4):
+    env = CountingEnv(max_steps=max_steps - 1, batch_size=batch_size)
     policy = CountingEnvCountPolicy(
         action_spec=env.action_spec, action_key=env.action_key
     )
 
     input_td = env.reset()
-
-    env.rollout(
-        max_steps=max_steps,
-        policy=policy,
-        auto_reset=False,
-        break_when_any_done=False,
-        tensordict=input_td,
-    )
-    assert (env.count == max_steps).all()
+    for _ in range(epochs):
+        rollout_td = env.rollout(
+            max_steps=max_steps,
+            policy=policy,
+            auto_reset=False,
+            break_when_any_done=False,
+            tensordict=input_td,
+        )
+        assert (env.count == max_steps).all()
+        input_td = step_mdp(
+            rollout_td[..., -1],
+            keep_other=True,
+            exclude_action=False,
+            exclude_reward=True,
+            reward_keys=env.reward_keys,
+            action_keys=env.action_keys,
+            done_keys=env.done_keys,
+        )
 
 
 @pytest.mark.parametrize("device", get_default_devices())
