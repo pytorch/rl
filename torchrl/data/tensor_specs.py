@@ -1456,7 +1456,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         shape = torch.broadcast_shapes(shape, val.shape)
         mask_expand = self.mask.expand(shape)
         gathered = mask_expand & val
-        return gathered.any(-1).all()
+        return gathered.any(-1).all() and val.dtype == self.dtype
 
     def __eq__(self, other):
         if not hasattr(other, "mask"):
@@ -1765,7 +1765,7 @@ class BoundedTensorSpec(TensorSpec):
         try:
             return (val >= self.space.low.to(val.device)).all() and (
                 val <= self.space.high.to(val.device)
-            ).all()
+            ).all() and (val.dtype == self.dtype)
         except RuntimeError as err:
             if "The size of tensor a" in str(err):
                 warnings.warn(f"Got a shape mismatch: {str(err)}")
@@ -1894,7 +1894,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         return torch.empty(shape, device=self.device, dtype=self.dtype).random_()
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return True
+        return val.dtype == self.dtype
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
@@ -2034,7 +2034,7 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         return r.to(self.device)
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return True
+        return val.dtype == self.dtype
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
@@ -2333,7 +2333,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         vals = self._split(val)
         if vals is None:
             return False
-        return all(spec.is_in(val) for val, spec in zip(vals, self._split_self()))
+        return all(spec.is_in(val) for val, spec in zip(vals, self._split_self())) and (val.dtype == self.dtype)
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         vals = self._split(val)
@@ -2589,7 +2589,7 @@ class DiscreteTensorSpec(TensorSpec):
         shape = torch.Size([*torch.broadcast_shapes(shape[:-1], val.shape), shape[-1]])
         mask_expand = self.mask.expand(shape)
         gathered = mask_expand.gather(-1, val.unsqueeze(-1))
-        return gathered.all()
+        return gathered.all() and (val.dtype == self.dtype)
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
@@ -3585,7 +3585,7 @@ class CompositeSpec(TensorSpec):
             val_item = val.get(key)
             if not item.is_in(val_item):
                 return False
-        return True
+        return val.dtype == self.dtype
 
     def project(self, val: TensorDictBase) -> TensorDictBase:
         for key, item in self.items():
@@ -4107,7 +4107,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         for spec, subval in zip(self._specs, val.unbind(self.dim)):
             if not spec.is_in(subval):
                 return False
-        return True
+        return val.dtype == self.dtype
 
     def __delitem__(self, key: NestedKey):
         """Deletes a key from the stacked composite spec.
