@@ -219,6 +219,7 @@ def test_rollout(env_name, frame_skip, seed=0):
 
 @pytest.mark.parametrize("max_steps", [1, 5])
 def test_rollouts_chaining(max_steps, batch_size=(4,), epochs=4):
+    # CountingEnv is done at max_steps + 1, so to emulate it being done at max_steps, we feed max_steps=max_steps - 1
     env = CountingEnv(max_steps=max_steps - 1, batch_size=batch_size)
     policy = CountingEnvCountPolicy(
         action_spec=env.action_spec, action_key=env.action_key
