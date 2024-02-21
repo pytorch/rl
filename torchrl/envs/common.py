@@ -2597,9 +2597,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             A tensordict that is identical to the input where the environment was
             not reset and contains the new reset data where the environment was reset.
 
-        This method is part of :meth:`~.step_and_maybe_reset` and should be called on the output of a :meth:`~.step`
-        on which :meth:`step_mdp` has been called.
-
         """
         any_done = _terminated_or_truncated(
             tensordict,
