@@ -59,8 +59,9 @@ import torch
 
 torch.manual_seed(0)
 
-from torchrl.collectors import RandomPolicy, SyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.envs import GymEnv
+from torchrl.envs.utils import RandomPolicy
 
 env = GymEnv("CartPole-v1")
 env.set_seed(0)

@@ -52,7 +52,7 @@ from tensordict.nn import (
 )
 from torch import nn
 from torchrl._utils import implement_for
-from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
+from torchrl.collectors.collectors import SyncDataCollector
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -105,7 +105,12 @@ from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
 from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
-from torchrl.envs.utils import check_env_specs, ExplorationType, MarlGroupMapType
+from torchrl.envs.utils import (
+    check_env_specs,
+    ExplorationType,
+    MarlGroupMapType,
+    RandomPolicy,
+)
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 
 _has_d4rl = importlib.util.find_spec("d4rl") is not None

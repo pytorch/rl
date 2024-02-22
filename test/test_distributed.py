@@ -33,7 +33,6 @@ from torch import multiprocessing as mp, nn
 from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
-    RandomPolicy,
     SyncDataCollector,
 )
 from torchrl.collectors.distributed import (
@@ -43,6 +42,7 @@ from torchrl.collectors.distributed import (
     RPCDataCollector,
 )
 from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
+from torchrl.envs.utils import RandomPolicy
 
 TIMEOUT = 200
 

@@ -2637,8 +2637,8 @@ class CatFrames(ObservationTransform):
     gives the complete picture, together with the usage of a :class:`torchrl.data.ReplayBuffer`:
 
     Examples:
-        >>> from torchrl.envs import UnsqueezeTransform, CatFrames
-        >>> from torchrl.collectors import SyncDataCollector, RandomPolicy
+        >>> from torchrl.envs.utils import RandomPolicy        >>> from torchrl.envs import UnsqueezeTransform, CatFrames
+        >>> from torchrl.collectors import SyncDataCollector
         >>> # Create a transformed environment with CatFrames: notice the usage of UnsqueezeTransform to create an extra dimension
         >>> env = TransformedEnv(
         ...     GymEnv("CartPole-v1", from_pixels=True),
@@ -6210,7 +6210,7 @@ class Reward2GoTransform(Transform):
     append the `inv` method of the transform.
 
     Examples:
-        >>> from torchrl.collectors import SyncDataCollector, RandomPolicy
+        >>> from torchrl.envs.utils import RandomPolicy        >>> from torchrl.collectors import SyncDataCollector
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> t = Reward2GoTransform(gamma=0.99, out_keys=["reward_to_go"])
         >>> env = GymEnv("Pendulum-v1")

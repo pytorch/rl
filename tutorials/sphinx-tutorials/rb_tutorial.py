@@ -646,7 +646,7 @@ plt.hist(sample["index"].numpy())
 # transformations can be recycled in the replay buffer:
 
 
-from torchrl.collectors import RandomPolicy, SyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     Compose,
@@ -655,6 +655,7 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
 )
+from torchrl.envs.utils import RandomPolicy
 
 env = TransformedEnv(
     GymEnv("CartPole-v1", from_pixels=True),
