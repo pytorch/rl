@@ -14,8 +14,7 @@ import torch
 from tensordict import TensorDict
 from torch import nn
 from torchrl.data.utils import DEVICE_TYPING
-
-from torchrl.modules.models import ConvNet, MLP
+from torchrl.modules.models import ConvNet, MLP, LSTMNet
 
 
 class MultiAgentNetBase(nn.Module):
@@ -506,6 +505,64 @@ class MultiAgentConvNet(MultiAgentNetBase):
         if self.centralised:
             # If the model is centralized, agents have full observability
             inputs = torch.flatten(inputs, -4, -3)
+        return inputs
+
+
+class MultiAgentRNN(MultiAgentNetBase):
+    """Multi-agent RNN.
+
+    TODO(Kevin): docs
+
+    TODO(Kevin): args
+
+    Input: (batch_size, n_agents, input_size)
+    Output: (batch_size, n_agents, hidden_size)
+    """
+
+    def __init__(
+        self,
+        n_agents: int,
+        centralised: bool,
+        share_params: bool,
+        *,
+        out_features: int,
+        mlp_kwargs: Dict,
+        lstm_kwargs: Dict,
+        device: Optional[DEVICE_TYPING] = None,
+        **kwargs,
+    ):
+        self.out_features = out_features
+        self.mlp_kwargs = mlp_kwargs
+        self.lstm_kwargs = lstm_kwargs
+        super().__init__(
+            n_agents=n_agents,
+            centralised=centralised,
+            share_params=share_params,
+            device=device,
+            agent_dim=-2,
+        )
+
+    def _build_single_net(self, *, device, **kwargs):
+        # input_size = self.input_size
+        # if self.centralised and input_size is not None:
+        #     input_size = input_size * self.n_agents
+        return LSTMNet(
+            out_features=self.out_features,
+            mlp_kwargs=self.mlp_kwargs,
+            lstm_kwargs=self.lstm_kwargs,
+            device=device,
+            **kwargs,
+        )
+
+    def _pre_forward_check(self, inputs):
+        if inputs.shape[-2] != self.n_agents:
+            raise ValueError(
+                f"Multi-agent network expected input with shape[-2]={self.n_agents},"
+                f" but got {inputs.shape}"
+            )
+        # If the model is centralized, agents have full observability, so merge all of the input observations
+        if self.centralised:
+            inputs = inputs.flatten(-2, -1)
         return inputs
 
 
