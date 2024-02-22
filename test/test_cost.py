@@ -12073,6 +12073,7 @@ class TestAdv:
         if adv is not VTrace:
             vt = module_none.value_estimate(td.clone(False))
             vt_patch = module_0.value_estimate(td.clone(False), time_dim=1)
+            vt_patch2 = module_0.value_estimate(td.clone(False), time_dim=-1)
             torch.testing.assert_close(vt, vt_patch)
 
     @pytest.mark.parametrize(

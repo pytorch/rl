@@ -459,9 +459,13 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     def _get_time_dim(self, time_dim: int | None, data: TensorDictBase):
         if time_dim is not None:
+            if time_dim < 0:
+                time_dim = data.ndim + time_dim
             return time_dim
         time_dim_attr = getattr(self, "time_dim", None)
         if time_dim_attr is not None:
+            if time_dim_attr < 0:
+                time_dim_attr = data.ndim + time_dim_attr
             return time_dim_attr
         if data._has_names():
             for i, name in enumerate(data.names):
@@ -718,6 +722,8 @@ class TD1Estimator(ValueEstimatorBase):
             markes with the ``"time"`` name if any, and to the last dimension
             otherwise. Can be overridden during a call to
             :meth:`~.value_estimate`.
+            Negative dimensions are considered with respect to the input
+            tensordict.
 
     """
 
@@ -937,6 +943,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
             markes with the ``"time"`` name if any, and to the last dimension
             otherwise. Can be overridden during a call to
             :meth:`~.value_estimate`.
+            Negative dimensions are considered with respect to the input
+            tensordict.
 
     """
 
@@ -1178,6 +1186,8 @@ class GAE(ValueEstimatorBase):
             markes with the ``"time"`` name if any, and to the last dimension
             otherwise. Can be overridden during a call to
             :meth:`~.value_estimate`.
+            Negative dimensions are considered with respect to the input
+            tensordict.
 
     GAE will return an :obj:`"advantage"` entry containing the advange value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
@@ -1260,6 +1270,8 @@ class GAE(ValueEstimatorBase):
                 in the input tensordict. If not provided, defaults to the dimension
                 markes with the ``"time"`` name if any, and to the last dimension
                 otherwise.
+                Negative dimensions are considered with respect to the input
+                tensordict.
 
         Returns:
             An updated TensorDict with an advantage and a value_error keys as defined in the constructor.
@@ -1486,6 +1498,8 @@ class VTrace(ValueEstimatorBase):
             markes with the ``"time"`` name if any, and to the last dimension
             otherwise. Can be overridden during a call to
             :meth:`~.value_estimate`.
+            Negative dimensions are considered with respect to the input
+            tensordict.
 
     VTrace will return an :obj:`"advantage"` entry containing the advantage value. It will also
     return a :obj:`"value_target"` entry with the V-Trace target value.
@@ -1581,6 +1595,8 @@ class VTrace(ValueEstimatorBase):
                 in the input tensordict. If not provided, defaults to the dimension
                 markes with the ``"time"`` name if any, and to the last dimension
                 otherwise.
+                Negative dimensions are considered with respect to the input
+                tensordict.
 
         Returns:
             An updated TensorDict with an advantage and a value_error keys as defined in the constructor.
