@@ -91,6 +91,7 @@ from torchrl.envs.transforms.transforms import (
 
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
+_has_gym = importlib.util.find_spec("gym") is not None
 _has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
 
@@ -2567,6 +2568,7 @@ class TestRBMultidim:
                 assert leaf.shape[0] == 4
                 assert (leaf == 1).all()
 
+    @pytest.mark.skipif(not _has_gym, reason="gym required for this test.")
     @pytest.mark.parametrize(
         "writer_cls",
         [TensorDictMaxValueWriter, RoundRobinWriter, TensorDictRoundRobinWriter],
