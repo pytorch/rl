@@ -2592,6 +2592,23 @@ def test_backprop(device):
         p_env.close()
 
 
+@pytest.mark.skipif(not _has_gym, reason="Gym required for this test")
+def test_non_td_policy():
+    env = GymEnv("CartPole-v1", categorical_action_encoding=True)
+
+    class ArgMaxModule(nn.Module):
+        def forward(self, values):
+            return values.argmax(-1)
+
+    policy = nn.Sequential(
+        nn.Linear(env.observation_spec["observation"].shape[-1], env.action_spec.n),
+        ArgMaxModule(),
+    )
+    env.rollout(10, policy)
+    env = SerialEnv(2, lambda: GymEnv("CartPole-v1", categorical_action_encoding=True))
+    env.rollout(10, policy)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

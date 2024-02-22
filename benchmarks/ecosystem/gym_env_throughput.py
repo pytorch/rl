@@ -23,11 +23,11 @@ from torchrl._utils import timeit
 from torchrl.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
-    RandomPolicy,
     SyncDataCollector,
 )
 from torchrl.envs import EnvCreator, GymEnv, ParallelEnv
 from torchrl.envs.libs.gym import gym_backend as gym_bc, set_gym_backend
+from torchrl.envs.utils import RandomPolicy
 
 if __name__ == "__main__":
     avail_devices = ("cpu",)
