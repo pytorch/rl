@@ -888,8 +888,9 @@ class DiscreteCQLLoss(LossModule):
 
 
     Examples:
-        >>> from torchrl.modules import MLP
+        >>> from torchrl.modules import MLP, QValueActor
         >>> from torchrl.data import OneHotDiscreteTensorSpec
+        >>> from torchrl.objectives import DiscreteCQLLoss
         >>> n_obs, n_act = 4, 3
         >>> value_net = MLP(in_features=n_obs, out_features=n_act)
         >>> spec = OneHotDiscreteTensorSpec(n_act)
@@ -907,8 +908,11 @@ class DiscreteCQLLoss(LossModule):
         >>> loss(data)
         TensorDict(
             fields={
-                loss: Tensor(shape=torch.Size([]), device=cuda:0, dtype=torch.float32, is_shared=True),
-                loss_cql: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                loss_cql: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                pred_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                td_error: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
