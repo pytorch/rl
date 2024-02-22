@@ -45,6 +45,7 @@ class CQLLoss(LossModule):
         actor_network (ProbabilisticActor): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
+
     Keyword args:
         loss_function (str, optional): loss function to be used with
             the value function loss. Default is `"smooth_l1"`.
