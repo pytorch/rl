@@ -7048,3 +7048,18 @@ class RemoveEmptySpecs(Transform):
         return self._call(tensordict_reset)
 
     forward = _call
+
+
+class _TransposeTransform(Transform):
+    """A private transform to allow replay buffers to store data along any dimension."""
+
+    def __init__(self, dim_extend):
+        super().__init__()
+        self.dim_extend = dim_extend
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if is_tensor_collection(tensordict):
+            return tensordict.transpose(self.dim_extend, 0)
+        return torch.utils._pytree.tree_map(
+            lambda x: x.transpose(self.dim_extend, 0), tensordict
+        )

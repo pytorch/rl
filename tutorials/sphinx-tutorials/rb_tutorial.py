@@ -291,7 +291,7 @@ data = MyData(
 )
 
 tempdir = tempfile.TemporaryDirectory()
-buffer_lazymemmap = TensorDictReplayBuffer(
+buffer_lazymemmap = ReplayBuffer(
     storage=LazyMemmapStorage(size, scratch_dir=tempdir), batch_size=12
 )
 buffer_lazymemmap.extend(data)
