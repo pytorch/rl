@@ -2592,6 +2592,7 @@ def test_backprop(device):
         p_env.close()
 
 
+@pytest.mark.skipif(not _has_gym, reason="Gym required for this test")
 def test_non_td_policy():
     env = GymEnv("CartPole-v1", categorical_action_encoding=True)
 
