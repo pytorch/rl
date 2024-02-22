@@ -127,8 +127,9 @@ class CQLLoss(LossModule):
                 alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_actor_bc: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                loss_alpha_prime: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_cql: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
@@ -169,10 +170,10 @@ class CQLLoss(LossModule):
         >>> qvalue = ValueOperator(
         ...     module=module,
         ...     in_keys=['observation', 'action'])
-        >>> loss = CQLLoss(actor, qvalue, value)
+        >>> loss = CQLLoss(actor, qvalue)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
-        >>> loss_actor, loss_qvalue, _, _, _, _ = loss(
+        >>> loss_actor, loss_actor_bc, loss_qvalue, loss_cql, _, _, _ = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
@@ -185,7 +186,7 @@ class CQLLoss(LossModule):
     method.
 
     Examples:
-        >>> loss.select_out_keys('loss_actor', 'loss_qvalue')
+        >>> _ = loss.select_out_keys('loss_actor', 'loss_qvalue')
         >>> loss_actor, loss_qvalue = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
@@ -471,10 +472,11 @@ class CQLLoss(LossModule):
                 "loss_qvalue",
                 "loss_cql",
                 "loss_alpha",
-                "loss_alpha_prime",
                 "alpha",
                 "entropy",
             ]
+            if self.with_lagrange:
+                keys.append("loss_alpha_prime")
             self._out_keys = keys
         return self._out_keys
 
