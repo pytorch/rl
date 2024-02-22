@@ -232,7 +232,7 @@ keyword argument which is accepted by all contiguous storages such as
 multidimensional storage is passed to a buffer, the buffer will automatically
 consider the last dimension as the "time" dimension, as it is conventional in
 TorchRL. This can be overridden through the ``dim_extend`` keyword argument
-in :class:`~torchrl.data.replay_buffers.ReplayBuffer`.
+in :class:`~torchrl.data.ReplayBuffer`.
 This is the recommended way to save trajectories that are obtained through
 :class:`~torchrl.envs.ParallelEnv` or its serial counterpart, as we will see
 below.
