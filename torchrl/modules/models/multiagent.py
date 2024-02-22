@@ -116,6 +116,7 @@ class MultiAgentNetBase(nn.Module):
                     *output.shape[:-2], self.n_agents, n_agent_outputs
                 )
 
+        print("output", output)
         if output.shape[-2] != (self.n_agents):
             raise ValueError(
                 f"Multi-agent network expected output with shape[-2]={self.n_agents}"
