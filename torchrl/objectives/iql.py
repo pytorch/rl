@@ -499,7 +499,7 @@ class DiscreteIQLLoss(IQLLoss):
 
     Args:
         actor_network (ProbabilisticActor): stochastic actor
-        qvalue_network (TensorDictModule): Q(s) parametric model
+        qvalue_network (TensorDictModule): Q(s, a) parametric model.
         value_network (TensorDictModule, optional): V(s) parametric model.
 
     Keyword Args:
