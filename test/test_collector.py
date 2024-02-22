@@ -49,7 +49,6 @@ from torchrl.collectors.collectors import (
     _Interruptor,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
-    RandomPolicy,
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
@@ -67,6 +66,7 @@ from torchrl.envs.utils import (
     _aggregate_end_of_traj,
     check_env_specs,
     PARTIAL_MISSING_ERR,
+    RandomPolicy,
 )
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
