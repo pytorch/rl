@@ -52,8 +52,8 @@ class IQLLoss(LossModule):
     Presented in "Offline Reinforcement Learning with Implicit Q-Learning" https://arxiv.org/abs/2110.06169
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
-        qvalue_network (TensorDictModule): Q(s, a) parametric model
+        actor_network (ProbabilisticActor): stochastic actor.
+        qvalue_network (TensorDictModule): Q(s, a) parametric model.
         value_network (TensorDictModule, optional): V(s) parametric model.
 
     Keyword Args:
@@ -529,7 +529,7 @@ class DiscreteIQLLoss(IQLLoss):
 
     Args:
         actor_network (ProbabilisticActor): stochastic actor
-        qvalue_network (TensorDictModule): Q(s) parametric model
+        qvalue_network (TensorDictModule): Q(s, a) parametric model
         value_network (TensorDictModule, optional): V(s) parametric model.
 
     Keyword Args:
@@ -576,12 +576,12 @@ class DiscreteIQLLoss(IQLLoss):
         ...     spec=spec,
         ...     distribution_class=OneHotCategorical)
         >>> qvalue = TensorDictModule(
-        ...     nn.Linear(n_obs),
+        ...     nn.Linear(n_obs, n_act),
         ...     in_keys=["observation"],
         ...     out_keys=["state_action_value"],
         ... )
         >>> value = TensorDictModule(
-        ...     nn.Linear(n_obs),
+        ...     nn.Linear(n_obs, 1),
         ...     in_keys=["observation"],
         ...     out_keys=["state_value"],
         ... )
@@ -645,7 +645,9 @@ class DiscreteIQLLoss(IQLLoss):
         >>> module = ValueClass()
         >>> qvalue = ValueOperator(
         ...     module=module,
-        ...     in_keys=['observation'])
+        ...     in_keys=["observation"],
+        ...     out_keys=["state_action_value"],
+        ... )
         >>> module = nn.Linear(n_obs, 1)
         >>> value = ValueOperator(
         ...     module=module,

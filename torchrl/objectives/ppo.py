@@ -130,36 +130,36 @@ class PPOLoss(LossModule):
       input tensordict, the advantage will be computed by the :meth:`~.forward`
       method.
 
-        >>> ppo_loss = PPOLoss(actor, critic)
-        >>> advantage = GAE(critic)
-        >>> data = next(datacollector)
-        >>> losses = ppo_loss(data)
+        >>> ppo_loss = PPOLoss(actor, critic)  # doctest: +SKIP
+        >>> advantage = GAE(critic)  # doctest: +SKIP
+        >>> data = next(datacollector)  # doctest: +SKIP
+        >>> losses = ppo_loss(data)  # doctest: +SKIP
         >>> # equivalent
-        >>> advantage(data)
-        >>> losses = ppo_loss(data)
+        >>> advantage(data)  # doctest: +SKIP
+        >>> losses = ppo_loss(data)  # doctest: +SKIP
 
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
       The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
       dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
-        >>> ppo_loss = PPOLoss(actor, critic)
-        >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
-        >>> data = next(datacollector)
-        >>> losses = ppo_loss(data)
+        >>> ppo_loss = PPOLoss(actor, critic)  # doctest: +SKIP
+        >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)  # doctest: +SKIP
+        >>> data = next(datacollector)  # doctest: +SKIP
+        >>> losses = ppo_loss(data)  # doctest: +SKIP
 
     .. note::
       If the actor and the value function share parameters, one can avoid
       calling the common module multiple times by passing only the head of the
       value network to the PPO loss module:
 
-        >>> common = SomeModule(in_keys=["observation"], out_keys=["hidden"])
-        >>> actor_head = SomeActor(in_keys=["hidden"])
-        >>> value_head = SomeValue(in_keys=["hidden"])
+        >>> common = SomeModule(in_keys=["observation"], out_keys=["hidden"])  # doctest: +SKIP
+        >>> actor_head = SomeActor(in_keys=["hidden"])  # doctest: +SKIP
+        >>> value_head = SomeValue(in_keys=["hidden"])  # doctest: +SKIP
         >>> # first option, with 2 calls on the common module
-        >>> model = ActorCriticOperator(common, actor_head, value_head)
-        >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())
+        >>> model = ActorCriticOperator(common, actor_head, value_head)  # doctest: +SKIP
+        >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())  # doctest: +SKIP
         >>> # second option, with a single call to the common module
-        >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
+        >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)  # doctest: +SKIP
 
       This will work regardless of whether separate_losses is activated or not.
 
@@ -706,36 +706,36 @@ class ClipPPOLoss(PPOLoss):
       input tensordict, the advantage will be computed by the :meth:`~.forward`
       method.
 
-        >>> ppo_loss = ClipPPOLoss(actor, critic)
-        >>> advantage = GAE(critic)
-        >>> data = next(datacollector)
-        >>> losses = ppo_loss(data)
+        >>> ppo_loss = ClipPPOLoss(actor, critic)  # doctest: +SKIP
+        >>> advantage = GAE(critic)  # doctest: +SKIP
+        >>> data = next(datacollector)  # doctest: +SKIP
+        >>> losses = ppo_loss(data)  # doctest: +SKIP
         >>> # equivalent
-        >>> advantage(data)
-        >>> losses = ppo_loss(data)
+        >>> advantage(data)  # doctest: +SKIP
+        >>> losses = ppo_loss(data)  # doctest: +SKIP
 
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
       The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
       dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
-        >>> ppo_loss = ClipPPOLoss(actor, critic)
-        >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
-        >>> data = next(datacollector)
-        >>> losses = ppo_loss(data)
+        >>> ppo_loss = ClipPPOLoss(actor, critic)  # doctest: +SKIP
+        >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)  # doctest: +SKIP
+        >>> data = next(datacollector)  # doctest: +SKIP
+        >>> losses = ppo_loss(data)  # doctest: +SKIP
 
     .. note::
       If the actor and the value function share parameters, one can avoid
       calling the common module multiple times by passing only the head of the
       value network to the PPO loss module:
 
-        >>> common = SomeModule(in_keys=["observation"], out_keys=["hidden"])
-        >>> actor_head = SomeActor(in_keys=["hidden"])
-        >>> value_head = SomeValue(in_keys=["hidden"])
+        >>> common = SomeModule(in_keys=["observation"], out_keys=["hidden"])  # doctest: +SKIP
+        >>> actor_head = SomeActor(in_keys=["hidden"])  # doctest: +SKIP
+        >>> value_head = SomeValue(in_keys=["hidden"])  # doctest: +SKIP
         >>> # first option, with 2 calls on the common module
-        >>> model = ActorCriticOperator(common, actor_head, value_head)
-        >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())
+        >>> model = ActorCriticOperator(common, actor_head, value_head)  # doctest: +SKIP
+        >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())  # doctest: +SKIP
         >>> # second option, with a single call to the common module
-        >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
+        >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)  # doctest: +SKIP
 
       This will work regardless of whether separate_losses is activated or not.
 
@@ -914,36 +914,36 @@ class KLPENPPOLoss(PPOLoss):
       input tensordict, the advantage will be computed by the :meth:`~.forward`
       method.
 
-        >>> ppo_loss = KLPENPPOLoss(actor, critic)
-        >>> advantage = GAE(critic)
-        >>> data = next(datacollector)
-        >>> losses = ppo_loss(data)
+        >>> ppo_loss = KLPENPPOLoss(actor, critic)  # doctest: +SKIP
+        >>> advantage = GAE(critic)  # doctest: +SKIP
+        >>> data = next(datacollector)  # doctest: +SKIP
+        >>> losses = ppo_loss(data)  # doctest: +SKIP
         >>> # equivalent
-        >>> advantage(data)
-        >>> losses = ppo_loss(data)
+        >>> advantage(data)  # doctest: +SKIP
+        >>> losses = ppo_loss(data)  # doctest: +SKIP
 
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
       The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
       dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
-        >>> ppo_loss = KLPENPPOLoss(actor, critic)
-        >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
-        >>> data = next(datacollector)
-        >>> losses = ppo_loss(data)
+        >>> ppo_loss = KLPENPPOLoss(actor, critic)  # doctest: +SKIP
+        >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)  # doctest: +SKIP
+        >>> data = next(datacollector)  # doctest: +SKIP
+        >>> losses = ppo_loss(data)  # doctest: +SKIP
 
     .. note::
       If the actor and the value function share parameters, one can avoid
       calling the common module multiple times by passing only the head of the
       value network to the PPO loss module:
 
-        >>> common = SomeModule(in_keys=["observation"], out_keys=["hidden"])
-        >>> actor_head = SomeActor(in_keys=["hidden"])
-        >>> value_head = SomeValue(in_keys=["hidden"])
+        >>> common = SomeModule(in_keys=["observation"], out_keys=["hidden"])  # doctest: +SKIP
+        >>> actor_head = SomeActor(in_keys=["hidden"])  # doctest: +SKIP
+        >>> value_head = SomeValue(in_keys=["hidden"])  # doctest: +SKIP
         >>> # first option, with 2 calls on the common module
-        >>> model = ActorCriticOperator(common, actor_head, value_head)
-        >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())
+        >>> model = ActorCriticOperator(common, actor_head, value_head)  # doctest: +SKIP
+        >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())  # doctest: +SKIP
         >>> # second option, with a single call to the common module
-        >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
+        >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)  # doctest: +SKIP
 
       This will work regardless of whether separate_losses is activated or not.
 

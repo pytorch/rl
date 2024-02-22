@@ -92,22 +92,22 @@ class ReinforceLoss(LossModule):
       input tensordict, the advantage will be computed by the :meth:`~.forward`
       method.
 
-        >>> reinforce_loss = ReinforceLoss(actor, critic)
-        >>> advantage = GAE(critic)
-        >>> data = next(datacollector)
-        >>> losses = reinforce_loss(data)
+        >>> reinforce_loss = ReinforceLoss(actor, critic)  # doctest: +SKIP
+        >>> advantage = GAE(critic)  # doctest: +SKIP
+        >>> data = next(datacollector)  # doctest: +SKIP
+        >>> losses = reinforce_loss(data)  # doctest: +SKIP
         >>> # equivalent
-        >>> advantage(data)
-        >>> losses = reinforce_loss(data)
+        >>> advantage(data)  # doctest: +SKIP
+        >>> losses = reinforce_loss(data)  # doctest: +SKIP
 
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
       The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
       dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
-        >>> reinforce_loss = ReinforceLoss(actor, critic)
-        >>> reinforce_loss.make_value_estimator(ValueEstimators.TDLambda)
-        >>> data = next(datacollector)
-        >>> losses = reinforce_loss(data)
+        >>> reinforce_loss = ReinforceLoss(actor, critic)  # doctest: +SKIP
+        >>> reinforce_loss.make_value_estimator(ValueEstimators.TDLambda)  # doctest: +SKIP
+        >>> data = next(datacollector)  # doctest: +SKIP
+        >>> losses = reinforce_loss(data)  # doctest: +SKIP
 
     Examples:
         >>> import torch

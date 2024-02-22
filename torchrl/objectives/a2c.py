@@ -38,12 +38,14 @@ from torchrl.objectives.value import (
 
 class LossContainerBase:
     __getitem__ = TensorDictBase.__getitem__
+
     def aggregate_loss(self):
         result = 0.0
         for key in self.__dataclass_attr__:
             if key.startswith("loss_"):
                 result += getattr(self, key)
         return result
+
 
 @tensorclass
 class A2CLosses(LossContainerBase):
