@@ -529,7 +529,7 @@ class REDQLoss(LossModule):
             next_action_log_prob_qvalue,
         ) = sample_log_prob.unbind(0)
 
-        loss_actor = -(state_action_value_actor - self.alpha * action_log_prob_actor)
+        loss_actor = -(state_action_value_actor - self.alpha * action_log_prob_actor).mean(0)
 
         next_state_value = (
             next_state_action_value_qvalue - self.alpha * next_action_log_prob_qvalue
@@ -549,7 +549,7 @@ class REDQLoss(LossModule):
             pred_val,
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
-        )
+        ).mean(0)
 
         tensordict.set(self.tensor_keys.priority, td_error.detach().max(0)[0])
 

@@ -444,8 +444,7 @@ class TD3Loss(LossModule):
                 target_value.expand_as(current_qvalue),
                 loss_function=self.loss_function,
             )
-            .mean(-1)
-            .sum()
+            .sum(0)
         )
         metadata = {
             "td_error": td_error,
