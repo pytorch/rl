@@ -475,7 +475,6 @@ class TD3Loss(LossModule):
             },
             batch_size=[],
         )
-        import ipdb; ipdb.set_trace()
         td_out = td_out.apply(
             functools.partial(_reduce, reduction=self.reduction), batch_size=[]
         )

@@ -572,7 +572,6 @@ class REDQLoss(LossModule):
             },
             [],
         )
-        import ipdb; ipdb.set_trace()
         td_out = td_out.apply(
             functools.partial(_reduce, reduction=self.reduction), batch_size=[]
         )

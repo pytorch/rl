@@ -578,7 +578,6 @@ class SACLoss(LossModule):
         if self._version == 1:
             out["loss_value"] = loss_value
         td_out = TensorDict(out, [])
-        import ipdb; ipdb.set_trace()
         td_out = td_out.apply(
             functools.partial(_reduce, reduction=self.reduction), batch_size=[]
         )
