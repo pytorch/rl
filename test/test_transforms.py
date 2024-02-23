@@ -1001,8 +1001,7 @@ class TestCatFrames(TransformBase):
 
         r2 = c(r)
 
-        print(r2["observation_cat2"][0, :2])
-        print(r2["observation_cat"][0, :2])
+        torch.testing.assert_close(r2["observation_cat2"], r2["observation_cat"])
         assert (r2["observation_cat2"] == r2["observation_cat"]).all()
 
         assert (r2["next", "observation_cat2"] == r2["next", "observation_cat"]).all()

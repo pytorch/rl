@@ -2952,6 +2952,7 @@ class CatFrames(ObservationTransform):
             # check if we have an obs in "next" that has already been processed.
             # If so, we must add an offset
             data_orig = data = tensordict.get(in_key)
+            n_feat = data_orig.shape[data.ndim + self.dim]
             first_val = None
             if isinstance(in_key, tuple) and in_key[0] == "next":
                 # let's get the out_key we have already processed
@@ -2960,7 +2961,7 @@ class CatFrames(ObservationTransform):
                 )
                 if prev_out_key is not None:
                     prev_val = tensordict.get(prev_out_key)
-                    n_feat = prev_val.shape[data.ndim + self.dim] // self.N
+                    # n_feat = prev_val.shape[data.ndim + self.dim] // self.N
                     first_val = prev_val.unflatten(
                         data.ndim + self.dim, (self.N, n_feat)
                     )
@@ -2977,25 +2978,33 @@ class CatFrames(ObservationTransform):
             data = data.unfold(tensordict.ndim - 1, self.N, 1)
 
             # Place -1 dim at self.dim place before squashing
-            done_mask = expand_as_right(done_mask, data)
-            if self.padding != "same":
-                data = torch.where(done_mask, self.padding_value, data)
-            else:
-                # TODO: we actually need for data_orig[:, 1] to contain info from data_orig[:, 0]
-                data_orig = torch.cat([
-                    data_orig[:, :1].repeat_interleave(self.N-1),
-                    data], tensordict.ndim - 1)
-
-                data_orig = data_orig.unfold(tensordict.ndim - 1, self.N, 1)
-
-                data = torch.where(
-                    done_mask, data_orig, data
-                )
+            done_mask_expand = expand_as_right(done_mask, data)
             data = data.permute(
                 *range(0, data.ndim + self.dim - 1),
                 -1,
                 *range(data.ndim + self.dim - 1, data.ndim - 1),
             )
+            done_mask_expand = done_mask_expand.permute(
+                *range(0, done_mask_expand.ndim + self.dim - 1),
+                -1,
+                *range(done_mask_expand.ndim + self.dim - 1, done_mask_expand.ndim - 1),
+            )
+            if self.padding != "same":
+                data = torch.where(done_mask_expand, self.padding_value, data)
+            else:
+                # TODO: This is a pretty bad implementation, could be
+                # made more efficient but it works!
+                reset_vals = list(data_orig[reset.squeeze()].unbind(0))
+                j_ = float("inf")
+                reps = []
+                for j in done_mask_expand.sum(-1).sum(self.dim).view(-1) // n_feat:
+                    if j > j_:
+                        reset_vals = reset_vals[1:]
+                    reps.extend([reset_vals[0]] * int(j))
+                    j_ = j
+                reps = torch.stack(reps)
+                data = torch.masked_scatter(data, done_mask_expand, reps.reshape(-1))
+
             if first_val is not None:
                 # Aggregate reset along last dim
                 reset = reset.any(-1, True)
