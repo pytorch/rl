@@ -57,6 +57,7 @@ class LossContainerBase:
                 result += getattr(self, key)
         return result
 
+
 @tensorclass
 class SACLosses(LossContainerBase):
     """The tensorclass for The SACLoss Loss class."""

@@ -43,6 +43,7 @@ class LossContainerBase:
                 result += getattr(self, key)
         return result
 
+
 @tensorclass
 class REDQLosses(LossContainerBase):
     """The tensorclass for The REDQLoss Loss class."""

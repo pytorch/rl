@@ -42,12 +42,14 @@ class LossContainerBase:
     """ContainerBase class loss tensorclass's."""
 
     __getitem__ = TensorDictBase.__getitem__
+
     def aggregate_loss(self):
         result = 0.0
         for key in self.__dataclass_attr__:
             if key.startswith("loss_"):
                 result += getattr(self, key)
         return result
+
 
 @tensorclass
 class CQLLosses(LossContainerBase):

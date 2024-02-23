@@ -37,6 +37,7 @@ class LossContainerBase:
                 result += getattr(self, key)
         return result
 
+
 @tensorclass
 class DreamerModelLosses(LossContainerBase):
     """The tensorclass for The Dreamer Model Loss class."""

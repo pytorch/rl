@@ -32,6 +32,7 @@ class LossContainerBase:
                 result += getattr(self, key)
         return result
 
+
 @tensorclass
 class OnlineDTLosses(LossContainerBase):
     """The tensorclass for The OnlineDTLoss Loss class."""

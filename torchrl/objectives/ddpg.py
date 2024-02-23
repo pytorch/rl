@@ -38,6 +38,7 @@ class LossContainerBase:
                 result += getattr(self, key)
         return result
 
+
 @tensorclass
 class DDPGLosses(LossContainerBase):
     """The tensorclass for The DDPGLoss class."""

@@ -47,6 +47,7 @@ class LossContainerBase:
                 result += getattr(self, key)
         return result
 
+
 @tensorclass
 class DQNLosses(LossContainerBase):
     """The tensorclass for The DQN Loss class."""

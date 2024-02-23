@@ -40,6 +40,7 @@ class LossContainerBase:
                 result += getattr(self, key)
         return result
 
+
 @tensorclass
 class TD3Losses(LossContainerBase):
     """The tensorclass for The TD3 Loss class."""

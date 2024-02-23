@@ -45,6 +45,7 @@ class LossContainerBase:
                 result += getattr(self, key)
         return result
 
+
 @tensorclass
 class ReinforceLosses(LossContainerBase):
     """The tensorclass for The Reinforce Loss class."""

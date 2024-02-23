@@ -55,6 +55,7 @@ class LossContainerBase:
                 result += getattr(self, key)
         return result
 
+
 @tensorclass
 class PPOLosses(LossContainerBase):
     """The tensorclass for The PPOLoss Loss class."""

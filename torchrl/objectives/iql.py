@@ -40,6 +40,7 @@ class LossContainerBase:
                 result += getattr(self, key)
         return result
 
+
 @tensorclass
 class IQLLosses(LossContainerBase):
     """The tensorclass for The PPOLoss Loss class."""
