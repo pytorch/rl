@@ -11,10 +11,10 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
-    RandomPolicy,
 )
 from torchrl.envs import EnvCreator, GymEnv, StepCounter, TransformedEnv
 from torchrl.envs.libs.dm_control import DMControlEnv
+from torchrl.envs.utils import RandomPolicy
 
 
 def single_collector_setup():

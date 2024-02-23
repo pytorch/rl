@@ -26,6 +26,7 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
+    _make_compatible_policy,
     _repr_by_depth,
     _terminated_or_truncated,
     _update_during_reset,
@@ -2260,9 +2261,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         Args:
             max_steps (int): maximum number of steps to be executed. The actual number of steps can be smaller if
                 the environment reaches a done state before max_steps have been executed.
-            policy (callable, optional): callable to be called to compute the desired action. If no policy is provided,
-                actions will be called using :obj:`env.rand_step()`
-                default = None
+            policy (callable, optional): callable to be called to compute the desired action.
+                If no policy is provided, actions will be called using :obj:`env.rand_step()`.
+                The policy can be any callable that reads either a tensordict or
+                the entire sequence of observation entries __sorted as__ the ``env.observation_spec.keys()``.
+                Defaults to `None`.
             callback (callable, optional): function to be called at each iteration with the given TensorDict.
             auto_reset (bool, optional): if ``True``, resets automatically the environment
                 if it is in a done state when the rollout is initiated.
@@ -2283,7 +2286,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         The data returned will be marked with a "time" dimension name for the last
         dimension of the tensordict (at the ``env.ndim`` index).
 
+        ``rollout`` is quite handy to display what the data structure of the
+        environment looks like.
+
         Examples:
+            >>> # Using rollout without a policy
             >>> from torchrl.envs.libs.gym import GymEnv
             >>> from torchrl.envs.transforms import TransformedEnv, StepCounter
             >>> env = TransformedEnv(GymEnv("Pendulum-v1"), StepCounter(max_steps=20))
@@ -2339,43 +2346,106 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             >>> print(rollout.names)
             [None, 'time']
 
+        Using a policy (a regular :class:`~torch.nn.Module` or a :class:`~tensordict.nn.TensorDictModule`)
+        is also easy:
+
+        Examples:
+            >>> from torch import nn
+            >>> env = GymEnv("CartPole-v1", categorical_action_encoding=True)
+            >>> class ArgMaxModule(nn.Module):
+            ...     def forward(self, values):
+            ...         return values.argmax(-1)
+            >>> n_obs = env.observation_spec["observation"].shape[-1]
+            >>> n_act = env.action_spec.n
+            >>> # A deterministic policy
+            >>> policy = nn.Sequential(
+            ...     nn.Linear(n_obs, n_act),
+            ...     ArgMaxModule())
+            >>> env.rollout(max_steps=10, policy=policy)
+            TensorDict(
+                fields={
+                    action: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int64, is_shared=False),
+                    done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    next: TensorDict(
+                        fields={
+                            done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            observation: Tensor(shape=torch.Size([10, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                            reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                            terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                        batch_size=torch.Size([10]),
+                        device=cpu,
+                        is_shared=False),
+                    observation: Tensor(shape=torch.Size([10, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([10]),
+                device=cpu,
+                is_shared=False)
+            >>> # Under the hood, rollout will wrap the policy in a TensorDictModule
+            >>> # To speed things up we can do that ourselves
+            >>> from tensordict.nn import TensorDictModule
+            >>> policy = TensorDictModule(policy, in_keys=list(env.observation_spec.keys()), out_keys=["action"])
+            >>> env.rollout(max_steps=10, policy=policy)
+            TensorDict(
+                fields={
+                    action: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int64, is_shared=False),
+                    done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    next: TensorDict(
+                        fields={
+                            done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            observation: Tensor(shape=torch.Size([10, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                            reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                            terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                        batch_size=torch.Size([10]),
+                        device=cpu,
+                        is_shared=False),
+                    observation: Tensor(shape=torch.Size([10, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([10]),
+                device=cpu,
+                is_shared=False)
+
+
         In some instances, contiguous tensordict cannot be obtained because
         they cannot be stacked. This can happen when the data returned at
         each step may have a different shape, or when different environments
         are executed together. In that case, ``return_contiguous=False``
         will cause the returned tensordict to be a lazy stack of tensordicts:
 
-        Examples:
+        Examples of non-contiguous rollout:
             >>> rollout = env.rollout(4, return_contiguous=False)
             >>> print(rollout)
-        LazyStackedTensorDict(
-            fields={
-                action: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-                done: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                next: LazyStackedTensorDict(
-                    fields={
-                        done: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                        observation: Tensor(shape=torch.Size([3, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                        reward: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-                        step_count: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-                        truncated: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
-                    batch_size=torch.Size([3, 4]),
-                    device=cpu,
-                    is_shared=False),
-                observation: Tensor(shape=torch.Size([3, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                step_count: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-                truncated: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
-            batch_size=torch.Size([3, 4]),
-            device=cpu,
-            is_shared=False)
-            >>> print(rollout.names)
-            [None, 'time']
+            LazyStackedTensorDict(
+                fields={
+                    action: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    done: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    next: LazyStackedTensorDict(
+                        fields={
+                            done: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            observation: Tensor(shape=torch.Size([3, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                            reward: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                            step_count: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                            truncated: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                        batch_size=torch.Size([3, 4]),
+                        device=cpu,
+                        is_shared=False),
+                    observation: Tensor(shape=torch.Size([3, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    step_count: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([3, 4]),
+                device=cpu,
+                is_shared=False)
+                >>> print(rollout.names)
+                [None, 'time']
 
         Rollouts can be used in a loop to emulate data collection.
         To do so, you need to pass as input the last tensordict coming from the previous rollout after calling
         :func:`~torchrl.envs.utils.step_mdp` on it.
 
-        Examples:
+        Examples of data collection rollouts:
             >>> from torchrl.envs import GymEnv, step_mdp
             >>> env = GymEnv("CartPole-v1")
             >>> epochs = 10
@@ -2392,12 +2462,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             ...     )
 
         """
-        if auto_cast_to_device:
-            try:
-                policy_device = next(policy.parameters()).device
-            except (StopIteration, AttributeError):
+        if policy is not None:
+            policy = _make_compatible_policy(
+                policy, self.observation_spec, env=self, fast_wrap=True
+            )
+            if auto_cast_to_device:
+                try:
+                    policy_device = next(policy.parameters()).device
+                except (StopIteration, AttributeError):
+                    policy_device = None
+            else:
                 policy_device = None
         else:
+            policy = self.rand_action
             policy_device = None
 
         env_device = self.device
@@ -2412,10 +2489,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             raise RuntimeError("tensordict must be provided when auto_reset is False")
         else:
             tensordict = self.maybe_reset(tensordict)
-
-        if policy is None:
-
-            policy = self.rand_action
 
         kwargs = {
             "tensordict": tensordict,

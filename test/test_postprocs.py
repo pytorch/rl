@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import functools
 
 import pytest
 import torch
@@ -276,12 +277,22 @@ class TestSplits:
 
     @pytest.mark.parametrize("num_workers", range(3, 34, 3))
     @pytest.mark.parametrize("traj_len", [10, 17, 50, 97])
-    def test_splits(self, num_workers, traj_len):
+    @pytest.mark.parametrize(
+        "constr",
+        [
+            functools.partial(split_trajectories, prefix="collector"),
+            functools.partial(split_trajectories),
+            functools.partial(
+                split_trajectories, trajectory_key=("collector", "traj_ids")
+            ),
+        ],
+    )
+    def test_splits(self, num_workers, traj_len, constr):
 
         trajs = TestSplits.create_fake_trajs(num_workers, traj_len)
         assert trajs.shape[0] == num_workers
         assert trajs.shape[1] == traj_len
-        split_trajs = split_trajectories(trajs, prefix="collector")
+        split_trajs = constr(trajs)
         assert (
             split_trajs.shape[0] == split_trajs.get(("collector", "traj_ids")).max() + 1
         )
