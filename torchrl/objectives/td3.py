@@ -438,14 +438,11 @@ class TD3Loss(LossModule):
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
 
         td_error = (current_qvalue - target_value).pow(2)
-        loss_qval = (
-            distance_loss(
-                current_qvalue,
-                target_value.expand_as(current_qvalue),
-                loss_function=self.loss_function,
-            )
-            .sum(0)
-        )
+        loss_qval = distance_loss(
+            current_qvalue,
+            target_value.expand_as(current_qvalue),
+            loss_function=self.loss_function,
+        ).sum(0)
         metadata = {
             "td_error": td_error,
             "next_state_value": next_target_qvalue.detach(),

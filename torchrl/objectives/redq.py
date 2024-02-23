@@ -529,7 +529,9 @@ class REDQLoss(LossModule):
             next_action_log_prob_qvalue,
         ) = sample_log_prob.unbind(0)
 
-        loss_actor = -(state_action_value_actor - self.alpha * action_log_prob_actor).mean(0)
+        loss_actor = -(
+            state_action_value_actor - self.alpha * action_log_prob_actor
+        ).mean(0)
 
         next_state_value = (
             next_state_action_value_qvalue - self.alpha * next_action_log_prob_qvalue
