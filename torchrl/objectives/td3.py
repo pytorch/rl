@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import functools
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -18,6 +19,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -65,6 +67,10 @@ class TD3Loss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
         >>> import torch
@@ -217,7 +223,10 @@ class TD3Loss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        reduction: str = None,
     ) -> None:
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
@@ -299,6 +308,7 @@ class TD3Loss(LossModule):
         self._vmap_actor_network00 = _vmap_func(
             self.actor_network, randomness=self.vmap_randomness
         )
+        self.reduction = reduction
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -361,9 +371,9 @@ class TD3Loss(LossModule):
             .get(self.tensor_keys.state_action_value)
             .squeeze(-1)
         )
-        loss_actor = -(state_action_value_actor[0]).mean()
+        loss_actor = -(state_action_value_actor[0])
         metadata = {
-            "state_action_value_actor": state_action_value_actor.mean().detach(),
+            "state_action_value_actor": state_action_value_actor.detach(),
         }
         return loss_actor, metadata
 
@@ -439,11 +449,10 @@ class TD3Loss(LossModule):
         )
         metadata = {
             "td_error": td_error,
-            "next_state_value": next_target_qvalue.mean().detach(),
-            "pred_value": current_qvalue.mean().detach(),
-            "target_value": target_value.mean().detach(),
+            "next_state_value": next_target_qvalue.detach(),
+            "pred_value": current_qvalue.detach(),
+            "target_value": target_value.detach(),
         }
-
         return loss_qval, metadata
 
     @dispatch
@@ -467,7 +476,9 @@ class TD3Loss(LossModule):
             },
             batch_size=[],
         )
-
+        td_out = td_out.apply(
+            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        )
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
