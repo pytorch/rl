@@ -37,6 +37,8 @@ from torchrl.objectives.value import (
 
 
 class LossContainerBase:
+    """ContainerBase class loss tensorclass's."""
+
     __getitem__ = TensorDictBase.__getitem__
 
     def aggregate_loss(self):

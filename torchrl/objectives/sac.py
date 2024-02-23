@@ -46,8 +46,16 @@ def _delezify(func):
 
 
 class LossContainerBase:
+    """ContainerBase class loss tensorclass's."""
+
     __getitem__ = TensorDictBase.__getitem__
 
+    def aggregate_loss(self):
+        result = 0.0
+        for key in self.__dataclass_attr__:
+            if key.startswith("loss_"):
+                result += getattr(self, key)
+        return result
 
 @tensorclass
 class SACLosses(LossContainerBase):
@@ -59,10 +67,6 @@ class SACLosses(LossContainerBase):
     alpha: torch.Tensor | None = None
     loss_alpha: torch.Tensor | None = None
     entropy: torch.Tensor | None = None
-
-    @property
-    def aggregate_loss(self):
-        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class SACLoss(LossModule):

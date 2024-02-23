@@ -34,8 +34,16 @@ from torchrl.objectives.value import (
 
 
 class LossContainerBase:
+    """ContainerBase class loss tensorclass's."""
+
     __getitem__ = TensorDictBase.__getitem__
 
+    def aggregate_loss(self):
+        result = 0.0
+        for key in self.__dataclass_attr__:
+            if key.startswith("loss_"):
+                result += getattr(self, key)
+        return result
 
 @tensorclass
 class ReinforceLosses(LossContainerBase):
@@ -43,10 +51,6 @@ class ReinforceLosses(LossContainerBase):
 
     loss_actor: torch.Tensor
     loss_value: torch.Tensor
-
-    @property
-    def aggregate_loss(self):
-        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class ReinforceLoss(LossModule):

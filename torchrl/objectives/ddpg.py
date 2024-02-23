@@ -27,8 +27,16 @@ from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimat
 
 
 class LossContainerBase:
+    """ContainerBase class loss tensorclass's."""
+
     __getitem__ = TensorDictBase.__getitem__
 
+    def aggregate_loss(self):
+        result = 0.0
+        for key in self.__dataclass_attr__:
+            if key.startswith("loss_"):
+                result += getattr(self, key)
+        return result
 
 @tensorclass
 class DDPGLosses(LossContainerBase):
@@ -41,10 +49,6 @@ class DDPGLosses(LossContainerBase):
     loss_actor: torch.Tensor | None = None
     loss_value: torch.Tensor | None = None
     target_value_max: torch.Tensor | None = None
-
-    @property
-    def aggregate_loss(self):
-        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class DDPGLoss(LossModule):
