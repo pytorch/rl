@@ -2981,8 +2981,15 @@ class CatFrames(ObservationTransform):
             if self.padding != "same":
                 data = torch.where(done_mask, self.padding_value, data)
             else:
+                # TODO: we actually need for data_orig[:, 1] to contain info from data_orig[:, 0]
+                data_orig = torch.cat([
+                    data_orig[:, :1].repeat_interleave(self.N-1),
+                    data], tensordict.ndim - 1)
+
+                data_orig = data_orig.unfold(tensordict.ndim - 1, self.N, 1)
+
                 data = torch.where(
-                    done_mask, data_orig.unsqueeze(-1).expand_as(data), data
+                    done_mask, data_orig, data
                 )
             data = data.permute(
                 *range(0, data.ndim + self.dim - 1),
