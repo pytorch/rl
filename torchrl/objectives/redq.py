@@ -553,7 +553,7 @@ class REDQLoss(LossModule):
 
         tensordict.set(self.tensor_keys.priority, td_error.detach().max(0)[0])
 
-        loss_alpha = self._loss_alpha(sample_log_prob)
+        loss_alpha = self._loss_alpha(sample_log_prob).mean(0)
         if not loss_qval.shape == loss_actor.shape:
             raise RuntimeError(
                 f"QVal and actor loss have different shape: {loss_qval.shape} and {loss_actor.shape}"
@@ -564,14 +564,15 @@ class REDQLoss(LossModule):
                 "loss_qvalue": loss_qval,
                 "loss_alpha": loss_alpha,
                 "alpha": self.alpha.detach(),
-                "entropy": -sample_log_prob.detach(),
-                "state_action_value_actor": state_action_value_actor.detach(),
+                "entropy": -sample_log_prob.mean(0).detach(),
+                "state_action_value_actor": state_action_value_actor.mean(0).detach(),
                 "action_log_prob_actor": action_log_prob_actor.detach(),
                 "next.state_value": next_state_value.detach(),
                 "target_value": target_value.detach(),
             },
             [],
         )
+        import ipdb; ipdb.set_trace()
         td_out = td_out.apply(
             functools.partial(_reduce, reduction=self.reduction), batch_size=[]
         )

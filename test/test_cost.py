@@ -481,7 +481,10 @@ class TestDQN(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_dqn(self, delay_value, double_dqn, device, action_spec_type, td_est):
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_dqn(
+        self, delay_value, double_dqn, device, action_spec_type, td_est, reduction
+    ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(
             action_spec_type=action_spec_type, device=device
@@ -490,7 +493,11 @@ class TestDQN(LossModuleTestBase):
             action_spec_type=action_spec_type, device=device
         )
         loss_fn = DQNLoss(
-            actor, loss_function="l2", delay_value=delay_value, double_dqn=double_dqn
+            actor,
+            loss_function="l2",
+            delay_value=delay_value,
+            double_dqn=double_dqn,
+            reduction=reduction,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -504,7 +511,14 @@ class TestDQN(LossModuleTestBase):
             else contextlib.nullcontext()
         ), _check_td_steady(td):
             loss = loss_fn(td)
+            if reduction == "none":
 
+                def func(x):
+                    if x.dtype != torch.float:
+                        return
+                    return x.mean()
+
+                loss = loss.apply(func, batch_size=[])
         if delay_value:
             # remove warning
             SoftUpdate(loss_fn, eps=0.5)
@@ -688,8 +702,9 @@ class TestDQN(LossModuleTestBase):
         "action_spec_type", ("mult_one_hot", "one_hot", "categorical")
     )
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_distributional_dqn(
-        self, atoms, delay_value, device, action_spec_type, td_est, gamma=0.9
+        self, atoms, delay_value, device, action_spec_type, td_est, reduction, gamma=0.9
     ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_distributional_actor(
@@ -699,7 +714,9 @@ class TestDQN(LossModuleTestBase):
         td = self._create_mock_data_dqn(
             action_spec_type=action_spec_type, atoms=atoms
         ).to(device)
-        loss_fn = DistributionalDQNLoss(actor, gamma=gamma, delay_value=delay_value)
+        loss_fn = DistributionalDQNLoss(
+            actor, gamma=gamma, delay_value=delay_value, reduction=reduction
+        )
 
         if td_est not in (None, ValueEstimators.TD0):
             with pytest.raises(NotImplementedError):
@@ -717,6 +734,14 @@ class TestDQN(LossModuleTestBase):
             else contextlib.nullcontext()
         ):
             loss = loss_fn(td)
+            if reduction == "none":
+
+                def func(x):
+                    if x.dtype != torch.float:
+                        return
+                    return x.mean()
+
+                loss = loss.apply(func, batch_size=[])
         assert loss_fn.tensor_keys.priority in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
@@ -1478,7 +1503,8 @@ class TestDDPG(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_ddpg(self, delay_actor, delay_value, device, td_est):
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_ddpg(self, delay_actor, delay_value, device, td_est, reduction):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
@@ -1489,6 +1515,7 @@ class TestDDPG(LossModuleTestBase):
             loss_function="l2",
             delay_actor=delay_actor,
             delay_value=delay_value,
+            reduction=reduction,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -1503,7 +1530,14 @@ class TestDDPG(LossModuleTestBase):
             else contextlib.nullcontext()
         ):
             loss = loss_fn(td)
+            if reduction == "none":
 
+                def func(x):
+                    if x.dtype != torch.float:
+                        return
+                    return x.mean()
+
+                loss = loss.apply(func, batch_size=[])
         if delay_value:
             # remove warning
             SoftUpdate(loss_fn, eps=0.5)
@@ -2086,6 +2120,7 @@ class TestTD3(LossModuleTestBase):
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("use_action_spec", [True, False])
     @pytest.mark.parametrize("dropout", [0.0, 0.1])
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_td3(
         self,
         delay_actor,
@@ -2096,6 +2131,7 @@ class TestTD3(LossModuleTestBase):
         td_est,
         use_action_spec,
         dropout,
+        reduction,
     ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device, dropout=dropout)
@@ -2117,6 +2153,7 @@ class TestTD3(LossModuleTestBase):
             noise_clip=noise_clip,
             delay_actor=delay_actor,
             delay_qvalue=delay_qvalue,
+            reduction=reduction,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -2134,6 +2171,14 @@ class TestTD3(LossModuleTestBase):
         ):
             with _check_td_steady(td):
                 loss = loss_fn(td)
+                if reduction == "none":
+
+                    def func(x):
+                        if x.dtype != torch.float:
+                            return
+                        return x.mean()
+
+                    loss = loss.apply(func, batch_size=[])
 
             assert all(
                 (p.grad is None) or (p.grad == 0).all()
@@ -2769,6 +2814,7 @@ class TestSAC(LossModuleTestBase):
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_sac(
         self,
         delay_value,
@@ -2778,6 +2824,7 @@ class TestSAC(LossModuleTestBase):
         device,
         version,
         td_est,
+        reduction,
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
@@ -2806,6 +2853,7 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
+            reduction=reduction,
             **kwargs,
         )
 
@@ -2820,6 +2868,14 @@ class TestSAC(LossModuleTestBase):
             UserWarning, match="No target network updater"
         ):
             loss = loss_fn(td)
+            if reduction == "none":
+
+                def func(x):
+                    if x.dtype != torch.float:
+                        return
+                    return x.mean()
+
+                loss = loss.apply(func, batch_size=[])
         assert loss_fn.tensor_keys.priority in td.keys()
 
         # check that losses are independent
@@ -3568,6 +3624,7 @@ class TestDiscreteSAC(LossModuleTestBase):
     @pytest.mark.parametrize("target_entropy_weight", [0.01, 0.5, 0.99])
     @pytest.mark.parametrize("target_entropy", ["auto", 1.0, 0.1, 0.0])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_discrete_sac(
         self,
         delay_qvalue,
@@ -3576,6 +3633,7 @@ class TestDiscreteSAC(LossModuleTestBase):
         target_entropy_weight,
         target_entropy,
         td_est,
+        reduction,
     ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_sac(device=device)
@@ -3596,6 +3654,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             target_entropy=target_entropy,
             loss_function="l2",
             action_space="one-hot",
+            reduction=reduction,
             **kwargs,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
@@ -3609,6 +3668,14 @@ class TestDiscreteSAC(LossModuleTestBase):
             UserWarning, match="No target network updater"
         ):
             loss = loss_fn(td)
+            if reduction == "none":
+
+                def func(x):
+                    if x.dtype != torch.float:
+                        return
+                    return x.mean()
+
+                loss = loss.apply(func, batch_size=[])
         assert loss_fn.tensor_keys.priority in td.keys()
 
         # check that losses are independent
@@ -4202,7 +4269,8 @@ class TestREDQ(LossModuleTestBase):
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_redq(self, delay_qvalue, num_qvalue, device, td_est):
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_redq(self, delay_qvalue, num_qvalue, device, td_est, reduction):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(device=device)
 
@@ -4215,6 +4283,7 @@ class TestREDQ(LossModuleTestBase):
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
             delay_qvalue=delay_qvalue,
+            reduction=reduction,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -4233,7 +4302,14 @@ class TestREDQ(LossModuleTestBase):
         ):
             with _check_td_steady(td):
                 loss = loss_fn(td)
+                if reduction == "none":
 
+                    def func(x):
+                        if x.dtype != torch.float:
+                            return
+                        return x.mean()
+
+                    loss = loss.apply(func, batch_size=[])
             # check td is left untouched
             assert loss_fn.tensor_keys.priority in td.keys()
 
