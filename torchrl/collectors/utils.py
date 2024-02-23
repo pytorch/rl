@@ -57,6 +57,64 @@ def split_trajectories(
         done_key (NestedKey, optional): the key pointing to the ``"done""`` signal,
             if the trajectory could not be directly recovered. Defaults to ``"done"``.
 
+    Returns:
+        A new tensordict with a leading dimension corresponding to the trajectory.
+        A ``"mask"`` boolean entry sharing the ``trajectory_key`` prefix
+        and the tensordict shape is also added. It indicated the valid elements of the tensordict,
+        as well as a ``"traj_ids"`` entry if ``trajectory_key`` could not be found.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> import torch
+        >>> from torchrl.collectors.utils import split_trajectories
+        >>> obs = torch.cat([torch.arange(10), torch.arange(5)])
+        >>> obs_ = torch.cat([torch.arange(1, 11), torch.arange(1, 6)])
+        >>> done = torch.zeros(15, dtype=torch.bool)
+        >>> done[9] = True
+        >>> trajectory_id = torch.cat([torch.zeros(10, dtype=torch.int32),
+        ...     torch.ones(5, dtype=torch.int32)])
+        >>> data = TensorDict({"obs": obs, ("next", "obs"): obs_, ("next", "done"): done, "trajectory": trajectory_id}, batch_size=[15])
+        >>> data_split = split_trajectories(data, done_key="done")
+        >>> print(data_split)
+        TensorDict(
+            fields={
+                mask: Tensor(shape=torch.Size([2, 10]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([2, 10]), device=cpu, dtype=torch.bool, is_shared=False),
+                        obs: Tensor(shape=torch.Size([2, 10]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([2, 10]),
+                    device=None,
+                    is_shared=False),
+                obs: Tensor(shape=torch.Size([2, 10]), device=cpu, dtype=torch.int64, is_shared=False),
+                traj_ids: Tensor(shape=torch.Size([2, 10]), device=cpu, dtype=torch.int64, is_shared=False),
+                trajectory: Tensor(shape=torch.Size([2, 10]), device=cpu, dtype=torch.int32, is_shared=False)},
+            batch_size=torch.Size([2, 10]),
+            device=None,
+            is_shared=False)
+        >>> # check that split_trajectory got the trajectories right with the done signal
+        >>> assert (data_split["traj_ids"] == data_split["trajectory"]).all()
+        >>> print(data_split["mask"])
+        tensor([[ True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
+                [ True,  True,  True,  True,  True, False, False, False, False, False]])
+        >>> data_split = split_trajectories(data, trajectory_key="trajectory")
+        >>> print(data_split)
+        TensorDict(
+            fields={
+                mask: Tensor(shape=torch.Size([2, 10]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([2, 10]), device=cpu, dtype=torch.bool, is_shared=False),
+                        obs: Tensor(shape=torch.Size([2, 10]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([2, 10]),
+                    device=None,
+                    is_shared=False),
+                obs: Tensor(shape=torch.Size([2, 10]), device=cpu, dtype=torch.int64, is_shared=False),
+                trajectory: Tensor(shape=torch.Size([2, 10]), device=cpu, dtype=torch.int32, is_shared=False)},
+            batch_size=torch.Size([2, 10]),
+            device=None,
+            is_shared=False)
+
     """
     mask_key = None
     if trajectory_key is not None:
@@ -130,5 +188,5 @@ def split_trajectories(
         MAX = out_splits[0].shape[0]
     td = torch.stack(
         [pad(out_split, [0, MAX - out_split.shape[0]]) for out_split in out_splits], 0
-    ).contiguous()
+    )
     return td
