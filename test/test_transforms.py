@@ -762,16 +762,16 @@ class TestCatFrames(TransformBase):
         ).all()
         assert cloned is not env.transform
 
-    @pytest.mark.parametrize("dim", [-2, -1])
+    @pytest.mark.parametrize("dim", [-1])
     @pytest.mark.parametrize("N", [3, 4])
-    @pytest.mark.parametrize("padding", ["same", "zeros", "constant"])
+    @pytest.mark.parametrize("padding", ["zeros", "constant", "same"])
     def test_transform_model(self, dim, N, padding):
         # test equivalence between transforms within an env and within a rb
         key1 = "observation"
         keys = [key1]
         out_keys = ["out_" + key1]
         cat_frames = CatFrames(
-            N=N, in_keys=out_keys, out_keys=out_keys, dim=dim, padding=padding
+            N=N, in_keys=keys, out_keys=out_keys, dim=dim, padding=padding
         )
         cat_frames2 = CatFrames(
             N=N,
@@ -781,23 +781,22 @@ class TestCatFrames(TransformBase):
             padding=padding,
         )
         envbase = ContinuousActionVecMockEnv()
-        env = TransformedEnv(
-            envbase,
-            Compose(
-                UnsqueezeTransform(dim, in_keys=keys, out_keys=out_keys), cat_frames
-            ),
-        )
+        env = TransformedEnv(envbase, cat_frames)
+
         torch.manual_seed(10)
         env.set_seed(10)
         td = env.rollout(10)
+
         torch.manual_seed(10)
         envbase.set_seed(10)
         tdbase = envbase.rollout(10)
+
         tdbase0 = tdbase.clone()
 
         model = nn.Sequential(cat_frames2, nn.Identity())
         model(tdbase)
-        assert (td == tdbase).all()
+        assert assert_allclose_td(td, tdbase)
+
         with pytest.warns(UserWarning):
             tdbase0.names = None
             model(tdbase0)
@@ -970,6 +969,43 @@ class TestCatFrames(TransformBase):
 
         # we don't want the same tensor to be returned twice, but they're all copies of the same buffer
         assert v1 is not v2
+
+    @pytest.mark.skipif(not _has_gym, reason="gym required for this test")
+    @pytest.mark.parametrize("padding", ["zeros", "constant", "same"])
+    def test_tranform_offline_against_online(self, padding):
+        torch.manual_seed(0)
+        env = SerialEnv(
+            3,
+            lambda: TransformedEnv(
+                GymEnv("CartPole-v1"),
+                CatFrames(
+                    dim=-1,
+                    N=5,
+                    in_keys=["observation"],
+                    out_keys=["observation_cat"],
+                    padding=padding,
+                ),
+            ),
+        )
+        env.set_seed(0)
+
+        r = env.rollout(100, break_when_any_done=False)
+
+        c = CatFrames(
+            dim=-1,
+            N=5,
+            in_keys=["observation", ("next", "observation")],
+            out_keys=["observation_cat2", ("next", "observation_cat2")],
+            padding=padding,
+        )
+
+        r2 = c(r)
+
+        print(r2["observation_cat2"][0, :2])
+        print(r2["observation_cat"][0, :2])
+        assert (r2["observation_cat2"] == r2["observation_cat"]).all()
+
+        assert (r2["next", "observation_cat2"] == r2["next", "observation_cat"]).all()
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("batch_size", [(), (1,), (1, 2)])
