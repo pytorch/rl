@@ -529,9 +529,7 @@ class REDQLoss(LossModule):
             next_action_log_prob_qvalue,
         ) = sample_log_prob.unbind(0)
 
-        loss_actor = -(
-            state_action_value_actor - self.alpha * action_log_prob_actor
-        ).mean(0)
+        loss_actor = -(state_action_value_actor - self.alpha * action_log_prob_actor)
 
         next_state_value = (
             next_state_action_value_qvalue - self.alpha * next_action_log_prob_qvalue
@@ -551,11 +549,11 @@ class REDQLoss(LossModule):
             pred_val,
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
-        ).mean(0)
+        )
 
         tensordict.set(self.tensor_keys.priority, td_error.detach().max(0)[0])
 
-        loss_alpha = self._loss_alpha(sample_log_prob).mean(0)
+        loss_alpha = self._loss_alpha(sample_log_prob)
         if not loss_qval.shape == loss_actor.shape:
             raise RuntimeError(
                 f"QVal and actor loss have different shape: {loss_qval.shape} and {loss_actor.shape}"
@@ -566,8 +564,8 @@ class REDQLoss(LossModule):
                 "loss_qvalue": loss_qval,
                 "loss_alpha": loss_alpha,
                 "alpha": self.alpha.detach(),
-                "entropy": -sample_log_prob.mean(0).detach(),
-                "state_action_value_actor": state_action_value_actor.mean(0).detach(),
+                "entropy": -sample_log_prob.detach(),
+                "state_action_value_actor": state_action_value_actor.detach(),
                 "action_log_prob_actor": action_log_prob_actor.detach(),
                 "next.state_value": next_state_value.detach(),
                 "target_value": target_value.detach(),
