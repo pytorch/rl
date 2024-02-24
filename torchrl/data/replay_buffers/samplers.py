@@ -799,6 +799,7 @@ class SliceSampler(Sampler):
     def _tensor_slices_from_startend(self, seq_length, start):
         # start is a 2d tensor resulting from nonzero()
         # seq_length is a 1d tensor indicating the desired length of each sequence
+
         def _start_to_end(st: torch.Tensor, length: int):
             arange = torch.arange(length, device=st.device, dtype=st.dtype)
             ndims = st.shape[-1] - 1 if st.ndim else 0
@@ -832,7 +833,7 @@ class SliceSampler(Sampler):
             # We first try with the traj_key
             try:
                 if isinstance(storage, TensorStorage):
-                    trajectory = storage._storage.get(self._used_traj_key)
+                    trajectory = storage[:].get(self._used_traj_key)
                 else:
                     try:
                         trajectory = storage[:].get(self.traj_key)
@@ -840,7 +841,7 @@ class SliceSampler(Sampler):
                         raise RuntimeError(
                             "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                         )
-                vals = self._find_start_stop_traj(trajectory=trajectory[: len(storage)])
+                vals = self._find_start_stop_traj(trajectory=trajectory)
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals
                 return vals
