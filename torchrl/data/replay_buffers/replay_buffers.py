@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import collections
+import contextlib
 import json
 import textwrap
 import threading
@@ -21,7 +22,6 @@ from tensordict import (
     is_tensor_collection,
     is_tensorclass,
     LazyStackedTensorDict,
-    TensorDict,
     TensorDictBase,
     unravel_key,
 )
@@ -350,14 +350,10 @@ class ReplayBuffer:
             data = self._collate_fn(data)
 
         if self._transform is not None and len(self._transform):
-            is_td = True
-            if not is_tensor_collection(data):
-                data = TensorDict({"data": data}, [])
-                is_td = False
-            with data.unlock_():
+            with data.unlock_() if is_tensor_collection(
+                data
+            ) else contextlib.nullcontext():
                 data = self._transform(data)
-            if not is_td:
-                data = data["data"]
 
         return data
 
@@ -1067,11 +1063,13 @@ class TensorDictReplayBuffer(ReplayBuffer):
                         val = expand_as_right(val, data)
                     data.set(key, val)
                 except RuntimeError:
-                    raise RuntimeError("Failed to set the metadata (e.g., indices or weights) in the sampled tensordict within TensorDictReplayBuffer.sample. "
-                                       "This is probably caused by a shape mismatch (one of the transforms has proably modified "
-                                       "the shape of the output tensordict). "
-                                       "You can always recover these items from the `sample` method from a regular ReplayBuffer "
-                                       "instance with the 'return_info' flag set to True." )
+                    raise RuntimeError(
+                        "Failed to set the metadata (e.g., indices or weights) in the sampled tensordict within TensorDictReplayBuffer.sample. "
+                        "This is probably caused by a shape mismatch (one of the transforms has proably modified "
+                        "the shape of the output tensordict). "
+                        "You can always recover these items from the `sample` method from a regular ReplayBuffer "
+                        "instance with the 'return_info' flag set to True."
+                    )
             if is_locked:
                 data.lock_()
         elif not is_tc and include_info in (True, None):

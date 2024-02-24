@@ -7067,6 +7067,22 @@ class _TransposeTransform(Transform):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         # if the tensordict number of dimension is greater than one we flip
         # the dimensions
-        if tensordict.ndim > 1:
+        if is_tensor_collection(tensordict) and tensordict.ndim > 1:
             tensordict = tensordict.transpose(self.dim_extend, 0)
+        else:
+            out = []
+            # we assume that if all tensors have the same leading dims
+            # they are batched
+            unique_shape = None
+            flat_tree, specs = torch.utils._pytree.tree_flatten(tensordict)
+            for tensor in flat_tree:
+                if unique_shape is None:
+                    unique_shape = tensor.shape[: self.dim_extend]
+                    if len(unique_shape) < self.dim_extend + 1:
+                        return tensordict
+                if tensor.shape[: self.dim_extend] == unique_shape:
+                    out.append(tensor)
+                else:
+                    return tensordict
+            tensordict = torch.utils._pytree.tree_unflatten(out, specs)
         return tensordict
