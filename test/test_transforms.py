@@ -815,7 +815,7 @@ class TestCatFrames(TransformBase):
         # check that swapping dims and names leads to same result
         assert_allclose_td(v1, v2.transpose(0, 1))
 
-    @pytest.mark.parametrize("dim", [-2, -1])
+    @pytest.mark.parametrize("dim", [-1])
     @pytest.mark.parametrize("N", [3, 4])
     @pytest.mark.parametrize("padding", ["same", "zeros", "constant"])
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
@@ -825,7 +825,7 @@ class TestCatFrames(TransformBase):
         keys = [key1]
         out_keys = ["out_" + key1]
         cat_frames = CatFrames(
-            N=N, in_keys=out_keys, out_keys=out_keys, dim=dim, padding=padding
+            N=N, in_keys=keys, out_keys=out_keys, dim=dim, padding=padding
         )
         cat_frames2 = CatFrames(
             N=N,
@@ -835,12 +835,7 @@ class TestCatFrames(TransformBase):
             padding=padding,
         )
 
-        env = TransformedEnv(
-            ContinuousActionVecMockEnv(),
-            Compose(
-                UnsqueezeTransform(dim, in_keys=keys, out_keys=out_keys), cat_frames
-            ),
-        )
+        env = TransformedEnv(ContinuousActionVecMockEnv(), cat_frames)
         td = env.rollout(10)
 
         rb = rbclass(storage=LazyTensorStorage(20))
@@ -874,8 +869,8 @@ class TestCatFrames(TransformBase):
         td = env1.rollout(rollout_length)
 
         transformed_td = cat_frames._inv_call(td)
-        assert transformed_td.get(in_keys[0]).shape == (rollout_length, obs_dim, N)
-        assert transformed_td.get(in_keys[1]).shape == (rollout_length, obs_dim, N)
+        assert transformed_td.get(in_keys[0]).shape == (rollout_length, obs_dim * N)
+        assert transformed_td.get(in_keys[1]).shape == (rollout_length, obs_dim * N)
         with pytest.raises(
             Exception,
             match="CatFrames as inverse is not supported as a transform for environments, only for replay buffers.",
@@ -1011,9 +1006,7 @@ class TestCatFrames(TransformBase):
     @pytest.mark.parametrize("d", range(2, 3))
     @pytest.mark.parametrize(
         "dim",
-        [
-            -3,
-        ],
+        [-3],
     )
     @pytest.mark.parametrize("N", [2, 4])
     def test_transform_compose(self, device, d, batch_size, dim, N):

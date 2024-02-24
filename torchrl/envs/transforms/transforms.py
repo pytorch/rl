@@ -2994,10 +2994,11 @@ class CatFrames(ObservationTransform):
             else:
                 # TODO: This is a pretty bad implementation, could be
                 # made more efficient but it works!
-                reset_vals = list(data_orig[reset.squeeze()].unbind(0))
+                reset_vals = list(data_orig[reset.squeeze(-1)].unbind(0))
                 j_ = float("inf")
                 reps = []
-                for j in done_mask_expand.sum(-1).sum(self.dim).view(-1) // n_feat:
+                d = data.ndim + self.dim - 1
+                for j in done_mask_expand.sum(d).sum(d).view(-1) // n_feat:
                     if j > j_:
                         reset_vals = reset_vals[1:]
                     reps.extend([reset_vals[0]] * int(j))
