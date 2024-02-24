@@ -7063,3 +7063,10 @@ class _TransposeTransform(Transform):
         return torch.utils._pytree.tree_map(
             lambda x: x.transpose(self.dim_extend, 0), tensordict
         )
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # if the tensordict number of dimension is greater than one we flip
+        # the dimensions
+        if tensordict.ndim > 1:
+            tensordict = tensordict.transpose(self.dim_extend, 0)
+        return tensordict

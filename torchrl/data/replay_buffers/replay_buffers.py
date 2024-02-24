@@ -286,7 +286,7 @@ class ReplayBuffer:
                     "The storage `ndim` attribute must be greater "
                     "than the `dim_extend` attribute of the buffer."
                 )
-            self.append_transform(_TransposeTransform(self.dim_extend))
+            self.insert_transform(0, _TransposeTransform(self.dim_extend))
 
     def _get_collate_fn(self, collate_fn):
         self._collate_fn = (
@@ -1061,10 +1061,17 @@ class TensorDictReplayBuffer(ReplayBuffer):
             for key, val in info.items():
                 if key == "index" and isinstance(val, tuple):
                     val = torch.stack(val, -1)
-                val = _to_torch(val, data.device)
-                if val.ndim < data.ndim:
-                    val = expand_as_right(val, data)
-                data.set(key, val)
+                try:
+                    val = _to_torch(val, data.device)
+                    if val.ndim < data.ndim:
+                        val = expand_as_right(val, data)
+                    data.set(key, val)
+                except RuntimeError:
+                    raise RuntimeError("Failed to set the metadata (e.g., indices or weights) in the sampled tensordict within TensorDictReplayBuffer.sample. "
+                                       "This is probably caused by a shape mismatch (one of the transforms has proably modified "
+                                       "the shape of the output tensordict). "
+                                       "You can always recover these items from the `sample` method from a regular ReplayBuffer "
+                                       "instance with the 'return_info' flag set to True." )
             if is_locked:
                 data.lock_()
         elif not is_tc and include_info in (True, None):
