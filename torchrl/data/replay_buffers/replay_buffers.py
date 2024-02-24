@@ -22,6 +22,7 @@ from tensordict import (
     is_tensor_collection,
     is_tensorclass,
     LazyStackedTensorDict,
+    NestedKey,
     TensorDictBase,
     unravel_key,
 )
