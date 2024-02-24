@@ -629,6 +629,11 @@ class SliceSampler(Sampler):
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
+        unique_traj (bool, optional): if ``True``, at most one slice of every
+            stored trajectory will be found in the samples.
+            If the number of slices required is lower than the number of
+            trajectories, an error will be thrown.
+            Defaults to ``False``.
 
     .. note:: To recover the trajectory splits in the storage,
         :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` will first
@@ -707,6 +712,7 @@ class SliceSampler(Sampler):
         cache_values: bool = False,
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
+        unique_traj: bool=False,
     ):
         self.num_slices = num_slices
         self.slice_len = slice_len
@@ -758,6 +764,7 @@ class SliceSampler(Sampler):
                 "Either num_slices or slice_len must be not None, and not both. "
                 f"Got num_slices={num_slices} and slice_len={slice_len}."
             )
+        self.unique_traj = unique_traj
 
     @staticmethod
     def _find_start_stop_traj(*, trajectory=None, end=None):
@@ -904,9 +911,12 @@ class SliceSampler(Sampler):
         self, lengths, start_idx, stop_idx, seq_length, num_slices, traj_idx=None
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, Any]]:
         if traj_idx is None:
-            traj_idx = torch.randint(
-                lengths.shape[0], (num_slices,), device=lengths.device
-            )
+            if self.unique_traj:
+                traj_idx = torch.multinomial(torch.full((lengths.shape[0],), 1/lengths.shape[0], device=lengths.device), num_slices, replacement=False)
+            else:
+                traj_idx = torch.randint(
+                    lengths.shape[0], (num_slices,), device=lengths.device
+                )
         else:
             num_slices = traj_idx.shape[0]
 
@@ -1054,6 +1064,11 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
         shuffle (bool, optional): if ``False``, the order of the trajectories
             is not shuffled. Defaults to ``True``.
+        unique_traj (bool, optional): if ``True``, at most one slice of every
+            stored trajectory will be found in the samples.
+            If the number of slices required is lower than the number of
+            trajectories, an error will be thrown.
+            Defaults to ``False``.
 
     .. note:: To recover the trajectory splits in the storage,
         :class:`~torchrl.data.replay_buffers.samplers.SliceSamplerWithoutReplacement` will first
@@ -1128,6 +1143,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
         shuffle: bool = True,
+        unique_traj: bool = False,
     ):
         SliceSampler.__init__(
             self,
@@ -1140,6 +1156,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             strict_length=strict_length,
             ends=ends,
             trajectories=trajectories,
+            unique_traj=unique_traj,
         )
         SamplerWithoutReplacement.__init__(self, drop_last=drop_last, shuffle=shuffle)
 
@@ -1232,6 +1249,11 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
+        unique_traj (bool, optional): if ``True``, at most one slice of every
+            stored trajectory will be found in the samples.
+            If the number of slices required is lower than the number of
+            trajectories, an error will be thrown.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -1288,6 +1310,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         cache_values: bool = False,
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
+        unique_traj: bool = False,
     ):
         SliceSampler.__init__(
             self,
@@ -1300,6 +1323,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             strict_length=strict_length,
             ends=ends,
             trajectories=trajectories,
+            unique_traj=unique_traj,
         )
         PrioritizedSampler.__init__(
             self,
