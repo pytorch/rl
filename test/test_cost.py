@@ -789,7 +789,7 @@ class TestDQN(LossModuleTestBase):
         SoftUpdate(dqn_loss, eps=0.5)
         loss_val = dqn_loss(**kwargs)
         loss_val_td = dqn_loss(td)
-        torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
+        torch.testing.assert_close(loss_val_td.get("loss_objective"), loss_val)
 
     def test_distributional_dqn_tensordict_keys(self):
         torch.manual_seed(self.seed)
