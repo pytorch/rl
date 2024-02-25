@@ -29,7 +29,7 @@ from tensordict import (
 )
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.nn import dispatch, TensorDictModuleBase
-from tensordict.utils import expand_as_right, NestedKey
+from tensordict.utils import expand_as_right, expand_right, NestedKey
 from torch import nn, Tensor
 from torch.utils._pytree import tree_map
 from torchrl._utils import _replace_last
@@ -2978,7 +2978,12 @@ class CatFrames(ObservationTransform):
             data = data.unfold(tensordict.ndim - 1, self.N, 1)
 
             # Place -1 dim at self.dim place before squashing
-            done_mask_expand = expand_as_right(done_mask, data)
+            done_mask_expand = done_mask.view(
+                *done_mask.shape[: tensordict.ndim],
+                *(1,) * (data.ndim - 1 - tensordict.ndim),
+                done_mask.shape[-1],
+            )
+            done_mask_expand = expand_as_right(done_mask_expand, data)
             data = data.permute(
                 *range(0, data.ndim + self.dim - 1),
                 -1,
@@ -2994,11 +2999,13 @@ class CatFrames(ObservationTransform):
             else:
                 # TODO: This is a pretty bad implementation, could be
                 # made more efficient but it works!
-                reset_vals = list(data_orig[reset.squeeze(-1)].unbind(0))
+                reset_any = reset.any(-1, False)
+                reset_vals = list(data_orig[reset_any].unbind(0))
                 j_ = float("inf")
                 reps = []
                 d = data.ndim + self.dim - 1
-                for j in done_mask_expand.sum(d).sum(d).view(-1) // n_feat:
+                n_feat = data.shape[data.ndim + self.dim :].numel()
+                for j in done_mask_expand.flatten(d, -1).sum(-1).view(-1) // n_feat:
                     if j > j_:
                         reset_vals = reset_vals[1:]
                     reps.extend([reset_vals[0]] * int(j))
@@ -3008,8 +3015,10 @@ class CatFrames(ObservationTransform):
 
             if first_val is not None:
                 # Aggregate reset along last dim
-                reset = reset.any(-1, True)
-                rexp = reset.expand(*reset.shape[:-1], n_feat)
+                reset_any = reset.any(-1, False)
+                rexp = expand_right(
+                    reset_any, (*reset_any.shape, *data.shape[data.ndim + self.dim :])
+                )
                 rexp = torch.cat(
                     [
                         torch.zeros_like(
