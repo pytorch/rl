@@ -19,12 +19,12 @@ permissions:
 
 jobs:
   generate-matrix:
-    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@main
+    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@Remove-Builds-Limits-for-Testing
     with:
       package-type: wheel
       os: macos-arm64
       test-infra-repository: pytorch/test-infra
-      test-infra-ref: main
+      test-infra-ref: Remove-Builds-Limits-for-Testing
   build:
     needs: generate-matrix
     strategy:
