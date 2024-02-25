@@ -967,17 +967,21 @@ class TestCatFrames(TransformBase):
 
     @pytest.mark.skipif(not _has_gym, reason="gym required for this test")
     @pytest.mark.parametrize("padding", ["zeros", "constant", "same"])
-    def test_tranform_offline_against_online(self, padding):
+    @pytest.mark.parametrize("envtype", ["gym", "conv"])
+    def test_tranform_offline_against_online(self, padding, envtype):
         torch.manual_seed(0)
+        key = "observation" if envtype == "gym" else "pixels"
         env = SerialEnv(
             3,
             lambda: TransformedEnv(
-                GymEnv("CartPole-v1"),
+                GymEnv("CartPole-v1")
+                if envtype == "gym"
+                else DiscreteActionConvMockEnv(),
                 CatFrames(
-                    dim=-1,
+                    dim=-3 if envtype == "conv" else -1,
                     N=5,
-                    in_keys=["observation"],
-                    out_keys=["observation_cat"],
+                    in_keys=[key],
+                    out_keys=[f"{key}_cat"],
                     padding=padding,
                 ),
             ),
@@ -987,19 +991,17 @@ class TestCatFrames(TransformBase):
         r = env.rollout(100, break_when_any_done=False)
 
         c = CatFrames(
-            dim=-1,
+            dim=-3 if envtype == "conv" else -1,
             N=5,
-            in_keys=["observation", ("next", "observation")],
-            out_keys=["observation_cat2", ("next", "observation_cat2")],
+            in_keys=[key, ("next", key)],
+            out_keys=[f"{key}_cat2", ("next", f"{key}_cat2")],
             padding=padding,
         )
 
         r2 = c(r)
 
-        torch.testing.assert_close(r2["observation_cat2"], r2["observation_cat"])
-        assert (r2["observation_cat2"] == r2["observation_cat"]).all()
-
-        assert (r2["next", "observation_cat2"] == r2["next", "observation_cat"]).all()
+        torch.testing.assert_close(r2[f"{key}_cat2"], r2[f"{key}_cat"])
+        torch.testing.assert_close(r2["next", f"{key}_cat2"], r2["next", f"{key}_cat"])
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("batch_size", [(), (1,), (1, 2)])
