@@ -875,15 +875,18 @@ class TestDQN(LossModuleTestBase):
             for key in loss.keys():
                 assert loss[key].shape == torch.Size([])
 
+    @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_distributional_dqn_reduction(self, reduction):
+    def test_distributional_dqn_reduction(self, reduction, atoms):
         torch.manual_seed(self.seed)
         device = (
             torch.device("cpu")
             if torch.cuda.device_count() == 0
             else torch.device("cuda")
         )
-        actor = self._create_mock_actor(action_spec_type="categorical", device=device)
+        actor = self._create_mock_distributional_actor(
+            action_spec_type="categorical", atoms=atoms
+        ).to(device)
         td = self._create_mock_data_dqn(action_spec_type="categorical", device=device)
         loss_fn = DistributionalDQNLoss(
             actor, gamma=0.9, delay_value=False, reduction=reduction
