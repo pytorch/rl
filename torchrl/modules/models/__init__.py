@@ -22,5 +22,11 @@ from .models import (
     MLP,
     OnlineDTActor,
 )
-from .multiagent import MultiAgentConvNet, MultiAgentMLP, MultiAgentLSTM, QMixer, VDNMixer
+from .multiagent import (
+    MultiAgentConvNet,
+    MultiAgentLSTM,
+    MultiAgentMLP,
+    QMixer,
+    VDNMixer,
+)
 from .utils import Squeeze2dLayer, SqueezeLayer

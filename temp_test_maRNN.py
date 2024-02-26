@@ -1,5 +1,5 @@
-from torchrl.modules import MultiAgentLSTM, MultiAgentMLP
 import torch
+from torchrl.modules import MultiAgentLSTM, MultiAgentMLP
 
 n_agents = 3
 rnn_input_size = 10

@@ -286,29 +286,34 @@ class LSTM(LSTMBase):
 
         return outputs, (torch.stack(h_t_out, 0), torch.stack(c_t_out, 0))
 
-    def forward(self, input, hx=None):  # noqa: F811
+    def _make_zero_recurrent(self, input):
         real_hidden_size = self.proj_size if self.proj_size > 0 else self.hidden_size
+        max_batch_size = input.size(0) if self.batch_first else input.size(1)
+        h_zeros = torch.zeros(
+            self.num_layers,
+            max_batch_size,
+            real_hidden_size,
+            dtype=input.dtype,
+            device=input.device,
+        )
+        c_zeros = torch.zeros(
+            self.num_layers,
+            max_batch_size,
+            self.hidden_size,
+            dtype=input.dtype,
+            device=input.device,
+        )
+        hx = (h_zeros, c_zeros)
+        return hx
+
+    def forward(self, input, hx=None):  # noqa: F811
         if input.dim() != 3:
             raise ValueError(
                 f"LSTM: Expected input to be 3D, got {input.dim()}D instead"
             )
-        max_batch_size = input.size(0) if self.batch_first else input.size(1)
-        if hx is None:
-            h_zeros = torch.zeros(
-                self.num_layers,
-                max_batch_size,
-                real_hidden_size,
-                dtype=input.dtype,
-                device=input.device,
-            )
-            c_zeros = torch.zeros(
-                self.num_layers,
-                max_batch_size,
-                self.hidden_size,
-                dtype=input.dtype,
-                device=input.device,
-            )
-            hx = (h_zeros, c_zeros)
+        if hx is None or all(_hx is None for _hx in hx):
+            hx = self._make_zero_recurrent(input)
+
         return self._lstm(input, hx)
 
 
