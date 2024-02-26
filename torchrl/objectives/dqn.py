@@ -615,10 +615,8 @@ class DistributionalDQNLoss(LossModule):
             loss.detach().unsqueeze(1).to(input_tensordict.device),
             inplace=True,
         )
+        loss = _reduce(loss, reduction=self.reduction)
         td_out = TensorDict({"loss": loss}, [])
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
-        )
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
