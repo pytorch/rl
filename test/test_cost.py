@@ -2630,7 +2630,6 @@ class TestTD3(LossModuleTestBase):
             if torch.cuda.device_count() == 0
             else torch.device("cuda")
         )
-        torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
         td = self._create_mock_data_td3(device=device)
@@ -2872,7 +2871,6 @@ class TestSAC(LossModuleTestBase):
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_sac(
         self,
         delay_value,
@@ -2882,7 +2880,6 @@ class TestSAC(LossModuleTestBase):
         device,
         version,
         td_est,
-        reduction,
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
@@ -2911,7 +2908,6 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
-            reduction=reduction,
             **kwargs,
         )
 
@@ -2926,14 +2922,7 @@ class TestSAC(LossModuleTestBase):
             UserWarning, match="No target network updater"
         ):
             loss = loss_fn(td)
-            if reduction == "none":
 
-                def func(x):
-                    if x.dtype != torch.float:
-                        return
-                    return x.mean()
-
-                loss = loss.apply(func, batch_size=[])
         assert loss_fn.tensor_keys.priority in td.keys()
 
         # check that losses are independent
@@ -3533,6 +3522,40 @@ class TestSAC(LossModuleTestBase):
             action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
         )
         loss.load_state_dict(state)
+
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_sac_reduction(self, reduction, version):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        td = self._create_mock_data_sac(device=device)
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        if version == 1:
+            value = self._create_mock_value(device=device)
+        else:
+            value = None
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            loss_function="l2",
+            delay_qvalue=False,
+            delay_actor=False,
+            delay_value=False,
+        )
+        loss_fn.make_value_estimator()
+        loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+        else:
+            for key in loss.keys():
+                assert loss[key].shape == torch.Size([])
 
 
 @pytest.mark.skipif(
