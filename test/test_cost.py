@@ -870,12 +870,18 @@ class TestDQN(LossModuleTestBase):
         loss_fn = DQNLoss(
             actor,
             loss_function="l2",
+            delay_value=False,
             reduction=reduction,
         )
+        loss_fn.make_value_estimator()
         loss = loss_fn(td)
         if reduction == "none":
             for key in loss.keys():
-                assert loss[key].shape == ()
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+        else:
+            for key in loss.keys():
+                assert loss[key].shape == torch.Size([])
 
 
 class TestQMixer(LossModuleTestBase):
