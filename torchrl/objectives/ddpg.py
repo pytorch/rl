@@ -312,7 +312,7 @@ class DDPGLoss(LossModule):
             td_copy = self.actor_network(td_copy)
         with self._cached_detached_value_params.to_module(self.value_network):
             td_copy = self.value_network(td_copy)
-        loss_actor = -td_copy.get(self.tensor_keys.state_action_value)
+        loss_actor = -td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
         metadata = {}
         return loss_actor, metadata
 

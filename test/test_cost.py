@@ -4391,8 +4391,7 @@ class TestREDQ(LossModuleTestBase):
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_redq(self, delay_qvalue, num_qvalue, device, td_est, reduction):
+    def test_redq(self, delay_qvalue, num_qvalue, device, td_est):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(device=device)
 
@@ -4405,7 +4404,6 @@ class TestREDQ(LossModuleTestBase):
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
             delay_qvalue=delay_qvalue,
-            reduction=reduction,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -4424,14 +4422,7 @@ class TestREDQ(LossModuleTestBase):
         ):
             with _check_td_steady(td):
                 loss = loss_fn(td)
-                if reduction == "none":
 
-                    def func(x):
-                        if x.dtype != torch.float:
-                            return
-                        return x.mean()
-
-                    loss = loss.apply(func, batch_size=[])
             # check td is left untouched
             assert loss_fn.tensor_keys.priority in td.keys()
 
@@ -5072,6 +5063,32 @@ class TestREDQ(LossModuleTestBase):
             assert loss_actor == loss_val_td["loss_actor"]
             assert loss_alpha == loss_val_td["loss_alpha"]
 
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_redq_reduction(self, reduction):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        td = self._create_mock_data_redq(device=device)
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        loss_fn = REDQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            loss_function="l2",
+            delay_qvalue=False,
+        )
+        loss_fn.make_value_estimator()
+        loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+        else:
+            for key in loss.keys():
+                assert loss[key].shape == torch.Size([])
 
 class TestCQL(LossModuleTestBase):
     seed = 0
