@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import functools
 import math
 import warnings
 from dataclasses import dataclass
@@ -26,6 +27,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -97,6 +99,10 @@ class SACLoss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
         >>> import torch
@@ -280,9 +286,12 @@ class SACLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        reduction: str = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
@@ -381,6 +390,7 @@ class SACLoss(LossModule):
             self._vmap_qnetwork00 = _vmap_func(
                 qvalue_network, randomness=self.vmap_randomness
             )
+        self.reduction = reduction
 
     @property
     def target_entropy_buffer(self):
@@ -557,17 +567,21 @@ class SACLoss(LossModule):
             )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
-        entropy = -metadata_actor["log_prob"].mean()
+        entropy = -metadata_actor["log_prob"]
         out = {
-            "loss_actor": loss_actor.mean(),
-            "loss_qvalue": loss_qvalue.mean(),
-            "loss_alpha": loss_alpha.mean(),
+            "loss_actor": loss_actor,
+            "loss_qvalue": loss_qvalue,
+            "loss_alpha": loss_alpha,
             "alpha": self._alpha,
             "entropy": entropy,
         }
         if self._version == 1:
-            out["loss_value"] = loss_value.mean()
-        return TensorDict(out, [])
+            out["loss_value"] = loss_value
+        td_out = TensorDict(out, [])
+        td_out = td_out.apply(
+            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        )
+        return td_out
 
     @property
     @_cache_values
@@ -805,6 +819,10 @@ class DiscreteSACLoss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
     >>> import torch
@@ -970,7 +988,10 @@ class DiscreteSACLoss(LossModule):
         delay_qvalue: bool = True,
         priority_key: str = None,
         separate_losses: bool = False,
+        reduction: str = None,
     ):
+        if reduction is None:
+            reduction = "mean"
         self._in_keys = None
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
@@ -1051,6 +1072,7 @@ class DiscreteSACLoss(LossModule):
         self._vmap_qnetworkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
+        self.reduction = reduction
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -1106,15 +1128,19 @@ class DiscreteSACLoss(LossModule):
             )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
-        entropy = -metadata_actor["log_prob"].mean()
+        entropy = -metadata_actor["log_prob"]
         out = {
-            "loss_actor": loss_actor.mean(),
-            "loss_qvalue": loss_value.mean(),
-            "loss_alpha": loss_alpha.mean(),
+            "loss_actor": loss_actor,
+            "loss_qvalue": loss_value,
+            "loss_alpha": loss_alpha,
             "alpha": self._alpha,
             "entropy": entropy,
         }
-        return TensorDict(out, [])
+        td_out = TensorDict(out, [])
+        td_out = td_out.apply(
+            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        )
+        return td_out
 
     def _compute_target(self, tensordict) -> Tensor:
         r"""Value network for SAC v2.
@@ -1189,7 +1215,7 @@ class DiscreteSACLoss(LossModule):
             chosen_action_value,
             target_value.expand_as(chosen_action_value),
             loss_function=self.loss_function,
-        ).mean(0)
+        ).sum(0)
 
         metadata = {
             "td_error": td_error.detach().max(0)[0],
