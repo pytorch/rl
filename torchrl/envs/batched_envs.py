@@ -1074,6 +1074,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if self._mp_start_method is not None:
             ctx = mp.get_context(self._mp_start_method)
             proc_fun = ctx.Process
+            num_sub_threads = self.num_sub_threads
         else:
             ctx = mp.get_context("spawn")
             proc_fun = functools.partial(
@@ -1081,6 +1082,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 num_threads=self.num_sub_threads,
                 _start_method=self._mp_start_method,
             )
+            num_sub_threads = None
 
         _num_workers = self.num_workers
 
@@ -1123,6 +1125,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "_selected_reset_keys": self._selected_reset_keys,
                         "_selected_step_keys": self._selected_step_keys,
                         "has_lazy_inputs": self.has_lazy_inputs,
+                        "num_threads": num_sub_threads,
                     }
                 )
                 process = proc_fun(target=func, kwargs=kwargs[idx])
@@ -1491,7 +1494,10 @@ def _run_worker_pipe_shared_mem(
     _selected_step_keys=None,
     has_lazy_inputs: bool = False,
     verbose: bool = False,
+    num_threads: int | None = None,  # for fork start method
 ) -> None:
+    if num_threads is not None:
+        torch.set_num_threads(num_threads)
     device = shared_tensordict.device
     if device is None or device.type != "cuda":
         # Check if some tensors are shared on cuda
