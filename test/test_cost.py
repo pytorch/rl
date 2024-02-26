@@ -5080,7 +5080,6 @@ class TestREDQ(LossModuleTestBase):
                 actor_network=actor,
                 qvalue_network=qvalue,
                 loss_function="l2",
-                target_entropy=0.0,
                 delay_qvalue=False,
                 reduction=reduction,
             )
