@@ -4124,7 +4124,8 @@ class TestDiscreteSAC(LossModuleTestBase):
             num_actions=actor.spec["action"].space.n,
             loss_function="l2",
             action_space="one-hot",
-            delay_qvalu=False,
+            delay_qvalue=False,
+            reduction=reduction,
         )
         loss_fn.make_value_estimator()
         loss = loss_fn(td)
