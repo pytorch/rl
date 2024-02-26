@@ -5064,7 +5064,8 @@ class TestREDQ(LossModuleTestBase):
             assert loss_alpha == loss_val_td["loss_alpha"]
 
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_redq_reduction(self, reduction):
+    @pytest.mark.parametrize("deprecated_loss", [True, False])
+    def test_redq_reduction(self, reduction, deprecated_loss):
         torch.manual_seed(self.seed)
         device = (
             torch.device("cpu")
@@ -5074,18 +5075,27 @@ class TestREDQ(LossModuleTestBase):
         td = self._create_mock_data_redq(device=device)
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
-        loss_fn = REDQLoss(
-            actor_network=actor,
-            qvalue_network=qvalue,
-            loss_function="l2",
-            delay_qvalue=False,
-        )
+        if deprecated_loss:
+            loss_fn = REDQLoss_deprecated(
+                actor_network=actor,
+                qvalue_network=qvalue,
+                loss_function="l2",
+                target_entropy=0.0,
+            )
+        else:
+            loss_fn = REDQLoss(
+                actor_network=actor,
+                qvalue_network=qvalue,
+                loss_function="l2",
+                delay_qvalue=False,
+                reduction=reduction,
+            )
         loss_fn.make_value_estimator()
         loss = loss_fn(td)
         if reduction == "none":
             for key in loss.keys():
                 if key.startswith("loss"):
-                    assert loss[key].shape == td.shape
+                    assert loss[key].shape[-1] == td.shape[0]
         else:
             for key in loss.keys():
                 assert loss[key].shape == torch.Size([])
