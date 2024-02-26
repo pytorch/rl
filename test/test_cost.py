@@ -691,9 +691,8 @@ class TestDQN(LossModuleTestBase):
         "action_spec_type", ("mult_one_hot", "one_hot", "categorical")
     )
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_distributional_dqn(
-        self, atoms, delay_value, device, action_spec_type, td_est, reduction, gamma=0.9
+        self, atoms, delay_value, device, action_spec_type, td_est, gamma=0.9
     ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_distributional_actor(
@@ -704,7 +703,7 @@ class TestDQN(LossModuleTestBase):
             action_spec_type=action_spec_type, atoms=atoms
         ).to(device)
         loss_fn = DistributionalDQNLoss(
-            actor, gamma=gamma, delay_value=delay_value, reduction=reduction
+            actor, gamma=gamma, delay_value=delay_value,
         )
 
         if td_est not in (None, ValueEstimators.TD0):
@@ -723,14 +722,7 @@ class TestDQN(LossModuleTestBase):
             else contextlib.nullcontext()
         ):
             loss = loss_fn(td)
-            if reduction == "none":
 
-                def func(x):
-                    if x.dtype != torch.float:
-                        return
-                    return x.mean()
-
-                loss = loss.apply(func, batch_size=[])
         assert loss_fn.tensor_keys.priority in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
@@ -872,6 +864,29 @@ class TestDQN(LossModuleTestBase):
             loss_function="l2",
             delay_value=False,
             reduction=reduction,
+        )
+        loss_fn.make_value_estimator()
+        loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+        else:
+            for key in loss.keys():
+                assert loss[key].shape == torch.Size([])
+
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_distributional_dqn_reduction(self, reduction):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        actor = self._create_mock_actor(action_spec_type="categorical", device=device)
+        td = self._create_mock_data_dqn(action_spec_type="categorical", device=device)
+        loss_fn = DistributionalDQNLoss(
+            actor, gamma=0.9, delay_value=False, reduction=reduction
         )
         loss_fn.make_value_estimator()
         loss = loss_fn(td)
