@@ -2643,6 +2643,7 @@ class TestTD3(LossModuleTestBase):
             bounds=bounds,
             loss_function="l2",
             delay_qvalue=False,
+            delay_actor=False,
             reduction=reduction,
         )
         loss_fn.make_value_estimator()
