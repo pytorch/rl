@@ -1215,7 +1215,7 @@ class DiscreteSACLoss(LossModule):
             chosen_action_value,
             target_value.expand_as(chosen_action_value),
             loss_function=self.loss_function,
-        ).mean(0)
+        ).sum(0)
 
         metadata = {
             "td_error": td_error.detach().max(0)[0],
