@@ -481,10 +481,7 @@ class TestDQN(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_dqn(
-        self, delay_value, double_dqn, device, action_spec_type, td_est, reduction
-    ):
+    def test_dqn(self, delay_value, double_dqn, device, action_spec_type, td_est):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(
             action_spec_type=action_spec_type, device=device
@@ -497,7 +494,6 @@ class TestDQN(LossModuleTestBase):
             loss_function="l2",
             delay_value=delay_value,
             double_dqn=double_dqn,
-            reduction=reduction,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -511,14 +507,7 @@ class TestDQN(LossModuleTestBase):
             else contextlib.nullcontext()
         ), _check_td_steady(td):
             loss = loss_fn(td)
-            if reduction == "none":
 
-                def func(x):
-                    if x.dtype != torch.float:
-                        return
-                    return x.mean()
-
-                loss = loss.apply(func, batch_size=[])
         if delay_value:
             # remove warning
             SoftUpdate(loss_fn, eps=0.5)
@@ -867,6 +856,26 @@ class TestDQN(LossModuleTestBase):
         with _check_td_steady(td):
             _ = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
+
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_dqn_reduction(self, reduction):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        actor = self._create_mock_actor(action_spec_type="categorical", device=device)
+        td = self._create_mock_data_dqn(action_spec_type="categorical", device=device)
+        loss_fn = DQNLoss(
+            actor,
+            loss_function="l2",
+            reduction=reduction,
+        )
+        loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                assert loss[key].shape == ()
 
 
 class TestQMixer(LossModuleTestBase):
