@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import abc
 import warnings
+import torchrl._utils
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
@@ -297,11 +298,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
         # set the functional module: we need to convert the params to non-differentiable params
         # otherwise they will appear twice in parameters
-        with params.apply(
-            self._make_meta_params, device=torch.device("meta"), filter_empty=False
-        ).to_module(module):
-            # avoid buffers and params being exposed
-            self.__dict__[module_name] = deepcopy(module)
+        self._make_meta_module(module_name=module_name, module=module, params=params)
 
         name_params_target = "target_" + module_name
         if create_target_params:
@@ -316,6 +313,13 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             setattr(self, name_params_target + "_params", target_params)
         self._has_update_associated[module_name] = not create_target_params
 
+    def _make_meta_module(self, *, module_name, module, params):
+        with params.apply(
+            self._make_meta_params, device=torch.device("meta"), filter_empty=False
+        ).to_module(module):
+            # avoid buffers and params being exposed
+            self.__dict__[module_name] = deepcopy(module)
+
     def __getattr__(self, item):
         if item.startswith("target_") and item.endswith("_params"):
             params = self._modules.get(item, None)
@@ -323,7 +327,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 # no target param, take detached data
                 params = getattr(self, item[7:])
                 params = params.data
-            elif not self._has_update_associated[item[7:-7]] and RL_WARNINGS:
+            elif not self._has_update_associated[item[7:-7]] and torchrl._utils.RL_WARNINGS:
                 # no updater associated
                 warnings.warn(
                     self.TARGET_NET_WARNING,
