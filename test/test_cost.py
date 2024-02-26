@@ -1538,8 +1538,7 @@ class TestDDPG(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_ddpg(self, delay_actor, delay_value, device, td_est, reduction):
+    def test_ddpg(self, delay_actor, delay_value, device, td_est):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
@@ -1550,7 +1549,6 @@ class TestDDPG(LossModuleTestBase):
             loss_function="l2",
             delay_actor=delay_actor,
             delay_value=delay_value,
-            reduction=reduction,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -1565,14 +1563,7 @@ class TestDDPG(LossModuleTestBase):
             else contextlib.nullcontext()
         ):
             loss = loss_fn(td)
-            if reduction == "none":
 
-                def func(x):
-                    if x.dtype != torch.float:
-                        return
-                    return x.mean()
-
-                loss = loss.apply(func, batch_size=[])
         if delay_value:
             # remove warning
             SoftUpdate(loss_fn, eps=0.5)
@@ -1952,6 +1943,35 @@ class TestDDPG(LossModuleTestBase):
                 return
             assert loss_actor == loss_val_td["loss_actor"]
             assert (target_value == loss_val_td["target_value"]).all()
+
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_ddpg_reduction(self, reduction):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        td = self._create_mock_data_ddpg(device=device)
+        loss_fn = DDPGLoss(
+            actor,
+            value,
+            loss_function="l2",
+            delay_actor=False,
+            delay_value=False,
+            reduction=reduction
+        )
+        loss_fn.make_value_estimator()
+        loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+        else:
+            for key in loss.keys():
+                assert loss[key].shape == torch.Size([])
 
 
 @pytest.mark.skipif(
