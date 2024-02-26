@@ -32,7 +32,7 @@ from .models import (
     MLP,
     MultiAgentConvNet,
     MultiAgentMLP,
-    MultiAgentRNN,
+    MultiAgentLSTM,
     NoisyLazyLinear,
     NoisyLinear,
     ObsDecoder,

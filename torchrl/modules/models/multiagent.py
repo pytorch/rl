@@ -5,12 +5,13 @@
 from __future__ import annotations
 
 import abc
-from typing import Optional, Sequence, Tuple, Type, Union
+from typing import Optional, Sequence, Tuple, Type, Union, Dict
 
 import numpy as np
 
 import torch
 
+import torchrl.modules
 from tensordict import TensorDict
 from torch import nn
 from torchrl.data.utils import DEVICE_TYPING
@@ -29,6 +30,7 @@ class MultiAgentNetBase(nn.Module):
         centralised: bool,
         share_params: bool,
         agent_dim: int,
+        num_outputs: int=1,
         **kwargs,
     ):
         super().__init__()
@@ -37,6 +39,7 @@ class MultiAgentNetBase(nn.Module):
         self.share_params = share_params
         self.centralised = centralised
         self.agent_dim = agent_dim
+        self.num_outputs = num_outputs
 
         agent_networks = [
             self._build_single_net(**kwargs)
@@ -51,6 +54,8 @@ class MultiAgentNetBase(nn.Module):
         self._make_params(agent_networks)
         kwargs["device"] = "meta"
         self.__dict__["_empty_net"] = self._build_single_net(**kwargs)
+
+        self._checked = False
 
     @property
     def _vmap_randomness(self):
@@ -91,38 +96,53 @@ class MultiAgentNetBase(nn.Module):
         if not self.share_params:
             if self.centralised:
                 output = self.vmap_func_module(
-                    self._empty_net, (0, None), (-2,), randomness=self._vmap_randomness
+                    self._empty_net, (0, None), (-2,) * self.num_outputs, randomness=self._vmap_randomness
                 )(self.params, inputs)
             else:
                 output = self.vmap_func_module(
                     self._empty_net,
                     (0, self.agent_dim),
-                    (-2,),
+                    (-2,) * self.num_outputs,
                     randomness=self._vmap_randomness,
                 )(self.params, inputs)
 
         # If parameters are shared, agents use the same network
+        elif not self.centralised:
+            output = self.vmap_func_module(
+                self._empty_net,
+                (None, self.agent_dim),
+                (-2,) * self.num_outputs,
+                randomness=self._vmap_randomness
+            )(self.params, inputs)
         else:
             with self.params.to_module(self._empty_net):
                 output = self._empty_net(inputs)
 
-            if self.centralised:
-                # If the parameters are shared, and it is centralised, all agents will have the same output
-                # We expand it to maintain the agent dimension, but values will be the same for all agents
+            # If the parameters are shared, and it is centralised, all agents will have the same output
+            # We expand it to maintain the agent dimension, but values will be the same for all agents
+            def expand_output(output):
                 n_agent_outputs = output.shape[-1]
                 output = output.view(*output.shape[:-1], n_agent_outputs)
                 output = output.unsqueeze(-2)
                 output = output.expand(
                     *output.shape[:-2], self.n_agents, n_agent_outputs
                 )
+                return output
 
-        print("output", output)
-        if output.shape[-2] != (self.n_agents):
-            raise ValueError(
-                f"Multi-agent network expected output with shape[-2]={self.n_agents}"
-                f" but got {output.shape}"
-            )
+            if self.num_outputs == 1:
+                output = expand_output(output)
+            else:
+                output = torch.utils._pytree.tree_map(expand_output, output)
 
+        if not self._checked:
+            def check_output(output):
+                if output.shape[-2] != self.n_agents:
+                    raise ValueError(
+                        f"Multi-agent network expected output with shape[-2]={self.n_agents}"
+                        f" but got {output.shape}"
+                    )
+            torch.utils._pytree.tree_map(check_output, output)
+            self._checked = True
         return output
 
 
@@ -509,8 +529,8 @@ class MultiAgentConvNet(MultiAgentNetBase):
         return inputs
 
 
-class MultiAgentRNN(MultiAgentNetBase):
-    """Multi-agent RNN.
+class MultiAgentLSTM(MultiAgentNetBase):
+    """Multi-agent LSTM.
 
     TODO(Kevin): docs
 
@@ -522,38 +542,44 @@ class MultiAgentRNN(MultiAgentNetBase):
 
     def __init__(
         self,
+        n_agent_inputs: int,
         n_agents: int,
         centralised: bool,
         share_params: bool,
         *,
         out_features: int,
-        mlp_kwargs: Dict,
-        lstm_kwargs: Dict,
         device: Optional[DEVICE_TYPING] = None,
         **kwargs,
     ):
+        self.n_agent_inputs = n_agent_inputs
         self.out_features = out_features
-        self.mlp_kwargs = mlp_kwargs
-        self.lstm_kwargs = lstm_kwargs
+        # self.mlp_kwargs = mlp_kwargs
+        self.lstm_kwargs = kwargs
         super().__init__(
             n_agents=n_agents,
             centralised=centralised,
             share_params=share_params,
             device=device,
             agent_dim=-2,
+            num_outputs=2,
         )
 
     def _build_single_net(self, *, device, **kwargs):
         # input_size = self.input_size
         # if self.centralised and input_size is not None:
         #     input_size = input_size * self.n_agents
-        return LSTMNet(
-            out_features=self.out_features,
-            mlp_kwargs=self.mlp_kwargs,
-            lstm_kwargs=self.lstm_kwargs,
-            device=device,
-            **kwargs,
-        )
+        # return LSTMNet(
+        #     out_features=self.out_features,
+        #     mlp_kwargs=self.mlp_kwargs,
+        #     lstm_kwargs=self.lstm_kwargs,
+        #     device=device,
+        #     **kwargs,
+        # )
+        n_agent_inputs = self.n_agent_inputs
+        if self.centralised and n_agent_inputs is not None:
+            n_agent_inputs = self.n_agent_inputs * self.n_agents
+
+        return torchrl.modules.LSTM(input_size=n_agent_inputs, hidden_size=self.out_features, **kwargs)
 
     def _pre_forward_check(self, inputs):
         if inputs.shape[-2] != self.n_agents:

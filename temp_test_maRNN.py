@@ -1,4 +1,4 @@
-from torchrl.modules import MultiAgentRNN, MultiAgentMLP
+from torchrl.modules import MultiAgentLSTM, MultiAgentMLP
 import torch
 
 n_agents = 3
@@ -7,7 +7,7 @@ rnn_hidden_size = 16
 batch_size = 32
 dummy_obs = torch.zeros(batch_size, n_agents, rnn_input_size)
 
-rnn = MultiAgentRNN(
+rnn = MultiAgentLSTM(
     n_agents=n_agents,
     centralised=False,
     share_params=True,
