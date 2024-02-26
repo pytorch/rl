@@ -3546,6 +3546,7 @@ class TestSAC(LossModuleTestBase):
             delay_qvalue=False,
             delay_actor=False,
             delay_value=False,
+            reduction=reduction,
         )
         loss_fn.make_value_estimator()
         loss = loss_fn(td)
@@ -3705,7 +3706,6 @@ class TestDiscreteSAC(LossModuleTestBase):
     @pytest.mark.parametrize("target_entropy_weight", [0.01, 0.5, 0.99])
     @pytest.mark.parametrize("target_entropy", ["auto", 1.0, 0.1, 0.0])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_discrete_sac(
         self,
         delay_qvalue,
@@ -3714,7 +3714,6 @@ class TestDiscreteSAC(LossModuleTestBase):
         target_entropy_weight,
         target_entropy,
         td_est,
-        reduction,
     ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_sac(device=device)
@@ -3735,7 +3734,6 @@ class TestDiscreteSAC(LossModuleTestBase):
             target_entropy=target_entropy,
             loss_function="l2",
             action_space="one-hot",
-            reduction=reduction,
             **kwargs,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
@@ -3749,14 +3747,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             UserWarning, match="No target network updater"
         ):
             loss = loss_fn(td)
-            if reduction == "none":
 
-                def func(x):
-                    if x.dtype != torch.float:
-                        return
-                    return x.mean()
-
-                loss = loss.apply(func, batch_size=[])
         assert loss_fn.tensor_keys.priority in td.keys()
 
         # check that losses are independent
@@ -4115,6 +4106,39 @@ class TestDiscreteSAC(LossModuleTestBase):
                 return
             assert loss_actor == loss_val_td["loss_actor"]
             assert loss_alpha == loss_val_td["loss_alpha"]
+
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_discrete_sac_reduction(self, reduction, version):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        td = self._create_mock_data_sac(device=device)
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        if version == 1:
+            value = self._create_mock_value(device=device)
+        else:
+            value = None
+        loss_fn = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_actions=actor.spec["action"].space.n,
+            loss_function="l2",
+            action_space="one-hot",
+            delay_qvalu=False,
+        )
+        loss_fn.make_value_estimator()
+        loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+        else:
+            for key in loss.keys():
+                assert loss[key].shape == torch.Size([])
 
 
 @pytest.mark.skipif(
