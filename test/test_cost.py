@@ -1961,7 +1961,7 @@ class TestDDPG(LossModuleTestBase):
             loss_function="l2",
             delay_actor=False,
             delay_value=False,
-            reduction=reduction
+            reduction=reduction,
         )
         loss_fn.make_value_estimator()
         loss = loss_fn(td)
@@ -5081,6 +5081,8 @@ class TestREDQ(LossModuleTestBase):
                 qvalue_network=qvalue,
                 loss_function="l2",
                 target_entropy=0.0,
+                delay_qvalue=False,
+                reduction=reduction,
             )
         else:
             loss_fn = REDQLoss(
@@ -5099,6 +5101,7 @@ class TestREDQ(LossModuleTestBase):
         else:
             for key in loss.keys():
                 assert loss[key].shape == torch.Size([])
+
 
 class TestCQL(LossModuleTestBase):
     seed = 0
