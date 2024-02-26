@@ -703,7 +703,9 @@ class TestDQN(LossModuleTestBase):
             action_spec_type=action_spec_type, atoms=atoms
         ).to(device)
         loss_fn = DistributionalDQNLoss(
-            actor, gamma=gamma, delay_value=delay_value,
+            actor,
+            gamma=gamma,
+            delay_value=delay_value,
         )
 
         if td_est not in (None, ValueEstimators.TD0):
@@ -2153,7 +2155,6 @@ class TestTD3(LossModuleTestBase):
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("use_action_spec", [True, False])
     @pytest.mark.parametrize("dropout", [0.0, 0.1])
-    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_td3(
         self,
         delay_actor,
@@ -2164,7 +2165,6 @@ class TestTD3(LossModuleTestBase):
         td_est,
         use_action_spec,
         dropout,
-        reduction,
     ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device, dropout=dropout)
@@ -2186,7 +2186,6 @@ class TestTD3(LossModuleTestBase):
             noise_clip=noise_clip,
             delay_actor=delay_actor,
             delay_qvalue=delay_qvalue,
-            reduction=reduction,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -2204,14 +2203,6 @@ class TestTD3(LossModuleTestBase):
         ):
             with _check_td_steady(td):
                 loss = loss_fn(td)
-                if reduction == "none":
-
-                    def func(x):
-                        if x.dtype != torch.float:
-                            return
-                        return x.mean()
-
-                    loss = loss.apply(func, batch_size=[])
 
             assert all(
                 (p.grad is None) or (p.grad == 0).all()
@@ -2630,6 +2621,39 @@ class TestTD3(LossModuleTestBase):
 
             assert loss_actor == loss_val_td["loss_actor"]
             assert loss_qvalue == loss_val_td["loss_qvalue"]
+
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_td3_reduction(self, reduction):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        td = self._create_mock_data_td3(device=device)
+        action_spec = actor.spec
+        bounds = None
+        loss_fn = TD3Loss(
+            actor,
+            value,
+            action_spec=action_spec,
+            bounds=bounds,
+            loss_function="l2",
+            delay_qvalue=False,
+            reduction=reduction,
+        )
+        loss_fn.make_value_estimator()
+        loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+        else:
+            for key in loss.keys():
+                assert loss[key].shape == torch.Size([])
 
 
 @pytest.mark.skipif(
