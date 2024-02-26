@@ -4108,7 +4108,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             assert loss_alpha == loss_val_td["loss_alpha"]
 
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_discrete_sac_reduction(self, reduction, version):
+    def test_discrete_sac_reduction(self, reduction):
         torch.manual_seed(self.seed)
         device = (
             torch.device("cpu")
@@ -4118,10 +4118,6 @@ class TestDiscreteSAC(LossModuleTestBase):
         td = self._create_mock_data_sac(device=device)
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
-        if version == 1:
-            value = self._create_mock_value(device=device)
-        else:
-            value = None
         loss_fn = DiscreteSACLoss(
             actor_network=actor,
             qvalue_network=qvalue,
