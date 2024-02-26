@@ -371,10 +371,8 @@ class DQNLoss(LossModule):
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
+        loss = _reduce(loss, reduction=self.reduction)
         td_out = TensorDict({"loss": loss}, [])
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
-        )
         return td_out
 
 
