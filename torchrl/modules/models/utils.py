@@ -127,7 +127,7 @@ def create_on_device(
 
 
 def reset_parameters_recursive(module, warn_if_no_op: bool = True) -> bool:
-    """Resets in-place the parameters of a torch.nn.Module.
+    """Recursively resets the parameters of a torch.nn.Module in-place.
 
     Args:
         module (torch.nn.Module): the module to reset
