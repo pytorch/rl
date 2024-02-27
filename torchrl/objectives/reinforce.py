@@ -402,7 +402,7 @@ class ReinforceLoss(LossModule):
 
         td_out.set("loss_value", self.loss_critic(tensordict))
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction)
+            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
             else value,
             batch_size=[],
