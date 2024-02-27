@@ -16,6 +16,7 @@ from torch import nn
 from torchrl.data.utils import DEVICE_TYPING
 
 from torchrl.modules.models import ConvNet, MLP
+from torchrl.modules.models.utils import reset_parameters_recursive
 
 
 class MultiAgentNetBase(nn.Module):
@@ -129,7 +130,7 @@ class MultiAgentNetBase(nn.Module):
         def vmap_reset_module(module, *args, **kwargs):
             def reset_module(params):
                 with params.to_module(module):
-                    module.reset_parameters()
+                    reset_parameters_recursive(module)
                     return params
 
             return torch.vmap(reset_module, *args, **kwargs)
@@ -138,7 +139,7 @@ class MultiAgentNetBase(nn.Module):
             vmap_reset_module(self._empty_net, randomness="different")(self.params)
         else:
             with self.params.to_module(self._empty_net):
-                self._empty_net.reset_parameters()
+                reset_parameters_recursive(self._empty_net)
 
 
 class MultiAgentMLP(MultiAgentNetBase):

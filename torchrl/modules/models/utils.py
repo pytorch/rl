@@ -123,3 +123,15 @@ def create_on_device(
     else:
         return module_class(*args, **kwargs).to(device)
         # .to() is always available for nn.Module, and does nothing if the Module contains no parameters or buffers
+
+
+def reset_parameters_recursive(module):
+    """Resets in-place the parameters of a torch.nn.Module.
+
+    Args:
+        module (torch.nn.Module): the module to reset
+    """
+    for layer in module.children():
+        if hasattr(layer, "reset_parameters"):
+            layer.reset_parameters()
+        reset_parameters_recursive(layer)
