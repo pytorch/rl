@@ -30,12 +30,12 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -63,12 +63,12 @@ jobs:
       gpu-arch-version: "11.7"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -97,12 +97,12 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -131,12 +131,12 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -165,12 +165,12 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -199,12 +199,12 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euxo pipefail
@@ -232,12 +232,12 @@ jobs:
       gpu-arch-version: "11.7"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -268,12 +268,12 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -302,12 +302,12 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -332,12 +332,12 @@ jobs:
       gpu-arch-version: "11.7"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -367,12 +367,12 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -400,12 +400,12 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -435,12 +435,12 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -470,12 +470,12 @@ jobs:
       gpu-arch-version: "11.7"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -506,12 +506,12 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
@@ -540,12 +540,12 @@ jobs:
       gpu-arch-version: "11.7"
       timeout: 120
       script: |
-        if [[ "${GITHUB_REF##*/}" == release/* ]]; then
+        if [[ "${{ github.ref == 'release/*' }}" == release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=stable
+          export TORCH_VERSION=nightly
         fi
 
         set -euo pipefail
