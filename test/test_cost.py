@@ -7410,6 +7410,7 @@ class TestA2C(LossModuleTestBase):
             actor,
             value,
             loss_critic_type="l2",
+            reduction=reduction,
         )
         advantage(td)
         loss = loss_fn(td)
