@@ -6158,7 +6158,6 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("functional", [True, False])
-    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_ppo(
         self,
         loss_class,
@@ -6167,7 +6166,6 @@ class TestPPO(LossModuleTestBase):
         advantage,
         td_est,
         functional,
-        reduction,
     ):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
@@ -6203,7 +6201,6 @@ class TestPPO(LossModuleTestBase):
             value,
             loss_critic_type="l2",
             functional=functional,
-            reduction=reduction,
         )
         if advantage is not None:
             advantage(td)
@@ -6215,15 +6212,6 @@ class TestPPO(LossModuleTestBase):
         if isinstance(loss_fn, KLPENPPOLoss):
             kl = loss.pop("kl")
             assert (kl != 0).any()
-
-        if reduction == "none":
-
-            def func(x):
-                if x.dtype != torch.float:
-                    return
-                return x.mean()
-
-            loss = loss.apply(func, batch_size=[])
 
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
@@ -6761,6 +6749,39 @@ class TestPPO(LossModuleTestBase):
         assert loss_obj == loss_val_td.get("loss_objective")
         assert loss_crit == loss_val_td.get("loss_critic")
 
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_ppo_reduction(self, reduction, loss_class):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        td = self._create_seq_mock_data_ppo(device=device)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        advantage = GAE(
+            gamma=0.9,
+            lmbda=0.9,
+            value_network=value,
+        )
+        loss_fn = loss_class(
+            actor,
+            value,
+            loss_critic_type="l2",
+            reduction=reduction,
+        )
+        advantage(td)
+        loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+            else:
+                for key in loss.keys():
+                    assert loss[key].shape == torch.Size([])
+
 
 class TestA2C(LossModuleTestBase):
     seed = 0
@@ -6926,8 +6947,7 @@ class TestA2C(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("functional", (True, False))
-    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_a2c(self, device, gradient_mode, advantage, td_est, functional, reduction):
+    def test_a2c(self, device, gradient_mode, advantage, td_est, functional):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_a2c(device=device)
 
@@ -6962,7 +6982,6 @@ class TestA2C(LossModuleTestBase):
             value,
             loss_critic_type="l2",
             functional=functional,
-            reduction=reduction,
         )
 
         # Check error is raised when actions require grads
@@ -6980,14 +6999,7 @@ class TestA2C(LossModuleTestBase):
         elif td_est is not None:
             loss_fn.make_value_estimator(td_est)
         loss = loss_fn(td)
-        if reduction == "none":
 
-            def func(x):
-                if x.dtype != torch.float:
-                    return
-                return x.mean()
-
-            loss = loss.apply(func, batch_size=[])
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
@@ -7370,6 +7382,37 @@ class TestA2C(LossModuleTestBase):
         assert loss_objective == loss_val_td["loss_objective"]
         assert loss_critic == loss_val_td["loss_critic"]
 
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_a2c_reduction(self, reduction):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        td = self._create_seq_mock_data_a2c(device=device)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        advantage = GAE(
+            gamma=0.9,
+            lmbda=0.9,
+            value_network=value,
+        )
+        loss_fn = A2CLoss(
+            actor,
+            value,
+            loss_critic_type="l2",
+        )
+        advantage(td)
+        loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+            else:
+                for key in loss.keys():
+                    assert loss[key].shape == torch.Size([])
+
 
 class TestReinforce(LossModuleTestBase):
     seed = 0
@@ -7616,26 +7659,16 @@ class TestReinforce(LossModuleTestBase):
         return actor, critic, common, td
 
     @pytest.mark.parametrize("separate_losses", [False, True])
-    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_reinforce_tensordict_separate_losses(self, separate_losses, reduction):
+    def test_reinforce_tensordict_separate_losses(self, separate_losses):
         torch.manual_seed(self.seed)
         actor, critic, common, td = self._create_mock_common_layer_setup()
         loss_fn = ReinforceLoss(
             actor_network=actor,
             critic_network=critic,
             separate_losses=separate_losses,
-            reduction=reduction,
         )
 
         loss = loss_fn(td)
-        if reduction == "none":
-
-            def func(x):
-                if x.dtype != torch.float:
-                    return
-                return x.mean()
-
-            loss = loss.apply(func, batch_size=[])
 
         assert all(
             (p.grad is None) or (p.grad == 0).all()
@@ -7763,6 +7796,24 @@ class TestReinforce(LossModuleTestBase):
                 loss_actor = loss(**kwargs)
             return
         assert loss_actor == loss_val_td["loss_actor"]
+
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_reinforce_reduction(self, reduction):
+        torch.manual_seed(self.seed)
+        actor, critic, common, td = self._create_mock_common_layer_setup()
+        loss_fn = ReinforceLoss(
+            actor_network=actor,
+            critic_network=critic,
+            reduction=reduction,
+        )
+        loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+            else:
+                for key in loss.keys():
+                    assert loss[key].shape == torch.Size([])
 
 
 @pytest.mark.parametrize("device", get_default_devices())
