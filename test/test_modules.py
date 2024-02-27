@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
-from copy import deepcopy
+
 from numbers import Number
 
 import numpy as np
@@ -967,9 +967,11 @@ class TestMultiAgent:
         )
         params_before = actor_net.params.clone()
         actor_net.reset_parameters()
-        params_after = actor_net.params()
-        for p1, p2 in zip(params_before.values(True, True), params_after.values(True, True)):
-            assert (p1 != p2).all()
+        params_after = actor_net.params
+        for p1, p2 in zip(
+            params_before.values(True, True), params_after.values(True, True)
+        ):
+            assert not torch.isclose(p1, p2).all()
 
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
@@ -1094,8 +1096,10 @@ class TestMultiAgent:
         params_before = actor_net.params.clone()
         actor_net.reset_parameters()
         params_after = actor_net.params
-        for p1, p2 in zip(params_before.values(True, True), params_after.values(True, True)):
-            assert (p1 != p2).all()
+        for p1, p2 in zip(
+            params_before.values(True, True), params_after.values(True, True)
+        ):
+            assert not torch.isclose(p1, p2).all()
 
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize(
