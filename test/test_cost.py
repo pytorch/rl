@@ -514,7 +514,7 @@ class TestDQN(LossModuleTestBase):
 
         assert loss_fn.tensor_keys.priority in td.keys()
 
-        sum([item for _, item in loss.items()]).backward()
+        sum([item for name, item in loss.items() if name.startswith("loss")]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
         # Check param update effect on targets
@@ -581,15 +581,21 @@ class TestDQN(LossModuleTestBase):
             loss = loss_fn(td)
         if n == 0:
             assert_allclose_td(td, ms_td.select(*td.keys(True, True)))
-            _loss = sum([item for _, item in loss.items()])
-            _loss_ms = sum([item for _, item in loss_ms.items()])
+            _loss = sum(
+                [item for name, item in loss.items() if name.startswith("loss")]
+            )
+            _loss_ms = sum(
+                [item for name, item in loss_ms.items() if name.startswith("loss")]
+            )
             assert (
                 abs(_loss - _loss_ms) < 1e-3
             ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
         else:
             with pytest.raises(AssertionError):
                 assert_allclose_td(loss, loss_ms)
-        sum([item for _, item in loss_ms.items()]).backward()
+        sum(
+            [item for name, item in loss_ms.items() if name.startswith("loss")]
+        ).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
         # Check param update effect on targets
@@ -727,7 +733,7 @@ class TestDQN(LossModuleTestBase):
 
         assert loss_fn.tensor_keys.priority in td.keys()
 
-        sum([item for _, item in loss.items()]).backward()
+        sum([item for name, item in loss.items() if name.startswith("loss")]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
         if delay_value:
@@ -1067,7 +1073,7 @@ class TestQMixer(LossModuleTestBase):
             loss = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
 
-        sum([item for _, item in loss.items()]).backward()
+        sum([item for name, item in loss.items() if name.startswith("loss")]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
         if delay_value:
@@ -1152,15 +1158,21 @@ class TestQMixer(LossModuleTestBase):
             loss = loss_fn(td)
         if n == 0:
             assert_allclose_td(td, ms_td.select(*td.keys(True, True)))
-            _loss = sum([item for _, item in loss.items()])
-            _loss_ms = sum([item for _, item in loss_ms.items()])
+            _loss = sum(
+                [item for name, item in loss.items() if name.startswith("loss")]
+            )
+            _loss_ms = sum(
+                [item for name, item in loss_ms.items() if name.startswith("loss")]
+            )
             assert (
                 abs(_loss - _loss_ms) < 1e-3
             ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
         else:
             with pytest.raises(AssertionError):
                 assert_allclose_td(loss, loss_ms)
-        sum([item for _, item in loss_ms.items()]).backward()
+        sum(
+            [item for name, item in loss_ms.items() if name.startswith("loss")]
+        ).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
         # Check param update effect on targets
@@ -1833,7 +1845,7 @@ class TestDDPG(LossModuleTestBase):
             with pytest.raises(AssertionError):
                 assert_allclose_td(loss, loss_ms)
         sum(
-            [item for name, item in loss.items() if name.startswith("loss_")]
+            [item for name, item in loss_ms.items() if name.startswith("loss_")]
         ).backward()
         parameters = list(actor.parameters()) + list(value.parameters())
         for p in parameters:
@@ -2466,8 +2478,12 @@ class TestTD3(LossModuleTestBase):
 
         if n == 0:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
-            _loss = sum([item for _, item in loss.items()])
-            _loss_ms = sum([item for _, item in loss_ms.items()])
+            _loss = sum(
+                [item for name, item in loss.items() if name.startswith("loss_")]
+            )
+            _loss_ms = sum(
+                [item for name, item in loss_ms.items() if name.startswith("loss_")]
+            )
             assert (
                 abs(_loss - _loss_ms) < 1e-3
             ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
@@ -2476,7 +2492,7 @@ class TestTD3(LossModuleTestBase):
                 assert_allclose_td(loss, loss_ms)
 
         sum(
-            [item for name, item in loss.items() if name.startswith("loss_")]
+            [item for name, item in loss_ms.items() if name.startswith("loss_")]
         ).backward()
         named_parameters = loss_fn.named_parameters()
 
@@ -2635,11 +2651,8 @@ class TestTD3(LossModuleTestBase):
             loss_val_td = loss(td)
             torch.manual_seed(0)
             loss_val = loss(**kwargs)
-            for i in loss_val:
-                assert i in loss_val_td.values(), f"{i} not in {loss_val_td.values()}"
-
-            for i, key in enumerate(loss.out_keys):
-                torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
+            loss_val_reconstruct = TensorDict(dict(zip(loss.out_keys, loss_val)), [])
+            assert_allclose_td(loss_val_reconstruct, loss_val_td)
 
             # test select
             loss.select_out_keys("loss_actor", "loss_qvalue")
@@ -3277,8 +3290,12 @@ class TestSAC(LossModuleTestBase):
                 loss = loss_fn(td)
             if n == 0:
                 assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
-                _loss = sum([item for _, item in loss.items()])
-                _loss_ms = sum([item for _, item in loss_ms.items()])
+                _loss = sum(
+                    [item for name, item in loss.items() if name.startswith("loss_")]
+                )
+                _loss_ms = sum(
+                    [item for name, item in loss_ms.items() if name.startswith("loss_")]
+                )
                 assert (
                     abs(_loss - _loss_ms) < 1e-3
                 ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
@@ -3286,7 +3303,7 @@ class TestSAC(LossModuleTestBase):
                 with pytest.raises(AssertionError):
                     assert_allclose_td(loss, loss_ms)
             sum(
-                [item for name, item in loss.items() if name.startswith("loss_")]
+                [item for name, item in loss_ms.items() if name.startswith("loss_")]
             ).backward()
             named_parameters = loss_fn.named_parameters()
             for name, p in named_parameters:
@@ -3963,8 +3980,12 @@ class TestDiscreteSAC(LossModuleTestBase):
             loss = loss_fn(td)
         if n == 0:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
-            _loss = sum([item for _, item in loss.items()])
-            _loss_ms = sum([item for _, item in loss_ms.items()])
+            _loss = sum(
+                [item for name, item in loss.items() if name.startswith("loss_")]
+            )
+            _loss_ms = sum(
+                [item for name, item in loss_ms.items() if name.startswith("loss_")]
+            )
             assert (
                 abs(_loss - _loss_ms) < 1e-3
             ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
@@ -3972,7 +3993,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             with pytest.raises(AssertionError):
                 assert_allclose_td(loss, loss_ms)
         sum(
-            [item for name, item in loss.items() if name.startswith("loss_")]
+            [item for name, item in loss_ms.items() if name.startswith("loss_")]
         ).backward()
         named_parameters = loss_fn.named_parameters()
         for name, p in named_parameters:
@@ -4889,8 +4910,12 @@ class TestREDQ(LossModuleTestBase):
                 loss = loss_fn(td)
             if n == 0:
                 assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
-                _loss = sum([item for _, item in loss.items()])
-                _loss_ms = sum([item for _, item in loss_ms.items()])
+                _loss = sum(
+                    [item for name, item in loss.items() if name.startswith("loss_")]
+                )
+                _loss_ms = sum(
+                    [item for name, item in loss_ms.items() if name.startswith("loss_")]
+                )
                 assert (
                     abs(_loss - _loss_ms) < 1e-3
                 ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
@@ -4898,7 +4923,7 @@ class TestREDQ(LossModuleTestBase):
                 with pytest.raises(AssertionError):
                     assert_allclose_td(loss, loss_ms)
             sum(
-                [item for name, item in loss.items() if name.startswith("loss_")]
+                [item for name, item in loss_ms.items() if name.startswith("loss_")]
             ).backward()
             named_parameters = loss_fn.named_parameters()
             for name, p in named_parameters:
@@ -5507,8 +5532,12 @@ class TestCQL(LossModuleTestBase):
                 loss = loss_fn(td)
             if n == 0:
                 assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
-                _loss = sum([item for _, item in loss.items()])
-                _loss_ms = sum([item for _, item in loss_ms.items()])
+                _loss = sum(
+                    [item for name, item in loss.items() if name.startswith("loss_")]
+                )
+                _loss_ms = sum(
+                    [item for name, item in loss_ms.items() if name.startswith("loss_")]
+                )
                 assert (
                     abs(_loss - _loss_ms) < 1e-3
                 ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
@@ -5516,7 +5545,7 @@ class TestCQL(LossModuleTestBase):
                 with pytest.raises(AssertionError):
                     assert_allclose_td(loss, loss_ms)
             sum(
-                [item for name, item in loss.items() if name.startswith("loss_")]
+                [item for name, item in loss_ms.items() if name.startswith("loss_")]
             ).backward()
             named_parameters = loss_fn.named_parameters()
             for name, p in named_parameters:
@@ -9004,7 +9033,9 @@ class TestIQL(LossModuleTestBase):
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
 
-        sum([item for _, item in loss.items()]).backward()
+        sum(
+            [item for name, item in loss.items() if name.startswith("loss_")]
+        ).backward()
         named_parameters = list(loss_fn.named_parameters())
         named_buffers = list(loss_fn.named_buffers())
 
@@ -9271,15 +9302,21 @@ class TestIQL(LossModuleTestBase):
             loss = loss_fn(td)
         if n == 0:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
-            _loss = sum([item for _, item in loss.items()])
-            _loss_ms = sum([item for _, item in loss_ms.items()])
+            _loss = sum(
+                [item for name, item in loss.items() if name.startswith("loss_")]
+            )
+            _loss_ms = sum(
+                [item for name, item in loss_ms.items() if name.startswith("loss_")]
+            )
             assert (
                 abs(_loss - _loss_ms) < 1e-3
             ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
         else:
             with pytest.raises(AssertionError):
                 assert_allclose_td(loss, loss_ms)
-        sum([item for _, item in loss_ms.items()]).backward()
+        sum(
+            [item for name, item in loss_ms.items() if name.startswith("loss_")]
+        ).backward()
         named_parameters = loss_fn.named_parameters()
         for name, p in named_parameters:
             if not name.startswith("target_"):
@@ -9769,7 +9806,9 @@ class TestDiscreteIQL(LossModuleTestBase):
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
 
-        sum([item for _, item in loss.items()]).backward()
+        sum(
+            [item for name, item in loss.items() if name.startswith("loss_")]
+        ).backward()
         named_parameters = list(loss_fn.named_parameters())
         named_buffers = list(loss_fn.named_buffers())
 
@@ -10039,15 +10078,21 @@ class TestDiscreteIQL(LossModuleTestBase):
             loss = loss_fn(td)
         if n == 0:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
-            _loss = sum([item for _, item in loss.items()])
-            _loss_ms = sum([item for _, item in loss_ms.items()])
+            _loss = sum(
+                [item for name, item in loss.items() if name.startswith("loss_")]
+            )
+            _loss_ms = sum(
+                [item for name, item in loss_ms.items() if name.startswith("loss_")]
+            )
             assert (
                 abs(_loss - _loss_ms) < 1e-3
             ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
         else:
             with pytest.raises(AssertionError):
                 assert_allclose_td(loss, loss_ms)
-        sum([item for _, item in loss_ms.items()]).backward()
+        sum(
+            [item for name, item in loss_ms.items() if name.startswith("loss_")]
+        ).backward()
         named_parameters = loss_fn.named_parameters()
         for name, p in named_parameters:
             if not name.startswith("target_"):
