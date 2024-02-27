@@ -636,11 +636,13 @@ class _ProcessNoWarn(mp.Process):
     """A private Process class that shuts down warnings on the subprocess and controls the number of threads in the subprocess."""
 
     @wraps(mp.Process.__init__)
-    def __init__(self, *args, num_threads=None, **kwargs):
+    def __init__(self, *args, num_threads=None, _start_method=None, **kwargs):
         import torchrl
 
         self.filter_warnings_subprocess = torchrl.filter_warnings_subprocess
         self.num_threads = num_threads
+        if _start_method is not None:
+            self._start_method = _start_method
         super().__init__(*args, **kwargs)
 
     def run(self, *args, **kwargs):

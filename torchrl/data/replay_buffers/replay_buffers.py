@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import collections
+import contextlib
 import json
 import textwrap
 import threading
@@ -21,7 +22,7 @@ from tensordict import (
     is_tensor_collection,
     is_tensorclass,
     LazyStackedTensorDict,
-    TensorDict,
+    NestedKey,
     TensorDictBase,
     unravel_key,
 )
@@ -278,15 +279,13 @@ class ReplayBuffer:
                 value = 1
 
         self._dim_extend = value
-        if value is not None and value > 0:
-            from torchrl.envs.transforms.transforms import _TransposeTransform
 
-            if self._storage is not None and self._storage.ndim <= self.dim_extend:
-                raise ValueError(
-                    "The storage `ndim` attribute must be greater "
-                    "than the `dim_extend` attribute of the buffer."
-                )
-            self.append_transform(_TransposeTransform(self.dim_extend))
+    def _transpose(self, data):
+        if is_tensor_collection(data):
+            return data.transpose(self.dim_extend, 0)
+        return torch.utils._pytree.tree_map(
+            lambda x: x.transpose(self.dim_extend, 0), data
+        )
 
     def _get_collate_fn(self, collate_fn):
         self._collate_fn = (
@@ -339,25 +338,33 @@ class ReplayBuffer:
         )
 
     @pin_memory_output
-    def __getitem__(self, index: Union[int, torch.Tensor]) -> Any:
+    def __getitem__(self, index: int | torch.Tensor | NestedKey) -> Any:
         if isinstance(index, str) or (isinstance(index, tuple) and unravel_key(index)):
             return self[:][index]
+        if isinstance(index, tuple):
+            if len(index) > 1:
+                return self[index[0]]
+            else:
+                return self[:][index]
         index = _to_numpy(index)
-        with self._replay_lock:
-            data = self._storage[index]
+
+        if self.dim_extend > 0:
+            index = (slice(None),) * self.dim_extend + (index,)
+            with self._replay_lock:
+                data = self._storage[index]
+            data = self._transpose(data)
+        else:
+            with self._replay_lock:
+                data = self._storage[index]
 
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
 
         if self._transform is not None and len(self._transform):
-            is_td = True
-            if not is_tensor_collection(data):
-                data = TensorDict({"data": data}, [])
-                is_td = False
-            with data.unlock_():
+            with data.unlock_() if is_tensor_collection(
+                data
+            ) else contextlib.nullcontext():
                 data = self._transform(data)
-            if not is_td:
-                data = data["data"]
 
         return data
 
@@ -470,6 +477,8 @@ class ReplayBuffer:
 
     def _extend(self, data: Sequence) -> torch.Tensor:
         with self._replay_lock:
+            if self.dim_extend > 0:
+                data = self._transpose(data)
             index = self._writer.extend(data)
             self._sampler.extend(index)
         return index
@@ -516,19 +525,16 @@ class ReplayBuffer:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
             data = self._storage.get(index)
+        # if self.dim_extend > 0:
+        #     data = self._transpose(data)
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
             is_td = is_tensor_collection(data)
-            if is_td:
-                is_locked = data.is_locked
-                if is_locked:
-                    data.unlock_()
-            with _set_dispatch_td_nn_modules(is_td):
+            with data.unlock_() if is_td else contextlib.nullcontext(), _set_dispatch_td_nn_modules(
+                is_td
+            ):
                 data = self._transform(data)
-            if is_td:
-                if is_locked:
-                    data.lock_()
 
         return data, info
 
@@ -1061,10 +1067,19 @@ class TensorDictReplayBuffer(ReplayBuffer):
             for key, val in info.items():
                 if key == "index" and isinstance(val, tuple):
                     val = torch.stack(val, -1)
-                val = _to_torch(val, data.device)
-                if val.ndim < data.ndim:
-                    val = expand_as_right(val, data)
-                data.set(key, val)
+                try:
+                    val = _to_torch(val, data.device)
+                    if val.ndim < data.ndim:
+                        val = expand_as_right(val, data)
+                    data.set(key, val)
+                except RuntimeError:
+                    raise RuntimeError(
+                        "Failed to set the metadata (e.g., indices or weights) in the sampled tensordict within TensorDictReplayBuffer.sample. "
+                        "This is probably caused by a shape mismatch (one of the transforms has proably modified "
+                        "the shape of the output tensordict). "
+                        "You can always recover these items from the `sample` method from a regular ReplayBuffer "
+                        "instance with the 'return_info' flag set to True."
+                    )
             if is_locked:
                 data.lock_()
         elif not is_tc and include_info in (True, None):

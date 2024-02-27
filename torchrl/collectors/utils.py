@@ -155,7 +155,7 @@ def split_trajectories(
                 traj_ids[i] += traj_ids[i - 1].max() + 1
         rollout_tensordict.set(traj_ids_key, traj_ids)
 
-    splits = traj_ids.view(-1)
+    splits = traj_ids.reshape(-1)
     splits = [(splits == i).sum().item() for i in splits.unique_consecutive()]
     # if all splits are identical then we can skip this function
     if len(set(splits)) == 1 and splits[0] == traj_ids.shape[-1]:
@@ -171,7 +171,7 @@ def split_trajectories(
             rollout_tensordict = rollout_tensordict.unsqueeze(0)
         return rollout_tensordict
 
-    out_splits = rollout_tensordict.view(-1).split(splits, 0)
+    out_splits = rollout_tensordict.reshape(-1).split(splits, 0)
 
     for out_split in out_splits:
         out_split.set(
