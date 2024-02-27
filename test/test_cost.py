@@ -881,9 +881,8 @@ class TestDQN(LossModuleTestBase):
                     assert loss[key].shape == td.shape
         else:
             for key in loss.keys():
-                if not key.startswith("loss"):
-                    continue
-                assert loss[key].shape == torch.Size([])
+                if key.startswith("loss"):
+                    assert loss[key].shape == torch.Size([])
 
     @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
@@ -909,9 +908,8 @@ class TestDQN(LossModuleTestBase):
                     assert loss[key].shape == td.shape
         else:
             for key in loss.keys():
-                if not key.startswith("loss"):
-                    continue
-                assert loss[key].shape == torch.Size([])
+                if key.startswith("loss"):
+                    assert loss[key].shape == torch.Size([])
 
 
 class TestQMixer(LossModuleTestBase):
@@ -1995,9 +1993,8 @@ class TestDDPG(LossModuleTestBase):
                     assert loss[key].shape == td.shape
         else:
             for key in loss.keys():
-                if not key.startswith("loss_"):
-                    continue
-                assert loss[key].shape == torch.Size([])
+                if key.startswith("loss"):
+                    assert loss[key].shape == torch.Size([])
 
 
 @pytest.mark.skipif(
@@ -2704,9 +2701,8 @@ class TestTD3(LossModuleTestBase):
                     assert loss[key].shape == td.shape
         else:
             for key in loss.keys():
-                if not key.startswith("loss"):
-                    continue
-                assert loss[key].shape == torch.Size([])
+                if key.startswith("loss"):
+                    assert loss[key].shape == torch.Size([])
 
 
 @pytest.mark.skipif(
@@ -3617,9 +3613,8 @@ class TestSAC(LossModuleTestBase):
                     assert loss[key].shape == td.shape
         else:
             for key in loss.keys():
-                if not key.startswith("loss"):
-                    continue
-                assert loss[key].shape == torch.Size([])
+                if key.startswith("loss"):
+                    assert loss[key].shape == torch.Size([])
 
 
 @pytest.mark.skipif(
@@ -4206,9 +4201,8 @@ class TestDiscreteSAC(LossModuleTestBase):
                     assert loss[key].shape == td.shape
         else:
             for key in loss.keys():
-                if not key.startswith("loss"):
-                    continue
-                assert loss[key].shape == torch.Size([])
+                if key.startswith("loss"):
+                    assert loss[key].shape == torch.Size([])
 
 
 @pytest.mark.skipif(
@@ -5157,12 +5151,11 @@ class TestREDQ(LossModuleTestBase):
         if reduction == "none":
             for key in loss.keys():
                 if key.startswith("loss"):
-                    assert loss[key].shape[-1] == td.shape[0]
+                    assert loss[key].shape == td.shape
         else:
             for key in loss.keys():
-                if not key.startswith("loss"):
-                    continue
-                assert loss[key].shape == torch.Size([])
+                if key.startswith("loss"):
+                    assert loss[key].shape == torch.Size([])
 
 
 class TestCQL(LossModuleTestBase):
@@ -6821,8 +6814,9 @@ class TestPPO(LossModuleTestBase):
             for key in loss.keys():
                 if key.startswith("loss"):
                     assert loss[key].shape == td.shape
-            else:
-                for key in loss.keys():
+        else:
+            for key in loss.keys():
+                if key.startswith("loss"):
                     assert loss[key].shape == torch.Size([])
 
 
@@ -7452,8 +7446,9 @@ class TestA2C(LossModuleTestBase):
             for key in loss.keys():
                 if key.startswith("loss"):
                     assert loss[key].shape == td.shape
-            else:
-                for key in loss.keys():
+        else:
+            for key in loss.keys():
+                if key.startswith("loss"):
                     assert loss[key].shape == torch.Size([])
 
 
@@ -7854,8 +7849,9 @@ class TestReinforce(LossModuleTestBase):
             for key in loss.keys():
                 if key.startswith("loss"):
                     assert loss[key].shape == td.shape
-            else:
-                for key in loss.keys():
+        else:
+            for key in loss.keys():
+                if key.startswith("loss"):
                     assert loss[key].shape == torch.Size([])
 
 
