@@ -1145,7 +1145,6 @@ def _make_compatible_policy(policy, observation_spec, env=None, fast_wrap=False)
             )
 
         try:
-            # signature modified by make_functional
             sig = policy.forward.__signature__
         except AttributeError:
             sig = inspect.signature(policy.forward)

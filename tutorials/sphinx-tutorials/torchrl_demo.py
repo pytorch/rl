@@ -543,21 +543,30 @@ print(tensordict)
 # Functional Programming (Ensembling / Meta-RL)
 # ----------------------------------------------
 
-from tensordict.nn import make_functional
+from tensordict import TensorDict
 
-params = make_functional(sequence)
-len(list(sequence.parameters()))  # functional modules have no parameters
-
-###############################################################################
-
-sequence(tensordict, params)
+params = TensorDict.from_module(sequence)
+print("extracted params", params)
 
 ###############################################################################
+# functional call using tensordict:
 
+with params.to_module(sequence):
+    sequence(tensordict)
+
+###############################################################################
+# Using vectorized map for model ensembling
 from torch import vmap
 
 params_expand = params.expand(4)
-tensordict_exp = vmap(sequence, (None, 0))(tensordict, params_expand)
+
+
+def exec_sequence(params, data):
+    with params.to_module(sequence):
+        return sequence(data)
+
+
+tensordict_exp = vmap(exec_sequence, (0, None))(params_expand, tensordict)
 print(tensordict_exp)
 
 ###############################################################################
