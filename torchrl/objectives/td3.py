@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import functools
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -375,6 +374,7 @@ class TD3Loss(LossModule):
         metadata = {
             "state_action_value_actor": state_action_value_actor.detach(),
         }
+        loss_actor = _reduce(loss_actor, reduction=self.reduction)
         return loss_actor, metadata
 
     def value_loss(self, tensordict):
@@ -449,6 +449,7 @@ class TD3Loss(LossModule):
             "pred_value": current_qvalue.detach(),
             "target_value": target_value.detach(),
         }
+        loss_qval = _reduce(loss_qval, reduction=self.reduction)
         return loss_qval, metadata
 
     @dispatch
@@ -471,9 +472,6 @@ class TD3Loss(LossModule):
                 **metadata_value,
             },
             batch_size=[],
-        )
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
         )
         return td_out
 

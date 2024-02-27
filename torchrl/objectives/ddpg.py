@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import functools
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
@@ -296,9 +295,6 @@ class DDPGLoss(LossModule):
             source={"loss_actor": loss_actor, "loss_value": loss_value, **metadata},
             batch_size=[],
         )
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
-        )
         return td_out
 
     def loss_actor(
@@ -314,6 +310,7 @@ class DDPGLoss(LossModule):
             td_copy = self.value_network(td_copy)
         loss_actor = -td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
         metadata = {}
+        loss_actor = _reduce(loss_actor, self.reduction)
         return loss_actor, metadata
 
     def loss_value(
@@ -352,6 +349,7 @@ class DDPGLoss(LossModule):
                 "target_value_max": target_value.max(),
                 "pred_value_max": pred_val.max(),
             }
+        loss_value = _reduce(loss_value, self.reduction)
         return loss_value, metadata
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):

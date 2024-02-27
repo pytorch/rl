@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import functools
 import math
 from dataclasses import dataclass
 from numbers import Number
@@ -312,12 +311,15 @@ class REDQLoss_deprecated(LossModule):
                 "loss_qvalue": loss_qval,
                 "loss_alpha": loss_alpha,
                 "alpha": self.alpha,
-                "entropy": -sample_log_prob.detach(),
+                "entropy": -sample_log_prob.detach().mean(),
             },
             [],
         )
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
         return td_out
 
