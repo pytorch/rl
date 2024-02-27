@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+from copy import deepcopy
 from numbers import Number
 
 import numpy as np
@@ -950,6 +951,29 @@ class TestMultiAgent:
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
     @pytest.mark.parametrize("centralised", [True, False])
+    def test_reset_mlp(
+        self,
+        n_agents,
+        centralised,
+        share_params,
+    ):
+        actor_net = MultiAgentMLP(
+            n_agent_inputs=4,
+            n_agent_outputs=6,
+            num_cells=[5, 5],
+            n_agents=n_agents,
+            centralised=centralised,
+            share_params=share_params,
+        )
+        params_before = deepcopy(list(actor_net.parameters()))
+        actor_net.reset_parameters()
+        params_after = list(actor_net.parameters())
+        for p1, p2 in zip(params_before, params_after):
+            assert (p1 != p2).all()
+
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize("share_params", [True, False])
+    @pytest.mark.parametrize("centralised", [True, False])
     @pytest.mark.parametrize("channels", [3, None])
     @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
     def test_multiagent_cnn(
@@ -1050,6 +1074,28 @@ class TestMultiAgent:
         for p in optim.param_groups[0]["params"]:
             if isinstance(p, torch.nn.parameter.UninitializedParameter):
                 raise AssertionError("UninitializedParameter found")
+
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize("share_params", [True, False])
+    @pytest.mark.parametrize("centralised", [True, False])
+    def test_reset_cnn(
+        self,
+        n_agents,
+        centralised,
+        share_params,
+    ):
+        actor_net = MultiAgentConvNet(
+            in_features=4,
+            num_cells=[5, 5],
+            n_agents=n_agents,
+            centralised=centralised,
+            share_params=share_params,
+        )
+        params_before = deepcopy(list(actor_net.parameters()))
+        actor_net.reset_parameters()
+        params_after = list(actor_net.parameters())
+        for p1, p2 in zip(params_before, params_after):
+            assert (p1 != p2).all()
 
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize(
@@ -1271,7 +1317,6 @@ class TestDecisionTransformer:
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("bias", [True, False])
 def test_python_lstm_cell(device, bias):
-
     lstm_cell1 = LSTMCell(10, 20, device=device, bias=bias)
     lstm_cell2 = nn.LSTMCell(10, 20, device=device, bias=bias)
 
@@ -1307,7 +1352,6 @@ def test_python_lstm_cell(device, bias):
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("bias", [True, False])
 def test_python_gru_cell(device, bias):
-
     gru_cell1 = GRUCell(10, 20, device=device, bias=bias)
     gru_cell2 = nn.GRUCell(10, 20, device=device, bias=bias)
 
