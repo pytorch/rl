@@ -126,7 +126,7 @@ def create_on_device(
         # .to() is always available for nn.Module, and does nothing if the Module contains no parameters or buffers
 
 
-def reset_parameters_recursive(module, warn_if_no_op: bool = True) -> bool:
+def _reset_parameters_recursive(module, warn_if_no_op: bool = True) -> bool:
     """Recursively resets the parameters of a :class:`~torch.nn.Module` in-place.
 
     Args:
@@ -142,7 +142,7 @@ def reset_parameters_recursive(module, warn_if_no_op: bool = True) -> bool:
         if hasattr(layer, "reset_parameters"):
             layer.reset_parameters()
             any_reset |= True
-        any_reset |= reset_parameters_recursive(layer, warn_if_no_op=False)
+        any_reset |= _reset_parameters_recursive(layer, warn_if_no_op=False)
     if warn_if_no_op and not any_reset:
         warnings.warn(
             "reset_parameters_recursive was called without the parameters argument and did not find any parameters to reset"

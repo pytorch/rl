@@ -16,7 +16,7 @@ from torch import nn
 from torchrl.data.utils import DEVICE_TYPING
 
 from torchrl.modules.models import ConvNet, MLP
-from torchrl.modules.models.utils import reset_parameters_recursive
+from torchrl.modules.models.utils import _reset_parameters_recursive
 
 
 class MultiAgentNetBase(nn.Module):
@@ -31,6 +31,7 @@ class MultiAgentNetBase(nn.Module):
         centralised: bool,
         share_params: bool,
         agent_dim: int,
+        vmap_randomness: str = "different",
         **kwargs,
     ):
         super().__init__()
@@ -39,6 +40,7 @@ class MultiAgentNetBase(nn.Module):
         self.share_params = share_params
         self.centralised = centralised
         self.agent_dim = agent_dim
+        self._vmap_randomness = vmap_randomness
 
         agent_networks = [
             self._build_single_net(**kwargs)
@@ -55,9 +57,9 @@ class MultiAgentNetBase(nn.Module):
         self.__dict__["_empty_net"] = self._build_single_net(**kwargs)
 
     @property
-    def _vmap_randomness(self):
+    def vmap_randomness(self):
         if self.initialized:
-            return "error"
+            return self._vmap_randomness
         return "same"
 
     def _make_params(self, agent_networks):
@@ -93,14 +95,14 @@ class MultiAgentNetBase(nn.Module):
         if not self.share_params:
             if self.centralised:
                 output = self.vmap_func_module(
-                    self._empty_net, (0, None), (-2,), randomness=self._vmap_randomness
+                    self._empty_net, (0, None), (-2,), randomness=self.vmap_randomness
                 )(self.params, inputs)
             else:
                 output = self.vmap_func_module(
                     self._empty_net,
                     (0, self.agent_dim),
                     (-2,),
-                    randomness=self._vmap_randomness,
+                    randomness=self.vmap_randomness,
                 )(self.params, inputs)
 
         # If parameters are shared, agents use the same network
@@ -130,7 +132,7 @@ class MultiAgentNetBase(nn.Module):
         def vmap_reset_module(module, *args, **kwargs):
             def reset_module(params):
                 with params.to_module(module):
-                    reset_parameters_recursive(module)
+                    _reset_parameters_recursive(module)
                     return params
 
             return torch.vmap(reset_module, *args, **kwargs)
@@ -139,7 +141,7 @@ class MultiAgentNetBase(nn.Module):
             vmap_reset_module(self._empty_net, randomness="different")(self.params)
         else:
             with self.params.to_module(self._empty_net):
-                reset_parameters_recursive(self._empty_net)
+                _reset_parameters_recursive(self._empty_net)
 
 
 class MultiAgentMLP(MultiAgentNetBase):
