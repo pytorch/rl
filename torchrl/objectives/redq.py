@@ -563,7 +563,7 @@ class REDQLoss(LossModule):
                 "loss_qvalue": loss_qval,
                 "loss_alpha": loss_alpha,
                 "alpha": self.alpha.detach(),
-                "entropy": -sample_log_prob.detach(),
+                "entropy": -sample_log_prob.detach().mean(),
                 "state_action_value_actor": state_action_value_actor.detach(),
                 "action_log_prob_actor": action_log_prob_actor.detach(),
                 "next.state_value": next_state_value.detach(),

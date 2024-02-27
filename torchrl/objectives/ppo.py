@@ -554,7 +554,7 @@ class PPOLoss(LossModule):
         td_out = TensorDict({"loss_objective": -neg_loss}, batch_size=[])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
@@ -800,7 +800,7 @@ class ClipPPOLoss(PPOLoss):
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
@@ -1065,7 +1065,7 @@ class KLPENPPOLoss(PPOLoss):
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict_copy)

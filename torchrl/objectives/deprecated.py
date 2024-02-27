@@ -311,7 +311,7 @@ class REDQLoss_deprecated(LossModule):
                 "loss_qvalue": loss_qval,
                 "loss_alpha": loss_alpha,
                 "alpha": self.alpha,
-                "entropy": -sample_log_prob.detach(),
+                "entropy": -sample_log_prob.detach().mean(),
             },
             [],
         )

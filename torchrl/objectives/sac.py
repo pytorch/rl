@@ -572,7 +572,7 @@ class SACLoss(LossModule):
             "loss_qvalue": loss_qvalue,
             "loss_alpha": loss_alpha,
             "alpha": self._alpha,
-            "entropy": entropy,
+            "entropy": entropy.detach().mean(),
         }
         if self._version == 1:
             out["loss_value"] = loss_value
@@ -1136,7 +1136,7 @@ class DiscreteSACLoss(LossModule):
             "loss_qvalue": loss_value,
             "loss_alpha": loss_alpha,
             "alpha": self._alpha,
-            "entropy": entropy,
+            "entropy": entropy.detach().mean(),
         }
         td_out = TensorDict(out, [])
         td_out = td_out.named_apply(
