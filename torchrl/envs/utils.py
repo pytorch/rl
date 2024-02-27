@@ -1115,3 +1115,207 @@ def _repr_by_depth(key):
         return (0, key)
     else:
         return (len(key) - 1, ".".join(key))
+
+
+def _make_compatible_policy(policy, observation_spec, env=None, fast_wrap=False):
+    if policy is None:
+        if env is None:
+            raise ValueError(
+                "env must be provided to _get_policy_and_device if policy is None"
+            )
+        policy = RandomPolicy(env.input_spec["full_action_spec"])
+    # make sure policy is an nn.Module
+    policy = _NonParametricPolicyWrapper(policy)
+    if not _policy_is_tensordict_compatible(policy):
+        # policy is a nn.Module that doesn't operate on tensordicts directly
+        # so we attempt to auto-wrap policy with TensorDictModule
+        if observation_spec is None:
+            raise ValueError(
+                "Unable to read observation_spec from the environment. This is "
+                "required to check compatibility of the environment and policy "
+                "since the policy is a nn.Module that operates on tensors "
+                "rather than a TensorDictModule or a nn.Module that accepts a "
+                "TensorDict as input and defines in_keys and out_keys."
+            )
+
+        try:
+            sig = policy.forward.__signature__
+        except AttributeError:
+            sig = inspect.signature(policy.forward)
+        # we check if all the mandatory params are there
+        params = list(sig.parameters.keys())
+        if (
+            set(sig.parameters) == {"tensordict"}
+            or set(sig.parameters) == {"td"}
+            or (
+                len(params) == 1
+                and is_tensor_collection(sig.parameters[params[0]].annotation)
+            )
+        ):
+            return policy
+        if fast_wrap:
+            in_keys = list(observation_spec.keys())
+            out_keys = list(env.action_keys)
+            return TensorDictModule(policy, in_keys=in_keys, out_keys=out_keys)
+
+        required_kwargs = {
+            str(k) for k, p in sig.parameters.items() if p.default is inspect._empty
+        }
+        next_observation = {
+            key: value for key, value in observation_spec.rand().items()
+        }
+        if not required_kwargs.difference(set(next_observation)):
+            in_keys = [str(k) for k in sig.parameters if k in next_observation]
+            if env is None:
+                out_keys = ["action"]
+            else:
+                out_keys = list(env.action_keys)
+            for p in policy.parameters():
+                policy_device = p.device
+                break
+            else:
+                policy_device = None
+            if policy_device:
+                next_observation = tree_map(
+                    lambda x: x.to(policy_device), next_observation
+                )
+
+            output = policy(**next_observation)
+
+            if isinstance(output, tuple):
+                out_keys.extend(f"output{i + 1}" for i in range(len(output) - 1))
+
+            policy = TensorDictModule(policy, in_keys=in_keys, out_keys=out_keys)
+        else:
+            raise TypeError(
+                f"""Arguments to policy.forward are incompatible with entries in
+    env.observation_spec (got incongruent signatures: fun signature is {set(sig.parameters)} vs specs {set(next_observation)}).
+    If you want TorchRL to automatically wrap your policy with a TensorDictModule
+    then the arguments to policy.forward must correspond one-to-one with entries
+    in env.observation_spec.
+    For more complex behaviour and more control you can consider writing your
+    own TensorDictModule.
+    Check the collector documentation to know more about accepted policies.
+    """
+            )
+    return policy
+
+
+def _policy_is_tensordict_compatible(policy: nn.Module):
+    if isinstance(policy, _NonParametricPolicyWrapper) and isinstance(
+        policy.policy, RandomPolicy
+    ):
+        return True
+
+    if isinstance(policy, TensorDictModuleBase):
+        return True
+
+    sig = inspect.signature(policy.forward)
+
+    if (
+        len(sig.parameters) == 1
+        and hasattr(policy, "in_keys")
+        and hasattr(policy, "out_keys")
+    ):
+        raise RuntimeError(
+            "Passing a policy that is not a tensordict.nn.TensorDictModuleBase subclass but has in_keys and out_keys "
+            "is deprecated. Users should inherit from this class (which "
+            "has very few restrictions) to make the experience smoother. "
+            "Simply change your policy from `class Policy(nn.Module)` to `Policy(tensordict.nn.TensorDictModuleBase)` "
+            "and this error should disappear.",
+        )
+    elif not hasattr(policy, "in_keys") and not hasattr(policy, "out_keys"):
+        # if it's not a TensorDictModule, and in_keys and out_keys are not defined then
+        # we assume no TensorDict compatibility and will try to wrap it.
+        return False
+
+    # if in_keys or out_keys were defined but policy is not a TensorDictModule or
+    # accepts multiple arguments then it's likely the user is trying to do something
+    # that will have undetermined behaviour, we raise an error
+    raise TypeError(
+        "Received a policy that defines in_keys or out_keys and also expects multiple "
+        "arguments to policy.forward. If the policy is compatible with TensorDict, it "
+        "should take a single argument of type TensorDict to policy.forward and define "
+        "both in_keys and out_keys. Alternatively, policy.forward can accept "
+        "arbitrarily many tensor inputs and leave in_keys and out_keys undefined and "
+        "TorchRL will attempt to automatically wrap the policy with a TensorDictModule."
+    )
+
+
+class RandomPolicy:
+    """A random policy for data collectors.
+
+    This is a wrapper around the action_spec.rand method.
+
+    Args:
+        action_spec: TensorSpec object describing the action specs
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data.tensor_specs import BoundedTensorSpec
+        >>> action_spec = BoundedTensorSpec(-torch.ones(3), torch.ones(3))
+        >>> actor = RandomPolicy(action_spec=action_spec)
+        >>> td = actor(TensorDict({}, batch_size=[])) # selects a random action in the cube [-1; 1]
+    """
+
+    def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
+        super().__init__()
+        self.action_spec = action_spec.clone()
+        self.action_key = action_key
+
+    def __call__(self, td: TensorDictBase) -> TensorDictBase:
+        if isinstance(self.action_spec, CompositeSpec):
+            return td.update(self.action_spec.rand())
+        else:
+            return td.set(self.action_key, self.action_spec.rand())
+
+
+class _PolicyMetaClass(abc.ABCMeta):
+    def __call__(cls, *args, **kwargs):
+        # no kwargs
+        if isinstance(args[0], nn.Module):
+            return args[0]
+        return super().__call__(*args)
+
+
+class _NonParametricPolicyWrapper(nn.Module, metaclass=_PolicyMetaClass):
+    """A wrapper for non-parametric policies."""
+
+    def __init__(self, policy):
+        super().__init__()
+        self.policy = policy
+
+    @property
+    def forward(self):
+        forward = self.__dict__.get("_forward", None)
+        if forward is None:
+
+            @functools.wraps(self.policy)
+            def forward(*input, **kwargs):
+                return self.policy.__call__(*input, **kwargs)
+
+            self.__dict__["_forward"] = forward
+        return forward
+
+    def __getattr__(self, attr: str) -> Any:
+        if attr in self.__dir__():
+            return self.__getattribute__(
+                attr
+            )  # make sure that appropriate exceptions are raised
+
+        elif attr.startswith("__"):
+            raise AttributeError(
+                "passing built-in private methods is "
+                f"not permitted with type {type(self)}. "
+                f"Got attribute {attr}."
+            )
+
+        elif "policy" in self.__dir__():
+            policy = self.__getattribute__("policy")
+            return getattr(policy, attr)
+        try:
+            super().__getattr__(attr)
+        except Exception:
+            raise AttributeError(
+                f"policy not set in {self.__class__.__name__}, cannot access {attr}."
+            )
