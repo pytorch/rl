@@ -1604,7 +1604,9 @@ class TestDDPG(LossModuleTestBase):
             loss_fn.zero_grad()
 
         # check overall grad
-        sum([item for _, item in loss.items()]).backward()
+        sum(
+            [item for name, item in loss.items() if name.startswith("loss_")]
+        ).backward()
         parameters = list(actor.parameters()) + list(value.parameters())
         for p in parameters:
             assert p.grad.norm() > 0.0
@@ -1816,15 +1818,21 @@ class TestDDPG(LossModuleTestBase):
             loss = loss_fn(td)
         if n == 0:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
-            _loss = sum([item for _, item in loss.items()])
-            _loss_ms = sum([item for _, item in loss_ms.items()])
+            _loss = sum(
+                [item for name, item in loss.items() if name.startswith("loss_")]
+            )
+            _loss_ms = sum(
+                [item for name, item in loss_ms.items() if name.startswith("loss_")]
+            )
             assert (
                 abs(_loss - _loss_ms) < 1e-3
             ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
         else:
             with pytest.raises(AssertionError):
                 assert_allclose_td(loss, loss_ms)
-        sum([item for _, item in loss_ms.items()]).backward()
+        sum(
+            [item for name, item in loss.items() if name.startswith("loss_")]
+        ).backward()
         parameters = list(actor.parameters()) + list(value.parameters())
         for p in parameters:
             assert p.grad.norm() > 0.0
@@ -2259,7 +2267,9 @@ class TestTD3(LossModuleTestBase):
                     raise NotImplementedError(k)
                 loss_fn.zero_grad()
 
-            sum([item for _, item in loss.items()]).backward()
+            sum(
+                [item for name, item in loss.items() if name.startswith("loss_")]
+            ).backward()
             named_parameters = list(loss_fn.named_parameters())
             named_buffers = list(loss_fn.named_buffers())
 
@@ -2462,7 +2472,9 @@ class TestTD3(LossModuleTestBase):
             with pytest.raises(AssertionError):
                 assert_allclose_td(loss, loss_ms)
 
-        sum([item for _, item in loss_ms.items()]).backward()
+        sum(
+            [item for name, item in loss.items() if name.startswith("loss_")]
+        ).backward()
         named_parameters = loss_fn.named_parameters()
 
         for name, p in named_parameters:
@@ -3033,7 +3045,9 @@ class TestSAC(LossModuleTestBase):
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
 
-        sum([item for _, item in loss.items()]).backward()
+        sum(
+            [item for name, item in loss.items() if name.startswith("loss_")]
+        ).backward()
         named_parameters = list(loss_fn.named_parameters())
         named_buffers = list(loss_fn.named_buffers())
 
@@ -3267,7 +3281,9 @@ class TestSAC(LossModuleTestBase):
             else:
                 with pytest.raises(AssertionError):
                     assert_allclose_td(loss, loss_ms)
-            sum([item for _, item in loss_ms.items()]).backward()
+            sum(
+                [item for name, item in loss.items() if name.startswith("loss_")]
+            ).backward()
             named_parameters = loss_fn.named_parameters()
             for name, p in named_parameters:
                 if not name.startswith("target_"):
@@ -3818,7 +3834,9 @@ class TestDiscreteSAC(LossModuleTestBase):
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
 
-        sum([item for _, item in loss.items()]).backward()
+        sum(
+            [item for name, item in loss.items() if name.startswith("loss_")]
+        ).backward()
         named_parameters = list(loss_fn.named_parameters())
         named_buffers = list(loss_fn.named_buffers())
 
@@ -3948,7 +3966,9 @@ class TestDiscreteSAC(LossModuleTestBase):
         else:
             with pytest.raises(AssertionError):
                 assert_allclose_td(loss, loss_ms)
-        sum([item for _, item in loss_ms.items()]).backward()
+        sum(
+            [item for name, item in loss.items() if name.startswith("loss_")]
+        ).backward()
         named_parameters = loss_fn.named_parameters()
         for name, p in named_parameters:
             if not name.startswith("target_"):
@@ -4474,7 +4494,9 @@ class TestREDQ(LossModuleTestBase):
                     raise NotImplementedError(k)
                 loss_fn.zero_grad()
 
-            sum([item for _, item in loss.items()]).backward()
+            sum(
+                [item for name, item in loss.items() if name.startswith("loss_")]
+            ).backward()
             named_parameters = list(loss_fn.named_parameters())
             named_buffers = list(loss_fn.named_buffers())
 
@@ -4869,7 +4891,9 @@ class TestREDQ(LossModuleTestBase):
             else:
                 with pytest.raises(AssertionError):
                     assert_allclose_td(loss, loss_ms)
-            sum([item for _, item in loss_ms.items()]).backward()
+            sum(
+                [item for name, item in loss.items() if name.startswith("loss_")]
+            ).backward()
             named_parameters = loss_fn.named_parameters()
             for name, p in named_parameters:
                 if not name.startswith("target_"):
@@ -5350,7 +5374,9 @@ class TestCQL(LossModuleTestBase):
                 )
             )
 
-        sum([item for _, item in loss.items()]).backward()
+        sum(
+            [item for name, item in loss.items() if name.startswith("loss_")]
+        ).backward()
         named_parameters = list(loss_fn.named_parameters())
         named_buffers = list(loss_fn.named_buffers())
 
@@ -5482,7 +5508,9 @@ class TestCQL(LossModuleTestBase):
             else:
                 with pytest.raises(AssertionError):
                     assert_allclose_td(loss, loss_ms)
-            sum([item for _, item in loss_ms.items()]).backward()
+            sum(
+                [item for name, item in loss.items() if name.startswith("loss_")]
+            ).backward()
             named_parameters = loss_fn.named_parameters()
             for name, p in named_parameters:
                 if not name.startswith("target_"):
