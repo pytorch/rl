@@ -145,6 +145,6 @@ def _reset_parameters_recursive(module, warn_if_no_op: bool = True) -> bool:
         any_reset |= _reset_parameters_recursive(layer, warn_if_no_op=False)
     if warn_if_no_op and not any_reset:
         warnings.warn(
-            "reset_parameters_recursive was called without the parameters argument and did not find any parameters to reset"
+            "_reset_parameters_recursive was called without the parameters argument and did not find any parameters to reset"
         )
     return any_reset
