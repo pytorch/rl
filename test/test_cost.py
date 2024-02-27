@@ -6827,6 +6827,7 @@ class TestPPO(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+
 class TestA2C(LossModuleTestBase):
     seed = 0
 
