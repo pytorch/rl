@@ -60,6 +60,8 @@ class MultiAgentNetBase(nn.Module):
     def vmap_randomness(self):
         if self.initialized:
             return self._vmap_randomness
+        # Matteo: There seems to be a problem with lazy layers when using "different" here
+        # found this bit as legacy, not sure the reason
         return "same"
 
     def _make_params(self, agent_networks):
