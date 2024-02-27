@@ -60,8 +60,10 @@ class MultiAgentNetBase(nn.Module):
     def vmap_randomness(self):
         if self.initialized:
             return self._vmap_randomness
-        # Matteo: There seems to be a problem with lazy layers when using "different" here
-        # found this bit as legacy, not sure the reason
+        # The class _BatchedUninitializedParameter and buffer are not batched
+        # by vmap so using "different" will raise an exception because vmap can't find
+        # the batch dimension. This is ok though since we won't have the same config
+        # for every element (as one might expect from "same").
         return "same"
 
     def _make_params(self, agent_networks):
@@ -131,6 +133,8 @@ class MultiAgentNetBase(nn.Module):
         return output
 
     def reset_parameters(self):
+        """Resets the parameters of the model."""
+
         def vmap_reset_module(module, *args, **kwargs):
             def reset_module(params):
                 with params.to_module(module):
