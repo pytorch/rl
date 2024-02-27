@@ -297,12 +297,11 @@ def _loss_actor(
 ) -> torch.Tensor:
     td_copy = tensordict.select(*self.actor_in_keys)
     # Get an action from the actor network: since we made it functional, we need to pass the params
-    td_copy = self.actor_network(td_copy, params=self.actor_network_params)
+    with self.actor_network_params.to_module(self.actor_network):
+        td_copy = self.actor_network(td_copy)
     # get the value associated with that action
-    td_copy = self.value_network(
-        td_copy,
-        params=self.value_network_params.detach(),
-    )
+    with self.value_network_params.detach().to_module(self.value_network):
+        td_copy = self.value_network(td_copy)
     return -td_copy.get("state_action_value")
 
 
@@ -324,7 +323,8 @@ def _loss_value(
     td_copy = tensordict.clone()
 
     # V(s, a)
-    self.value_network(td_copy, params=self.value_network_params)
+    with self.value_network_params.to_module(self.value_network):
+        self.value_network(td_copy)
     pred_val = td_copy.get("state_action_value").squeeze(-1)
 
     # we manually reconstruct the parameters of the actor-critic, where the first
@@ -339,9 +339,8 @@ def _loss_value(
         batch_size=self.target_actor_network_params.batch_size,
         device=self.target_actor_network_params.device,
     )
-    target_value = self.value_estimator.value_estimate(
-        tensordict, target_params=target_params
-    ).squeeze(-1)
+    with target_params.to_module(self.value_estimator):
+        target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
 
     # Computes the value loss: L2, L1 or smooth L1 depending on `self.loss_function`
     loss_value = distance_loss(pred_val, target_value, loss_function=self.loss_function)
