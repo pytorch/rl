@@ -492,6 +492,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
             share_params=share_params,
             device=device,
             agent_dim=-4,
+            **kwargs,
         )
 
     def _build_single_net(self, *, device, **kwargs):
