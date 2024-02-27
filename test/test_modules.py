@@ -1049,10 +1049,10 @@ class TestMultiAgent:
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
 
     def test_multiagent_cnn_lazy(self):
-        n_channels = 5
+        n_agents = 5
         n_channels = 3
         cnn = MultiAgentConvNet(
-            n_agents=5,
+            n_agents=n_agents,
             centralised=False,
             share_params=False,
             in_features=None,
