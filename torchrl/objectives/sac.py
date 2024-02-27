@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import functools
 import math
 import warnings
 from dataclasses import dataclass
@@ -573,13 +572,16 @@ class SACLoss(LossModule):
             "loss_qvalue": loss_qvalue,
             "loss_alpha": loss_alpha,
             "alpha": self._alpha,
-            "entropy": entropy,
+            "entropy": entropy.detach().mean(),
         }
         if self._version == 1:
             out["loss_value"] = loss_value
         td_out = TensorDict(out, [])
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
         return td_out
 
@@ -1134,11 +1136,14 @@ class DiscreteSACLoss(LossModule):
             "loss_qvalue": loss_value,
             "loss_alpha": loss_alpha,
             "alpha": self._alpha,
-            "entropy": entropy,
+            "entropy": entropy.detach().mean(),
         }
         td_out = TensorDict(out, [])
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
         return td_out
 
