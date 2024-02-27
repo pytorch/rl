@@ -6823,9 +6823,9 @@ class TestPPO(LossModuleTestBase):
                     assert loss[key].shape == td.shape
         else:
             for key in loss.keys():
-                if key.startswith("loss"):
-                    assert loss[key].shape == torch.Size([])
-
+                if not key.startswith("loss"):
+                    continue
+                assert loss[key].shape == torch.Size([])
 
 class TestA2C(LossModuleTestBase):
     seed = 0
@@ -7456,8 +7456,9 @@ class TestA2C(LossModuleTestBase):
                     assert loss[key].shape == td.shape
         else:
             for key in loss.keys():
-                if key.startswith("loss"):
-                    assert loss[key].shape == torch.Size([])
+                if not key.startswith("loss"):
+                    continue
+                assert loss[key].shape == torch.Size([])
 
 
 class TestReinforce(LossModuleTestBase):
@@ -7859,8 +7860,9 @@ class TestReinforce(LossModuleTestBase):
                     assert loss[key].shape == td.shape
         else:
             for key in loss.keys():
-                if key.startswith("loss"):
-                    assert loss[key].shape == torch.Size([])
+                if not key.startswith("loss"):
+                    continue
+                assert loss[key].shape == torch.Size([])
 
 
 @pytest.mark.parametrize("device", get_default_devices())
