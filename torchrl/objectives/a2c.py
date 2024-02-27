@@ -477,7 +477,7 @@ class A2CLoss(LossModule):
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction)
+            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
             else value,
             batch_size=[],
