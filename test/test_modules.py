@@ -965,10 +965,10 @@ class TestMultiAgent:
             centralised=centralised,
             share_params=share_params,
         )
-        params_before = deepcopy(list(actor_net.parameters()))
+        params_before = actor_net.params.clone()
         actor_net.reset_parameters()
-        params_after = list(actor_net.parameters())
-        for p1, p2 in zip(params_before, params_after):
+        params_after = actor_net.params()
+        for p1, p2 in zip(params_before.values(True, True), params_after.values(True, True)):
             assert (p1 != p2).all()
 
     @pytest.mark.parametrize("n_agents", [1, 3])
@@ -1091,10 +1091,10 @@ class TestMultiAgent:
             centralised=centralised,
             share_params=share_params,
         )
-        params_before = deepcopy(list(actor_net.parameters()))
+        params_before = actor_net.params.clone()
         actor_net.reset_parameters()
-        params_after = list(actor_net.parameters())
-        for p1, p2 in zip(params_before, params_after):
+        params_after = actor_net.params
+        for p1, p2 in zip(params_before.values(True, True), params_after.values(True, True)):
             assert (p1 != p2).all()
 
     @pytest.mark.parametrize("n_agents", [1, 3])

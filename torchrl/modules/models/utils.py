@@ -127,13 +127,14 @@ def create_on_device(
 
 
 def reset_parameters_recursive(module, warn_if_no_op: bool = True) -> bool:
-    """Recursively resets the parameters of a torch.nn.Module in-place.
+    """Recursively resets the parameters of a :class:`~torch.nn.Module` in-place.
 
     Args:
-        module (torch.nn.Module): the module to reset
-        warn_if_no_op (bool): whether to raise a warning in case this is a no-op
+        module (torch.nn.Module): the module to reset.
+        warn_if_no_op (bool, optional): whether to raise a warning in case this is a no-op.
+            Defaults to ``True``.
 
-    Returns: whether any parameters where reset
+    Returns: whether any parameter has been reset.
 
     """
     any_reset = False
