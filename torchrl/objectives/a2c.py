@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import contextlib
-import functools
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
@@ -477,8 +476,11 @@ class A2CLoss(LossModule):
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
         return td_out
 

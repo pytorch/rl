@@ -806,8 +806,11 @@ class ClipPPOLoss(PPOLoss):
             td_out.set("loss_critic", loss_critic)
 
         td_out.set("ESS", _reduce(ess, self.reduction) / batch)
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
         return td_out
 
@@ -1066,8 +1069,11 @@ class KLPENPPOLoss(PPOLoss):
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict_copy)
             td_out.set("loss_critic", loss_critic)
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
 
         return td_out
