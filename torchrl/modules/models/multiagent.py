@@ -125,6 +125,21 @@ class MultiAgentNetBase(nn.Module):
 
         return output
 
+    def reset_parameters(self):
+        def vmap_reset_module(module, *args, **kwargs):
+            def reset_module(params):
+                with params.to_module(module):
+                    module.reset_parameters()
+                    return params
+
+            return torch.vmap(reset_module, *args, **kwargs)
+
+        if not self.share_params:
+            vmap_reset_module(self._empty_net, randomness="different")(self.params)
+        else:
+            with self.params.to_module(self._empty_net):
+                self._empty_net.reset_parameters()
+
 
 class MultiAgentMLP(MultiAgentNetBase):
     """Mult-agent MLP.
@@ -262,7 +277,6 @@ class MultiAgentMLP(MultiAgentNetBase):
         activation_class: Optional[Type[nn.Module]] = nn.Tanh,
         **kwargs,
     ):
-
         self.n_agents = n_agents
         self.n_agent_inputs = n_agent_inputs
         self.n_agent_outputs = n_agent_outputs

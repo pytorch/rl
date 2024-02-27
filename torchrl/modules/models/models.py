@@ -269,6 +269,15 @@ class MLP(nn.Sequential):
             out = out.view(*out.shape[:-1], *self.out_features)
         return out
 
+    def reset_parameters(self):
+        def reset_child_params(module):
+            for layer in module.children():
+                if hasattr(layer, "reset_parameters"):
+                    layer.reset_parameters()
+                reset_child_params(layer)
+
+        reset_child_params(self)
+
 
 class ConvNet(nn.Sequential):
     """A convolutional neural network.
