@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import inspect
+import warnings
 from typing import Optional, Sequence, Type
 
 import torch
@@ -125,13 +126,24 @@ def create_on_device(
         # .to() is always available for nn.Module, and does nothing if the Module contains no parameters or buffers
 
 
-def reset_parameters_recursive(module):
+def reset_parameters_recursive(module, warn_if_no_op: bool = True) -> bool:
     """Resets in-place the parameters of a torch.nn.Module.
 
     Args:
         module (torch.nn.Module): the module to reset
+        warn_if_no_op (bool): whether to raise a warning in case this is a no-op
+
+    Returns: whether any parameters where reset
+
     """
+    any_reset = False
     for layer in module.children():
         if hasattr(layer, "reset_parameters"):
             layer.reset_parameters()
-        reset_parameters_recursive(layer)
+            any_reset |= True
+        any_reset |= reset_parameters_recursive(layer, warn_if_no_op=False)
+    if warn_if_no_op and not any_reset:
+        warnings.warn(
+            "reset_parameters_recursive was called without the parameters argument and did not find any parameters to reset"
+        )
+    return any_reset
