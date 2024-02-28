@@ -1456,7 +1456,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         shape = torch.broadcast_shapes(shape, val.shape)
         mask_expand = self.mask.expand(shape)
         gathered = mask_expand & val
-        return gathered.any(-1).all() and val.dtype == self.dtype and val.shape[-len(self.shape):] == self.shape
+        return (gathered.sum(-1) == 1).all() and val.dtype == self.dtype and val.shape[-len(self.shape):] == self.shape
 
     def __eq__(self, other):
         if not hasattr(other, "mask"):
