@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import functools
 import importlib
 from contextlib import nullcontext
 
@@ -92,6 +92,7 @@ from torchrl.envs.libs.gym import (
     _has_gym,
     _is_from_pixels,
     _torchrl_to_gym_spec_transform,
+    gym_backend,
     GymEnv,
     GymWrapper,
     MOGymEnv,
@@ -125,25 +126,41 @@ _has_minari = importlib.util.find_spec("minari") is not None
 
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_gym_regular = importlib.util.find_spec("gym") is not None
+if _has_gymnasium:
+    set_gym_backend("gymnasium").set()
+    import gymnasium
+
+    assert gym_backend() is gymnasium
+elif _has_gym:
+    set_gym_backend("gym").set()
+    import gym
+
+    assert gym_backend() is gym
+
+
+def get_gym_pixel_wrapper():
+    try:
+        # works whenever gym_version > version.parse("0.19")
+        PixelObservationWrapper = gym_backend(
+            "wrappers.pixel_observation"
+        ).PixelObservationWrapper
+    except Exception as err:
+        print("err", err)
+        from torchrl.envs.libs.utils import (
+            GymPixelObservationWrapper as PixelObservationWrapper,
+        )
+    return PixelObservationWrapper
+
 
 if _has_gym:
     try:
-        import gymnasium as gym
         from gymnasium import __version__ as gym_version
 
         gym_version = version.parse(gym_version)
-        from gymnasium.wrappers.pixel_observation import PixelObservationWrapper
     except ModuleNotFoundError:
-        import gym
+        from gym import __version__ as gym_version
 
-        gym_version = version.parse(gym.__version__)
-        if gym_version > version.parse("0.19"):
-            from gym.wrappers.pixel_observation import PixelObservationWrapper
-        else:
-            from torchrl.envs.libs.utils import (
-                GymPixelObservationWrapper as PixelObservationWrapper,
-            )
-
+        gym_version = version.parse(gym_version)
 
 if _has_dmc:
     from dm_control import suite
@@ -295,162 +312,205 @@ class TestGym:
     def test_torchrl_to_gym(self, backend, numpy):
         from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
-        EnvBase.register_gym(
-            f"Dummy-{numpy}-{backend}-v0",
-            entry_point=self.DummyEnv,
-            to_numpy=numpy,
-            backend=backend,
-            arg1=1,
-            arg2=2,
-        )
+        gb = gym_backend()
+        try:
+            EnvBase.register_gym(
+                f"Dummy-{numpy}-{backend}-v0",
+                entry_point=self.DummyEnv,
+                to_numpy=numpy,
+                backend=backend,
+                arg1=1,
+                arg2=2,
+            )
 
-        with set_gym_backend(backend) if backend is not None else nullcontext():
-            envgym = gym_backend().make(f"Dummy-{numpy}-{backend}-v0")
-            envgym.reset()
-            obs, *_ = envgym.step(envgym.action_space.sample())
-            assert "observation" in obs
-            assert "other" in obs
-            if numpy:
-                assert all(isinstance(val, np.ndarray) for val in tree_flatten(obs)[0])
-            else:
-                assert all(
-                    isinstance(val, torch.Tensor) for val in tree_flatten(obs)[0]
+            with set_gym_backend(backend) if backend is not None else nullcontext():
+                envgym = gym_backend().make(f"Dummy-{numpy}-{backend}-v0")
+                envgym.reset()
+                obs, *_ = envgym.step(envgym.action_space.sample())
+                assert "observation" in obs
+                assert "other" in obs
+                if numpy:
+                    assert all(
+                        isinstance(val, np.ndarray) for val in tree_flatten(obs)[0]
+                    )
+                else:
+                    assert all(
+                        isinstance(val, torch.Tensor) for val in tree_flatten(obs)[0]
+                    )
+
+                # with a transform
+                transform = Compose(
+                    CatTensors(["observation", ("other", "another_other")]),
+                    RemoveEmptySpecs(),
                 )
+                envgym = gym_backend().make(
+                    f"Dummy-{numpy}-{backend}-v0",
+                    transform=transform,
+                )
+                envgym.reset()
+                obs, *_ = envgym.step(envgym.action_space.sample())
+                assert "observation_other" not in obs
+                assert "observation" not in obs
+                assert "other" not in obs
+                if numpy:
+                    assert all(
+                        isinstance(val, np.ndarray) for val in tree_flatten(obs)[0]
+                    )
+                else:
+                    assert all(
+                        isinstance(val, torch.Tensor) for val in tree_flatten(obs)[0]
+                    )
 
-            # with a transform
+            # register with transform
             transform = Compose(
                 CatTensors(["observation", ("other", "another_other")]),
                 RemoveEmptySpecs(),
             )
-            envgym = gym_backend().make(
-                f"Dummy-{numpy}-{backend}-v0",
-                transform=transform,
-            )
-            envgym.reset()
-            obs, *_ = envgym.step(envgym.action_space.sample())
-            assert "observation_other" not in obs
-            assert "observation" not in obs
-            assert "other" not in obs
-            if numpy:
-                assert all(isinstance(val, np.ndarray) for val in tree_flatten(obs)[0])
-            else:
-                assert all(
-                    isinstance(val, torch.Tensor) for val in tree_flatten(obs)[0]
-                )
-
-        # register with transform
-        transform = Compose(
-            CatTensors(["observation", ("other", "another_other")]), RemoveEmptySpecs()
-        )
-        EnvBase.register_gym(
-            f"Dummy-{numpy}-{backend}-transform-v0",
-            entry_point=self.DummyEnv,
-            backend=backend,
-            to_numpy=numpy,
-            arg1=1,
-            arg2=2,
-            transform=transform,
-        )
-
-        with set_gym_backend(backend) if backend is not None else nullcontext():
-            envgym = gym_backend().make(f"Dummy-{numpy}-{backend}-transform-v0")
-            envgym.reset()
-            obs, *_ = envgym.step(envgym.action_space.sample())
-            assert "observation_other" not in obs
-            assert "observation" not in obs
-            assert "other" not in obs
-            if numpy:
-                assert all(isinstance(val, np.ndarray) for val in tree_flatten(obs)[0])
-            else:
-                assert all(
-                    isinstance(val, torch.Tensor) for val in tree_flatten(obs)[0]
-                )
-
-        # register with transform
-        EnvBase.register_gym(
-            f"Dummy-{numpy}-{backend}-noarg-v0",
-            entry_point=self.DummyEnv,
-            backend=backend,
-            to_numpy=numpy,
-        )
-        with set_gym_backend(backend) if backend is not None else nullcontext():
-            with pytest.raises(AssertionError):
-                envgym = gym_backend().make(
-                    f"Dummy-{numpy}-{backend}-noarg-v0", arg1=None, arg2=None
-                )
-            envgym = gym_backend().make(
-                f"Dummy-{numpy}-{backend}-noarg-v0", arg1=1, arg2=2
-            )
-
-        # Get info dict
-        gym_info_at_reset = version.parse(gym_backend().__version__) >= version.parse(
-            "0.26.0"
-        )
-        with set_gym_backend(backend) if backend is not None else nullcontext():
-            envgym = gym_backend().make(
-                f"Dummy-{numpy}-{backend}-noarg-v0",
+            EnvBase.register_gym(
+                f"Dummy-{numpy}-{backend}-transform-v0",
+                entry_point=self.DummyEnv,
+                backend=backend,
+                to_numpy=numpy,
                 arg1=1,
                 arg2=2,
+                transform=transform,
+            )
+
+            with set_gym_backend(backend) if backend is not None else nullcontext():
+                envgym = gym_backend().make(f"Dummy-{numpy}-{backend}-transform-v0")
+                envgym.reset()
+                obs, *_ = envgym.step(envgym.action_space.sample())
+                assert "observation_other" not in obs
+                assert "observation" not in obs
+                assert "other" not in obs
+                if numpy:
+                    assert all(
+                        isinstance(val, np.ndarray) for val in tree_flatten(obs)[0]
+                    )
+                else:
+                    assert all(
+                        isinstance(val, torch.Tensor) for val in tree_flatten(obs)[0]
+                    )
+
+            # register with transform
+            EnvBase.register_gym(
+                f"Dummy-{numpy}-{backend}-noarg-v0",
+                entry_point=self.DummyEnv,
+                backend=backend,
+                to_numpy=numpy,
+            )
+            with set_gym_backend(backend) if backend is not None else nullcontext():
+                with pytest.raises(AssertionError):
+                    envgym = gym_backend().make(
+                        f"Dummy-{numpy}-{backend}-noarg-v0", arg1=None, arg2=None
+                    )
+                envgym = gym_backend().make(
+                    f"Dummy-{numpy}-{backend}-noarg-v0", arg1=1, arg2=2
+                )
+
+            # Get info dict
+            gym_info_at_reset = version.parse(
+                gym_backend().__version__
+            ) >= version.parse("0.26.0")
+            with set_gym_backend(backend) if backend is not None else nullcontext():
+                envgym = gym_backend().make(
+                    f"Dummy-{numpy}-{backend}-noarg-v0",
+                    arg1=1,
+                    arg2=2,
+                    info_keys=("other",),
+                )
+                if gym_info_at_reset:
+                    out, info = envgym.reset()
+                    if numpy:
+                        assert all(
+                            isinstance(val, np.ndarray)
+                            for val in tree_flatten((obs, info))[0]
+                        )
+                    else:
+                        assert all(
+                            isinstance(val, torch.Tensor)
+                            for val in tree_flatten((obs, info))[0]
+                        )
+                else:
+                    out = envgym.reset()
+                    info = {}
+                    if numpy:
+                        assert all(
+                            isinstance(val, np.ndarray)
+                            for val in tree_flatten((obs, info))[0]
+                        )
+                    else:
+                        assert all(
+                            isinstance(val, torch.Tensor)
+                            for val in tree_flatten((obs, info))[0]
+                        )
+                assert "observation" in out
+                assert "other" not in out
+
+                if gym_info_at_reset:
+                    assert "other" in info
+
+                out, *_, info = envgym.step(envgym.action_space.sample())
+                assert "observation" in out
+                assert "other" not in out
+                assert "other" in info
+                if numpy:
+                    assert all(
+                        isinstance(val, np.ndarray)
+                        for val in tree_flatten((obs, info))[0]
+                    )
+                else:
+                    assert all(
+                        isinstance(val, torch.Tensor)
+                        for val in tree_flatten((obs, info))[0]
+                    )
+
+            EnvBase.register_gym(
+                f"Dummy-{numpy}-{backend}-info-v0",
+                entry_point=self.DummyEnv,
+                backend=backend,
+                to_numpy=numpy,
                 info_keys=("other",),
             )
-            if gym_info_at_reset:
-                out, info = envgym.reset()
-                if numpy:
-                    assert all(
-                        isinstance(val, np.ndarray)
-                        for val in tree_flatten((obs, info))[0]
-                    )
+            with set_gym_backend(backend) if backend is not None else nullcontext():
+                envgym = gym_backend().make(
+                    f"Dummy-{numpy}-{backend}-info-v0", arg1=1, arg2=2
+                )
+                if gym_info_at_reset:
+                    out, info = envgym.reset()
+                    if numpy:
+                        assert all(
+                            isinstance(val, np.ndarray)
+                            for val in tree_flatten((obs, info))[0]
+                        )
+                    else:
+                        assert all(
+                            isinstance(val, torch.Tensor)
+                            for val in tree_flatten((obs, info))[0]
+                        )
                 else:
-                    assert all(
-                        isinstance(val, torch.Tensor)
-                        for val in tree_flatten((obs, info))[0]
-                    )
-            else:
-                out = envgym.reset()
-                info = {}
-                if numpy:
-                    assert all(
-                        isinstance(val, np.ndarray)
-                        for val in tree_flatten((obs, info))[0]
-                    )
-                else:
-                    assert all(
-                        isinstance(val, torch.Tensor)
-                        for val in tree_flatten((obs, info))[0]
-                    )
-            assert "observation" in out
-            assert "other" not in out
+                    out = envgym.reset()
+                    info = {}
+                    if numpy:
+                        assert all(
+                            isinstance(val, np.ndarray)
+                            for val in tree_flatten((obs, info))[0]
+                        )
+                    else:
+                        assert all(
+                            isinstance(val, torch.Tensor)
+                            for val in tree_flatten((obs, info))[0]
+                        )
+                assert "observation" in out
+                assert "other" not in out
 
-            if gym_info_at_reset:
+                if gym_info_at_reset:
+                    assert "other" in info
+
+                out, *_, info = envgym.step(envgym.action_space.sample())
+                assert "observation" in out
+                assert "other" not in out
                 assert "other" in info
-
-            out, *_, info = envgym.step(envgym.action_space.sample())
-            assert "observation" in out
-            assert "other" not in out
-            assert "other" in info
-            if numpy:
-                assert all(
-                    isinstance(val, np.ndarray) for val in tree_flatten((obs, info))[0]
-                )
-            else:
-                assert all(
-                    isinstance(val, torch.Tensor)
-                    for val in tree_flatten((obs, info))[0]
-                )
-
-        EnvBase.register_gym(
-            f"Dummy-{numpy}-{backend}-info-v0",
-            entry_point=self.DummyEnv,
-            backend=backend,
-            to_numpy=numpy,
-            info_keys=("other",),
-        )
-        with set_gym_backend(backend) if backend is not None else nullcontext():
-            envgym = gym_backend().make(
-                f"Dummy-{numpy}-{backend}-info-v0", arg1=1, arg2=2
-            )
-            if gym_info_at_reset:
-                out, info = envgym.reset()
                 if numpy:
                     assert all(
                         isinstance(val, np.ndarray)
@@ -461,44 +521,14 @@ class TestGym:
                         isinstance(val, torch.Tensor)
                         for val in tree_flatten((obs, info))[0]
                     )
-            else:
-                out = envgym.reset()
-                info = {}
-                if numpy:
-                    assert all(
-                        isinstance(val, np.ndarray)
-                        for val in tree_flatten((obs, info))[0]
-                    )
-                else:
-                    assert all(
-                        isinstance(val, torch.Tensor)
-                        for val in tree_flatten((obs, info))[0]
-                    )
-            assert "observation" in out
-            assert "other" not in out
-
-            if gym_info_at_reset:
-                assert "other" in info
-
-            out, *_, info = envgym.step(envgym.action_space.sample())
-            assert "observation" in out
-            assert "other" not in out
-            assert "other" in info
-            if numpy:
-                assert all(
-                    isinstance(val, np.ndarray) for val in tree_flatten((obs, info))[0]
-                )
-            else:
-                assert all(
-                    isinstance(val, torch.Tensor)
-                    for val in tree_flatten((obs, info))[0]
-                )
+        finally:
+            set_gym_backend(gb).set()
 
     @pytest.mark.parametrize(
         "env_name",
         [
-            HALFCHEETAH_VERSIONED,
-            PONG_VERSIONED,
+            HALFCHEETAH_VERSIONED(),
+            PONG_VERSIONED(),
             # PENDULUM_VERSIONED,
         ],
     )
@@ -512,12 +542,15 @@ class TestGym:
         ],
     )
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
-        if env_name == PONG_VERSIONED and not from_pixels:
+
+        if env_name == PONG_VERSIONED() and not from_pixels:
             # raise pytest.skip("already pixel")
             # we don't skip because that would raise an exception
             return
         elif (
-            env_name != PONG_VERSIONED and from_pixels and torch.cuda.device_count() < 1
+            env_name != PONG_VERSIONED()
+            and from_pixels
+            and torch.cuda.device_count() < 1
         ):
             raise pytest.skip("no cuda device")
 
@@ -572,13 +605,16 @@ class TestGym:
         final_seed0, final_seed1 = final_seed
         assert final_seed0 == final_seed1
 
-        if env_name == PONG_VERSIONED:
-            base_env = gym.make(env_name, frameskip=frame_skip)
+        if env_name == PONG_VERSIONED():
+            base_env = gym_backend().make(
+                env_name, frameskip=frame_skip, render_mode="human"
+            )
             frame_skip = 1
         else:
             base_env = _make_gym_environment(env_name)
 
         if from_pixels and not _is_from_pixels(base_env):
+            PixelObservationWrapper = get_gym_pixel_wrapper()
             base_env = PixelObservationWrapper(base_env, pixels_only=pixels_only)
         assert type(base_env) is env_type
 
@@ -611,9 +647,9 @@ class TestGym:
     @pytest.mark.parametrize(
         "env_name",
         [
-            PONG_VERSIONED,
+            PONG_VERSIONED(),
             # PENDULUM_VERSIONED,
-            HALFCHEETAH_VERSIONED,
+            HALFCHEETAH_VERSIONED(),
         ],
     )
     @pytest.mark.parametrize("frame_skip", [1, 3])
@@ -626,11 +662,11 @@ class TestGym:
         ],
     )
     def test_gym_fake_td(self, env_name, frame_skip, from_pixels, pixels_only):
-        if env_name == PONG_VERSIONED and not from_pixels:
+        if env_name == PONG_VERSIONED() and not from_pixels:
             # raise pytest.skip("already pixel")
             return
         elif (
-            env_name != PONG_VERSIONED
+            env_name != PONG_VERSIONED()
             and from_pixels
             and (not torch.has_cuda or not torch.cuda.device_count())
         ):
@@ -684,36 +720,39 @@ class TestGym:
         env = SerialEnv(2, make_env)
         check_env_specs(env)
 
-    def test_info_reader(self):
+    def test_info_reader_mario(self):
         try:
             import gym_super_mario_bros as mario_gym
         except ImportError as err:
             try:
-                import gym
+                gym = gym_backend()
 
                 # with 0.26 we must have installed gym_super_mario_bros
                 # Since we capture the skips as errors, we raise a skip in this case
                 # Otherwise, we just return
-                if (
-                    version.parse("0.26.0")
-                    <= version.parse(gym.__version__)
-                    < version.parse("0.27.0")
-                ):
+                gym_version = version.parse(gym.__version__)
+                if version.parse(
+                    "0.26.0"
+                ) <= gym_version and gym_version < version.parse("0.27"):
                     raise pytest.skip(f"no super mario bros: error=\n{err}")
             except ImportError:
                 pass
             return
 
-        env = mario_gym.make("SuperMarioBros-v0", apply_api_compatibility=True)
-        env = GymWrapper(env)
+        gb = gym_backend()
+        try:
+            with set_gym_backend("gym"):
+                env = mario_gym.make("SuperMarioBros-v0")
+                env = GymWrapper(env)
+                check_env_specs(env)
 
-        def info_reader(info, tensordict):
-            assert isinstance(info, dict)  # failed before bugfix
+                def info_reader(info, tensordict):
+                    assert isinstance(info, dict)  # failed before bugfix
 
-        env.info_dict_reader = info_reader
-        env.reset()
-        env.rand_step()
-        env.rollout(3)
+                env.info_dict_reader = info_reader
+                check_env_specs(env)
+        finally:
+            set_gym_backend(gb).set()
 
     @implement_for("gymnasium")
     def test_one_hot_and_categorical(self):
@@ -769,22 +808,26 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_env(self, envname):
-        with set_gym_backend("gymnasium"):
-            env = GymEnv(envname, num_envs=2, from_pixels=False)
-            env.set_seed(0)
-            assert env.get_library_name(env._env) == "gymnasium"
-        # rollouts can be executed without decorator
-        check_env_specs(env)
-        rollout = env.rollout(100, break_when_any_done=False)
-        for obs_key in env.observation_spec.keys(True, True):
-            rollout_consistency_assertion(
-                rollout,
-                done_key="done",
-                observation_key=obs_key,
-                done_strict="CartPole" in envname,
-            )
-        env.close()
-        del env
+        gb = gym_backend()
+        try:
+            with set_gym_backend("gymnasium"):
+                env = GymEnv(envname, num_envs=2, from_pixels=False)
+                env.set_seed(0)
+                assert env.get_library_name(env._env) == "gymnasium"
+            # rollouts can be executed without decorator
+            check_env_specs(env)
+            rollout = env.rollout(100, break_when_any_done=False)
+            for obs_key in env.observation_spec.keys(True, True):
+                rollout_consistency_assertion(
+                    rollout,
+                    done_key="done",
+                    observation_key=obs_key,
+                    done_strict="CartPole" in envname,
+                )
+            env.close()
+            del env
+        finally:
+            set_gym_backend(gb).set()
 
     @implement_for("gym", "0.18")
     @pytest.mark.parametrize(
@@ -793,8 +836,7 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):  # noqa: F811
-        import gym
-
+        gym = gym_backend()
         # we can't use parametrize with implement_for
         for envname in ["CartPole-v1", "HalfCheetah-v4"]:
             env = GymWrapper(
@@ -817,34 +859,42 @@ class TestGym:
     @implement_for("gym", "0.18")
     @pytest.mark.parametrize(
         "envname",
-        ["CartPole-v1", "HalfCheetah-v4"],
+        ["cp", "hc"],
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_env(self, envname):  # noqa: F811
-        with set_gym_backend("gym"):
-            env = GymEnv(envname, num_envs=2, from_pixels=False)
-            env.set_seed(0)
-            assert env.get_library_name(env._env) == "gym"
-        # rollouts can be executed without decorator
-        check_env_specs(env)
-        rollout = env.rollout(100, break_when_any_done=False)
-        for obs_key in env.observation_spec.keys(True, True):
-            rollout_consistency_assertion(
-                rollout,
-                done_key="done",
-                observation_key=obs_key,
-                done_strict="CartPole" in envname,
-            )
-        env.close()
-        del env
-        if envname != "CartPole-v1":
+        gb = gym_backend()
+        try:
             with set_gym_backend("gym"):
-                env = GymEnv(envname, num_envs=2, from_pixels=True)
+                if envname == "hc":
+                    envname = HALFCHEETAH_VERSIONED()
+                else:
+                    envname = CARTPOLE_VERSIONED()
+                env = GymEnv(envname, num_envs=2, from_pixels=False)
                 env.set_seed(0)
+                assert env.get_library_name(env._env) == "gym"
             # rollouts can be executed without decorator
             check_env_specs(env)
+            rollout = env.rollout(100, break_when_any_done=False)
+            for obs_key in env.observation_spec.keys(True, True):
+                rollout_consistency_assertion(
+                    rollout,
+                    done_key="done",
+                    observation_key=obs_key,
+                    done_strict="CartPole" in envname,
+                )
             env.close()
             del env
+            if envname != "CartPole-v1":
+                with set_gym_backend("gym"):
+                    env = GymEnv(envname, num_envs=2, from_pixels=True)
+                    env.set_seed(0)
+                # rollouts can be executed without decorator
+                check_env_specs(env)
+                env.close()
+                del env
+        finally:
+            set_gym_backend(gb).set()
 
     @implement_for("gym", None, "0.18")
     @pytest.mark.parametrize(
@@ -868,88 +918,101 @@ class TestGym:
     @pytest.mark.parametrize("wrapper", [True, False])
     def test_gym_output_num(self, wrapper):
         # gym has 4 outputs, no truncation
-        import gym
-
-        if wrapper:
-            env = GymWrapper(gym.make(PENDULUM_VERSIONED))
-        else:
-            with set_gym_backend("gym"):
-                env = GymEnv(PENDULUM_VERSIONED)
-        # truncated is read from the info
-        assert "truncated" in env.done_keys
-        assert "terminated" in env.done_keys
-        assert "done" in env.done_keys
-        check_env_specs(env)
+        gym = gym_backend()
+        try:
+            if wrapper:
+                env = GymWrapper(gym.make(PENDULUM_VERSIONED()))
+            else:
+                with set_gym_backend("gym"):
+                    env = GymEnv(PENDULUM_VERSIONED())
+            # truncated is read from the info
+            assert "truncated" in env.done_keys
+            assert "terminated" in env.done_keys
+            assert "done" in env.done_keys
+            check_env_specs(env)
+        finally:
+            set_gym_backend(gym).set()
 
     @implement_for("gym", "0.26")
     @pytest.mark.parametrize("wrapper", [True, False])
     def test_gym_output_num(self, wrapper):  # noqa: F811
         # gym has 5 outputs, with truncation
-        import gym
+        gym = gym_backend()
+        try:
+            if wrapper:
+                env = GymWrapper(gym.make(PENDULUM_VERSIONED()))
+            else:
+                with set_gym_backend("gym"):
+                    env = GymEnv(PENDULUM_VERSIONED())
+            assert "truncated" in env.done_keys
+            assert "terminated" in env.done_keys
+            assert "done" in env.done_keys
+            check_env_specs(env)
 
-        if wrapper:
-            env = GymWrapper(gym.make(PENDULUM_VERSIONED))
-        else:
-            with set_gym_backend("gym"):
-                env = GymEnv(PENDULUM_VERSIONED)
-        assert "truncated" in env.done_keys
-        assert "terminated" in env.done_keys
-        assert "done" in env.done_keys
-        check_env_specs(env)
+            if wrapper:
+                # let's further test with a wrapper that exposes the env with old API
+                from gym.wrappers.compatibility import EnvCompatibility
 
-        if wrapper:
-            # let's further test with a wrapper that exposes the env with old API
-            from gym.wrappers.compatibility import EnvCompatibility
-
-            with pytest.raises(
-                ValueError,
-                match="GymWrapper does not support the gym.wrapper.compatibility.EnvCompatibility",
-            ):
-                GymWrapper(EnvCompatibility(gym.make("CartPole-v1")))
+                with pytest.raises(
+                    ValueError,
+                    match="GymWrapper does not support the gym.wrapper.compatibility.EnvCompatibility",
+                ):
+                    GymWrapper(EnvCompatibility(gym.make("CartPole-v1")))
+        finally:
+            set_gym_backend(gym).set()
 
     @implement_for("gymnasium")
     @pytest.mark.parametrize("wrapper", [True, False])
     def test_gym_output_num(self, wrapper):  # noqa: F811
         # gym has 5 outputs, with truncation
-        import gymnasium as gym
-
-        if wrapper:
-            env = GymWrapper(gym.make(PENDULUM_VERSIONED))
-        else:
-            with set_gym_backend("gymnasium"):
-                env = GymEnv(PENDULUM_VERSIONED)
-        assert "truncated" in env.done_keys
-        assert "terminated" in env.done_keys
-        assert "done" in env.done_keys
-        check_env_specs(env)
+        gym = gym_backend()
+        try:
+            if wrapper:
+                env = GymWrapper(gym.make(PENDULUM_VERSIONED()))
+            else:
+                with set_gym_backend("gymnasium"):
+                    env = GymEnv(PENDULUM_VERSIONED())
+            assert "truncated" in env.done_keys
+            assert "terminated" in env.done_keys
+            assert "done" in env.done_keys
+            check_env_specs(env)
+        finally:
+            set_gym_backend(gym).set()
 
     def test_gym_gymnasium_parallel(self):
         # tests that both gym and gymnasium work with wrappers without
         # decorating with set_gym_backend during execution
-        if importlib.util.find_spec("gym") is not None:
-            import gym
+        gym = gym_backend()
+        try:
+            if importlib.util.find_spec("gym") is not None:
+                with set_gym_backend("gym"):
+                    gym = gym_backend()
 
-            old_api = version.parse(gym.__version__) < version.parse("0.26")
-            make_fun = EnvCreator(lambda: GymWrapper(gym.make(PENDULUM_VERSIONED)))
-        elif importlib.util.find_spec("gymnasium") is not None:
-            import gymnasium
+                old_api = version.parse(gym.__version__) < version.parse("0.26")
+                make_fun = EnvCreator(
+                    lambda: GymWrapper(gym.make(PENDULUM_VERSIONED()))
+                )
+            elif importlib.util.find_spec("gymnasium") is not None:
+                import gymnasium
 
-            old_api = False
-            make_fun = EnvCreator(
-                lambda: GymWrapper(gymnasium.make(PENDULUM_VERSIONED))
-            )
-        else:
-            raise ImportError  # unreachable under pytest.skipif
-        penv = ParallelEnv(2, make_fun)
-        rollout = penv.rollout(2)
-        if old_api:
-            assert "terminated" in rollout.keys()
-            # truncated is read from info
-            assert "truncated" in rollout.keys()
-        else:
-            assert "terminated" in rollout.keys()
-            assert "truncated" in rollout.keys()
-        check_env_specs(penv)
+                old_api = False
+                make_fun = EnvCreator(
+                    lambda: GymWrapper(gymnasium.make(PENDULUM_VERSIONED()))
+                )
+            else:
+                raise ImportError  # unreachable under pytest.skipif
+            penv = ParallelEnv(2, make_fun)
+            rollout = penv.rollout(2)
+            if old_api:
+                assert "terminated" in rollout.keys()
+                # truncated is read from info
+                assert "truncated" in rollout.keys()
+            else:
+                assert "terminated" in rollout.keys()
+                assert "truncated" in rollout.keys()
+            check_env_specs(penv)
+        finally:
+            set_gym_backend(gym).set()
 
     @implement_for("gym", None, "0.22.0")
     def test_vecenvs_nan(self):  # noqa: F811
@@ -1005,7 +1068,7 @@ class TestGym:
     def test_vecenvs_nan(self):  # noqa: F811
         # new versions of gym must never return nan for next values when there is a done state
         torch.manual_seed(0)
-        env = GymEnv("CartPole-v0", num_envs=2)
+        env = GymEnv("CartPole-v1", num_envs=2)
         env.set_seed(0)
         rollout = env.rollout(200)
         assert torch.isfinite(rollout.get("observation")).all()
@@ -1014,7 +1077,7 @@ class TestGym:
         del env
 
         # same with collector
-        env = GymEnv("CartPole-v0", num_envs=2)
+        env = GymEnv("CartPole-v1", num_envs=2)
         env.set_seed(0)
         c = SyncDataCollector(
             env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
@@ -1029,16 +1092,19 @@ class TestGym:
 
 @implement_for("gym", None, "0.26")
 def _make_gym_environment(env_name):  # noqa: F811
+    gym = gym_backend()
     return gym.make(env_name)
 
 
 @implement_for("gym", "0.26", None)
 def _make_gym_environment(env_name):  # noqa: F811
+    gym = gym_backend()
     return gym.make(env_name, render_mode="rgb_array")
 
 
 @implement_for("gymnasium")
 def _make_gym_environment(env_name):  # noqa: F811
+    gym = gym_backend()
     return gym.make(env_name, render_mode="rgb_array")
 
 
@@ -1143,8 +1209,8 @@ if _has_dmc:
 if _has_gym:
     params += [
         # [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
-        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
-        [GymEnv, (PONG_VERSIONED,), {}],
+        [GymEnv, (HALFCHEETAH_VERSIONED(),), {"from_pixels": False}],
+        [GymEnv, (PONG_VERSIONED(),), {}],
     ]
 
 
@@ -1200,6 +1266,7 @@ if _has_gym:
 )
 class TestCollectorLib:
     def test_collector_run(self, env_lib, env_args, env_kwargs, device):
+        env_args = tuple(arg() if callable(arg) else arg for arg in env_args)
         if not _has_dmc and env_lib is DMControlEnv:
             raise pytest.skip("no dmc")
         if not _has_gym and env_lib is GymEnv:
@@ -1343,11 +1410,11 @@ class TestJumanji:
 
 
 ENVPOOL_CLASSIC_CONTROL_ENVS = [
-    PENDULUM_VERSIONED,
+    PENDULUM_VERSIONED(),
     "MountainCar-v0",
     "MountainCarContinuous-v0",
     "Acrobot-v1",
-    CARTPOLE_VERSIONED,
+    CARTPOLE_VERSIONED(),
 ]
 ENVPOOL_ATARI_ENVS = []  # PONG_VERSIONED]
 ENVPOOL_GYM_ENVS = ENVPOOL_CLASSIC_CONTROL_ENVS + ENVPOOL_ATARI_ENVS
@@ -1574,7 +1641,7 @@ class TestEnvPool:
 
         # Check that results are different if seed is different
         # Skip Pong, since there different actions can lead to the same result
-        if env_name != PONG_VERSIONED:
+        if env_name != PONG_VERSIONED():
             env.set_seed(
                 seed=seed + 10,
             )
@@ -1589,7 +1656,7 @@ class TestEnvPool:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     def test_multithread_env_shutdown(self):
         env = _make_multithreaded_env(
-            PENDULUM_VERSIONED,
+            PENDULUM_VERSIONED(),
             1,
             transformed_out=False,
             N=3,

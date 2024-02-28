@@ -158,6 +158,7 @@ IS_OSX = platform == "darwin"
 @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, CARTPOLE_VERSIONED])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_env_seed(env_name, frame_skip, seed=0):
+    env_name = env_name()
     env = GymEnv(env_name, frame_skip=frame_skip)
     action = env.action_spec.rand()
 
@@ -190,6 +191,7 @@ def test_env_seed(env_name, frame_skip, seed=0):
 @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, PONG_VERSIONED])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_rollout(env_name, frame_skip, seed=0):
+    env_name = env_name()
     env = GymEnv(env_name, frame_skip=frame_skip)
 
     torch.manual_seed(seed)
@@ -279,6 +281,7 @@ def test_rollout_predictability(device):
 @pytest.mark.parametrize("truncated_key", ["truncated", "done"])
 @pytest.mark.parametrize("parallel", [False, True])
 def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
+    env_name = env_name()
     envs = []
     for horizon in [20, 30, 40]:
         envs.append(
@@ -564,6 +567,7 @@ class TestParallel:
     def test_parallel_env(
         self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=3
     ):
+        env_name = env_name()
         env_parallel, env_serial, _, env0 = _make_envs(
             env_name,
             frame_skip,
@@ -610,6 +614,7 @@ class TestParallel:
         T=10,
         N=3,
     ):
+        env_name = env_name()
         env_parallel, env_serial, _, env0 = _make_envs(
             env_name,
             frame_skip,
@@ -688,9 +693,7 @@ class TestParallel:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize(
         "env_name",
-        [
-            PENDULUM_VERSIONED,
-        ],
+        [PENDULUM_VERSIONED],
     )  # PONG_VERSIONED])  # 1226: efficiency
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize(
@@ -700,6 +703,7 @@ class TestParallel:
     def test_parallel_env_seed(
         self, env_name, frame_skip, transformed_in, transformed_out, static_seed
     ):
+        env_name = env_name()
         env_parallel, env_serial, _, _ = _make_envs(
             env_name, frame_skip, transformed_in, transformed_out, 5
         )
@@ -739,7 +743,7 @@ class TestParallel:
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     def test_parallel_env_shutdown(self):
-        env_make = EnvCreator(lambda: GymEnv(PENDULUM_VERSIONED))
+        env_make = EnvCreator(lambda: GymEnv(PENDULUM_VERSIONED()))
         env = ParallelEnv(4, env_make)
         env.reset()
         assert not env.is_closed
@@ -792,6 +796,7 @@ class TestParallel:
         open_before,
         N=3,
     ):
+        env_name = env_name()
         # tests casting to device
         env_parallel, env_serial, _, env0 = _make_envs(
             env_name,
@@ -884,6 +889,7 @@ class TestParallel:
     def test_parallel_env_device(
         self, env_name, frame_skip, transformed_in, transformed_out, device
     ):
+        env_name = env_name()
         # tests creation on device
         torch.manual_seed(0)
         N = 3
@@ -924,6 +930,7 @@ class TestParallel:
         [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")],
     )
     def test_parallel_env_transform_consistency(self, env_name, frame_skip, device):
+        env_name = env_name()
         env_parallel_in, env_serial_in, _, env0_in = _make_envs(
             env_name,
             frame_skip,
@@ -1146,13 +1153,13 @@ def test_env_base_reset_flag(batch_size, max_steps=3):
 @pytest.mark.skipif(not _has_gym, reason="no gym")
 def test_seed():
     torch.manual_seed(0)
-    env1 = GymEnv(PENDULUM_VERSIONED)
+    env1 = GymEnv(PENDULUM_VERSIONED())
     env1.set_seed(0)
     state0_1 = env1.reset()
     state1_1 = env1.step(state0_1.set("action", env1.action_spec.rand()))
 
     torch.manual_seed(0)
-    env2 = GymEnv(PENDULUM_VERSIONED)
+    env2 = GymEnv(PENDULUM_VERSIONED())
     env2.set_seed(0)
     state0_2 = env2.reset()
     state1_2 = env2.step(state0_2.set("action", env2.action_spec.rand()))
@@ -1695,7 +1702,7 @@ class TestInfoDict:
         except ModuleNotFoundError:
             import gym
 
-        env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED), device=device)
+        env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED()), device=device)
         env.set_info_dict_reader(default_info_dict_reader(["x_position"]))
 
         assert "x_position" in env.observation_spec.keys()
@@ -1740,7 +1747,7 @@ class TestInfoDict:
         except ModuleNotFoundError:
             import gym
 
-        env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED), device=device)
+        env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED()), device=device)
         check_env_specs(env)
         env.set_info_dict_reader()
         with pytest.raises(
@@ -1748,7 +1755,7 @@ class TestInfoDict:
         ):
             check_env_specs(env)
 
-        env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED), device=device)
+        env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED()), device=device)
         env = env.auto_register_info_dict()
         check_env_specs(env)
 
@@ -1756,13 +1763,13 @@ class TestInfoDict:
         penv = ParallelEnv(
             2,
             lambda: GymWrapper(
-                gym.make(HALFCHEETAH_VERSIONED), device=device
+                gym.make(HALFCHEETAH_VERSIONED()), device=device
             ).auto_register_info_dict(),
         )
         senv = ParallelEnv(
             2,
             lambda: GymWrapper(
-                gym.make(HALFCHEETAH_VERSIONED), device=device
+                gym.make(HALFCHEETAH_VERSIONED()), device=device
             ).auto_register_info_dict(),
         )
         try:

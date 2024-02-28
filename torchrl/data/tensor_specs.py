@@ -576,9 +576,9 @@ class TensorSpec:
             ):
                 val = val.copy()
             if not ignore_device:
-                val = torch.tensor(val, device=self.device, dtype=self.dtype)
+                val = torch.as_tensor(val, device=self.device, dtype=self.dtype)
             else:
-                val = torch.tensor(val, dtype=self.dtype)
+                val = torch.as_tensor(val, dtype=self.dtype)
             if val.shape != self.shape:
                 # if val.shape[-len(self.shape) :] != self.shape:
                 # option 1: add a singleton dim at the end

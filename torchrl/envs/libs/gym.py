@@ -498,8 +498,8 @@ def _is_from_pixels(env):
     observation_spec = env.observation_space
     try:
         PixelObservationWrapper = gym_backend(
-            "wrappers.pixel_observation.PixelObservationWrapper"
-        )
+            "wrappers.pixel_observation"
+        ).PixelObservationWrapper
     except ModuleNotFoundError:
 
         class PixelObservationWrapper:
@@ -509,22 +509,40 @@ def _is_from_pixels(env):
         GymPixelObservationWrapper as LegacyPixelObservationWrapper,
     )
 
+    gDict = gym_backend("spaces").dict.Dict
+    Box = gym_backend("spaces").Box
+
+    print("observation_spec", observation_spec)
+    print(isinstance(observation_spec, Box))
+    print((observation_spec.low == 0).all())
+    print((observation_spec.high == 255).all())
+    print(observation_spec.low.shape[-1] == 3)
+    print(observation_spec.low.ndim == 3)
+
     if isinstance(observation_spec, (Dict,)):
         if "pixels" in set(observation_spec.keys()):
             return True
-    if isinstance(observation_spec, (gym.spaces.dict.Dict,)):
+    if isinstance(observation_spec, (gDict,)):
         if "pixels" in set(observation_spec.spaces.keys()):
             return True
     elif (
-        isinstance(observation_spec, gym.spaces.Box)
+        isinstance(observation_spec, Box)
         and (observation_spec.low == 0).all()
         and (observation_spec.high == 255).all()
         and observation_spec.low.shape[-1] == 3
         and observation_spec.low.ndim == 3
     ):
         return True
-    elif isinstance(env, (LegacyPixelObservationWrapper, PixelObservationWrapper)):
-        return True
+    else:
+        while True:
+            if isinstance(
+                env, (LegacyPixelObservationWrapper, PixelObservationWrapper)
+            ):
+                return True
+            if hasattr(env, "env"):
+                env = env.env
+            else:
+                break
     return False
 
 
@@ -1114,14 +1132,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         self._env = self._build_env(**self._constructor_kwargs)
         self._make_specs(self._env)
 
-    @property
-    def info_dict_reader(self):
-        return self._info_dict_reader
-
-    @info_dict_reader.setter
-    def info_dict_reader(self, value: callable):
-        self._info_dict_reader = value
-
     def _reset(
         self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
@@ -1265,11 +1275,12 @@ class GymEnv(GymWrapper):
     ) -> None:
         kwargs.setdefault("disable_env_checker", True)
 
-    @implement_for("gymnasium", "0.27.0", None)
+    @implement_for("gymnasium")
     def _set_gym_args(  # noqa: F811
         self,
         kwargs,
     ) -> None:
+        print("gym_backend", gym_backend(), "should be gymnasium")
         kwargs.setdefault("disable_env_checker", True)
 
     def _async_env(self, *args, **kwargs):

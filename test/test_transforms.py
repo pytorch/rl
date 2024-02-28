@@ -666,7 +666,7 @@ class TestCatFrames(TransformBase):
         from _utils_internal import CARTPOLE_VERSIONED
 
         env = TransformedEnv(
-            batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED)),
+            batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
             CatFrames(
                 dim=-1, N=3, in_keys=["observation"], out_keys=["observation_cat"]
             ),
@@ -678,7 +678,7 @@ class TestCatFrames(TransformBase):
         env = batched_class(
             2,
             lambda: TransformedEnv(
-                GymEnv(CARTPOLE_VERSIONED),
+                GymEnv(CARTPOLE_VERSIONED()),
                 CatFrames(
                     dim=-1, N=3, in_keys=["observation"], out_keys=["observation_cat"]
                 ),
@@ -725,7 +725,7 @@ class TestCatFrames(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="Gym not available")
     def test_transform_env(self):
         env = TransformedEnv(
-            GymEnv(PENDULUM_VERSIONED, frame_skip=4),
+            GymEnv(PENDULUM_VERSIONED(), frame_skip=4),
             CatFrames(dim=-1, N=3, in_keys=["observation"]),
         )
         td = env.reset()
@@ -745,7 +745,7 @@ class TestCatFrames(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="Gym not available")
     def test_transform_env_clone(self):
         env = TransformedEnv(
-            GymEnv(PENDULUM_VERSIONED, frame_skip=4),
+            GymEnv(PENDULUM_VERSIONED(), frame_skip=4),
             CatFrames(dim=-1, N=3, in_keys=["observation"]),
         )
         td = env.reset()
@@ -1526,7 +1526,7 @@ class TestR3M(TransformBase):
 class TestStepCounter(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="no gym detected")
     def test_step_count_gym(self):
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), StepCounter(max_steps=30))
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), StepCounter(max_steps=30))
         env.rollout(1000)
         check_env_specs(env)
 
@@ -1534,7 +1534,7 @@ class TestStepCounter(TransformBase):
     def test_step_count_gym_doublecount(self):
         # tests that 2 truncations can be used together
         env = TransformedEnv(
-            GymEnv(PENDULUM_VERSIONED),
+            GymEnv(PENDULUM_VERSIONED()),
             Compose(
                 StepCounter(max_steps=2),
                 StepCounter(max_steps=3),  # this one will be ignored
@@ -1559,7 +1559,7 @@ class TestStepCounter(TransformBase):
         from _utils_internal import CARTPOLE_VERSIONED
 
         env = TransformedEnv(
-            batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED)),
+            batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
             StepCounter(max_steps=15),
         )
         torch.manual_seed(0)
@@ -1569,7 +1569,7 @@ class TestStepCounter(TransformBase):
         env = batched_class(
             2,
             lambda: TransformedEnv(
-                GymEnv(CARTPOLE_VERSIONED), StepCounter(max_steps=15)
+                GymEnv(CARTPOLE_VERSIONED()), StepCounter(max_steps=15)
             ),
         )
         torch.manual_seed(0)
@@ -1626,7 +1626,7 @@ class TestStepCounter(TransformBase):
 
     @pytest.mark.skipif(not _has_gym, reason="Gym not found")
     def test_transform_env(self):
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), StepCounter(10))
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), StepCounter(10))
         td = env.rollout(100, break_when_any_done=False)
         assert td["step_count"].max() == 9
         assert td.shape[-1] == 100
@@ -2029,7 +2029,7 @@ class TestCatTensors(TransformBase):
             dim=-1,
             del_keys=del_keys,
         )
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), ct)
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), ct)
         assert env.observation_spec[out_key]
         if del_keys:
             assert "observation" not in env.observation_spec
@@ -2303,7 +2303,7 @@ class TestCenterCrop(TransformBase):
         ct = Compose(
             ToTensorImage(), CenterCrop(out_keys=out_key, w=20, h=20, in_keys=keys)
         )
-        env = TransformedEnv(GymEnv(PONG_VERSIONED), ct)
+        env = TransformedEnv(GymEnv(PONG_VERSIONED()), ct)
         td = env.reset()
         if out_key is None:
             assert td["pixels"].shape == torch.Size([3, 20, 20])
@@ -3301,7 +3301,7 @@ class TestFlattenObservation(TransformBase):
     )
     def test_transform_env(self, out_keys):
         env = TransformedEnv(
-            GymEnv(PONG_VERSIONED), FlattenObservation(-3, -1, out_keys=out_keys)
+            GymEnv(PONG_VERSIONED()), FlattenObservation(-3, -1, out_keys=out_keys)
         )
         check_env_specs(env)
         if out_keys:
@@ -3409,9 +3409,9 @@ class TestFrameSkipTransform(TransformBase):
             return
         else:
             fs = FrameSkipTransform(skip)
-        base_env = GymEnv(PENDULUM_VERSIONED, frame_skip=skip)
+        base_env = GymEnv(PENDULUM_VERSIONED(), frame_skip=skip)
         tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), fs)
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), fs)
         base_env.set_seed(0)
         env.base_env.set_seed(0)
         td1 = base_env.reset()
@@ -3470,9 +3470,9 @@ class TestFrameSkipTransform(TransformBase):
             return
         else:
             fs = FrameSkipTransform(skip)
-        base_env = GymEnv(PENDULUM_VERSIONED)
+        base_env = GymEnv(PENDULUM_VERSIONED())
         tensordicts = TensorDict({"action": base_env.action_spec.rand((10,))}, [10])
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), fs)
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), fs)
         base_env.set_seed(0)
         env.base_env.set_seed(0)
         td1 = base_env.reset()
@@ -4102,7 +4102,7 @@ class TestObservationNorm(TransformBase):
                 standard_normal=standard_normal,
             )
         )
-        base_env = GymEnv(PENDULUM_VERSIONED)
+        base_env = GymEnv(PENDULUM_VERSIONED())
         env = TransformedEnv(base_env, t)
         td = env.rollout(3)
         check_env_specs(env)
@@ -4477,7 +4477,7 @@ class TestResize(TransformBase):
     @pytest.mark.parametrize("out_key", ["pixels", ("agents", "pixels")])
     def test_transform_env(self, out_key):
         env = TransformedEnv(
-            GymEnv(PONG_VERSIONED),
+            GymEnv(PONG_VERSIONED()),
             Compose(
                 ToTensorImage(), Resize(20, 21, in_keys=["pixels"], out_keys=[out_key])
             ),
@@ -4565,7 +4565,7 @@ class TestRewardClipping(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="No Gym")
     def test_transform_env(self):
         t = Compose(RewardClipping(-0.1, 0.1))
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), t)
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), t)
         td = env.rollout(3)
         assert (td["next", "reward"] <= 0.1).all()
         assert (td["next", "reward"] >= -0.1).all()
@@ -4715,7 +4715,7 @@ class TestRewardScaling(TransformBase):
         loc = 0.5
         scale = 1.5
         t = Compose(RewardScaling(0.5, 1.5, standard_normal=standard_normal))
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), t)
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), t)
         torch.manual_seed(0)
         env.set_seed(0)
         td = env.rollout(3)
@@ -4901,7 +4901,7 @@ class TestRewardSum(TransformBase):
     @pytest.mark.parametrize("out_key", ["reward_sum", ("some", "nested")])
     def test_transform_env(self, out_key):
         t = Compose(RewardSum(in_keys=["reward"], out_keys=[out_key]))
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), t)
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), t)
         env.set_seed(0)
         torch.manual_seed(0)
         td = env.rollout(3)
@@ -4920,14 +4920,14 @@ class TestRewardSum(TransformBase):
         from _utils_internal import CARTPOLE_VERSIONED
 
         env = TransformedEnv(
-            batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED)), RewardSum()
+            batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())), RewardSum()
         )
         torch.manual_seed(0)
         env.set_seed(0)
         r0 = env.rollout(100, break_when_any_done=break_when_any_done)
 
         env = batched_class(
-            2, lambda: TransformedEnv(GymEnv(CARTPOLE_VERSIONED), RewardSum())
+            2, lambda: TransformedEnv(GymEnv(CARTPOLE_VERSIONED()), RewardSum())
         )
         torch.manual_seed(0)
         env.set_seed(0)
@@ -5613,7 +5613,7 @@ class TestUnsqueezeTransform(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="No gym")
     def test_transform_inverse(self):
         env = TransformedEnv(
-            GymEnv(HALFCHEETAH_VERSIONED),
+            GymEnv(HALFCHEETAH_VERSIONED()),
             # the order is inverted
             Compose(
                 UnsqueezeTransform(
@@ -5884,11 +5884,11 @@ class TestSqueezeTransform(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="No Gym")
     def test_transform_inverse(self):
         env = TransformedEnv(
-            GymEnv(HALFCHEETAH_VERSIONED), self._inv_circular_transform
+            GymEnv(HALFCHEETAH_VERSIONED()), self._inv_circular_transform
         )
         check_env_specs(env)
         r = env.rollout(3)
-        r2 = GymEnv(HALFCHEETAH_VERSIONED).rollout(3)
+        r2 = GymEnv(HALFCHEETAH_VERSIONED()).rollout(3)
         assert (r.zero_() == r2.zero_()).all()
 
 
@@ -6013,7 +6013,7 @@ class TestTargetReturn(TransformBase):
         from _utils_internal import CARTPOLE_VERSIONED
 
         env = TransformedEnv(
-            batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED)),
+            batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
             TargetReturn(target_return=10.0, mode="reduce"),
         )
         torch.manual_seed(0)
@@ -6023,7 +6023,7 @@ class TestTargetReturn(TransformBase):
         env = batched_class(
             2,
             lambda: TransformedEnv(
-                GymEnv(CARTPOLE_VERSIONED),
+                GymEnv(CARTPOLE_VERSIONED()),
                 TargetReturn(target_return=10.0, mode="reduce"),
             ),
         )
@@ -6485,7 +6485,7 @@ class TestTensorDictPrimer(TransformBase):
         from _utils_internal import CARTPOLE_VERSIONED
 
         env = TransformedEnv(
-            batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED)),
+            batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
             TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([2, 4])),
         )
         torch.manual_seed(0)
@@ -6495,7 +6495,7 @@ class TestTensorDictPrimer(TransformBase):
         env = batched_class(
             2,
             lambda: TransformedEnv(
-                GymEnv(CARTPOLE_VERSIONED),
+                GymEnv(CARTPOLE_VERSIONED()),
                 TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([4])),
             ),
         )
@@ -6627,7 +6627,7 @@ class TestTimeMaxPool(TransformBase):
         from _utils_internal import CARTPOLE_VERSIONED
 
         env = TransformedEnv(
-            batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED)),
+            batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
             TimeMaxPool(
                 in_keys=["observation"],
                 out_keys=["observation_max"],
@@ -6641,7 +6641,7 @@ class TestTimeMaxPool(TransformBase):
         env = batched_class(
             2,
             lambda: TransformedEnv(
-                GymEnv(CARTPOLE_VERSIONED),
+                GymEnv(CARTPOLE_VERSIONED()),
                 TimeMaxPool(
                     in_keys=["observation"],
                     out_keys=["observation_max"],
@@ -6658,7 +6658,7 @@ class TestTimeMaxPool(TransformBase):
     @pytest.mark.parametrize("out_keys", [None, ["obs2"], [("some", "other")]])
     def test_transform_env(self, out_keys):
         env = TransformedEnv(
-            GymEnv(PENDULUM_VERSIONED, frame_skip=4),
+            GymEnv(PENDULUM_VERSIONED(), frame_skip=4),
             TimeMaxPool(
                 in_keys=["observation"],
                 out_keys=out_keys,
@@ -6872,7 +6872,7 @@ class TestgSDE(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     def test_transform_env(self):
         env = TransformedEnv(
-            GymEnv(PENDULUM_VERSIONED), gSDENoise(state_dim=3, action_dim=1)
+            GymEnv(PENDULUM_VERSIONED()), gSDENoise(state_dim=3, action_dim=1)
         )
         check_env_specs(env)
         assert (env.reset()["_eps_gSDE"] != 0.0).all()
@@ -7649,7 +7649,7 @@ class TestVecNorm:
         prcs = []
         if _has_gym:
             make_env = EnvCreator(
-                lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED), VecNorm(decay=1.0))
+                lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm(decay=1.0))
             )
         else:
             make_env = EnvCreator(
@@ -7750,7 +7750,7 @@ class TestVecNorm:
     def test_parallelenv_vecnorm(self):
         if _has_gym:
             make_env = EnvCreator(
-                lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED), VecNorm())
+                lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm())
             )
         else:
             make_env = EnvCreator(
@@ -7802,14 +7802,14 @@ class TestVecNorm:
         torch.manual_seed(self.SEED)
 
         if parallel is None:
-            env = GymEnv(PENDULUM_VERSIONED)
+            env = GymEnv(PENDULUM_VERSIONED())
         elif parallel:
             env = ParallelEnv(
-                num_workers=5, create_env_fn=lambda: GymEnv(PENDULUM_VERSIONED)
+                num_workers=5, create_env_fn=lambda: GymEnv(PENDULUM_VERSIONED())
             )
         else:
             env = SerialEnv(
-                num_workers=5, create_env_fn=lambda: GymEnv(PENDULUM_VERSIONED)
+                num_workers=5, create_env_fn=lambda: GymEnv(PENDULUM_VERSIONED())
             )
 
         env.set_seed(self.SEED)
@@ -8753,7 +8753,7 @@ class TestInitTracker(TransformBase):
         self,
     ):
         env = TransformedEnv(
-            GymEnv(PENDULUM_VERSIONED),
+            GymEnv(PENDULUM_VERSIONED()),
             Compose(StepCounter(max_steps=30), InitTracker()),
         )
         env.rollout(1000)
