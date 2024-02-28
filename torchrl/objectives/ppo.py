@@ -455,7 +455,7 @@ class PPOLoss(LossModule):
             entropy = dist.entropy()
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
-            entropy = -dist.log_prob(x)
+            entropy = -dist.log_prob(x).mean(0)
         return entropy.unsqueeze(-1)
 
     def _log_weight(
@@ -1036,7 +1036,7 @@ class KLPENPPOLoss(PPOLoss):
             td_out.set("loss_entropy", -self.entropy_coef * entropy.mean())
 
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict)
+            loss_critic = self.loss_critic(tensordict_copy)
             td_out.set("loss_critic", loss_critic.mean())
 
         return td_out

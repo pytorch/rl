@@ -2549,7 +2549,8 @@ def test_backprop(device):
                     "reward": action.sum().unsqueeze(0),
                     **self.full_done_spec.zero(),
                     "observation": obs,
-                }
+                },
+                batch_size=[],
             )
 
     torch.manual_seed(0)

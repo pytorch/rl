@@ -252,7 +252,6 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                     return param._apply_nest(
                         _compare_and_expand,
                         batch_size=[expand_dim, *param.shape],
-                        filter_empty=False,
                         call_on_nested=True,
                     )
                 if not isinstance(param, nn.Parameter):

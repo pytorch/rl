@@ -433,9 +433,6 @@ class BatchedEnvBase(EnvBase):
                 def map_device(key, value, device_map=device_map):
                     return value.to(device_map[key])
 
-                # self._env_tensordict.named_apply(
-                #     map_device, nested_keys=True, filter_empty=True
-                # )
                 self._env_tensordict.named_apply(
                     map_device,
                     nested_keys=True,
@@ -809,11 +806,6 @@ class SerialEnv(BatchedEnvBase):
             if name in selected_output_keys:
                 return tensor.clone()
 
-        # out = self.shared_tensordict_parent.named_apply(
-        #     select_and_clone,
-        #     nested_keys=True,
-        #     filter_empty=True,
-        # )
         out = self.shared_tensordict_parent.named_apply(
             select_and_clone,
             nested_keys=True,
@@ -1208,14 +1200,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 if x.device != device
                 else x.clone(),
                 device=device,
-                # filter_empty=True,
             )
             tensordict_ = tensordict_._fast_apply(
                 lambda x: x.to(device, non_blocking=self.non_blocking)
                 if x.device != device
                 else x.clone(),
                 device=device,
-                # filter_empty=True,
             )
         else:
             next_td = next_td.clone().clear_device_()
@@ -1271,7 +1261,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         out = next_td.named_apply(
             select_and_clone,
             nested_keys=True,
-            # filter_empty=True,
         )
         if out.device != device:
             if device is None:
@@ -1357,7 +1346,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         out = self.shared_tensordict_parent.named_apply(
             select_and_clone,
             nested_keys=True,
-            # filter_empty=True,
         )
         del out["next"]
 
@@ -1495,7 +1483,6 @@ def _run_worker_pipe_shared_mem(
         def look_for_cuda(tensor, has_cuda=has_cuda):
             has_cuda[0] = has_cuda[0] or tensor.is_cuda
 
-        # shared_tensordict.apply(look_for_cuda, filter_empty=True)
         shared_tensordict.apply(look_for_cuda)
         has_cuda = has_cuda[0]
     else:
@@ -1683,10 +1670,6 @@ def _run_worker_pipe_shared_mem(
             else:
                 # don't send env through pipe
                 child_pipe.send(("_".join([cmd, "done"]), None))
-
-
-def _filter_empty(tensordict):
-    return tensordict.select(*tensordict.keys(True, True))
 
 
 # Create an alias for possible imports
