@@ -24,7 +24,7 @@ from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
 from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
 from torchrl.envs.libs.envpool import _has_envpool
-from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
+from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv
 from torchrl.envs.transforms import (
     Compose,
     RewardClipping,
@@ -35,39 +35,42 @@ from torchrl.envs.transforms import (
 # Specified for test_utils.py
 __version__ = "0.3"
 
-# Default versions of the environments.
-_CARTPOLE_VERSIONED = "CartPole-v1"
-_HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
-_PENDULUM_VERSIONED = "Pendulum-v1"
-_PONG_VERSIONED = "ALE/Pong-v5"
-
 
 def CARTPOLE_VERSIONED():
     # load gym
-    gym_backend()
-    _set_gym_environments()
+    if gym_backend() is not None:
+        _set_gym_environments()
     return _CARTPOLE_VERSIONED
 
 
 def HALFCHEETAH_VERSIONED():
     # load gym
-    gym_backend()
-    _set_gym_environments()
+    if gym_backend() is not None:
+        _set_gym_environments()
     return _HALFCHEETAH_VERSIONED
 
 
 def PONG_VERSIONED():
     # load gym
-    gym_backend()
-    _set_gym_environments()
+    if gym_backend() is not None:
+        _set_gym_environments()
     return _PONG_VERSIONED
 
 
 def PENDULUM_VERSIONED():
     # load gym
-    gym_backend()
-    _set_gym_environments()
+    if gym_backend() is not None:
+        _set_gym_environments()
     return _PENDULUM_VERSIONED
+
+
+def _set_gym_environments():
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED
+
+    _CARTPOLE_VERSIONED = None
+    _HALFCHEETAH_VERSIONED = None
+    _PENDULUM_VERSIONED = None
+    _PONG_VERSIONED = None
 
 
 @implement_for("gym", None, "0.21.0")

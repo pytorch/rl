@@ -1085,7 +1085,9 @@ def test_collector_vecnorm_envcreator(static_seed):
     from torchrl.envs.libs.gym import GymEnv
 
     num_envs = 4
-    env_make = EnvCreator(lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm()))
+    env_make = EnvCreator(
+        lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm())
+    )
     env_make = ParallelEnv(num_envs, env_make)
 
     policy = RandomPolicy(env_make.action_spec)

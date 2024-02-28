@@ -494,7 +494,6 @@ def _get_gym_envs():  # noqa: F811
 
 
 def _is_from_pixels(env):
-    gym = gym_backend()
     observation_spec = env.observation_space
     try:
         PixelObservationWrapper = gym_backend(

@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import functools
 import importlib
 from contextlib import nullcontext
 
@@ -145,7 +144,6 @@ def get_gym_pixel_wrapper():
             "wrappers.pixel_observation"
         ).PixelObservationWrapper
     except Exception as err:
-        print("err", err)
         from torchrl.envs.libs.utils import (
             GymPixelObservationWrapper as PixelObservationWrapper,
         )
@@ -606,9 +604,7 @@ class TestGym:
         assert final_seed0 == final_seed1
 
         if env_name == PONG_VERSIONED():
-            base_env = gym_backend().make(
-                env_name, frameskip=frame_skip, render_mode="human"
-            )
+            base_env = gym_backend().make(env_name, frameskip=frame_skip)
             frame_skip = 1
         else:
             base_env = _make_gym_environment(env_name)
