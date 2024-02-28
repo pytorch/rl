@@ -4,13 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import abc
+
 import contextlib
+import functools
 
 import importlib.util
+import inspect
 import os
 import re
 from enum import Enum
-from typing import Dict, List, Union
+from typing import Any, Dict, List, Union
 
 import torch
 
@@ -20,6 +24,7 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
+from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
@@ -31,6 +36,8 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_type as set_exploration_type,
 )
 from tensordict.utils import NestedKey
+from torch import nn
+from torch.utils._pytree import tree_map
 from torchrl._utils import _replace_last, _rng_decorator, logger as torchrl_logger
 
 from torchrl.data.tensor_specs import (
