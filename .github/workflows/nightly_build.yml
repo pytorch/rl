@@ -84,7 +84,7 @@ jobs:
         uses: actions/checkout@v2
       - name: Install PyTorch nightly
         run: |
-          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
+          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
       - name: Build TorchRL Nightly
         run: |
           export CC=clang CXX=clang++
@@ -116,7 +116,7 @@ jobs:
         uses: actions/checkout@v2
       - name: Install PyTorch Nightly
         run: |
-          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
+          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
       - name: Upgrade pip
         run: |
           python3 -mpip install --upgrade pip
@@ -289,7 +289,7 @@ jobs:
       - name: Install PyTorch nightly
         shell: bash
         run: |
-          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
+          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
       - name: Build TorchRL nightly
         shell: bash
         run: |
@@ -322,7 +322,7 @@ jobs:
       - name: Install PyTorch Nightly
         shell: bash
         run: |
-          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
+          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
       - name: Upgrade pip
         shell: bash
         run: |
