@@ -1085,7 +1085,7 @@ def test_collector_vecnorm_envcreator(static_seed):
     from torchrl.envs.libs.gym import GymEnv
 
     num_envs = 4
-    env_make = EnvCreator(lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED), VecNorm()))
+    env_make = EnvCreator(lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm()))
     env_make = ParallelEnv(num_envs, env_make)
 
     policy = RandomPolicy(env_make.action_spec)
@@ -1302,7 +1302,7 @@ def test_collector_output_keys(
 
     policy = SafeModule(**policy_kwargs)
 
-    env_maker = lambda: GymEnv(PENDULUM_VERSIONED)
+    env_maker = lambda: GymEnv(PENDULUM_VERSIONED())
 
     policy(env_maker().reset())
 
@@ -1441,7 +1441,7 @@ class TestAutoWrap:
     def env_maker(self):
         from torchrl.envs.libs.gym import GymEnv
 
-        return lambda: GymEnv(PENDULUM_VERSIONED)
+        return lambda: GymEnv(PENDULUM_VERSIONED())
 
     def _create_collector_kwargs(self, env_maker, collector_class, policy):
         collector_kwargs = {
