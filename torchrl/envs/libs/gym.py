@@ -512,13 +512,6 @@ def _is_from_pixels(env):
     gDict = gym_backend("spaces").dict.Dict
     Box = gym_backend("spaces").Box
 
-    print("observation_spec", observation_spec)
-    print(isinstance(observation_spec, Box))
-    print((observation_spec.low == 0).all())
-    print((observation_spec.high == 255).all())
-    print(observation_spec.low.shape[-1] == 3)
-    print(observation_spec.low.ndim == 3)
-
     if isinstance(observation_spec, (Dict,)):
         if "pixels" in set(observation_spec.keys()):
             return True
@@ -1280,7 +1273,6 @@ class GymEnv(GymWrapper):
         self,
         kwargs,
     ) -> None:
-        print("gym_backend", gym_backend(), "should be gymnasium")
         kwargs.setdefault("disable_env_checker", True)
 
     def _async_env(self, *args, **kwargs):
