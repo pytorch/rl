@@ -762,16 +762,16 @@ class TestCatFrames(TransformBase):
         ).all()
         assert cloned is not env.transform
 
-    @pytest.mark.parametrize("dim", [-2, -1])
+    @pytest.mark.parametrize("dim", [-1])
     @pytest.mark.parametrize("N", [3, 4])
-    @pytest.mark.parametrize("padding", ["same", "zeros", "constant"])
+    @pytest.mark.parametrize("padding", ["zeros", "constant", "same"])
     def test_transform_model(self, dim, N, padding):
         # test equivalence between transforms within an env and within a rb
         key1 = "observation"
         keys = [key1]
         out_keys = ["out_" + key1]
         cat_frames = CatFrames(
-            N=N, in_keys=out_keys, out_keys=out_keys, dim=dim, padding=padding
+            N=N, in_keys=keys, out_keys=out_keys, dim=dim, padding=padding
         )
         cat_frames2 = CatFrames(
             N=N,
@@ -781,23 +781,22 @@ class TestCatFrames(TransformBase):
             padding=padding,
         )
         envbase = ContinuousActionVecMockEnv()
-        env = TransformedEnv(
-            envbase,
-            Compose(
-                UnsqueezeTransform(dim, in_keys=keys, out_keys=out_keys), cat_frames
-            ),
-        )
+        env = TransformedEnv(envbase, cat_frames)
+
         torch.manual_seed(10)
         env.set_seed(10)
         td = env.rollout(10)
+
         torch.manual_seed(10)
         envbase.set_seed(10)
         tdbase = envbase.rollout(10)
+
         tdbase0 = tdbase.clone()
 
         model = nn.Sequential(cat_frames2, nn.Identity())
         model(tdbase)
-        assert (td == tdbase).all()
+        assert assert_allclose_td(td, tdbase)
+
         with pytest.warns(UserWarning):
             tdbase0.names = None
             model(tdbase0)
@@ -816,7 +815,7 @@ class TestCatFrames(TransformBase):
         # check that swapping dims and names leads to same result
         assert_allclose_td(v1, v2.transpose(0, 1))
 
-    @pytest.mark.parametrize("dim", [-2, -1])
+    @pytest.mark.parametrize("dim", [-1])
     @pytest.mark.parametrize("N", [3, 4])
     @pytest.mark.parametrize("padding", ["same", "zeros", "constant"])
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
@@ -826,7 +825,7 @@ class TestCatFrames(TransformBase):
         keys = [key1]
         out_keys = ["out_" + key1]
         cat_frames = CatFrames(
-            N=N, in_keys=out_keys, out_keys=out_keys, dim=dim, padding=padding
+            N=N, in_keys=keys, out_keys=out_keys, dim=dim, padding=padding
         )
         cat_frames2 = CatFrames(
             N=N,
@@ -836,12 +835,7 @@ class TestCatFrames(TransformBase):
             padding=padding,
         )
 
-        env = TransformedEnv(
-            ContinuousActionVecMockEnv(),
-            Compose(
-                UnsqueezeTransform(dim, in_keys=keys, out_keys=out_keys), cat_frames
-            ),
-        )
+        env = TransformedEnv(ContinuousActionVecMockEnv(), cat_frames)
         td = env.rollout(10)
 
         rb = rbclass(storage=LazyTensorStorage(20))
@@ -875,8 +869,8 @@ class TestCatFrames(TransformBase):
         td = env1.rollout(rollout_length)
 
         transformed_td = cat_frames._inv_call(td)
-        assert transformed_td.get(in_keys[0]).shape == (rollout_length, obs_dim, N)
-        assert transformed_td.get(in_keys[1]).shape == (rollout_length, obs_dim, N)
+        assert transformed_td.get(in_keys[0]).shape == (rollout_length, obs_dim * N)
+        assert transformed_td.get(in_keys[1]).shape == (rollout_length, obs_dim * N)
         with pytest.raises(
             Exception,
             match="CatFrames as inverse is not supported as a transform for environments, only for replay buffers.",
@@ -971,14 +965,50 @@ class TestCatFrames(TransformBase):
         # we don't want the same tensor to be returned twice, but they're all copies of the same buffer
         assert v1 is not v2
 
+    @pytest.mark.skipif(not _has_gym, reason="gym required for this test")
+    @pytest.mark.parametrize("padding", ["zeros", "constant", "same"])
+    @pytest.mark.parametrize("envtype", ["gym", "conv"])
+    def test_tranform_offline_against_online(self, padding, envtype):
+        torch.manual_seed(0)
+        key = "observation" if envtype == "gym" else "pixels"
+        env = SerialEnv(
+            3,
+            lambda: TransformedEnv(
+                GymEnv("CartPole-v1")
+                if envtype == "gym"
+                else DiscreteActionConvMockEnv(),
+                CatFrames(
+                    dim=-3 if envtype == "conv" else -1,
+                    N=5,
+                    in_keys=[key],
+                    out_keys=[f"{key}_cat"],
+                    padding=padding,
+                ),
+            ),
+        )
+        env.set_seed(0)
+
+        r = env.rollout(100, break_when_any_done=False)
+
+        c = CatFrames(
+            dim=-3 if envtype == "conv" else -1,
+            N=5,
+            in_keys=[key, ("next", key)],
+            out_keys=[f"{key}_cat2", ("next", f"{key}_cat2")],
+            padding=padding,
+        )
+
+        r2 = c(r)
+
+        torch.testing.assert_close(r2[f"{key}_cat2"], r2[f"{key}_cat"])
+        torch.testing.assert_close(r2["next", f"{key}_cat2"], r2["next", f"{key}_cat"])
+
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("batch_size", [(), (1,), (1, 2)])
     @pytest.mark.parametrize("d", range(2, 3))
     @pytest.mark.parametrize(
         "dim",
-        [
-            -3,
-        ],
+        [-3],
     )
     @pytest.mark.parametrize("N", [2, 4])
     def test_transform_compose(self, device, d, batch_size, dim, N):

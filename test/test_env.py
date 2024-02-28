@@ -2609,6 +2609,23 @@ def test_non_td_policy():
     env.rollout(10, policy)
 
 
+def test_parallel_another_ctx():
+    from torch import multiprocessing as mp
+
+    sm = mp.get_start_method()
+    if sm == "spawn":
+        other_sm = "fork"
+    else:
+        other_sm = "spawn"
+    env = ParallelEnv(2, ContinuousActionVecMockEnv, mp_start_method=other_sm)
+    try:
+        assert env.rollout(3) is not None
+        assert env._workers[0]._start_method == other_sm
+    finally:
+        env.close()
+        del env
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

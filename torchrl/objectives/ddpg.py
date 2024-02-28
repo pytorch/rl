@@ -19,6 +19,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -67,6 +68,10 @@ class DDPGLoss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
         >>> import torch
@@ -230,8 +235,11 @@ class DDPGLoss(LossModule):
         gamma: float = None,
         separate_losses: bool = False,
         return_tensorclass: bool = False,
+        reduction: str = None,
     ) -> None:
         self._in_keys = None
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
         self.delay_actor = delay_actor
         self.delay_value = delay_value
@@ -270,7 +278,6 @@ class DDPGLoss(LossModule):
         )
 
         self.loss_function = loss_function
-        self.return_tensorclass = return_tensorclass
 
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
@@ -332,6 +339,7 @@ class DDPGLoss(LossModule):
         if self.return_tensorclass:
             return DDPGLosses._from_tensordict(td_out)
         return td_out
+        return td_out
 
     def loss_actor(
         self,
@@ -344,9 +352,10 @@ class DDPGLoss(LossModule):
             td_copy = self.actor_network(td_copy)
         with self._cached_detached_value_params.to_module(self.value_network):
             td_copy = self.value_network(td_copy)
-        loss_actor = -td_copy.get(self.tensor_keys.state_action_value)
+        loss_actor = -td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
         metadata = {}
-        return loss_actor.mean(), metadata
+        loss_actor = _reduce(loss_actor, self.reduction)
+        return loss_actor, metadata
 
     def loss_value(
         self,
@@ -378,13 +387,14 @@ class DDPGLoss(LossModule):
         )
         with torch.no_grad():
             metadata = {
-                "td_error": td_error.mean(),
-                "pred_value": pred_val.mean(),
-                "target_value": target_value.mean(),
+                "td_error": td_error,
+                "pred_value": pred_val,
+                "target_value": target_value,
                 "target_value_max": target_value.max(),
                 "pred_value_max": pred_val.max(),
             }
-        return loss_value.mean(), metadata
+        loss_value = _reduce(loss_value, self.reduction)
+        return loss_value, metadata
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:

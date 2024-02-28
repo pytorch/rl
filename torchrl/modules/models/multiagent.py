@@ -16,6 +16,7 @@ from torch import nn
 from torchrl.data.utils import DEVICE_TYPING
 
 from torchrl.modules.models import ConvNet, MLP
+from torchrl.modules.models.utils import _reset_parameters_recursive
 
 
 class MultiAgentNetBase(nn.Module):
@@ -30,6 +31,7 @@ class MultiAgentNetBase(nn.Module):
         centralised: bool,
         share_params: bool,
         agent_dim: int,
+        vmap_randomness: str = "different",
         **kwargs,
     ):
         super().__init__()
@@ -38,6 +40,7 @@ class MultiAgentNetBase(nn.Module):
         self.share_params = share_params
         self.centralised = centralised
         self.agent_dim = agent_dim
+        self._vmap_randomness = vmap_randomness
 
         agent_networks = [
             self._build_single_net(**kwargs)
@@ -54,9 +57,13 @@ class MultiAgentNetBase(nn.Module):
         self.__dict__["_empty_net"] = self._build_single_net(**kwargs)
 
     @property
-    def _vmap_randomness(self):
+    def vmap_randomness(self):
         if self.initialized:
-            return "error"
+            return self._vmap_randomness
+        # The class _BatchedUninitializedParameter and buffer are not batched
+        # by vmap so using "different" will raise an exception because vmap can't find
+        # the batch dimension. This is ok though since we won't have the same config
+        # for every element (as one might expect from "same").
         return "same"
 
     def _make_params(self, agent_networks):
@@ -92,14 +99,14 @@ class MultiAgentNetBase(nn.Module):
         if not self.share_params:
             if self.centralised:
                 output = self.vmap_func_module(
-                    self._empty_net, (0, None), (-2,), randomness=self._vmap_randomness
+                    self._empty_net, (0, None), (-2,), randomness=self.vmap_randomness
                 )(self.params, inputs)
             else:
                 output = self.vmap_func_module(
                     self._empty_net,
                     (0, self.agent_dim),
                     (-2,),
-                    randomness=self._vmap_randomness,
+                    randomness=self.vmap_randomness,
                 )(self.params, inputs)
 
         # If parameters are shared, agents use the same network
@@ -124,6 +131,23 @@ class MultiAgentNetBase(nn.Module):
             )
 
         return output
+
+    def reset_parameters(self):
+        """Resets the parameters of the model."""
+
+        def vmap_reset_module(module, *args, **kwargs):
+            def reset_module(params):
+                with params.to_module(module):
+                    _reset_parameters_recursive(module)
+                    return params
+
+            return torch.vmap(reset_module, *args, **kwargs)
+
+        if not self.share_params:
+            vmap_reset_module(self._empty_net, randomness="different")(self.params)
+        else:
+            with self.params.to_module(self._empty_net):
+                _reset_parameters_recursive(self._empty_net)
 
 
 class MultiAgentMLP(MultiAgentNetBase):
@@ -262,7 +286,6 @@ class MultiAgentMLP(MultiAgentNetBase):
         activation_class: Optional[Type[nn.Module]] = nn.Tanh,
         **kwargs,
     ):
-
         self.n_agents = n_agents
         self.n_agent_inputs = n_agent_inputs
         self.n_agent_outputs = n_agent_outputs
@@ -477,6 +500,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
             share_params=share_params,
             device=device,
             agent_dim=-4,
+            **kwargs,
         )
 
     def _build_single_net(self, *, device, **kwargs):

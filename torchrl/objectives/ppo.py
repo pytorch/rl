@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import contextlib
-import functools
 
 import math
 import warnings
@@ -591,7 +590,7 @@ class PPOLoss(LossModule):
         td_out = TensorDict({"loss_objective": -neg_loss}, batch_size=[])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict).mean()
@@ -600,8 +599,11 @@ class PPOLoss(LossModule):
             return PPOLosses._from_tensordict(td_out)
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
         return td_out
 
@@ -838,15 +840,18 @@ class ClipPPOLoss(PPOLoss):
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
 
         td_out.set("ESS", _reduce(ess, self.reduction) / batch)
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
         return td_out
 
@@ -1100,13 +1105,16 @@ class KLPENPPOLoss(PPOLoss):
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict_copy)
             td_out.set("loss_critic", loss_critic)
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
 
         return td_out

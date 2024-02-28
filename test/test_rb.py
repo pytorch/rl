@@ -32,7 +32,9 @@ from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
 
 from torchrl.collectors import RandomPolicy, SyncDataCollector
+from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
+    MultiStep,
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
@@ -2559,6 +2561,13 @@ class TestRBMultidim:
         rb = rbtype(storage=storage_cls(100, ndim=datadim), batch_size=4)
         rb.extend(data)
         assert len(rb) == 12
+        data = rb[:]
+        if datatype in ("tensordict", "tensorclass"):
+            assert data.numel() == 12
+        else:
+            assert all(
+                leaf.shape[:datadim].numel() == 12 for leaf in tree_flatten(data)[0]
+            )
         s = rb.sample()
         if datatype in ("tensordict", "tensorclass"):
             assert (s.exclude("index") == 1).all()
@@ -2600,7 +2609,19 @@ class TestRBMultidim:
             ),
         ],
     )
-    def test_rb_multidim_collector(self, rbtype, storage_cls, writer_cls, sampler_cls):
+    @pytest.mark.parametrize(
+        "transform",
+        [
+            None,
+            [
+                lambda: split_trajectories,
+                functools.partial(MultiStep, gamma=0.9, n_steps=3),
+            ],
+        ],
+    )
+    def test_rb_multidim_collector(
+        self, rbtype, storage_cls, writer_cls, sampler_cls, transform
+    ):
         from _utils_internal import CARTPOLE_VERSIONED
 
         torch.manual_seed(0)
@@ -2625,9 +2646,24 @@ class TestRBMultidim:
             sampler=sampler_cls(),
             writer=writer_cls(),
         )
+        if not isinstance(rb._sampler, SliceSampler) and transform is not None:
+            pytest.skip("no need to test this combination")
+        if transform:
+            for t in transform:
+                rb.append_transform(t())
         for data in collector:
             rb.extend(data)
-            rb.sample()
+            if isinstance(rb, TensorDictReplayBuffer) and transform is not None:
+                # this should fail bc we can't set the indices after executing the transform.
+                with pytest.raises(RuntimeError, match="Failed to set the metadata"):
+                    rb.sample()
+                return
+            s = rb.sample()
+            rbtot = rb[:]
+            assert rbtot.shape[0] == 2
+            assert len(rb) == rbtot.numel()
+            if transform is not None:
+                assert s.ndim == 2
 
 
 if __name__ == "__main__":

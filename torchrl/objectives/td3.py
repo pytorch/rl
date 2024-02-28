@@ -20,6 +20,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -92,6 +93,10 @@ class TD3Loss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
         >>> import torch
@@ -257,7 +262,10 @@ class TD3Loss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
         return_tensorclass: bool = False,
+        reduction: str = None,
     ) -> None:
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
@@ -339,7 +347,6 @@ class TD3Loss(LossModule):
         self._vmap_actor_network00 = _vmap_func(
             self.actor_network, randomness=self.vmap_randomness
         )
-        self.return_tensorclass = return_tensorclass
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -402,10 +409,11 @@ class TD3Loss(LossModule):
             .get(self.tensor_keys.state_action_value)
             .squeeze(-1)
         )
-        loss_actor = -(state_action_value_actor[0]).mean()
+        loss_actor = -(state_action_value_actor[0])
         metadata = {
-            "state_action_value_actor": state_action_value_actor.mean().detach(),
+            "state_action_value_actor": state_action_value_actor.detach(),
         }
+        loss_actor = _reduce(loss_actor, reduction=self.reduction)
         return loss_actor, metadata
 
     def value_loss(self, tensordict):
@@ -469,22 +477,18 @@ class TD3Loss(LossModule):
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
 
         td_error = (current_qvalue - target_value).pow(2)
-        loss_qval = (
-            distance_loss(
-                current_qvalue,
-                target_value.expand_as(current_qvalue),
-                loss_function=self.loss_function,
-            )
-            .mean(-1)
-            .sum()
-        )
+        loss_qval = distance_loss(
+            current_qvalue,
+            target_value.expand_as(current_qvalue),
+            loss_function=self.loss_function,
+        ).sum(0)
         metadata = {
             "td_error": td_error,
-            "next_state_value": next_target_qvalue.mean().detach(),
-            "pred_value": current_qvalue.mean().detach(),
-            "target_value": target_value.mean().detach(),
+            "next_state_value": next_target_qvalue.detach(),
+            "pred_value": current_qvalue.detach(),
+            "target_value": target_value.detach(),
         }
-
+        loss_qval = _reduce(loss_qval, reduction=self.reduction)
         return loss_qval, metadata
 
     @dispatch
@@ -508,8 +512,6 @@ class TD3Loss(LossModule):
             },
             batch_size=[],
         )
-        if self.return_tensorclass:
-            return TD3Losses._from_tensordict(td_out)
 
         return td_out
 

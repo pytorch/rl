@@ -247,7 +247,7 @@ class OnlineDTLoss(LossModule):
             "loss_log_likelihood": -log_likelihood,
             "loss_entropy": -entropy_bonus,
             "loss_alpha": loss_alpha,
-            "entropy": entropy.detach(),
+            "entropy": entropy.detach().mean(),
             "alpha": self.alpha.detach(),
         }
         td_out = TensorDict(out, [])
