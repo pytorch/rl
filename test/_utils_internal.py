@@ -40,28 +40,28 @@ def CARTPOLE_VERSIONED():
     # load gym
     if gym_backend() is not None:
         _set_gym_environments()
-    return _CARTPOLE_VERSIONED
+        return _CARTPOLE_VERSIONED
 
 
 def HALFCHEETAH_VERSIONED():
     # load gym
     if gym_backend() is not None:
         _set_gym_environments()
-    return _HALFCHEETAH_VERSIONED
+        return _HALFCHEETAH_VERSIONED
 
 
 def PONG_VERSIONED():
     # load gym
     if gym_backend() is not None:
         _set_gym_environments()
-    return _PONG_VERSIONED
+        return _PONG_VERSIONED
 
 
 def PENDULUM_VERSIONED():
     # load gym
     if gym_backend() is not None:
         _set_gym_environments()
-    return _PENDULUM_VERSIONED
+        return _PENDULUM_VERSIONED
 
 
 def _set_gym_environments():
