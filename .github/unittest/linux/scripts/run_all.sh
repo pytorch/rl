@@ -150,7 +150,7 @@ else
 fi
 
 # install tensordict
-if [[ "RELEASE" == 0 ]]; then
+if [[ "$RELEASE" == 0 ]]; then
   pip3 install git+https://github.com/pytorch/tensordict.git
 else
   pip3 install tensordict
