@@ -124,15 +124,15 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
+      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu
   else
-      pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/$CU_VERSION
+      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
   fi
 else
   printf "Failed to install pytorch"
@@ -150,7 +150,11 @@ else
 fi
 
 # install tensordict
-pip3 install git+https://github.com/pytorch/tensordict.git
+if [[ "$TORCH_VERSION" == "nightly" ]]; then
+  pip3 install git+https://github.com/pytorch/tensordict.git
+else
+  pip3 install tensordict
+fi
 
 printf "* Installing torchrl\n"
 python setup.py develop
