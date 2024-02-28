@@ -607,7 +607,7 @@ def test_collector_env_reset(constr, parallel):
         # This is currently necessary as the methods in GymWrapper may have mismatching backend
         # versions.
         with set_gym_backend(gym_backend()):
-            return TransformedEnv(GymEnv(PONG_VERSIONED, frame_skip=4), StepCounter())
+            return TransformedEnv(GymEnv(PONG_VERSIONED(), frame_skip=4), StepCounter())
 
     if parallel:
         env = ParallelEnv(2, make_env)
