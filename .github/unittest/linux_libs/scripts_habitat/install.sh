@@ -28,7 +28,7 @@ fi
 
 # install tensordict
 # install tensordict
-if [[ "$TORCH_VERSION" == "nightly" ]]; then
+if [[ "RELEASE" == 0 ]]; then
   pip3 install git+https://github.com/pytorch/tensordict.git
 else
   pip3 install tensordict
