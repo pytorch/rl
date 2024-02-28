@@ -31,7 +31,7 @@ jobs:
       docker-image: "nvidia/cuda:12.2.0-devel-ubuntu22.04"
       timeout: 90
       script: |
-        if [[ ${{ github.ref == 'release/*' }} ]]; then
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
           export TORCH_VERSION=stable
         else
@@ -68,7 +68,7 @@ jobs:
         # Commenting these out for now because the GPU test are not working inside docker
         export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
         export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
-        if [[ ${{ github.ref == 'release/*' }} ]]; then
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
           export TORCH_VERSION=stable
         else
@@ -102,7 +102,7 @@ jobs:
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu116"
         export TAR_OPTIONS="--no-same-owner"
-        if [[ ${{ github.ref == 'release/*' }} ]]; then
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
           export TORCH_VERSION=stable
         else
@@ -139,7 +139,7 @@ jobs:
         # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
         #export CU_VERSION="cpu"
 
-        if [[ ${{ github.ref == 'release/*' }} ]]; then
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
           export TORCH_VERSION=stable
         else
@@ -173,7 +173,7 @@ jobs:
         # Commenting these out for now because the GPU test are not working inside docker
         export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
         export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
-        if [[ ${{ github.ref == 'release/*' }} ]]; then
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
           export TORCH_VERSION=nightly
         else

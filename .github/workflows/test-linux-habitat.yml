@@ -31,7 +31,7 @@ jobs:
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
       script: |
-        if [[ ${{ github.ref == 'release/*' }} ]]; then
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
           export TORCH_VERSION=stable
         else
