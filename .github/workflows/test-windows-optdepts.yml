@@ -34,7 +34,15 @@ jobs:
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
-        
+
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         ## setup_env.sh
         ./.github/unittest/windows_optdepts/scripts/setup_env.sh
 
@@ -65,7 +73,15 @@ jobs:
         export PATH="/c/Jenkins/Miniconda3/Scripts:${PATH}"
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
-        
+
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         ## setup_env.sh
         ./.github/unittest/windows_optdepts/scripts/setup_env.sh
 
