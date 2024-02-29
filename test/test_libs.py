@@ -34,7 +34,7 @@ import torch
 from _utils_internal import (
     _make_multithreaded_env,
     CARTPOLE_VERSIONED,
-    get_available_devices,
+    get_available_devices,maybe_fork_ParallelEnv,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
@@ -975,7 +975,7 @@ class TestGym:
         finally:
             set_gym_backend(gym).set()
 
-    def test_gym_gymnasium_parallel(self):
+    def test_gym_gymnasium_parallel(self, maybe_fork_ParallelEnv):
         # tests that both gym and gymnasium work with wrappers without
         # decorating with set_gym_backend during execution
         gym = gym_backend()
@@ -997,7 +997,7 @@ class TestGym:
                 )
             else:
                 raise ImportError  # unreachable under pytest.skipif
-            penv = ParallelEnv(2, make_fun)
+            penv = maybe_fork_ParallelEnv(2, make_fun)
             rollout = penv.rollout(2)
             if old_api:
                 assert "terminated" in rollout.keys()
@@ -1821,14 +1821,14 @@ class TestBrax:
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
     @pytest.mark.parametrize("parallel", [False, True])
-    def test_brax_parallel(self, envname, batch_size, parallel, n=1):
+    def test_brax_parallel(self, envname, batch_size, parallel, maybe_fork_ParallelEnv, n=1):
         def make_brax():
             env = BraxEnv(envname, batch_size=batch_size, requires_grad=False)
             env.set_seed(1)
             return env
 
         if parallel:
-            env = ParallelEnv(n, make_brax)
+            env = maybe_fork_ParallelEnv(n, make_brax)
         else:
             env = SerialEnv(n, make_brax)
         check_env_specs(env)
@@ -2034,7 +2034,7 @@ class TestVmas:
             env.set_seed(0)
             return env
 
-        env = ParallelEnv(n_workers, make_vmas)
+        env = maybe_fork_ParallelEnv(n_workers, make_vmas)
         tensordict = env.rollout(max_steps=n_rollout_samples)
 
         assert tensordict.shape == torch.Size(
@@ -2052,6 +2052,7 @@ class TestVmas:
         scenario_name,
         num_envs,
         n_workers,
+        maybe_fork_ParallelEnv,
         n_agents=5,
         n_rollout_samples=3,
         max_steps=3,
@@ -2068,7 +2069,7 @@ class TestVmas:
             env.set_seed(0)
             return env
 
-        env = ParallelEnv(n_workers, make_vmas)
+        env = maybe_fork_ParallelEnv(n_workers, make_vmas)
         tensordict = env.rollout(max_steps=n_rollout_samples)
 
         assert (
@@ -2124,13 +2125,13 @@ class TestVmas:
     @pytest.mark.parametrize("n_envs", [1, 4])
     @pytest.mark.parametrize("n_workers", [1, 2])
     @pytest.mark.parametrize("n_agents", [1, 3])
-    def test_collector(self, n_envs, n_workers, n_agents, frames_per_batch=80):
+    def test_collector(self, n_envs, n_workers, n_agents, maybe_fork_ParallelEnv, frames_per_batch=80):
         torch.manual_seed(1)
         env_fun = lambda: VmasEnv(
             scenario="flocking", num_envs=n_envs, n_agents=n_agents, max_steps=7
         )
 
-        env = ParallelEnv(n_workers, env_fun)
+        env = maybe_fork_ParallelEnv(n_workers, env_fun)
 
         n_actions_per_agent = env.action_spec.shape[-1]
         n_observations_per_agent = env.observation_spec["agents", "observation"].shape[
@@ -3025,14 +3026,14 @@ class TestPettingZoo:
 
     @pytest.mark.parametrize("task", ["knights_archers_zombies_v10", "pistonball_v6"])
     @pytest.mark.parametrize("parallel", [True, False])
-    def test_vec_env(self, task, parallel):
+    def test_vec_env(self, task, parallel, maybe_fork_ParallelEnv):
         env_fun = lambda: PettingZooEnv(
             task=task,
             parallel=parallel,
             seed=0,
             use_mask=not parallel,
         )
-        vec_env = ParallelEnv(2, create_env_fn=env_fun)
+        vec_env = maybe_fork_ParallelEnv(2, create_env_fn=env_fun)
         vec_env.rollout(100, break_when_any_done=False)
 
     @pytest.mark.parametrize("task", ["knights_archers_zombies_v10", "pistonball_v6"])
@@ -3133,9 +3134,9 @@ class TestSmacv2:
         check_env_specs(env, seed=None)
         env.close()
 
-    def test_parallel_env(self):
+    def test_parallel_env(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
-            ParallelEnv(
+            maybe_fork_ParallelEnv(
                 num_workers=2,
                 create_env_fn=lambda: SMACv2Env(
                     map_name="3s_vs_5z",

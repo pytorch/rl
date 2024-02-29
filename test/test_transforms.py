@@ -26,7 +26,7 @@ from _utils_internal import (  # noqa
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
-    rand_reset,
+    rand_reset,maybe_fork_ParallelEnv,
     retry,
 )
 from mocking_classes import (
@@ -225,8 +225,8 @@ class TestBinarizeReward(TransformBase):
         check_env_specs(env)
         env.close()
 
-    def test_parallel_trans_env_check(self):
-        env = ParallelEnv(
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        env = maybe_fork_ParallelEnv(
             2, lambda: TransformedEnv(ContinuousActionVecMockEnv(), BinarizeReward())
         )
         try:
@@ -243,9 +243,9 @@ class TestBinarizeReward(TransformBase):
         finally:
             env.close()
 
-    def test_trans_parallel_env_check(self):
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
-            ParallelEnv(2, lambda: ContinuousActionVecMockEnv()), BinarizeReward()
+            maybe_fork_ParallelEnv(2, lambda: ContinuousActionVecMockEnv()), BinarizeReward()
         )
         try:
             check_env_specs(env)
@@ -538,7 +538,7 @@ class TestClipTransform(TransformBase):
         assert data["reward"] == 2
         assert data["reward_clip"] == 0.1
 
-    def test_parallel_trans_env_check(self):
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
         def make_env():
             env = ContinuousActionVecMockEnv()
             return TransformedEnv(
@@ -551,7 +551,7 @@ class TestClipTransform(TransformBase):
                 ),
             )
 
-        env = ParallelEnv(2, make_env)
+        env = maybe_fork_ParallelEnv(2, make_env)
         try:
             check_env_specs(env)
         finally:
@@ -573,10 +573,10 @@ class TestClipTransform(TransformBase):
         env = SerialEnv(2, make_env)
         check_env_specs(env)
 
-    def test_trans_parallel_env_check(self):
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = ContinuousActionVecMockEnv()
         env = TransformedEnv(
-            ParallelEnv(2, ContinuousActionVecMockEnv),
+            maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv),
             ClipTransform(
                 in_keys=["observation", "reward"],
                 in_keys_inv=["observation_orig"],
@@ -622,8 +622,8 @@ class TestCatFrames(TransformBase):
         )
         check_env_specs(env)
 
-    def test_parallel_trans_env_check(self):
-        env = ParallelEnv(
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        env = maybe_fork_ParallelEnv(
             2,
             lambda: TransformedEnv(
                 ContinuousActionVecMockEnv(),
@@ -649,9 +649,9 @@ class TestCatFrames(TransformBase):
             ),
         )
 
-    def test_trans_parallel_env_check(self):
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
-            ParallelEnv(2, lambda: ContinuousActionVecMockEnv()),
+            maybe_fork_ParallelEnv(2, lambda: ContinuousActionVecMockEnv()),
             CatFrames(dim=-1, N=3, in_keys=["observation"]),
         )
         try:
@@ -662,8 +662,11 @@ class TestCatFrames(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="Test executed on gym")
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
-    def test_catframes_batching(self, batched_class, break_when_any_done):
+    def test_catframes_batching(self, batched_class, break_when_any_done, maybe_fork_ParallelEnv):
         from _utils_internal import CARTPOLE_VERSIONED
+
+        if batched_class is ParallelEnv:
+            batched_class = maybe_fork_ParallelEnv
 
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),

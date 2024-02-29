@@ -97,6 +97,14 @@ def pytest_addoption(parser):
         "--runslow", action="store_true", default=False, help="run slow tests"
     )
 
+    parser.addoption(
+        "--mp_fork", action="store_true", default=False, help="Use 'fork' start method for mp dedicated tests."
+    )
+
+    parser.addoption(
+        "--mp_fork_if_no_cuda", action="store_true", default=False, help="Use 'fork' start method for mp dedicated tests only if there is no cuda device available."
+    )
+
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "slow: mark test as slow to run")

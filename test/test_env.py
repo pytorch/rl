@@ -24,7 +24,7 @@ from _utils_internal import (
     decorate_thread_sub_func,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
-    PENDULUM_VERSIONED,
+    PENDULUM_VERSIONED,maybe_fork_ParallelEnv,
     PONG_VERSIONED,
     rand_reset,
 )
@@ -280,7 +280,7 @@ def test_rollout_predictability(device):
 @pytest.mark.parametrize("frame_skip", [1])
 @pytest.mark.parametrize("truncated_key", ["truncated", "done"])
 @pytest.mark.parametrize("parallel", [False, True])
-def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
+def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, maybe_fork_ParallelEnv, seed=0):
     env_name = env_name()
     envs = []
     for horizon in [20, 30, 40]:
@@ -291,7 +291,7 @@ def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
             )
         )
     if parallel:
-        env = ParallelEnv(3, envs)
+        env = maybe_fork_ParallelEnv(3, envs)
     else:
         env = SerialEnv(3, envs)
     env.set_seed(100)
@@ -407,9 +407,9 @@ class TestParallel:
     @pytest.mark.parametrize("pdevice", [None, "cpu", "cuda"])
     @pytest.mark.parametrize("edevice", ["cpu", "cuda"])
     @pytest.mark.parametrize("bwad", [True, False])
-    def test_parallel_devices(self, parallel, hetero, pdevice, edevice, bwad):
+    def test_parallel_devices(self, parallel, hetero, pdevice, edevice, bwad, maybe_fork_ParallelEnv):
         if parallel:
-            cls = ParallelEnv
+            cls = maybe_fork_ParallelEnv
         else:
             cls = SerialEnv
         if not hetero:
@@ -441,26 +441,26 @@ class TestParallel:
                 env.shared_tensordict_parent.device.type == torch.device(edevice).type
             )
 
-    def test_serial_for_single(self):
+    def test_serial_for_single(self, maybe_fork_ParallelEnv):
         env = ParallelEnv(1, ContinuousActionVecMockEnv, serial_for_single=True)
         assert isinstance(env, SerialEnv)
-        env = ParallelEnv(1, ContinuousActionVecMockEnv)
+        env = maybe_fork_ParallelEnv(1, ContinuousActionVecMockEnv)
         assert isinstance(env, ParallelEnv)
-        env = ParallelEnv(2, ContinuousActionVecMockEnv, serial_for_single=True)
+        env = maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv, serial_for_single=True)
         assert isinstance(env, ParallelEnv)
 
     @pytest.mark.parametrize("num_parallel_env", [1, 10])
     @pytest.mark.parametrize("env_batch_size", [[], (32,), (32, 1), (32, 0)])
-    def test_env_with_batch_size(self, num_parallel_env, env_batch_size):
+    def test_env_with_batch_size(self, num_parallel_env, env_batch_size, maybe_fork_ParallelEnv):
         env = MockBatchedLockedEnv(device="cpu", batch_size=torch.Size(env_batch_size))
         env.set_seed(1)
-        parallel_env = ParallelEnv(num_parallel_env, lambda: env)
+        parallel_env = maybe_fork_ParallelEnv(num_parallel_env, lambda: env)
         assert parallel_env.batch_size == (num_parallel_env, *env_batch_size)
 
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
     @pytest.mark.parametrize("share_individual_td", [True, False])
-    def test_multi_task_serial_parallel(self, env_task, share_individual_td):
+    def test_multi_task_serial_parallel(self, env_task, share_individual_td, maybe_fork_ParallelEnv):
         tasks = env_task.split(",")
         if len(tasks) == 1:
             single_task = True
@@ -485,13 +485,13 @@ class TestParallel:
             with pytest.raises(
                 ValueError, match="share_individual_td must be set to None"
             ):
-                ParallelEnv(3, env_make, share_individual_td=share_individual_td)
+                maybe_fork_ParallelEnv(3, env_make, share_individual_td=share_individual_td)
             return
 
         env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
         env_serial.start()
         assert env_serial._single_task is single_task
-        env_parallel = ParallelEnv(3, env_make, share_individual_td=share_individual_td)
+        env_parallel = maybe_fork_ParallelEnv(3, env_make, share_individual_td=share_individual_td)
         env_parallel.start()
         assert env_parallel._single_task is single_task
 
@@ -506,7 +506,7 @@ class TestParallel:
         assert_allclose_td(td_serial, td_parallel)
 
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
-    def test_multitask(self):
+    def test_multitask(self, maybe_fork_ParallelEnv):
         env1 = DMControlEnv("humanoid", "stand")
         env1_obs_keys = list(env1.observation_spec.keys())
         env2 = DMControlEnv("humanoid", "walk")
@@ -541,7 +541,7 @@ class TestParallel:
                 ),
             )
 
-        env = ParallelEnv(2, [env1_maker, env2_maker])
+        env = maybe_fork_ParallelEnv(2, [env1_maker, env2_maker])
         # env = SerialEnv(2, [env1_maker, env2_maker])
         assert not env._single_task
 
@@ -669,7 +669,7 @@ class TestParallel:
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
     @pytest.mark.parametrize("heterogeneous", [False, True])
-    def test_transform_env_transform_no_device(self, heterogeneous):
+    def test_transform_env_transform_no_device(self, heterogeneous, maybe_fork_ParallelEnv):
         # Tests non-regression on 1865
         def make_env():
             return TransformedEnv(
@@ -680,7 +680,7 @@ class TestParallel:
             make_envs = [EnvCreator(make_env), EnvCreator(make_env)]
         else:
             make_envs = make_env
-        penv = ParallelEnv(2, make_envs)
+        penv = maybe_fork_ParallelEnv(2, make_envs)
         r = penv.rollout(6, break_when_any_done=False)
         assert r.shape == (2, 6)
         try:
@@ -742,9 +742,9 @@ class TestParallel:
         env_serial.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    def test_parallel_env_shutdown(self):
+    def test_parallel_env_shutdown(self, maybe_fork_ParallelEnv):
         env_make = EnvCreator(lambda: GymEnv(PENDULUM_VERSIONED()))
-        env = ParallelEnv(4, env_make)
+        env = maybe_fork_ParallelEnv(4, env_make)
         env.reset()
         assert not env.is_closed
         env.rand_step()
@@ -756,11 +756,11 @@ class TestParallel:
         env.close()
 
     @pytest.mark.parametrize("parallel", [True, False])
-    def test_parallel_env_custom_method(self, parallel):
+    def test_parallel_env_custom_method(self, parallel, maybe_fork_ParallelEnv):
         # define env
 
         if parallel:
-            env = ParallelEnv(2, lambda: DiscreteActionVecMockEnv())
+            env = maybe_fork_ParallelEnv(2, lambda: DiscreteActionVecMockEnv())
         else:
             env = SerialEnv(2, lambda: DiscreteActionVecMockEnv())
 
@@ -978,7 +978,7 @@ class TestParallel:
         env0_in.close()
 
     @pytest.mark.parametrize("parallel", [True, False])
-    def test_parallel_env_kwargs_set(self, parallel):
+    def test_parallel_env_kwargs_set(self, parallel, maybe_fork_ParallelEnv):
         num_env = 2
 
         def make_make_env():
@@ -990,7 +990,7 @@ class TestParallel:
 
             return make_transformed_env
 
-        _class = ParallelEnv if parallel else SerialEnv
+        _class = maybe_fork_ParallelEnv if parallel else SerialEnv
 
         def env_fn1(seed):
             env = _class(
@@ -1020,9 +1020,9 @@ class TestParallel:
 
     @pytest.mark.parametrize("batch_size", [(32, 5), (4,), (1,), ()])
     @pytest.mark.parametrize("n_workers", [2, 1])
-    def test_parallel_env_reset_flag(self, batch_size, n_workers, max_steps=3):
+    def test_parallel_env_reset_flag(self, batch_size, n_workers, maybe_fork_ParallelEnv, max_steps=3):
         torch.manual_seed(1)
-        env = ParallelEnv(
+        env = maybe_fork_ParallelEnv(
             n_workers, lambda: CountingEnv(max_steps=max_steps, batch_size=batch_size)
         )
         env.set_seed(1)
@@ -1065,7 +1065,7 @@ class TestParallel:
         nested_obs_action,
         nested_done,
         nested_reward,
-        env_type,
+        env_type,maybe_fork_ParallelEnv,
         n_envs=2,
         batch_size=(32,),
         nested_dim=5,
@@ -1082,7 +1082,7 @@ class TestParallel:
         if env_type == "serial":
             env = SerialEnv(n_envs, env_fn)
         else:
-            env = ParallelEnv(n_envs, env_fn)
+            env = maybe_fork_ParallelEnv(n_envs, env_fn)
         env.set_seed(seed)
 
         batch_size = (n_envs, *batch_size)
@@ -1741,7 +1741,7 @@ class TestInfoDict:
         reason="older versions of half-cheetah do not have 'x_position' info key.",
     )
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_auto_register(self, device):
+    def test_auto_register(self, device, maybe_fork_ParallelEnv):
         try:
             import gymnasium as gym
         except ModuleNotFoundError:
@@ -1760,13 +1760,13 @@ class TestInfoDict:
         check_env_specs(env)
 
         # check that the env can be executed in parallel
-        penv = ParallelEnv(
+        penv = maybe_fork_ParallelEnv(
             2,
             lambda: GymWrapper(
                 gym.make(HALFCHEETAH_VERSIONED()), device=device
             ).auto_register_info_dict(),
         )
-        senv = ParallelEnv(
+        senv = maybe_fork_ParallelEnv(
             2,
             lambda: GymWrapper(
                 gym.make(HALFCHEETAH_VERSIONED()), device=device
@@ -2208,7 +2208,7 @@ class TestMultiKeyEnvs:
     @pytest.mark.parametrize("env_type", ["serial", "parallel"])
     @pytest.mark.parametrize("max_steps", [2, 5])
     def test_parallel(
-        self, batch_size, rollout_steps, env_type, max_steps, seed, n_workers=2
+        self, batch_size, rollout_steps, env_type, max_steps, seed, maybe_fork_ParallelEnv, n_workers=2
     ):
         torch.manual_seed(seed)
         env_fun = lambda: MultiKeyCountingEnv(
@@ -2217,7 +2217,7 @@ class TestMultiKeyEnvs:
         if env_type == "serial":
             vec_env = SerialEnv(n_workers, env_fun)
         else:
-            vec_env = ParallelEnv(n_workers, env_fun)
+            vec_env = maybe_fork_ParallelEnv(n_workers, env_fun)
 
         # check_env_specs(vec_env)
         policy = MultiKeyCountingEnvPolicy(
@@ -2410,7 +2410,7 @@ class TestLibThreading:
         IS_OSX,
         reason="setting different threads across workers can randomly fail on OSX.",
     )
-    def test_num_threads(self):
+    def test_num_threads(self, maybe_fork_ParallelEnv):
         from torchrl.envs import batched_envs
 
         _run_worker_pipe_shared_mem_save = batched_envs._run_worker_pipe_shared_mem
@@ -2419,7 +2419,7 @@ class TestLibThreading:
         )
         num_threads = torch.get_num_threads()
         try:
-            env = ParallelEnv(
+            env = maybe_fork_ParallelEnv(
                 2, ContinuousActionVecMockEnv, num_sub_threads=3, num_threads=7
             )
             # We could test that the number of threads isn't changed until we start the procs.
@@ -2436,16 +2436,16 @@ class TestLibThreading:
         IS_OSX,
         reason="setting different threads across workers can randomly fail on OSX.",
     )
-    def test_auto_num_threads(self):
+    def test_auto_num_threads(self, maybe_fork_ParallelEnv):
         init_threads = torch.get_num_threads()
 
         try:
-            env3 = ParallelEnv(3, ContinuousActionVecMockEnv)
+            env3 = maybe_fork_ParallelEnv(3, ContinuousActionVecMockEnv)
             env3.rollout(2)
 
             assert torch.get_num_threads() == max(1, init_threads - 3)
 
-            env2 = ParallelEnv(2, ContinuousActionVecMockEnv)
+            env2 = maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv)
             env2.rollout(2)
 
             assert torch.get_num_threads() == max(1, init_threads - 5)
@@ -2519,7 +2519,7 @@ def test_auto_cast_to_device(break_when_any_done):
 
 
 @pytest.mark.parametrize("device", get_default_devices())
-def test_backprop(device):
+def test_backprop(device, maybe_fork_ParallelEnv):
     # Tests that backprop through a series of single envs and through a serial env are identical
     # Also tests that no backprop can be achieved with parallel env.
     class DifferentiableEnv(EnvBase):
@@ -2587,7 +2587,7 @@ def test_backprop(device):
     )
     torch.testing.assert_close(g, g_serial)
 
-    p_env = ParallelEnv(
+    p_env = maybe_fork_ParallelEnv(
         2,
         [functools.partial(make_env, seed=0), functools.partial(make_env, seed=seed)],
         device=device,

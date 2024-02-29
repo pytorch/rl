@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import contextlib
+import functools
 import os
 
 import os.path
@@ -498,3 +499,10 @@ def decorate_thread_sub_func(func, num_threads):
         return func(*args, **kwargs)
 
     return CloudpickleWrapper(new_func)
+
+
+@pytest.fixture
+def maybe_fork_ParallelEnv(request):
+    if request.config.getoption("--mp_fork") or (request.config.getoption("--mp_fork_if_no_cuda") and not torch.cuda.is_available()):
+        return functools.partial(ParallelEnv, mp_start_method="fork")
+    return ParallelEnv
