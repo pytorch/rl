@@ -23,7 +23,7 @@ from tensordict.nn import (
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossModule, LossContainerBase
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -41,25 +41,10 @@ from torchrl.objectives.value import (
     VTrace,
 )
 
-
-class LossContainerBase:
-    """ContainerBase class loss tensorclass's."""
-
-    __getitem__ = TensorDictBase.__getitem__
-
-    def aggregate_loss(self):
-        result = 0.0
-        for key in self.__dataclass_attr__:
-            if key.startswith("loss_"):
-                result += getattr(self, key)
-        return result
-
-
 @tensorclass
 class PPOLosses(LossContainerBase):
     """The tensorclass for The PPOLoss Loss class."""
 
-    loss_actor: torch.Tensor
     loss_objective: torch.Tensor
     loss_critic: torch.Tensor | None = None
     loss_entropy: torch.Tensor | None = None
@@ -214,10 +199,10 @@ class PPOLoss(LossModule):
         >>> loss = PPOLoss(actor, value, return_tensorclass=True)
         >>> loss(data)
         PPOLosses(
-            entropy=Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             loss_critic=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-            loss_entropy=Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-            loss_objective=Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_objective=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -570,7 +555,7 @@ class PPOLoss(LossModule):
         return self.critic_network_params.detach()
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> PPOLosses:
+    def forward(self, tensordict: TensorDictBase) -> PPOLosses | TensorDictBase:
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
@@ -595,8 +580,6 @@ class PPOLoss(LossModule):
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict).mean()
             td_out.set("loss_critic", loss_critic.mean())
-        if self.return_tensorclass:
-            return PPOLosses._from_tensordict(td_out)
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
         td_out = td_out.named_apply(
@@ -605,6 +588,8 @@ class PPOLoss(LossModule):
             else value,
             batch_size=[],
         )
+        if self.return_tensorclass:
+            return PPOLosses._from_tensordict(td_out)
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):

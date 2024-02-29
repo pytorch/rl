@@ -16,22 +16,8 @@ from tensordict.utils import NestedKey
 from torch import distributions as d
 from torchrl.modules import ProbabilisticActor
 
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossModule, LossContainerBase
 from torchrl.objectives.utils import distance_loss
-
-
-class LossContainerBase:
-    """ContainerBase class loss tensorclass's."""
-
-    __getitem__ = TensorDictBase.__getitem__
-
-    def aggregate_loss(self):
-        result = 0.0
-        for key in self.__dataclass_attr__:
-            if key.startswith("loss_"):
-                result += getattr(self, key)
-        return result
-
 
 @tensorclass
 class OnlineDTLosses(LossContainerBase):
@@ -226,7 +212,7 @@ class OnlineDTLoss(LossModule):
         return -log_p.mean(axis=0)
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) ->  OnlineDTLosses | TensorDictBase:
         """Compute the loss for the Online Decision Transformer."""
         # extract action targets
         tensordict = tensordict.clone(False)

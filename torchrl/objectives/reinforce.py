@@ -14,7 +14,7 @@ from tensordict import tensorclass, TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossModule, LossContainerBase
 
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -30,20 +30,6 @@ from torchrl.objectives.value import (
     TDLambdaEstimator,
     VTrace,
 )
-
-
-class LossContainerBase:
-    """ContainerBase class loss tensorclass's."""
-
-    __getitem__ = TensorDictBase.__getitem__
-
-    def aggregate_loss(self):
-        result = 0.0
-        for key in self.__dataclass_attr__:
-            if key.startswith("loss_"):
-                result += getattr(self, key)
-        return result
-
 
 @tensorclass
 class ReinforceLosses(LossContainerBase):
@@ -407,7 +393,7 @@ class ReinforceLoss(LossModule):
         self._in_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> ReinforceLosses:
+    def forward(self, tensordict: TensorDictBase) -> ReinforceLosses | TensorDictBase:
         advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(

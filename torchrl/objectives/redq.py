@@ -18,7 +18,7 @@ from torch import Tensor
 
 from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossModule, LossContainerBase
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -30,20 +30,6 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-
-class LossContainerBase:
-    """ContainerBase class loss tensorclass's."""
-
-    __getitem__ = TensorDictBase.__getitem__
-
-    def aggregate_loss(self):
-        result = 0.0
-        for key in self.__dataclass_attr__:
-            if key.startswith("loss_"):
-                result += getattr(self, key)
-        return result
-
 
 @tensorclass
 class REDQLosses(LossContainerBase):
@@ -476,7 +462,7 @@ class REDQLoss(LossModule):
         return qvalue_params
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> REDQLosses:
+    def forward(self, tensordict: TensorDictBase) -> REDQLosses | TensorDictBase:
         obs_keys = self.actor_network.in_keys
         tensordict_select = tensordict.clone(False).select(
             "next", *obs_keys, self.tensor_keys.action
@@ -618,6 +604,14 @@ class REDQLoss(LossModule):
             },
             [],
         )
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
+        )
+        if self.return_tensorclass:
+            return SACLosses._from_tensordict(td_out)
 
         return td_out
 

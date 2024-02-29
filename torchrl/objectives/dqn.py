@@ -24,7 +24,7 @@ from torchrl.modules.tensordict_module.actors import (
 )
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossModule, LossContainerBase
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
@@ -34,30 +34,12 @@ from torchrl.objectives.utils import (
 from torchrl.objectives.value import TDLambdaEstimator
 from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator
 
-
-class LossContainerBase:
-    """ContainerBase class loss tensorclass's."""
-
-    __getitem__ = TensorDictBase.__getitem__
-
-    def aggregate_loss(self):
-        result = 0.0
-        for key in self.__dataclass_attr__:
-            if key.startswith("loss_"):
-                result += getattr(self, key)
-        return result
-
-
 @tensorclass
 class DQNLosses(LossContainerBase):
     """The tensorclass for The DQN Loss class."""
 
     loss_objective: torch.Tensor
     loss: torch.Tensor
-
-    @property
-    def aggregate_loss(self):
-        return self.loss_critic + self.loss_objective + self.loss_entropy
 
 
 class DQNLoss(LossModule):
@@ -334,7 +316,7 @@ class DQNLoss(LossModule):
         self._value_estimator.set_keys(**tensor_keys)
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> DQNLosses:
+    def forward(self, tensordict: TensorDictBase) -> DQNLosses | TensorDictBase:
         """Computes the DQN loss given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
@@ -404,7 +386,10 @@ class DQNLoss(LossModule):
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
-        return TensorDict({"loss": loss.mean()}, [])
+        loss_td = TensorDict({"loss": loss.mean()}, [])
+        if self.return_tensorclass:
+            return DQNLosses._from_tensordict(loss_td)
+        return loss_td
 
 
 class DistributionalDQNLoss(LossModule):
@@ -531,7 +516,7 @@ class DistributionalDQNLoss(LossModule):
         action = action.expand(new_shape)
         return torch.gather(action_log_softmax, -1, index=action).squeeze(-1)
 
-    def forward(self, input_tensordict: TensorDictBase) -> DQNLosses:
+    def forward(self, input_tensordict: TensorDictBase) -> DQNLosses | TensorDictBase:
         # from https://github.com/Kaixhin/Rainbow/blob/9ff5567ad1234ae0ed30d8471e8f13ae07119395/agent.py
         tensordict = TensorDict(
             source=input_tensordict, batch_size=input_tensordict.batch_size
@@ -644,8 +629,11 @@ class DistributionalDQNLoss(LossModule):
             loss.detach().unsqueeze(1).to(input_tensordict.device),
             inplace=True,
         )
-        loss_td = TensorDict({"loss": loss.mean()}, [])
-        return loss_td
+        loss = _reduce(loss, reduction=self.reduction)
+        td_out = TensorDict({"loss": loss}, [])
+        if self.return_tensorclass:
+            return DQNLosses._from_tensordict(loss_td)
+        return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:

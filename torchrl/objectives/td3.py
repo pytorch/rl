@@ -15,7 +15,7 @@ from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec, TensorSpec
 
 from torchrl.envs.utils import step_mdp
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossModule, LossContainerBase
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -27,20 +27,6 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-
-class LossContainerBase:
-    """ContainerBase class loss tensorclass's."""
-
-    __getitem__ = TensorDictBase.__getitem__
-
-    def aggregate_loss(self):
-        result = 0.0
-        for key in self.__dataclass_attr__:
-            if key.startswith("loss_"):
-                result += getattr(self, key)
-        return result
-
 
 @tensorclass
 class TD3Losses(LossContainerBase):
@@ -492,7 +478,7 @@ class TD3Loss(LossModule):
         return loss_qval, metadata
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TD3Losses:
+    def forward(self, tensordict: TensorDictBase) -> TD3Losses | TensorDictBase:
         tensordict_save = tensordict
         loss_actor, metadata_actor = self.actor_loss(tensordict)
         loss_qval, metadata_value = self.value_loss(tensordict_save)

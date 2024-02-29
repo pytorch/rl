@@ -15,7 +15,7 @@ from tensordict.nn import dispatch, TensorDictModule
 
 from tensordict.utils import NestedKey, unravel_key
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossModule, LossContainerBase
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -25,20 +25,6 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-
-class LossContainerBase:
-    """ContainerBase class loss tensorclass's."""
-
-    __getitem__ = TensorDictBase.__getitem__
-
-    def aggregate_loss(self):
-        result = 0.0
-        for key in self.__dataclass_attr__:
-            if key.startswith("loss_"):
-                result += getattr(self, key)
-        return result
-
 
 @tensorclass
 class DDPGLosses(LossContainerBase):
@@ -171,7 +157,7 @@ class DDPGLoss(LossModule):
     method.
 
     Examples:
-        >>> out_keys = loss.select_out_keys('loss_actor', 'loss_value')
+        >>> _ = loss.select_out_keys('loss_actor', 'loss_value')
         >>> loss_actor, loss_value = loss(
         ...     observation=torch.randn(n_obs),
         ...     action=spec.rand(),
@@ -315,7 +301,7 @@ class DDPGLoss(LossModule):
         self._in_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> DDPGLosses:
+    def forward(self, tensordict: TensorDictBase) -> DDPGLosses | TensorDictBase:
         """Computes the DDPG losses given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign

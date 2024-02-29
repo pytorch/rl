@@ -14,7 +14,7 @@ from tensordict.utils import NestedKey
 
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossModule, LossContainerBase
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
@@ -23,20 +23,6 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-
-class LossContainerBase:
-    """ContainerBase class loss tensorclass's."""
-
-    __getitem__ = TensorDictBase.__getitem__
-
-    def aggregate_loss(self):
-        result = 0.0
-        for key in self.__dataclass_attr__:
-            if key.startswith("loss_"):
-                result += getattr(self, key)
-        return result
-
 
 @tensorclass
 class DreamerModelLosses(LossContainerBase):
@@ -288,7 +274,7 @@ class DreamerActorLoss(LossModule):
 
     def forward(
         self, tensordict: TensorDict
-    ) -> Tuple[DreamerModelLosses, DreamerModelLosses]:
+    ) -> Tuple[DreamerModelLosses, TensorDict] | Tuple[TensorDict, TensorDict]:
         with torch.no_grad():
             tensordict = tensordict.select("state", self.tensor_keys.belief)
             tensordict = tensordict.reshape(-1)
@@ -328,7 +314,7 @@ class DreamerActorLoss(LossModule):
         if self.return_tensorclass:
             return DreamerModelLosses._from_tensordict(
                 loss_tensordict
-            ), DreamerModelLosses._from_tensordict(fake_data.detach())
+            ), fake_data.detach()
         return loss_tensordict, fake_data.detach()
 
     def lambda_target(self, reward: torch.Tensor, value: torch.Tensor) -> torch.Tensor:

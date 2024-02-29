@@ -16,7 +16,7 @@ from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDic
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossModule, LossContainerBase
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -34,20 +34,6 @@ from torchrl.objectives.value import (
     VTrace,
 )
 
-
-class LossContainerBase:
-    """ContainerBase class loss tensorclass's."""
-
-    __getitem__ = TensorDictBase.__getitem__
-
-    def aggregate_loss(self):
-        result = 0.0
-        for key in self.__dataclass_attr__:
-            if key.startswith("loss_"):
-                result += getattr(self, key)
-        return result
-
-
 @tensorclass
 class A2CLosses(LossContainerBase):
     """The tensorclass for The A2CLoss Loss class."""
@@ -57,11 +43,6 @@ class A2CLosses(LossContainerBase):
     loss_critic: torch.Tensor | None = None
     loss_entropy: torch.Tensor | None = None
     entropy: torch.Tensor | None = None
-
-    @property
-    def aggregate_loss(self):
-        return self.loss_critic + self.loss_objective + self.loss_entropy
-
 
 class A2CLoss(LossModule):
     """TorchRL implementation of the A2C loss.
@@ -164,8 +145,8 @@ class A2CLoss(LossModule):
         A2CLosses(
             entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             loss_critic=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-            loss_entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-            loss_objective=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_entropy=Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_objective=Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -497,7 +478,7 @@ class A2CLoss(LossModule):
         return self.critic_network_params.detach()
 
     @dispatch()
-    def forward(self, tensordict: TensorDictBase) -> A2CLosses:
+    def forward(self, tensordict: TensorDictBase) -> A2CLosses | TensorDictBase:
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:

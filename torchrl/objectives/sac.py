@@ -23,7 +23,7 @@ from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossModule, LossContainerBase
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -44,20 +44,6 @@ def _delezify(func):
         return func(self, *args, **kwargs)
 
     return new_func
-
-
-class LossContainerBase:
-    """ContainerBase class loss tensorclass's."""
-
-    __getitem__ = TensorDictBase.__getitem__
-
-    def aggregate_loss(self):
-        result = 0.0
-        for key in self.__dataclass_attr__:
-            if key.startswith("loss_"):
-                result += getattr(self, key)
-        return result
-
 
 @tensorclass
 class SACLosses(LossContainerBase):
@@ -581,7 +567,7 @@ class SACLoss(LossModule):
         self._out_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> SACLosses:
+    def forward(self, tensordict: TensorDictBase) -> SACLosses | TensorDictBase:
         shape = None
         if tensordict.ndimension() > 1:
             shape = tensordict.shape
@@ -615,8 +601,17 @@ class SACLoss(LossModule):
             "entropy": entropy.detach().mean(),
         }
         if self._version == 1:
-            out["loss_value"] = loss_value.mean()
-        return TensorDict(out, [])
+            out["loss_value"] = loss_value
+        td_out = TensorDict(out, [])
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
+        )
+        if self.return_tensorclass:
+            return SACLosses._from_tensordict(td_out)
+        return td_out
 
     @property
     @_cache_values

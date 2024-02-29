@@ -17,7 +17,7 @@ from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import _find_action_space
 
 from torchrl.modules import ProbabilisticActor
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossModule, LossContainerBase
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     _vmap_func,
@@ -26,20 +26,6 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
-
-
-class LossContainerBase:
-    """ContainerBase class loss tensorclass's."""
-
-    __getitem__ = TensorDictBase.__getitem__
-
-    def aggregate_loss(self):
-        result = 0.0
-        for key in self.__dataclass_attr__:
-            if key.startswith("loss_"):
-                result += getattr(self, key)
-        return result
-
 
 @tensorclass
 class IQLLosses(LossContainerBase):
@@ -377,7 +363,7 @@ class IQLLoss(LossModule):
         self._set_in_keys()
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> IQLLosses:
+    def forward(self, tensordict: TensorDictBase) -> IQLLosses | TensorDictBase:
         shape = None
         if tensordict.ndimension() > 1:
             shape = tensordict.shape
