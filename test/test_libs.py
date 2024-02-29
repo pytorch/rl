@@ -37,7 +37,6 @@ from _utils_internal import (
     get_available_devices,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
-    maybe_fork_ParallelEnv,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
     rand_reset,
