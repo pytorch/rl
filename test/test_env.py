@@ -2410,7 +2410,7 @@ class TestLibThreading:
         IS_OSX,
         reason="setting different threads across workers can randomly fail on OSX.",
     )
-    def test_num_threads(self, maybe_fork_ParallelEnv):
+    def test_num_threads(self):
         from torchrl.envs import batched_envs
 
         _run_worker_pipe_shared_mem_save = batched_envs._run_worker_pipe_shared_mem
@@ -2419,7 +2419,7 @@ class TestLibThreading:
         )
         num_threads = torch.get_num_threads()
         try:
-            env = maybe_fork_ParallelEnv(
+            env = ParallelEnv(
                 2, ContinuousActionVecMockEnv, num_sub_threads=3, num_threads=7
             )
             # We could test that the number of threads isn't changed until we start the procs.
