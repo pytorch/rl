@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import functools
 import os
+import sys
 import time
 import warnings
 from collections import defaultdict
@@ -12,6 +13,7 @@ import pytest
 import torch
 
 CALL_TIMES = defaultdict(lambda: 0.0)
+IS_OSX = sys.platform == "darwin"
 
 
 def pytest_sessionfinish(maxprint=50):
@@ -130,9 +132,12 @@ def pytest_collection_modifyitems(config, items):
 def maybe_fork_ParallelEnv(request):
     from torchrl.envs import ParallelEnv
 
-    if request.config.getoption("--mp_fork") or (
-        request.config.getoption("--mp_fork_if_no_cuda")
-        and not torch.cuda.is_available()
+    if not IS_OSX and (
+        request.config.getoption("--mp_fork")
+        or (
+            request.config.getoption("--mp_fork_if_no_cuda")
+            and not torch.cuda.is_available()
+        )
     ):
         return functools.partial(ParallelEnv, mp_start_method="fork")
     return ParallelEnv

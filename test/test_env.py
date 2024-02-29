@@ -108,6 +108,7 @@ except FileNotFoundError:
     atari_confs = defaultdict(lambda: "")
 
 IS_OSX = platform == "darwin"
+IS_WIN = platform == "win32"
 
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
 ## the serial and parallel batched envs
@@ -2655,6 +2656,7 @@ def test_non_td_policy():
     env.rollout(10, policy)
 
 
+@pytest.mark.skipif(IS_WIN, reason="fork not available on windows 10")
 def test_parallel_another_ctx():
     from torch import multiprocessing as mp
 
