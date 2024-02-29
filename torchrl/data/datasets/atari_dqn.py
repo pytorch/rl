@@ -745,6 +745,9 @@ class _AtariStorage(Storage):
         if isinstance(index, torch.Tensor):
             if index.ndim <= 1:
                 return self._read_from_splits(index)
+            elif index.shape[1] == 1:
+                index = index.squeeze(1)
+                return self.get(index)
             else:
                 raise RuntimeError("Only 1d tensors are accepted")
             # with ThreadPoolExecutor(16) as pool:

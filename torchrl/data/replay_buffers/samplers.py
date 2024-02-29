@@ -1565,7 +1565,7 @@ class SamplerEnsemble(Sampler):
                 ]
             )
         samples = [
-            sample if isinstance(sample, torch.Tensor) else torch.tensor(sample)
+            sample if isinstance(sample, torch.Tensor) else torch.stack(sample, -1)
             for sample in samples
         ]
         if all(samples[0].shape == sample.shape for sample in samples[1:]):
