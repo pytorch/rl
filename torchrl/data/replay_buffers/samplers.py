@@ -773,14 +773,18 @@ class SliceSampler(Sampler):
 
             # faster
             end = trajectory[:-1] != trajectory[1:]
-            end = torch.cat([end, torch.ones_like(end[:1])], 0)
+            end = torch.cat([end, trajectory[-1:] != trajectory[:1]], 0)
+            length = trajectory.shape[0]
         else:
-            end = torch.index_fill(
-                end,
-                index=torch.tensor(-1, device=end.device, dtype=torch.long),
-                dim=0,
-                value=1,
-            )
+            # We presume that not done at the end means that the traj spans across end and beginning of storage
+            # end = torch.index_fill(
+            #     end,
+            #     index=torch.tensor(-1, device=end.device, dtype=torch.long),
+            #     dim=0,
+            #     value=1,
+            # )
+            length = end.shape[0]
+
         ndim = end.ndim
         if ndim == 0:
             raise RuntimeError(
@@ -788,15 +792,19 @@ class SliceSampler(Sampler):
             )
         # Using transpose ensures the start and stop are sorted the same way
         stop_idx = end.transpose(0, -1).nonzero()
-        beginnings = torch.cat([torch.ones_like(end[:1]), end[:-1]], 0)
+        beginnings = torch.cat([end[-1:], end[:-1]], 0)
         start_idx = beginnings.transpose(0, -1).nonzero()
         start_idx = torch.cat([start_idx[:, -1:], start_idx[:, :-1]], -1)
         stop_idx = torch.cat([stop_idx[:, -1:], stop_idx[:, :-1]], -1)
+        # shift start and stop if needed
+        should_shift = (start_idx > stop_idx).any(0)
+        start_idx[:, should_shift] = torch.roll(start_idx[:, should_shift], 1)
 
         lengths = stop_idx[:, 0] - start_idx[:, 0] + 1
+        lengths[lengths < 0] = lengths[lengths < 0] + length
         return start_idx, stop_idx, lengths
 
-    def _tensor_slices_from_startend(self, seq_length, start):
+    def _tensor_slices_from_startend(self, seq_length, start, storage_length):
         # start is a 2d tensor resulting from nonzero()
         # seq_length is a 1d tensor indicating the desired length of each sequence
 
@@ -823,6 +831,7 @@ class SliceSampler(Sampler):
                     for _start, _seq_len in zip(start, seq_length)
                 ]
             )
+        result[:, 0] = result[:, 0] % storage_length
         return result
 
     def _get_stop_and_length(self, storage, fallback=True):
@@ -899,28 +908,48 @@ class SliceSampler(Sampler):
                 "instead."
             )
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
-        return self._sample_slices(lengths, start_idx, stop_idx, seq_length, num_slices)
+        storage_length = storage.shape[0]
+        return self._sample_slices(
+            lengths,
+            start_idx,
+            stop_idx,
+            seq_length,
+            num_slices,
+            storage_length=storage_length,
+        )
 
     def _sample_slices(
-        self, lengths, start_idx, stop_idx, seq_length, num_slices, traj_idx=None
+        self,
+        lengths,
+        start_idx,
+        stop_idx,
+        seq_length,
+        num_slices,
+        storage_length,
+        traj_idx=None,
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, Any]]:
+        if (lengths < seq_length).any():
+            if self.strict_length:
+                idx = lengths == seq_length
+                if (
+                    isinstance(seq_length, torch.Tensor)
+                    and seq_length.shape == lengths.shape
+                ):
+                    seq_length = seq_length[idx]
+                lengths = lengths[idx]
+                start_idx = start_idx[idx]
+                stop_idx = stop_idx[idx]
+                del idx
+            else:
+                # make seq_length a tensor with values clamped by lengths
+                seq_length = lengths[traj_idx].clamp_max(seq_length)
+
         if traj_idx is None:
             traj_idx = torch.randint(
                 lengths.shape[0], (num_slices,), device=lengths.device
             )
         else:
             num_slices = traj_idx.shape[0]
-
-        if (lengths < seq_length).any():
-            if self.strict_length:
-                raise RuntimeError(
-                    "Some stored trajectories have a length shorter than the slice that was asked for ("
-                    f"min length={lengths.min()}). "
-                    "Create the sampler with `strict_length=False` to allow shorter trajectories to appear "
-                    "in you batch."
-                )
-            # make seq_length a tensor with values clamped by lengths
-            seq_length = lengths[traj_idx].clamp_max(seq_length)
 
         relative_starts = (
             (
@@ -937,7 +966,7 @@ class SliceSampler(Sampler):
             ],
             1,
         )
-        index = self._tensor_slices_from_startend(seq_length, starts)
+        index = self._tensor_slices_from_startend(seq_length, starts, storage_length)
         if self.truncated_key is not None:
             truncated_key = self.truncated_key
             done_key = _replace_last(truncated_key, "done")
@@ -1168,8 +1197,15 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         # first get indices of the trajectories we want to retrieve
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
         indices, _ = SamplerWithoutReplacement.sample(self, storage, num_slices)
+        storage_length = storage.shape[0]
         idx, info = self._sample_slices(
-            lengths, start_idx, stop_idx, seq_length, num_slices, traj_idx=indices
+            lengths,
+            start_idx,
+            stop_idx,
+            seq_length,
+            num_slices,
+            storage_length,
+            traj_idx=indices,
         )
         return idx, info
 
