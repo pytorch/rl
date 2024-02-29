@@ -24,7 +24,7 @@ from _utils_internal import (
     decorate_thread_sub_func,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
-    PENDULUM_VERSIONED,maybe_fork_ParallelEnv,
+    PENDULUM_VERSIONED,
     PONG_VERSIONED,
     rand_reset,
 )
@@ -280,7 +280,9 @@ def test_rollout_predictability(device):
 @pytest.mark.parametrize("frame_skip", [1])
 @pytest.mark.parametrize("truncated_key", ["truncated", "done"])
 @pytest.mark.parametrize("parallel", [False, True])
-def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, maybe_fork_ParallelEnv, seed=0):
+def test_rollout_reset(
+    env_name, frame_skip, parallel, truncated_key, maybe_fork_ParallelEnv, seed=0
+):
     env_name = env_name()
     envs = []
     for horizon in [20, 30, 40]:
@@ -407,7 +409,9 @@ class TestParallel:
     @pytest.mark.parametrize("pdevice", [None, "cpu", "cuda"])
     @pytest.mark.parametrize("edevice", ["cpu", "cuda"])
     @pytest.mark.parametrize("bwad", [True, False])
-    def test_parallel_devices(self, parallel, hetero, pdevice, edevice, bwad, maybe_fork_ParallelEnv):
+    def test_parallel_devices(
+        self, parallel, hetero, pdevice, edevice, bwad, maybe_fork_ParallelEnv
+    ):
         if parallel:
             cls = maybe_fork_ParallelEnv
         else:
@@ -446,12 +450,16 @@ class TestParallel:
         assert isinstance(env, SerialEnv)
         env = maybe_fork_ParallelEnv(1, ContinuousActionVecMockEnv)
         assert isinstance(env, ParallelEnv)
-        env = maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv, serial_for_single=True)
+        env = maybe_fork_ParallelEnv(
+            2, ContinuousActionVecMockEnv, serial_for_single=True
+        )
         assert isinstance(env, ParallelEnv)
 
     @pytest.mark.parametrize("num_parallel_env", [1, 10])
     @pytest.mark.parametrize("env_batch_size", [[], (32,), (32, 1), (32, 0)])
-    def test_env_with_batch_size(self, num_parallel_env, env_batch_size, maybe_fork_ParallelEnv):
+    def test_env_with_batch_size(
+        self, num_parallel_env, env_batch_size, maybe_fork_ParallelEnv
+    ):
         env = MockBatchedLockedEnv(device="cpu", batch_size=torch.Size(env_batch_size))
         env.set_seed(1)
         parallel_env = maybe_fork_ParallelEnv(num_parallel_env, lambda: env)
@@ -460,7 +468,9 @@ class TestParallel:
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
     @pytest.mark.parametrize("share_individual_td", [True, False])
-    def test_multi_task_serial_parallel(self, env_task, share_individual_td, maybe_fork_ParallelEnv):
+    def test_multi_task_serial_parallel(
+        self, env_task, share_individual_td, maybe_fork_ParallelEnv
+    ):
         tasks = env_task.split(",")
         if len(tasks) == 1:
             single_task = True
@@ -485,13 +495,17 @@ class TestParallel:
             with pytest.raises(
                 ValueError, match="share_individual_td must be set to None"
             ):
-                maybe_fork_ParallelEnv(3, env_make, share_individual_td=share_individual_td)
+                maybe_fork_ParallelEnv(
+                    3, env_make, share_individual_td=share_individual_td
+                )
             return
 
         env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
         env_serial.start()
         assert env_serial._single_task is single_task
-        env_parallel = maybe_fork_ParallelEnv(3, env_make, share_individual_td=share_individual_td)
+        env_parallel = maybe_fork_ParallelEnv(
+            3, env_make, share_individual_td=share_individual_td
+        )
         env_parallel.start()
         assert env_parallel._single_task is single_task
 
@@ -669,7 +683,9 @@ class TestParallel:
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
     @pytest.mark.parametrize("heterogeneous", [False, True])
-    def test_transform_env_transform_no_device(self, heterogeneous, maybe_fork_ParallelEnv):
+    def test_transform_env_transform_no_device(
+        self, heterogeneous, maybe_fork_ParallelEnv
+    ):
         # Tests non-regression on 1865
         def make_env():
             return TransformedEnv(
@@ -1020,7 +1036,9 @@ class TestParallel:
 
     @pytest.mark.parametrize("batch_size", [(32, 5), (4,), (1,), ()])
     @pytest.mark.parametrize("n_workers", [2, 1])
-    def test_parallel_env_reset_flag(self, batch_size, n_workers, maybe_fork_ParallelEnv, max_steps=3):
+    def test_parallel_env_reset_flag(
+        self, batch_size, n_workers, maybe_fork_ParallelEnv, max_steps=3
+    ):
         torch.manual_seed(1)
         env = maybe_fork_ParallelEnv(
             n_workers, lambda: CountingEnv(max_steps=max_steps, batch_size=batch_size)
@@ -1065,7 +1083,8 @@ class TestParallel:
         nested_obs_action,
         nested_done,
         nested_reward,
-        env_type,maybe_fork_ParallelEnv,
+        env_type,
+        maybe_fork_ParallelEnv,
         n_envs=2,
         batch_size=(32,),
         nested_dim=5,
@@ -1079,42 +1098,55 @@ class TestParallel:
             batch_size=batch_size,
             nested_dim=nested_dim,
         )
+
         if env_type == "serial":
             env = SerialEnv(n_envs, env_fn)
         else:
             env = maybe_fork_ParallelEnv(n_envs, env_fn)
-        env.set_seed(seed)
 
-        batch_size = (n_envs, *batch_size)
+        try:
+            env.set_seed(seed)
 
-        td = env.reset()
-        assert td.batch_size == batch_size
-        if nested_done or nested_obs_action:
-            assert td["data"].batch_size == (*batch_size, nested_dim)
-        if not nested_done and not nested_reward and not nested_obs_action:
-            assert "data" not in td.keys()
+            batch_size = (n_envs, *batch_size)
 
-        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
-        td = env.rollout(rollout_length, policy)
-        assert td.batch_size == (*batch_size, rollout_length)
-        if nested_done or nested_obs_action:
-            assert td["data"].batch_size == (*batch_size, rollout_length, nested_dim)
-        if nested_reward or nested_done or nested_obs_action:
-            assert td["next", "data"].batch_size == (
-                *batch_size,
-                rollout_length,
-                nested_dim,
-            )
-        if not nested_done and not nested_reward and not nested_obs_action:
-            assert "data" not in td.keys()
-            assert "data" not in td["next"].keys()
+            td = env.reset()
+            assert td.batch_size == batch_size
+            if nested_done or nested_obs_action:
+                assert td["data"].batch_size == (*batch_size, nested_dim)
+            if not nested_done and not nested_reward and not nested_obs_action:
+                assert "data" not in td.keys()
 
-        if nested_obs_action:
-            assert "observation" not in td.keys()
-            assert (td[..., -1]["data", "states"] == 2).all()
-        else:
-            assert ("data", "states") not in td.keys(True, True)
-            assert (td[..., -1]["observation"] == 2).all()
+            policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+            td = env.rollout(rollout_length, policy)
+            assert td.batch_size == (*batch_size, rollout_length)
+            if nested_done or nested_obs_action:
+                assert td["data"].batch_size == (
+                    *batch_size,
+                    rollout_length,
+                    nested_dim,
+                )
+            if nested_reward or nested_done or nested_obs_action:
+                assert td["next", "data"].batch_size == (
+                    *batch_size,
+                    rollout_length,
+                    nested_dim,
+                )
+            if not nested_done and not nested_reward and not nested_obs_action:
+                assert "data" not in td.keys()
+                assert "data" not in td["next"].keys()
+
+            if nested_obs_action:
+                assert "observation" not in td.keys()
+                assert (td[..., -1]["data", "states"] == 2).all()
+            else:
+                assert ("data", "states") not in td.keys(True, True)
+                assert (td[..., -1]["observation"] == 2).all()
+        finally:
+            try:
+                env.close()
+                del env
+            except Exception:
+                pass
 
 
 @pytest.mark.parametrize("batch_size", [(), (2,), (32, 5)])
@@ -2208,7 +2240,14 @@ class TestMultiKeyEnvs:
     @pytest.mark.parametrize("env_type", ["serial", "parallel"])
     @pytest.mark.parametrize("max_steps", [2, 5])
     def test_parallel(
-        self, batch_size, rollout_steps, env_type, max_steps, seed, maybe_fork_ParallelEnv, n_workers=2
+        self,
+        batch_size,
+        rollout_steps,
+        env_type,
+        max_steps,
+        seed,
+        maybe_fork_ParallelEnv,
+        n_workers=2,
     ):
         torch.manual_seed(seed)
         env_fun = lambda: MultiKeyCountingEnv(

@@ -26,7 +26,7 @@ from _utils_internal import (  # noqa
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
-    rand_reset,maybe_fork_ParallelEnv,
+    rand_reset,
     retry,
 )
 from mocking_classes import (
@@ -245,7 +245,8 @@ class TestBinarizeReward(TransformBase):
 
     def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
-            maybe_fork_ParallelEnv(2, lambda: ContinuousActionVecMockEnv()), BinarizeReward()
+            maybe_fork_ParallelEnv(2, lambda: ContinuousActionVecMockEnv()),
+            BinarizeReward(),
         )
         try:
             check_env_specs(env)
@@ -662,7 +663,9 @@ class TestCatFrames(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="Test executed on gym")
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
-    def test_catframes_batching(self, batched_class, break_when_any_done, maybe_fork_ParallelEnv):
+    def test_catframes_batching(
+        self, batched_class, break_when_any_done, maybe_fork_ParallelEnv
+    ):
         from _utils_internal import CARTPOLE_VERSIONED
 
         if batched_class is ParallelEnv:

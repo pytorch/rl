@@ -34,9 +34,10 @@ import torch
 from _utils_internal import (
     _make_multithreaded_env,
     CARTPOLE_VERSIONED,
-    get_available_devices,maybe_fork_ParallelEnv,
+    get_available_devices,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
+    maybe_fork_ParallelEnv,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
     rand_reset,
@@ -78,7 +79,6 @@ from torchrl.envs import (
     DoubleToFloat,
     EnvBase,
     EnvCreator,
-    ParallelEnv,
     RemoveEmptySpecs,
     RenameTransform,
 )
@@ -1821,7 +1821,9 @@ class TestBrax:
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
     @pytest.mark.parametrize("parallel", [False, True])
-    def test_brax_parallel(self, envname, batch_size, parallel, maybe_fork_ParallelEnv, n=1):
+    def test_brax_parallel(
+        self, envname, batch_size, parallel, maybe_fork_ParallelEnv, n=1
+    ):
         def make_brax():
             env = BraxEnv(envname, batch_size=batch_size, requires_grad=False)
             env.set_seed(1)
@@ -2125,7 +2127,9 @@ class TestVmas:
     @pytest.mark.parametrize("n_envs", [1, 4])
     @pytest.mark.parametrize("n_workers", [1, 2])
     @pytest.mark.parametrize("n_agents", [1, 3])
-    def test_collector(self, n_envs, n_workers, n_agents, maybe_fork_ParallelEnv, frames_per_batch=80):
+    def test_collector(
+        self, n_envs, n_workers, n_agents, maybe_fork_ParallelEnv, frames_per_batch=80
+    ):
         torch.manual_seed(1)
         env_fun = lambda: VmasEnv(
             scenario="flocking", num_envs=n_envs, n_agents=n_agents, max_steps=7
