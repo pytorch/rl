@@ -19,10 +19,10 @@ apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-de
 # solves "'extras_require' must be a dictionary"
 pip install setuptools==65.3.0
 
-mkdir third_party
-cd third_party
-git clone https://github.com/vmoens/gym
-cd ..
+#mkdir -p third_party
+#cd third_party
+#git clone https://github.com/vmoens/gym
+#cd ..
 
 # This version is installed initially (see environment.yml)
 for GYM_VERSION in '0.13'
@@ -38,7 +38,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove --prefix ./cloned_env
+  conda env remove --prefix ./cloned_env -y
 done
 
 # gym[atari]==0.19 is broken, so we install only gym without dependencies.
@@ -57,7 +57,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove --prefix ./cloned_env
+  conda env remove --prefix ./cloned_env -y
 done
 
 # gym[atari]==0.20 installs ale-py==0.8, but this version is not compatible with gym<0.26, so we downgrade it.
@@ -76,7 +76,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove --prefix ./cloned_env
+  conda env remove --prefix ./cloned_env -y
 done
 
 for GYM_VERSION in '0.25'
@@ -92,7 +92,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove --prefix ./cloned_env
+  conda env remove --prefix ./cloned_env -y
 done
 
 # For this version "gym[accept-rom-license]" is required.
@@ -110,7 +110,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove --prefix ./cloned_env
+  conda env remove --prefix ./cloned_env -y
 done
 
 # For this version "gym[accept-rom-license]" is required.
@@ -128,7 +128,7 @@ do
 
   # delete the conda copy
   conda deactivate
-  conda env remove --prefix ./cloned_env
+  conda env remove --prefix ./cloned_env -y
 done
 
 # Latest gymnasium
@@ -142,4 +142,4 @@ $DIR/run_test.sh
 
 # delete the conda copy
 conda deactivate
-conda env remove --prefix ./cloned_env
+conda env remove --prefix ./cloned_env -y
