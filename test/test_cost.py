@@ -491,13 +491,10 @@ class TestDQN(LossModuleTestBase):
         )
         loss_fn = DQNLoss(
             actor,
-
             loss_function="l2",
-
             delay_value=delay_value,
-
             double_dqn=double_dqn,
-            return_tensorclass=False,,
+            return_tensorclass=False,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -7035,7 +7032,6 @@ class TestA2C(LossModuleTestBase):
             value,
             loss_critic_type="l2",
             functional=functional,
-            reduction=reduction,
         )
 
         # Check error is raised when actions require grads

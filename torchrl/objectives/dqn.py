@@ -27,7 +27,6 @@ from torchrl.modules.tensordict_module.common import ensure_tensordict_compatibl
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
-    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
