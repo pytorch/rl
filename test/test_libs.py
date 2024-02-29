@@ -2020,6 +2020,7 @@ class TestVmas:
         num_envs,
         n_workers,
         continuous_actions,
+        maybe_fork_ParallelEnv,
         n_agents=5,
         n_rollout_samples=3,
     ):
