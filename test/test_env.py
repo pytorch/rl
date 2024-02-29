@@ -2622,8 +2622,11 @@ def test_parallel_another_ctx():
         assert env.rollout(3) is not None
         assert env._workers[0]._start_method == other_sm
     finally:
-        env.close()
-        del env
+        try:
+            env.close()
+            del env
+        except RuntimeError:
+            pass
 
 
 if __name__ == "__main__":

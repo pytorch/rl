@@ -41,15 +41,15 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if $torch_cuda ; then
-    python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu121
+    python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118
   else
     python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
   if $torch_cuda ; then
-      pip3 install torch --index-url https://download.pytorch.org/whl/cpu
+      python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118
   else
-      pip3 install torch --index-url https://download.pytorch.org/whl/cu121
+      python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
   fi
 else
   printf "Failed to install pytorch"
