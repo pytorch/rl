@@ -610,10 +610,16 @@ class SliceSampler(Sampler):
             To be used whenever the ``end_key`` or ``traj_key`` is expensive to get,
             or when this signal is readily available. Must be used with ``cache_values=True``
             and cannot be used in conjunction with ``end_key`` or ``traj_key``.
+            If provided, it is assumed that the storage is at capacity and that
+            if the last element of the ``ends`` tensor is ``False``,
+            the same trajectory spans across end and beginning.
         trajectories (torch.Tensor, optional): a 1d integer tensor containing the run ids.
             To be used whenever the ``end_key`` or ``traj_key`` is expensive to get,
             or when this signal is readily available. Must be used with ``cache_values=True``
             and cannot be used in conjunction with ``end_key`` or ``traj_key``.
+            If provided, it is assumed that the storage is at capacity and that
+            if the last element of the trajectory tensor is identical to the first,
+            the same trajectory spans across end and beginning.
         cache_values (bool, optional): to be used with static datasets.
             Will cache the start and end signal of the trajectory.
         truncated_key (NestedKey, optional): If not ``None``, this argument
@@ -730,7 +736,7 @@ class SliceSampler(Sampler):
                     "To be used, trajectories requires `cache_values` to be set to `True`."
                 )
             vals = self._find_start_stop_traj(
-                trajectory=trajectories, at_capacity=storage._is_full
+                trajectory=trajectories, at_capacity=True,
             )
             self._cache["stop-and-length"] = vals
 
@@ -745,7 +751,7 @@ class SliceSampler(Sampler):
                 raise RuntimeError(
                     "To be used, ends requires `cache_values` to be set to `True`."
                 )
-            vals = self._find_start_stop_traj(end=ends, at_capacity=storage._is_full)
+            vals = self._find_start_stop_traj(end=ends, at_capacity=True)
             self._cache["stop-and-length"] = vals
 
         else:

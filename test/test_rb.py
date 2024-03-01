@@ -2681,7 +2681,7 @@ class TestRBMultidim:
             for t in transform:
                 rb.append_transform(t())
         try:
-            for i, data in enumerate(collector):
+            for i, data in enumerate(collector):  # noqa: B007
                 rb.extend(data)
                 if isinstance(rb, TensorDictReplayBuffer) and transform is not None:
                     # this should fail bc we can't set the indices after executing the transform.
@@ -2697,8 +2697,8 @@ class TestRBMultidim:
                 if transform is not None:
                     assert s.ndim == 2
         except Exception:
-            print(f"Failing at iter {i}")
-            print(f"rb {rb}")
+            print(f"Failing at iter {i}")  # noqa: T201
+            print(f"rb {rb}")  # noqa: T201
             raise
 
 
