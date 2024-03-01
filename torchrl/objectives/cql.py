@@ -837,7 +837,7 @@ class CQLLoss(LossModule):
         tensordict.set(self.tensor_keys.cql_q1_loss, cql_q1_loss)
         tensordict.set(self.tensor_keys.cql_q2_loss, cql_q2_loss)
 
-        cql_q_loss = cql_q1_loss + cql_q2_loss
+        cql_q_loss = (cql_q1_loss + cql_q2_loss).mean(-1)
         cql_q_loss = _reduce(cql_q_loss, reduction=self.reduction)
 
         return cql_q_loss, {}
