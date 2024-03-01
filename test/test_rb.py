@@ -1904,7 +1904,7 @@ class TestSamplers:
         )
 
         done = torch.zeros(100, 1, dtype=torch.bool)
-        done[torch.tensor([29, 54, 69])] = 1
+        done[torch.tensor([29, 54, 69, 99])] = 1
 
         data = TensorDict(
             {
