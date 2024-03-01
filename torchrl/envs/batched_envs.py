@@ -1052,6 +1052,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     """
 
     def _start_workers(self) -> None:
+        self._timeout = 10.0
+
         from torchrl.envs.env_creator import EnvCreator
 
         if self.num_threads is None:
@@ -1149,7 +1151,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         for i, channel in enumerate(self.parent_channels):
             channel.send(("load_state_dict", state_dict[f"worker{i}"]))
         for event in self._events:
-            event.wait()
+            event.wait(self._timeout)
             event.clear()
 
     @torch.no_grad()
@@ -1183,7 +1185,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         for i in range(self.num_workers):
             event = self._events[i]
-            event.wait()
+            event.wait(self._timeout)
             event.clear()
 
         # We must pass a clone of the tensordict, as the values of this tensordict
@@ -1246,7 +1248,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         for i in range(self.num_workers):
             event = self._events[i]
-            event.wait()
+            event.wait(self._timeout)
             event.clear()
 
         # We must pass a clone of the tensordict, as the values of this tensordict
@@ -1333,7 +1335,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         for i in workers:
             event = self._events[i]
-            event.wait()
+            event.wait(self._timeout)
             event.clear()
 
         selected_output_keys = self._selected_reset_keys_filt
@@ -1367,7 +1369,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 if self._verbose:
                     torchrl_logger.info(f"closing {i}")
                 channel.send(("close", None))
-                self._events[i].wait()
+                self._events[i].wait(self._timeout)
                 self._events[i].clear()
 
             del self.shared_tensordicts, self.shared_tensordict_parent
