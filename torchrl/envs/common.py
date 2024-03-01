@@ -2531,6 +2531,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     tensordict = tensordict.to(policy_device, non_blocking=True)
                 else:
                     tensordict.clear_device_()
+
+            if "state" in tensordict.keys() and "belief" in tensordict.keys():
+                tensordict["state"] = tensordict["state"].detach()
+                tensordict["belief"] = tensordict["belief"].detach()
             tensordict = policy(tensordict)
             if auto_cast_to_device:
                 if env_device is not None:

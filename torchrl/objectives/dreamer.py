@@ -16,7 +16,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
-    distance_loss,
+    # distance_loss,
     hold_out_net,
     ValueEstimators,
 )
@@ -127,25 +127,20 @@ class DreamerModelLoss(LossModule):
             tensordict.get(("next", self.tensor_keys.prior_std)),
             tensordict.get(("next", self.tensor_keys.posterior_mean)),
             tensordict.get(("next", self.tensor_keys.posterior_std)),
-        ).unsqueeze(-1)
-        reco_loss = distance_loss(
-            tensordict.get(("next", self.tensor_keys.pixels)),
-            tensordict.get(("next", self.tensor_keys.reco_pixels)),
-            self.reco_loss,
         )
-        if not self.global_average:
-            reco_loss = reco_loss.sum((-3, -2, -1))
-        reco_loss = reco_loss.mean().unsqueeze(-1)
 
-        reward_loss = distance_loss(
-            tensordict.get(("next", self.tensor_keys.true_reward)),
-            tensordict.get(("next", self.tensor_keys.reward)),
-            self.reward_loss,
-        )
-        if not self.global_average:
-            reward_loss = reward_loss.squeeze(-1)
-        reward_loss = reward_loss.mean().unsqueeze(-1)
-        # import ipdb; ipdb.set_trace()
+        decoder = self.world_model[0][-1]
+        dist = decoder.get_dist(tensordict)
+        reco_loss = -dist.log_prob(
+            tensordict.get(("next", self.tensor_keys.pixels))
+        ).mean()
+
+        reward_model = self.world_model[1]
+        dist = reward_model.get_dist(tensordict)
+        reward_loss = -dist.log_prob(
+            tensordict.get(("next", self.tensor_keys.true_reward))
+        ).mean()
+
         return (
             TensorDict(
                 {
@@ -170,14 +165,8 @@ class DreamerModelLoss(LossModule):
             + (posterior_std**2 + (prior_mean - posterior_mean) ** 2)
             / (2 * prior_std**2)
             - 0.5
-        )
-        if not self.global_average:
-            kl = kl.sum(-1)
-        if self.delayed_clamp:
-            kl = kl.mean().clamp_min(self.free_nats)
-        else:
-            kl = kl.clamp_min(self.free_nats).mean()
-        return kl
+        ).mean()
+        return kl.clamp_min(self.free_nats)
 
 
 class DreamerActorLoss(LossModule):
@@ -235,7 +224,7 @@ class DreamerActorLoss(LossModule):
         model_based_env: DreamerEnv,
         *,
         imagination_horizon: int = 15,
-        discount_loss: bool = False,  # for consistency with paper
+        discount_loss: bool = True,  # for consistency with paper
         gamma: int = None,
         lmbda: int = None,
     ):
@@ -258,13 +247,24 @@ class DreamerActorLoss(LossModule):
 
     def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
         with torch.no_grad():
+            # TODO: I think we need to take the "next" state and "next" beliefs
             tensordict = tensordict.select("state", self.tensor_keys.belief)
             tensordict = tensordict.reshape(-1)
 
+            # td = tensordict.select(("next", self.tensor_keys.state), ("next", self.tensor_keys.belief))
+            # td = td.rename_key_(("next", "state"), "state")
+            # td = td.rename_key_(("next", "belief"), "belief")
+            # td = td.reshape(-1)
+
+        # TODO: do we need exploration here?
         with hold_out_net(self.model_based_env), set_exploration_type(
-            ExplorationType.RANDOM
+            ExplorationType.MEAN
         ):
+            # action_td = self.actor_model(td)
+
+            # TODO: we are not using the actual batch beliefs as starting ones - should be solved! took of the primer for the mb_env
             tensordict = self.model_based_env.reset(tensordict.clone(recurse=False))
+            # TODO: do we detach state gradients when passing again for new actions: action = self.actor(state.detach())
             fake_data = self.model_based_env.rollout(
                 max_steps=self.imagination_horizon,
                 policy=self.actor_model,
@@ -289,9 +289,9 @@ class DreamerActorLoss(LossModule):
             discount = gamma.expand(lambda_target.shape).clone()
             discount[..., 0, :] = 1
             discount = discount.cumprod(dim=-2)
-            actor_loss = -(lambda_target * discount).sum((-2, -1)).mean()
+            actor_loss = -(lambda_target * discount).mean()
         else:
-            actor_loss = -lambda_target.sum((-2, -1)).mean()
+            actor_loss = -lambda_target.mean()
         loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
         return loss_tensordict, fake_data.detach()
 
@@ -340,6 +340,7 @@ class DreamerActorLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
+                vectorized=False,  # TODO: vectorized version seems not to be similar to the non vectoried
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
@@ -389,7 +390,7 @@ class DreamerValueLoss(LossModule):
         self,
         value_model: TensorDictModule,
         value_loss: Optional[str] = None,
-        discount_loss: bool = False,  # for consistency with paper
+        discount_loss: bool = True,  # for consistency with paper
         gamma: int = 0.99,
     ):
         super().__init__()
@@ -403,36 +404,20 @@ class DreamerValueLoss(LossModule):
 
     def forward(self, fake_data) -> torch.Tensor:
         lambda_target = fake_data.get("lambda_target")
-        tensordict_select = fake_data.select(*self.value_model.in_keys)
-        self.value_model(tensordict_select)
+        # TODO: I think this should be next state and belief
+        td = fake_data.select(("next", "state"), ("next", "belief"))
+        td = td.rename_key_(("next", "state"), "state")
+        tensordict_select = td.rename_key_(("next", "belief"), "belief")
+        # tensordict_select = fake_data.select(*self.value_model.in_keys)
+        dist = self.value_model.get_dist(tensordict_select)
         if self.discount_loss:
             discount = self.gamma * torch.ones_like(
                 lambda_target, device=lambda_target.device
             )
             discount[..., 0, :] = 1
             discount = discount.cumprod(dim=-2)
-            value_loss = (
-                (
-                    discount
-                    * distance_loss(
-                        tensordict_select.get(self.tensor_keys.value),
-                        lambda_target,
-                        self.value_loss,
-                    )
-                )
-                .sum((-1, -2))
-                .mean()
-            )
+            value_loss = -(discount * dist.log_prob(lambda_target).unsqueeze(-1)).mean()
         else:
-            value_loss = (
-                distance_loss(
-                    tensordict_select.get(self.tensor_keys.value),
-                    lambda_target,
-                    self.value_loss,
-                )
-                .sum((-1, -2))
-                .mean()
-            )
-
+            value_loss = -dist.log_prob(lambda_target).mean()
         loss_tensordict = TensorDict({"loss_value": value_loss}, [])
         return loss_tensordict, fake_data
