@@ -2680,19 +2680,26 @@ class TestRBMultidim:
         if transform:
             for t in transform:
                 rb.append_transform(t())
-        for data in collector:
-            rb.extend(data)
-            if isinstance(rb, TensorDictReplayBuffer) and transform is not None:
-                # this should fail bc we can't set the indices after executing the transform.
-                with pytest.raises(RuntimeError, match="Failed to set the metadata"):
-                    rb.sample()
-                return
-            s = rb.sample()
-            rbtot = rb[:]
-            assert rbtot.shape[0] == 2
-            assert len(rb) == rbtot.numel()
-            if transform is not None:
-                assert s.ndim == 2
+        try:
+            for i, data in enumerate(collector):
+                rb.extend(data)
+                if isinstance(rb, TensorDictReplayBuffer) and transform is not None:
+                    # this should fail bc we can't set the indices after executing the transform.
+                    with pytest.raises(
+                        RuntimeError, match="Failed to set the metadata"
+                    ):
+                        rb.sample()
+                    return
+                s = rb.sample()
+                rbtot = rb[:]
+                assert rbtot.shape[0] == 2
+                assert len(rb) == rbtot.numel()
+                if transform is not None:
+                    assert s.ndim == 2
+        except Exception:
+            print(f"Failing at iter {i}")
+            print(f"rb {rb}")
+            raise
 
 
 if __name__ == "__main__":

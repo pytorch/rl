@@ -729,7 +729,9 @@ class SliceSampler(Sampler):
                 raise RuntimeError(
                     "To be used, trajectories requires `cache_values` to be set to `True`."
                 )
-            vals = self._find_start_stop_traj(trajectory=trajectories)
+            vals = self._find_start_stop_traj(
+                trajectory=trajectories, at_capacity=storage._is_full
+            )
             self._cache["stop-and-length"] = vals
 
         elif ends is not None:
@@ -743,7 +745,7 @@ class SliceSampler(Sampler):
                 raise RuntimeError(
                     "To be used, ends requires `cache_values` to be set to `True`."
                 )
-            vals = self._find_start_stop_traj(end=ends)
+            vals = self._find_start_stop_traj(end=ends, at_capacity=storage._is_full)
             self._cache["stop-and-length"] = vals
 
         else:
@@ -761,7 +763,7 @@ class SliceSampler(Sampler):
             )
 
     @staticmethod
-    def _find_start_stop_traj(*, trajectory=None, end=None):
+    def _find_start_stop_traj(*, trajectory=None, end=None, at_capacity: bool):
         if trajectory is not None:
             # slower
             # _, stop_idx = torch.unique_consecutive(trajectory, return_counts=True)
@@ -780,14 +782,21 @@ class SliceSampler(Sampler):
             # TODO: check that storage is at capacity here, if not we need to assume that the last element of end is True
 
             # We presume that not done at the end means that the traj spans across end and beginning of storage
-            # end = torch.index_fill(
-            #     end,
-            #     index=torch.tensor(-1, device=end.device, dtype=torch.long),
-            #     dim=0,
-            #     value=1,
-            # )
             length = end.shape[0]
 
+        if not at_capacity:
+            end = torch.index_fill(
+                end,
+                index=torch.tensor(-1, device=end.device, dtype=torch.long),
+                dim=0,
+                value=1,
+            )
+        elif not end.any(0).all():
+            # we must have at least one end by traj to delimitate trajectories
+            # so if no end can be found we set it manually
+            mask = ~end.any(0, True)
+            mask = torch.cat([torch.zeros_like(end[:-1]), mask])
+            end = torch.masked_fill(mask, end, 1)
         ndim = end.ndim
         if ndim == 0:
             raise RuntimeError(
@@ -866,7 +875,9 @@ class SliceSampler(Sampler):
                         raise RuntimeError(
                             "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                         )
-                vals = self._find_start_stop_traj(trajectory=trajectory)
+                vals = self._find_start_stop_traj(
+                    trajectory=trajectory, at_capacity=storage._is_full
+                )
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals
                 return vals
@@ -884,7 +895,9 @@ class SliceSampler(Sampler):
                     raise RuntimeError(
                         "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                     )
-                vals = self._find_start_stop_traj(end=done.squeeze()[: len(storage)])
+                vals = self._find_start_stop_traj(
+                    end=done.squeeze()[: len(storage)], at_capacity=storage._is_full
+                )
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals
                 return vals
