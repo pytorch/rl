@@ -1995,6 +1995,35 @@ class TestSamplers:
         truncated = info[("next", "truncated")]
         assert truncated.view(num_slices, -1)[:, -1].all()
 
+    @pytest.mark.parametrize("sampler", [SliceSampler, SliceSamplerWithoutReplacement])
+    def test_slice_sampler_at_capacity(self, sampler):
+        torch.manual_seed(0)
+
+        trajectory0 = torch.tensor([3, 3, 0, 1, 1, 1, 2, 2, 2, 3])
+        trajectory1 = torch.arange(2).repeat_interleave(5)
+        trajectory = torch.stack([trajectory0, trajectory1], 0)
+
+        td = TensorDict(
+            {"trajectory": trajectory, "steps": torch.arange(10).expand(2, 10)}, [2, 10]
+        )
+
+        rb = ReplayBuffer(
+            sampler=sampler(traj_key="trajectory", num_slices=2),
+            storage=LazyTensorStorage(20, ndim=2),
+            batch_size=6,
+        )
+
+        rb.extend(td)
+
+        for s in rb:
+            if (s["steps"] == 9).any():
+                n = (s["steps"] == 9).nonzero()
+                assert ((s["steps"] == 0).nonzero() == n + 1).all()
+                assert ((s["steps"] == 1).nonzero() == n + 2).all()
+                break
+        else:
+            raise AssertionError
+
     def test_slice_sampler_errors(self):
         device = "cpu"
         batch_size, num_slices = 100, 20

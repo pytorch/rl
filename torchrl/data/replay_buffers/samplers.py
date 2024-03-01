@@ -625,7 +625,8 @@ class SliceSampler(Sampler):
             returned by the :meth:`~torchrl.data.replay_buffers.ReplayBuffer.sample` method).
         strict_length (bool, optional): if ``False``, trajectories of length
             shorter than `slice_len` (or `batch_size // num_slices`) will be
-            allowed to appear in the batch.
+            allowed to appear in the batch. If ``True``, trajectories shorted
+            than required will be filtered out.
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
@@ -776,6 +777,8 @@ class SliceSampler(Sampler):
             end = torch.cat([end, trajectory[-1:] != trajectory[:1]], 0)
             length = trajectory.shape[0]
         else:
+            # TODO: check that storage is at capacity here, if not we need to assume that the last element of end is True
+
             # We presume that not done at the end means that the traj spans across end and beginning of storage
             # end = torch.index_fill(
             #     end,
@@ -792,14 +795,21 @@ class SliceSampler(Sampler):
             )
         # Using transpose ensures the start and stop are sorted the same way
         stop_idx = end.transpose(0, -1).nonzero()
-        beginnings = torch.cat([end[-1:], end[:-1]], 0)
-        start_idx = beginnings.transpose(0, -1).nonzero()
-        start_idx = torch.cat([start_idx[:, -1:], start_idx[:, :-1]], -1)
+        # beginnings = torch.cat([end[-1:], end[:-1]], 0)
+        # start_idx = beginnings.transpose(0, -1).nonzero()
+        # start_idx = torch.cat([start_idx[:, -1:], start_idx[:, :-1]], -1)
         stop_idx = torch.cat([stop_idx[:, -1:], stop_idx[:, :-1]], -1)
+        start_idx = stop_idx.clone()
+        start_idx[:, 0] += 1
+        start_idx[:, 0] %= end.shape[0]
         # shift start and stop if needed
-        should_shift = (start_idx > stop_idx).any(0)
-        start_idx[:, should_shift] = torch.roll(start_idx[:, should_shift], 1)
-
+        start_idx_mask = (start_idx[1:, 1:] == start_idx[:-1, 1:]).all(-1)
+        m1 = torch.cat([torch.zeros_like(start_idx_mask[:1]), start_idx_mask])
+        m2 = torch.cat([start_idx_mask, torch.zeros_like(start_idx_mask[:1])])
+        start_idx_replace = torch.empty_like(start_idx)
+        start_idx_replace[m1] = start_idx[m2]
+        start_idx_replace[~m1] = start_idx[~m2]
+        start_idx = start_idx_replace
         lengths = stop_idx[:, 0] - start_idx[:, 0] + 1
         lengths[lengths < 0] = lengths[lengths < 0] + length
         return start_idx, stop_idx, lengths
@@ -920,36 +930,64 @@ class SliceSampler(Sampler):
 
     def _sample_slices(
         self,
-        lengths,
-        start_idx,
-        stop_idx,
-        seq_length,
-        num_slices,
-        storage_length,
-        traj_idx=None,
+        lengths: torch.Tensor,
+        start_idx: torch.Tensor,
+        stop_idx: torch.Tensor,
+        seq_length: int,
+        num_slices: int,
+        storage_length: int,
+        traj_idx: torch.Tensor | None = None,
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, Any]]:
+        def get_traj_idx(lengths=lengths):
+            return torch.randint(lengths.shape[0], (num_slices,), device=lengths.device)
+
         if (lengths < seq_length).any():
             if self.strict_length:
                 idx = lengths == seq_length
+                if not idx.any():
+                    raise RuntimeError(
+                        "Did not find a single trajectory with sufficient length."
+                    )
                 if (
                     isinstance(seq_length, torch.Tensor)
                     and seq_length.shape == lengths.shape
                 ):
                     seq_length = seq_length[idx]
-                lengths = lengths[idx]
+                lengths_idx = lengths[idx]
                 start_idx = start_idx[idx]
                 stop_idx = stop_idx[idx]
+
+                if traj_idx is None:
+                    traj_idx = get_traj_idx(lengths=lengths_idx)
+                else:
+                    # Here we must filter out the indices that correspond to trajectories
+                    # we don't want to keep. That could potentially lead to an empty sample
+                    idx_mask = torch.zeros_like(idx)
+                    idx_mask[traj_idx] = True
+                    traj_idx = idx_mask[idx].nonzero().squeeze(-1)
+                    if not traj_idx.numel():
+                        raise RuntimeError(
+                            "None of the provided indices pointed to a trajectory of "
+                            "sufficient length. Consider using strict_length=False for the "
+                            "sampler instead."
+                        )
+                    num_slices = traj_idx.shape[0]
+
                 del idx
+                lengths = lengths_idx
             else:
+                if traj_idx is None:
+                    traj_idx = get_traj_idx()
+                else:
+                    num_slices = traj_idx.shape[0]
+
                 # make seq_length a tensor with values clamped by lengths
                 seq_length = lengths[traj_idx].clamp_max(seq_length)
-
-        if traj_idx is None:
-            traj_idx = torch.randint(
-                lengths.shape[0], (num_slices,), device=lengths.device
-            )
         else:
-            num_slices = traj_idx.shape[0]
+            if traj_idx is None:
+                traj_idx = get_traj_idx()
+            else:
+                num_slices = traj_idx.shape[0]
 
         relative_starts = (
             (
@@ -961,7 +999,7 @@ class SliceSampler(Sampler):
         )
         starts = torch.cat(
             [
-                start_idx[traj_idx, :1] + relative_starts.unsqueeze(-1),
+                (start_idx[traj_idx, 0] + relative_starts).unsqueeze(1),
                 start_idx[traj_idx, 1:],
             ],
             1,
@@ -1078,7 +1116,8 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             returned by the :meth:`~torchrl.data.replay_buffers.ReplayBuffer.sample` method).
         strict_length (bool, optional): if ``False``, trajectories of length
             shorter than `slice_len` (or `batch_size // num_slices`) will be
-            allowed to appear in the batch.
+            allowed to appear in the batch. If ``True``, trajectories shorted
+            than required will be filtered out.
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
@@ -1265,7 +1304,8 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             returned by the :meth:`~torchrl.data.replay_buffers.ReplayBuffer.sample` method).
         strict_length (bool, optional): if ``False``, trajectories of length
             shorter than `slice_len` (or `batch_size // num_slices`) will be
-            allowed to appear in the batch.
+            allowed to appear in the batch. If ``True``, trajectories shorted
+            than required will be filtered out.
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
@@ -1416,7 +1456,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         info["_weight"] = torch.as_tensor(info["_weight"], device=lengths.device)
 
         # extends starting indices of each slice with sequence_length to get indices of all steps
-        index = self._tensor_slices_from_startend(seq_length, starts)
+        index = self._tensor_slices_from_startend(
+            seq_length, starts, storage_length=storage.shape[0]
+        )
 
         # repeat the weight of each slice to match the number of steps
         info["_weight"] = torch.repeat_interleave(info["_weight"], seq_length)
