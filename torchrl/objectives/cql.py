@@ -1252,6 +1252,6 @@ class DiscreteCQLLoss(LossModule):
         else:
             q_a = (qvalues * current_action).sum(dim=-1, keepdim=True)
 
-        cql_loss = logsumexp - q_a
-        cql_loss = _reduce(cql_loss, reduction=self.reduction)
-        return cql_loss, {}
+        loss_cql = (logsumexp - q_a).squeeze()
+        loss_cql = _reduce(loss_cql, reduction=self.reduction)
+        return loss_cql, {}
