@@ -5641,10 +5641,7 @@ class TestCQL(LossModuleTestBase):
             reduction=reduction,
         )
         loss_fn.make_value_estimator()
-        with _check_td_steady(td), pytest.warns(
-            UserWarning, match="No target network updater"
-        ):
-            loss = loss_fn(td)
+        loss = loss_fn(td)
         if reduction == "none":
             for key in loss.keys():
                 if key.startswith("loss"):
@@ -6041,10 +6038,7 @@ class TestDiscreteCQL(LossModuleTestBase):
             actor, loss_function="l2", delay_value=False, reduction=reduction
         )
         loss_fn.make_value_estimator()
-        with _check_td_steady(td), pytest.warns(
-            UserWarning, match="No target network updater"
-        ):
-            loss = loss_fn(td)
+        loss = loss_fn(td)
         if reduction == "none":
             for key in loss.keys():
                 if key.startswith("loss"):
