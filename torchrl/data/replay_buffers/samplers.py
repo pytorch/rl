@@ -799,10 +799,16 @@ class SliceSampler(Sampler):
         # start_idx = beginnings.transpose(0, -1).nonzero()
         # start_idx = torch.cat([start_idx[:, -1:], start_idx[:, :-1]], -1)
         stop_idx = torch.cat([stop_idx[:, -1:], stop_idx[:, :-1]], -1)
+        # First build the start indices as the stop + 1, we'll shift it later
         start_idx = stop_idx.clone()
         start_idx[:, 0] += 1
         start_idx[:, 0] %= end.shape[0]
-        # shift start and stop if needed
+        # shift start: to do this, we check when the non-first dim indices are identical
+        # and get a mask like [False, True, True, False, True, ...] where False means
+        # that there's a switch from one dim to another (ie, a switch from one element of the batch
+        # to another). We roll this one step along the time dimension and these two
+        # masks provide us with the indices of the permutation matrix we need
+        # to apply to start_idx.
         start_idx_mask = (start_idx[1:, 1:] == start_idx[:-1, 1:]).all(-1)
         m1 = torch.cat([torch.zeros_like(start_idx_mask[:1]), start_idx_mask])
         m2 = torch.cat([start_idx_mask, torch.zeros_like(start_idx_mask[:1])])
@@ -961,7 +967,11 @@ class SliceSampler(Sampler):
                     traj_idx = get_traj_idx(lengths=lengths_idx)
                 else:
                     # Here we must filter out the indices that correspond to trajectories
-                    # we don't want to keep. That could potentially lead to an empty sample
+                    # we don't want to keep. That could potentially lead to an empty sample.
+                    # The difficulty with this adjustment is that traj_idx points to a full
+                    # sequences of lengths, but we filter out part of it so we must
+                    # convert traj_idx to a boolean mask, index this mask with the
+                    # valid indices and then recover the nonzero.
                     idx_mask = torch.zeros_like(idx)
                     idx_mask[traj_idx] = True
                     traj_idx = idx_mask[idx].nonzero().squeeze(-1)
