@@ -417,9 +417,9 @@ class IQLLoss(LossModule):
 
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
-        loss_actor = -(exp_a * log_prob), {}
+        loss_actor = -(exp_a * log_prob)
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
-        return loss_actor
+        return loss_actor, {}
 
     def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         # Min Q value

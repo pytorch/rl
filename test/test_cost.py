@@ -5641,7 +5641,10 @@ class TestCQL(LossModuleTestBase):
             reduction=reduction,
         )
         loss_fn.make_value_estimator()
-        loss = loss_fn(td)
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            loss = loss_fn(td)
         if reduction == "none":
             for key in loss.keys():
                 if key.startswith("loss"):
@@ -6038,7 +6041,10 @@ class TestDiscreteCQL(LossModuleTestBase):
             actor, loss_function="l2", delay_value=False, reduction=reduction
         )
         loss_fn.make_value_estimator()
-        loss = loss_fn(td)
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            loss = loss_fn(td)
         if reduction == "none":
             for key in loss.keys():
                 if key.startswith("loss"):
@@ -8806,14 +8812,9 @@ class TestDT(LossModuleTestBase):
         loss_fn = DTLoss(actor, reduction=reduction)
         loss = loss_fn(td)
         if reduction == "none":
-            for key in loss.keys():
-                if key.startswith("loss"):
-                    assert loss[key].shape == td.shape
+            assert loss["loss"].shape == td["action"].shape
         else:
-            for key in loss.keys():
-                if not key.startswith("loss"):
-                    continue
-                assert loss[key].shape == torch.Size([])
+            assert loss["loss"].shape == torch.Size([])
 
 
 @pytest.mark.skipif(
@@ -9611,7 +9612,10 @@ class TestIQL(LossModuleTestBase):
             reduction=reduction,
         )
         loss_fn.make_value_estimator()
-        loss = loss_fn(td)
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            loss = loss_fn(td)
         if reduction == "none":
             for key in loss.keys():
                 if key.startswith("loss"):
@@ -10427,7 +10431,10 @@ class TestDiscreteIQL(LossModuleTestBase):
             reduction=reduction,
         )
         loss_fn.make_value_estimator()
-        loss = loss_fn(td)
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            loss = loss_fn(td)
         if reduction == "none":
             for key in loss.keys():
                 if key.startswith("loss"):
