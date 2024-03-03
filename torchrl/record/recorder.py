@@ -61,7 +61,7 @@ class VideoRecorder(ObservationTransform):
         >>> env = TransformedEnv(base_env, VideoRecorder(logger=logger, tag="run_video"))
         >>> env.rollout(100)
 
-        All transforms have a dump function, mostly a no-op except for ``VideoRecorder``, and :class:`~torchrl.envs.transforms.Composite`
+        All transforms have a dump function, mostly a no-op except for ``VideoRecorder``, and :class:`~torchrl.envs.transforms.Compose`
         which will dispatch the `dumps` to all its members.
 
         >>> env.transform.dump()
