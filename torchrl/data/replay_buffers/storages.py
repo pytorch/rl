@@ -509,7 +509,11 @@ class TensorStorage(Storage):
         # returns the length of the buffer along dim0
         len_along_dim = len(self)
         if self.ndim:
-            len_along_dim = len_along_dim // self._total_shape[1:].numel()
+            _total_shape = self._total_shape
+            if _total_shape is not None:
+                len_along_dim = len_along_dim // _total_shape[1:].numel()
+            else:
+                return None
         return len_along_dim
 
     def _max_size_along_dim0(self, *, single_data=None, batched_data=None):
@@ -555,6 +559,8 @@ class TensorStorage(Storage):
     def flatten(self):
         if self.ndim == 1:
             return self
+        if not self.initialized:
+            raise RuntimeError("Cannot flatten a non-initialized storage.")
         if is_tensor_collection(self._storage):
             if self._is_full:
                 return TensorStorage(self._storage.flatten(0, self.ndim - 1))
@@ -773,6 +779,8 @@ class TensorStorage(Storage):
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         _storage = self._storage
         is_tc = is_tensor_collection(_storage)
+        if not self.initialized:
+            raise RuntimeError("Cannot get elements out of a non-initialized storage.")
         if not self._is_full:
             if is_tc:
                 storage = self._storage[: self._len_along_dim0]
@@ -803,7 +811,9 @@ class TensorStorage(Storage):
         )
 
     def __repr__(self):
-        if is_tensor_collection(self._storage):
+        if not self.initialized:
+            storage_str = textwrap.indent("data=<empty>", 4 * " ")
+        elif is_tensor_collection(self._storage):
             storage_str = textwrap.indent(f"data={self[:]}", 4 * " ")
         else:
 
