@@ -498,7 +498,8 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             if not os.listdir(tempdir):
                 os.makedirs(tempdir, exist_ok=True)
                 # get the list of runs
-                command = f"gsutil -m ls -R gs://atari-replay-datasets/dqn/{self.dataset_id}/replay_logs"
+                command = f"gsutil ls -R gs://atari-replay-datasets/dqn/{self.dataset_id}/replay_logs"
+                # command = f"gsutil -m ls -R gs://atari-replay-datasets/dqn/{self.dataset_id}/replay_logs"
                 output = subprocess.run(
                     command, shell=True, capture_output=True
                 )  # , stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -508,7 +509,11 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                     if file.endswith(b".gz")
                 ]
                 self.remote_gz_files = self._list_runs(None, files)
-                total_runs = list(self.remote_gz_files)[-1]
+                remote_gz_files = list(self.remote_gz_files)
+                if not len(remote_gz_files):
+                    raise RuntimeError("Could not load the file list.")
+
+                total_runs = remote_gz_files[-1]
                 if self.num_procs == 0:
                     for run, run_files in self.remote_gz_files.items():
                         self._download_and_proc_split(
@@ -622,7 +627,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         return key
 
     @classmethod
-    def _list_runs(cls, download_path, gz_files=None):
+    def _list_runs(cls, download_path, gz_files=None) -> dict:
         path = download_path
         if gz_files is None:
             gz_files = []
