@@ -216,7 +216,7 @@ class RoundRobinWriter(Writer):
         self.__dict__.update(state)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(cursor={int(self._cursor)}, full_storage={self._storage.is_full})"
+        return f"{self.__class__.__name__}(cursor={int(self._cursor)}, full_storage={self._storage._is_full})"
 
 
 class TensorDictRoundRobinWriter(RoundRobinWriter):
@@ -530,7 +530,7 @@ class TensorDictMaxValueWriter(Writer):
         raise NotImplementedError
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(cursor={int(self._cursor)}, full_storage={self._storage.is_full}, rank_key={self._rank_key}, reduction={self._reduction})"
+        return f"{self.__class__.__name__}(cursor={int(self._cursor)}, full_storage={self._storage._is_full}, rank_key={self._rank_key}, reduction={self._reduction})"
 
 
 class WriterEnsemble(Writer):

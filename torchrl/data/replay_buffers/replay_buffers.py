@@ -329,10 +329,21 @@ class ReplayBuffer:
             return len(self._storage)
 
     def __repr__(self) -> str:
-        storages = textwrap.indent(f"storages={self._storage}", " " * 4)
-        writers = textwrap.indent(f"writers={self._writer}", " " * 4)
-        samplers = textwrap.indent(f"samplers={self._sampler}", " " * 4)
-        return f"{self.__class__.__name__}(\n{storages}, \n{samplers}, \n{writers}, \nbatch_size={self._batch_size}, \ntransform={self._transform}, \ncollate_fn={self._collate_fn})"
+        from torchrl.envs.transforms import Compose
+
+        storage = textwrap.indent(f"storage={self._storage}", " " * 4)
+        writer = textwrap.indent(f"writer={self._writer}", " " * 4)
+        sampler = textwrap.indent(f"sampler={self._sampler}", " " * 4)
+        if self._transform is not None and not (
+            isinstance(self._transform, Compose) and not len(self._transform)
+        ):
+            transform = textwrap.indent(f"transform={self._transform}", " " * 4)
+            transform = f"\n{self._transform}, "
+        else:
+            transform = ""
+        batch_size = textwrap.indent(f"batch_size={self._batch_size}", " " * 4)
+        collate_fn = textwrap.indent(f"collate_fn={self._collate_fn}", " " * 4)
+        return f"{self.__class__.__name__}(\n{storage}, \n{sampler}, \n{writer}, {transform}\n{batch_size}, \n{collate_fn})"
 
     @pin_memory_output
     def __getitem__(self, index: int | torch.Tensor | NestedKey) -> Any:
