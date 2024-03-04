@@ -677,7 +677,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             mmap.memmap_like(tmpdir, num_threads=32)
 
             def func(mmap):
-                idx = mmap["_indices"]
+                idx = mmap["_indices"].squeeze()
                 orig = self[idx]
                 mmap.update(fn(orig), inplace=True)
                 return
