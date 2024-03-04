@@ -28,7 +28,7 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with cu121"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install 'mpmath<1.4'' --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      pip3 install 'mpmath<1.4' --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
       pip3 install 'mpmath<1.4' --pre torch --index-url https://download.pytorch.org/whl/nightly/cu121 -U
   fi
