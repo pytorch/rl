@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import abc
 import json
@@ -17,9 +18,9 @@ from typing import Any, Dict, List, Sequence, Union
 import numpy as np
 import tensordict
 import torch
-from tensordict import is_tensor_collection, is_tensorclass, TensorDict, TensorDictBase
+from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.memmap import MemmapTensor, MemoryMappedTensor
-from tensordict.utils import _STRDTYPE2DTYPE, expand_right
+from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
 
 from torch.utils._pytree import LeafSpec, tree_flatten, tree_map, tree_unflatten
@@ -30,7 +31,7 @@ from torchrl._utils import (
     logger as torchrl_logger,
     VERBOSE,
 )
-from torchrl.data.replay_buffers.utils import INT_CLASSES
+from torchrl.data.replay_buffers.utils import _is_int, INT_CLASSES
 
 try:
     from torchsnapshot.serialization import tensor_from_memoryview
@@ -55,8 +56,14 @@ class Storage:
 
     """
 
+    ndim = 1
+
     def __init__(self, max_size: int) -> None:
         self.max_size = int(max_size)
+
+    @property
+    def _is_full(self):
+        return len(self) == self.max_size
 
     @property
     def _attached_entities(self):
@@ -125,6 +132,40 @@ class Storage:
     @abc.abstractmethod
     def _empty(self):
         ...
+
+    def _rand_given_ndim(self, batch_size):
+        # a method to return random indices given the storage ndim
+        if self.ndim == 1:
+            return torch.randint(0, len(self), (batch_size,))
+        raise RuntimeError(
+            f"Random number generation is not implemented for storage of type {type(self)} with ndim {self.ndim}. "
+            f"Please report this exception as well as the use case (incl. buffer construction) on github."
+        )
+
+    @property
+    def shape(self):
+        if self.ndim == 1:
+            return torch.Size([self.max_size])
+        raise RuntimeError(
+            f"storage.shape is not supported for storages of type {type(self)} when ndim > 1."
+            f"Please report this exception as well as the use case (incl. buffer construction) on github."
+        )
+
+    def _max_size_along_dim0(self, *, single_data=None, batched_data=None):
+        if self.ndim == 1:
+            return self.max_size
+        raise RuntimeError(
+            f"storage._max_size_along_dim0 is not supported for storages of type {type(self)} when ndim > 1."
+            f"Please report this exception as well as the use case (incl. buffer construction) on github."
+        )
+
+    def flatten(self):
+        if self.ndim == 1:
+            return self
+        raise RuntimeError(
+            f"storage.flatten is not supported for storages of type {type(self)} when ndim > 1."
+            f"Please report this exception as well as the use case (incl. buffer construction) on github."
+        )
 
 
 class ListStorage(Storage):
@@ -245,6 +286,9 @@ class ListStorage(Storage):
         state = copy(self.__dict__)
         return state
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(items=[{self._storage[0]}, ...])"
+
 
 class TensorStorage(Storage):
     """A storage for tensors and tensordicts.
@@ -253,6 +297,8 @@ class TensorStorage(Storage):
         storage (tensor or TensorDict): the data buffer to be used.
         max_size (int): size of the storage, i.e. maximum number of elements stored
             in the buffer.
+
+    Keyword Args:
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is :obj:`torch.device("cpu")`.
             If "auto" is passed, the device is automatically gathered from the
@@ -307,12 +353,15 @@ class TensorStorage(Storage):
 
     """
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._storage = None
-        return super().__new__(cls)
+    _storage = None
 
-    def __init__(self, storage, max_size=None, device="cpu"):
+    def __init__(
+        self,
+        storage,
+        max_size=None,
+        *,
+        device: torch.device = "cpu",
+    ):
         if not ((storage is None) ^ (max_size is None)):
             if storage is None:
                 raise ValueError("Expected storage to be non-null.")
@@ -326,6 +375,7 @@ class TensorStorage(Storage):
                 max_size = storage.shape[0]
             else:
                 max_size = tree_flatten(storage)[0][0].shape[0]
+        self.ndim = 1
         super().__init__(max_size)
         self.initialized = storage is not None
         if self.initialized:
@@ -431,6 +481,98 @@ class TensorStorage(Storage):
             _len_value = self._len_value = mp.Value("i", 0)
         _len_value.value = value
 
+    @property
+    def _total_shape(self):
+        # Total shape, irrespective of how full the storage is
+        _total_shape = self.__dict__.get("_total_shape_value", None)
+        if _total_shape is None and self.initialized:
+            if is_tensor_collection(self._storage):
+                _total_shape = self._storage.shape[: self.ndim]
+            else:
+                leaf, *_ = torch.utils._pytree.tree_leaves(self._storage)
+                _total_shape = leaf.shape[: self.ndim]
+            self.__dict__["_total_shape_value"] = _total_shape
+        return _total_shape
+
+    @property
+    def _is_full(self):
+        # whether the storage is full
+        return len(self) == self.max_size
+
+    @property
+    def _len_along_dim0(self):
+        # returns the length of the buffer along dim0
+        len_along_dim = len(self)
+        if self.ndim:
+            _total_shape = self._total_shape
+            if _total_shape is not None:
+                len_along_dim = len_along_dim // _total_shape[1:].numel()
+            else:
+                return None
+        return len_along_dim
+
+    def _max_size_along_dim0(self, *, single_data=None, batched_data=None):
+        # returns the max_size of the buffer along dim0
+        max_size = self.max_size
+        if self.ndim:
+            shape = self.shape
+            if shape is None:
+                if single_data is not None:
+                    data = single_data
+                elif batched_data is not None:
+                    data = batched_data
+                else:
+                    raise ValueError("single_data or batched_data must be passed.")
+                if is_tensor_collection(data):
+                    datashape = data.shape[: self.ndim]
+                else:
+                    for leaf in torch.utils._pytree.tree_leaves(data):
+                        datashape = leaf.shape[: self.ndim]
+                        break
+                if batched_data is not None:
+                    datashape = datashape[1:]
+                max_size = max_size // datashape.numel()
+            else:
+                max_size = max_size // self._total_shape[1:].numel()
+        return max_size
+
+    @property
+    def shape(self):
+        # Shape, turncated where needed to accomodate for the length of the storage
+        if self._is_full:
+            return self._total_shape
+        _total_shape = self._total_shape
+        if _total_shape is not None:
+            return torch.Size([self._len_along_dim0] + list(_total_shape[1:]))
+
+    def _rand_given_ndim(self, batch_size):
+        if self.ndim == 1:
+            return super()._rand_given_ndim(batch_size)
+        shape = self.shape
+        return tuple(torch.randint(_dim, (batch_size,)) for _dim in shape)
+
+    def flatten(self):
+        if self.ndim == 1:
+            return self
+        if not self.initialized:
+            raise RuntimeError("Cannot flatten a non-initialized storage.")
+        if is_tensor_collection(self._storage):
+            if self._is_full:
+                return TensorStorage(self._storage.flatten(0, self.ndim - 1))
+            return TensorStorage(
+                self._storage[: self._len_along_dim0].flatten(0, self.ndim - 1)
+            )
+        if self._is_full:
+            return TensorStorage(
+                tree_map(lambda x: x.flatten(0, self.ndim - 1), self._storage)
+            )
+        return TensorStorage(
+            tree_map(
+                lambda x: x[: self._len_along_dim0].flatten(0, self.ndim - 1),
+                self._storage,
+            )
+        )
+
     def __getstate__(self):
         state = copy(self.__dict__)
         if get_spawning_popen() is None:
@@ -531,16 +673,23 @@ class TensorStorage(Storage):
         for datum, store in zip(data_flat, storage_flat):
             store[cursor] = datum
 
+    def _get_new_len(self, data, cursor):
+        int_cursor = _is_int(cursor)
+        ndim = self.ndim - int_cursor
+        if is_tensor_collection(data) or isinstance(data, torch.Tensor):
+            numel = data.shape[:ndim].numel()
+        else:
+            # unfortunately tree_flatten isn't an iterator so we will have to flatten it all
+            leaf, *_ = torch.utils._pytree.tree_leaves(data)
+            numel = leaf.shape[:ndim].numel()
+        self._len = min(self._len + numel, self.max_size)
+
     @implement_for("torch", "2.0", None)
     def set(
         self,
         cursor: Union[int, Sequence[int], slice],
         data: Union[TensorDictBase, torch.Tensor],
     ):
-        if isinstance(cursor, INT_CLASSES):
-            self._len = max(self._len, cursor + 1)
-        else:
-            self._len = max(self._len, max(cursor) + 1)
 
         if isinstance(data, list):
             # flip list
@@ -556,6 +705,8 @@ class TensorStorage(Storage):
                     f"consider using a tuple instead, as lists are used within `extend` "
                     f"for per-item addition."
                 )
+
+        self._get_new_len(data, cursor)
 
         if not self.initialized:
             if not isinstance(cursor, INT_CLASSES):
@@ -576,10 +727,23 @@ class TensorStorage(Storage):
         cursor: Union[int, Sequence[int], slice],
         data: Union[TensorDictBase, torch.Tensor],
     ):
-        if isinstance(cursor, INT_CLASSES):
-            self._len = max(self._len, cursor + 1)
-        else:
-            self._len = max(self._len, max(cursor) + 1)
+
+        if isinstance(data, list):
+            # flip list
+            try:
+                data = _flip_list(data)
+            except Exception:
+                raise RuntimeError(
+                    "Stacking the elements of the list resulted in "
+                    "an error. "
+                    f"Storages of type {type(self)} expect all elements of the list "
+                    f"to have the same tree structure. If the list is compact (each "
+                    f"leaf is itself a batch with the appropriate number of elements) "
+                    f"consider using a tuple instead, as lists are used within `extend` "
+                    f"for per-item addition."
+                )
+
+        self._get_new_len(data, cursor)
 
         if not is_tensor_collection(data) and not isinstance(data, torch.Tensor):
             raise NotImplementedError(
@@ -596,7 +760,7 @@ class TensorStorage(Storage):
                 cursor = torch.tensor(cursor, dtype=torch.long)
             elif cursor.dtype != torch.long:
                 cursor = cursor.to(dtype=torch.long)
-            if len(cursor) > len(self._storage):
+            if len(cursor) > self._len_along_dim0:
                 warnings.warn(
                     "A cursor of length superior to the storage capacity was provided. "
                     "To accomodate for this, the cursor will be truncated to its last "
@@ -610,11 +774,13 @@ class TensorStorage(Storage):
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         _storage = self._storage
         is_tc = is_tensor_collection(_storage)
-        if self._len < self.max_size:
+        if not self.initialized:
+            raise RuntimeError("Cannot get elements out of a non-initialized storage.")
+        if not self._is_full:
             if is_tc:
-                storage = self._storage[: self._len]
+                storage = self._storage[: self._len_along_dim0]
             else:
-                storage = tree_map(lambda x: x[: self._len], self._storage)
+                storage = tree_map(lambda x: x[: self._len_along_dim0], self._storage)
         else:
             storage = self._storage
         if not self.initialized:
@@ -622,8 +788,7 @@ class TensorStorage(Storage):
                 "Cannot get an item from an unitialized LazyMemmapStorage"
             )
         if is_tc:
-            out = storage[index]
-            return _reset_batch_size(out)
+            return storage[index]
         else:
             return tree_map(lambda x: x[index], storage)
 
@@ -640,6 +805,26 @@ class TensorStorage(Storage):
             f"{type(self)} must be initialized during construction."
         )
 
+    def __repr__(self):
+        if not self.initialized:
+            storage_str = textwrap.indent("data=<empty>", 4 * " ")
+        elif is_tensor_collection(self._storage):
+            storage_str = textwrap.indent(f"data={self[:]}", 4 * " ")
+        else:
+
+            def repr_item(x):
+                if isinstance(x, torch.Tensor):
+                    return f"{x.__class__.__name__}(shape={x.shape}, dtype={x.dtype}, device={x.device})"
+                return x.__class__.__name__
+
+            storage_str = textwrap.indent(
+                f"data={tree_map(repr_item, self[:])}", 4 * " "
+            )
+        shape_str = textwrap.indent(f"shape={self.shape}", 4 * " ")
+        len_str = textwrap.indent(f"len={len(self)}", 4 * " ")
+        maxsize_str = textwrap.indent(f"max_size={self.max_size}", 4 * " ")
+        return f"{self.__class__.__name__}(\n{storage_str}, \n{shape_str}, \n{len_str}, \n{maxsize_str})"
+
 
 class LazyTensorStorage(TensorStorage):
     """A pre-allocated tensor storage for tensors and tensordicts.
@@ -647,6 +832,8 @@ class LazyTensorStorage(TensorStorage):
     Args:
         max_size (int): size of the storage, i.e. maximum number of elements stored
             in the buffer.
+
+    Keyword Args:
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is :obj:`torch.device("cpu")`.
             If "auto" is passed, the device is automatically gathered from the
@@ -703,7 +890,12 @@ class LazyTensorStorage(TensorStorage):
 
     """
 
-    def __init__(self, max_size, device="cpu"):
+    def __init__(
+        self,
+        max_size: int,
+        *,
+        device: torch.device = "cpu",
+    ):
         super().__init__(storage=None, max_size=max_size, device=device)
 
     def _init(
@@ -714,24 +906,34 @@ class LazyTensorStorage(TensorStorage):
             torchrl_logger.info("Creating a TensorStorage...")
         if self.device == "auto":
             self.device = data.device
-        if is_tensorclass(data):
+
+        def max_size_along_dim0(data_shape):
+            if self.ndim > 1:
+                return (
+                    -(self.max_size // -data_shape[: self.ndim - 1].numel()),
+                    *data_shape,
+                )
+            return (self.max_size, *data_shape)
+
+        if is_tensor_collection(data):
             out = (
-                data.expand(self.max_size, *data.shape).clone().zero_().to(self.device)
+                data.expand(max_size_along_dim0(data.shape))
+                .clone()
+                .zero_()
+                .to(self.device)
             )
         elif is_tensor_collection(data):
             out = (
-                data.expand(self.max_size, *data.shape)
-                .to_tensordict()
-                .zero_()
+                data.expand(max_size_along_dim0(data.shape))
                 .clone()
+                .zero_()
                 .to(self.device)
             )
         else:
             # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
             out = tree_map(
                 lambda data: torch.empty(
-                    self.max_size,
-                    *data.shape,
+                    max_size_along_dim0(data.shape),
                     device=self.device,
                     dtype=data.dtype,
                 ),
@@ -804,7 +1006,13 @@ class LazyMemmapStorage(LazyTensorStorage):
 
     """
 
-    def __init__(self, max_size, scratch_dir=None, device="cpu"):
+    def __init__(
+        self,
+        max_size: int,
+        *,
+        scratch_dir=None,
+        device: torch.device = "cpu",
+    ):
         super().__init__(max_size)
         self.initialized = False
         self.scratch_dir = None
@@ -885,11 +1093,19 @@ class LazyMemmapStorage(LazyTensorStorage):
                 "Using a 'cuda' device may be suboptimal.",
                 category=DeprecationWarning,
             )
+
+        def max_size_along_dim0(data_shape):
+            if self.ndim > 1:
+                return (
+                    -(self.max_size // -data_shape[: self.ndim - 1].numel()),
+                    *data_shape,
+                )
+            return (self.max_size, *data_shape)
+
         if is_tensor_collection(data):
             out = data.clone().to(self.device)
-            out = out.expand(self.max_size, *data.shape)
+            out = out.expand(max_size_along_dim0(data.shape))
             out = out.memmap_like(prefix=self.scratch_dir)
-
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
@@ -899,7 +1115,7 @@ class LazyMemmapStorage(LazyTensorStorage):
                         f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
                     )
         else:
-            out = _init_pytree(self.scratch_dir, self.max_size, data)
+            out = _init_pytree(self.scratch_dir, max_size_along_dim0, data)
         self._storage = out
         self.initialized = True
 
@@ -1099,50 +1315,8 @@ def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
         return mem_map_tensor._tensor
 
 
-def _reset_batch_size(x):
-    """Resets the batch size of a tensordict.
-
-    In some cases we save the original shape of the tensordict as a tensor (or memmap tensor).
-
-    This function will read that tensor, extract its items and reset the shape
-    of the tensordict to it. If items have an incompatible shape (e.g. "index")
-    they will be expanded to the right to match it.
-
-    """
-    shape = x.get("_rb_batch_size", None)
-    if shape is not None:
-        warnings.warn(
-            "Reshaping nested tensordicts will be deprecated in v0.4.0.",
-            category=DeprecationWarning,
-        )
-        data = x.get("_data")
-        # we need to reset the batch-size
-        if isinstance(shape, MemmapTensor):
-            shape = shape.as_tensor()
-        locked = data.is_locked
-        if locked:
-            data.unlock_()
-        shape = [s.item() for s in shape[0]]
-        shape = torch.Size([x.shape[0], *shape])
-        # we may need to update some values in the data
-        for key, value in x.items():
-            if value.ndim >= len(shape):
-                continue
-            value = expand_right(value, shape)
-            data.set(key, value)
-        if locked:
-            data.lock_()
-        return data
-    data = x.get("_data", None)
-    if data is not None:
-        return data
-    return x
-
-
 def _collate_list_tensordict(x):
     out = torch.stack(x, 0)
-    if is_tensor_collection(out):
-        return _reset_batch_size(out)
     return out
 
 
@@ -1276,7 +1450,7 @@ def _save_pytree(_storage, metadata, path):  # noqa: F811
         save_tensor(tensor_path, tensor)
 
 
-def _init_pytree_common(tensor_path, scratch_dir, max_size, tensor):
+def _init_pytree_common(tensor_path, scratch_dir, max_size_fn, tensor):
     if "." in tensor_path:
         tensor_path.replace(".", "_<dot>_")
     if scratch_dir is not None:
@@ -1291,7 +1465,7 @@ def _init_pytree_common(tensor_path, scratch_dir, max_size, tensor):
     else:
         total_tensor_path = None
     out = MemoryMappedTensor.empty(
-        shape=(max_size, *tensor.shape),
+        shape=max_size_fn(tensor.shape),
         filename=total_tensor_path,
         dtype=tensor.dtype,
     )
@@ -1304,14 +1478,14 @@ def _init_pytree_common(tensor_path, scratch_dir, max_size, tensor):
 
 
 @implement_for("torch", "2.3", None)
-def _init_pytree(scratch_dir, max_size, data):
+def _init_pytree(scratch_dir, max_size_fn, data):
     from torch.utils._pytree import tree_map_with_path
 
     # If not a tensorclass/tensordict, it must be a tensor(-like) or a PyTree
     # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
     def save_tensor(tensor_path: tuple, tensor: torch.Tensor):
         tensor_path = _path2str(tensor_path)
-        return _init_pytree_common(tensor_path, scratch_dir, max_size, tensor)
+        return _init_pytree_common(tensor_path, scratch_dir, max_size_fn, tensor)
 
     out = tree_map_with_path(save_tensor, data)
     return out
