@@ -680,7 +680,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                 idx = mmap["_indices"].squeeze()
                 orig = self[idx]
                 orig = fn(orig)
-                mmap.update_at_(orig, idx, inplace=True)
+                mmap.update_at_(orig, idx)
                 return
 
             if dim != 0:
