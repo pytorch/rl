@@ -2654,7 +2654,7 @@ class TestRBMultidim:
         from _utils_internal import CARTPOLE_VERSIONED
 
         torch.manual_seed(0)
-        env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED))
+        env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED()))
         env.set_seed(0)
         collector = SyncDataCollector(
             env, RandomPolicy(env.action_spec), frames_per_batch=4, total_frames=16

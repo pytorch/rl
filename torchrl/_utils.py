@@ -363,6 +363,7 @@ class implement_for:
     _lazy_impl = collections.defaultdict(list)
 
     def _delazify(self, func_name):
+        out = None
         for local_call in implement_for._lazy_impl[func_name]:
             out = local_call()
         return out
