@@ -736,7 +736,8 @@ class SliceSampler(Sampler):
                     "To be used, trajectories requires `cache_values` to be set to `True`."
                 )
             vals = self._find_start_stop_traj(
-                trajectory=trajectories, at_capacity=True,
+                trajectory=trajectories,
+                at_capacity=True,
             )
             self._cache["stop-and-length"] = vals
 
