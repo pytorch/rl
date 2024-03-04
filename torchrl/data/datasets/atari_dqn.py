@@ -99,6 +99,8 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             The ``sampler`` arg will override this value.
         replacement (bool, optional): if ``False``, sampling will occur without replacement.
             The ``sampler`` arg will override this value.
+        mp_start_method (str, optional): the start method for multiprocessed
+            download. Defaults to ``"fork"``.
 
     Attributes:
         available_datasets: list of available datasets, formatted as `<game_name>/<run>`. Example:
@@ -409,6 +411,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         slice_len: int | None = None,
         strict_len: bool = True,
         replacement: bool = True,
+        mp_start_method: str = "fork",
         **kwargs,
     ):
         if dataset_id not in self.available_datasets:
@@ -424,6 +427,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             root = _get_root_dir("atari")
         self.root = root
         self.num_procs = num_procs
+        self.mp_start_method = mp_start_method
         if download == "force" or (download and not self._is_downloaded):
             try:
                 self._download_and_preproc()
@@ -522,6 +526,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                             dataset_path=self.dataset_path,
                             total_episodes=total_runs,
                             max_runs=self._max_runs,
+                        multithreaded=True,
                         )
                 else:
                     func = functools.partial(
@@ -530,12 +535,14 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                         dataset_path=self.dataset_path,
                         total_episodes=total_runs,
                         max_runs=self._max_runs,
+                        multithreaded=False,
                     )
                     args = [
                         (run, run_files)
                         for (run, run_files) in self.remote_gz_files.items()
                     ]
-                    with mp.Pool(self.num_procs) as pool:
+                    ctx = mp.get_context(self.mp_start_method)
+                    with ctx.Pool(self.num_procs) as pool:
                         pool.starmap(func, args)
         with open(self.dataset_path / "processed.json", "w") as file:
             # we save self._max_runs such that changing the number of runs to process
@@ -544,7 +551,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
 
     @classmethod
     def _download_and_proc_split(
-        cls, run, run_files, *, tempdir, dataset_path, total_episodes, max_runs
+        cls, run, run_files, *, tempdir, dataset_path, total_episodes, max_runs, multithreaded=True
     ):
         if (max_runs is not None) and (run >= max_runs):
             return
@@ -552,7 +559,10 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         os.makedirs(tempdir / str(run))
         files_str = " ".join(run_files)  # .decode("utf-8")
         torchrl_logger.info(f"downloading {files_str}")
-        command = f"gsutil -m cp {files_str} {tempdir}/{run}"
+        if multithreaded:
+            command = f"gsutil -m cp {files_str} {tempdir}/{run}"
+        else:
+            command = f"gsutil cp {files_str} {tempdir}/{run}"
         subprocess.run(
             command, shell=True
         )  # , stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

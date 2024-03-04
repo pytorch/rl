@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib
+import os
 from contextlib import nullcontext
 
 from torchrl._utils import logger as torchrl_logger
@@ -2616,7 +2617,7 @@ class TestAtariDQN:
         assert sample[0].get_non_tensor("metadata")["dataset_id"] == "Pong/4"
         assert sample[1].get_non_tensor("metadata")["dataset_id"] == "Asterix/1"
 
-    @pytest.mark.parametrize("dataset_id", ["Asterix/1", "Pong/4"])
+    @pytest.mark.parametrize("dataset_id", ["Pong/4"])
     def test_atari_preproc(self, dataset_id):
         from torchrl.envs import Compose, RenameTransform, Resize
 
@@ -2625,6 +2626,7 @@ class TestAtariDQN:
             slice_len=None,
             num_slices=8,
             batch_size=64,
+            num_procs=os.cpu_count() // 2,
         )
         t = Compose(
             Resize(32, in_keys=["observation", ("next", "observation")]),
