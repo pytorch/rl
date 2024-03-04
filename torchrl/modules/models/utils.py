@@ -2,10 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import inspect
 import warnings
-from typing import Optional, Sequence, Type
+from typing import Callable, Sequence, Type
 
 import torch
 from torch import nn
@@ -86,7 +87,7 @@ class SquashDims(nn.Module):
         return value
 
 
-def _find_depth(depth: Optional[int], *list_or_ints: Sequence):
+def _find_depth(depth: int | None, *list_or_ints: Sequence):
     """Find depth based on a sequence of inputs and a depth indicator.
 
     If the depth is None, it is inferred by the length of one (or more) matching
@@ -113,7 +114,10 @@ def _find_depth(depth: Optional[int], *list_or_ints: Sequence):
 
 
 def create_on_device(
-    module_class: Type[nn.Module], device: Optional[DEVICE_TYPING], *args, **kwargs
+    module_class: Type[nn.Module] | Callable,
+    device: DEVICE_TYPING | None,
+    *args,
+    **kwargs,
 ) -> nn.Module:
     """Create a new instance of :obj:`module_class` on :obj:`device`.
 
@@ -130,8 +134,10 @@ def create_on_device(
     if "device" in fullargspec.args or "device" in fullargspec.kwonlyargs:
         return module_class(*args, device=device, **kwargs)
     else:
-        return module_class(*args, **kwargs).to(device)
-        # .to() is always available for nn.Module, and does nothing if the Module contains no parameters or buffers
+        result = module_class(*args, **kwargs)
+        if hasattr(result, "to"):
+            result = result.to(device)
+        return result
 
 
 def _reset_parameters_recursive(module, warn_if_no_op: bool = True) -> bool:

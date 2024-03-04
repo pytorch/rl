@@ -7,11 +7,11 @@ from __future__ import annotations
 import dataclasses
 
 import warnings
+from copy import deepcopy
 from numbers import Number
-from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import Callable, Dict, List, Sequence, Tuple, Type, Union
 
 import torch
-import torchrl.modules
 from tensordict.nn import dispatch, TensorDictModuleBase
 from torch import nn
 from torch.nn import functional as F
@@ -168,7 +168,7 @@ class MLP(nn.Sequential):
         num_cells: Sequence[int] | int | None = None,
         activation_class: Type[nn.Module] | Callable = nn.Tanh,
         activation_kwargs: dict | List[dict] | None = None,
-        norm_class: Optional[Type[nn.Module] | Callable] = None,
+        norm_class: Type[nn.Module] | Callable | None = None,
         norm_kwargs: dict | List[dict] | None = None,
         dropout: float | None = None,
         bias_last_layer: bool = True,
@@ -229,6 +229,10 @@ class MLP(nn.Sequential):
             consider matching or specifying a constant num_cells argument together with a a desired depth"
             )
         layers = self._make_net(device)
+        layers = [
+            layer if isinstance(layer, nn.Module) else _ExecutableLayer(layer)
+            for layer in layers
+        ]
         super().__init__(*layers)
 
     def _make_net(self, device: DEVICE_TYPING | None) -> List[nn.Module]:
@@ -236,8 +240,10 @@ class MLP(nn.Sequential):
         in_features = [self.in_features] + self.num_cells
         out_features = self.num_cells + [self._out_features_num]
         for i, (_in, _out) in enumerate(zip(in_features, out_features)):
-            _bias = self.bias_last_layer if i == self.depth else True
             layer_kwargs = next(self._layer_kwargs_iter)
+            _bias = layer_kwargs.pop(
+                "bias", self.bias_last_layer if i == self.depth else True
+            )
             if _in is not None:
                 layers.append(
                     create_on_device(
@@ -457,6 +463,10 @@ class ConvNet(nn.Sequential):
 
         self.depth = len(self.kernel_sizes)
         layers = self._make_net(device)
+        layers = [
+            layer if isinstance(layer, nn.Module) else _ExecutableLayer(layer)
+            for layer in layers
+        ]
         super().__init__(*layers)
 
     def _make_net(self, device: DEVICE_TYPING | None) -> nn.Module:
@@ -694,6 +704,10 @@ class Conv3dNet(nn.Sequential):
 
         self.depth = len(self.kernel_sizes)
         layers = self._make_net(device)
+        layers = [
+            layer if isinstance(layer, nn.Module) else _ExecutableLayer(layer)
+            for layer in layers
+        ]
         super().__init__(*layers)
 
     def _make_net(self, device: DEVICE_TYPING | None) -> nn.Module:
@@ -1599,8 +1613,8 @@ class LSTMNet(nn.Module):
     def _lstm(
         self,
         input: torch.Tensor,
-        hidden0_in: Optional[torch.Tensor] = None,
-        hidden1_in: Optional[torch.Tensor] = None,
+        hidden0_in: torch.Tensor | None = None,
+        hidden1_in: torch.Tensor | None = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         squeeze0 = False
         squeeze1 = False
@@ -1669,8 +1683,8 @@ class LSTMNet(nn.Module):
     def forward(
         self,
         input: torch.Tensor,
-        hidden0_in: Optional[torch.Tensor] = None,
-        hidden1_in: Optional[torch.Tensor] = None,
+        hidden0_in: torch.Tensor | None = None,
+        hidden1_in: torch.Tensor | None = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         input = self.mlp(input)
         return self._lstm(input, hidden0_in, hidden1_in)
@@ -1865,6 +1879,20 @@ def _iter_maybe_over_single(item: dict | List[dict] | None):
             yield {}
     elif isinstance(item, dict):
         while True:
-            yield item
+            yield deepcopy(item)
     else:
-        yield from item
+        yield from (deepcopy(_item) for _item in item)
+
+
+class _ExecutableLayer(nn.Module):
+    """A thin wrapper around a function to be exectued as a module."""
+
+    def __init__(self, func):
+        super(_ExecutableLayer, self).__init__()
+        self.func = func
+
+    def forward(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(func={self.func})"
