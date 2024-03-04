@@ -761,8 +761,8 @@ class _AtariStorage(Storage):
         split = (item < self.frames_per_split[1:, 1].unsqueeze(1)) & (
             item >= self.frames_per_split[:-1, 1].unsqueeze(1)
         )
-        # split_tmp, idx = split.squeeze().nonzero().unbind(-1)
-        split_tmp, idx = split.nonzero().unbind(-1)
+        split_tmp, idx = split.squeeze(0).nonzero().unbind(-1)
+        # split_tmp, idx = split.nonzero().unbind(-1)
         split = torch.zeros_like(split_tmp)
         split[idx] = split_tmp
         split = self.frames_per_split[split + 1, 0]
