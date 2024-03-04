@@ -676,10 +676,11 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             mmap["_indices"] = torch.arange(mmap.shape[0]).reshape(mmap.shape)
             mmap.memmap_like(tmpdir, num_threads=32)
 
-            def func(mmap):
+            def func(mmap: TensorDictBase):
                 idx = mmap["_indices"].squeeze()
                 orig = self[idx]
-                mmap.update(fn(orig), inplace=True)
+                orig = fn(orig)
+                mmap.update_at_(orig, idx, inplace=True)
                 return
 
             if dim != 0:
