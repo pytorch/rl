@@ -16,7 +16,11 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.data.replay_buffers import RandomSampler, SamplerWithoutReplacement
+from torchrl.data.replay_buffers import (
+    RandomSampler,
+    SamplerWithoutReplacement,
+    SliceSampler,
+)
 
 _TensorDictPrioritizedReplayBuffer = functools.partial(
     TensorDictPrioritizedReplayBuffer, alpha=1, beta=0.9
@@ -49,6 +53,8 @@ class create_rb:
             },
             batch_size=[self.size],
         )
+        if "sampler" in kwargs and isinstance(kwargs["sampler"], SliceSampler):
+            data["traj"] = torch.arange(self.size) // 123
         if self.populated:
             rb.extend(data)
             return ((rb,), {})
@@ -77,6 +83,18 @@ def iterate(rb):
         [TensorDictReplayBuffer, ListStorage, SamplerWithoutReplacement, 4000],
         [TensorDictReplayBuffer, LazyMemmapStorage, SamplerWithoutReplacement, 10_000],
         [TensorDictReplayBuffer, LazyTensorStorage, SamplerWithoutReplacement, 10_000],
+        [
+            TensorDictReplayBuffer,
+            LazyMemmapStorage,
+            functools.partial(SliceSampler, num_slices=8, traj_key="traj"),
+            10_000,
+        ],
+        [
+            TensorDictReplayBuffer,
+            LazyTensorStorage,
+            functools.partial(SliceSampler, num_slices=8, traj_key="traj"),
+            10_000,
+        ],
         [_TensorDictPrioritizedReplayBuffer, ListStorage, None, 4000],
         [_TensorDictPrioritizedReplayBuffer, LazyMemmapStorage, None, 10_000],
         [_TensorDictPrioritizedReplayBuffer, LazyTensorStorage, None, 10_000],
