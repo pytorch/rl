@@ -282,6 +282,9 @@ class ListStorage(Storage):
         state = copy(self.__dict__)
         return state
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(items=[{self._storage[0]}, ...])"
+
 
 class TensorStorage(Storage):
     """A storage for tensors and tensordicts.
@@ -794,6 +797,18 @@ class TensorStorage(Storage):
         raise NotImplementedError(
             f"{type(self)} must be initialized during construction."
         )
+
+    def __repr__(self):
+        if is_tensor_collection(self._storage):
+            return f"{self.__class__.__name__}({self._storage})"
+
+        def repr_item(x):
+            if isinstance(x, torch.Tensor):
+                return f"{x.__class__.__name__}(shape={x.shape}, dtype={x.dtype}, device={x.device})"
+            return x.__class__.__name__
+
+        storage_str = tree_map(repr_item, self._storage)
+        return f"{self.__class__.__name__}({storage_str})"
 
 
 class LazyTensorStorage(TensorStorage):

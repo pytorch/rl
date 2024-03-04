@@ -22,6 +22,7 @@ from tensordict import make_tensordict, PersistentTensorDict, TensorDict
 from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors.utils import split_trajectories
+from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.d4rl_infos import D4RL_DATASETS
 
 from torchrl.data.datasets.utils import _get_root_dir
@@ -31,7 +32,7 @@ from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
 
 
-class D4RLExperienceReplay(TensorDictReplayBuffer):
+class D4RLExperienceReplay(BaseDatasetExperienceReplay):
     """An Experience replay class for D4RL.
 
     To install D4RL, follow the instructions on the

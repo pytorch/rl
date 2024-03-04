@@ -10,6 +10,7 @@ from typing import Callable
 
 import numpy as np
 from tensordict import TensorDict
+from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import (
@@ -21,7 +22,7 @@ from torchrl.data.replay_buffers import (
 )
 
 
-class OpenMLExperienceReplay(TensorDictReplayBuffer):
+class OpenMLExperienceReplay(BaseDatasetExperienceReplay):
     """An experience replay for OpenML data.
 
     This class provides an easy entry point for public datasets.

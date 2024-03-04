@@ -15,6 +15,7 @@ from typing import Any, Callable, Dict, Tuple
 import torch
 
 from tensordict import make_tensordict, pad, TensorDict
+from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
@@ -29,7 +30,7 @@ _has_datasets = importlib.util.find_spec("datasets", None) is not None
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
 
 
-class OpenXExperienceReplay(TensorDictReplayBuffer):
+class OpenXExperienceReplay(BaseDatasetExperienceReplay):
     """Open X-Embodiment datasets experience replay.
 
     The Open X-Embodiment Dataset contains 1M+ real robot trajectories

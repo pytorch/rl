@@ -20,6 +20,7 @@ import torch
 
 from tensordict import PersistentTensorDict, TensorDict
 from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
+from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
@@ -55,7 +56,7 @@ _DTYPE_DIR = {
 }
 
 
-class MinariExperienceReplay(TensorDictReplayBuffer):
+class MinariExperienceReplay(BaseDatasetExperienceReplay):
     """Minari Experience replay dataset.
 
     Learn more about Minari on their website: https://minari.farama.org/

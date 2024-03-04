@@ -16,6 +16,7 @@ import torch
 
 from tensordict import TensorDict
 from torchrl._utils import logger as torchrl_logger
+from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import TensorStorage
@@ -25,7 +26,7 @@ _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
 _has_requests = importlib.util.find_spec("requests", None) is not None
 
 
-class GenDGRLExperienceReplay(TensorDictReplayBuffer):
+class GenDGRLExperienceReplay(BaseDatasetExperienceReplay):
     """Gen-DGRL Experience Replay dataset.
 
     This dataset accompanies the paper "The Generalization Gap in Offline Reinforcement Learning".

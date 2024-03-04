@@ -21,6 +21,7 @@ import torch
 from tensordict import MemoryMappedTensor, TensorDict
 from torch import multiprocessing as mp
 from torchrl._utils import logger as torchrl_logger
+from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
@@ -33,7 +34,7 @@ from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter
 from torchrl.envs.utils import _classproperty
 
 
-class AtariDQNExperienceReplay(TensorDictReplayBuffer):
+class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
     """Atari DQN Experience replay class.
 
     The Atari DQN dataset (https://offline-rl.github.io/) is a collection of 5 training

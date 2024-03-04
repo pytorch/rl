@@ -23,6 +23,7 @@ from tensordict import PersistentTensorDict, TensorDict
 from torch import multiprocessing as mp
 
 from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
+from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
@@ -39,7 +40,7 @@ _has_hf_hub = importlib.util.find_spec("huggingface_hub", None) is not None
 THIS_DIR = pathlib.Path(__file__).parent
 
 
-class VD4RLExperienceReplay(TensorDictReplayBuffer):
+class VD4RLExperienceReplay(BaseDatasetExperienceReplay):
     """V-D4RL experience replay dataset.
 
     This class downloads the H5/npz data from V-D4RL and processes it in a mmap

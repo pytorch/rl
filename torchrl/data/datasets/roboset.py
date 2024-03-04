@@ -21,6 +21,7 @@ from torchrl._utils import (
     logger as torchrl_logger,
     print_directory_tree,
 )
+from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
@@ -38,7 +39,7 @@ _NAME_MATCH["actions"] = "action"
 _NAME_MATCH["env_infos"] = "info"
 
 
-class RobosetExperienceReplay(TensorDictReplayBuffer):
+class RobosetExperienceReplay(BaseDatasetExperienceReplay):
     """Roboset experience replay dataset.
 
     This class downloads the H5 data from roboset and processes it in a mmap

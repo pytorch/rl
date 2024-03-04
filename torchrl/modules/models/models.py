@@ -423,8 +423,8 @@ class ConvNet(nn.Sequential):
 
     def _make_net(self, device: Optional[DEVICE_TYPING]) -> nn.Module:
         layers = []
-        in_features = [self.in_features] + self.num_cells[: self.depth]
-        out_features = self.num_cells + [self.out_features]
+        in_features = [self.in_features] + list(self.num_cells[: self.depth])
+        out_features = list(self.num_cells) + [self.out_features]
         kernel_sizes = self.kernel_sizes
         strides = self.strides
         paddings = self.paddings
