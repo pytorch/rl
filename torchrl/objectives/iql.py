@@ -18,6 +18,7 @@ from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -54,6 +55,10 @@ class IQLLoss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
         >>> import torch
@@ -240,9 +245,12 @@ class IQLLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        reduction: str = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
         self._set_deprecated_ctor_keys(priority=priority_key)
 
@@ -293,6 +301,7 @@ class IQLLoss(LossModule):
         self._vmap_qvalue_networkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
+        self.reduction = reduction
 
     @property
     def device(self) -> torch.device:
@@ -367,9 +376,9 @@ class IQLLoss(LossModule):
 
         entropy = -tensordict_reshape.get(self.tensor_keys.log_prob).detach()
         out = {
-            "loss_actor": loss_actor.mean(),
-            "loss_qvalue": loss_qvalue.mean(),
-            "loss_value": loss_value.mean(),
+            "loss_actor": loss_actor,
+            "loss_qvalue": loss_qvalue,
+            "loss_value": loss_value,
             "entropy": entropy.mean(),
         }
 
@@ -408,7 +417,9 @@ class IQLLoss(LossModule):
 
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
-        return -(exp_a * log_prob).mean(), {}
+        loss_actor = -(exp_a * log_prob)
+        loss_actor = _reduce(loss_actor, reduction=self.reduction)
+        return loss_actor, {}
 
     def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         # Min Q value
@@ -420,7 +431,8 @@ class IQLLoss(LossModule):
         with self.value_network_params.to_module(self.value_network):
             self.value_network(td_copy)
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
-        value_loss = self.loss_value_diff(min_q - value, self.expectile).mean()
+        value_loss = self.loss_value_diff(min_q - value, self.expectile)
+        value_loss = _reduce(value_loss, reduction=self.reduction)
         return value_loss, {}
 
     def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
@@ -438,15 +450,12 @@ class IQLLoss(LossModule):
             -1
         )
         td_error = (pred_val - target_value).pow(2)
-        loss_qval = (
-            distance_loss(
-                pred_val,
-                target_value.expand_as(pred_val),
-                loss_function=self.loss_function,
-            )
-            .sum(0)
-            .mean()
-        )
+        loss_qval = distance_loss(
+            pred_val,
+            target_value.expand_as(pred_val),
+            loss_function=self.loss_function,
+        ).sum(0)
+        loss_qval = _reduce(loss_qval, reduction=self.reduction)
         metadata = {"td_error": td_error.detach()}
         return loss_qval, metadata
 
@@ -525,6 +534,10 @@ class DiscreteIQLLoss(IQLLoss):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
         >>> import torch
@@ -701,9 +714,12 @@ class DiscreteIQLLoss(IQLLoss):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        reduction: str = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
+        if reduction is None:
+            reduction = "mean"
         if expectile >= 1.0:
             raise ValueError(f"Expectile should be lower than 1.0 but is {expectile}")
         super().__init__(
@@ -726,6 +742,7 @@ class DiscreteIQLLoss(IQLLoss):
             )
             action_space = "one-hot"
         self.action_space = _find_action_space(action_space)
+        self.reduction = reduction
 
     def actor_loss(self, tensordict: TensorDictBase) -> Tensor:
         # KL loss
@@ -768,7 +785,9 @@ class DiscreteIQLLoss(IQLLoss):
 
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
-        return -(exp_a * log_prob).mean(), {}
+        loss_actor = -(exp_a * log_prob)
+        loss_actor = _reduce(loss_actor, reduction=self.reduction)
+        return loss_actor, {}
 
     def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         # Min Q value
@@ -794,7 +813,8 @@ class DiscreteIQLLoss(IQLLoss):
         with self.value_network_params.to_module(self.value_network):
             self.value_network(td_copy)
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
-        value_loss = self.loss_value_diff(min_Q - value, self.expectile).mean()
+        value_loss = self.loss_value_diff(min_Q - value, self.expectile)
+        value_loss = _reduce(value_loss, reduction=self.reduction)
         return value_loss, {}
 
     def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
@@ -820,14 +840,11 @@ class DiscreteIQLLoss(IQLLoss):
             pred_val = (state_action_value * action).sum(-1)
 
         td_error = (pred_val - target_value.expand_as(pred_val)).pow(2)
-        loss_qval = (
-            distance_loss(
-                pred_val,
-                target_value.expand_as(pred_val),
-                loss_function=self.loss_function,
-            )
-            .sum(0)
-            .mean()
-        )
+        loss_qval = distance_loss(
+            pred_val,
+            target_value.expand_as(pred_val),
+            loss_function=self.loss_function,
+        ).sum(0)
+        loss_qval = _reduce(loss_qval, reduction=self.reduction)
         metadata = {"td_error": td_error.detach()}
         return loss_qval, metadata
