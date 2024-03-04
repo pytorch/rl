@@ -89,6 +89,9 @@ class Sampler(ABC):
     def loads(self, path):
         ...
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}()"
+
 
 class RandomSampler(Sampler):
     """A uniformly random sampler for composable replay buffers.
@@ -247,6 +250,13 @@ class SamplerWithoutReplacement(Sampler):
         self.drop_last = state_dict["drop_last"]
         self._ran_out = state_dict["_ran_out"]
 
+    def __repr__(self):
+        if self._sample_list is not None:
+            perc = len(self._sample_list) / self.len_storage * 100
+        else:
+            perc = 0.0
+        return f"{self.__class__.__name__}({perc: 4.4f}% sampled)"
+
 
 class PrioritizedSampler(Sampler):
     """Prioritized sampler for replay buffer.
@@ -334,6 +344,9 @@ class PrioritizedSampler(Sampler):
         self.reduction = reduction
         self.dtype = dtype
         self._init()
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(alpha={self._alpha}, beta={self._beta}, eps={self._eps}, reduction={self.reduction})"
 
     @property
     def max_size(self):
@@ -759,6 +772,16 @@ class SliceSampler(Sampler):
                 f"Got num_slices={num_slices} and slice_len={slice_len}."
             )
 
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(num_slices={self.num_slices}, "
+            f"slice_len={self.slice_len}, "
+            f"end_key={self.end_key}, "
+            f"traj_key={self.traj_key}, "
+            f"truncated_key={self.truncated_key}, "
+            f"strict_length={self.strict_length})"
+        )
+
     @staticmethod
     def _find_start_stop_traj(*, trajectory=None, end=None):
         if trajectory is not None:
@@ -1144,6 +1167,19 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         )
         SamplerWithoutReplacement.__init__(self, drop_last=drop_last, shuffle=shuffle)
 
+    def __repr__(self):
+        perc = len(self._sample_list) / self.len_storage * 100
+        return (
+            f"{self.__class__.__name__}("
+            f"num_slices={self.num_slices}, "
+            f"slice_len={self.slice_len}, "
+            f"end_key={self.end_key}, "
+            f"traj_key={self.traj_key}, "
+            f"truncated_key={self.truncated_key}, "
+            f"strict_length={self.strict_length},"
+            f"{perc}% sampled)"
+        )
+
     def _empty(self):
         self._cache = {}
         SamplerWithoutReplacement._empty(self)
@@ -1310,6 +1346,25 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             eps=eps,
             dtype=dtype,
             reduction=reduction,
+        )
+
+    def __repr__(self):
+        if self._sample_list is not None:
+            perc = len(self._sample_list) / self.len_storage * 100
+        else:
+            perc = 0.0
+        return (
+            f"{self.__class__.__name__}("
+            f"num_slices={self.num_slices}, "
+            f"slice_len={self.slice_len}, "
+            f"end_key={self.end_key}, "
+            f"traj_key={self.traj_key}, "
+            f"truncated_key={self.truncated_key}, "
+            f"strict_length={self.strict_length},"
+            f"alpha={self._alpha}, "
+            f"beta={self._beta}, "
+            f"eps={self._eps},"
+            f"{perc: 4.4f}% filled)"
         )
 
     def __getstate__(self):
@@ -1666,4 +1721,4 @@ class SamplerEnsemble(Sampler):
 
     def __repr__(self):
         samplers = textwrap.indent(f"samplers={self._samplers}", " " * 4)
-        return f"SamplerEnsemble(\n{samplers})"
+        return f"{self.__class__.__name__}(\n{samplers})"

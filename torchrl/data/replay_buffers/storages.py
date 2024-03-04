@@ -62,6 +62,10 @@ class Storage:
         self.max_size = int(max_size)
 
     @property
+    def _is_full(self):
+        return len(self) == self.max_size
+
+    @property
     def _attached_entities(self):
         # RBs that use a given instance of Storage should add
         # themselves to this set.
@@ -281,6 +285,9 @@ class ListStorage(Storage):
             )
         state = copy(self.__dict__)
         return state
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(items=[{self._storage[0]}, ...])"
 
 
 class TensorStorage(Storage):
@@ -794,6 +801,24 @@ class TensorStorage(Storage):
         raise NotImplementedError(
             f"{type(self)} must be initialized during construction."
         )
+
+    def __repr__(self):
+        if is_tensor_collection(self._storage):
+            storage_str = textwrap.indent(f"data={self[:]}", 4 * " ")
+        else:
+
+            def repr_item(x):
+                if isinstance(x, torch.Tensor):
+                    return f"{x.__class__.__name__}(shape={x.shape}, dtype={x.dtype}, device={x.device})"
+                return x.__class__.__name__
+
+            storage_str = textwrap.indent(
+                f"data={tree_map(repr_item, self[:])}", 4 * " "
+            )
+        shape_str = textwrap.indent(f"shape={self.shape}", 4 * " ")
+        len_str = textwrap.indent(f"len={len(self)}", 4 * " ")
+        maxsize_str = textwrap.indent(f"max_size={self.max_size}", 4 * " ")
+        return f"{self.__class__.__name__}(\n{storage_str}, \n{shape_str}, \n{len_str}, \n{maxsize_str})"
 
 
 class LazyTensorStorage(TensorStorage):
