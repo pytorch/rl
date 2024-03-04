@@ -16,7 +16,6 @@ from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import (
     Sampler,
     SamplerWithoutReplacement,
-    TensorDictReplayBuffer,
     TensorStorage,
     Writer,
 )

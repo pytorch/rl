@@ -18,7 +18,6 @@ from tensordict import TensorDict
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
-from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.envs.utils import _classproperty
 

@@ -2616,6 +2616,27 @@ class TestAtariDQN:
         assert sample[0].get_non_tensor("metadata")["dataset_id"] == "Pong/4"
         assert sample[1].get_non_tensor("metadata")["dataset_id"] == "Asterix/1"
 
+    @pytest.mark.parametrize("dataset_id", ["Asterix/1", "Pong/4"])
+    def test_atari_preproc(self, dataset_id):
+        from torchrl.envs import Compose, RenameTransform, Resize
+
+        dataset = AtariDQNExperienceReplay(
+            dataset_id,
+            slice_len=None,
+            num_slices=8,
+            batch_size=64,
+        )
+        t = Compose(
+            Resize(32, in_keys=["observation", ("next", "observation")]),
+            RenameTransform(in_keys=["action"], out_keys=["other_action"]),
+        )
+
+        def preproc(data):
+            return t(data)
+
+        dataset.preprocess(preproc, num_workers=4, mp_start_method="fork")
+        print(dataset)
+
 
 @pytest.mark.slow
 class TestOpenX:

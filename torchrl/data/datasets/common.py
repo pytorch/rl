@@ -7,6 +7,11 @@ from __future__ import annotations
 import abc
 import shutil
 from pathlib import Path
+from typing import Callable
+
+import torch
+from tensordict import TensorDict, TensorDictBase
+from torch import multiprocessing as mp
 
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, TensorStorage
 

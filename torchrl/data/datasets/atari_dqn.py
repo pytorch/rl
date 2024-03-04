@@ -4,8 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import concurrent.futures
 import functools
 import gzip
+import importlib.util
 import io
 import json
 
@@ -15,21 +17,21 @@ import subprocess
 import tempfile
 from collections import defaultdict
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import torch
-from tensordict import MemoryMappedTensor, TensorDict
+from tensordict import MemoryMappedTensor, TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 
-from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
 )
-from torchrl.data.replay_buffers.storages import Storage
+from torchrl.data.replay_buffers.storages import Storage, TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter
 from torchrl.envs.utils import _classproperty
 
@@ -635,6 +637,57 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             episode = int(episode)
             runs[episode].append(file)
         return dict(sorted(runs.items(), key=lambda x: x[0]))
+
+    def preprocess(
+        self,
+        fn: Callable[[TensorDictBase], TensorDictBase],
+        dim: int = 0,
+        num_workers: int | None = None,
+        *,
+        chunksize: int | None = None,
+        num_chunks: int | None = None,
+        pool: mp.Pool | None = None,
+        generator: torch.Generator | None = None,
+        max_tasks_per_child: int | None = None,
+        worker_threads: int = 1,
+        index_with_generator: bool = False,
+        pbar: bool = False,
+        mp_start_method: str | None = None,
+    ):
+        # Copy data to a tensordict
+        with tempfile.TemporaryDirectory() as tmpdir:
+            first_item = self[0]
+            mmap = fn(first_item)
+            mmap = mmap.expand(len(self), *first_item.shape)
+            mmap["_indices"] = torch.arange(mmap.shape[0])
+            mmap.memmap_like(tmpdir, num_threads=32)
+
+            def func(mmap):
+                idx = mmap["_indices"]
+                orig = self[idx]
+                mmap.update(fn(orig), inplace=True)
+                return
+
+            if dim != 0:
+                raise RuntimeError("dim != 0 is not supported.")
+            mmap.map(
+                fn=fn,
+                dim=dim,
+                num_workers=num_workers,
+                chunksize=chunksize,
+                num_chunks=num_chunks,
+                pool=pool,
+                generator=generator,
+                max_tasks_per_child=max_tasks_per_child,
+                worker_threads=worker_threads,
+                index_with_generator=index_with_generator,
+                mp_start_method=mp_start_method,
+                pbar=pbar,
+            )
+            shutil.rmtree(self.dataset_path)
+            shutil.move(tmpdir, self.dataset_path)
+            del mmap["_indices"]
+            self._storage = TensorStorage(mmap)
 
 
 class _AtariStorage(Storage):
