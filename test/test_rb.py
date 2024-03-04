@@ -103,7 +103,12 @@ torch_2_3 = version.parse(
 
 
 @pytest.mark.parametrize(
-    "sampler", [samplers.RandomSampler, samplers.PrioritizedSampler]
+    "sampler",
+    [
+        samplers.RandomSampler,
+        samplers.SamplerWithoutReplacement,
+        samplers.PrioritizedSampler,
+    ],
 )
 @pytest.mark.parametrize(
     "writer", [writers.RoundRobinWriter, writers.TensorDictMaxValueWriter]
@@ -183,6 +188,28 @@ class TestComposableBuffers:
         else:
             raise NotImplementedError(datatype)
         return data
+
+    def test_rb_repr(self, rb_type, sampler, writer, storage, size, datatype):
+        if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
+            pytest.skip(
+                "Distributed package support on Windows is a prototype feature and is subject to changes."
+            )
+        torch.manual_seed(0)
+        rb = self._get_rb(
+            rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
+        )
+        data = self._get_datum(datatype)
+        if not is_tensor_collection(data) and writer is TensorDictMaxValueWriter:
+            with pytest.raises(
+                RuntimeError, match="expects data to be a tensor collection"
+            ):
+                rb.add(data)
+            return
+        rb.add(data)
+        # we just check that str runs, not its value
+        assert str(rb)
+        rb.sample()
+        assert str(rb)
 
     def test_add(self, rb_type, sampler, writer, storage, size, datatype):
         if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
@@ -2588,7 +2615,9 @@ class TestRBMultidim:
             rbtype = functools.partial(rbtype, alpha=0.9, beta=1.1)
 
         rb = rbtype(storage=storage_cls(100, ndim=datadim), batch_size=4)
+        assert str(rb)  # check str works
         rb.extend(data)
+        assert str(rb)
         assert len(rb) == 12
         data = rb[:]
         if datatype in ("tensordict", "tensorclass"):
@@ -2598,6 +2627,7 @@ class TestRBMultidim:
                 leaf.shape[:datadim].numel() == 12 for leaf in tree_flatten(data)[0]
             )
         s = rb.sample()
+        assert str(rb)
         if datatype in ("tensordict", "tensorclass"):
             assert (s.exclude("index") == 1).all()
             assert s.numel() == 4
