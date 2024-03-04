@@ -12,10 +12,9 @@ import warnings
 from numbers import Number
 from typing import Iterable, List, Optional, Type, Union
 
-import tensordict
 import torch
 
-from tensordict import TensorDict, TensorDictBase, unravel_key_list
+from tensordict import TensorDictBase, unravel_key_list
 
 from tensordict.nn import dispatch, TensorDictModule, TensorDictModuleBase
 from tensordict.utils import NestedKey
