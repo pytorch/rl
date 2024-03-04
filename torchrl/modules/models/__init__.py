@@ -18,6 +18,7 @@ from .models import (
     DistributionalDQNnet,
     DTActor,
     DuelingCnnDQNet,
+    DuelingMlpDQNet,
     LSTMNet,
     MLP,
     OnlineDTActor,

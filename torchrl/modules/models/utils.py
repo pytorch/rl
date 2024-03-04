@@ -12,7 +12,7 @@ from torch import nn
 
 from torchrl.data.utils import DEVICE_TYPING
 
-from .exploration import NoisyLazyLinear, NoisyLinear
+from torchrl.modules.models.exploration import NoisyLazyLinear, NoisyLinear
 
 LazyMapping = {
     nn.Linear: nn.LazyLinear,
@@ -67,6 +67,14 @@ class SquashDims(nn.Module):
     Args:
         ndims_in (int): number of dimensions to be flattened.
             default = 3
+
+    Examples:
+        >>> from torchrl.modules.models.utils import SquashDims
+        >>> import torch
+        >>> x = torch.randn(1, 2, 3, 4)
+        >>> print(SquashDims()(x).shape)
+        torch.Size([1, 24])
+
     """
 
     def __init__(self, ndims_in: int = 3):
