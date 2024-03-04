@@ -12,9 +12,7 @@ from numbers import Number
 from typing import Callable, Dict, List, Sequence, Tuple, Type, Union
 
 import torch
-from tensordict.nn import dispatch, TensorDictModuleBase
 from torch import nn
-from torch.nn import functional as F
 
 from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING
@@ -27,6 +25,7 @@ from torchrl.modules.models.utils import (
     Squeeze2dLayer,
     SqueezeLayer,
 )
+from torchrl.modules.tensordict_module.common import DistributionalDQNnet  # noqa
 
 
 class MLP(nn.Sequential):
@@ -206,9 +205,6 @@ class MLP(nn.Sequential):
         self.activation_kwargs = activation_kwargs
         self.norm_kwargs = norm_kwargs
         self.layer_kwargs = layer_kwargs
-        self._activation_kwargs_iter = _iter_maybe_over_single(activation_kwargs)
-        self._norm_kwargs_iter = _iter_maybe_over_single(norm_kwargs)
-        self._layer_kwargs_iter = _iter_maybe_over_single(layer_kwargs)
 
         self.activate_last_layer = activate_last_layer
         if single_bias_last_layer:
@@ -228,6 +224,14 @@ class MLP(nn.Sequential):
                 "depth and num_cells length conflict, \
             consider matching or specifying a constant num_cells argument together with a a desired depth"
             )
+
+        self._activation_kwargs_iter = _iter_maybe_over_single(
+            activation_kwargs, n=self.depth
+        )
+        self._norm_kwargs_iter = _iter_maybe_over_single(norm_kwargs, n=self.depth)
+        self._layer_kwargs_iter = _iter_maybe_over_single(
+            layer_kwargs, n=self.depth + 1
+        )
         layers = self._make_net(device)
         layers = [
             layer if isinstance(layer, nn.Module) else _ExecutableLayer(layer)
@@ -430,8 +434,6 @@ class ConvNet(nn.Sequential):
             activation_kwargs if activation_kwargs is not None else {}
         )
         self.norm_kwargs = norm_kwargs if norm_kwargs is not None else {}
-        self._activation_kwargs_iter = _iter_maybe_over_single(activation_kwargs)
-        self._norm_kwargs_iter = _iter_maybe_over_single(norm_kwargs)
 
         depth = _find_depth(depth, num_cells, kernel_sizes, strides, paddings)
         self.depth = depth
@@ -462,6 +464,12 @@ class ConvNet(nn.Sequential):
         self.out_features = self.num_cells[-1]
 
         self.depth = len(self.kernel_sizes)
+
+        self._activation_kwargs_iter = _iter_maybe_over_single(
+            activation_kwargs, n=self.depth
+        )
+        self._norm_kwargs_iter = _iter_maybe_over_single(norm_kwargs, n=self.depth)
+
         layers = self._make_net(device)
         layers = [
             layer if isinstance(layer, nn.Module) else _ExecutableLayer(layer)
@@ -668,8 +676,6 @@ class Conv3dNet(nn.Sequential):
             activation_kwargs if activation_kwargs is not None else {}
         )
         self.norm_kwargs = norm_kwargs if norm_kwargs is not None else {}
-        self._activation_kwargs_iter = _iter_maybe_over_single(activation_kwargs)
-        self._norm_kwargs_iter = _iter_maybe_over_single(norm_kwargs)
 
         self.bias_last_layer = bias_last_layer
         self.aggregator_class = aggregator_class
@@ -703,6 +709,12 @@ class Conv3dNet(nn.Sequential):
         self.out_features = self.num_cells[-1]
 
         self.depth = len(self.kernel_sizes)
+
+        self._activation_kwargs_iter = _iter_maybe_over_single(
+            activation_kwargs, n=self.depth
+        )
+        self._norm_kwargs_iter = _iter_maybe_over_single(norm_kwargs, n=self.depth)
+
         layers = self._make_net(device)
         layers = [
             layer if isinstance(layer, nn.Module) else _ExecutableLayer(layer)
@@ -1000,73 +1012,6 @@ class DuelingCnnDQNet(nn.Module):
         advantage = self.advantage(x)
         value = self.value(x)
         return value + advantage - advantage.mean(dim=-1, keepdim=True)
-
-
-class DistributionalDQNnet(TensorDictModuleBase):
-    """Distributional Deep Q-Network softmax layer.
-
-    This layer should be used in between a regular model that predicts the
-    action values and a distribution which acts on logits values.
-
-    Args:
-        in_keys (list of str or tuples of str): input keys to the log-softmax
-            operation. Defaults to ``["action_value"]``.
-        out_keys (list of str or tuples of str): output keys to the log-softmax
-            operation. Defaults to ``["action_value"]``.
-
-    Examples:
-        >>> import torch
-        >>> from tensordict import TensorDict
-        >>> net = DistributionalDQNnet()
-        >>> td = TensorDict({"action_value": torch.randn(10, 5)}, batch_size=[10])
-        >>> net(td)
-        TensorDict(
-            fields={
-                action_value: Tensor(shape=torch.Size([10, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([10]),
-            device=None,
-            is_shared=False)
-
-    """
-
-    _wrong_out_feature_dims_error = (
-        "DistributionalDQNnet requires dqn output to be at least "
-        "2-dimensional, with dimensions *Batch x #Atoms x #Actions. Got {0} "
-        "instead."
-    )
-
-    def __init__(self, *, in_keys=None, out_keys=None, DQNet: nn.Module = None):
-        super().__init__()
-        if DQNet is not None:
-            warnings.warn(
-                f"Passing a network to {type(self)} is going to be deprecated in v0.4.0.",
-                category=DeprecationWarning,
-            )
-            if not (
-                not isinstance(DQNet.out_features, Number)
-                and len(DQNet.out_features) > 1
-            ):
-                raise RuntimeError(self._wrong_out_feature_dims_error)
-        self.dqn = DQNet
-        if in_keys is None:
-            in_keys = ["action_value"]
-        if out_keys is None:
-            out_keys = ["action_value"]
-        self.in_keys = in_keys
-        self.out_keys = out_keys
-
-    @dispatch(auto_batch_size=False)
-    def forward(self, tensordict):
-        for in_key, out_key in zip(self.in_keys, self.out_keys):
-            q_values = tensordict.get(in_key)
-            if self.dqn is not None:
-                q_values = self.dqn(q_values)
-            if q_values.ndimension() < 2:
-                raise RuntimeError(
-                    self._wrong_out_feature_dims_error.format(q_values.shape)
-                )
-            tensordict.set(out_key, F.log_softmax(q_values, dim=-2))
-        return tensordict
 
 
 def ddpg_init_last_layer(
@@ -1873,15 +1818,13 @@ class DTActor(nn.Module):
         )
 
 
-def _iter_maybe_over_single(item: dict | List[dict] | None):
+def _iter_maybe_over_single(item: dict | List[dict] | None, n):
     if item is None:
-        while True:
-            yield {}
+        return iter([{} for _ in range(n)])
     elif isinstance(item, dict):
-        while True:
-            yield deepcopy(item)
+        return iter([deepcopy(item) for _ in range(n)])
     else:
-        yield from (deepcopy(_item) for _item in item)
+        return iter([deepcopy(_item) for _item in item])
 
 
 class _ExecutableLayer(nn.Module):
