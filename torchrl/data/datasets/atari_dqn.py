@@ -673,7 +673,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             first_item = self[0]
             mmap = fn(first_item)
             mmap = mmap.expand(len(self), *first_item.shape)
-            mmap["_indices"] = torch.arange(mmap.shape[0])
+            mmap["_indices"] = torch.arange(mmap.shape[0]).reshape(mmap.shape)
             mmap.memmap_like(tmpdir, num_threads=32)
 
             def func(mmap):
