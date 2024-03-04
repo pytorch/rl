@@ -498,8 +498,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             if not os.listdir(tempdir):
                 os.makedirs(tempdir, exist_ok=True)
                 # get the list of runs
-                command = f"gsutil ls -R gs://atari-replay-datasets/dqn/{self.dataset_id}/replay_logs"
-                # command = f"gsutil -m ls -R gs://atari-replay-datasets/dqn/{self.dataset_id}/replay_logs"
+                command = f"gsutil -m ls -R gs://atari-replay-datasets/dqn/{self.dataset_id}/replay_logs"
                 output = subprocess.run(
                     command, shell=True, capture_output=True
                 )  # , stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
