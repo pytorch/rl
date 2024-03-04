@@ -10,7 +10,7 @@ import gzip
 import importlib.util
 import io
 import json
-
+from torchrl.data.utils import CloudpickleWrapper
 import os
 import shutil
 import subprocess
@@ -685,7 +685,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             if dim != 0:
                 raise RuntimeError("dim != 0 is not supported.")
             mmap.map(
-                fn=fn,
+                fn=CloudpickleWrapper(func),
                 dim=dim,
                 num_workers=num_workers,
                 chunksize=chunksize,
@@ -758,7 +758,8 @@ class _AtariStorage(Storage):
         split = (item < self.frames_per_split[1:, 1].unsqueeze(1)) & (
             item >= self.frames_per_split[:-1, 1].unsqueeze(1)
         )
-        split_tmp, idx = split.squeeze().nonzero().unbind(-1)
+        # split_tmp, idx = split.squeeze().nonzero().unbind(-1)
+        split_tmp, idx = split.nonzero().unbind(-1)
         split = torch.zeros_like(split_tmp)
         split[idx] = split_tmp
         split = self.frames_per_split[split + 1, 0]

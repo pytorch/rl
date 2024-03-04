@@ -2626,7 +2626,7 @@ class TestAtariDQN:
             slice_len=None,
             num_slices=8,
             batch_size=64,
-            num_procs=os.cpu_count() // 2,
+            num_procs=os.cpu_count(),
         )
         t = Compose(
             Resize(32, in_keys=["observation", ("next", "observation")]),
