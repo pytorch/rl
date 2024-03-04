@@ -53,7 +53,7 @@ class create_rb:
             },
             batch_size=[self.size],
         )
-        if "sampler" in kwargs and isinstance(["sampler"], SliceSampler):
+        if "sampler" in kwargs and isinstance(kwargs["sampler"], SliceSampler):
             data["traj"] = torch.arange(self.size) // 123
         if self.populated:
             rb.extend(data)
