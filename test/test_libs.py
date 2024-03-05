@@ -73,6 +73,7 @@ from torchrl.data.datasets.openx import OpenXExperienceReplay
 from torchrl.data.datasets.roboset import RobosetExperienceReplay
 from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
+from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import (
     CatTensors,
     Compose,
@@ -2627,10 +2628,13 @@ class TestAtariDQN:
             num_slices=8,
             batch_size=64,
             num_procs=max(0, os.cpu_count() - 4),
+            download="force",
         )
 
         t = Compose(
-            UnsqueezeTransform(unsqueeze_dim=-3, in_keys=["observation", ("next", "observation")]),
+            UnsqueezeTransform(
+                unsqueeze_dim=-3, in_keys=["observation", ("next", "observation")]
+            ),
             Resize(32, in_keys=["observation", ("next", "observation")]),
             RenameTransform(in_keys=["action"], out_keys=["other_action"]),
         )
@@ -2638,8 +2642,22 @@ class TestAtariDQN:
         def preproc(data):
             return t(data)
 
-        dataset.preprocess(preproc, num_workers=max(1, os.cpu_count()-4), num_chunks=1000, mp_start_method="fork", pbar=True)
-        print(dataset)
+        dataset.preprocess(
+            preproc,
+            num_workers=max(1, os.cpu_count() - 4),
+            num_chunks=1000,
+            mp_start_method="fork",
+            pbar=True,
+        )
+
+        dataset = AtariDQNExperienceReplay(
+            dataset_id,
+            slice_len=None,
+            num_slices=8,
+            batch_size=64,
+            num_procs=max(0, os.cpu_count() - 4),
+            download=True,
+        )
 
 
 @pytest.mark.slow
@@ -2753,6 +2771,83 @@ class TestOpenX:
             ), sample.get(("next", "done"))
         elif num_slices is not None:
             assert sample.get(("next", "done")).sum() == num_slices
+
+    def test_openx_preproc(self):
+        dataset = OpenXExperienceReplay(
+            "cmu_stretch",
+            download="force",
+            streaming=False,
+            batch_size=64,
+            shuffle=True,
+            num_slices=8,
+            slice_len=None,
+        )
+        from torchrl.envs import Compose, RenameTransform, Resize
+
+        t = Compose(
+            Resize(
+                64,
+                64,
+                in_keys=[("observation", "image"), ("next", "observation", "image")],
+            ),
+            RenameTransform(
+                in_keys=[
+                    ("observation", "image"),
+                    ("next", "observation", "image"),
+                    ("observation", "state"),
+                    ("next", "observation", "state"),
+                ],
+                out_keys=["pixels", ("next", "pixels"), "state", ("next", "state")],
+            ),
+        )
+
+        def fn(data: TensorDict):
+            data.unlock_()
+            data = data.select(
+                "action",
+                "done",
+                "episode",
+                ("next", "done"),
+                ("next", "observation"),
+                ("next", "reward"),
+                ("next", "terminated"),
+                ("next", "truncated"),
+                "observation",
+                "terminated",
+                "truncated",
+            )
+            data = t(data)
+            data = data.select(*data.keys(True, True))
+            return data
+
+        dataset.preprocess(
+            CloudpickleWrapper(fn),
+            num_workers=max(1, os.cpu_count() - 2),
+            num_chunks=500,
+            mp_start_method="fork",
+        )
+        sample = dataset.sample(32)
+        assert "observation" not in sample.keys()
+        assert "pixels" in sample.keys()
+        assert ("next", "pixels") in sample.keys(True)
+        assert "state" in sample.keys()
+        assert ("next", "state") in sample.keys(True)
+        assert sample["pixels"].shape == torch.Size([32, 3, 64, 64])
+        dataset = OpenXExperienceReplay(
+            "cmu_stretch",
+            download=True,
+            streaming=False,
+            batch_size=64,
+            shuffle=True,
+            num_slices=8,
+            slice_len=None,
+        )
+        sample = dataset.sample(32)
+        assert "observation" not in sample.keys()
+        assert "pixels" in sample.keys()
+        assert ("next", "pixels") in sample.keys(True)
+        assert "state" in sample.keys()
+        assert ("next", "state") in sample.keys(True)
 
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")

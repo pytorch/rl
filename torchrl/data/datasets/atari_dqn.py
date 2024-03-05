@@ -10,7 +10,6 @@ import gzip
 import importlib.util
 import io
 import json
-from torchrl.data.utils import CloudpickleWrapper
 import os
 import shutil
 import subprocess
@@ -33,6 +32,7 @@ from torchrl.data.replay_buffers.samplers import (
 )
 from torchrl.data.replay_buffers.storages import Storage, TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter
+from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.utils import _classproperty
 
 
@@ -535,7 +535,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                             dataset_path=self.dataset_path,
                             total_episodes=total_runs,
                             max_runs=self._max_runs,
-                        multithreaded=True,
+                            multithreaded=True,
                         )
                 else:
                     func = functools.partial(
@@ -560,7 +560,15 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
 
     @classmethod
     def _download_and_proc_split(
-        cls, run, run_files, *, tempdir, dataset_path, total_episodes, max_runs, multithreaded=True
+        cls,
+        run,
+        run_files,
+        *,
+        tempdir,
+        dataset_path,
+        total_episodes,
+        max_runs,
+        multithreaded=True,
     ):
         if (max_runs is not None) and (run >= max_runs):
             return
@@ -757,7 +765,8 @@ class _AtariStorage(Storage):
         frames_per_split[:, 1] = frames_per_split[:, 1].cumsum(0)
         self.frames_per_split = torch.cat(
             # [torch.tensor([[-1, 0]]), frames_per_split], 0
-            [torch.tensor([[-1, 0]]), frames_per_split], 0
+            [torch.tensor([[-1, 0]]), frames_per_split],
+            0,
         )
 
         # retrieve episodes
@@ -783,7 +792,7 @@ class _AtariStorage(Storage):
         else:
             is_int = False
         split = (item < self.frames_per_split[1:, 1].unsqueeze(1)) & (
-                item >= self.frames_per_split[:-1, 1].unsqueeze(1)
+            item >= self.frames_per_split[:-1, 1].unsqueeze(1)
         )
         # split_tmp, idx = split.squeeze().nonzero().unbind(-1)
         split_tmp, idx = split.nonzero().unbind(-1)
