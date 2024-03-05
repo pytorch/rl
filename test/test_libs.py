@@ -2628,8 +2628,6 @@ class TestAtariDQN:
             batch_size=64,
             num_procs=os.cpu_count(),
         )
-        print("indexing")
-        dataset[1:10]
 
         t = Compose(
             UnsqueezeTransform(unsqueeze_dim=-3, in_keys=["observation", ("next", "observation")]),
@@ -2640,7 +2638,7 @@ class TestAtariDQN:
         def preproc(data):
             return t(data)
 
-        dataset.preprocess(preproc, num_workers=4, num_chunks=1000, mp_start_method="fork", pbar=True)
+        dataset.preprocess(preproc, num_workers=max(1, os.cpu_count()-2), chunksize=100, mp_start_method="spawn", pbar=True)
         print(dataset)
 
 

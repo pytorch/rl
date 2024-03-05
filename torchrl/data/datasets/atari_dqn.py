@@ -671,16 +671,20 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         # Copy data to a tensordict
         with tempfile.TemporaryDirectory() as tmpdir:
             first_item = self[0]
+            metadata = first_item.pop("metadata")
+
             mmap = fn(first_item)
             mmap = mmap.expand(len(self), *first_item.shape)
-            mmap["_indices"] = torch.arange(mmap.shape[0])
-            mmap.memmap_like(tmpdir, num_threads=32)
+            mmap = mmap.memmap_like(tmpdir, num_threads=32)
+            with mmap.unlock_():
+                mmap["_indices"] = torch.arange(mmap.shape[0])
+            mmap.memmap_(tmpdir, num_threads=32)
 
             def func(mmap: TensorDictBase):
-                idx = mmap["_indices"].squeeze()
-                orig = self[idx]
+                idx = mmap["_indices"]
+                orig = self[idx].exclude("metadata")
                 orig = fn(orig)
-                mmap.update_at_(orig, idx)
+                mmap.update(orig, inplace=True)
                 return
 
             if dim != 0:
@@ -702,7 +706,8 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             shutil.rmtree(self.dataset_path)
             shutil.move(tmpdir, self.dataset_path)
             del mmap["_indices"]
-            self._storage = TensorStorage(mmap)
+            with mmap.unlock_():
+                self._storage = TensorStorage(mmap.set("metadata", metadata))
 
 
 class _AtariStorage(Storage):
