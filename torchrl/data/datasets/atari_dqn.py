@@ -436,7 +436,10 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                 if os.path.exists(self.dataset_path):
                     shutil.rmtree(self.dataset_path)
                 raise
-        storage = _AtariStorage(self.dataset_path)
+        if self._downloaded_and_preproc:
+            storage = TensorStrorage(TensorDict.load_memmap(self.dataset_path))
+        else:
+            storage = _AtariStorage(self.dataset_path)
         if writer is None:
             writer = ImmutableDatasetWriter()
         if sampler is None:
@@ -484,7 +487,13 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         return self._root / self.dataset_id
 
     @property
+    def _downloaded_and_preproc(self):
+        return os.path.exists(self.dataset_path / "meta.json")
+
+    @property
     def _is_downloaded(self):
+        if os.path.exists(self.dataset_path / "meta.json"):
+            return True
         if os.path.exists(self.dataset_path / "processed.json"):
             with open(self.dataset_path / "processed.json", "r") as jsonfile:
                 return json.load(jsonfile).get("processed", False) == self._max_runs
@@ -689,6 +698,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
 
             if dim != 0:
                 raise RuntimeError("dim != 0 is not supported.")
+
             mmap.map(
                 fn=CloudpickleWrapper(func),
                 dim=dim,
@@ -703,9 +713,13 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                 mp_start_method=mp_start_method,
                 pbar=pbar,
             )
+
             shutil.rmtree(self.dataset_path)
             shutil.move(tmpdir, self.dataset_path)
+            mmap = TensorDict.load_memmap(self.dataset_path)
+
             del mmap["_indices"]
+
             with mmap.unlock_():
                 self._storage = TensorStorage(mmap.set("metadata", metadata))
 

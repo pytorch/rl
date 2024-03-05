@@ -2638,7 +2638,7 @@ class TestAtariDQN:
         def preproc(data):
             return t(data)
 
-        dataset.preprocess(preproc, num_workers=max(1, os.cpu_count()-2), chunksize=100, mp_start_method="spawn", pbar=True)
+        dataset.preprocess(preproc, num_workers=max(1, os.cpu_count()-2), num_chunks=1000, mp_start_method="fork", pbar=True)
         print(dataset)
 
 
