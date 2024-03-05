@@ -10,13 +10,15 @@ from pathlib import Path
 from typing import Callable
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDictBase
 from torch import multiprocessing as mp
 
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, TensorStorage
 
 
 class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
+    """Parent class for offline datasets."""
+
     @abc.abstractproperty
     def data_path(self) -> Path:
         """Path to the dataset, including split."""

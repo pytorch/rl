@@ -4,10 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import concurrent.futures
 import functools
 import gzip
-import importlib.util
 import io
 import json
 import os
@@ -437,7 +435,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                     shutil.rmtree(self.dataset_path)
                 raise
         if self._downloaded_and_preproc:
-            storage = TensorStrorage(TensorDict.load_memmap(self.dataset_path))
+            storage = TensorStorage(TensorDict.load_memmap(self.dataset_path))
         else:
             storage = _AtariStorage(self.dataset_path)
         if writer is None:
@@ -776,6 +774,7 @@ class _AtariStorage(Storage):
             ),
             0,
         )
+        super().__init__(max_size=len(self))
 
     def __len__(self):
         return self.frames_per_split[-1, 1].item()

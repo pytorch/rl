@@ -57,6 +57,7 @@ class Storage:
     """
 
     ndim = 1
+    max_size: int
 
     def __init__(self, max_size: int) -> None:
         self.max_size = int(max_size)
