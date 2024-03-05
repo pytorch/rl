@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import shutil
 import tempfile
 import urllib
 import warnings
@@ -178,6 +179,9 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
             self.from_env = from_env
 
         if (download == "force") or (download and not self._is_downloaded()):
+            if download == "force" and os.path.exists(self.data_path_root):
+                shutil.rmtree(self.data_path_root)
+
             if not direct_download:
                 if terminate_on_end is None:
                     # we use the default of d4rl
@@ -232,6 +236,14 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
             prefetch=prefetch,
             transform=transform,
         )
+
+    @property
+    def data_path(self) -> Path:
+        return self._dataset_path
+
+    @property
+    def data_path_root(self) -> Path:
+        return self._dataset_path
 
     @property
     def _dataset_path(self):

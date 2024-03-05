@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import tarfile
 import tempfile
 import typing as tp
@@ -61,7 +62,7 @@ class GenDGRLExperienceReplay(BaseDatasetExperienceReplay):
             `<root>/<dataset_id>`. If none is provided, it defaults to
             ``~/.cache/torchrl/gen_dgrl`.
         download (bool or str, optional): Whether the dataset should be downloaded if
-            not found. Defaults to ``True``. Download can also be passed as "force",
+            not found. Defaults to ``True``. Download can also be passed as ``"force"``,
             in which case the downloaded data will be overwritten.
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
@@ -98,6 +99,7 @@ class GenDGRLExperienceReplay(BaseDatasetExperienceReplay):
     BASE_URL = "https://dl.fbaipublicfiles.com/DGRL/Procgen/Datasets/Compressed"
     # number of files extracted at a time
     _PROCESS_NPY_BATCH = 32
+    split_trajs: bool = False
 
     @_classproperty
     def available_datasets(cls):
@@ -154,6 +156,8 @@ class GenDGRLExperienceReplay(BaseDatasetExperienceReplay):
             os.makedirs(root, exist_ok=True)
         self.root = root
         if download == "force" or (download and not self._is_downloaded()):
+            if download == "force" and os.path.exists(self.data_path_root):
+                shutil.rmtree(self.data_path_root)
             storage = TensorStorage(self._download_and_preproc())
         else:
             storage = TensorStorage(TensorDict.load_memmap(self.data_path_root))

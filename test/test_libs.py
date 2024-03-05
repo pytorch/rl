@@ -2278,6 +2278,31 @@ class TestGenDGRL:
         yield
         GenDGRLExperienceReplay._get_category_len = _get_category_len
 
+    @pytest.mark.parametrize("dataset_num", [4])
+    def test_gen_dgrl_preproc(self, dataset_num, tmpdir, _patch_traj_len):
+        dataset_id = GenDGRLExperienceReplay.available_datasets[dataset_num]
+        dataset = GenDGRLExperienceReplay(
+            dataset_id, batch_size=32, root=tmpdir, download="force"
+        )
+        from torchrl.envs import Compose, GrayScale, Resize
+
+        t = Compose(
+            Resize(32, in_keys=["observation", ("next", "observation")]),
+            GrayScale(in_keys=["observation", ("next", "observation")]),
+        )
+
+        def fn(data):
+            return t(data)
+
+        dataset.preprocess(fn, num_workers=max(1, os.cpu_count() - 2), num_chunks=1000)
+        sample = dataset.sample()
+        assert sample["observation"].shape == torch.Size([32, 1, 32, 32])
+        assert sample["next", "observation"].shape == torch.Size([32, 1, 32, 32])
+        dataset = GenDGRLExperienceReplay(dataset_id, batch_size=32, root=tmpdir)
+        sample = dataset.sample()
+        assert sample["observation"].shape == torch.Size([32, 1, 32, 32])
+        assert sample["next", "observation"].shape == torch.Size([32, 1, 32, 32])
+
     @pytest.mark.parametrize("dataset_num", [0, 4, 8])
     def test_gen_dgrl(self, dataset_num, tmpdir, _patch_traj_len):
         dataset_id = GenDGRLExperienceReplay.available_datasets[dataset_num]
@@ -2310,6 +2335,51 @@ class TestGenDGRL:
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
 @pytest.mark.slow
 class TestD4RL:
+    def test_d4rl_preproc(self, tmpdir):
+        dataset_id = "walker2d-medium-replay-v2"
+        dataset = D4RLExperienceReplay(
+            dataset_id,
+            batch_size=32,
+            root=tmpdir,
+            download="force",
+            direct_download=True,
+        )
+        from torchrl.envs import CatTensors, Compose
+
+        t = Compose(
+            CatTensors(
+                in_keys=["observation", ("info", "qpos"), ("info", "qvel")],
+                out_key="data",
+            ),
+            CatTensors(
+                in_keys=[
+                    ("next", "observation"),
+                    ("next", "info", "qpos"),
+                    ("next", "info", "qvel"),
+                ],
+                out_key=("next", "data"),
+            ),
+        )
+
+        def fn(data):
+            return t(data)
+
+        dataset.preprocess(
+            fn,
+            num_workers=max(1, os.cpu_count() - 2),
+            num_chunks=1000,
+            mp_start_method="fork",
+        )
+        sample = dataset.sample()
+        assert sample["data"].shape == torch.Size([32, 35])
+        assert sample["next", "data"].shape == torch.Size([32, 35])
+        dataset = D4RLExperienceReplay(
+            dataset_id, batch_size=32, root=tmpdir, direct_download=True
+        )
+        sample = dataset.sample()
+        assert sample["data"].shape == torch.Size([32, 35])
+        assert sample["next", "data"].shape == torch.Size([32, 35])
+
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("use_truncated_as_done", [True, False])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -2496,10 +2566,10 @@ _minari_selected_datasets()
 
 
 @pytest.mark.skipif(not _has_minari or not _has_gymnasium, reason="Minari not found")
-@pytest.mark.parametrize("split", [False, True])
-@pytest.mark.parametrize("selected_dataset", _MINARI_DATASETS)
 @pytest.mark.slow
 class TestMinari:
+    @pytest.mark.parametrize("split", [False, True])
+    @pytest.mark.parametrize("selected_dataset", _MINARI_DATASETS)
     def test_load(self, selected_dataset, split):
         torchrl_logger.info(f"dataset {selected_dataset}")
         data = MinariExperienceReplay(
@@ -2514,6 +2584,55 @@ class TestMinari:
             t0 = time.time()
             if i == 10:
                 break
+
+    def test_minari_preproc(self, tmpdir):
+        selected_dataset = _MINARI_DATASETS[0]
+        dataset_id = "walker2d-medium-replay-v2"
+        dataset = MinariExperienceReplay(
+            selected_dataset, batch_size=32, split_trajs=False, download="force"
+        )
+
+        from torchrl.envs import CatTensors, Compose
+
+        t = Compose(
+            CatTensors(
+                in_keys=[
+                    ("observation", "observation"),
+                    ("info", "qpos"),
+                    ("info", "qvel"),
+                ],
+                out_key="data",
+            ),
+            CatTensors(
+                in_keys=[
+                    ("next", "observation", "observation"),
+                    ("next", "info", "qpos"),
+                    ("next", "info", "qvel"),
+                ],
+                out_key=("next", "data"),
+            ),
+        )
+
+        def fn(data):
+            return t(data)
+
+        dataset.preprocess(
+            fn,
+            num_workers=max(1, os.cpu_count() - 2),
+            num_chunks=1000,
+            mp_start_method="fork",
+        )
+        sample = dataset.sample()
+        assert sample["data"].shape == torch.Size([32, 8])
+        assert sample["next", "data"].shape == torch.Size([32, 8])
+        dataset = MinariExperienceReplay(
+            selected_dataset,
+            batch_size=32,
+            split_trajs=False,
+        )
+        sample = dataset.sample()
+        assert sample["data"].shape == torch.Size([32, 8])
+        assert sample["next", "data"].shape == torch.Size([32, 8])
 
 
 @pytest.mark.slow
@@ -2531,6 +2650,28 @@ class TestRoboset:
             t0 = time.time()
             if i == 10:
                 break
+
+    def test_roboset_preproc(self):
+        dataset = RobosetExperienceReplay(
+            "FK1-v4(expert)/FK1_MicroOpenRandom_v2d-v4", batch_size=32, download="force"
+        )
+
+        def func(data):
+            return data.set("obs_norm", data.get("observation").norm(dim=-1))
+
+        dataset.preprocess(
+            func,
+            num_workers=max(1, os.cpu_count() - 2),
+            num_chunks=1000,
+            mp_start_method="fork",
+        )
+        sample = dataset.sample()
+        assert "obs_norm" in sample.keys()
+        dataset = RobosetExperienceReplay(
+            "FK1-v4(expert)/FK1_MicroOpenRandom_v2d-v4", batch_size=32
+        )
+        sample = dataset.sample()
+        assert "obs_norm" in sample.keys()
 
 
 @pytest.mark.slow
@@ -2564,6 +2705,32 @@ class TestVD4RL:
                 t0 = time.time()
                 if i == 10:
                     break
+
+    def test_vd4rl_preproc(self):
+        torch.manual_seed(0)
+        datasets = VD4RLExperienceReplay.available_datasets
+        dataset_id = list(datasets)[4]
+        dataset = VD4RLExperienceReplay(dataset_id, batch_size=32, download="force")
+        from torchrl.envs import Compose, GrayScale, ToTensorImage
+
+        func = Compose(
+            ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
+            GrayScale(in_keys=["pixels", ("next", "pixels")]),
+        )
+        dataset.preprocess(
+            func,
+            num_workers=max(1, os.cpu_count() - 2),
+            num_chunks=1000,
+            mp_start_method="fork",
+        )
+        sample = dataset.sample()
+        assert sample["next", "pixels"].shape == torch.Size([32, 1, 64, 64])
+        dataset = VD4RLExperienceReplay(
+            dataset_id,
+            batch_size=32,
+        )
+        sample = dataset.sample()
+        assert sample["next", "pixels"].shape == torch.Size([32, 1, 64, 64])
 
 
 @pytest.mark.slow

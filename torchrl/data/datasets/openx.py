@@ -341,6 +341,9 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
             if self.download == "force" or (
                 self.download and not self._is_downloaded()
             ):
+                if download == "force" and os.path.exists(self.data_path_root):
+                    shutil.rmtree(self.data_path_root)
+
                 storage = self._download_and_preproc()
             else:
                 storage = TensorStorage(TensorDict.load_memmap(self.root / dataset_id))

@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 import abc
+import pickle
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Callable
 
@@ -14,19 +16,27 @@ from tensordict import TensorDictBase
 from torch import multiprocessing as mp
 
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, TensorStorage
+from torchrl.data.utils import CloudpickleWrapper
 
 
 class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
     """Parent class for offline datasets."""
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def data_path(self) -> Path:
         """Path to the dataset, including split."""
         ...
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def data_path_root(self) -> Path:
         """Path to the dataset root."""
+        ...
+
+    @abc.abstractmethod
+    def _is_downloaded(self) -> bool:
+        """Checks if the data has been downloaded."""
         ...
 
     @property
@@ -210,29 +220,43 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
             collate_fn=<function _collate_id at 0x120e21dc0>)
 
         """
+        if not _can_be_pickled(fn):
+            fn = CloudpickleWrapper(fn)
         if isinstance(self._storage, TensorStorage):
-            example_data = fn(self._storage[0])
-            mock_folder = self.data_path.parent / "mock"
-            mmlike = example_data.expand(
-                (self._storage.shape[0], *example_data.shape)
-            ).memmap_like(mock_folder, num_threads=32)
-            self._storage._storage.map(
-                fn=fn,
-                dim=dim,
-                num_workers=num_workers,
-                chunksize=chunksize,
-                num_chunks=num_chunks,
-                pool=pool,
-                generator=generator,
-                max_tasks_per_child=max_tasks_per_child,
-                worker_threads=worker_threads,
-                index_with_generator=index_with_generator,
-                pbar=pbar,
-                mp_start_method=mp_start_method,
-                out=mmlike,
-            )
-            self._storage._storage = mmlike
-            shutil.rmtree(self.data_path)
-            shutil.move(mock_folder, self.data_path)
+            item = self._storage[0]
+            with item.unlock_():
+                example_data = fn(item)
+            with tempfile.TemporaryDirectory() as mock_folder:
+                mmlike = example_data.expand(
+                    (self._storage.shape[0], *example_data.shape)
+                ).memmap_like(mock_folder, num_threads=32)
+                storage = self._storage._storage
+                with storage.unlock_():
+                    storage.map(
+                        fn=fn,
+                        dim=dim,
+                        num_workers=num_workers,
+                        chunksize=chunksize,
+                        num_chunks=num_chunks,
+                        pool=pool,
+                        generator=generator,
+                        max_tasks_per_child=max_tasks_per_child,
+                        worker_threads=worker_threads,
+                        index_with_generator=index_with_generator,
+                        pbar=pbar,
+                        mp_start_method=mp_start_method,
+                        out=mmlike,
+                    )
+                self._storage._storage = mmlike
+                shutil.rmtree(self.data_path)
+                shutil.move(mock_folder, self.data_path)
         else:
             raise NotImplementedError
+
+
+def _can_be_pickled(obj):
+    try:
+        pickle.dumps(obj)
+        return True
+    except (pickle.PickleError, AttributeError, TypeError):
+        return False

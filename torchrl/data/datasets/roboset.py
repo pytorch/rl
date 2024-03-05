@@ -59,7 +59,7 @@ class RobosetExperienceReplay(BaseDatasetExperienceReplay):
             `<root>/<dataset_id>`. If none is provided, it defaults to
             ``~/.cache/torchrl/roboset`.
         download (bool or str, optional): Whether the dataset should be downloaded if
-            not found. Defaults to ``True``. Download can also be passed as "force",
+            not found. Defaults to ``True``. Download can also be passed as ``"force"``,
             in which case the downloaded data will be overwritten.
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
@@ -95,30 +95,32 @@ class RobosetExperienceReplay(BaseDatasetExperienceReplay):
         >>> for batch in d:
         ...     break
         >>> # data is organised by seed and episode, but stored contiguously
-        >>> torchrl_logger.info(f"{batch['seed']}, {batch['episode']}")
+        >>> print(f"{batch['seed']}, {batch['episode']}")
         tensor([2, 1, 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 2, 2, 2, 1, 1, 2, 0, 2, 0, 2, 2, 1,
                 0, 2, 0, 0, 1, 1, 2, 1]) tensor([17, 20, 18,  9,  6,  1, 12,  6,  2,  6,  8, 15,  8, 21, 17,  3,  9, 20,
                 23, 12,  3, 16, 19, 16, 16,  4,  4, 12,  1,  2, 15, 24])
-        >>> torchrl_logger.info(batch)
+        >>> print(batch)
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([32, 9]), device=cpu, dtype=torch.float64, is_shared=False),
-                done: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.bool, is_shared=False),
+                done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                 episode: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False),
                 index: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False),
                 next: TensorDict(
                     fields={
-                        done: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.bool, is_shared=False),
+                        done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                         observation: Tensor(shape=torch.Size([32, 75]), device=cpu, dtype=torch.float64, is_shared=False),
                         reward: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.float64, is_shared=False),
-                        terminated: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.bool, is_shared=False),
-                        truncated: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.bool, is_shared=False)},
+                        terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
                     batch_size=torch.Size([32]),
                     device=cpu,
                     is_shared=False),
                 observation: Tensor(shape=torch.Size([32, 75]), device=cpu, dtype=torch.float64, is_shared=False),
                 seed: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False),
+                terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                 time: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.float64, is_shared=False)},
+                truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
             batch_size=torch.Size([32]),
             device=cpu,
             is_shared=False)
@@ -183,7 +185,9 @@ class RobosetExperienceReplay(BaseDatasetExperienceReplay):
         if self.download == "force" or (self.download and not self._is_downloaded()):
             if self.download == "force":
                 try:
-                    shutil.rmtree(self.data_path_root)
+                    if os.path.exists(self.data_path_root):
+                        shutil.rmtree(self.data_path_root)
+
                     if self.data_path != self.data_path_root:
                         shutil.rmtree(self.data_path)
                 except FileNotFoundError:
@@ -277,8 +281,12 @@ class RobosetExperienceReplay(BaseDatasetExperienceReplay):
                             )
 
         # give it the proper size
+        td_data["next", "done"] = td_data["next", "done"].unsqueeze(-1)
+        td_data["done"] = td_data["done"].unsqueeze(-1)
         td_data["next", "terminated"] = td_data["next", "done"]
         td_data["next", "truncated"] = td_data["next", "done"]
+        td_data["terminated"] = td_data["done"]
+        td_data["truncated"] = td_data["done"]
 
         td_data = td_data.expand(total_steps)
         # save to designated location
@@ -317,8 +325,11 @@ class RobosetExperienceReplay(BaseDatasetExperienceReplay):
                     ):
                         data_view["next", match][:-1].copy_(val[1:])
                         data_view[match].copy_(val)
-                    elif key not in ("rewards",):
+                    elif key not in ("rewards", "done", "terminated", "truncated"):
                         data_view[match].copy_(val)
+                    elif key in ("done", "terminated", "truncated"):
+                        data_view[match].copy_(val.unsqueeze(-1))
+                        data_view[("next", match)].copy_(val.unsqueeze(-1))
                     else:
                         data_view[("next", match)].copy_(val.unsqueeze(-1))
                 data_view["next", "terminated"].copy_(data_view["next", "done"])

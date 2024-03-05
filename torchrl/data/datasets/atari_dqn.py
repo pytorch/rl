@@ -65,7 +65,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             Has no effect whenever the data is already downloaded. Defaults to 0
             (no multiprocessing used).
         download (bool or str, optional): Whether the dataset should be downloaded if
-            not found. Defaults to ``True``. Download can also be passed as "force",
+            not found. Defaults to ``True``. Download can also be passed as ``"force"``,
             in which case the downloaded data will be overwritten.
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.

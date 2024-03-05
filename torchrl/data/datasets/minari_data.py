@@ -73,7 +73,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
             `<root>/<dataset_id>`. If none is provided, it defaults to
             ``~/.cache/torchrl/minari`.
         download (bool or str, optional): Whether the dataset should be downloaded if
-            not found. Defaults to ``True``. Download can also be passed as "force",
+            not found. Defaults to ``True``. Download can also be passed as ``"force"``,
             in which case the downloaded data will be overwritten.
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
@@ -185,7 +185,8 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         if self.download == "force" or (self.download and not self._is_downloaded()):
             if self.download == "force":
                 try:
-                    shutil.rmtree(self.data_path_root)
+                    if os.path.exists(self.data_path_root):
+                        shutil.rmtree(self.data_path_root)
                     if self.data_path != self.data_path_root:
                         shutil.rmtree(self.data_path)
                 except FileNotFoundError:
