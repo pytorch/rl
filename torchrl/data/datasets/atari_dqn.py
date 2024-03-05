@@ -673,15 +673,13 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             first_item = self[0]
             mmap = fn(first_item)
             mmap = mmap.expand(len(self), *first_item.shape)
-            mmap["_indices"] = torch.arange(mmap.shape[0]).reshape(mmap.shape)
+            mmap["_indices"] = torch.arange(mmap.shape[0])
             mmap.memmap_like(tmpdir, num_threads=32)
 
             def func(mmap: TensorDictBase):
                 idx = mmap["_indices"].squeeze()
                 orig = self[idx]
                 orig = fn(orig)
-                print('memmap', mmap.shape)
-                print('orig', orig.shape)
                 mmap.update_at_(orig, idx)
                 return
 
@@ -739,6 +737,7 @@ class _AtariStorage(Storage):
         )
         frames_per_split[:, 1] = frames_per_split[:, 1].cumsum(0)
         self.frames_per_split = torch.cat(
+            # [torch.tensor([[-1, 0]]), frames_per_split], 0
             [torch.tensor([[-1, 0]]), frames_per_split], 0
         )
 
@@ -758,22 +757,30 @@ class _AtariStorage(Storage):
         # We don't assume each storage has the same size (too expensive to test)
         # so we keep a map of each storage cumulative length and retrieve the
         # storages one after the other.
+        item = torch.as_tensor(item)
+        if not item.ndim:
+            is_int = True
+            item = item.reshape(-1)
+        else:
+            is_int = False
         split = (item < self.frames_per_split[1:, 1].unsqueeze(1)) & (
-            item >= self.frames_per_split[:-1, 1].unsqueeze(1)
+                item >= self.frames_per_split[:-1, 1].unsqueeze(1)
         )
-        split_tmp, idx = split.squeeze(0).nonzero().unbind(-1)
-        # split_tmp, idx = split.nonzero().unbind(-1)
-        split = torch.zeros_like(split_tmp)
-        split[idx] = split_tmp
+        # split_tmp, idx = split.squeeze().nonzero().unbind(-1)
+        split_tmp, idx = split.nonzero().unbind(-1)
+        split = split_tmp.squeeze()
+        idx = idx.squeeze()
+
+        if not is_int:
+            split = torch.zeros_like(split_tmp)
+            split[idx] = split_tmp
         split = self.frames_per_split[split + 1, 0]
         item = item - self.frames_per_split[split, 1]
-        assert (item >= 0).all()
-        if isinstance(item, int):
-            unique_splits = (split,)
-            split_inverse = None
-        else:
-            unique_splits, split_inverse = torch.unique(split, return_inverse=True)
-            unique_splits = unique_splits.tolist()
+        if is_int:
+            item = item.squeeze()
+            return self._proc_td(self._split_tds[split], item)
+        unique_splits, split_inverse = torch.unique(split, return_inverse=True)
+        unique_splits = unique_splits.tolist()
         out = []
         for i, split in enumerate(unique_splits):
             _item = item[split_inverse == i] if split_inverse is not None else item
@@ -793,7 +800,7 @@ class _AtariStorage(Storage):
         td_idx.set(("next", "observation"), obs_)
         non_tensor = td.exclude("data").to_dict()
         td_idx.update(td_data.apply(lambda x: x[index]))
-        if isinstance(index, torch.Tensor):
+        if isinstance(index, torch.Tensor) and index.ndim:
             td_idx.batch_size = [len(index)]
         td_idx.set_non_tensor("metadata", non_tensor)
 

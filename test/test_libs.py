@@ -2619,7 +2619,7 @@ class TestAtariDQN:
 
     @pytest.mark.parametrize("dataset_id", ["Pong/4"])
     def test_atari_preproc(self, dataset_id):
-        from torchrl.envs import Compose, RenameTransform, Resize
+        from torchrl.envs import Compose, RenameTransform, Resize, UnsqueezeTransform
 
         dataset = AtariDQNExperienceReplay(
             dataset_id,
@@ -2628,7 +2628,11 @@ class TestAtariDQN:
             batch_size=64,
             num_procs=os.cpu_count(),
         )
+        print("indexing")
+        dataset[1:10]
+
         t = Compose(
+            UnsqueezeTransform(unsqueeze_dim=-3, in_keys=["observation", ("next", "observation")]),
             Resize(32, in_keys=["observation", ("next", "observation")]),
             RenameTransform(in_keys=["action"], out_keys=["other_action"]),
         )
