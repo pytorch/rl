@@ -2626,7 +2626,7 @@ class TestAtariDQN:
             slice_len=None,
             num_slices=8,
             batch_size=64,
-            num_procs=os.cpu_count(),
+            num_procs=max(0, os.cpu_count() - 4),
         )
 
         t = Compose(
@@ -2638,7 +2638,7 @@ class TestAtariDQN:
         def preproc(data):
             return t(data)
 
-        dataset.preprocess(preproc, num_workers=max(1, os.cpu_count()-2), num_chunks=1000, mp_start_method="fork", pbar=True)
+        dataset.preprocess(preproc, num_workers=max(1, os.cpu_count()-4), num_chunks=1000, mp_start_method="fork", pbar=True)
         print(dataset)
 
 
