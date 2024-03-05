@@ -60,13 +60,13 @@ class MLP(nn.Sequential):
             class or constructor to be used.
             Defaults to :class:`~torch.nn.Tanh`.
         activation_kwargs (dict or list of dicts, optional): kwargs to be used
-            with the activation class. Aslo accepts a list of kwargs, one for
-            each layer.
+            with the activation class. Aslo accepts a list of kwargs of length
+            ``depth + int(activate_last_layer)``.
         norm_class (Type or callable, optional): normalization class or
             constructor, if any.
         norm_kwargs (dict or list of dicts, optional): kwargs to be used with
-            the normalization layers. Aslo accepts a list of kwargs, one for
-            each layer.
+            the normalization layers. Aslo accepts a list of kwargs of length
+            ``depth + int(activate_last_layer)``.
         dropout (float, optional): dropout probability. Defaults to ``None`` (no
             dropout);
         bias_last_layer (bool): if ``True``, the last Linear layer will have a bias parameter.
@@ -77,7 +77,7 @@ class MLP(nn.Sequential):
         layer_class (Type[nn.Module] or callable, optional): class to be used
             for the linear layers;
         layer_kwargs (dict or list of dicts, optional): kwargs for the linear
-            layers. Aslo accepts a list of kwargs, one for each layer.
+            layers. Aslo accepts a list of kwargs of length ``depth + 1``.
         activate_last_layer (bool): whether the MLP output should be activated. This is useful when the MLP output
             is used as the input for another module.
             default: False.
@@ -330,13 +330,13 @@ class ConvNet(nn.Sequential):
             class or constructor to be used.
             Defaults to :class:`~torch.nn.Tanh`.
         activation_kwargs (dict or list of dicts, optional): kwargs to be used
-            with the activation class. A list of kwargs can also be passed,
-            with one element per layer.
+            with the activation class. A list of kwargs of length ``depth``
+            can also be passed, with one element per layer.
         norm_class (Type or callable, optional): normalization class or
             constructor, if any.
         norm_kwargs (dict or list of dicts, optional): kwargs to be used with
-            the normalization layers. A list of kwargs can also be passed,
-            with one element per layer.
+            the normalization layers. A list of kwargs of length ``depth`` can
+            also be passed, with one element per layer.
         bias_last_layer (bool): if ``True``, the last Linear layer will have a
             bias parameter. Defaults to ``True``.
         aggregator_class (Type[nn.Module] or callable): aggregator class or
@@ -578,12 +578,12 @@ class Conv3dNet(nn.Sequential):
         activation_class (Type[nn.Module] or callable): activation class or
             constructor to be used. Defaults to :class:`~torch.nn.Tanh`.
         activation_kwargs (dict or list of dicts, optional): kwargs to be used
-            with the activation class. A list of kwargs with one element per
-            layer can also be provided.
+            with the activation class. A list of kwargs of length ``depth``
+            with one element per layer can also be provided.
         norm_class (Type or callable, optional): normalization class, if any.
         norm_kwargs (dict or list of dicts, optional): kwargs to be used with
-            the normalization layers. A list of kwargs with one element per
-            layer can also be provided.
+            the normalization layers. A list of kwargs of length ``depth``
+            with one element per layer can also be provided.
         bias_last_layer (bool): if ``True``, the last Linear layer will have a
             bias parameter. Defaults to ``True``.
         aggregator_class (Type[nn.Module] or callable): aggregator class or
