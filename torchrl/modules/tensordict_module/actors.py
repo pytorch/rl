@@ -21,8 +21,7 @@ from torch.distributions import Categorical
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.data.utils import _process_action_space_spec
-from torchrl.modules.models.models import DistributionalDQNnet
-from torchrl.modules.tensordict_module.common import SafeModule
+from torchrl.modules.tensordict_module.common import DistributionalDQNnet, SafeModule
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,

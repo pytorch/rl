@@ -58,65 +58,99 @@ def double_prec_fixture():
     torch.set_default_dtype(dtype)
 
 
-@pytest.mark.parametrize("in_features", [3, 10, None])
-@pytest.mark.parametrize("out_features", [3, (3, 10)])
-@pytest.mark.parametrize("depth, num_cells", [(3, 32), (None, (32, 32, 32))])
-@pytest.mark.parametrize(
-    "activation_class, activation_kwargs",
-    [(nn.ReLU, {"inplace": True}), (nn.ReLU, {}), (nn.PReLU, {})],
-)
-@pytest.mark.parametrize(
-    "norm_class, norm_kwargs",
-    [
-        (nn.LazyBatchNorm1d, {}),
-        (nn.BatchNorm1d, {"num_features": 32}),
-        (nn.LayerNorm, {"normalized_shape": 32}),
-    ],
-)
-@pytest.mark.parametrize("dropout", [0.0, 0.5])
-@pytest.mark.parametrize("bias_last_layer", [True, False])
-@pytest.mark.parametrize("single_bias_last_layer", [True, False])
-@pytest.mark.parametrize("layer_class", [nn.Linear, NoisyLinear])
-@pytest.mark.parametrize("device", get_default_devices())
-def test_mlp(
-    in_features,
-    out_features,
-    depth,
-    num_cells,
-    activation_class,
-    activation_kwargs,
-    dropout,
-    bias_last_layer,
-    norm_class,
-    norm_kwargs,
-    single_bias_last_layer,
-    layer_class,
-    device,
-    seed=0,
-):
-    torch.manual_seed(seed)
-    batch = 2
-    mlp = MLP(
-        in_features=in_features,
-        out_features=out_features,
-        depth=depth,
-        num_cells=num_cells,
-        activation_class=activation_class,
-        activation_kwargs=activation_kwargs,
-        norm_class=norm_class,
-        norm_kwargs=norm_kwargs,
-        dropout=dropout,
-        bias_last_layer=bias_last_layer,
-        single_bias_last_layer=False,
-        layer_class=layer_class,
-        device=device,
+class TestMLP:
+    @pytest.mark.parametrize("in_features", [3, 10, None])
+    @pytest.mark.parametrize("out_features", [3, (3, 10)])
+    @pytest.mark.parametrize("depth, num_cells", [(3, 32), (None, (32, 32, 32))])
+    @pytest.mark.parametrize(
+        "activation_class, activation_kwargs",
+        [(nn.ReLU, {"inplace": True}), (nn.ReLU, {}), (nn.PReLU, {})],
     )
-    if in_features is None:
-        in_features = 5
-    x = torch.randn(batch, in_features, device=device)
-    y = mlp(x)
-    out_features = [out_features] if isinstance(out_features, Number) else out_features
-    assert y.shape == torch.Size([batch, *out_features])
+    @pytest.mark.parametrize(
+        "norm_class, norm_kwargs",
+        [
+            (nn.LazyBatchNorm1d, {}),
+            (nn.BatchNorm1d, {"num_features": 32}),
+            (nn.LayerNorm, {"normalized_shape": 32}),
+        ],
+    )
+    @pytest.mark.parametrize("dropout", [0.0, 0.5])
+    @pytest.mark.parametrize("bias_last_layer", [True, False])
+    @pytest.mark.parametrize("single_bias_last_layer", [True, False])
+    @pytest.mark.parametrize("layer_class", [nn.Linear, NoisyLinear])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_mlp(
+        self,
+        in_features,
+        out_features,
+        depth,
+        num_cells,
+        activation_class,
+        activation_kwargs,
+        dropout,
+        bias_last_layer,
+        norm_class,
+        norm_kwargs,
+        single_bias_last_layer,
+        layer_class,
+        device,
+        seed=0,
+    ):
+        torch.manual_seed(seed)
+        batch = 2
+        mlp = MLP(
+            in_features=in_features,
+            out_features=out_features,
+            depth=depth,
+            num_cells=num_cells,
+            activation_class=activation_class,
+            activation_kwargs=activation_kwargs,
+            norm_class=norm_class,
+            norm_kwargs=norm_kwargs,
+            dropout=dropout,
+            bias_last_layer=bias_last_layer,
+            single_bias_last_layer=False,
+            layer_class=layer_class,
+            device=device,
+        )
+        if in_features is None:
+            in_features = 5
+        x = torch.randn(batch, in_features, device=device)
+        y = mlp(x)
+        out_features = (
+            [out_features] if isinstance(out_features, Number) else out_features
+        )
+        assert y.shape == torch.Size([batch, *out_features])
+
+    def test_kwargs(self):
+        def make_activation(shift):
+            return lambda x: x + shift
+
+        def layer(*args, **kwargs):
+            linear = nn.Linear(*args, **kwargs)
+            linear.weight.data.copy_(torch.eye(4))
+            return linear
+
+        in_features = 4
+        out_features = 4
+        num_cells = [4, 4, 4]
+        mlp = MLP(
+            in_features=in_features,
+            out_features=out_features,
+            num_cells=num_cells,
+            activation_class=make_activation,
+            activation_kwargs=[{"shift": 0}, {"shift": 1}, {"shift": 2}],
+            layer_class=layer,
+            layer_kwargs=[{"bias": False}] * 4,
+            bias_last_layer=False,
+        )
+        x = torch.zeros(4)
+        y = mlp(x)
+        for i, module in enumerate(mlp.modules()):
+            if isinstance(module, nn.Linear):
+                assert (module.weight == torch.eye(4)).all(), i
+                assert module.bias is None, i
+        assert (y == 3).all()
 
 
 @pytest.mark.parametrize("in_features", [3, 10, None])
