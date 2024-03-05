@@ -226,9 +226,11 @@ class MLP(nn.Sequential):
             )
 
         self._activation_kwargs_iter = _iter_maybe_over_single(
-            activation_kwargs, n=self.depth
+            activation_kwargs, n=self.depth + self.activate_last_layer
         )
-        self._norm_kwargs_iter = _iter_maybe_over_single(norm_kwargs, n=self.depth)
+        self._norm_kwargs_iter = _iter_maybe_over_single(
+            norm_kwargs, n=self.depth + self.activate_last_layer
+        )
         self._layer_kwargs_iter = _iter_maybe_over_single(
             layer_kwargs, n=self.depth + 1
         )
