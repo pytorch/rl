@@ -8,6 +8,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Callable, Dict, Tuple
