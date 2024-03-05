@@ -217,9 +217,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
 
-    scaler1 = GradScaler()
-    scaler2 = GradScaler()
-    scaler3 = GradScaler()
+    scaler_world_model = GradScaler()
+    scaler_actor = GradScaler()
+    scaler_value = GradScaler()
 
     for i, tensordict in enumerate(collector):
         cmpt = 0
@@ -260,17 +260,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     sampled_tensordict = reward_normalizer.normalize_reward(
                         sampled_tensordict
                     )
-                # update world model
+
+                # If we are logging videos, we keep some frames.
                 with autocast(dtype=torch.float16):
-                    model_loss_td, sampled_tensordict = world_model_loss(
-                        sampled_tensordict
-                    )
-                    loss_world_model = (
-                        model_loss_td["loss_model_kl"]
-                        + model_loss_td["loss_model_reco"]
-                        + model_loss_td["loss_model_reward"]
-                    )
-                    # If we are logging videos, we keep some frames.
                     if (
                         cfg.record_video
                         and (record._count + 1) % cfg.record_interval == 0
@@ -286,80 +278,45 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     else:
                         sampled_tensordict_save = None
 
-                    scaler1.scale(loss_world_model).backward()
-                    scaler1.unscale_(world_model_opt)
-                    clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
-                    scaler1.step(world_model_opt)
-                    if j == cfg.optim_steps_per_batch - 1 and do_log:
-                        logger.log_scalar(
-                            "loss_world_model",
-                            loss_world_model.detach().item(),
-                            step=collected_frames,
-                        )
-                        logger.log_scalar(
-                            "grad_world_model",
-                            grad_norm(world_model_opt),
-                            step=collected_frames,
-                        )
-                        logger.log_scalar(
-                            "loss_model_kl",
-                            model_loss_td["loss_model_kl"].detach().item(),
-                            step=collected_frames,
-                        )
-                        logger.log_scalar(
-                            "loss_model_reco",
-                            model_loss_td["loss_model_reco"].detach().item(),
-                            step=collected_frames,
-                        )
-                        logger.log_scalar(
-                            "loss_model_reward",
-                            model_loss_td["loss_model_reward"].detach().item(),
-                            step=collected_frames,
-                        )
-                    world_model_opt.zero_grad()
-                    scaler1.update()
+                sampled_tensordict = update_world_model(
+                    cfg,
+                    collected_frames,
+                    do_log,
+                    j,
+                    logger,
+                    sampled_tensordict,
+                    scaler_world_model,
+                    world_model,
+                    world_model_loss,
+                    world_model_opt,
+                )
 
-                # update actor network
-                with autocast(dtype=torch.float16):
-                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
-                scaler2.scale(actor_loss_td["loss_actor"]).backward()
-                scaler2.unscale_(actor_opt)
-                clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
-                scaler2.step(actor_opt)
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
-                    logger.log_scalar(
-                        "loss_actor",
-                        actor_loss_td["loss_actor"].detach().item(),
-                        step=collected_frames,
-                    )
-                    logger.log_scalar(
-                        "grad_actor",
-                        grad_norm(actor_opt),
-                        step=collected_frames,
-                    )
-                actor_opt.zero_grad()
-                scaler2.update()
+                sampled_tensordict = update_actor_network(
+                    actor_model,
+                    actor_loss,
+                    actor_opt,
+                    scaler_actor,
+                    sampled_tensordict,
+                    collected_frames,
+                    cfg,
+                    logger,
+                    do_log,
+                    j,
+                )
 
-                # update value network
-                with autocast(dtype=torch.float16):
-                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
-                scaler3.scale(value_loss_td["loss_value"]).backward()
-                scaler3.unscale_(value_opt)
-                clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
-                scaler3.step(value_opt)
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
-                    logger.log_scalar(
-                        "loss_value",
-                        value_loss_td["loss_value"].detach().item(),
-                        step=collected_frames,
-                    )
-                    logger.log_scalar(
-                        "grad_value",
-                        grad_norm(value_opt),
-                        step=collected_frames,
-                    )
-                value_opt.zero_grad()
-                scaler3.update()
+                update_value_network(
+                    value_model,
+                    value_loss,
+                    value_opt,
+                    scaler_value,
+                    sampled_tensordict,
+                    collected_frames,
+                    cfg,
+                    logger,
+                    do_log,
+                    j,
+                )
+
                 if j == cfg.optim_steps_per_batch - 1:
                     do_log = False
 
@@ -377,6 +334,131 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if cfg.exploration != "":
             exploration_policy.step(current_frames)
         collector.update_policy_weights_()
+
+
+def update_value_network(
+    value_model,
+    value_loss,
+    value_opt,
+    scaler_value,
+    sampled_tensordict,
+    collected_frames,
+    cfg,
+    logger,
+    do_log,
+    j,
+):
+    # update value network
+    with autocast(dtype=torch.float16):
+        value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+    scaler_value.scale(value_loss_td["loss_value"]).backward()
+    scaler_value.unscale_(value_opt)
+    clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
+    scaler_value.step(value_opt)
+    if j == cfg.optim_steps_per_batch - 1 and do_log:
+        logger.log_scalar(
+            "loss_value",
+            value_loss_td["loss_value"].detach().item(),
+            step=collected_frames,
+        )
+        logger.log_scalar(
+            "grad_value",
+            grad_norm(value_opt),
+            step=collected_frames,
+        )
+    value_opt.zero_grad()
+    scaler_value.update()
+    return sampled_tensordict
+
+
+def update_actor_network(
+    actor_model,
+    actor_loss,
+    actor_opt,
+    scaler_actor,
+    sampled_tensordict,
+    collected_frames,
+    cfg,
+    logger,
+    do_log,
+    j,
+):
+    # update actor network
+    with autocast(dtype=torch.float16):
+        actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+    scaler_actor.scale(actor_loss_td["loss_actor"]).backward()
+    scaler_actor.unscale_(actor_opt)
+    clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
+    scaler_actor.step(actor_opt)
+    if j == cfg.optim_steps_per_batch - 1 and do_log:
+        logger.log_scalar(
+            "loss_actor",
+            actor_loss_td["loss_actor"].detach().item(),
+            step=collected_frames,
+        )
+        logger.log_scalar(
+            "grad_actor",
+            grad_norm(actor_opt),
+            step=collected_frames,
+        )
+    actor_opt.zero_grad()
+    scaler_actor.update()
+    return sampled_tensordict
+
+
+def update_world_model(
+    cfg,
+    collected_frames,
+    do_log,
+    j,
+    logger,
+    sampled_tensordict,
+    scaler_world_model,
+    world_model,
+    world_model_loss,
+    world_model_opt,
+):
+    # update world model
+    with autocast(dtype=torch.float16):
+        model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
+        loss_world_model = (
+            model_loss_td["loss_model_kl"]
+            + model_loss_td["loss_model_reco"]
+            + model_loss_td["loss_model_reward"]
+        )
+        scaler_world_model.scale(loss_world_model).backward()
+        scaler_world_model.unscale_(world_model_opt)
+        clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
+        scaler_world_model.step(world_model_opt)
+        if j == cfg.optim_steps_per_batch - 1 and do_log:
+            logger.log_scalar(
+                "loss_world_model",
+                loss_world_model.detach().item(),
+                step=collected_frames,
+            )
+            logger.log_scalar(
+                "grad_world_model",
+                grad_norm(world_model_opt),
+                step=collected_frames,
+            )
+            logger.log_scalar(
+                "loss_model_kl",
+                model_loss_td["loss_model_kl"].detach().item(),
+                step=collected_frames,
+            )
+            logger.log_scalar(
+                "loss_model_reco",
+                model_loss_td["loss_model_reco"].detach().item(),
+                step=collected_frames,
+            )
+            logger.log_scalar(
+                "loss_model_reward",
+                model_loss_td["loss_model_reward"].detach().item(),
+                step=collected_frames,
+            )
+        world_model_opt.zero_grad()
+        scaler_world_model.update()
+        return sampled_tensordict
 
 
 if __name__ == "__main__":
