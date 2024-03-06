@@ -52,7 +52,12 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
 )
 from torchrl.collectors.utils import split_trajectories
-from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
+from torchrl.data import (
+    CompositeSpec,
+    LazyTensorStorage,
+    ReplayBuffer,
+    UnboundedContinuousTensorSpec,
+)
 from torchrl.envs import (
     EnvBase,
     EnvCreator,
@@ -1626,8 +1631,8 @@ class TestPreemptiveThreshold:
 
         interruptor.stop_collection()
         for batch in collector:
-            assert batch["collector"]["traj_ids"][0] != -1
-            assert batch["collector"]["traj_ids"][1] == -1
+            assert batch["collector", "traj_ids"][0] != -1
+            assert batch["collector", "traj_ids"][1] == -1
         collector.shutdown()
         del collector
 
@@ -1660,7 +1665,7 @@ class TestPreemptiveThreshold:
         )
 
         for batch in collector:
-            trajectory_ids = batch["collector"]["traj_ids"]
+            trajectory_ids = batch["collector", "traj_ids"]
             trajectory_ids_mask = trajectory_ids != -1  # valid frames mask
             assert trajectory_ids[trajectory_ids_mask].numel() < frames_per_batch
         collector.shutdown()
@@ -2450,6 +2455,43 @@ class TestLibThreading:
             gc.collect()
         finally:
             torch.set_num_threads(init_threads)
+
+
+class TestUniqueTraj:
+    @pytest.mark.parametrize("stack_results", [True, False])
+    def test_unique_traj_sync(self, stack_results):
+        buffer = ReplayBuffer(
+            storage=LazyTensorStorage(900, ndim=2 + stack_results), batch_size=16
+        )
+        c = MultiSyncDataCollector(
+            [SerialEnv(2, EnvCreator(lambda: GymEnv("CartPole-v1")))] * 3,
+            policy=RandomPolicy(GymEnv("CartPole-v1").action_spec),
+            total_frames=900,
+            frames_per_batch=300,
+            stack_results=stack_results,
+        )
+        try:
+            for d in c:
+                buffer.extend(d)
+            traj_ids = buffer[:].get(("collector", "traj_ids"))
+            # check that we have as many trajs as expected (no skip)
+            assert traj_ids.unique().numel() == traj_ids.max() + 1
+            # check that trajs are not overlapping
+            if stack_results:
+                sets = [
+                    set(batch)
+                    for collectors in traj_ids.tolist()
+                    for batch in collectors
+                ]
+            else:
+                sets = [set(batch) for batch in traj_ids.tolist()]
+
+            for i in range(len(sets) - 1):
+                for j in range(i + 1, len(sets)):
+                    assert sets[i].intersection(sets[j]) == set()
+        finally:
+            c.shutdown()
+            del c
 
 
 if __name__ == "__main__":

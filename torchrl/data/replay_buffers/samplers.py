@@ -834,10 +834,7 @@ class SliceSampler(Sampler):
             )
         # Using transpose ensures the start and stop are sorted the same way
         stop_idx = end.transpose(0, -1).nonzero()
-        # beginnings = torch.cat([end[-1:], end[:-1]], 0)
-        # start_idx = beginnings.transpose(0, -1).nonzero()
-        # start_idx = torch.cat([start_idx[:, -1:], start_idx[:, :-1]], -1)
-        stop_idx = torch.cat([stop_idx[:, -1:], stop_idx[:, :-1]], -1)
+        stop_idx[:, [0, -1]] = stop_idx[:, [-1, 0]].clone()
         # First build the start indices as the stop + 1, we'll shift it later
         start_idx = stop_idx.clone()
         start_idx[:, 0] += 1
@@ -999,7 +996,7 @@ class SliceSampler(Sampler):
                 idx = lengths == seq_length
                 if not idx.any():
                     raise RuntimeError(
-                        "Did not find a single trajectory with sufficient length."
+                        f"Did not find a single trajectory with sufficient length (length range: {lengths.min()} - {lengths.max()} / required={seq_length}))."
                     )
                 if (
                     isinstance(seq_length, torch.Tensor)

@@ -59,6 +59,49 @@ Besides those compute parameters, users may choose to configure the following pa
 - exploration_type: the exploration strategy to be used with the policy.
 - reset_when_done: whether environments should be reset when reaching a done state.
 
+Collectors and batch size
+-------------------------
+
+Because each collector has its own way of organizing the environments that are
+run within, the data will come with different batch-size depending on how
+the specificities of the collector. The following table summarizes what is to
+be expected when collecting data:
+
+
++--------------------+---------------------+-----------------------------+------------------------------+
+|                    | SyncDataCollector   |MultiSyncDataCollector (n=B) |MultiaSyncDataCollector (n=B) |
++====================+=====================+=============+===============+==============================+
+|   `stack_result`   |          NA         |    `True`   |    `False`    |             NA               |
++--------------------+---------------------+-------------+---------------+------------------------------+
+|     Single env     |         [T]         |   `[B, T]`  |  `[B*(T//B)`  |              [T]             |
++--------------------+---------------------+-------------+---------------+------------------------------+
+| Batched env (n=P)  |       [P, T]        | `[B, P, T]` |  `[B * P, T]` |            [P, T]            |
++--------------------+---------------------+-------------+---------------+------------------------------+
+
+In each of these cases, the last dimension (``T`` for ``time``) is adapted such
+that the batch size equals the ``frames_per_batch`` argument passed to the
+collector.
+
+:class:`~torchrl.collectors.collectors.MultiSyncDataCollector` should only be
+used with ``stack_result=False`` when preemption is required, as the
+data will be stacked along the batch dimension or the time dimension, which
+can introduce some confusion when swapping regular and batched environments.
+In all other cases, using :func:`~torch.stack` is a better thing to do as it
+will keep each dimension separate and provide better interchangeability
+between configurations and collector classes.
+
+Another thing to note is that whereas :class:`~torchrl.collectors.collectors.MultiSyncDataCollector`
+has a dimension corresponding to the number of sub-collectors being run (``B``),
+:class:`~torchrl.collectors.collectors.MultiaSyncDataCollector` doesn't. This
+is easily understood when considering that :class:`~torchrl.collectors.collectors.MultiaSyncDataCollector`
+delivers batches of data on a first come first serve basis, whereas
+:class:`~torchrl.collectors.collectors.MultiSyncDataCollector` gathers data from
+each sub-collector before delivering it.
+
+Collectors and replay buffers interoperability
+----------------------------------------------
+
+
 
 Single node data collectors
 ---------------------------
