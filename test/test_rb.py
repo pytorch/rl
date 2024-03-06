@@ -2678,16 +2678,21 @@ class TestRBMultidim:
             ],
         ],
     )
+    @pytest.mark.parametrize("env_device", get_default_devices())
     def test_rb_multidim_collector(
-        self, rbtype, storage_cls, writer_cls, sampler_cls, transform
+        self, rbtype, storage_cls, writer_cls, sampler_cls, transform, env_device
     ):
         from _utils_internal import CARTPOLE_VERSIONED
 
         torch.manual_seed(0)
-        env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED()))
+        env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED()), device=env_device)
         env.set_seed(0)
         collector = SyncDataCollector(
-            env, RandomPolicy(env.action_spec), frames_per_batch=4, total_frames=16
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=4,
+            total_frames=16,
+            device=env_device,
         )
         if writer_cls is TensorDictMaxValueWriter:
             with pytest.raises(
@@ -2712,6 +2717,7 @@ class TestRBMultidim:
                 rb.append_transform(t())
         try:
             for i, data in enumerate(collector):  # noqa: B007
+                assert data.device == torch.device(env_device)
                 rb.extend(data)
                 if isinstance(rb, TensorDictReplayBuffer) and transform is not None:
                     # this should fail bc we can't set the indices after executing the transform.
@@ -2721,6 +2727,7 @@ class TestRBMultidim:
                         rb.sample()
                     return
                 s = rb.sample()
+                assert s.device == torch.device("cpu")
                 rbtot = rb[:]
                 assert rbtot.shape[0] == 2
                 assert len(rb) == rbtot.numel()
