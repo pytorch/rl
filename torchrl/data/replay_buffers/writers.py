@@ -81,7 +81,13 @@ class Writer(ABC):
         if self._storage.ndim == 1:
             return index
         mesh = torch.stack(
-            torch.meshgrid(*(torch.arange(dim) for dim in self._storage.shape[1:])), -1
+            torch.meshgrid(
+                *(
+                    torch.arange(dim, device=index.device)
+                    for dim in self._storage.shape[1:]
+                )
+            ),
+            -1,
         ).flatten(0, -2)
         if _is_int(index):
             index0 = torch.as_tensor(int(index)).expand(mesh.shape[0], 1)
