@@ -1896,6 +1896,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
         last_traj_ids_subs = [None for _ in range(self.num_workers)]
         traj_max = -1
         traj_ids_list = [None for _ in range(self.num_workers)]
+        preempt = self.interruptor is not None and self.preemptive_threshold < 1.0
 
         while not all(dones) and self._frames < self.total_frames:
             _check_for_faulty_process(self.procs)
@@ -1914,7 +1915,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             self._iter += 1
 
-            if self.interruptor is not None and self.preemptive_threshold < 1.0:
+            if preempt:
                 self.interruptor.start_collection()
                 while self.queue_out.qsize() < int(
                     self.num_workers * self.preemptive_threshold
@@ -1934,7 +1935,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     idx = new_data
                     data = self.buffers[idx]
 
-                if self.interruptor is not None and self.preemptive_threshold < 1.0:
+                if preempt:
                     # mask buffers if cat, and create a mask if stack
                     if not stack_results:
                         buffers = {}
@@ -1967,7 +1968,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 is_last = traj_ids == last_traj_ids[idx]
                 # If we `cat` interrupted data, we have already filtered out
                 # non-valid steps. If we stack, we haven't.
-                if self.interruptor is not None and self.preemptive_threshold < 1.0 and stack_results:
+                if preempt and stack_results:
                     valid = buffer.get(("collector", "traj_ids")) != -1
                     if valid.ndim > 2:
                         valid = valid.flatten(0, -2)
@@ -1982,16 +1983,17 @@ class MultiSyncDataCollector(_MultiDataCollector):
                         traj_to_correct + (traj_max + 1) - traj_to_correct.min()
                     )
                     traj_ids = traj_ids.masked_scatter(~is_last, traj_to_correct)
+                # is_last can only be true if we're after the first iteration
                 if is_last.any():
                     traj_ids = torch.where(
                         is_last, last_traj_ids_subs[idx].expand_as(traj_ids), traj_ids
                     )
 
                 traj_ids_list[idx] = traj_ids
-                if self.interruptor is not None and self.preemptive_threshold < 1.0:
+                if preempt:
                     traj_ids = torch.where(buffer.get(("collector", "traj_ids")) != -1, traj_ids, -1)
                     if stack_results:
-                        last_traj_ids[idx] = traj_ids[..., valid][..., -1:].clone()
+                        last_traj_ids_subs[idx] = traj_ids[..., valid][..., -1:].clone()
                     else:
                         last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
                 else:
