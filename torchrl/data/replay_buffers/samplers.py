@@ -177,10 +177,12 @@ class SamplerWithoutReplacement(Sampler):
             device = self._sample_list.device
         else:
             device = storage.device if hasattr(storage, "device") else None
+
         if self.shuffle:
-            self._sample_list = torch.randperm(len_storage, device=device)
+            _sample_list = torch.randperm(len_storage, device=device)
         else:
-            self._sample_list = torch.arange(len_storage, device=device)
+            _sample_list = torch.arange(len_storage, device=device)
+        self._sample_list = _sample_list
 
     def _single_sample(self, len_storage, batch_size):
         index = self._sample_list[:batch_size]
@@ -188,7 +190,7 @@ class SamplerWithoutReplacement(Sampler):
 
         # check if we have enough elements for one more batch, assuming same batch size
         # will be used each time sample is called
-        if self._sample_list.numel() == 0 or (
+        if self._sample_list.shape[0] == 0 or (
             self.drop_last and len(self._sample_list) < batch_size
         ):
             self.ran_out = True
@@ -201,7 +203,6 @@ class SamplerWithoutReplacement(Sampler):
         return len(storage)
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
-        storage = storage.flatten()
         len_storage = self._storage_len(storage)
         if len_storage == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
@@ -217,6 +218,8 @@ class SamplerWithoutReplacement(Sampler):
             )
         self.len_storage = len_storage
         index = self._single_sample(len_storage, batch_size)
+        if storage.ndim > 1:
+            index = torch.unravel_index(index, storage.shape)
         # we 'always' return the indices. The 'drop_last' just instructs the
         # sampler to turn to 'ran_out = True` whenever the next sample
         # will be too short. This will be read by the replay buffer
