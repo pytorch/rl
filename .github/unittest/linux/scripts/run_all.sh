@@ -142,12 +142,12 @@ fi
 # smoke test
 python -c "import functorch"
 
-# install snapshot
-if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  pip3 install git+https://github.com/pytorch/torchsnapshot
-else
-  pip3 install torchsnapshot
-fi
+## install snapshot
+#if [[ "$TORCH_VERSION" == "nightly" ]]; then
+#  pip3 install git+https://github.com/pytorch/torchsnapshot
+#else
+#  pip3 install torchsnapshot
+#fi
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
