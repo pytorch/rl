@@ -2661,6 +2661,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
 
+    @property
+    def _simple_done(self):
+        _simple_done = self.__dict__.get("_simple_done_value", None)
+        if _simple_done is None:
+            key_set = set(self.full_done_spec.keys())
+            _simple_done = key_set == {
+                "done",
+                "truncated",
+                "terminated",
+            } or key_set == {"done", "terminated"}
+            self.__dict__["_simple_done_value"] = _simple_done
+        return _simple_done
+
     def maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Checks the done keys of the input tensordict and, if needed, resets the environment where it is done.
 
@@ -2672,11 +2685,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             not reset and contains the new reset data where the environment was reset.
 
         """
-        any_done = _terminated_or_truncated(
-            tensordict,
-            full_done_spec=self.output_spec["full_done_spec"],
-            key="_reset",
-        )
+        if self._simple_done:
+            done = tensordict._get_str("done", default=None)
+            tensordict._set_str("done", done.clone(), validated=True, inplace=False)
+            any_done = done.any()
+        else:
+            any_done = _terminated_or_truncated(
+                tensordict,
+                full_done_spec=self.output_spec["full_done_spec"],
+                key="_reset",
+            )
         if any_done:
             tensordict = self.reset(tensordict)
         return tensordict

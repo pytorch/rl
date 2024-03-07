@@ -1555,9 +1555,9 @@ class BoundedTensorSpec(TensorSpec):
             dtype = torch.get_default_dtype()
 
         if not isinstance(low, torch.Tensor):
-            low = torch.as_tensor(low, dtype=dtype, device=device)
+            low = torch.tensor(low, dtype=dtype, device=device)
         if not isinstance(high, torch.Tensor):
-            high = torch.as_tensor(high, dtype=dtype, device=device)
+            high = torch.tensor(high, dtype=dtype, device=device)
         if high.device != device:
             high = high.to(device)
         if low.device != device:
