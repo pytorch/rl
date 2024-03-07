@@ -2023,11 +2023,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if stack_results:
                 if same_device:
                     self.out_buffer = torch.stack(
-                        list(self.buffers.values()), 0, out=self.out_buffer
+                        list(buffers.values()), 0, out=self.out_buffer
                     )
                 else:
                     self.out_buffer = torch.stack(
-                        [item.cpu() for item in self.buffers.values()],
+                        [item.cpu() for item in buffers.values()],
                         0,
                         out=self.out_buffer,
                     )
@@ -2040,12 +2040,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 # but not interchangeably
                 if same_device:
                     self.out_buffer = torch.cat(
-                        list(self.buffers.values()), -1,
+                        list(buffers.values()), -1,
                         # out=self.out_buffer
                     )
                 else:
                     self.out_buffer = torch.cat(
-                        [item.cpu() for item in self.buffers.values()],
+                        [item.cpu() for item in buffers.values()],
                         -1,
                         # out=self.out_buffer,
                     )
