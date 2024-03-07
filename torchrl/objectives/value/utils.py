@@ -182,14 +182,15 @@ def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
     return gammas
 
 
-def _flatten_batch(tensor):
+def _flatten_batch(tensor, time_dim=-1):
     """Because we mark the end of each batch with a truncated signal, we can concatenate them.
 
     Args:
-        tensor (torch.Tensor): a tensor of shape [*B, T]
+        tensor (torch.Tensor): a tensor of shape [*B, T, *F]
+        time_dim (int, optional): the time dimension T. Defaults to -1.
 
     """
-    return tensor.flatten(0, -1)
+    return tensor.flatten(0, time_dim)
 
 
 def _get_num_per_traj(done):
@@ -211,7 +212,10 @@ def _get_num_per_traj(done):
 
 
 def _split_and_pad_sequence(
-    tensor: Union[torch.Tensor, TensorDictBase], splits: torch.Tensor, return_mask=False
+    tensor: Union[torch.Tensor, TensorDictBase],
+    splits: torch.Tensor,
+    return_mask=False,
+    time_dim=-1,
 ):
     """Given a tensor of size [*B, T, F] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax, *other].
 
@@ -277,16 +281,17 @@ def _split_and_pad_sequence(
                  [19, 19, 19]]])
 
     """
-    tensor = _flatten_batch(tensor)
     max_seq_len = torch.max(splits)
     shape = (len(splits), max_seq_len)
 
     # int16 supports length up to 32767
     dtype = (
-        torch.int16 if tensor.shape[-1] < torch.iinfo(torch.int16).max else torch.int32
+        torch.int16 if tensor.shape[-2] < torch.iinfo(torch.int16).max else torch.int32
     )
     arange = torch.arange(max_seq_len, device=tensor.device, dtype=dtype).unsqueeze(0)
     mask = arange < splits.unsqueeze(1)
+
+    tensor = _flatten_batch(tensor, time_dim=time_dim)
 
     def _fill_tensor(tensor):
         empty_tensor = torch.zeros(
