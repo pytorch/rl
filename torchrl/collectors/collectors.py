@@ -2040,22 +2040,24 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 # but not interchangeably
                 if same_device:
                     self.out_buffer = torch.cat(
-                        list(self.buffers.values()), -1, out=self.out_buffer
+                        list(self.buffers.values()), -1,
+                        # out=self.out_buffer
                     )
                 else:
                     self.out_buffer = torch.cat(
                         [item.cpu() for item in self.buffers.values()],
                         -1,
-                        out=self.out_buffer,
+                        # out=self.out_buffer,
                     )
                 self.out_buffer.set_(
-                    ("collector", "traj_ids"), torch.cat(traj_ids_list)
+                    ("collector", "traj_ids"), torch.cat(traj_ids_list, -1)
                 )
 
+            # TODO: why do we need to do cat inplace and clone?
             if self.split_trajs:
                 out = split_trajectories(self.out_buffer, prefix="collector")
             else:
-                out = self.out_buffer.clone()
+                out = self.out_buffer  # .clone()
 
             self._frames += n_collected
 
