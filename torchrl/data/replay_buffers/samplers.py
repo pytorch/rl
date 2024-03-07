@@ -991,6 +991,8 @@ class SliceSampler(Sampler):
         storage_length: int,
         traj_idx: torch.Tensor | None = None,
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, Any]]:
+        # start_idx and stop_idx are 2d tensors organized like a non-zero
+
         def get_traj_idx(lengths=lengths):
             return torch.randint(lengths.shape[0], (num_slices,), device=lengths.device)
 
@@ -1307,6 +1309,16 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
         indices, _ = SamplerWithoutReplacement.sample(self, storage, num_slices)
         storage_length = storage.shape[0]
+
+        # traj_idx will either be a single tensor or a tuple that can be reorganized
+        # like a non-zero through stacking.
+        def tuple_to_tensor(traj_idx, lengths=lengths):
+            if isinstance(traj_idx, tuple):
+                traj_idx = torch.arange(len(storage), device=lengths.device).view(
+                    storage.shape
+                )[traj_idx]
+            return traj_idx
+
         idx, info = self._sample_slices(
             lengths,
             start_idx,
@@ -1314,7 +1326,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             seq_length,
             num_slices,
             storage_length,
-            traj_idx=indices,
+            traj_idx=tuple_to_tensor(indices),
         )
         return idx, info
 
