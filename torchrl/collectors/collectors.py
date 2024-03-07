@@ -2035,14 +2035,17 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     ("collector", "traj_ids"), torch.stack(traj_ids_list)
                 )
             else:
+                # TODO: this is bc-breaking
+                # We should either always stack along dim=-1 or along dim=0
+                # but not interchangeably
                 if same_device:
                     self.out_buffer = torch.cat(
-                        list(self.buffers.values()), 0, out=self.out_buffer
+                        list(self.buffers.values()), -1, out=self.out_buffer
                     )
                 else:
                     self.out_buffer = torch.cat(
                         [item.cpu() for item in self.buffers.values()],
-                        0,
+                        -1,
                         out=self.out_buffer,
                     )
                 self.out_buffer.set_(
