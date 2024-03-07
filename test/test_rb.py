@@ -2555,12 +2555,19 @@ class TestEnsemble:
 
 def _rbtype(datatype):
     if datatype in ("pytree", "tensorclass"):
-        return [ReplayBuffer, PrioritizedReplayBuffer]
+        return [
+            (ReplayBuffer, RandomSampler),
+            (PrioritizedReplayBuffer, RandomSampler),
+            (ReplayBuffer, SamplerWithoutReplacement),
+            (PrioritizedReplayBuffer, SamplerWithoutReplacement),
+        ]
     return [
-        ReplayBuffer,
-        PrioritizedReplayBuffer,
-        TensorDictReplayBuffer,
-        TensorDictPrioritizedReplayBuffer,
+        (ReplayBuffer, RandomSampler),
+        (ReplayBuffer, SamplerWithoutReplacement),
+        (PrioritizedReplayBuffer, None),
+        (TensorDictReplayBuffer, RandomSampler),
+        (TensorDictReplayBuffer, SamplerWithoutReplacement),
+        (TensorDictPrioritizedReplayBuffer, None),
     ]
 
 
@@ -2598,19 +2605,19 @@ class TestRBMultidim:
                 batch_size=shape,
             )
 
-    datatype_rb_pairs = [
-        [datatype, rbtype]
+    datatype_rb_tuples = [
+        [datatype, *rbtype]
         for datatype in ["pytree", "tensordict", "tensorclass"]
         for rbtype in _rbtype(datatype)
     ]
 
-    @pytest.mark.parametrize("datatype,rbtype", datatype_rb_pairs)
+    @pytest.mark.parametrize("datatype,rbtype,sampler_cls", datatype_rb_tuples)
     @pytest.mark.parametrize("datadim", [1, 2])
     @pytest.mark.parametrize("storage_cls", [LazyMemmapStorage, LazyTensorStorage])
-    def test_rb_multidim(self, datatype, datadim, rbtype, storage_cls):
+    def test_rb_multidim(self, datatype, datadim, rbtype, storage_cls, sampler_cls):
         data = self._make_data(datatype, datadim)
         if rbtype not in (PrioritizedReplayBuffer, TensorDictPrioritizedReplayBuffer):
-            rbtype = functools.partial(rbtype, sampler=RandomSampler())
+            rbtype = functools.partial(rbtype, sampler=sampler_cls())
         else:
             rbtype = functools.partial(rbtype, alpha=0.9, beta=1.1)
 

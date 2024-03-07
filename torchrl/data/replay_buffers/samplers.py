@@ -177,10 +177,12 @@ class SamplerWithoutReplacement(Sampler):
             device = self._sample_list.device
         else:
             device = storage.device if hasattr(storage, "device") else None
+
         if self.shuffle:
-            self._sample_list = torch.randperm(len_storage, device=device)
+            _sample_list = torch.randperm(len_storage, device=device)
         else:
-            self._sample_list = torch.arange(len_storage, device=device)
+            _sample_list = torch.arange(len_storage, device=device)
+        self._sample_list = _sample_list
 
     def _single_sample(self, len_storage, batch_size):
         index = self._sample_list[:batch_size]
@@ -188,7 +190,7 @@ class SamplerWithoutReplacement(Sampler):
 
         # check if we have enough elements for one more batch, assuming same batch size
         # will be used each time sample is called
-        if self._sample_list.numel() == 0 or (
+        if self._sample_list.shape[0] == 0 or (
             self.drop_last and len(self._sample_list) < batch_size
         ):
             self.ran_out = True
@@ -201,7 +203,6 @@ class SamplerWithoutReplacement(Sampler):
         return len(storage)
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
-        storage = storage.flatten()
         len_storage = self._storage_len(storage)
         if len_storage == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
@@ -217,6 +218,8 @@ class SamplerWithoutReplacement(Sampler):
             )
         self.len_storage = len_storage
         index = self._single_sample(len_storage, batch_size)
+        if storage.ndim > 1:
+            index = torch.unravel_index(index, storage.shape)
         # we 'always' return the indices. The 'drop_last' just instructs the
         # sampler to turn to 'ran_out = True` whenever the next sample
         # will be too short. This will be read by the replay buffer
@@ -834,10 +837,7 @@ class SliceSampler(Sampler):
             )
         # Using transpose ensures the start and stop are sorted the same way
         stop_idx = end.transpose(0, -1).nonzero()
-        # beginnings = torch.cat([end[-1:], end[:-1]], 0)
-        # start_idx = beginnings.transpose(0, -1).nonzero()
-        # start_idx = torch.cat([start_idx[:, -1:], start_idx[:, :-1]], -1)
-        stop_idx = torch.cat([stop_idx[:, -1:], stop_idx[:, :-1]], -1)
+        stop_idx[:, [0, -1]] = stop_idx[:, [-1, 0]].clone()
         # First build the start indices as the stop + 1, we'll shift it later
         start_idx = stop_idx.clone()
         start_idx[:, 0] += 1
@@ -991,6 +991,8 @@ class SliceSampler(Sampler):
         storage_length: int,
         traj_idx: torch.Tensor | None = None,
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, Any]]:
+        # start_idx and stop_idx are 2d tensors organized like a non-zero
+
         def get_traj_idx(lengths=lengths):
             return torch.randint(lengths.shape[0], (num_slices,), device=lengths.device)
 
@@ -999,7 +1001,7 @@ class SliceSampler(Sampler):
                 idx = lengths == seq_length
                 if not idx.any():
                     raise RuntimeError(
-                        "Did not find a single trajectory with sufficient length."
+                        f"Did not find a single trajectory with sufficient length (length range: {lengths.min()} - {lengths.max()} / required={seq_length}))."
                     )
                 if (
                     isinstance(seq_length, torch.Tensor)
@@ -1307,6 +1309,16 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
         indices, _ = SamplerWithoutReplacement.sample(self, storage, num_slices)
         storage_length = storage.shape[0]
+
+        # traj_idx will either be a single tensor or a tuple that can be reorganized
+        # like a non-zero through stacking.
+        def tuple_to_tensor(traj_idx, lengths=lengths):
+            if isinstance(traj_idx, tuple):
+                traj_idx = torch.arange(len(storage), device=lengths.device).view(
+                    storage.shape
+                )[traj_idx]
+            return traj_idx
+
         idx, info = self._sample_slices(
             lengths,
             start_idx,
@@ -1314,7 +1326,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             seq_length,
             num_slices,
             storage_length,
-            traj_idx=indices,
+            traj_idx=tuple_to_tensor(indices),
         )
         return idx, info
 
