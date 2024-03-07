@@ -1260,7 +1260,7 @@ class _MultiDataCollector(DataCollectorBase):
         preemptive_threshold: float = None,
         num_threads: int = None,
         num_sub_threads: int = 1,
-        stack_results: bool | None = None,
+        cat_results: bool | None = None,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
@@ -1419,7 +1419,7 @@ class _MultiDataCollector(DataCollectorBase):
         self._exclude_private_keys = True
         self._frames = 0
         self._iter = -1
-        self.stack_results = stack_results
+        self.cat_results = cat_results
 
     @classmethod
     def _total_workers_from_env(cls, env_creators):
@@ -1876,13 +1876,19 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     def iterator(self) -> Iterator[TensorDictBase]:
 
-        stack_results = self.stack_results
-        if stack_results is None:
-            stack_results = False
+        cat_results = self.cat_results
+        if cat_results is None:
+            cat_results = False
             warnings.warn(
-                f"stack_results was not specified in the constructor of {type(self).__name__}. "
-                f"Currently, the default value if False (using torch.cat over torch.stack) but "
-                f"in the future (v0.5 onward) this will default to `True`. "
+                f"`cat_results` was not specified in the constructor of {type(self).__name__}. "
+                f"For MultiSyncDataCollector, `cat_results` indicates how the data should "
+                f"be packed: the preferred option is `cat_results='stack'` which provides "
+                f"the best interoperability across torchrl components. "
+                f"Other accepted values are `cat_results=0` (previous behaviour) and "
+                f"`cat_results=-1` (cat along time dimension). Among these two, the latter "
+                f"should be preferred for consistency across environment configurations. "
+                f"Currently, the default value is `0` (using torch.cat along first dimension)."
+                f"From v0.5 onward, this will default to `'stack'`. "
                 f"To suppress this warning, set stack_results to the desired value.",
                 category=DeprecationWarning,
             )
@@ -1937,7 +1943,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
                 if preempt:
                     # mask buffers if cat, and create a mask if stack
-                    if not stack_results:
+                    if cat_results != "stack":
                         buffers = {}
                         for idx, buffer in self.buffers.items():
                             valid = buffer.get(("collector", "traj_ids")) != -1
@@ -1970,7 +1976,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 is_last = traj_ids == last_traj_ids[idx]
                 # If we `cat` interrupted data, we have already filtered out
                 # non-valid steps. If we stack, we haven't.
-                if preempt and stack_results:
+                if preempt and cat_results == "stack":
                     valid = buffer.get(("collector", "traj_ids")) != -1
                     if valid.ndim > 2:
                         valid = valid.flatten(0, -2)
@@ -1992,13 +1998,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     )
 
                 if preempt:
-                    if stack_results:
+                    if cat_results == "stack":
                         mask_frames = buffer.get(("collector", "traj_ids")) != -1
-                        traj_ids = torch.where(
-                            mask_frames,
-                            traj_ids,
-                            -1
-                            )
+                        traj_ids = torch.where(mask_frames, traj_ids, -1)
                         n_collected += mask_frames.sum().cpu()
                         last_traj_ids_subs[idx] = traj_ids[..., valid][..., -1:].clone()
                     else:
@@ -2020,33 +2022,38 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     else:
                         same_device = same_device and (item.device == prev_device)
 
-            if stack_results:
+            if cat_results == "stack":
                 if same_device:
-                    self.out_buffer = torch.stack(
-                        list(buffers.values()), 0
-                    )
+                    self.out_buffer = torch.stack(list(buffers.values()), 0)
                 else:
                     self.out_buffer = torch.stack(
-                        [item.cpu() for item in buffers.values()],
-                        0
+                        [item.cpu() for item in buffers.values()], 0
                     )
                 self.out_buffer.set_(
                     ("collector", "traj_ids"), torch.stack(traj_ids_list)
                 )
             else:
-                # TODO: this is bc-breaking
-                # We should either always stack along dim=-1 or along dim=0
-                # but not interchangeably
-                if same_device:
-                    self.out_buffer = torch.cat(
-                        list(buffers.values()), -1)
-                else:
-                    self.out_buffer = torch.cat(
-                        [item.cpu() for item in buffers.values()],
-                        -1)
-                self.out_buffer.set_(
-                    ("collector", "traj_ids"), torch.cat(traj_ids_list, -1)
-                )
+                try:
+                    if same_device:
+                        self.out_buffer = torch.cat(list(buffers.values()), cat_results)
+                    else:
+                        self.out_buffer = torch.cat(
+                            [item.cpu() for item in buffers.values()], cat_results
+                        )
+                    self.out_buffer.set_(
+                        ("collector", "traj_ids"), torch.cat(traj_ids_list, -1)
+                    )
+                except RuntimeError as err:
+                    if (
+                        preempt
+                        and cat_results != -1
+                        and "Sizes of tensors must match" in str(err)
+                    ):
+                        raise RuntimeError(
+                            "The value provided to cat_results isn't compatible with the collectors outputs. "
+                            "Consider using `cat_results=-1`."
+                        )
+                    raise
 
             # TODO: why do we need to do cat inplace and clone?
             if self.split_trajs:
