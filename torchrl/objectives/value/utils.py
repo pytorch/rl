@@ -189,7 +189,7 @@ def _flatten_batch(tensor):
         tensor (torch.Tensor): a tensor of shape [*B, T]
 
     """
-    return tensor.flatten(0, -1)
+    return tensor.flatten(0, -2)
 
 
 def _get_num_per_traj(done):
