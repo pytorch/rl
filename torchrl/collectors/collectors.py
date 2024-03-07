@@ -1886,10 +1886,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 f"To suppress this warning, set stack_results to the desired value.",
                 category=DeprecationWarning,
             )
-        elif stack_results and self.interruptor is not None:
-            raise RuntimeError(
-                "Using an interruptor with stack_results=True is not permitted yet as trajectories of different length cannot be stacked together."
-            )
 
         self.buffers = {}
         dones = [False for _ in range(self.num_workers)]
