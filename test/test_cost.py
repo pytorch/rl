@@ -11518,6 +11518,99 @@ class TestValues:
         torch.testing.assert_close(v1, torch.cat([v1a, v1b], -2), rtol=1e-4, atol=1e-4)
 
     @pytest.mark.parametrize("device", get_default_devices())
+    def test_args_kwargs_timedim(self, device):
+        torch.manual_seed(0)
+
+        lmbda = 0.95
+        N = (2, 3)
+        B = (4,)
+        T = 20
+
+        terminated = torch.zeros(*N, T, *B, 1, device=device, dtype=torch.bool)
+        terminated[..., T // 2 - 1, :, :] = 1
+        done = terminated.clone()
+        done[..., -1, :, :] = 1
+
+        reward = torch.randn(*N, T, *B, 1, device=device)
+        state_value = torch.randn(*N, T, *B, 1, device=device)
+        next_state_value = torch.randn(*N, T, *B, 1, device=device)
+
+        # avoid low values of gamma
+        gamma = 0.95
+
+        v1 = vec_generalized_advantage_estimate(
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            time_dim=-3,
+        )[0]
+
+
+        v2 = vec_generalized_advantage_estimate(
+            gamma=gamma,
+            lmbda=lmbda,
+            state_value=state_value,
+            next_state_value=next_state_value,
+            reward=reward,
+            done=done,
+            terminated=terminated,
+            time_dim=-3,
+        )[0]
+
+        with pytest.raises(TypeError, match="positional arguments"):
+            v3 = vec_generalized_advantage_estimate(
+                gamma,
+                lmbda,
+                state_value,
+                next_state_value,
+                reward,
+                done,
+                terminated,
+                -3,
+            )[0]
+
+        v3 = vec_generalized_advantage_estimate(
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            terminated,
+            time_dim=-3,
+        )[0]
+
+        v4 = vec_generalized_advantage_estimate(
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            terminated,
+            time_dim=2,
+        )[0]
+
+        v5 = vec_generalized_advantage_estimate(
+            gamma=gamma,
+            lmbda=lmbda,
+            state_value=state_value,
+            next_state_value=next_state_value,
+            reward=reward,
+            done=done,
+            terminated=terminated,
+            time_dim=-3,
+        )[0]
+        torch.testing.assert_close(v1, v2)
+        torch.testing.assert_close(v1, v3)
+        torch.testing.assert_close(v1, v4)
+        torch.testing.assert_close(v1, v5)
+
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("N", [(3,), (3, 7)])
     @pytest.mark.parametrize("T", [3, 5, 200])
     def test_successive_traj_gae(
