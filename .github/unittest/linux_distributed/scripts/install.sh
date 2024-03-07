@@ -46,8 +46,8 @@ fi
 # smoke test
 python -c "import functorch"
 
-# install snapshot
-pip install git+https://github.com/pytorch/torchsnapshot
+## install snapshot
+#pip install git+https://github.com/pytorch/torchsnapshot
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
