@@ -964,14 +964,14 @@ class SyncDataCollector(DataCollectorBase):
                         torch.stack(
                             tensordicts,
                             self._final_rollout.ndim - 1,
-                            out=self._final_rollout[: t + 1],
+                            out=self._final_rollout[..., : t + 1],
                         )
                     except RuntimeError:
                         with self._final_rollout.unlock_():
                             torch.stack(
                                 tensordicts,
                                 self._final_rollout.ndim - 1,
-                                out=self._final_rollout[: t + 1],
+                                out=self._final_rollout[..., : t + 1],
                             )
                     break
             else:
