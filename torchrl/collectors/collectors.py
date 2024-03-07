@@ -1989,7 +1989,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
                         is_last, last_traj_ids_subs[idx].expand_as(traj_ids), traj_ids
                     )
 
-                traj_ids_list[idx] = traj_ids
                 if preempt:
                     traj_ids = torch.where(buffer.get(("collector", "traj_ids")) != -1, traj_ids, -1)
                     if stack_results:
@@ -1998,6 +1997,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                         last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
                 else:
                     last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
+                traj_ids_list[idx] = traj_ids
 
                 traj_max = max(traj_max, traj_ids.max())
 
