@@ -81,8 +81,10 @@ def _transpose_time(fun):
             return tensor, single_dim
 
         if time_dim != -2:
-            args, single_dim = zip(*(transpose_tensor(arg) for arg in args))
-            single_dim = any(single_dim)
+            single_dim = False
+            if args:
+                args, single_dim = zip(*(transpose_tensor(arg) for arg in args))
+                single_dim = any(single_dim)
             for k, item in list(kwargs.items()):
                 item, sd = transpose_tensor(item)
                 single_dim = single_dim or sd
