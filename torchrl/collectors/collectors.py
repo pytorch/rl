@@ -1962,9 +1962,20 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
-                traj_ids = self.buffers[idx].get(("collector", "traj_ids"))
+                buffer = buffers[idx]
+                traj_ids = buffer.get(("collector", "traj_ids"))
                 is_last = traj_ids == last_traj_ids[idx]
-                last_traj_ids[idx] = traj_ids[..., -1:].clone()
+                # If we `cat` interrupted data, we have already filtered out
+                # non-valid steps. If we stack, we haven't.
+                if self.interruptor is not None and self.preemptive_threshold < 1.0 and stack_results:
+                    valid = buffer.get(("collector", "traj_ids")) != -1
+                    if valid.ndim > 2:
+                        valid = valid.flatten(0, -2)
+                    if valid.ndim == 2:
+                        valid = valid.any(0)
+                    last_traj_ids[idx] = traj_ids[..., valid][..., -1:].clone()
+                else:
+                    last_traj_ids[idx] = traj_ids[..., -1:].clone()
                 if not is_last.all():
                     traj_to_correct = traj_ids[~is_last]
                     traj_to_correct = (
@@ -1975,8 +1986,16 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     traj_ids = torch.where(
                         is_last, last_traj_ids_subs[idx].expand_as(traj_ids), traj_ids
                     )
+
                 traj_ids_list[idx] = traj_ids
-                last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
+                if self.interruptor is not None and self.preemptive_threshold < 1.0:
+                    traj_ids = torch.where(buffer.get(("collector", "traj_ids")) != -1, traj_ids, -1)
+                    if stack_results:
+                        last_traj_ids[idx] = traj_ids[..., valid][..., -1:].clone()
+                    else:
+                        last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
+                else:
+                    last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
 
                 traj_max = max(traj_max, traj_ids.max())
 
