@@ -1962,6 +1962,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     dones[idx] = True
 
             # we have to correct the traj_ids to make sure that they don't overlap
+            # We can count the number of frames collected for free in this loop
+            n_collected = 0
             for idx in range(self.num_workers):
                 buffer = buffers[idx]
                 traj_ids = buffer.get(("collector", "traj_ids"))
@@ -1990,13 +1992,21 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     )
 
                 if preempt:
-                    traj_ids = torch.where(buffer.get(("collector", "traj_ids")) != -1, traj_ids, -1)
                     if stack_results:
+                        mask_frames = buffer.get(("collector", "traj_ids")) != -1
+                        traj_ids = torch.where(
+                            mask_frames,
+                            traj_ids,
+                            -1
+                            )
+                        n_collected += mask_frames.sum().cpu()
                         last_traj_ids_subs[idx] = traj_ids[..., valid][..., -1:].clone()
                     else:
                         last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
+                        n_collected += traj_ids.numel()
                 else:
                     last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
+                    n_collected += traj_ids.numel()
                 traj_ids_list[idx] = traj_ids
 
                 traj_max = max(traj_max, traj_ids.max())
@@ -2041,10 +2051,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             if self.split_trajs:
                 out = split_trajectories(self.out_buffer, prefix="collector")
-                self._frames += out.get(("collector", "mask")).sum().item()
             else:
                 out = self.out_buffer.clone()
-                self._frames += prod(out.shape)
+
+            self._frames += n_collected
+
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
