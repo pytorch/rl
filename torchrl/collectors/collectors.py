@@ -2023,13 +2023,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if stack_results:
                 if same_device:
                     self.out_buffer = torch.stack(
-                        list(buffers.values()), 0, out=self.out_buffer
+                        list(buffers.values()), 0
                     )
                 else:
                     self.out_buffer = torch.stack(
                         [item.cpu() for item in buffers.values()],
-                        0,
-                        out=self.out_buffer,
+                        0
                     )
                 self.out_buffer.set_(
                     ("collector", "traj_ids"), torch.stack(traj_ids_list)
@@ -2040,15 +2039,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 # but not interchangeably
                 if same_device:
                     self.out_buffer = torch.cat(
-                        list(buffers.values()), -1,
-                        # out=self.out_buffer
-                    )
+                        list(buffers.values()), -1)
                 else:
                     self.out_buffer = torch.cat(
                         [item.cpu() for item in buffers.values()],
-                        -1,
-                        # out=self.out_buffer,
-                    )
+                        -1)
                 self.out_buffer.set_(
                     ("collector", "traj_ids"), torch.cat(traj_ids_list, -1)
                 )
@@ -2072,6 +2067,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             del out
 
         del self.buffers
+        self.out_buffer = None
         # We shall not call shutdown just yet as user may want to retrieve state_dict
         # self._shutdown_main()
 
