@@ -2680,8 +2680,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         if self._simple_done:
             done = tensordict._get_str("done", default=None)
-            tensordict._set_str("_reset", done.clone(), validated=True, inplace=False)
             any_done = done.any()
+            if any_done:
+                tensordict._set_str(
+                    "_reset", done.clone(), validated=True, inplace=False
+                )
         else:
             any_done = _terminated_or_truncated(
                 tensordict,
