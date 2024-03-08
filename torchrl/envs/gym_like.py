@@ -21,7 +21,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
-from collections import Mapping
+from typing import Mapping
 
 class BaseInfoDictReader(metaclass=abc.ABCMeta):
     """Base class for info-readers."""
