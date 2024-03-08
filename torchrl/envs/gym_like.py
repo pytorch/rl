@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import abc
-import itertools
 import warnings
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
@@ -261,18 +260,14 @@ class GymLikeEnv(_EnvWrapper):
                 # when queried with and without pixels
                 observations["observation"] = observations.pop("state")
         if not isinstance(observations, Mapping):
-            observations_dict = None
             for key, spec in self.observation_spec.items(True, True):
-                if observations_dict is None:
-                    observations_dict = {}
-                    observations_dict[key] = spec.encode(
-                        observations, ignore_device=True
-                    )
-                else:
-                    raise RuntimeError(
-                        "There is more than one observation key but only one observation "
-                        "was found in the step data."
-                    )
+                observations_dict = {}
+                observations_dict[key] = spec.encode(observations, ignore_device=True)
+                # we don't check that there is only one spec because obs spec also
+                # contains the data spec of the info dict.
+                break
+            else:
+                raise RuntimeError("Could not find any element in observation_spec.")
             observations = observations_dict
         else:
             for key, val in observations.items():
