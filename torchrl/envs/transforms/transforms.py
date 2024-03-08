@@ -732,7 +732,9 @@ but got an object of type {type(transform)}."""
         return input_spec
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = tensordict.clone(False)
+        # No need to clone here because inv does it already
+        # tensordict = tensordict.clone(False)
+
         next_preset = tensordict.get("next", None)
         tensordict_in = self.transform.inv(tensordict)
         next_tensordict = self.base_env._step(tensordict_in)
@@ -3831,30 +3833,29 @@ class CatTensors(Transform):
             self.in_keys = self._find_in_keys()
             self._initialized = True
 
-        if all(key in tensordict.keys(include_nested=True) for key in self.in_keys):
-            values = [tensordict.get(key) for key in self.in_keys]
-            if self.unsqueeze_if_oor:
-                pos_idx = self.dim > 0
-                abs_idx = self.dim if pos_idx else -self.dim - 1
-                values = [
-                    v
-                    if abs_idx < v.ndimension()
-                    else v.unsqueeze(0)
-                    if not pos_idx
-                    else v.unsqueeze(-1)
-                    for v in values
-                ]
-
-            out_tensor = torch.cat(values, dim=self.dim)
-            tensordict.set(self.out_keys[0], out_tensor)
-            if self._del_keys:
-                tensordict.exclude(*self.keys_to_exclude, inplace=True)
-        else:
+        values = [tensordict.get(key, None) for key in self.in_keys]
+        if any(value is None for value in values):
             raise Exception(
                 f"CatTensor failed, as it expected input keys ="
                 f" {sorted(self.in_keys, key=_sort_keys)} but got a TensorDict with keys"
                 f" {sorted(tensordict.keys(include_nested=True), key=_sort_keys)}"
             )
+        if self.unsqueeze_if_oor:
+            pos_idx = self.dim > 0
+            abs_idx = self.dim if pos_idx else -self.dim - 1
+            values = [
+                v
+                if abs_idx < v.ndimension()
+                else v.unsqueeze(0)
+                if not pos_idx
+                else v.unsqueeze(-1)
+                for v in values
+            ]
+
+        out_tensor = torch.cat(values, dim=self.dim)
+        tensordict.set(self.out_keys[0], out_tensor)
+        if self._del_keys:
+            tensordict.exclude(*self.keys_to_exclude, inplace=True)
         return tensordict
 
     forward = _call
