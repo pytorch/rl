@@ -12151,7 +12151,6 @@ class TestValues:
             time_dim=-3,
         )[0]
 
-
         v2 = vec_generalized_advantage_estimate(
             gamma=gamma,
             lmbda=lmbda,
