@@ -79,6 +79,7 @@ from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
 from torchrl.envs.utils import (
+    _StepMDP,
     _terminated_or_truncated,
     check_env_specs,
     check_marl_grouping,
@@ -1311,6 +1312,54 @@ class TestStepMdp:
             assert "done" not in out.keys()
         if has_out:
             assert out is next_tensordict
+
+    @pytest.mark.parametrize("keep_other", [True, False])
+    @pytest.mark.parametrize("exclude_reward", [True, False])
+    @pytest.mark.parametrize("exclude_done", [False, True])
+    @pytest.mark.parametrize("exclude_action", [False, True])
+    @pytest.mark.parametrize(
+        "envcls",
+        [
+            ContinuousActionVecMockEnv,
+            CountingBatchedEnv,
+            CountingEnv,
+            NestedCountingEnv,
+            CountingBatchedEnv,
+            HeterogeneousCountingEnv,
+            DiscreteActionConvMockEnv,
+        ],
+    )
+    def test_step_class(
+        self,
+        envcls,
+        keep_other,
+        exclude_reward,
+        exclude_done,
+        exclude_action,
+    ):
+        torch.manual_seed(0)
+        env = envcls()
+
+        tensordict = env.rand_step(env.reset())
+        out = step_mdp(
+            tensordict.lock_(),
+            keep_other=keep_other,
+            exclude_reward=exclude_reward,
+            exclude_done=exclude_done,
+            exclude_action=exclude_action,
+            done_keys=env.done_keys,
+            action_keys=env.action_keys,
+            reward_keys=env.reward_keys,
+        )
+        step_func = _StepMDP(
+            env,
+            keep_other=keep_other,
+            exclude_reward=exclude_reward,
+            exclude_done=exclude_done,
+            exclude_action=exclude_action,
+        )
+        out2 = step_func(tensordict)
+        assert (out == out2).all()
 
     @pytest.mark.parametrize("nested_obs", [True, False])
     @pytest.mark.parametrize("nested_action", [True, False])

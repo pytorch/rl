@@ -28,10 +28,10 @@ from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
     _make_compatible_policy,
     _repr_by_depth,
+    _StepMDP,
     _terminated_or_truncated,
     _update_during_reset,
     get_available_libraries,
-    step_mdp,
 )
 
 LIBRARIES = get_available_libraries()
@@ -2513,6 +2513,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         out_td.refine_names(..., "time")
         return out_td
 
+    @property
+    def _step_mdp(self):
+        step_func = self.__dict__.get("_step_mdp_value", None)
+        if step_func is None:
+            step_func = _StepMDP(self, exclude_action=False)
+            self.__dict__["_step_mdp_value"] = step_func
+        return step_func
+
     def _rollout_stop_early(
         self,
         *,
@@ -2543,15 +2551,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if i == max_steps - 1:
                 # we don't truncated as one could potentially continue the run
                 break
-            tensordict = step_mdp(
-                tensordict,
-                keep_other=True,
-                exclude_action=False,
-                exclude_reward=True,
-                reward_keys=self.reward_keys,
-                action_keys=self.action_keys,
-                done_keys=self.done_keys,
-            )
+            tensordict = self._step_mdp_stop_early(tensordict)
+
             # done and truncated are in done_keys
             # We read if any key is done.
             any_done = _terminated_or_truncated(
@@ -2649,15 +2650,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict = self.step(tensordict)
         # done and truncated are in done_keys
         # We read if any key is done.
-        tensordict_ = step_mdp(
-            tensordict,
-            keep_other=True,
-            exclude_action=False,
-            exclude_reward=True,
-            reward_keys=self.reward_keys,
-            action_keys=self.action_keys,
-            done_keys=self.done_keys,
-        )
+        tensordict_ = self._step_mdp(tensordict)
         tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
 
