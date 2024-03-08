@@ -3599,13 +3599,17 @@ class CompositeSpec(TensorSpec):
     def rand(self, shape=None) -> TensorDictBase:
         if shape is None:
             shape = torch.Size([])
-        _dict = {
-            key: self[key].rand(shape) for key in self.keys() if self[key] is not None
-        }
+        _dict = {}
+        for key, item in self.items():
+            if item is not None:
+                _dict[key] = item.rand(shape)
         return TensorDict(
             _dict,
             batch_size=[*shape, *self.shape],
             device=self._device,
+            # No need to run checks since we know Composite is compliant with
+            # TensorDict requirements
+            _run_checks=False,
         )
 
     def keys(

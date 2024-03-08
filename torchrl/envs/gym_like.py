@@ -21,7 +21,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
-
+from collections import Mapping
 
 class BaseInfoDictReader(metaclass=abc.ABCMeta):
     """Base class for info-readers."""
@@ -260,14 +260,21 @@ class GymLikeEnv(_EnvWrapper):
                 # naming it 'state' will result in envs that have a different name for the state vector
                 # when queried with and without pixels
                 observations["observation"] = observations.pop("state")
-        if not isinstance(observations, (TensorDict, dict)):
-            (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
-            observations = {key: observations}
-        for key, val in observations.items():
-            observations[key] = self.observation_spec[key].encode(
-                val, ignore_device=True
-            )
-        # observations = self.observation_spec.encode(observations, ignore_device=True)
+        if not isinstance(observations, Mapping):
+            observations_dict = None
+            for key, spec in self.observation_spec.items(True, True):
+                if observations_dict is None:
+                    observations_dict = {}
+                    observations_dict[key] = spec.encode(observations, ignore_device=True)
+                else:
+                    raise RuntimeError("There is more than one observation key but only one observation "
+                                       "was found in the step data.")
+            observations = observations_dict
+        else:
+            for key, val in observations.items():
+                observations[key] = self.observation_spec[key].encode(
+                    val, ignore_device=True
+                )
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
