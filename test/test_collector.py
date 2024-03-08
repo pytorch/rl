@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import gc
 
 import sys
@@ -591,14 +592,22 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
 
 @pytest.mark.skipif(not _has_gym, reason="gym library is not installed")
 @pytest.mark.parametrize("parallel", [False, True])
-def test_collector_env_reset(parallel):
+@pytest.mark.parametrize(
+    "constr",
+    [
+        functools.partial(split_trajectories, prefix="collector"),
+        functools.partial(split_trajectories),
+        functools.partial(split_trajectories, trajectory_key=("collector", "traj_ids")),
+    ],
+)
+def test_collector_env_reset(constr, parallel):
     torch.manual_seed(0)
 
     def make_env():
         # This is currently necessary as the methods in GymWrapper may have mismatching backend
         # versions.
         with set_gym_backend(gym_backend()):
-            return TransformedEnv(GymEnv(PONG_VERSIONED, frame_skip=4), StepCounter())
+            return TransformedEnv(GymEnv(PONG_VERSIONED(), frame_skip=4), StepCounter())
 
     if parallel:
         env = ParallelEnv(2, make_env)
@@ -627,7 +636,7 @@ def test_collector_env_reset(parallel):
         # check that if step is 1, then the env was done before
         assert (steps == 1)[done].all()
         # check that split traj has a minimum total reward of -21 (for pong only)
-        _data = split_trajectories(_data, prefix="collector")
+        _data = constr(_data)
         assert _data["next", "reward"].sum(-2).min() == -21
     finally:
         env.close()
@@ -1076,7 +1085,9 @@ def test_collector_vecnorm_envcreator(static_seed):
     from torchrl.envs.libs.gym import GymEnv
 
     num_envs = 4
-    env_make = EnvCreator(lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED), VecNorm()))
+    env_make = EnvCreator(
+        lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm())
+    )
     env_make = ParallelEnv(num_envs, env_make)
 
     policy = RandomPolicy(env_make.action_spec)
@@ -1293,7 +1304,7 @@ def test_collector_output_keys(
 
     policy = SafeModule(**policy_kwargs)
 
-    env_maker = lambda: GymEnv(PENDULUM_VERSIONED)
+    env_maker = lambda: GymEnv(PENDULUM_VERSIONED())
 
     policy(env_maker().reset())
 
@@ -1432,7 +1443,7 @@ class TestAutoWrap:
     def env_maker(self):
         from torchrl.envs.libs.gym import GymEnv
 
-        return lambda: GymEnv(PENDULUM_VERSIONED)
+        return lambda: GymEnv(PENDULUM_VERSIONED())
 
     def _create_collector_kwargs(self, env_maker, collector_class, policy):
         collector_kwargs = {

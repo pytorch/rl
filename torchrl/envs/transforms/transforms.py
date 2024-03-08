@@ -29,7 +29,7 @@ from tensordict import (
 )
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.nn import dispatch, TensorDictModuleBase
-from tensordict.utils import expand_as_right, NestedKey
+from tensordict.utils import expand_as_right, expand_right, NestedKey
 from torch import nn, Tensor
 from torch.utils._pytree import tree_map
 from torchrl._utils import _replace_last
@@ -317,9 +317,8 @@ class Transform(nn.Module):
             return state
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # # We create a shallow copy of the tensordict to avoid that changes are
-        # # exposed to the user: we'd like that the input keys remain unchanged
-        # # in the originating script if they're being transformed.
+        if not self.in_keys_inv:
+            return tensordict
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
             data = tensordict.get(in_key, None)
             if data is not None:
@@ -732,7 +731,8 @@ but got an object of type {type(transform)}."""
         return input_spec
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = tensordict.clone(False)
+        # No need to clone here because inv does it already
+        # tensordict = tensordict.clone(False)
         next_preset = tensordict.get("next", None)
         tensordict_in = self.transform.inv(tensordict)
         next_tensordict = self.base_env._step(tensordict_in)
@@ -2620,6 +2620,8 @@ class CatFrames(ObservationTransform):
             reset indicator. Must be unique. If not provided, defaults to the
             only reset key of the parent environment (if it has only one)
             and raises an exception otherwise.
+        done_key (NestedKey, optional): the done key to be used as partial
+            done indicator. Must be unique. If not provided, defaults to ``"done"``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -2700,6 +2702,7 @@ class CatFrames(ObservationTransform):
         padding_value=0,
         as_inverse=False,
         reset_key: NestedKey | None = None,
+        done_key: NestedKey | None = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
@@ -2733,6 +2736,19 @@ class CatFrames(ObservationTransform):
         # keeps track of calls to _reset since it's only _call that will populate the buffer
         self.as_inverse = as_inverse
         self.reset_key = reset_key
+        self.done_key = done_key
+
+    @property
+    def done_key(self):
+        done_key = self.__dict__.get("_done_key", None)
+        if done_key is None:
+            done_key = "done"
+            self._done_key = done_key
+        return done_key
+
+    @done_key.setter
+    def done_key(self, value):
+        self._done_key = value
 
     @property
     def reset_key(self):
@@ -2829,15 +2845,6 @@ class CatFrames(ObservationTransform):
                     # make linter happy. An exception has already been raised
                     raise NotImplementedError
 
-                # # this duplicates the code below, but only for _reset values
-                # if _all:
-                #     buffer.copy_(torch.roll(buffer_reset, shifts=-d, dims=dim))
-                #     buffer_reset = buffer
-                # else:
-                #     buffer_reset = buffer[_reset] = torch.roll(
-                #         buffer_reset, shifts=-d, dims=dim
-                #     )
-                # add new obs
                 if self.dim < 0:
                     n = buffer_reset.ndimension() + self.dim
                 else:
@@ -2906,69 +2913,145 @@ class CatFrames(ObservationTransform):
         if i != tensordict.ndim - 1:
             tensordict = tensordict.transpose(tensordict.ndim - 1, i)
         # first sort the in_keys with strings and non-strings
-        in_keys = list(
-            zip(
-                (in_key, out_key)
-                for in_key, out_key in zip(self.in_keys, self.out_keys)
-                if isinstance(in_key, str) or len(in_key) == 1
+        keys = [
+            (in_key, out_key)
+            for in_key, out_key in zip(self.in_keys, self.out_keys)
+            if isinstance(in_key, str)
+        ]
+        keys += [
+            (in_key, out_key)
+            for in_key, out_key in zip(self.in_keys, self.out_keys)
+            if not isinstance(in_key, str)
+        ]
+
+        def unfold_done(done, N):
+            prefix = (slice(None),) * (tensordict.ndim - 1)
+            reset = torch.cat(
+                [
+                    torch.zeros_like(done[prefix + (slice(self.N - 1),)]),
+                    torch.ones_like(done[prefix + (slice(1),)]),
+                    done[prefix + (slice(None, -1),)],
+                ],
+                tensordict.ndim - 1,
             )
-        )
-        in_keys += list(
-            zip(
-                (in_key, out_key)
-                for in_key, out_key in zip(self.in_keys, self.out_keys)
-                if not isinstance(in_key, str) and not len(in_key) == 1
-            )
-        )
-        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            reset_unfold = reset.unfold(tensordict.ndim - 1, self.N, 1)
+            reset_unfold_slice = reset_unfold[..., -1]
+            reset_unfold_list = [torch.zeros_like(reset_unfold_slice)]
+            for r in reversed(reset_unfold.unbind(-1)):
+                reset_unfold_list.append(r | reset_unfold_list[-1])
+                reset_unfold_slice = reset_unfold_list[-1]
+            reset_unfold = torch.stack(list(reversed(reset_unfold_list))[1:], -1)
+            reset = reset[prefix + (slice(self.N - 1, None),)]
+            reset[prefix + (0,)] = 1
+            return reset_unfold, reset
+
+        done = tensordict.get(("next", self.done_key))
+        done_mask, reset = unfold_done(done, self.N)
+
+        for in_key, out_key in keys:
             # check if we have an obs in "next" that has already been processed.
             # If so, we must add an offset
-            data = tensordict.get(in_key)
+            data_orig = data = tensordict.get(in_key)
+            n_feat = data_orig.shape[data.ndim + self.dim]
+            first_val = None
             if isinstance(in_key, tuple) and in_key[0] == "next":
                 # let's get the out_key we have already processed
-                prev_out_key = dict(zip(self.in_keys, self.out_keys))[in_key[1]]
-                prev_val = tensordict.get(prev_out_key)
-                # the first item is located along `dim+1` at the last index of the
-                # first time index
-                idx = (
-                    [slice(None)] * (tensordict.ndim - 1)
-                    + [0]
-                    + [..., -1]
-                    + [slice(None)] * (abs(self.dim) - 1)
+                prev_out_key = dict(zip(self.in_keys, self.out_keys)).get(
+                    in_key[1], None
                 )
-                first_val = prev_val[tuple(idx)].unsqueeze(tensordict.ndim - 1)
-                data0 = [first_val] * (self.N - 1)
-                if self.padding == "constant":
-                    data0 = [
-                        torch.full_like(elt, self.padding_value) for elt in data0[:-1]
-                    ] + data0[-1:]
-                elif self.padding == "same":
-                    pass
-                else:
-                    # make linter happy. An exception has already been raised
-                    raise NotImplementedError
-            elif self.padding == "same":
-                idx = [slice(None)] * (tensordict.ndim - 1) + [0]
-                data0 = [data[tuple(idx)].unsqueeze(tensordict.ndim - 1)] * (self.N - 1)
-            elif self.padding == "constant":
-                idx = [slice(None)] * (tensordict.ndim - 1) + [0]
-                data0 = [
-                    torch.full_like(data[tuple(idx)], self.padding_value).unsqueeze(
-                        tensordict.ndim - 1
+                if prev_out_key is not None:
+                    prev_val = tensordict.get(prev_out_key)
+                    # n_feat = prev_val.shape[data.ndim + self.dim] // self.N
+                    first_val = prev_val.unflatten(
+                        data.ndim + self.dim, (self.N, n_feat)
                     )
-                ] * (self.N - 1)
-            else:
-                # make linter happy. An exception has already been raised
-                raise NotImplementedError
+
+            idx = [slice(None)] * (tensordict.ndim - 1) + [0]
+            data0 = [
+                torch.full_like(data[tuple(idx)], self.padding_value).unsqueeze(
+                    tensordict.ndim - 1
+                )
+            ] * (self.N - 1)
 
             data = torch.cat(data0 + [data], tensordict.ndim - 1)
 
             data = data.unfold(tensordict.ndim - 1, self.N, 1)
-            data = data.permute(
-                *range(0, data.ndim + self.dim),
-                -1,
-                *range(data.ndim + self.dim, data.ndim - 1),
+
+            # Place -1 dim at self.dim place before squashing
+            done_mask_expand = done_mask.view(
+                *done_mask.shape[: tensordict.ndim],
+                *(1,) * (data.ndim - 1 - tensordict.ndim),
+                done_mask.shape[-1],
             )
+            done_mask_expand = expand_as_right(done_mask_expand, data)
+            data = data.permute(
+                *range(0, data.ndim + self.dim - 1),
+                -1,
+                *range(data.ndim + self.dim - 1, data.ndim - 1),
+            )
+            done_mask_expand = done_mask_expand.permute(
+                *range(0, done_mask_expand.ndim + self.dim - 1),
+                -1,
+                *range(done_mask_expand.ndim + self.dim - 1, done_mask_expand.ndim - 1),
+            )
+            if self.padding != "same":
+                data = torch.where(done_mask_expand, self.padding_value, data)
+            else:
+                # TODO: This is a pretty bad implementation, could be
+                # made more efficient but it works!
+                reset_any = reset.any(-1, False)
+                reset_vals = list(data_orig[reset_any].unbind(0))
+                j_ = float("inf")
+                reps = []
+                d = data.ndim + self.dim - 1
+                n_feat = data.shape[data.ndim + self.dim :].numel()
+                for j in done_mask_expand.flatten(d, -1).sum(-1).view(-1) // n_feat:
+                    if j > j_:
+                        reset_vals = reset_vals[1:]
+                    reps.extend([reset_vals[0]] * int(j))
+                    j_ = j
+                reps = torch.stack(reps)
+                data = torch.masked_scatter(data, done_mask_expand, reps.reshape(-1))
+
+            if first_val is not None:
+                # Aggregate reset along last dim
+                reset_any = reset.any(-1, False)
+                rexp = expand_right(
+                    reset_any, (*reset_any.shape, *data.shape[data.ndim + self.dim :])
+                )
+                rexp = torch.cat(
+                    [
+                        torch.zeros_like(
+                            data0[0].repeat_interleave(
+                                len(data0), dim=tensordict.ndim - 1
+                            ),
+                            dtype=torch.bool,
+                        ),
+                        rexp,
+                    ],
+                    tensordict.ndim - 1,
+                )
+                rexp = rexp.unfold(tensordict.ndim - 1, self.N, 1)
+                rexp_orig = rexp
+                rexp = torch.cat([rexp[..., 1:], torch.zeros_like(rexp[..., -1:])], -1)
+                if self.padding == "same":
+                    rexp_orig = rexp_orig.flip(-1).cumsum(-1).flip(-1).bool()
+                    rexp = rexp.flip(-1).cumsum(-1).flip(-1).bool()
+                rexp_orig = torch.cat(
+                    [torch.zeros_like(rexp_orig[..., -1:]), rexp_orig[..., 1:]], -1
+                )
+                rexp = rexp.permute(
+                    *range(0, rexp.ndim + self.dim - 1),
+                    -1,
+                    *range(rexp.ndim + self.dim - 1, rexp.ndim - 1),
+                )
+                rexp_orig = rexp_orig.permute(
+                    *range(0, rexp_orig.ndim + self.dim - 1),
+                    -1,
+                    *range(rexp_orig.ndim + self.dim - 1, rexp_orig.ndim - 1),
+                )
+                data[rexp] = first_val[rexp_orig]
+            data = data.flatten(data.ndim + self.dim - 1, data.ndim + self.dim)
             tensordict.set(out_key, data)
         if tensordict_orig is not tensordict:
             tensordict_orig = tensordict.transpose(tensordict.ndim - 1, i)
@@ -3196,6 +3279,16 @@ class DTypeCastTransform(Transform):
         in_keys_inv: Sequence[NestedKey] | None = None,
         out_keys_inv: Sequence[NestedKey] | None = None,
     ):
+        if in_keys is not None and in_keys_inv is None:
+            warnings.warn(
+                "in_keys have been provided but not in_keys_inv. From v0.5, "
+                "this will result in in_keys_inv being an empty list whereas "
+                "now the input keys are retrieved automatically. "
+                "To silence this warning, pass the (possibly empty) "
+                "list of in_keys_inv.",
+                category=DeprecationWarning,
+            )
+
         self.dtype_in = dtype_in
         self.dtype_out = dtype_out
         super().__init__(
@@ -3748,30 +3841,29 @@ class CatTensors(Transform):
             self.in_keys = self._find_in_keys()
             self._initialized = True
 
-        if all(key in tensordict.keys(include_nested=True) for key in self.in_keys):
-            values = [tensordict.get(key) for key in self.in_keys]
-            if self.unsqueeze_if_oor:
-                pos_idx = self.dim > 0
-                abs_idx = self.dim if pos_idx else -self.dim - 1
-                values = [
-                    v
-                    if abs_idx < v.ndimension()
-                    else v.unsqueeze(0)
-                    if not pos_idx
-                    else v.unsqueeze(-1)
-                    for v in values
-                ]
-
-            out_tensor = torch.cat(values, dim=self.dim)
-            tensordict.set(self.out_keys[0], out_tensor)
-            if self._del_keys:
-                tensordict.exclude(*self.keys_to_exclude, inplace=True)
-        else:
+        values = [tensordict.get(key, None) for key in self.in_keys]
+        if any(value is None for value in values):
             raise Exception(
                 f"CatTensor failed, as it expected input keys ="
                 f" {sorted(self.in_keys, key=_sort_keys)} but got a TensorDict with keys"
                 f" {sorted(tensordict.keys(include_nested=True), key=_sort_keys)}"
             )
+        if self.unsqueeze_if_oor:
+            pos_idx = self.dim > 0
+            abs_idx = self.dim if pos_idx else -self.dim - 1
+            values = [
+                v
+                if abs_idx < v.ndimension()
+                else v.unsqueeze(0)
+                if not pos_idx
+                else v.unsqueeze(-1)
+                for v in values
+            ]
+
+        out_tensor = torch.cat(values, dim=self.dim)
+        tensordict.set(self.out_keys[0], out_tensor)
+        if self._del_keys:
+            tensordict.exclude(*self.keys_to_exclude, inplace=True)
         return tensordict
 
     forward = _call
@@ -7048,18 +7140,3 @@ class RemoveEmptySpecs(Transform):
         return self._call(tensordict_reset)
 
     forward = _call
-
-
-class _TransposeTransform(Transform):
-    """A private transform to allow replay buffers to store data along any dimension."""
-
-    def __init__(self, dim_extend):
-        super().__init__()
-        self.dim_extend = dim_extend
-
-    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if is_tensor_collection(tensordict):
-            return tensordict.transpose(self.dim_extend, 0)
-        return torch.utils._pytree.tree_map(
-            lambda x: x.transpose(self.dim_extend, 0), tensordict
-        )

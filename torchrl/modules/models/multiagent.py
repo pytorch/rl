@@ -18,6 +18,7 @@ from torch import nn
 from torch.utils._pytree import tree_map
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules.models import ConvNet, MLP
+from torchrl.modules.models.utils import _reset_parameters_recursive
 
 
 class MultiAgentNetBase(nn.Module):
@@ -37,6 +38,7 @@ class MultiAgentNetBase(nn.Module):
         agent_dim: int,
         input_tuple_len: int = 1,
         output_tuple_len: int = 1,
+        vmap_randomness: str = "different",
         **kwargs,
     ):
         super().__init__()
@@ -46,6 +48,7 @@ class MultiAgentNetBase(nn.Module):
         self.centralised = centralised
         self.agent_dim = agent_dim
         self.output_tuple_len = output_tuple_len
+        self._vmap_randomness = vmap_randomness
 
         agent_networks = [
             self._build_single_net(**kwargs)
@@ -64,9 +67,13 @@ class MultiAgentNetBase(nn.Module):
         self._checked = False
 
     @property
-    def _vmap_randomness(self):
+    def vmap_randomness(self):
         if self.initialized:
-            return "error"
+            return self._vmap_randomness
+        # The class _BatchedUninitializedParameter and buffer are not batched
+        # by vmap so using "different" will raise an exception because vmap can't find
+        # the batch dimension. This is ok though since we won't have the same config
+        # for every element (as one might expect from "same").
         return "same"
 
     def _make_params(self, agent_networks):
@@ -155,6 +162,23 @@ class MultiAgentNetBase(nn.Module):
             tree_map(check_output, output)
             self._checked = True
         return output
+
+    def reset_parameters(self):
+        """Resets the parameters of the model."""
+
+        def vmap_reset_module(module, *args, **kwargs):
+            def reset_module(params):
+                with params.to_module(module):
+                    _reset_parameters_recursive(module)
+                    return params
+
+            return torch.vmap(reset_module, *args, **kwargs)
+
+        if not self.share_params:
+            vmap_reset_module(self._empty_net, randomness="different")(self.params)
+        else:
+            with self.params.to_module(self._empty_net):
+                _reset_parameters_recursive(self._empty_net)
 
 
 class MultiAgentMLP(MultiAgentNetBase):
@@ -293,7 +317,6 @@ class MultiAgentMLP(MultiAgentNetBase):
         activation_class: Optional[Type[nn.Module]] = nn.Tanh,
         **kwargs,
     ):
-
         self.n_agents = n_agents
         self.n_agent_inputs = n_agent_inputs
         self.n_agent_outputs = n_agent_outputs
@@ -512,6 +535,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
             share_params=share_params,
             device=device,
             agent_dim=-4,
+            **kwargs,
         )
 
     def _build_single_net(self, *, device, **kwargs):

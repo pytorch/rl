@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import functools
+
 import gc
 
 import os
@@ -172,6 +174,10 @@ class BatchedEnvBase(EnvBase):
         non_blocking (bool, optional): if ``True``, device moves will be done using the
             ``non_blocking=True`` option. Defaults to ``True`` for batched environments
             on cuda devices, and ``False`` otherwise.
+        mp_start_method (str, optional): the multiprocessing start method.
+            Uses the default start method if not indicated ('spawn' by default in
+            TorchRL if not initiated differently before first import).
+            To be used only with :class:`~torchrl.envs.ParallelEnv` subclasses.
 
     Examples:
         >>> from torchrl.envs import GymEnv, ParallelEnv, SerialEnv, EnvCreator
@@ -275,6 +281,7 @@ class BatchedEnvBase(EnvBase):
         num_sub_threads: int = 1,
         serial_for_single: bool = False,
         non_blocking: bool = False,
+        mp_start_method: str = None,
     ):
         super().__init__(device=device)
         self.serial_for_single = serial_for_single
@@ -333,6 +340,11 @@ class BatchedEnvBase(EnvBase):
         self._properties_set = False
         self._get_metadata(create_env_fn, create_env_kwargs)
         self._non_blocking = non_blocking
+        if mp_start_method is not None and not isinstance(self, ParallelEnv):
+            raise TypeError(
+                f"Cannot use mp_start_method={mp_start_method} with envs of type {type(self)}."
+            )
+        self._mp_start_method = mp_start_method
 
     @property
     def non_blocking(self):
@@ -1050,6 +1062,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     """
 
     def _start_workers(self) -> None:
+        self._timeout = 10.0
+
         from torchrl.envs.env_creator import EnvCreator
 
         if self.num_threads is None:
@@ -1059,7 +1073,18 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         torch.set_num_threads(self.num_threads)
 
-        ctx = mp.get_context("spawn")
+        if self._mp_start_method is not None:
+            ctx = mp.get_context(self._mp_start_method)
+            proc_fun = ctx.Process
+            num_sub_threads = self.num_sub_threads
+        else:
+            ctx = mp.get_context("spawn")
+            proc_fun = functools.partial(
+                _ProcessNoWarn,
+                num_threads=self.num_sub_threads,
+                _start_method=self._mp_start_method,
+            )
+            num_sub_threads = None
 
         _num_workers = self.num_workers
 
@@ -1102,13 +1127,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "_selected_reset_keys": self._selected_reset_keys,
                         "_selected_step_keys": self._selected_step_keys,
                         "has_lazy_inputs": self.has_lazy_inputs,
+                        "num_threads": num_sub_threads,
                     }
                 )
-                process = _ProcessNoWarn(
-                    target=func,
-                    num_threads=self.num_sub_threads,
-                    kwargs=kwargs[idx],
-                )
+                process = proc_fun(target=func, kwargs=kwargs[idx])
                 process.daemon = True
                 process.start()
                 child_pipe.close()
@@ -1146,7 +1168,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         for i, channel in enumerate(self.parent_channels):
             channel.send(("load_state_dict", state_dict[f"worker{i}"]))
         for event in self._events:
-            event.wait()
+            event.wait(self._timeout)
             event.clear()
 
     @torch.no_grad()
@@ -1180,7 +1202,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         for i in range(self.num_workers):
             event = self._events[i]
-            event.wait()
+            event.wait(self._timeout)
             event.clear()
 
         # We must pass a clone of the tensordict, as the values of this tensordict
@@ -1245,7 +1267,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         for i in range(self.num_workers):
             event = self._events[i]
-            event.wait()
+            event.wait(self._timeout)
             event.clear()
 
         # We must pass a clone of the tensordict, as the values of this tensordict
@@ -1333,7 +1355,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         for i in workers:
             event = self._events[i]
-            event.wait()
+            event.wait(self._timeout)
             event.clear()
 
         selected_output_keys = self._selected_reset_keys_filt
@@ -1367,7 +1389,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 if self._verbose:
                     torchrl_logger.info(f"closing {i}")
                 channel.send(("close", None))
-                self._events[i].wait()
+                self._events[i].wait(self._timeout)
                 self._events[i].clear()
 
             del self.shared_tensordicts, self.shared_tensordict_parent
@@ -1474,7 +1496,10 @@ def _run_worker_pipe_shared_mem(
     _selected_step_keys=None,
     has_lazy_inputs: bool = False,
     verbose: bool = False,
+    num_threads: int | None = None,  # for fork start method
 ) -> None:
+    if num_threads is not None:
+        torch.set_num_threads(num_threads)
     device = shared_tensordict.device
     if device is None or device.type != "cuda":
         # Check if some tensors are shared on cuda

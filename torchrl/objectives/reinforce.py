@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import contextlib
-import functools
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
@@ -402,8 +401,11 @@ class ReinforceLoss(LossModule):
         td_out = TensorDict({"loss_actor": loss_actor}, batch_size=[])
 
         td_out.set("loss_value", self.loss_critic(tensordict))
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
 
         return td_out

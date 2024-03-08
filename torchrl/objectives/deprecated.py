@@ -22,6 +22,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     _vmap_func,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
@@ -74,6 +75,10 @@ class REDQLoss_deprecated(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
     """
 
     @dataclass
@@ -136,9 +141,12 @@ class REDQLoss_deprecated(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        reduction: str = None,
     ):
         self._in_keys = None
         self._out_keys = None
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
@@ -197,6 +205,7 @@ class REDQLoss_deprecated(LossModule):
         self._action_spec = action_spec
         self.target_entropy_buffer = None
         self.gSDE = gSDE
+        self.reduction = reduction
 
         self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
 
@@ -298,15 +307,20 @@ class REDQLoss_deprecated(LossModule):
             )
         td_out = TensorDict(
             {
-                "loss_actor": loss_actor.mean(),
-                "loss_qvalue": loss_qval.mean(),
-                "loss_alpha": loss_alpha.mean(),
+                "loss_actor": loss_actor,
+                "loss_qvalue": loss_qval,
+                "loss_alpha": loss_alpha,
                 "alpha": self.alpha,
-                "entropy": -sample_log_prob.mean().detach(),
+                "entropy": -sample_log_prob.detach().mean(),
             },
             [],
         )
-
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
+        )
         return td_out
 
     @property
@@ -330,7 +344,7 @@ class REDQLoss_deprecated(LossModule):
         loss_actor = -(
             state_action_value
             - self.alpha * tensordict_clone.get("sample_log_prob").squeeze(-1)
-        ).mean(0)
+        )
         return loss_actor, tensordict_clone.get("sample_log_prob")
 
     def _qvalue_loss(self, tensordict: TensorDictBase) -> Tensor:
@@ -385,7 +399,7 @@ class REDQLoss_deprecated(LossModule):
             pred_val,
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
-        ).mean(0)
+        )
         tensordict_save.set("td_error", td_error.detach().max(0)[0])
         return loss_qval
 
