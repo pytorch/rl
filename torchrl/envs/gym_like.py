@@ -31,7 +31,8 @@ class BaseInfoDictReader(metaclass=abc.ABCMeta):
     ) -> TensorDictBase:
         raise NotImplementedError
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def info_spec(self) -> Dict[str, TensorSpec]:
         raise NotImplementedError
 
