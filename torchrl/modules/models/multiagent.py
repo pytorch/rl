@@ -17,7 +17,7 @@ from torch import nn
 
 from torch.utils._pytree import tree_map
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.modules.models import ConvNet, LSTMNet, MLP
+from torchrl.modules.models import ConvNet, MLP
 
 
 class MultiAgentNetBase(nn.Module):
@@ -120,7 +120,6 @@ class MultiAgentNetBase(nn.Module):
         # If parameters are not shared, each agent has its own network
         if not self.share_params:
             if self.centralised:
-                tree_map(lambda x: print(x.shape) if x is not None else None, inputs)
                 output = self.vmap_func_module(
                     self._empty_net,
                     (0, *self._in_dim(inputs)),
@@ -554,15 +553,106 @@ class MultiAgentConvNet(MultiAgentNetBase):
         return (inputs,)
 
 
+class MultiAgentGRU(MultiAgentNetBase):
+    """Multi-agent GRU.
+
+    TODO(Kevin): docs
+
+    TODO(Kevin): args
+    """
+
+    def __init__(
+        self,
+        n_agent_inputs: int,
+        n_agents: int,
+        centralised: bool,
+        share_params: bool,
+        *,
+        out_features: int,
+        device: Optional[DEVICE_TYPING] = None,
+        **kwargs,
+    ):
+        self.n_agent_inputs = n_agent_inputs
+        self.out_features = out_features
+        self.lstm_kwargs = kwargs
+        super().__init__(
+            n_agents=n_agents,
+            centralised=centralised,
+            share_params=share_params,
+            device=device,
+            agent_dim=-2,
+            num_outputs=2,
+        )
+
+    def _in_dim(self, input: Tuple[...]):
+        in_dim = self.__dict__.get("_in_dim_value", None)
+        if in_dim is None:
+            if self.centralised:
+                if self.share_params:
+                    # simplest case: everything is flattened
+                    in_dim = (None, None)
+                else:
+                    in_dim = (None, self.agent_dim)
+            else:
+                in_dim = (self.agent_dim, self.agent_dim)
+            self.__dict__["_in_dim_value"] = in_dim
+        return in_dim
+
+    def _build_single_net(self, *, device, **kwargs):
+        n_agent_inputs = self.n_agent_inputs
+        out_features = self.out_features
+        if n_agent_inputs is None:
+            raise RuntimeError("Lazy initialization of GRU is not supported yet.")
+        if self.centralised:
+            n_agent_inputs = self.n_agent_inputs * self.n_agents
+
+        return torchrl.modules.GRU(
+            input_size=n_agent_inputs, hidden_size=out_features, **kwargs
+        )
+
+    def _pre_forward_check(self, inputs):
+        if len(inputs) == 1:
+            hx = self._empty_net._make_zero_recurrent(inputs[0])
+            if not self.centralised or not self.share_params:
+                # we need to expand the hidden states
+                hx = hx.unsqueeze(self.agent_dim).repeat_interleave(
+                        self.n_agents, dim=self.agent_dim
+                    )
+            inputs = (inputs[0], hx)
+
+        if not self._checked:
+            input = inputs[0]
+            if input is None:
+                return
+            # _checked will be turned off later
+            if input.shape[-2] != self.n_agents:
+                raise ValueError(
+                    f"Multi-agent network expected input with shape[-2]={self.n_agents},"
+                    f" but got {input.shape}"
+                )
+
+        # If the model is centralized, agents have full observability, so merge all of the input observations
+        if self.centralised:
+            # if self.share_params:
+            inputs = (inputs[0].flatten(-2, -1), *inputs[1:])
+            # else:
+            #     inputs = tree_map(lambda x: x.flatten(-2, -1), inputs)
+
+        return inputs
+
+    def _expand_centralized_output(self, output):
+        if self.share_params:
+            return (super()._expand_centralized_output(output[0]), *output[1:])
+        else:
+            return super()._expand_centralized_output(output)
+
+
 class MultiAgentLSTM(MultiAgentNetBase):
     """Multi-agent LSTM.
 
     TODO(Kevin): docs
 
     TODO(Kevin): args
-
-    Input: (batch_size, n_agents, input_size)
-    Output: (batch_size, n_agents, hidden_size)
     """
 
     def __init__(

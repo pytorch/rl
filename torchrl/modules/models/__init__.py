@@ -25,6 +25,7 @@ from .models import (
 from .multiagent import (
     MultiAgentConvNet,
     MultiAgentLSTM,
+    MultiAgentGRU,
     MultiAgentMLP,
     QMixer,
     VDNMixer,
