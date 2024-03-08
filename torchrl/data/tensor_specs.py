@@ -3605,7 +3605,7 @@ class CompositeSpec(TensorSpec):
                 _dict[key] = item.rand(shape)
         return TensorDict(
             _dict,
-            batch_size=[*shape, *self.shape],
+            batch_size=torch.Size([*shape, *self.shape]),
             device=self._device,
             # No need to run checks since we know Composite is compliant with
             # TensorDict requirements
