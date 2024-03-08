@@ -2551,7 +2551,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if i == max_steps - 1:
                 # we don't truncated as one could potentially continue the run
                 break
-            tensordict = self._step_mdp_stop_early(tensordict)
+            tensordict = self._step_mdp(tensordict)
 
             # done and truncated are in done_keys
             # We read if any key is done.

@@ -8,7 +8,7 @@ from __future__ import annotations
 import abc
 import itertools
 import warnings
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -21,7 +21,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
-from typing import Mapping
+
 
 class BaseInfoDictReader(metaclass=abc.ABCMeta):
     """Base class for info-readers."""
@@ -265,10 +265,14 @@ class GymLikeEnv(_EnvWrapper):
             for key, spec in self.observation_spec.items(True, True):
                 if observations_dict is None:
                     observations_dict = {}
-                    observations_dict[key] = spec.encode(observations, ignore_device=True)
+                    observations_dict[key] = spec.encode(
+                        observations, ignore_device=True
+                    )
                 else:
-                    raise RuntimeError("There is more than one observation key but only one observation "
-                                       "was found in the step data.")
+                    raise RuntimeError(
+                        "There is more than one observation key but only one observation "
+                        "was found in the step data."
+                    )
             observations = observations_dict
         else:
             for key, val in observations.items():
@@ -327,7 +331,8 @@ class GymLikeEnv(_EnvWrapper):
             tensordict_out = TensorDict(
                 obs_dict, batch_size=tensordict.batch_size, _run_checks=False
             )
-        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+        if self.device is not None:
+            tensordict_out = tensordict_out.to(self.device, non_blocking=True)
 
         if self.info_dict_reader and (info_dict is not None):
             if not isinstance(info_dict, dict):

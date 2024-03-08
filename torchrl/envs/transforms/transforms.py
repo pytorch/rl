@@ -317,9 +317,8 @@ class Transform(nn.Module):
             return state
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # # We create a shallow copy of the tensordict to avoid that changes are
-        # # exposed to the user: we'd like that the input keys remain unchanged
-        # # in the originating script if they're being transformed.
+        if not self.in_keys_inv:
+            return tensordict
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
             data = tensordict.get(in_key, None)
             if data is not None:
@@ -3281,6 +3280,16 @@ class DTypeCastTransform(Transform):
         in_keys_inv: Sequence[NestedKey] | None = None,
         out_keys_inv: Sequence[NestedKey] | None = None,
     ):
+        if in_keys is not None and in_keys_inv is None:
+            warnings.warn(
+                "in_keys have been provided but not in_keys_inv. From v0.5, "
+                "this will result in in_keys_inv being an empty list whereas "
+                "now the input keys are retrieved automatically. "
+                "To silence this warning, pass the (possibly empty) "
+                "list of in_keys_inv.",
+                category=DeprecationWarning,
+            )
+
         self.dtype_in = dtype_in
         self.dtype_out = dtype_out
         super().__init__(

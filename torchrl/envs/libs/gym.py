@@ -1089,9 +1089,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             # since it's not a bool, we make it so
             terminated = bool(terminated)
 
-        if isinstance(observations, list) and len(obs) == 1:
+        if isinstance(observations, list) and len(observations) == 1:
             # Until gym 0.25.2 we had rendered frames returned in lists of length 1
-            obs = obs[0]
+            observations = observations[0]
 
         return (observations, reward, terminated, truncated, done, info)
 
