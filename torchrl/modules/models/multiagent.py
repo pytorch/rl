@@ -21,7 +21,10 @@ from torchrl.modules.models import ConvNet, MLP
 
 
 class MultiAgentNetBase(nn.Module):
-    """A base class for multi-agent networks."""
+    """A base class for multi-agent networks.
+
+    TODO(Kevin): document input_tuple_len/output_tuple_len
+    """
 
     _empty_net: nn.Module
 
@@ -32,8 +35,8 @@ class MultiAgentNetBase(nn.Module):
         centralised: bool,
         share_params: bool,
         agent_dim: int,
-        num_inputs: int = 1,
-        num_outputs: int = 1,
+        input_tuple_len: int = 1,
+        output_tuple_len: int = 1,
         **kwargs,
     ):
         super().__init__()
@@ -42,7 +45,7 @@ class MultiAgentNetBase(nn.Module):
         self.share_params = share_params
         self.centralised = centralised
         self.agent_dim = agent_dim
-        self.num_outputs = num_outputs
+        self.output_tuple_len = output_tuple_len
 
         agent_networks = [
             self._build_single_net(**kwargs)
@@ -110,7 +113,7 @@ class MultiAgentNetBase(nn.Module):
             output = output.expand(*output.shape[:-2], self.n_agents, n_agent_outputs)
             return output
 
-        if self.num_outputs == 1:
+        if self.output_tuple_len == 1:
             return expand_output(output)
         else:
             return tree_map(expand_output, output)
@@ -118,28 +121,21 @@ class MultiAgentNetBase(nn.Module):
     def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
         inputs = self._pre_forward_check(inputs)
         # If parameters are not shared, each agent has its own network
+        # self._in_dim() handles expanding the input size for centralized (by concatenating all agent inputs)
         if not self.share_params:
-            if self.centralised:
-                output = self.vmap_func_module(
-                    self._empty_net,
-                    (0, *self._in_dim(inputs)),
-                    (-2,) * self.num_outputs,
-                    randomness=self._vmap_randomness,
-                )(self.params, *inputs)
-            else:
-                output = self.vmap_func_module(
-                    self._empty_net,
-                    (0, *self._in_dim(inputs)),
-                    (-2,) * self.num_outputs,
-                    randomness=self._vmap_randomness,
-                )(self.params, *inputs)
+            output = self.vmap_func_module(
+                self._empty_net,
+                (0, *self._in_dim(inputs)),
+                (-2,) * self.output_tuple_len,
+                randomness=self._vmap_randomness,
+            )(self.params, *inputs)
 
         # If parameters are shared, agents use the same network
         elif not self.centralised:
             output = self.vmap_func_module(
                 self._empty_net,
                 (None, *self._in_dim(inputs)),
-                (-2,) * self.num_outputs,
+                (-2,) * self.output_tuple_len,
                 randomness=self._vmap_randomness,
             )(self.params, *inputs)
         else:
@@ -581,7 +577,7 @@ class MultiAgentGRU(MultiAgentNetBase):
             share_params=share_params,
             device=device,
             agent_dim=-2,
-            num_outputs=2,
+            output_tuple_len=2,
         )
 
     def _in_dim(self, input: Tuple[...]):
@@ -675,7 +671,7 @@ class MultiAgentLSTM(MultiAgentNetBase):
             share_params=share_params,
             device=device,
             agent_dim=-2,
-            num_outputs=2,
+            output_tuple_len=2,
         )
 
     def _in_dim(self, input: Tuple[...]):
