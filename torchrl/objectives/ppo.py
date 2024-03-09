@@ -840,7 +840,7 @@ class ClipPPOLoss(PPOLoss):
                 old_state_value = tensordict.get(self.tensor_keys.value).clone()
             except KeyError:
                 raise KeyError(
-                    f"clip_value_loss is set to True, but"
+                    f"clip_value_loss is set to True, but "
                     f"the key {self.tensor_keys.value} was not found in the input tensordict. "
                     f"Make sure that the value_key passed to PPO exists in the input tensordict."
                 )

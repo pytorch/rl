@@ -6911,10 +6911,9 @@ class TestPPO(LossModuleTestBase):
 
         value = td.pop(loss_fn.tensor_keys.value)
 
-        # Test KeyError if value is not present
         with pytest.raises(
             KeyError,
-            match="clip_value_loss is set to True, butthe key "
+            match="clip_value_loss is set to True, but the key "
             "state_value was not found in the input tensordict. "
             "Make sure that the value_key passed to PPO exists in "
             "the input tensordict.",
@@ -6922,7 +6921,7 @@ class TestPPO(LossModuleTestBase):
             loss = loss_fn(td)
 
         # Add value to td
-        td.set(loss.tensor_keys.value, value)
+        td.set(loss_fn.tensor_keys.value, value)
 
         # Test it works with value
         loss = loss_fn(td)
