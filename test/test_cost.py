@@ -6925,7 +6925,7 @@ class TestPPO(LossModuleTestBase):
 
         # Test it works with value
         loss = loss_fn(td)
-        assert "loss_critic" in loss
+        assert "loss_critic" in loss.keys()
 
 
 class TestA2C(LossModuleTestBase):
