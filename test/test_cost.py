@@ -6901,7 +6901,7 @@ class TestPPO(LossModuleTestBase):
             value_network=value,
         )
 
-        loss_fn = KLPENPPOLoss(
+        loss_fn = ClipPPOLoss(
             actor,
             value,
             loss_critic_type="l2",
@@ -6909,21 +6909,24 @@ class TestPPO(LossModuleTestBase):
         )
         advantage(td)
 
+        value = td.pop(loss_fn.tensor_keys.value)
+
         # Test KeyError if value is not present
         with pytest.raises(
             KeyError,
-            match="The source and target state dicts don't have the same number of parameters.",
+            match="clip_value_loss is set to True, butthe key "
+            "state_value was not found in the input tensordict. "
+            "Make sure that the value_key passed to PPO exists in "
+            "the input tensordict.",
         ):
             loss = loss_fn(td)
 
-    #
-    #     # Add value to td
-    #     import ipdb; ipdb.set_trace()
-    #     td.set(loss.tensor_keys.value, torch.randn_like(td.get(loss.tensor_keys.action)))
-    #
-    #     # Test it works with value
-    #     loss = loss_fn(td)
-    #     assert "loss_critic" in loss
+        # Add value to td
+        td.set(loss.tensor_keys.value, value)
+
+        # Test it works with value
+        loss = loss_fn(td)
+        assert "loss_critic" in loss
 
 
 class TestA2C(LossModuleTestBase):

@@ -865,6 +865,7 @@ class ClipPPOLoss(PPOLoss):
         )
 
         if self.clip_value_loss:
+            self.clip_epsilon = self.clip_epsilon.to(state_value.device)
             state_value_clipped = old_state_value + (
                 state_value - old_state_value
             ).clamp(-self.clip_epsilon, self.clip_epsilon)
