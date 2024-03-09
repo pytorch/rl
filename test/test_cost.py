@@ -6885,6 +6885,46 @@ class TestPPO(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    def test_ppo_value_clipping(self):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        td = self._create_seq_mock_data_ppo(device=device)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        advantage = GAE(
+            gamma=0.9,
+            lmbda=0.9,
+            value_network=value,
+        )
+
+        loss_fn = KLPENPPOLoss(
+            actor,
+            value,
+            loss_critic_type="l2",
+            clip_value_loss=True,
+        )
+        advantage(td)
+
+        # Test KeyError if value is not present
+        with pytest.raises(
+            KeyError,
+            match="The source and target state dicts don't have the same number of parameters.",
+        ):
+            loss = loss_fn(td)
+
+    #
+    #     # Add value to td
+    #     import ipdb; ipdb.set_trace()
+    #     td.set(loss.tensor_keys.value, torch.randn_like(td.get(loss.tensor_keys.action)))
+    #
+    #     # Test it works with value
+    #     loss = loss_fn(td)
+    #     assert "loss_critic" in loss
+
 
 class TestA2C(LossModuleTestBase):
     seed = 0
