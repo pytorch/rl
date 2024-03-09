@@ -612,7 +612,7 @@ class CQLLoss(LossModule):
                 # tensordict.del_("scale")
 
         return (
-            tensordict.select(*self.actor_network.in_keys, self.tensor_keys.action),
+            tensordict.select(*self.actor_network.in_keys, self.tensor_keys.action, strict=False),
             sample_log_prob,
         )
 
