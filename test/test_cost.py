@@ -6885,7 +6885,8 @@ class TestPPO(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
-    def test_ppo_value_clipping(self):
+    @pytest.mark.parametrize("clip_value_loss", [True, False, 0.5])
+    def test_ppo_value_clipping(self, clip_value_loss):
         torch.manual_seed(self.seed)
         device = (
             torch.device("cpu")
@@ -6905,7 +6906,7 @@ class TestPPO(LossModuleTestBase):
             actor,
             value,
             loss_critic_type="l2",
-            clip_value_loss=True,
+            clip_value_loss=clip_value_loss,
         )
         advantage(td)
 

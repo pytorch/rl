@@ -664,8 +664,9 @@ class ClipPPOLoss(PPOLoss):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
-        clip_value_loss (bool, optional): if ``True``, the value loss will be clipped with respect to the
-            input value estimate to prevent excessively large updates. Defaults to ``False``.
+        clip_value_loss (bool or float, optional): if ``True``, the value loss will be clipped with respect to the
+            input value estimate to prevent excessively large updates. If a float is provided, it will be used as the
+            clipping threshold. If not provided or ``False``, no clipping will be performed. Defaults to ``False``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -725,7 +726,7 @@ class ClipPPOLoss(PPOLoss):
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
-        clip_value_loss: bool = False,
+        clip_value_loss: bool | float = False,
         **kwargs,
     ):
         super(ClipPPOLoss, self).__init__(
@@ -743,7 +744,17 @@ class ClipPPOLoss(PPOLoss):
             **kwargs,
         )
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
-        self.clip_value_loss = clip_value_loss
+
+        # Handle clip_value_loss
+        if isinstance(clip_value_loss, bool):
+            if clip_value_loss:
+                self.clip_value_loss = clip_epsilon
+            else:
+                self.clip_value_loss = None
+        elif isinstance(clip_value_loss, float):
+            self.clip_value_loss = clip_value_loss
+        else:
+            raise ValueError("clip_value_loss must be a boolean or a float.")
 
     @property
     def _clip_bounds(self):
@@ -865,10 +876,9 @@ class ClipPPOLoss(PPOLoss):
         )
 
         if self.clip_value_loss:
-            self.clip_epsilon = self.clip_epsilon.to(state_value.device)
             state_value_clipped = old_state_value + (
                 state_value - old_state_value
-            ).clamp(-self.clip_epsilon, self.clip_epsilon)
+            ).clamp(-self.clip_value_loss, self.clip_value_loss)
             loss_value_clipped = distance_loss(
                 target_return,
                 state_value_clipped,
