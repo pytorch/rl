@@ -745,13 +745,17 @@ class ClipPPOLoss(PPOLoss):
         )
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
 
-        # Handle clip_value_loss
+        # Handle clipping of the value loss
         if isinstance(clip_value_loss, bool):
             if clip_value_loss:
-                clip_value_loss = clip_epsilon
+                clip_value_loss = torch.tensor(clip_epsilon)
             else:
                 clip_value_loss = None
-        self.register_buffer("clip_value_loss", torch.tensor(clip_value_loss))
+        elif isinstance(clip_value_loss, float):
+            clip_value_loss = torch.tensor(clip_value_loss)
+        else:
+            raise ValueError("clip_value_loss must be a boolean or a float.")
+        self.register_buffer("clip_value_loss", clip_value_loss)
 
     @property
     def _clip_bounds(self):
@@ -873,7 +877,7 @@ class ClipPPOLoss(PPOLoss):
         )
 
         if self.clip_value_loss:
-            self.clip_epsilon = self.clip_epsilon.to(tensordict.device)
+            self.clip_value_loss = self.clip_value_loss.to(loss_value.device)
             state_value_clipped = old_state_value + (
                 state_value - old_state_value
             ).clamp(-self.clip_value_loss, self.clip_value_loss)
