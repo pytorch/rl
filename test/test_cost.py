@@ -6913,6 +6913,7 @@ class TestPPO(LossModuleTestBase):
         value = td.pop(loss_fn.tensor_keys.value)
 
         if clip_value_loss:
+            # Test it fails without value key
             with pytest.raises(
                 KeyError,
                 match="clip_value_loss is set to True, but the key "
@@ -6922,10 +6923,10 @@ class TestPPO(LossModuleTestBase):
             ):
                 loss = loss_fn(td)
 
-        # Add value to td
+        # Add value back to td
         td.set(loss_fn.tensor_keys.value, value)
 
-        # Test it works with value
+        # Test it works with value key
         loss = loss_fn(td)
         assert "loss_critic" in loss.keys()
 
