@@ -6885,15 +6885,11 @@ class TestPPO(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("clip_value_loss", [True, False, None, 0.5])
-    def test_ppo_value_clipping(self, clip_value_loss, loss_class):
+    def test_ppo_value_clipping(self, clip_value_loss, loss_class, device):
         torch.manual_seed(self.seed)
-        device = (
-            torch.device("cpu")
-            if torch.cuda.device_count() == 0
-            else torch.device("cuda")
-        )
         td = self._create_seq_mock_data_ppo(device=device)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
@@ -7578,14 +7574,10 @@ class TestA2C(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("clip_value_loss", [True, None, 0.5])
-    def test_a2c_value_clipping(self, clip_value_loss):
+    def test_a2c_value_clipping(self, clip_value_loss, device):
         torch.manual_seed(self.seed)
-        device = (
-            torch.device("cpu")
-            if torch.cuda.device_count() == 0
-            else torch.device("cuda")
-        )
         td = self._create_seq_mock_data_a2c(device=device)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
@@ -8039,10 +8031,15 @@ class TestReinforce(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("clip_value_loss", [True, None, 0.5])
-    def test_reinforce_value_clipping(self, clip_value_loss):
+    def test_reinforce_value_clipping(self, clip_value_loss, device):
         torch.manual_seed(self.seed)
         actor, critic, common, td = self._create_mock_common_layer_setup()
+        actor = actor.to(device)
+        critic = critic.to(device)
+        common = common.to(device)
+        td = td.to(device)
         if isinstance(clip_value_loss, bool):
             with pytest.raises(
                 ValueError,
@@ -8061,7 +8058,9 @@ class TestReinforce(LossModuleTestBase):
                 clip_value_loss=clip_value_loss,
             )
 
-            value = td.pop(loss_fn.tensor_keys.value)
+            value = td.pop(
+                loss_fn.tensor_keys.value, torch.randn_like(td["next"]["reward"])
+            )
 
             if clip_value_loss:
                 # Test it fails without value key
@@ -8079,7 +8078,7 @@ class TestReinforce(LossModuleTestBase):
 
             # Test it works with value key
             loss = loss_fn(td)
-            assert "loss_critic" in loss.keys()
+            assert "loss_value" in loss.keys()
 
 
 @pytest.mark.parametrize("device", get_default_devices())
