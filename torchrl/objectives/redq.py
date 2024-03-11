@@ -361,6 +361,7 @@ class REDQLoss(LossModule):
             self.actor_network, func="get_dist_params", randomness=self.vmap_randomness
         )
         self.return_tensorclass = return_tensorclass
+        self.reduction = reduction
 
     @property
     def target_entropy(self):

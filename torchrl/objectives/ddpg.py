@@ -264,6 +264,8 @@ class DDPGLoss(LossModule):
         )
 
         self.loss_function = loss_function
+        self.return_tensorclass = return_tensorclass
+        self.reduction = reduction
 
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)

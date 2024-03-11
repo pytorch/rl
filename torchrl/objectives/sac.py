@@ -416,6 +416,8 @@ class SACLoss(LossModule):
             self._vmap_qnetwork00 = _vmap_func(
                 qvalue_network, randomness=self.vmap_randomness
             )
+        self.return_tensorclass = return_tensorclass
+        self.reduction = reduction
 
     @property
     def target_entropy_buffer(self):
@@ -1102,6 +1104,7 @@ class DiscreteSACLoss(LossModule):
         self._vmap_qnetworkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
+
         self.reduction = reduction
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:

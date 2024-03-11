@@ -377,6 +377,7 @@ class PPOLoss(LossModule):
             value=value_key,
         )
         self.return_tensorclass = return_tensorclass
+        self.reduction = reduction
 
     @property
     def functional(self):

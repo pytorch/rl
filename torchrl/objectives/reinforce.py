@@ -308,6 +308,7 @@ class ReinforceLoss(LossModule):
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.return_tensorclass = return_tensorclass
+        self.reduction = reduction
 
     @property
     def functional(self):

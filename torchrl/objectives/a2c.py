@@ -323,6 +323,7 @@ class A2CLoss(LossModule):
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.loss_critic_type = loss_critic_type
         self.return_tensorclass = return_tensorclass
+        self.reduction = reduction
 
     @property
     def functional(self):
