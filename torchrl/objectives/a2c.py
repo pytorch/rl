@@ -74,6 +74,11 @@ class A2CLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        clip_value_loss (float, optional): If provided, it will be used to compute a clipped version of the value
+            prediction with respect to the input tensordict value estimate and use it to calculate the value loss.
+            The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
+            and preventing large updates. However, it will have no impact if the value estimate was done by the current
+            version of the value estimator. Defaults to ``None``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -241,6 +246,7 @@ class A2CLoss(LossModule):
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
         reduction: str = None,
+        clip_value_loss: float = None,
     ):
         if actor is not None:
             actor_network = actor
@@ -300,6 +306,12 @@ class A2CLoss(LossModule):
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.loss_critic_type = loss_critic_type
+
+        if clip_value_loss:
+            if not isinstance(clip_value_loss, float):
+                raise ValueError("If provided, clip_value_loss must be a float.")
+            clip_value_loss = torch.tensor(clip_value_loss)
+        self.register_buffer("clip_value_loss", clip_value_loss)
 
     @property
     def functional(self):
@@ -421,6 +433,16 @@ class A2CLoss(LossModule):
         return log_prob, dist
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
+        if self.clip_value_loss:
+            try:
+                old_state_value = tensordict.get(self.tensor_keys.value).clone()
+            except KeyError:
+                raise KeyError(
+                    f"clip_value_loss is set to True, but "
+                    f"the key {self.tensor_keys.value} was not found in the input tensordict. "
+                    f"Make sure that the value_key passed to A2C exists in the input tensordict."
+                )
+
         try:
             # TODO: if the advantage is gathered by forward, this introduces an
             # overhead that we could easily reduce.
@@ -445,6 +467,18 @@ class A2CLoss(LossModule):
                 f"TDLambdaEstimate and TDEstimate all return a 'value_target' entry that "
                 f"can be used for the value loss."
             )
+        if self.clip_value_loss:
+            self.clip_value_loss = self.clip_value_loss.to(state_value.device)
+            state_value_clipped = old_state_value + (
+                state_value - old_state_value
+            ).clamp(-self.clip_value_loss, self.clip_value_loss)
+            loss_value_clipped = distance_loss(
+                target_return,
+                state_value_clipped,
+                loss_function=self.loss_critic_type,
+            )
+            # Chose the most pessimistic value prediction between clipped and non-clipped
+            loss_value = torch.max(loss_value, loss_value_clipped)
         return self.critic_coef * loss_value
 
     @property

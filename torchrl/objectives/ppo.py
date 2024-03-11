@@ -101,6 +101,11 @@ class PPOLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        clip_value_loss (float, optional): If provided, it will be used to compute a clipped version of the value
+            prediction with respect to the input tensordict value estimate and use it to calculate the value loss.
+            The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
+            and preventing large updates. However, it will have no impact if the value estimate was done by the current
+            version of the value estimator. Defaults to ``None``.
 
     .. note::
       The advantage (typically GAE) can be computed by the loss function or
@@ -295,6 +300,8 @@ class PPOLoss(LossModule):
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
         reduction: str = None,
+        clip_value_loss: float = None,
+        **kwargs,
     ):
         if actor is not None:
             actor_network = actor
@@ -356,6 +363,12 @@ class PPOLoss(LossModule):
             value_target=value_target_key,
             value=value_key,
         )
+
+        if clip_value_loss:
+            if not isinstance(clip_value_loss, float):
+                raise ValueError("If provided, clip_value_loss must be a float.")
+            clip_value_loss = torch.tensor(clip_value_loss)
+        self.register_buffer("clip_value_loss", clip_value_loss)
 
     @property
     def functional(self):
@@ -506,6 +519,16 @@ class PPOLoss(LossModule):
                 f"can be used for the value loss."
             )
 
+        if self.clip_value_loss:
+            try:
+                old_state_value = tensordict.get(self.tensor_keys.value).clone()
+            except KeyError:
+                raise KeyError(
+                    f"clip_value_loss is set to True, but "
+                    f"the key {self.tensor_keys.value} was not found in the input tensordict. "
+                    f"Make sure that the value_key passed to PPO exists in the input tensordict."
+                )
+
         with self.critic_network_params.to_module(
             self.critic_network
         ) if self.functional else contextlib.nullcontext():
@@ -515,7 +538,7 @@ class PPOLoss(LossModule):
             state_value = state_value_td.get(self.tensor_keys.value)
         except KeyError:
             raise KeyError(
-                f"the key {self.tensor_keys.value} was not found in the input tensordict. "
+                f"the key {self.tensor_keys.value} was not found in the critic output tensordict. "
                 f"Make sure that the value_key passed to PPO is accurate."
             )
 
@@ -524,6 +547,20 @@ class PPOLoss(LossModule):
             state_value,
             loss_function=self.loss_critic_type,
         )
+
+        if self.clip_value_loss:
+            self.clip_value_loss = self.clip_value_loss.to(state_value.device)
+            state_value_clipped = old_state_value + (
+                state_value - old_state_value
+            ).clamp(-self.clip_value_loss, self.clip_value_loss)
+            loss_value_clipped = distance_loss(
+                target_return,
+                state_value_clipped,
+                loss_function=self.loss_critic_type,
+            )
+            # Chose the most pessimistic value prediction between clipped and non-clipped
+            loss_value = torch.max(loss_value, loss_value_clipped)
+
         return self.critic_coef * loss_value
 
     @property
@@ -664,9 +701,13 @@ class ClipPPOLoss(PPOLoss):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
-        clip_value_loss (bool or float, optional): if ``True``, the value loss will be clipped with respect to the
-            input value estimate to prevent excessively large updates. If a float is provided, it will be used as the
-            clipping threshold. If not provided or ``False``, no clipping will be performed. Defaults to ``False``.
+        clip_value_loss (bool or float, optional): If a float is provided, it will be used to compute a clipped
+            version of the value prediction with respect to the input tensordict value estimate and use it to
+            calculate the value loss. The purpose of clipping is to limit the impact of extreme value predictions,
+            helping stabilize training and preventing large updates. However, it will have no impact if the value
+            estimate was done by the current version of the value estimator. If instead True is provided, the
+            ``clip_epsilon`` parameter will be used as the clipping threshold. If not provided or ``False``, no
+            clipping will be performed. Defaults to ``False``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -729,6 +770,13 @@ class ClipPPOLoss(PPOLoss):
         clip_value_loss: bool | float = False,
         **kwargs,
     ):
+        # Define clipping of the value loss
+        if isinstance(clip_value_loss, bool):
+            if clip_value_loss:
+                clip_value_loss = clip_epsilon
+            else:
+                clip_value_loss = None
+
         super(ClipPPOLoss, self).__init__(
             actor_network,
             critic_network,
@@ -741,21 +789,10 @@ class ClipPPOLoss(PPOLoss):
             gamma=gamma,
             separate_losses=separate_losses,
             reduction=reduction,
+            clip_value_loss=clip_value_loss,
             **kwargs,
         )
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
-
-        # Handle clipping of the value loss
-        if isinstance(clip_value_loss, bool):
-            if clip_value_loss:
-                clip_value_loss = torch.tensor(clip_epsilon)
-            else:
-                clip_value_loss = None
-        elif isinstance(clip_value_loss, float):
-            clip_value_loss = torch.tensor(clip_value_loss)
-        else:
-            raise ValueError("clip_value_loss must be a boolean or a float.")
-        self.register_buffer("clip_value_loss", clip_value_loss)
 
     @property
     def _clip_bounds(self):
@@ -831,66 +868,6 @@ class ClipPPOLoss(PPOLoss):
         )
         return td_out
 
-    def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
-        # TODO: if the advantage is gathered by forward, this introduces an
-        # overhead that we could easily reduce.
-        if self.separate_losses:
-            tensordict = tensordict.detach()
-        try:
-            target_return = tensordict.get(self.tensor_keys.value_target)
-        except KeyError:
-            raise KeyError(
-                f"the key {self.tensor_keys.value_target} was not found in the input tensordict. "
-                f"Make sure you provided the right key and the value_target (i.e. the target "
-                f"return) has been retrieved accordingly. Advantage classes such as GAE, "
-                f"TDLambdaEstimate and TDEstimate all return a 'value_target' entry that "
-                f"can be used for the value loss."
-            )
-
-        if self.clip_value_loss:
-            try:
-                old_state_value = tensordict.get(self.tensor_keys.value).clone()
-            except KeyError:
-                raise KeyError(
-                    f"clip_value_loss is set to True, but "
-                    f"the key {self.tensor_keys.value} was not found in the input tensordict. "
-                    f"Make sure that the value_key passed to PPO exists in the input tensordict."
-                )
-
-        with self.critic_network_params.to_module(
-            self.critic_network
-        ) if self.functional else contextlib.nullcontext():
-            state_value_td = self.critic_network(tensordict)
-
-        try:
-            state_value = state_value_td.get(self.tensor_keys.value)
-        except KeyError:
-            raise KeyError(
-                f"the key {self.tensor_keys.value} was not found in the critic output tensordict. "
-                f"Make sure that the value_key passed to PPO is accurate."
-            )
-
-        loss_value = distance_loss(
-            target_return,
-            state_value,
-            loss_function=self.loss_critic_type,
-        )
-
-        if self.clip_value_loss:
-            self.clip_value_loss = self.clip_value_loss.to(state_value.device)
-            state_value_clipped = old_state_value + (
-                state_value - old_state_value
-            ).clamp(-self.clip_value_loss, self.clip_value_loss)
-            loss_value_clipped = distance_loss(
-                target_return,
-                state_value_clipped,
-                loss_function=self.loss_critic_type,
-            )
-            # Chose the most pessimistic value prediction between clipped and non-clipped
-            loss_value = torch.max(loss_value, loss_value_clipped)
-
-        return self.critic_coef * loss_value
-
 
 class KLPENPPOLoss(PPOLoss):
     """KL Penalty PPO loss.
@@ -951,47 +928,55 @@ class KLPENPPOLoss(PPOLoss):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        clip_value_loss (float, optional): If provided, it will be used to compute a clipped version of the value
+            prediction with respect to the input tensordict value estimate and use it to calculate the value loss.
+            The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
+            and preventing large updates. However, it will have no impact if the value estimate was done by the current
+            version of the value estimator. Defaults to ``None``.
 
-    .. note:
-      The advantage (typically GAE) can be computed by the loss function or
-      in the training loop. The latter option is usually preferred, but this is
-      up to the user to choose which option is to be preferred.
-      If the advantage key (``"advantage`` by default) is not present in the
-      input tensordict, the advantage will be computed by the :meth:`~.forward`
-      method.
+    If set to True, the algorithm will compute a clipped version of the value prediction and use it to calculate the value loss.
+        The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training and prevent large updates.
 
-        >>> ppo_loss = KLPENPPOLoss(actor, critic)
-        >>> advantage = GAE(critic)
-        >>> data = next(datacollector)
-        >>> losses = ppo_loss(data)
-        >>> # equivalent
-        >>> advantage(data)
-        >>> losses = ppo_loss(data)
+        .. note:
+          The advantage (typically GAE) can be computed by the loss function or
+          in the training loop. The latter option is usually preferred, but this is
+          up to the user to choose which option is to be preferred.
+          If the advantage key (``"advantage`` by default) is not present in the
+          input tensordict, the advantage will be computed by the :meth:`~.forward`
+          method.
 
-      A custom advantage module can be built using :meth:`~.make_value_estimator`.
-      The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
-      dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
+            >>> ppo_loss = KLPENPPOLoss(actor, critic)
+            >>> advantage = GAE(critic)
+            >>> data = next(datacollector)
+            >>> losses = ppo_loss(data)
+            >>> # equivalent
+            >>> advantage(data)
+            >>> losses = ppo_loss(data)
 
-        >>> ppo_loss = KLPENPPOLoss(actor, critic)
-        >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
-        >>> data = next(datacollector)
-        >>> losses = ppo_loss(data)
+          A custom advantage module can be built using :meth:`~.make_value_estimator`.
+          The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
+          dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
-    .. note::
-      If the actor and the value function share parameters, one can avoid
-      calling the common module multiple times by passing only the head of the
-      value network to the PPO loss module:
+            >>> ppo_loss = KLPENPPOLoss(actor, critic)
+            >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
+            >>> data = next(datacollector)
+            >>> losses = ppo_loss(data)
 
-        >>> common = SomeModule(in_keys=["observation"], out_keys=["hidden"])
-        >>> actor_head = SomeActor(in_keys=["hidden"])
-        >>> value_head = SomeValue(in_keys=["hidden"])
-        >>> # first option, with 2 calls on the common module
-        >>> model = ActorCriticOperator(common, actor_head, value_head)
-        >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())
-        >>> # second option, with a single call to the common module
-        >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
+        .. note::
+          If the actor and the value function share parameters, one can avoid
+          calling the common module multiple times by passing only the head of the
+          value network to the PPO loss module:
 
-      This will work regardless of whether separate_losses is activated or not.
+            >>> common = SomeModule(in_keys=["observation"], out_keys=["hidden"])
+            >>> actor_head = SomeActor(in_keys=["hidden"])
+            >>> value_head = SomeValue(in_keys=["hidden"])
+            >>> # first option, with 2 calls on the common module
+            >>> model = ActorCriticOperator(common, actor_head, value_head)
+            >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())
+            >>> # second option, with a single call to the common module
+            >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
+
+          This will work regardless of whether separate_losses is activated or not.
 
     """
 
@@ -1014,6 +999,7 @@ class KLPENPPOLoss(PPOLoss):
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
+        clip_value_loss: float = None,
         **kwargs,
     ):
         super(KLPENPPOLoss, self).__init__(
@@ -1028,6 +1014,7 @@ class KLPENPPOLoss(PPOLoss):
             gamma=gamma,
             separate_losses=separate_losses,
             reduction=reduction,
+            clip_value_loss=clip_value_loss,
             **kwargs,
         )
 
