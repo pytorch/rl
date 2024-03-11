@@ -934,9 +934,6 @@ class KLPENPPOLoss(PPOLoss):
             and preventing large updates. However, it will have no impact if the value estimate was done by the current
             version of the value estimator. Defaults to ``None``.
 
-    If set to True, the algorithm will compute a clipped version of the value prediction and use it to calculate the value loss.
-        The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training and prevent large updates.
-
         .. note:
           The advantage (typically GAE) can be computed by the loss function or
           in the training loop. The latter option is usually preferred, but this is
