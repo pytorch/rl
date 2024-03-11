@@ -934,46 +934,46 @@ class KLPENPPOLoss(PPOLoss):
             and preventing large updates. However, it will have no impact if the value estimate was done by the current
             version of the value estimator. Defaults to ``None``.
 
-        .. note:
-          The advantage (typically GAE) can be computed by the loss function or
-          in the training loop. The latter option is usually preferred, but this is
-          up to the user to choose which option is to be preferred.
-          If the advantage key (``"advantage`` by default) is not present in the
-          input tensordict, the advantage will be computed by the :meth:`~.forward`
-          method.
+    .. note:
+      The advantage (typically GAE) can be computed by the loss function or
+      in the training loop. The latter option is usually preferred, but this is
+      up to the user to choose which option is to be preferred.
+      If the advantage key (``"advantage`` by default) is not present in the
+      input tensordict, the advantage will be computed by the :meth:`~.forward`
+      method.
 
-            >>> ppo_loss = KLPENPPOLoss(actor, critic)
-            >>> advantage = GAE(critic)
-            >>> data = next(datacollector)
-            >>> losses = ppo_loss(data)
-            >>> # equivalent
-            >>> advantage(data)
-            >>> losses = ppo_loss(data)
+        >>> ppo_loss = KLPENPPOLoss(actor, critic)
+        >>> advantage = GAE(critic)
+        >>> data = next(datacollector)
+        >>> losses = ppo_loss(data)
+        >>> # equivalent
+        >>> advantage(data)
+        >>> losses = ppo_loss(data)
 
-          A custom advantage module can be built using :meth:`~.make_value_estimator`.
-          The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
-          dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
+      A custom advantage module can be built using :meth:`~.make_value_estimator`.
+      The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
-            >>> ppo_loss = KLPENPPOLoss(actor, critic)
-            >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
-            >>> data = next(datacollector)
-            >>> losses = ppo_loss(data)
+        >>> ppo_loss = KLPENPPOLoss(actor, critic)
+        >>> ppo_loss.make_value_estimator(ValueEstimators.TDLambda)
+        >>> data = next(datacollector)
+        >>> losses = ppo_loss(data)
 
-        .. note::
-          If the actor and the value function share parameters, one can avoid
-          calling the common module multiple times by passing only the head of the
-          value network to the PPO loss module:
+    .. note::
+      If the actor and the value function share parameters, one can avoid
+      calling the common module multiple times by passing only the head of the
+      value network to the PPO loss module:
 
-            >>> common = SomeModule(in_keys=["observation"], out_keys=["hidden"])
-            >>> actor_head = SomeActor(in_keys=["hidden"])
-            >>> value_head = SomeValue(in_keys=["hidden"])
-            >>> # first option, with 2 calls on the common module
-            >>> model = ActorCriticOperator(common, actor_head, value_head)
-            >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())
-            >>> # second option, with a single call to the common module
-            >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
+        >>> common = SomeModule(in_keys=["observation"], out_keys=["hidden"])
+        >>> actor_head = SomeActor(in_keys=["hidden"])
+        >>> value_head = SomeValue(in_keys=["hidden"])
+        >>> # first option, with 2 calls on the common module
+        >>> model = ActorCriticOperator(common, actor_head, value_head)
+        >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())
+        >>> # second option, with a single call to the common module
+        >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
 
-          This will work regardless of whether separate_losses is activated or not.
+      This will work regardless of whether separate_losses is activated or not.
 
     """
 
