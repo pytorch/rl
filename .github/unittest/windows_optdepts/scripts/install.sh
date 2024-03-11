@@ -39,10 +39,21 @@ fi
 git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
-if $torch_cuda ; then
-  python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118
+if [[ "$TORCH_VERSION" == "nightly" ]]; then
+  if $torch_cuda ; then
+    python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118
+  else
+    python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+  fi
+elif [[ "$TORCH_VERSION" == "stable" ]]; then
+  if $torch_cuda ; then
+      python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118
+  else
+      python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+  fi
 else
-  python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
+  printf "Failed to install pytorch"
+  exit 1
 fi
 
 torch_cuda=$(python -c "import torch; print(torch.cuda.is_available())")
@@ -58,10 +69,14 @@ fi
 #python -m pip install pip --upgrade
 
 # install tensordict
-git clone https://github.com/pytorch/tensordict
-cd tensordict
-python setup.py develop
-cd ..
+if [[ "$RELEASE" == 0 ]]; then
+  git clone https://github.com/pytorch/tensordict
+  cd tensordict
+  python setup.py develop
+  cd ..
+else
+  pip3 install tensordict
+fi
 
 # smoke test
 python -c """

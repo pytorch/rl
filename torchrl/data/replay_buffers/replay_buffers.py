@@ -329,13 +329,21 @@ class ReplayBuffer:
             return len(self._storage)
 
     def __repr__(self) -> str:
-        return (
-            f"{type(self).__name__}("
-            f"storage={self._storage}, "
-            f"sampler={self._sampler}, "
-            f"writer={self._writer}"
-            ")"
-        )
+        from torchrl.envs.transforms import Compose
+
+        storage = textwrap.indent(f"storage={self._storage}", " " * 4)
+        writer = textwrap.indent(f"writer={self._writer}", " " * 4)
+        sampler = textwrap.indent(f"sampler={self._sampler}", " " * 4)
+        if self._transform is not None and not (
+            isinstance(self._transform, Compose) and not len(self._transform)
+        ):
+            transform = textwrap.indent(f"transform={self._transform}", " " * 4)
+            transform = f"\n{self._transform}, "
+        else:
+            transform = ""
+        batch_size = textwrap.indent(f"batch_size={self._batch_size}", " " * 4)
+        collate_fn = textwrap.indent(f"collate_fn={self._collate_fn}", " " * 4)
+        return f"{self.__class__.__name__}(\n{storage}, \n{sampler}, \n{writer}, {transform}\n{batch_size}, \n{collate_fn})"
 
     @pin_memory_output
     def __getitem__(self, index: int | torch.Tensor | NestedKey) -> Any:
@@ -656,6 +664,33 @@ class ReplayBuffer:
             _futures_lock = threading.RLock()
             state["_futures_lock"] = _futures_lock
         self.__dict__.update(state)
+
+    @property
+    def sampler(self):
+        """The sampler of the replay buffer.
+
+        The sampler must be an instance of :class:`~torchrl.data.replay_buffers.Sampler`.
+
+        """
+        return self._sampler
+
+    @property
+    def writer(self):
+        """The writer of the replay buffer.
+
+        The writer must be an instance of :class:`~torchrl.data.replay_buffers.Writer`.
+
+        """
+        return self._writer
+
+    @property
+    def storage(self):
+        """The storage of the replay buffer.
+
+        The storage must be an instance of :class:`~torchrl.data.replay_buffers.Storage`.
+
+        """
+        return self._storage
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
@@ -1474,6 +1509,8 @@ class ReplayBufferEnsemble(ReplayBuffer):
         ...     assert sample["renamed"].shape == torch.Size([2, 5])
 
     """
+
+    _collate_fn_val = None
 
     def __init__(
         self,

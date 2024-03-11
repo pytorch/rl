@@ -29,6 +29,7 @@ from torchrl.objectives.common import LossModule, LossContainerBase
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -96,6 +97,10 @@ class CQLLoss(LossModule):
         with_lagrange (bool, optional): Whether to use the Lagrange multiplier.
             Default is ``False``.
         lagrange_thresh (float, optional): Lagrange threshold. Default is 0.0.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
         >>> import torch
@@ -302,8 +307,11 @@ class CQLLoss(LossModule):
         with_lagrange: bool = False,
         lagrange_thresh: float = 0.0,
         return_tensorclass: bool = False,
+        reduction: str = None,
     ) -> None:
         self._out_keys = None
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
 
         # Actor
@@ -388,6 +396,7 @@ class CQLLoss(LossModule):
             self.qvalue_network, randomness=self.vmap_randomness
         )
         self.return_tensorclass = return_tensorclass
+        self.reduction = reduction
 
     @property
     def target_entropy(self):
@@ -546,11 +555,11 @@ class CQLLoss(LossModule):
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
         out = {
-            "loss_actor": loss_actor.mean(),
-            "loss_actor_bc": loss_actor_bc.mean(),
-            "loss_qvalue": q_loss.mean(),
-            "loss_cql": cql_loss.mean(),
-            "loss_alpha": loss_alpha.mean(),
+            "loss_actor": loss_actor,
+            "loss_actor_bc": loss_actor_bc,
+            "loss_qvalue": q_loss,
+            "loss_cql": cql_loss,
+            "loss_alpha": loss_alpha,
             "alpha": self._alpha,
             "entropy": -td_device.get(self.tensor_keys.log_prob).mean().detach(),
         }
@@ -578,6 +587,7 @@ class CQLLoss(LossModule):
         bc_log_prob = dist.log_prob(tensordict.get(self.tensor_keys.action))
 
         bc_actor_loss = self._alpha * log_prob - bc_log_prob
+        bc_actor_loss = _reduce(bc_actor_loss, reduction=self.reduction)
         metadata = {"bc_log_prob": bc_log_prob.mean().detach()}
         return bc_actor_loss, metadata
 
@@ -609,6 +619,7 @@ class CQLLoss(LossModule):
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         actor_loss = self._alpha * log_prob - min_q_logprob
+        actor_loss = _reduce(actor_loss, reduction=self.reduction)
 
         return actor_loss, {}
 
@@ -718,11 +729,11 @@ class CQLLoss(LossModule):
             q_pred,
             target_value.expand_as(q_pred),
             loss_function=self.loss_function,
-        )
+        ).sum(0)
+        loss_qval = _reduce(loss_qval, reduction=self.reduction)
         td_error = (q_pred - target_value).pow(2)
         metadata = {"td_error": td_error.detach()}
-
-        return loss_qval.sum(0).mean(), metadata
+        return loss_qval, metadata
 
     def cql_loss(self, tensordict: TensorDictBase) -> Tensor:
         pred_q1 = tensordict.get(self.tensor_keys.pred_q1)
@@ -861,7 +872,10 @@ class CQLLoss(LossModule):
         tensordict.set(self.tensor_keys.cql_q1_loss, cql_q1_loss)
         tensordict.set(self.tensor_keys.cql_q2_loss, cql_q2_loss)
 
-        return (cql_q1_loss + cql_q2_loss).mean(), {}
+        cql_q_loss = (cql_q1_loss + cql_q2_loss).mean(-1)
+        cql_q_loss = _reduce(cql_q_loss, reduction=self.reduction)
+
+        return cql_q_loss, {}
 
     def alpha_prime_loss(self, tensordict: TensorDictBase) -> Tensor:
         cql_q1_loss = tensordict.get(self.tensor_keys.cql_q1_loss)
@@ -883,6 +897,7 @@ class CQLLoss(LossModule):
         min_qf2_loss = alpha_prime * (cql_q2_loss.mean() - self.target_action_gap)
 
         alpha_prime_loss = (-min_qf1_loss - min_qf2_loss) * 0.5
+        alpha_prime_loss = _reduce(alpha_prime_loss, reduction=self.reduction)
         return alpha_prime_loss, {}
 
     def alpha_loss(self, tensordict: TensorDictBase) -> Tensor:
@@ -893,6 +908,7 @@ class CQLLoss(LossModule):
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
+        alpha_loss = _reduce(alpha_loss, reduction=self.reduction)
         return alpha_loss, {}
 
     @property
@@ -921,7 +937,10 @@ class DiscreteCQLLoss(LossModule):
         gamma (float, optional): Discount factor. Default is ``None``.
         action_space: The action space of the environment. If None, it is inferred from the value network.
             Defaults to None.
-
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
         >>> from torchrl.modules import MLP, QValueActor
@@ -1043,9 +1062,12 @@ class DiscreteCQLLoss(LossModule):
         gamma: float = None,
         action_space=None,
         return_tensorclass: bool = False,
+        reduction: str = None,
     ) -> None:
-        super().__init__()
         self._in_keys = None
+        if reduction is None:
+            reduction = "mean"
+        super().__init__()
         self.delay_value = delay_value
         value_network = ensure_tensordict_compatible(
             module=value_network,
@@ -1080,6 +1102,7 @@ class DiscreteCQLLoss(LossModule):
             )
             action_space = "one-hot"
         self.action_space = _find_action_space(action_space)
+        self.reduction = reduction
 
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
@@ -1202,9 +1225,8 @@ class DiscreteCQLLoss(LossModule):
             pred_val,
             inplace=True,
         )
-        loss = (
-            0.5 * distance_loss(pred_val_index, target_value, self.loss_function).mean()
-        )
+        loss = 0.5 * distance_loss(pred_val_index, target_value, self.loss_function)
+        loss = _reduce(loss, reduction=self.reduction)
 
         metadata = {
             "td_error": td_error.mean(0).detach(),
@@ -1269,4 +1291,6 @@ class DiscreteCQLLoss(LossModule):
         else:
             q_a = (qvalues * current_action).sum(dim=-1, keepdim=True)
 
-        return (logsumexp - q_a).mean(), {}
+        loss_cql = (logsumexp - q_a).squeeze(-1)
+        loss_cql = _reduce(loss_cql, reduction=self.reduction)
+        return loss_cql, {}

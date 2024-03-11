@@ -103,7 +103,12 @@ torch_2_3 = version.parse(
 
 
 @pytest.mark.parametrize(
-    "sampler", [samplers.RandomSampler, samplers.PrioritizedSampler]
+    "sampler",
+    [
+        samplers.RandomSampler,
+        samplers.SamplerWithoutReplacement,
+        samplers.PrioritizedSampler,
+    ],
 )
 @pytest.mark.parametrize(
     "writer", [writers.RoundRobinWriter, writers.TensorDictMaxValueWriter]
@@ -183,6 +188,28 @@ class TestComposableBuffers:
         else:
             raise NotImplementedError(datatype)
         return data
+
+    def test_rb_repr(self, rb_type, sampler, writer, storage, size, datatype):
+        if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
+            pytest.skip(
+                "Distributed package support on Windows is a prototype feature and is subject to changes."
+            )
+        torch.manual_seed(0)
+        rb = self._get_rb(
+            rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
+        )
+        data = self._get_datum(datatype)
+        if not is_tensor_collection(data) and writer is TensorDictMaxValueWriter:
+            with pytest.raises(
+                RuntimeError, match="expects data to be a tensor collection"
+            ):
+                rb.add(data)
+            return
+        rb.add(data)
+        # we just check that str runs, not its value
+        assert str(rb)
+        rb.sample()
+        assert str(rb)
 
     def test_add(self, rb_type, sampler, writer, storage, size, datatype):
         if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
@@ -1904,7 +1931,7 @@ class TestSamplers:
         )
 
         done = torch.zeros(100, 1, dtype=torch.bool)
-        done[torch.tensor([29, 54, 69])] = 1
+        done[torch.tensor([29, 54, 69, 99])] = 1
 
         data = TensorDict(
             {
@@ -1994,6 +2021,35 @@ class TestSamplers:
         assert len(trajs_unique_id) == 4
         truncated = info[("next", "truncated")]
         assert truncated.view(num_slices, -1)[:, -1].all()
+
+    @pytest.mark.parametrize("sampler", [SliceSampler, SliceSamplerWithoutReplacement])
+    def test_slice_sampler_at_capacity(self, sampler):
+        torch.manual_seed(0)
+
+        trajectory0 = torch.tensor([3, 3, 0, 1, 1, 1, 2, 2, 2, 3])
+        trajectory1 = torch.arange(2).repeat_interleave(5)
+        trajectory = torch.stack([trajectory0, trajectory1], 0)
+
+        td = TensorDict(
+            {"trajectory": trajectory, "steps": torch.arange(10).expand(2, 10)}, [2, 10]
+        )
+
+        rb = ReplayBuffer(
+            sampler=sampler(traj_key="trajectory", num_slices=2),
+            storage=LazyTensorStorage(20, ndim=2),
+            batch_size=6,
+        )
+
+        rb.extend(td)
+
+        for s in rb:
+            if (s["steps"] == 9).any():
+                n = (s["steps"] == 9).nonzero()
+                assert ((s["steps"] == 0).nonzero() == n + 1).all()
+                assert ((s["steps"] == 1).nonzero() == n + 2).all()
+                break
+        else:
+            raise AssertionError
 
     def test_slice_sampler_errors(self):
         device = "cpu"
@@ -2499,12 +2555,19 @@ class TestEnsemble:
 
 def _rbtype(datatype):
     if datatype in ("pytree", "tensorclass"):
-        return [ReplayBuffer, PrioritizedReplayBuffer]
+        return [
+            (ReplayBuffer, RandomSampler),
+            (PrioritizedReplayBuffer, RandomSampler),
+            (ReplayBuffer, SamplerWithoutReplacement),
+            (PrioritizedReplayBuffer, SamplerWithoutReplacement),
+        ]
     return [
-        ReplayBuffer,
-        PrioritizedReplayBuffer,
-        TensorDictReplayBuffer,
-        TensorDictPrioritizedReplayBuffer,
+        (ReplayBuffer, RandomSampler),
+        (ReplayBuffer, SamplerWithoutReplacement),
+        (PrioritizedReplayBuffer, None),
+        (TensorDictReplayBuffer, RandomSampler),
+        (TensorDictReplayBuffer, SamplerWithoutReplacement),
+        (TensorDictPrioritizedReplayBuffer, None),
     ]
 
 
@@ -2542,24 +2605,26 @@ class TestRBMultidim:
                 batch_size=shape,
             )
 
-    datatype_rb_pairs = [
-        [datatype, rbtype]
+    datatype_rb_tuples = [
+        [datatype, *rbtype]
         for datatype in ["pytree", "tensordict", "tensorclass"]
         for rbtype in _rbtype(datatype)
     ]
 
-    @pytest.mark.parametrize("datatype,rbtype", datatype_rb_pairs)
+    @pytest.mark.parametrize("datatype,rbtype,sampler_cls", datatype_rb_tuples)
     @pytest.mark.parametrize("datadim", [1, 2])
     @pytest.mark.parametrize("storage_cls", [LazyMemmapStorage, LazyTensorStorage])
-    def test_rb_multidim(self, datatype, datadim, rbtype, storage_cls):
+    def test_rb_multidim(self, datatype, datadim, rbtype, storage_cls, sampler_cls):
         data = self._make_data(datatype, datadim)
         if rbtype not in (PrioritizedReplayBuffer, TensorDictPrioritizedReplayBuffer):
-            rbtype = functools.partial(rbtype, sampler=RandomSampler())
+            rbtype = functools.partial(rbtype, sampler=sampler_cls())
         else:
             rbtype = functools.partial(rbtype, alpha=0.9, beta=1.1)
 
         rb = rbtype(storage=storage_cls(100, ndim=datadim), batch_size=4)
+        assert str(rb)  # check str works
         rb.extend(data)
+        assert str(rb)
         assert len(rb) == 12
         data = rb[:]
         if datatype in ("tensordict", "tensorclass"):
@@ -2569,6 +2634,7 @@ class TestRBMultidim:
                 leaf.shape[:datadim].numel() == 12 for leaf in tree_flatten(data)[0]
             )
         s = rb.sample()
+        assert str(rb)
         if datatype in ("tensordict", "tensorclass"):
             assert (s.exclude("index") == 1).all()
             assert s.numel() == 4
@@ -2619,16 +2685,21 @@ class TestRBMultidim:
             ],
         ],
     )
+    @pytest.mark.parametrize("env_device", get_default_devices())
     def test_rb_multidim_collector(
-        self, rbtype, storage_cls, writer_cls, sampler_cls, transform
+        self, rbtype, storage_cls, writer_cls, sampler_cls, transform, env_device
     ):
         from _utils_internal import CARTPOLE_VERSIONED
 
         torch.manual_seed(0)
-        env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED))
+        env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED()), device=env_device)
         env.set_seed(0)
         collector = SyncDataCollector(
-            env, RandomPolicy(env.action_spec), frames_per_batch=4, total_frames=16
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=4,
+            total_frames=16,
+            device=env_device,
         )
         if writer_cls is TensorDictMaxValueWriter:
             with pytest.raises(
@@ -2651,19 +2722,28 @@ class TestRBMultidim:
         if transform:
             for t in transform:
                 rb.append_transform(t())
-        for data in collector:
-            rb.extend(data)
-            if isinstance(rb, TensorDictReplayBuffer) and transform is not None:
-                # this should fail bc we can't set the indices after executing the transform.
-                with pytest.raises(RuntimeError, match="Failed to set the metadata"):
-                    rb.sample()
-                return
-            s = rb.sample()
-            rbtot = rb[:]
-            assert rbtot.shape[0] == 2
-            assert len(rb) == rbtot.numel()
-            if transform is not None:
-                assert s.ndim == 2
+        try:
+            for i, data in enumerate(collector):  # noqa: B007
+                assert data.device == torch.device(env_device)
+                rb.extend(data)
+                if isinstance(rb, TensorDictReplayBuffer) and transform is not None:
+                    # this should fail bc we can't set the indices after executing the transform.
+                    with pytest.raises(
+                        RuntimeError, match="Failed to set the metadata"
+                    ):
+                        rb.sample()
+                    return
+                s = rb.sample()
+                assert s.device == torch.device("cpu")
+                rbtot = rb[:]
+                assert rbtot.shape[0] == 2
+                assert len(rb) == rbtot.numel()
+                if transform is not None:
+                    assert s.ndim == 2
+        except Exception:
+            print(f"Failing at iter {i}")  # noqa: T201
+            print(f"rb {rb}")  # noqa: T201
+            raise
 
 
 if __name__ == "__main__":

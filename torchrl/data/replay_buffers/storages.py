@@ -62,6 +62,10 @@ class Storage:
         self.max_size = int(max_size)
 
     @property
+    def _is_full(self):
+        return len(self) == self.max_size
+
+    @property
     def _attached_entities(self):
         # RBs that use a given instance of Storage should add
         # themselves to this set.
@@ -281,6 +285,9 @@ class ListStorage(Storage):
             )
         state = copy(self.__dict__)
         return state
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(items=[{self._storage[0]}, ...])"
 
 
 class TensorStorage(Storage):
@@ -502,7 +509,11 @@ class TensorStorage(Storage):
         # returns the length of the buffer along dim0
         len_along_dim = len(self)
         if self.ndim:
-            len_along_dim = len_along_dim // self._total_shape[1:].numel()
+            _total_shape = self._total_shape
+            if _total_shape is not None:
+                len_along_dim = len_along_dim // _total_shape[1:].numel()
+            else:
+                return None
         return len_along_dim
 
     def _max_size_along_dim0(self, *, single_data=None, batched_data=None):
@@ -548,6 +559,8 @@ class TensorStorage(Storage):
     def flatten(self):
         if self.ndim == 1:
             return self
+        if not self.initialized:
+            raise RuntimeError("Cannot flatten a non-initialized storage.")
         if is_tensor_collection(self._storage):
             if self._is_full:
                 return TensorStorage(self._storage.flatten(0, self.ndim - 1))
@@ -766,6 +779,8 @@ class TensorStorage(Storage):
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         _storage = self._storage
         is_tc = is_tensor_collection(_storage)
+        if not self.initialized:
+            raise RuntimeError("Cannot get elements out of a non-initialized storage.")
         if not self._is_full:
             if is_tc:
                 storage = self._storage[: self._len_along_dim0]
@@ -794,6 +809,26 @@ class TensorStorage(Storage):
         raise NotImplementedError(
             f"{type(self)} must be initialized during construction."
         )
+
+    def __repr__(self):
+        if not self.initialized:
+            storage_str = textwrap.indent("data=<empty>", 4 * " ")
+        elif is_tensor_collection(self._storage):
+            storage_str = textwrap.indent(f"data={self[:]}", 4 * " ")
+        else:
+
+            def repr_item(x):
+                if isinstance(x, torch.Tensor):
+                    return f"{x.__class__.__name__}(shape={x.shape}, dtype={x.dtype}, device={x.device})"
+                return x.__class__.__name__
+
+            storage_str = textwrap.indent(
+                f"data={tree_map(repr_item, self[:])}", 4 * " "
+            )
+        shape_str = textwrap.indent(f"shape={self.shape}", 4 * " ")
+        len_str = textwrap.indent(f"len={len(self)}", 4 * " ")
+        maxsize_str = textwrap.indent(f"max_size={self.max_size}", 4 * " ")
+        return f"{self.__class__.__name__}(\n{storage_str}, \n{shape_str}, \n{len_str}, \n{maxsize_str})"
 
 
 class LazyTensorStorage(TensorStorage):

@@ -5624,6 +5624,39 @@ class TestCQL(LossModuleTestBase):
                 (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters())
             )
 
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_cql_reduction(self, reduction):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        td = self._create_mock_data_cql(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+
+        loss_fn = CQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            loss_function="l2",
+            delay_actor=False,
+            delay_qvalue=False,
+            reduction=reduction,
+        )
+        loss_fn.make_value_estimator()
+        loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+        else:
+            for key in loss.keys():
+                if not key.startswith("loss"):
+                    continue
+                assert loss[key].shape == torch.Size([])
+
 
 class TestDiscreteCQL(LossModuleTestBase):
     seed = 0
@@ -5995,6 +6028,31 @@ class TestDiscreteCQL(LossModuleTestBase):
 
         torch.testing.assert_close(loss_val_td.get(loss.out_keys[0]), loss_val[0])
         torch.testing.assert_close(loss_val_td.get(loss.out_keys[1]), loss_val[1])
+
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_dcql_reduction(self, reduction):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        actor = self._create_mock_actor(action_spec_type="one_hot", device=device)
+        td = self._create_mock_data_dcql(action_spec_type="one_hot", device=device)
+        loss_fn = DiscreteCQLLoss(
+            actor, loss_function="l2", delay_value=False, reduction=reduction
+        )
+        loss_fn.make_value_estimator()
+        loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+        else:
+            for key in loss.keys():
+                if not key.startswith("loss"):
+                    continue
+                assert loss[key].shape == torch.Size([])
 
 
 class TestPPO(LossModuleTestBase):
@@ -8554,6 +8612,28 @@ class TestOnlineDT(LossModuleTestBase):
             return
         assert loss_entropy == loss_val_td["loss_entropy"]
 
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_onlinedt_reduction(self, reduction):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        td = self._create_mock_data_odt(device=device)
+        actor = self._create_mock_actor(device=device)
+        loss_fn = OnlineDTLoss(actor, reduction=reduction)
+        loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+        else:
+            for key in loss.keys():
+                if not key.startswith("loss"):
+                    continue
+                assert loss[key].shape == torch.Size([])
+
 
 class TestDT(LossModuleTestBase):
     seed = 0
@@ -8719,6 +8799,23 @@ class TestDT(LossModuleTestBase):
 
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_dt_reduction(self, reduction):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        td = self._create_mock_data_dt(device=device)
+        actor = self._create_mock_actor(device=device)
+        loss_fn = DTLoss(actor, reduction=reduction)
+        loss = loss_fn(td)
+        if reduction == "none":
+            assert loss["loss"].shape == td["action"].shape
+        else:
+            assert loss["loss"].shape == torch.Size([])
 
 
 @pytest.mark.skipif(
@@ -9494,6 +9591,42 @@ class TestIQL(LossModuleTestBase):
                 return
             assert loss_actor == loss_val_td["loss_actor"]
             assert loss_value == loss_val_td["loss_value"]
+
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_iql_reduction(self, reduction):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        td = self._create_mock_data_iql(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        value = self._create_mock_value(device=device)
+
+        loss_fn = IQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            loss_function="l2",
+            reduction=reduction,
+        )
+        loss_fn.make_value_estimator()
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+        else:
+            for key in loss.keys():
+                if not key.startswith("loss"):
+                    continue
+                assert loss[key].shape == torch.Size([])
 
 
 @pytest.mark.skipif(
@@ -10276,6 +10409,43 @@ class TestDiscreteIQL(LossModuleTestBase):
                 return
             assert loss_actor == loss_val_td["loss_actor"]
             assert loss_value == loss_val_td["loss_value"]
+
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    def test_discrete_iql_reduction(self, reduction):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        td = self._create_mock_data_discrete_iql(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        value = self._create_mock_value(device=device)
+
+        loss_fn = DiscreteIQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            loss_function="l2",
+            action_space="one-hot",
+            reduction=reduction,
+        )
+        loss_fn.make_value_estimator()
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            loss = loss_fn(td)
+        if reduction == "none":
+            for key in loss.keys():
+                if key.startswith("loss"):
+                    assert loss[key].shape == td.shape
+        else:
+            for key in loss.keys():
+                if not key.startswith("loss"):
+                    continue
+                assert loss[key].shape == torch.Size([])
 
 
 @pytest.mark.parametrize("create_target_params", [True, False])
@@ -11956,6 +12126,98 @@ class TestValues:
             terminated=terminated[..., T // 2 :, :],
         )
         torch.testing.assert_close(v1, torch.cat([v1a, v1b], -2), rtol=1e-4, atol=1e-4)
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_args_kwargs_timedim(self, device):
+        torch.manual_seed(0)
+
+        lmbda = 0.95
+        N = (2, 3)
+        B = (4,)
+        T = 20
+
+        terminated = torch.zeros(*N, T, *B, 1, device=device, dtype=torch.bool)
+        terminated[..., T // 2 - 1, :, :] = 1
+        done = terminated.clone()
+        done[..., -1, :, :] = 1
+
+        reward = torch.randn(*N, T, *B, 1, device=device)
+        state_value = torch.randn(*N, T, *B, 1, device=device)
+        next_state_value = torch.randn(*N, T, *B, 1, device=device)
+
+        # avoid low values of gamma
+        gamma = 0.95
+
+        v1 = vec_generalized_advantage_estimate(
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            time_dim=-3,
+        )[0]
+
+        v2 = vec_generalized_advantage_estimate(
+            gamma=gamma,
+            lmbda=lmbda,
+            state_value=state_value,
+            next_state_value=next_state_value,
+            reward=reward,
+            done=done,
+            terminated=terminated,
+            time_dim=-3,
+        )[0]
+
+        with pytest.raises(TypeError, match="positional arguments"):
+            v3 = vec_generalized_advantage_estimate(
+                gamma,
+                lmbda,
+                state_value,
+                next_state_value,
+                reward,
+                done,
+                terminated,
+                -3,
+            )[0]
+
+        v3 = vec_generalized_advantage_estimate(
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            terminated,
+            time_dim=-3,
+        )[0]
+
+        v4 = vec_generalized_advantage_estimate(
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            terminated,
+            time_dim=2,
+        )[0]
+
+        v5 = vec_generalized_advantage_estimate(
+            gamma=gamma,
+            lmbda=lmbda,
+            state_value=state_value,
+            next_state_value=next_state_value,
+            reward=reward,
+            done=done,
+            terminated=terminated,
+            time_dim=-3,
+        )[0]
+        torch.testing.assert_close(v1, v2)
+        torch.testing.assert_close(v1, v3)
+        torch.testing.assert_close(v1, v4)
+        torch.testing.assert_close(v1, v5)
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("N", [(3,), (3, 7)])

@@ -37,6 +37,8 @@ from torchrl.data.replay_buffers.utils import _is_int, _reduce
 class Writer(ABC):
     """A ReplayBuffer base Writer class."""
 
+    _storage: Storage
+
     def __init__(self) -> None:
         self._storage = None
 
@@ -79,7 +81,13 @@ class Writer(ABC):
         if self._storage.ndim == 1:
             return index
         mesh = torch.stack(
-            torch.meshgrid(*(torch.arange(dim) for dim in self._storage.shape[1:])), -1
+            torch.meshgrid(
+                *(
+                    torch.arange(dim, device=index.device)
+                    for dim in self._storage.shape[1:]
+                )
+            ),
+            -1,
         ).flatten(0, -2)
         if _is_int(index):
             index0 = torch.as_tensor(int(index)).expand(mesh.shape[0], 1)
@@ -91,6 +99,9 @@ class Writer(ABC):
             ],
             1,
         )
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}()"
 
 
 class ImmutableDatasetWriter(Writer):
@@ -209,6 +220,9 @@ class RoundRobinWriter(Writer):
             _cursor_value = mp.Value("i", cursor)
             state["_cursor_value"] = _cursor_value
         self.__dict__.update(state)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(cursor={int(self._cursor)}, full_storage={self._storage._is_full})"
 
 
 class TensorDictRoundRobinWriter(RoundRobinWriter):
@@ -520,6 +534,9 @@ class TensorDictMaxValueWriter(Writer):
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         raise NotImplementedError
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(cursor={int(self._cursor)}, full_storage={self._storage._is_full}, rank_key={self._rank_key}, reduction={self._reduction})"
 
 
 class WriterEnsemble(Writer):

@@ -59,7 +59,7 @@ jobs:
         git version
         
         # 5. Install PyTorch
-        python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
+        python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
         
         # 6. Install tensordict
         python3 -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
