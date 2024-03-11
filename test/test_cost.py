@@ -8038,7 +8038,6 @@ class TestReinforce(LossModuleTestBase):
         actor, critic, common, td = self._create_mock_common_layer_setup()
         actor = actor.to(device)
         critic = critic.to(device)
-        common = common.to(device)
         td = td.to(device)
         if isinstance(clip_value_loss, bool):
             with pytest.raises(
@@ -8068,7 +8067,7 @@ class TestReinforce(LossModuleTestBase):
                     KeyError,
                     match="clip_value_loss is set to True, but the key "
                     "state_value was not found in the input tensordict. "
-                    "Make sure that the value_key passed to A2C exists in "
+                    "Make sure that the value_key passed to Reinforce exists in "
                     "the input tensordict.",
                 ):
                     loss = loss_fn(td)

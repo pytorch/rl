@@ -389,6 +389,15 @@ class ReinforceLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.clip_value_loss:
+            try:
+                old_state_value = tensordict.get(self.tensor_keys.value).clone()
+            except KeyError:
+                raise KeyError(
+                    f"clip_value_loss is set to True, but "
+                    f"the key {self.tensor_keys.value} was not found in the input tensordict. "
+                    f"Make sure that the value_key passed to Reinforce exists in the input tensordict."
+                )
         advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
@@ -423,17 +432,6 @@ class ReinforceLoss(LossModule):
         return td_out
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
-
-        if self.clip_value_loss:
-            try:
-                old_state_value = tensordict.get(self.tensor_keys.value).clone()
-            except KeyError:
-                raise KeyError(
-                    f"clip_value_loss is set to True, but "
-                    f"the key {self.tensor_keys.value} was not found in the input tensordict. "
-                    f"Make sure that the value_key passed to Reinforce exists in the input tensordict."
-                )
-
         try:
             target_return = tensordict.get(self.tensor_keys.value_target)
             tensordict_select = tensordict.select(*self.critic_network.in_keys)
