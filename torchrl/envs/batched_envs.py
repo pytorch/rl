@@ -113,6 +113,8 @@ class _PEnvMeta(_EnvPostInit):
         serial_for_single = kwargs.pop("serial_for_single", False)
         if serial_for_single:
             num_workers = kwargs.get("num_workers", None)
+            # Remove start method from kwargs
+            kwargs.pop("mp_start_method", None)
             if num_workers is None:
                 num_workers = args[0]
             if num_workers == 1:
