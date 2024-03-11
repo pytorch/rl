@@ -6915,33 +6915,34 @@ class TestPPO(LossModuleTestBase):
                     clip_value_loss=clip_value_loss,
                 )
 
-        loss_fn = loss_class(
-            actor,
-            value,
-            loss_critic_type="l2",
-            clip_value_loss=clip_value_loss,
-        )
-        advantage(td)
+        else:
+            loss_fn = loss_class(
+                actor,
+                value,
+                loss_critic_type="l2",
+                clip_value_loss=clip_value_loss,
+            )
+            advantage(td)
 
-        value = td.pop(loss_fn.tensor_keys.value)
+            value = td.pop(loss_fn.tensor_keys.value)
 
-        if clip_value_loss:
-            # Test it fails without value key
-            with pytest.raises(
-                KeyError,
-                match="clip_value_loss is set to True, but the key "
-                "state_value was not found in the input tensordict. "
-                "Make sure that the value_key passed to PPO exists in "
-                "the input tensordict.",
-            ):
-                loss = loss_fn(td)
+            if clip_value_loss:
+                # Test it fails without value key
+                with pytest.raises(
+                    KeyError,
+                    match="clip_value_loss is set to True, but the key "
+                    "state_value was not found in the input tensordict. "
+                    "Make sure that the value_key passed to PPO exists in "
+                    "the input tensordict.",
+                ):
+                    loss = loss_fn(td)
 
-        # Add value back to td
-        td.set(loss_fn.tensor_keys.value, value)
+            # Add value back to td
+            td.set(loss_fn.tensor_keys.value, value)
 
-        # Test it works with value key
-        loss = loss_fn(td)
-        assert "loss_critic" in loss.keys()
+            # Test it works with value key
+            loss = loss_fn(td)
+            assert "loss_critic" in loss.keys()
 
 
 class TestA2C(LossModuleTestBase):
