@@ -8063,9 +8063,7 @@ class TestReinforce(LossModuleTestBase):
             )
             advantage(td)
 
-            value = td.pop(
-                loss_fn.tensor_keys.value, torch.randn_like(td["next"]["reward"])
-            )
+            value = td.pop(loss_fn.tensor_keys.value)
 
             if clip_value_loss:
                 # Test it fails without value key
