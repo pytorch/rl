@@ -8039,6 +8039,11 @@ class TestReinforce(LossModuleTestBase):
         actor = actor.to(device)
         critic = critic.to(device)
         td = td.to(device)
+        advantage = GAE(
+            gamma=0.9,
+            lmbda=0.9,
+            value_network=critic,
+        )
         if isinstance(clip_value_loss, bool):
             with pytest.raises(
                 ValueError,
@@ -8056,6 +8061,7 @@ class TestReinforce(LossModuleTestBase):
                 critic_network=critic,
                 clip_value_loss=clip_value_loss,
             )
+            advantage(td)
 
             value = td.pop(
                 loss_fn.tensor_keys.value, torch.randn_like(td["next"]["reward"])
