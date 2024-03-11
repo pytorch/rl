@@ -364,7 +364,7 @@ class PPOLoss(LossModule):
             value=value_key,
         )
 
-        if clip_value_loss:
+        if clip_value_loss is not None:
             if not isinstance(clip_value_loss, float):
                 raise ValueError("If provided, clip_value_loss must be a float.")
             clip_value_loss = torch.tensor(clip_value_loss)

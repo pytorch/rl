@@ -6886,7 +6886,7 @@ class TestPPO(LossModuleTestBase):
                 assert loss[key].shape == torch.Size([])
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
-    @pytest.mark.parametrize("clip_value_loss", [True, False, 0.5])
+    @pytest.mark.parametrize("clip_value_loss", [True, False, None, 0.5])
     def test_ppo_value_clipping(self, clip_value_loss, loss_class):
         torch.manual_seed(self.seed)
         device = (
@@ -6903,9 +6903,7 @@ class TestPPO(LossModuleTestBase):
             value_network=value,
         )
 
-        if isinstance(clip_value_loss, bool) and not isinstance(
-            loss_class, ClipPPOLoss
-        ):
+        if isinstance(clip_value_loss, bool) and loss_class is not ClipPPOLoss:
             with pytest.raises(
                 ValueError,
                 match="If provided, clip_value_loss must be a float.",
@@ -6916,7 +6914,6 @@ class TestPPO(LossModuleTestBase):
                     loss_critic_type="l2",
                     clip_value_loss=clip_value_loss,
                 )
-                return
 
         loss_fn = loss_class(
             actor,
