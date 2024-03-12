@@ -767,7 +767,7 @@ class ClipPPOLoss(PPOLoss):
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
-        clip_value_loss: bool | float = False,
+        clip_value_loss: bool | float | None = None,
         **kwargs,
     ):
         # Define clipping of the value loss
