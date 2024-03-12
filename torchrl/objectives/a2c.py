@@ -468,7 +468,7 @@ class A2CLoss(LossModule):
                 f"can be used for the value loss."
             )
         if self.clip_value_loss:
-            self.clip_value_loss = self.clip_value_loss.to(state_value.device)
+            clip_value_loss = self.clip_value_loss.to(state_value.device)
             state_value_clipped = old_state_value + (
                 state_value - old_state_value
             ).clamp(-self.clip_value_loss, self.clip_value_loss)
