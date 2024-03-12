@@ -32,6 +32,7 @@ from _utils_internal import (  # noqa
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
+    CountingEnv,
     CountingEnvCountPolicy,
     DiscreteActionConvMockEnv,
     DiscreteActionConvMockEnvNumpy,
@@ -80,6 +81,7 @@ from torchrl.envs import (
     GrayScale,
     gSDENoise,
     InitTracker,
+    MultiStepTransform,
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
@@ -10189,6 +10191,73 @@ class TestRemoveEmptySpecs(TransformBase):
         env = TransformedEnv(self.DummyEnv(), RemoveEmptySpecs())
         td2 = env.transform.inv(TensorDict({}, []))
         assert ("state", "sub") in td2.keys(True)
+
+
+class TestMultiStepTransform:
+    def test_multistep_transform(self):
+        env = TransformedEnv(
+            SerialEnv(
+                2, [lambda: CountingEnv(max_steps=4), lambda: CountingEnv(max_steps=10)]
+            ),
+            StepCounter(),
+        )
+
+        env.set_seed(0)
+        torch.manual_seed(0)
+
+        t = MultiStepTransform(3, 0.98)
+
+        outs_2 = []
+        td = env.reset()
+        for _ in range(1):
+            rollout = env.rollout(
+                250, auto_reset=False, tensordict=td, break_when_any_done=False
+            )
+            out = t._inv_call(rollout)
+            td = rollout[..., -1]
+            outs_2.append(out)
+        # This will break if we don't have the appropriate number of frames
+        outs_2 = torch.cat(outs_2, -1).split([47, 50, 50, 50, 50], -1)
+
+        t = MultiStepTransform(3, 0.98)
+
+        env.set_seed(0)
+        torch.manual_seed(0)
+
+        outs = []
+        td = env.reset()
+        for i in range(5):
+            rollout = env.rollout(
+                50, auto_reset=False, tensordict=td, break_when_any_done=False
+            )
+            out = t._inv_call(rollout)
+            # tests that the data is insensitive to the collection schedule
+            assert_allclose_td(out, outs_2[i])
+            td = rollout[..., -1]["next"]
+            outs.append(out)
+
+        outs = torch.cat(outs, -1)
+
+        # Test with a very tiny window and across the whole collection
+        t = MultiStepTransform(3, 0.98)
+
+        env.set_seed(0)
+        torch.manual_seed(0)
+
+        outs_3 = []
+        td = env.reset()
+        for i in range(125):
+            rollout = env.rollout(
+                2, auto_reset=False, tensordict=td, break_when_any_done=False
+            )
+            out = t._inv_call(rollout)
+            td = rollout[..., -1]["next"]
+            if out is not None:
+                outs_3.append(out)
+
+        outs_3 = torch.cat(outs_3, -1)
+
+        assert_allclose_td(outs, outs_3)
 
 
 if __name__ == "__main__":
