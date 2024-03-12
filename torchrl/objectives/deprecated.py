@@ -316,14 +316,14 @@ class REDQLoss_deprecated(LossModule):
 
     def _actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
-        tensordict_clone = tensordict.select(*obs_keys)
+        tensordict_clone = tensordict.select(*obs_keys, strict=False)
         with set_exploration_type(
             ExplorationType.RANDOM
         ), self.actor_network_params.to_module(self.actor_network):
             self.actor_network(tensordict_clone)
 
         tensordict_expand = self._vmap_qvalue_networkN0(
-            tensordict_clone.select(*self.qvalue_network.in_keys),
+            tensordict_clone.select(*self.qvalue_network.in_keys, strict=False),
             self._cached_detach_qvalue_network_params,
         )
         state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
@@ -338,7 +338,7 @@ class REDQLoss_deprecated(LossModule):
 
         obs_keys = self.actor_network.in_keys
         tensordict = tensordict.select(
-            "next", *obs_keys, self.tensor_keys.action
+            "next", *obs_keys, self.tensor_keys.action, strict=False
         ).clone(False)
 
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
@@ -348,7 +348,7 @@ class REDQLoss_deprecated(LossModule):
             selected_q_params = self.target_qvalue_network_params[selected_models_idx]
 
             next_td = step_mdp(tensordict).select(
-                *self.actor_network.in_keys
+                *self.actor_network.in_keys, strict=False
             )  # next_observation ->
             # observation
             # select pseudo-action
@@ -376,7 +376,7 @@ class REDQLoss_deprecated(LossModule):
         tensordict.set(("next", "state_value"), next_state_value)
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
         tensordict_expand = self._vmap_qvalue_networkN0(
-            tensordict.select(*self.qvalue_network.in_keys),
+            tensordict.select(*self.qvalue_network.in_keys, strict=False),
             self.qvalue_network_params,
         )
         pred_val = tensordict_expand.get("state_action_value").squeeze(-1)

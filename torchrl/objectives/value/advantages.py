@@ -163,7 +163,7 @@ def _call_actor_net(
     log_prob_key: NestedKey,
 ):
     # TODO: extend to handle time dimension (and vmap?)
-    log_pi = actor_net(data.select(*actor_net.in_keys)).get(log_prob_key)
+    log_pi = actor_net(data.select(*actor_net.in_keys, strict=False)).get(log_prob_key)
     return log_pi
 
 

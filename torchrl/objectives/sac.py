@@ -584,7 +584,7 @@ class SACLoss(LossModule):
             a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
 
-        td_q = tensordict.select(*self.qvalue_network.in_keys)
+        td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qnetworkN0(
             td_q,
@@ -703,7 +703,7 @@ class SACLoss(LossModule):
         target_value = self._compute_target_v2(tensordict)
 
         tensordict_expand = self._vmap_qnetworkN0(
-            tensordict.select(*self.qvalue_network.in_keys),
+            tensordict.select(*self.qvalue_network.in_keys, strict=False),
             self.qvalue_network_params,
         )
         pred_val = tensordict_expand.get(self.tensor_keys.state_action_value).squeeze(
@@ -722,7 +722,7 @@ class SACLoss(LossModule):
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # value loss
-        td_copy = tensordict.select(*self.value_network.in_keys).detach()
+        td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
         with self.value_network_params.to_module(self.value_network):
             self.value_network(td_copy)
         pred_val = td_copy.get(self.tensor_keys.value).squeeze(-1)
@@ -1163,7 +1163,7 @@ class DiscreteSACLoss(LossModule):
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         target_value = self._compute_target(tensordict)
         tensordict_expand = self._vmap_qnetworkN0(
-            tensordict.select(*self.qvalue_network.in_keys),
+            tensordict.select(*self.qvalue_network.in_keys, strict=False),
             self.qvalue_network_params,
         )
 
@@ -1205,7 +1205,7 @@ class DiscreteSACLoss(LossModule):
         prob = dist.probs
         log_prob = dist.logits
 
-        td_q = tensordict.select(*self.qvalue_network.in_keys)
+        td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
 
         td_q = self._vmap_qnetworkN0(
             td_q, self._cached_detached_qvalue_params  # should we clone?

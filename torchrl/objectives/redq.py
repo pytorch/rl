@@ -424,7 +424,7 @@ class REDQLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
         tensordict_select = tensordict.clone(False).select(
-            "next", *obs_keys, self.tensor_keys.action
+            "next", *obs_keys, self.tensor_keys.action, strict=False
         )
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
@@ -436,10 +436,10 @@ class REDQLoss(LossModule):
         )
 
         tensordict_actor_grad = tensordict_select.select(
-            *obs_keys
+            *obs_keys, strict=False
         )  # to avoid overwriting keys
         next_td_actor = step_mdp(tensordict_select).select(
-            *self.actor_network.in_keys
+            *self.actor_network.in_keys, strict=False
         )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
         # tensordict_actor = tensordict_actor.contiguous()
