@@ -705,7 +705,7 @@ class ClipPPOLoss(PPOLoss):
             version of the value prediction with respect to the input tensordict value estimate and use it to
             calculate the value loss. The purpose of clipping is to limit the impact of extreme value predictions,
             helping stabilize training and preventing large updates. However, it will have no impact if the value
-            estimate was done by the current version of the value estimator. If instead True is provided, the
+            estimate was done by the current version of the value estimator. If instead ``True`` is provided, the
             ``clip_epsilon`` parameter will be used as the clipping threshold. If not provided or ``False``, no
             clipping will be performed. Defaults to ``False``.
 
