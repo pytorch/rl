@@ -75,7 +75,7 @@ class A2CLoss(LossModule):
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
         clip_value_loss (float, optional): If provided, it will be used to compute a clipped version of the value
-            prediction with respect to the input tensordict value estimate and use it to calculate the value loss.
+            prediction with respect to the input value estimate and use it to calculate the value loss.
             The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
             and preventing large updates. However, it will have no impact if the value estimate was done by the current
             version of the value estimator. Defaults to ``None``.
