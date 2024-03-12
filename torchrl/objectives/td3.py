@@ -345,11 +345,13 @@ class TD3Loss(LossModule):
         )
 
     def actor_loss(self, tensordict):
-        tensordict_actor_grad = tensordict.select(*self.actor_network.in_keys)
+        tensordict_actor_grad = tensordict.select(
+            *self.actor_network.in_keys, strict=False
+        )
         with self.actor_network_params.to_module(self.actor_network):
             tensordict_actor_grad = self.actor_network(tensordict_actor_grad)
         actor_loss_td = tensordict_actor_grad.select(
-            *self.qvalue_network.in_keys
+            *self.qvalue_network.in_keys, strict=False
         ).expand(
             self.num_qvalue_nets, *tensordict_actor_grad.batch_size
         )  # for actor loss
@@ -379,7 +381,7 @@ class TD3Loss(LossModule):
 
         with torch.no_grad():
             next_td_actor = step_mdp(tensordict).select(
-                *self.actor_network.in_keys
+                *self.actor_network.in_keys, strict=False
             )  # next_observation ->
             with self.target_actor_network_params.to_module(self.actor_network):
                 next_td_actor = self.actor_network(next_td_actor)
@@ -390,7 +392,9 @@ class TD3Loss(LossModule):
                 self.tensor_keys.action,
                 next_action,
             )
-            next_val_td = next_td_actor.select(*self.qvalue_network.in_keys).expand(
+            next_val_td = next_td_actor.select(
+                *self.qvalue_network.in_keys, strict=False
+            ).expand(
                 self.num_qvalue_nets, *next_td_actor.batch_size
             )  # for next value estimation
             next_target_q1q2 = (
@@ -410,7 +414,7 @@ class TD3Loss(LossModule):
             next_target_qvalue.unsqueeze(-1),
         )
 
-        qval_td = tensordict.select(*self.qvalue_network.in_keys).expand(
+        qval_td = tensordict.select(*self.qvalue_network.in_keys, strict=False).expand(
             self.num_qvalue_nets,
             *tensordict.batch_size,
         )

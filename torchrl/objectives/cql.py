@@ -556,7 +556,7 @@ class CQLLoss(LossModule):
             a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
 
-        td_q = tensordict.select(*self.qvalue_network.in_keys)
+        td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qvalue_networkN0(
             td_q,
@@ -596,7 +596,9 @@ class CQLLoss(LossModule):
                 # tensordict.del_("scale")
 
         return (
-            tensordict.select(*self.actor_network.in_keys, self.tensor_keys.action),
+            tensordict.select(
+                *self.actor_network.in_keys, self.tensor_keys.action, strict=False
+            ),
             sample_log_prob,
         )
 
@@ -664,7 +666,9 @@ class CQLLoss(LossModule):
             self.target_qvalue_network_params,
         )
 
-        tensordict_pred_q = tensordict.select(*self.qvalue_network.in_keys)
+        tensordict_pred_q = tensordict.select(
+            *self.qvalue_network.in_keys, strict=False
+        )
         q_pred = self._vmap_qvalue_networkN0(
             tensordict_pred_q, self.qvalue_network_params
         ).get(self.tensor_keys.state_action_value)
@@ -730,7 +734,9 @@ class CQLLoss(LossModule):
         )
         # select and stack input params
         # q value random action
-        tensordict_q_random = tensordict.select(*self.actor_network.in_keys)
+        tensordict_q_random = tensordict.select(
+            *self.actor_network.in_keys, strict=False
+        )
 
         batch_size = tensordict_q_random.batch_size
         batch_size = list(batch_size[:-1]) + [batch_size[-1] * self.num_random]
