@@ -1419,6 +1419,13 @@ class _MultiDataCollector(DataCollectorBase):
         self._exclude_private_keys = True
         self._frames = 0
         self._iter = -1
+        if not isinstance(cat_results, (int, str)) or (
+            isinstance(cat_results, str) and cat_results != "stack"
+        ):
+            raise ValueError(
+                "cat_results must be a string ('stack') "
+                f"or an interger representing the cat dimension. Got {cat_results}."
+            )
         self.cat_results = cat_results
 
     @classmethod
@@ -1878,7 +1885,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
         cat_results = self.cat_results
         if cat_results is None:
-            cat_results = False
+            cat_results = 0
             warnings.warn(
                 f"`cat_results` was not specified in the constructor of {type(self).__name__}. "
                 f"For MultiSyncDataCollector, `cat_results` indicates how the data should "
@@ -2041,7 +2048,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                             [item.cpu() for item in buffers.values()], cat_results
                         )
                     self.out_buffer.set_(
-                        ("collector", "traj_ids"), torch.cat(traj_ids_list, -1)
+                        ("collector", "traj_ids"), torch.cat(traj_ids_list, cat_results)
                     )
                 except RuntimeError as err:
                     if (

@@ -2458,8 +2458,9 @@ class TestLibThreading:
 
 
 class TestUniqueTraj:
-    @pytest.mark.parametrize("stack_results", [True, False])
-    def test_unique_traj_sync(self, stack_results):
+    @pytest.mark.parametrize("cat_results", ["stack", 0])
+    def test_unique_traj_sync(self, cat_results):
+        stack_results = cat_results == "stack"
         buffer = ReplayBuffer(
             storage=LazyTensorStorage(900, ndim=2 + stack_results), batch_size=16
         )
@@ -2468,7 +2469,7 @@ class TestUniqueTraj:
             policy=RandomPolicy(GymEnv("CartPole-v1").action_spec),
             total_frames=900,
             frames_per_batch=300,
-            stack_results=stack_results,
+            cat_results=cat_results,
         )
         try:
             for d in c:
