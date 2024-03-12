@@ -1419,8 +1419,9 @@ class _MultiDataCollector(DataCollectorBase):
         self._exclude_private_keys = True
         self._frames = 0
         self._iter = -1
-        if not isinstance(cat_results, (int, str)) or (
-            isinstance(cat_results, str) and cat_results != "stack"
+        if cat_results is not None and (
+            not isinstance(cat_results, (int, str))
+            or (isinstance(cat_results, str) and cat_results != "stack")
         ):
             raise ValueError(
                 "cat_results must be a string ('stack') "
