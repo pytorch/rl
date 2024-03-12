@@ -101,7 +101,7 @@ class PPOLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
-        clip_value_loss (float, optional): If provided, it will be used to compute a clipped version of the value
+        clip_value (float, optional): If provided, it will be used to compute a clipped version of the value
             prediction with respect to the input tensordict value estimate and use it to calculate the value loss.
             The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
             and preventing large updates. However, it will have no impact if the value estimate was done by the current
@@ -300,7 +300,7 @@ class PPOLoss(LossModule):
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
         reduction: str = None,
-        clip_value_loss: float = None,
+        clip_value: float = None,
         **kwargs,
     ):
         if actor is not None:
@@ -364,11 +364,19 @@ class PPOLoss(LossModule):
             value=value_key,
         )
 
-        if clip_value_loss is not None:
-            if not isinstance(clip_value_loss, float):
-                raise ValueError("If provided, clip_value_loss must be a float.")
-            clip_value_loss = torch.tensor(clip_value_loss)
-        self.register_buffer("clip_value_loss", clip_value_loss)
+        if clip_value is not None:
+            if isinstance(clip_value, float):
+                clip_value = torch.tensor(clip_value)
+            elif isinstance(clip_value, torch.Tensor):
+                if clip_value.numel() != 1:
+                    raise ValueError(
+                        f"clip_value must be a float or a scalar tensor, got {clip_value}."
+                    )
+            else:
+                raise ValueError(
+                    f"clip_value must be a float or a scalar tensor, got {clip_value}."
+                )
+        self.register_buffer("clip_value", clip_value)
 
     @property
     def functional(self):
@@ -519,12 +527,12 @@ class PPOLoss(LossModule):
                 f"can be used for the value loss."
             )
 
-        if self.clip_value_loss:
+        if self.clip_value:
             try:
                 old_state_value = tensordict.get(self.tensor_keys.value).clone()
             except KeyError:
                 raise KeyError(
-                    f"clip_value_loss is set to True, but "
+                    f"clip_value is set to {self.clip_value}, but "
                     f"the key {self.tensor_keys.value} was not found in the input tensordict. "
                     f"Make sure that the value_key passed to PPO exists in the input tensordict."
                 )
@@ -548,11 +556,11 @@ class PPOLoss(LossModule):
             loss_function=self.loss_critic_type,
         )
 
-        if self.clip_value_loss:
-            self.clip_value_loss = self.clip_value_loss.to(state_value.device)
+        if self.clip_value:
+            clip_value = self.clip_value.to(state_value.device)
             state_value_clipped = old_state_value + (
                 state_value - old_state_value
-            ).clamp(-self.clip_value_loss, self.clip_value_loss)
+            ).clamp(-clip_value, self.clip_value)
             loss_value_clipped = distance_loss(
                 target_return,
                 state_value_clipped,
@@ -701,7 +709,7 @@ class ClipPPOLoss(PPOLoss):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
-        clip_value_loss (bool or float, optional): If a ``float`` is provided, it will be used to compute a clipped
+        clip_value (bool or float, optional): If a ``float`` is provided, it will be used to compute a clipped
             version of the value prediction with respect to the input tensordict value estimate and use it to
             calculate the value loss. The purpose of clipping is to limit the impact of extreme value predictions,
             helping stabilize training and preventing large updates. However, it will have no impact if the value
@@ -767,12 +775,12 @@ class ClipPPOLoss(PPOLoss):
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
-        clip_value_loss: bool | float | None = None,
+        clip_value: bool | float | None = None,
         **kwargs,
     ):
         # Define clipping of the value loss
-        if isinstance(clip_value_loss, bool):
-            clip_value_loss = clip_epsilon if clip_value_loss else None
+        if isinstance(clip_value, bool):
+            clip_value = clip_epsilon if clip_value else None
 
         super(ClipPPOLoss, self).__init__(
             actor_network,
@@ -786,7 +794,7 @@ class ClipPPOLoss(PPOLoss):
             gamma=gamma,
             separate_losses=separate_losses,
             reduction=reduction,
-            clip_value_loss=clip_value_loss,
+            clip_value=clip_value,
             **kwargs,
         )
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
@@ -925,7 +933,7 @@ class KLPENPPOLoss(PPOLoss):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
-        clip_value_loss (float, optional): If provided, it will be used to compute a clipped version of the value
+        clip_value (float, optional): If provided, it will be used to compute a clipped version of the value
             prediction with respect to the input tensordict value estimate and use it to calculate the value loss.
             The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
             and preventing large updates. However, it will have no impact if the value estimate was done by the current
@@ -993,7 +1001,7 @@ class KLPENPPOLoss(PPOLoss):
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
-        clip_value_loss: float = None,
+        clip_value: float = None,
         **kwargs,
     ):
         super(KLPENPPOLoss, self).__init__(
@@ -1008,7 +1016,7 @@ class KLPENPPOLoss(PPOLoss):
             gamma=gamma,
             separate_losses=separate_losses,
             reduction=reduction,
-            clip_value_loss=clip_value_loss,
+            clip_value=clip_value,
             **kwargs,
         )
 
