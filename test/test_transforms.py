@@ -10246,7 +10246,7 @@ class TestMultiStepTransform:
 
         outs_3 = []
         td = env.reset()
-        for i in range(125):
+        for _ in range(125):
             rollout = env.rollout(
                 2, auto_reset=False, tensordict=td, break_when_any_done=False
             )
