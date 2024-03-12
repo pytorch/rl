@@ -701,7 +701,7 @@ class ClipPPOLoss(PPOLoss):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
-        clip_value_loss (bool or float, optional): If a float is provided, it will be used to compute a clipped
+        clip_value_loss (bool or float, optional): If a ``float`` is provided, it will be used to compute a clipped
             version of the value prediction with respect to the input tensordict value estimate and use it to
             calculate the value loss. The purpose of clipping is to limit the impact of extreme value predictions,
             helping stabilize training and preventing large updates. However, it will have no impact if the value
