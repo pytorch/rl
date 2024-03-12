@@ -160,7 +160,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             sampled_tensordict = sampled_tensordict.to(device)
 
             loss_td = loss_module(sampled_tensordict)
-            q_loss = loss_td["loss_objective"]
+            q_loss = loss_td["loss"]
             optimizer.zero_grad()
             q_loss.backward()
             torch.nn.utils.clip_grad_norm_(

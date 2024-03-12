@@ -204,6 +204,7 @@ class DQNLoss(LossModule):
                 "script."
             )
             delay_value = False
+        self.reduction = reduction
         if reduction is None:
             reduction = "mean"
         super().__init__()
@@ -253,7 +254,7 @@ class DQNLoss(LossModule):
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.return_tensorclass = return_tensorclass
-        self.reduction = reduction
+
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:

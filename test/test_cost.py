@@ -912,7 +912,7 @@ class TestDQN(LossModuleTestBase):
             for key in loss.keys():
                 if not key.startswith("loss"):
                     continue
-                assert loss[key].shape == torch.Size([])
+                assert loss[key].shape == torch.Size([2, 4])
 
 
 class TestQMixer(LossModuleTestBase):

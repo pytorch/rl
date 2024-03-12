@@ -163,7 +163,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
                 loss_vals = loss_module(subdata)
                 training_tds.append(loss_vals.detach())
 
-                loss_value = loss_vals["loss_objective"]
+                loss_value = loss_vals["loss"]
 
                 loss_value.backward()
 
