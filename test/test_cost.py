@@ -6926,7 +6926,7 @@ class TestPPO(LossModuleTestBase):
                 # Test it fails without value key
                 with pytest.raises(
                     KeyError,
-                    match="clip_value is set to True, but the key "
+                    match=f"clip_value is set to {clip_value}, but the key "
                     "state_value was not found in the input tensordict. "
                     "Make sure that the value_key passed to PPO exists in "
                     "the input tensordict.",
@@ -7613,10 +7613,10 @@ class TestA2C(LossModuleTestBase):
                 # Test it fails without value key
                 with pytest.raises(
                     KeyError,
-                    match="clip_value is set to True, but the key "
-                    "state_value was not found in the input tensordict. "
-                    "Make sure that the value_key passed to A2C exists in "
-                    "the input tensordict.",
+                    match=f"clip_value is set to {clip_value}, but the key "
+                          "state_value was not found in the input tensordict. "
+                          "Make sure that the value_key passed to PPO exists in "
+                          "the input tensordict.",
                 ):
                     loss = loss_fn(td)
 
@@ -8069,10 +8069,10 @@ class TestReinforce(LossModuleTestBase):
                 # Test it fails without value key
                 with pytest.raises(
                     KeyError,
-                    match="clip_value is set to True, but the key "
-                    "state_value was not found in the input tensordict. "
-                    "Make sure that the value_key passed to Reinforce exists in "
-                    "the input tensordict.",
+                    match=f"clip_value is set to {clip_value}, but the key "
+                          "state_value was not found in the input tensordict. "
+                          "Make sure that the value_key passed to PPO exists in "
+                          "the input tensordict.",
                 ):
                     loss = loss_fn(td)
 
