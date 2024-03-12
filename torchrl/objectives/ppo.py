@@ -556,6 +556,7 @@ class PPOLoss(LossModule):
             loss_function=self.loss_critic_type,
         )
 
+        clip_fraction = None
         if self.clip_value:
             clip_value = self.clip_value.to(state_value.device)
             state_value_clipped = old_state_value + (
@@ -568,8 +569,14 @@ class PPOLoss(LossModule):
             )
             # Chose the most pessimistic value prediction between clipped and non-clipped
             loss_value = torch.max(loss_value, loss_value_clipped)
+            clip_fraction = (
+                (state_value / old_state_value)
+                .clamp(1 - clip_value, 1 + clip_value)
+                .abs()
+                .detach()
+            )
 
-        return self.critic_coef * loss_value
+        return self.critic_coef * loss_value, clip_fraction
 
     @property
     @_cache_values
@@ -602,8 +609,10 @@ class PPOLoss(LossModule):
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict)
+            loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
+            if value_clip_fraction is not None:
+                td_out.set("value_clip_fraction", value_clip_fraction)
         td_out = td_out.named_apply(
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
@@ -851,18 +860,22 @@ class ClipPPOLoss(PPOLoss):
         gain1 = log_weight.exp() * advantage
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
-        gain2 = log_weight_clip.exp() * advantage
+        ratio = log_weight_clip.exp()
+        gain2 = ratio * advantage
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
         td_out = TensorDict({"loss_objective": -gain}, batch_size=[])
+        td_out.set("clip_fraction", ratio.abs().detach())
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict)
+            loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
+            if value_clip_fraction is not None:
+                td_out.set("value_clip_fraction", value_clip_fraction)
 
         td_out.set("ESS", _reduce(ess, self.reduction) / batch)
         td_out = td_out.named_apply(
@@ -1133,8 +1146,10 @@ class KLPENPPOLoss(PPOLoss):
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict_copy)
+            loss_critic, value_clip_fraction = self.loss_critic(tensordict_copy)
             td_out.set("loss_critic", loss_critic)
+            if value_clip_fraction is not None:
+                td_out.set("value_clip_fraction", value_clip_fraction)
         td_out = td_out.named_apply(
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")

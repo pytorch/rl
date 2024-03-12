@@ -420,7 +420,10 @@ class ReinforceLoss(LossModule):
         loss_actor = -log_prob * advantage.detach()
         td_out = TensorDict({"loss_actor": loss_actor}, batch_size=[])
 
-        td_out.set("loss_value", self.loss_critic(tensordict))
+        loss_value, value_clip_fraction = self.loss_critic(tensordict)
+        td_out.set("loss_value", loss_value)
+        if value_clip_fraction is not None:
+            td_out.set("value_clip_fraction", value_clip_fraction)
         td_out = td_out.named_apply(
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
@@ -465,6 +468,7 @@ class ReinforceLoss(LossModule):
                 f"can be used for the value loss."
             )
 
+        clip_fraction = None
         if self.clip_value:
             clip_value = self.clip_value.to(state_value.device)
             state_value_clipped = old_state_value + (
@@ -477,8 +481,14 @@ class ReinforceLoss(LossModule):
             )
             # Chose the most pessimistic value prediction between clipped and non-clipped
             loss_value = torch.max(loss_value, loss_value_clipped)
+            clip_fraction = (
+                (state_value / old_state_value)
+                .clamp(1 - clip_value, 1 + clip_value)
+                .abs()
+                .detach()
+            )
 
-        return loss_value
+        return loss_value, clip_fraction
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:

@@ -475,6 +475,7 @@ class A2CLoss(LossModule):
                 f"TDLambdaEstimate and TDEstimate all return a 'value_target' entry that "
                 f"can be used for the value loss."
             )
+        clip_fraction = None
         if self.clip_value:
             clip_value = self.clip_value.to(state_value.device)
             state_value_clipped = old_state_value + (
@@ -487,7 +488,13 @@ class A2CLoss(LossModule):
             )
             # Chose the most pessimistic value prediction between clipped and non-clipped
             loss_value = torch.max(loss_value, loss_value_clipped)
-        return self.critic_coef * loss_value
+            clip_fraction = (
+                (state_value / old_state_value)
+                .clamp(1 - clip_value, 1 + clip_value)
+                .abs()
+                .detach()
+            )
+        return self.critic_coef * loss_value, clip_fraction
 
     @property
     @_cache_values
@@ -516,8 +523,10 @@ class A2CLoss(LossModule):
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict)
+            loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
+            if value_clip_fraction is not None:
+                td_out.set("value_clip_fraction", value_clip_fraction)
         td_out = td_out.named_apply(
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
