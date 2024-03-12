@@ -115,6 +115,12 @@ class MultiStep(nn.Module):
                 dtype=torch.float,
             ).reshape(1, 1, -1),
         )
+        self.done_key = "done"
+        self.terminated_key = "terminated"
+        self.truncated_key = "truncated"
+        self.mask_key = ("collector", "mask")
+        self.reward_key = "reward"
+
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Re-writes a tensordict following the multi-step transform.
@@ -151,68 +157,79 @@ class MultiStep(nn.Module):
             in-place transformation of the input tensordict.
 
         """
-        tensordict = tensordict.clone(False)
-        done = tensordict.get(("next", "done"))
-        truncated = tensordict.get(
-            ("next", "truncated"), torch.zeros((), dtype=done.dtype, device=done.device)
+        return _multi_step_func(tensordict, done_key=self.done_key, reward_key=self.reward_key, mask_key=self.mask_key, n_steps=self.n_steps, gamma=self.gamma, truncated_key=self.truncated_key, terminated_key=self.terminated_key)
+
+def _multi_step_func(tensordict,*, done_key, reward_key, mask_key, n_steps, gamma, truncated_key, terminated_key):
+    tensordict = tensordict.clone(False)
+    done = tensordict.get(("next", done_key))
+    print('tensordict', tensordict.get(("next", "done")).any())
+
+    # we'll be using the done states to index the tensordict.
+    # if the shapes don't match we're in trouble.
+    ndim = tensordict.ndim
+    if done.shape != tensordict.shape:
+        if done.shape[-1] == 1 and done.shape[:-1] == tensordict.shape:
+            done = done.squeeze(-1)
+        else:
+            try:
+                # let's try to reshape the tensordict
+                tensordict.batch_size = done.shape
+                tensordict = tensordict.apply(
+                    lambda x: x.transpose(ndim - 1, tensordict.ndim - 1),
+                    batch_size=done.transpose(
+                        ndim - 1,
+                        tensordict.ndim - 1
+                        ).shape,
+                )
+                done = tensordict.get(("next", done_key))
+            except Exception as err:
+                raise RuntimeError(
+                    "tensordict shape must be compatible with the done's shape "
+                    "(trailing singleton dimension excluded)."
+                ) from err
+
+    print('tensordict', tensordict.get(("next", "done")).any())
+
+    if mask_key is not None:
+        mask = tensordict.get(mask_key, None)
+    else:
+        mask = None
+    reward = tensordict.get(("next", reward_key))
+    *batch, T = tensordict.batch_size
+
+    # sum rewards
+    summed_rewards, time_to_obs = _get_reward(
+        gamma, reward, done, n_steps
+    )
+    idx_to_gather = torch.arange(
+        T, device=time_to_obs.device, dtype=time_to_obs.dtype
+    ).expand(*batch, T)
+    idx_to_gather = idx_to_gather + time_to_obs
+    # idx_to_gather looks like  tensor([[ 2,  3,  4,  5,  5,  5,  8,  9, 10, 10, 10]])
+    # with a done state         tensor([[ 0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  1]])
+    # meaning that the first obs will be replaced by the third, the second by the fourth etc.
+    # The fifth remains the fifth as it is terminal
+    tensordict_gather = (
+        tensordict.get("next").exclude(reward_key, done_key, truncated_key, terminated_key).gather(-1, idx_to_gather)
+    )
+    print('tensordict', tensordict.get(("next", "done")).any())
+
+    tensordict.set("steps_to_next_obs", time_to_obs + 1)
+    tensordict.rename_key_(("next", reward_key), ("next", "original_reward"))
+    tensordict.get("next").update(tensordict_gather)
+    tensordict.set(("next", reward_key), summed_rewards)
+    tensordict.set("gamma", gamma ** (time_to_obs + 1))
+    print('tensordict', tensordict.get(("next", "done")).any())
+    nonterminal = time_to_obs != 0
+    if mask is not None:
+        mask = mask.view(*batch, T)
+        nonterminal[~mask] = False
+    tensordict.set("nonterminal", nonterminal)
+    print('tensordict', tensordict.get(("next", "done")).any())
+    if tensordict.ndim != ndim:
+        tensordict = tensordict.apply(
+            lambda x: x.transpose(ndim - 1, tensordict.ndim - 1),
+            batch_size=done.transpose(ndim - 1, tensordict.ndim - 1).shape,
         )
-        done = done | truncated
-
-        # we'll be using the done states to index the tensordict.
-        # if the shapes don't match we're in trouble.
-        ndim = tensordict.ndim
-        if done.shape != tensordict.shape:
-            if done.shape[-1] == 1 and done.shape[:-1] == tensordict.shape:
-                done = done.squeeze(-1)
-            else:
-                try:
-                    # let's try to reshape the tensordict
-                    tensordict.batch_size = done.shape
-                    tensordict = tensordict.apply(
-                        lambda x: x.transpose(ndim - 1, tensordict.ndim - 1),
-                        batch_size=done.transpose(ndim - 1, tensordict.ndim - 1).shape,
-                    )
-                    done = tensordict.get(("next", "done"))
-                except Exception as err:
-                    raise RuntimeError(
-                        "tensordict shape must be compatible with the done's shape "
-                        "(trailing singleton dimension excluded)."
-                    ) from err
-
-        mask = tensordict.get(("collector", "mask"), None)
-        reward = tensordict.get(("next", "reward"))
-        *batch, T = tensordict.batch_size
-
-        # sum rewards
-        summed_rewards, time_to_obs = _get_reward(
-            self.gamma, reward, done, self.n_steps
-        )
-        idx_to_gather = torch.arange(
-            T, device=time_to_obs.device, dtype=time_to_obs.dtype
-        ).expand(*batch, T)
-        idx_to_gather = idx_to_gather + time_to_obs
-        # idx_to_gather looks like  tensor([[ 2,  3,  4,  5,  5,  5,  8,  9, 10, 10, 10]])
-        # with a done state         tensor([[ 0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  1]])
-        # meaning that the first obs will be replaced by the third, the second by the fourth etc.
-        # The fifth remains the fifth as it is terminal
-        tensordict_gather = (
-            tensordict["next"].exclude("reward", "done").gather(-1, idx_to_gather)
-        )
-
-        tensordict.set("steps_to_next_obs", time_to_obs + 1)
-        tensordict.rename_key_(("next", "reward"), ("next", "original_reward"))
-        tensordict.get("next").update(tensordict_gather)
-        tensordict.set(("next", "reward"), summed_rewards)
-        tensordict.set("gamma", self.gamma ** (time_to_obs + 1))
-        nonterminal = time_to_obs != 0
-        if mask is not None:
-            mask = mask.view(*batch, T)
-            nonterminal[~mask] = False
-        tensordict.set("nonterminal", nonterminal)
-        if tensordict.ndim != ndim:
-            tensordict = tensordict.apply(
-                lambda x: x.transpose(ndim - 1, tensordict.ndim - 1),
-                batch_size=done.transpose(ndim - 1, tensordict.ndim - 1).shape,
-            )
-            tensordict.batch_size = tensordict.batch_size[:ndim]
-        return tensordict
+        tensordict.batch_size = tensordict.batch_size[:ndim]
+    return tensordict
