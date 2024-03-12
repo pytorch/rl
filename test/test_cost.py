@@ -6926,7 +6926,7 @@ class TestPPO(LossModuleTestBase):
                 # Test it fails without value key
                 with pytest.raises(
                     KeyError,
-                    match=f"clip_value is set to {clip_value}, but the key "
+                    match=f"clip_value is set to {loss_fn.clip_value}, but the key "
                     "state_value was not found in the input tensordict. "
                     "Make sure that the value_key passed to PPO exists in "
                     "the input tensordict.",
