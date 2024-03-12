@@ -471,7 +471,7 @@ class A2CLoss(LossModule):
             clip_value_loss = self.clip_value_loss.to(state_value.device)
             state_value_clipped = old_state_value + (
                 state_value - old_state_value
-            ).clamp(-self.clip_value_loss, self.clip_value_loss)
+            ).clamp(-clip_value_loss, clip_value_loss)
             loss_value_clipped = distance_loss(
                 target_return,
                 state_value_clipped,
