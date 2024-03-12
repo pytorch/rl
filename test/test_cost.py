@@ -7615,7 +7615,7 @@ class TestA2C(LossModuleTestBase):
                     KeyError,
                     match=f"clip_value is set to {clip_value}, but the key "
                           "state_value was not found in the input tensordict. "
-                          "Make sure that the value_key passed to PPO exists in "
+                          "Make sure that the value_key passed to A2C exists in "
                           "the input tensordict.",
                 ):
                     loss = loss_fn(td)
@@ -8071,7 +8071,7 @@ class TestReinforce(LossModuleTestBase):
                     KeyError,
                     match=f"clip_value is set to {clip_value}, but the key "
                           "state_value was not found in the input tensordict. "
-                          "Make sure that the value_key passed to PPO exists in "
+                          "Make sure that the value_key passed to Reinforce exists in "
                           "the input tensordict.",
                 ):
                     loss = loss_fn(td)

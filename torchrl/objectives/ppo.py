@@ -560,7 +560,7 @@ class PPOLoss(LossModule):
             clip_value = self.clip_value.to(state_value.device)
             state_value_clipped = old_state_value + (
                 state_value - old_state_value
-            ).clamp(-clip_value, self.clip_value)
+            ).clamp(-clip_value, clip_value)
             loss_value_clipped = distance_loss(
                 target_return,
                 state_value_clipped,
