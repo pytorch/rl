@@ -772,10 +772,7 @@ class ClipPPOLoss(PPOLoss):
     ):
         # Define clipping of the value loss
         if isinstance(clip_value_loss, bool):
-            if clip_value_loss:
-                clip_value_loss = clip_epsilon
-            else:
-                clip_value_loss = None
+            clip_value_loss = clip_epsilon if clip_value_loss else None
 
         super(ClipPPOLoss, self).__init__(
             actor_network,
