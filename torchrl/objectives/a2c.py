@@ -438,7 +438,7 @@ class A2CLoss(LossModule):
                 old_state_value = tensordict.get(self.tensor_keys.value).clone()
             except KeyError:
                 raise KeyError(
-                    f"clip_value_loss is set to True, but "
+                    f"clip_value_loss is set to {self.clip_value_loss}, but "
                     f"the key {self.tensor_keys.value} was not found in the input tensordict. "
                     f"Make sure that the value_key passed to A2C exists in the input tensordict."
                 )
