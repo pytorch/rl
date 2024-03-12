@@ -350,7 +350,7 @@ class DTLoss(LossModule):
         self._out_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> OnlineDTLosses:
+    def forward(self, tensordict: TensorDictBase) -> OnlineDTLosses | TensorDictBase:
         """Compute the loss for the Online Decision Transformer."""
         # extract action targets
         tensordict = tensordict.clone(False)
