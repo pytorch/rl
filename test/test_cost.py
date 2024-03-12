@@ -7614,9 +7614,9 @@ class TestA2C(LossModuleTestBase):
                 with pytest.raises(
                     KeyError,
                     match=f"clip_value is set to {clip_value}, but the key "
-                          "state_value was not found in the input tensordict. "
-                          "Make sure that the value_key passed to A2C exists in "
-                          "the input tensordict.",
+                    "state_value was not found in the input tensordict. "
+                    "Make sure that the value_key passed to A2C exists in "
+                    "the input tensordict.",
                 ):
                     loss = loss_fn(td)
 
@@ -8069,10 +8069,10 @@ class TestReinforce(LossModuleTestBase):
                 # Test it fails without value key
                 with pytest.raises(
                     KeyError,
-                    match=f"clip_value is set to {clip_value}, but the key "
-                          "state_value was not found in the input tensordict. "
-                          "Make sure that the value_key passed to Reinforce exists in "
-                          "the input tensordict.",
+                    match=f"clip_value is set to {loss_fn.clip_value}, but the key "
+                    "state_value was not found in the input tensordict. "
+                    "Make sure that the value_key passed to Reinforce exists in "
+                    "the input tensordict.",
                 ):
                     loss = loss_fn(td)
 
