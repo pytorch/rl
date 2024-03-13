@@ -15,6 +15,7 @@ import torch
 from tensordict import TensorDictBase
 from torch import multiprocessing as mp
 
+from torchrl.data import ReplayBuffer
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, TensorStorage
 from torchrl.data.utils import CloudpickleWrapper
 
@@ -62,10 +63,27 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
         index_with_generator: bool = False,
         pbar: bool = False,
         mp_start_method: str | None = None,
+        num_frames: int | None = None,
+        dest: str | Path | None = None,
     ):
         """Preprocesses a dataset, discards the previous data an replaces it with the newly formatted data.
 
         The data transform must be unitary (work on a single sample of the dataset).
+
+        Args and Keyword Args are forwarded to :meth:`~tensordict.TensorDictBase.map`.
+
+        Keyword Args:
+            num_frames (int, optional): if provided, only the first `num_frames` will be
+                transformed. This is useful to debug the transform at first.
+            dest (path or equivalent, optional): a path to the location of the new dataset.
+                If not provided or `"same"` (default) the dataset will be updated in-place
+                and the previously downloaded data will be discarded.
+                If `dest` is a path to a new storage location, the sampler will be identical
+                to the current sampler, as well as the writer. The transforms however will
+                not be copied.
+
+        Returns: The same dataset with the updated storage if ``dest="same"`` or a new
+            dataset with the updated storage otherwise.
 
         Examples:
             >>> from torchrl.data.datasets import MinariExperienceReplay
@@ -231,6 +249,8 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
                     (self._storage.shape[0], *example_data.shape)
                 ).memmap_like(mock_folder, num_threads=32)
                 storage = self._storage._storage
+                if num_frames is not None:
+                    storage = storage[:num_frames]
                 with storage.unlock_():
                     storage.map(
                         fn=fn,
@@ -247,9 +267,20 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
                         mp_start_method=mp_start_method,
                         out=mmlike,
                     )
-                self._storage._storage = mmlike
-                shutil.rmtree(self.data_path)
-                shutil.move(mock_folder, self.data_path)
+                if dest is None or dest == "same":
+                    shutil.rmtree(self.data_path)
+                    shutil.move(mock_folder, self.data_path)
+                    self._storage._storage = TensorDictBase.load_memmap(self.data_path)
+                    return self
+                else:
+                    self_copy = ReplayBuffer(
+                        storage=TensorStorage(mmlike),
+                        sampler=self.sampler,
+                        writer=self.writer,
+                        collate_fn=self._collate_fn,
+                        batch_size=self._batch_size,
+                    )
+                    return self_copy
         else:
             raise NotImplementedError
 
