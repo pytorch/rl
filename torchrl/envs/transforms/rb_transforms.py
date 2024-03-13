@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from typing import List
+
 import torch
 
 from tensordict import NestedKey, TensorDictBase
@@ -100,18 +102,16 @@ class MultiStepTransform(Transform):
         n_steps,
         gamma,
         *,
-        reward_key: NestedKey | None = None,
+        reward_keys: List[NestedKey] | None = None,
         done_key: NestedKey | None = None,
-        truncated_key: NestedKey | None = None,
-        terminated_key: NestedKey | None = None,
+        done_keys: List[NestedKey] | None = None,
         mask_key: NestedKey | None = None,
     ):
         super().__init__()
         self.n_steps = n_steps
-        self.reward_key = reward_key
+        self.reward_keys = reward_keys
         self.done_key = done_key
-        self.terminated_key = terminated_key
-        self.truncated_key = truncated_key
+        self.done_keys = done_keys
         self.mask_key = mask_key
         self.gamma = gamma
         self.buffer = None
@@ -128,34 +128,26 @@ class MultiStepTransform(Transform):
         self._done_key = value
 
     @property
-    def terminated_key(self):
-        return self._terminated_key
+    def done_keys(self):
+        return self._done_keys
 
-    @terminated_key.setter
-    def terminated_key(self, value):
+    @done_keys.setter
+    def done_keys(self, value):
         if value is None:
-            value = "terminated"
-        self._terminated_key = value
+            value = ["done", "terminated", "truncated"]
+        self._done_keys = value
 
     @property
-    def truncated_key(self):
-        return self._truncated_key
+    def reward_keys(self):
+        return self._reward_keys
 
-    @truncated_key.setter
-    def truncated_key(self, value):
+    @reward_keys.setter
+    def reward_keys(self, value):
         if value is None:
-            value = "truncated"
-        self._truncated_key = value
-
-    @property
-    def reward_key(self):
-        return self._reward_key
-
-    @reward_key.setter
-    def reward_key(self, value):
-        if value is None:
-            value = "reward"
-        self._reward_key = value
+            value = [
+                "reward",
+            ]
+        self._reward_keys = value
 
     @property
     def mask_key(self):
@@ -181,12 +173,11 @@ class MultiStepTransform(Transform):
             out = _multi_step_func(
                 total_cat,
                 done_key=self.done_key,
-                reward_key=self.reward_key,
+                done_keys=self.done_keys,
+                reward_keys=self.reward_keys,
                 mask_key=self.mask_key,
                 n_steps=self.n_steps,
                 gamma=self.gamma,
-                terminated_key=self.terminated_key,
-                truncated_key=self.truncated_key,
             )
             return out[..., : -self.n_steps]
 

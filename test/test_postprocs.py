@@ -13,7 +13,7 @@ from torchrl.collectors.utils import split_trajectories
 from torchrl.data.postprocs.postprocs import MultiStep
 
 
-@pytest.mark.parametrize("n", range(13))
+@pytest.mark.parametrize("n", range(1, 14))
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("key", ["observation", "pixels", "observation_whatever"])
 def test_multistep(n, key, device, T=11):
@@ -58,7 +58,7 @@ def test_multistep(n, key, device, T=11):
 
     assert ms_tensordict.get("done").max() == 1
 
-    if n == 0:
+    if n == 1:
         assert_allclose_td(
             tensordict, ms_tensordict.select(*list(tensordict.keys(True, True)))
         )
@@ -76,12 +76,10 @@ def test_multistep(n, key, device, T=11):
     )
 
     # check that next obs is properly replaced, or that it is terminated
-    next_obs = ms_tensordict.get(key)[:, (1 + ms.n_steps) :]
-    true_next_obs = ms_tensordict.get(("next", key))[:, : -(1 + ms.n_steps)]
+    next_obs = ms_tensordict.get(key)[:, (ms.n_steps) :]
+    true_next_obs = ms_tensordict.get(("next", key))[:, : -(ms.n_steps)]
     terminated = ~ms_tensordict.get("nonterminal")
-    assert (
-        (next_obs == true_next_obs).all(-1) | terminated[:, (1 + ms.n_steps) :]
-    ).all()
+    assert ((next_obs == true_next_obs).all(-1) | terminated[:, (ms.n_steps) :]).all()
 
     # test gamma computation
     torch.testing.assert_close(
@@ -89,7 +87,7 @@ def test_multistep(n, key, device, T=11):
     )
 
     # test reward
-    if n > 0:
+    if n > 1:
         assert (
             ms_tensordict.get(("next", "reward"))
             != ms_tensordict.get(("next", "original_reward"))
@@ -105,33 +103,14 @@ def test_multistep(n, key, device, T=11):
 @pytest.mark.parametrize(
     "batch_size",
     [
-        [
-            4,
-        ],
+        [4],
         [],
-        [
-            1,
-        ],
+        [1],
         [2, 3],
     ],
 )
-@pytest.mark.parametrize(
-    "T",
-    [
-        10,
-        1,
-        2,
-    ],
-)
-@pytest.mark.parametrize(
-    "obs_dim",
-    [
-        [
-            1,
-        ],
-        [],
-    ],
-)
+@pytest.mark.parametrize("T", [10, 1, 2])
+@pytest.mark.parametrize("obs_dim", [[1], []])
 @pytest.mark.parametrize("unsq_reward", [True, False])
 @pytest.mark.parametrize("last_done", [True, False])
 @pytest.mark.parametrize("n_steps", [3, 1, 0])
