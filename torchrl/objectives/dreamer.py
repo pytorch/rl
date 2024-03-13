@@ -403,7 +403,7 @@ class DreamerValueLoss(LossModule):
 
     def forward(self, fake_data) -> torch.Tensor:
         lambda_target = fake_data.get("lambda_target")
-        tensordict_select = fake_data.select(*self.value_model.in_keys)
+        tensordict_select = fake_data.select(*self.value_model.in_keys, strict=False)
         self.value_model(tensordict_select)
         if self.discount_loss:
             discount = self.gamma * torch.ones_like(
