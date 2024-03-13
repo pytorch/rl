@@ -971,6 +971,12 @@ class SliceSampler(Sampler):
                 "instead."
             )
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
+        filt = lengths >= seq_length
+        start_idx = start_idx[filt]
+        stop_idx = stop_idx[filt]
+        lengths = lengths[filt]
+        if len(lengths) == 0:
+            raise RuntimeError("No trajectories of the require minimum length")
         storage_length = storage.shape[0]
         return self._sample_slices(
             lengths,
