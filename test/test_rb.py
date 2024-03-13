@@ -2050,6 +2050,40 @@ class TestSamplers:
                 break
         else:
             raise AssertionError
+        
+    @pytest.mark.parametrize("sampler", [SliceSampler, SliceSamplerWithoutReplacement])
+    def test_slice_sampler_different_lengths(self, sampler):
+        torch.manual_seed(0)
+
+        trajectory0 = torch.tensor([3, 3, 0, 1, 1, 1, 2, 2, 2, 3])
+        trajectory1 = torch.arange(2).repeat_interleave(5)
+        trajectory = torch.stack([trajectory0, trajectory1], 0)
+
+        td = TensorDict(
+            {"trajectory": trajectory, "steps": torch.arange(10).expand(2, 10)}, [2, 10]
+        )
+
+        rb = ReplayBuffer(
+            sampler=sampler(traj_key="trajectory", slice_len=4),
+            storage=LazyTensorStorage(20, ndim=2),
+            batch_size=6,
+        )
+
+        rb.extend(td)
+
+        trajectory0 = torch.tensor([3, 2, 1, 2])
+        trajectory1 = torch.arange(2).repeat_interleave(2)
+        trajectory = torch.stack([trajectory0, trajectory1], 0)
+
+        td = TensorDict(
+            {"trajectory": trajectory, "steps": torch.arange(4).expand(2, 4)}, [2, 4]
+        )
+        rb.extend(td)
+        
+        with pytest.raises(RuntimeError, match="Trajectories have different lengths"):
+            for n in range(100):
+                rb.sample()
+
 
     def test_slice_sampler_errors(self):
         device = "cpu"
