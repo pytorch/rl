@@ -1555,9 +1555,9 @@ class BoundedTensorSpec(TensorSpec):
             dtype = torch.get_default_dtype()
 
         if not isinstance(low, torch.Tensor):
-            low = torch.as_tensor(low, dtype=dtype, device=device)
+            low = torch.tensor(low, dtype=dtype, device=device)
         if not isinstance(high, torch.Tensor):
-            high = torch.as_tensor(high, dtype=dtype, device=device)
+            high = torch.tensor(high, dtype=dtype, device=device)
         if high.device != device:
             high = high.to(device)
         if low.device != device:
@@ -3599,13 +3599,17 @@ class CompositeSpec(TensorSpec):
     def rand(self, shape=None) -> TensorDictBase:
         if shape is None:
             shape = torch.Size([])
-        _dict = {
-            key: self[key].rand(shape) for key in self.keys() if self[key] is not None
-        }
+        _dict = {}
+        for key, item in self.items():
+            if item is not None:
+                _dict[key] = item.rand(shape)
         return TensorDict(
             _dict,
-            batch_size=[*shape, *self.shape],
+            batch_size=torch.Size([*shape, *self.shape]),
             device=self._device,
+            # No need to run checks since we know Composite is compliant with
+            # TensorDict requirements
+            _run_checks=False,
         )
 
     def keys(

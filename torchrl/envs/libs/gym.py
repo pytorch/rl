@@ -1062,6 +1062,11 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             # if it's not a ndarray, we must return bool
             # since it's not a bool, we make it so
             terminated = bool(terminated)
+
+        if isinstance(observations, list) and len(observations) == 1:
+            # Until gym 0.25.2 we had rendered frames returned in lists of length 1
+            observations = observations[0]
+
         return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.24", "0.26")
@@ -1083,6 +1088,11 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             # if it's not a ndarray, we must return bool
             # since it's not a bool, we make it so
             terminated = bool(terminated)
+
+        if isinstance(observations, list) and len(observations) == 1:
+            # Until gym 0.25.2 we had rendered frames returned in lists of length 1
+            observations = observations[0]
+
         return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.26", None)

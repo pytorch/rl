@@ -28,10 +28,10 @@ from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
     _make_compatible_policy,
     _repr_by_depth,
+    _StepMDP,
     _terminated_or_truncated,
     _update_during_reset,
     get_available_libraries,
-    step_mdp,
 )
 
 LIBRARIES = get_available_libraries()
@@ -2513,6 +2513,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         out_td.refine_names(..., "time")
         return out_td
 
+    @property
+    def _step_mdp(self):
+        step_func = self.__dict__.get("_step_mdp_value", None)
+        if step_func is None:
+            step_func = _StepMDP(self, exclude_action=False)
+            self.__dict__["_step_mdp_value"] = step_func
+        return step_func
+
     def _rollout_stop_early(
         self,
         *,
@@ -2543,15 +2551,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if i == max_steps - 1:
                 # we don't truncated as one could potentially continue the run
                 break
-            tensordict = step_mdp(
-                tensordict,
-                keep_other=True,
-                exclude_action=False,
-                exclude_reward=True,
-                reward_keys=self.reward_keys,
-                action_keys=self.action_keys,
-                done_keys=self.done_keys,
-            )
+            tensordict = self._step_mdp(tensordict)
+
             # done and truncated are in done_keys
             # We read if any key is done.
             any_done = _terminated_or_truncated(
@@ -2649,17 +2650,22 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict = self.step(tensordict)
         # done and truncated are in done_keys
         # We read if any key is done.
-        tensordict_ = step_mdp(
-            tensordict,
-            keep_other=True,
-            exclude_action=False,
-            exclude_reward=True,
-            reward_keys=self.reward_keys,
-            action_keys=self.action_keys,
-            done_keys=self.done_keys,
-        )
+        tensordict_ = self._step_mdp(tensordict)
         tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
+
+    @property
+    def _simple_done(self):
+        _simple_done = self.__dict__.get("_simple_done_value", None)
+        if _simple_done is None:
+            key_set = set(self.full_done_spec.keys())
+            _simple_done = key_set == {
+                "done",
+                "truncated",
+                "terminated",
+            } or key_set == {"done", "terminated"}
+            self.__dict__["_simple_done_value"] = _simple_done
+        return _simple_done
 
     def maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Checks the done keys of the input tensordict and, if needed, resets the environment where it is done.
@@ -2672,11 +2678,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             not reset and contains the new reset data where the environment was reset.
 
         """
-        any_done = _terminated_or_truncated(
-            tensordict,
-            full_done_spec=self.output_spec["full_done_spec"],
-            key="_reset",
-        )
+        if self._simple_done:
+            done = tensordict._get_str("done", default=None)
+            any_done = done.any()
+            if any_done:
+                tensordict._set_str(
+                    "_reset", done.clone(), validated=True, inplace=False
+                )
+        else:
+            any_done = _terminated_or_truncated(
+                tensordict,
+                full_done_spec=self.output_spec["full_done_spec"],
+                key="_reset",
+            )
         if any_done:
             tensordict = self.reset(tensordict)
         return tensordict

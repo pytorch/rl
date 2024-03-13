@@ -124,9 +124,9 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install 'mpmath<1.4' --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install 'mpmath<1.4' --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
@@ -142,12 +142,12 @@ fi
 # smoke test
 python -c "import functorch"
 
-# install snapshot
-if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  pip3 install git+https://github.com/pytorch/torchsnapshot
-else
-  pip3 install torchsnapshot
-fi
+## install snapshot
+#if [[ "$TORCH_VERSION" == "nightly" ]]; then
+#  pip3 install git+https://github.com/pytorch/torchsnapshot
+#else
+#  pip3 install torchsnapshot
+#fi
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then

@@ -2555,12 +2555,19 @@ class TestEnsemble:
 
 def _rbtype(datatype):
     if datatype in ("pytree", "tensorclass"):
-        return [ReplayBuffer, PrioritizedReplayBuffer]
+        return [
+            (ReplayBuffer, RandomSampler),
+            (PrioritizedReplayBuffer, RandomSampler),
+            (ReplayBuffer, SamplerWithoutReplacement),
+            (PrioritizedReplayBuffer, SamplerWithoutReplacement),
+        ]
     return [
-        ReplayBuffer,
-        PrioritizedReplayBuffer,
-        TensorDictReplayBuffer,
-        TensorDictPrioritizedReplayBuffer,
+        (ReplayBuffer, RandomSampler),
+        (ReplayBuffer, SamplerWithoutReplacement),
+        (PrioritizedReplayBuffer, None),
+        (TensorDictReplayBuffer, RandomSampler),
+        (TensorDictReplayBuffer, SamplerWithoutReplacement),
+        (TensorDictPrioritizedReplayBuffer, None),
     ]
 
 
@@ -2598,19 +2605,19 @@ class TestRBMultidim:
                 batch_size=shape,
             )
 
-    datatype_rb_pairs = [
-        [datatype, rbtype]
+    datatype_rb_tuples = [
+        [datatype, *rbtype]
         for datatype in ["pytree", "tensordict", "tensorclass"]
         for rbtype in _rbtype(datatype)
     ]
 
-    @pytest.mark.parametrize("datatype,rbtype", datatype_rb_pairs)
+    @pytest.mark.parametrize("datatype,rbtype,sampler_cls", datatype_rb_tuples)
     @pytest.mark.parametrize("datadim", [1, 2])
     @pytest.mark.parametrize("storage_cls", [LazyMemmapStorage, LazyTensorStorage])
-    def test_rb_multidim(self, datatype, datadim, rbtype, storage_cls):
+    def test_rb_multidim(self, datatype, datadim, rbtype, storage_cls, sampler_cls):
         data = self._make_data(datatype, datadim)
         if rbtype not in (PrioritizedReplayBuffer, TensorDictPrioritizedReplayBuffer):
-            rbtype = functools.partial(rbtype, sampler=RandomSampler())
+            rbtype = functools.partial(rbtype, sampler=sampler_cls())
         else:
             rbtype = functools.partial(rbtype, alpha=0.9, beta=1.1)
 
@@ -2678,16 +2685,21 @@ class TestRBMultidim:
             ],
         ],
     )
+    @pytest.mark.parametrize("env_device", get_default_devices())
     def test_rb_multidim_collector(
-        self, rbtype, storage_cls, writer_cls, sampler_cls, transform
+        self, rbtype, storage_cls, writer_cls, sampler_cls, transform, env_device
     ):
         from _utils_internal import CARTPOLE_VERSIONED
 
         torch.manual_seed(0)
-        env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED()))
+        env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED()), device=env_device)
         env.set_seed(0)
         collector = SyncDataCollector(
-            env, RandomPolicy(env.action_spec), frames_per_batch=4, total_frames=16
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=4,
+            total_frames=16,
+            device=env_device,
         )
         if writer_cls is TensorDictMaxValueWriter:
             with pytest.raises(
@@ -2712,6 +2724,7 @@ class TestRBMultidim:
                 rb.append_transform(t())
         try:
             for i, data in enumerate(collector):  # noqa: B007
+                assert data.device == torch.device(env_device)
                 rb.extend(data)
                 if isinstance(rb, TensorDictReplayBuffer) and transform is not None:
                     # this should fail bc we can't set the indices after executing the transform.
@@ -2721,6 +2734,7 @@ class TestRBMultidim:
                         rb.sample()
                     return
                 s = rb.sample()
+                assert s.device == torch.device("cpu")
                 rbtot = rb[:]
                 assert rbtot.shape[0] == 2
                 assert len(rb) == rbtot.numel()
