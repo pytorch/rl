@@ -113,7 +113,7 @@ def test_multistep(n, key, device, T=11):
 @pytest.mark.parametrize("obs_dim", [[1], []])
 @pytest.mark.parametrize("unsq_reward", [True, False])
 @pytest.mark.parametrize("last_done", [True, False])
-@pytest.mark.parametrize("n_steps", [3, 1, 0])
+@pytest.mark.parametrize("n_steps", [4, 2, 1])
 def test_mutistep_cattrajs(
     batch_size, T, obs_dim, unsq_reward, last_done, device, n_steps
 ):
@@ -145,7 +145,7 @@ def test_mutistep_cattrajs(
     )
     ms = MultiStep(0.98, n_steps)
     tdm = ms(td)
-    if n_steps == 0:
+    if n_steps == 1:
         # n_steps = 0 has no effect
         for k in td["next"].keys():
             assert (tdm["next", k] == td["next", k]).all()
@@ -158,7 +158,7 @@ def test_mutistep_cattrajs(
         if unsq_reward:
             done = done.squeeze(-1)
         for t in range(T):
-            idx = t + n_steps
+            idx = t + n_steps - 1
             while (done[..., t:idx].any() and idx > t) or idx > done.shape[-1] - 1:
                 idx = idx - 1
             next_obs.append(obs[..., idx])
