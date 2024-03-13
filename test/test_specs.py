@@ -1149,7 +1149,7 @@ class TestSpec:
             (a1 == a2).all() for a1, a2 in zip(actions_tensors, actions_tensors_2)
         )
 
-        actions_numpy = [int(np.random.randint(0, 10, (1,))) for a in actions_tensors]
+        actions_numpy = [int(np.random.randint(0, 10, ())) for a in actions_tensors]
         actions_tensors = [action_spec.encode(a) for a in actions_numpy]
         actions_numpy_2 = [action_spec.to_numpy(a) for a in actions_tensors]
         assert all((a1 == a2) for a1, a2 in zip(actions_numpy, actions_numpy_2))
