@@ -521,7 +521,9 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                 self.remote_gz_files = self._list_runs(None, files)
                 remote_gz_files = list(self.remote_gz_files)
                 if not len(remote_gz_files):
-                    raise RuntimeError("Could not load the file list.")
+                    raise RuntimeError(
+                        "Could not load the file list. Did you install gsutil?"
+                    )
 
                 total_runs = remote_gz_files[-1]
                 if self.num_procs == 0:
@@ -682,6 +684,8 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         index_with_generator: bool = False,
         pbar: bool = False,
         mp_start_method: str | None = None,
+        dest: str | Path,
+        num_frames: int | None = None,
     ):
         # Copy data to a tensordict
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -689,7 +693,9 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             metadata = first_item.pop("metadata")
 
             mmap = fn(first_item)
-            mmap = mmap.expand(len(self), *first_item.shape)
+            if num_frames is None:
+                num_frames = len(self)
+            mmap = mmap.expand(num_frames, *first_item.shape)
             mmap = mmap.memmap_like(tmpdir, num_threads=32)
             with mmap.unlock_():
                 mmap["_indices"] = torch.arange(mmap.shape[0])
@@ -720,14 +726,8 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                 pbar=pbar,
             )
 
-            shutil.rmtree(self.dataset_path)
-            shutil.move(tmpdir, self.dataset_path)
-            mmap = TensorDict.load_memmap(self.dataset_path)
-
-            del mmap["_indices"]
-
             with mmap.unlock_():
-                self._storage = TensorStorage(mmap.set("metadata", metadata))
+                return TensorStorage(mmap.set("metadata", metadata))
 
 
 class _AtariStorage(Storage):

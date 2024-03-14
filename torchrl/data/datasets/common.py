@@ -5,9 +5,7 @@
 from __future__ import annotations
 
 import abc
-import pickle
 import shutil
-import tempfile
 from pathlib import Path
 from typing import Callable
 
@@ -15,7 +13,7 @@ import torch
 from tensordict import TensorDictBase
 from torch import multiprocessing as mp
 
-from torchrl.data import ReplayBuffer
+from torchrl._utils import _can_be_pickled
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, TensorStorage
 from torchrl.data.utils import CloudpickleWrapper
 
@@ -64,26 +62,20 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
         pbar: bool = False,
         mp_start_method: str | None = None,
         num_frames: int | None = None,
-        dest: str | Path | None = None,
-    ):
-        """Preprocesses a dataset, discards the previous data an replaces it with the newly formatted data.
+        dest: str | Path,
+    ) -> TensorStorage:
+        """Preprocesses a dataset and returns a new storage with the formatted data.
 
         The data transform must be unitary (work on a single sample of the dataset).
 
         Args and Keyword Args are forwarded to :meth:`~tensordict.TensorDictBase.map`.
 
         Keyword Args:
+            dest (path or equivalent): a path to the location of the new dataset.
             num_frames (int, optional): if provided, only the first `num_frames` will be
                 transformed. This is useful to debug the transform at first.
-            dest (path or equivalent, optional): a path to the location of the new dataset.
-                If not provided or `"same"` (default) the dataset will be updated in-place
-                and the previously downloaded data will be discarded.
-                If `dest` is a path to a new storage location, the sampler will be identical
-                to the current sampler, as well as the writer. The transforms however will
-                not be copied.
 
-        Returns: The same dataset with the updated storage if ``dest="same"`` or a new
-            dataset with the updated storage otherwise.
+        Returns: A new storage to be used within a :class:`~torchrl.data.ReplayBuffer` instance.
 
         Examples:
             >>> from torchrl.data.datasets import MinariExperienceReplay
@@ -169,6 +161,7 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
             ),
             collate_fn=<function _collate_id at 0x120e21dc0>)
             >>> from torchrl.envs import CatTensors, Compose
+            >>> from tempfile import TemporaryDirectory
             >>>
             >>> cat_tensors = CatTensors(
             ...     in_keys=[("observation", "observation"), ("observation", "achieved_goal"),
@@ -196,46 +189,49 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
             ...         )
             ...     td = t(td)
             ...     return td
-            >>>
-            >>> data.preprocess(func, num_workers=4, pbar=True, mp_start_method="fork")
-            >>> print(data)
-            MinariExperienceReplay(
-                storages=TensorStorage(TensorDict(
-                    fields={
-                        action: MemoryMappedTensor(shape=torch.Size([1000000, 8]), device=cpu, dtype=torch.float32, is_shared=True),
-                        episode: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.int64, is_shared=True),
-                        next: TensorDict(
-                            fields={
-                                done: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.bool, is_shared=True),
-                                obs: MemoryMappedTensor(shape=torch.Size([1000000, 31]), device=cpu, dtype=torch.float64, is_shared=True),
-                                observation: TensorDict(
-                                    fields={
-                                    },
-                                    batch_size=torch.Size([1000000]),
-                                    device=cpu,
-                                    is_shared=False),
-                                reward: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.float64, is_shared=True),
-                                terminated: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.bool, is_shared=True),
-                                truncated: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.bool, is_shared=True)},
-                            batch_size=torch.Size([1000000]),
-                            device=cpu,
-                            is_shared=False),
-                        obs: MemoryMappedTensor(shape=torch.Size([1000000, 31]), device=cpu, dtype=torch.float64, is_shared=True),
-                        observation: TensorDict(
-                            fields={
-                            },
-                            batch_size=torch.Size([1000000]),
-                            device=cpu,
-                            is_shared=False)},
-                    batch_size=torch.Size([1000000]),
-                    device=cpu,
-                    is_shared=False)),
-                samplers=RandomSampler,
-                writers=ImmutableDatasetWriter(),
-            batch_size=32,
-            transform=Compose(
-            ),
-            collate_fn=<function _collate_id at 0x120e21dc0>)
+            >>> with TemporaryDirectory() as tmpdir:
+            ...     new_storage = data.preprocess(func, num_workers=4, pbar=True, mp_start_method="fork", dest=tmpdir)
+            ...     rb = ReplayBuffer(storage=new_storage)
+            ...     print(rb)
+            ReplayBuffer(
+                storage=TensorStorage(
+                    data=TensorDict(
+                        fields={
+                            action: MemoryMappedTensor(shape=torch.Size([1000000, 8]), device=cpu, dtype=torch.float32, is_shared=True),
+                            episode: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.int64, is_shared=True),
+                            next: TensorDict(
+                                fields={
+                                    done: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.bool, is_shared=True),
+                                    obs: MemoryMappedTensor(shape=torch.Size([1000000, 31]), device=cpu, dtype=torch.float64, is_shared=True),
+                                    observation: TensorDict(
+                                        fields={
+                                        },
+                                        batch_size=torch.Size([1000000]),
+                                        device=cpu,
+                                        is_shared=False),
+                                    reward: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.float64, is_shared=True),
+                                    terminated: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.bool, is_shared=True),
+                                    truncated: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.bool, is_shared=True)},
+                                batch_size=torch.Size([1000000]),
+                                device=cpu,
+                                is_shared=False),
+                            obs: MemoryMappedTensor(shape=torch.Size([1000000, 31]), device=cpu, dtype=torch.float64, is_shared=True),
+                            observation: TensorDict(
+                                fields={
+                                },
+                                batch_size=torch.Size([1000000]),
+                                device=cpu,
+                                is_shared=False)},
+                        batch_size=torch.Size([1000000]),
+                        device=cpu,
+                        is_shared=False),
+                    shape=torch.Size([1000000]),
+                    len=1000000,
+                    max_size=1000000),
+                sampler=RandomSampler(),
+                writer=RoundRobinWriter(cursor=0, full_storage=True),
+                batch_size=None,
+                collate_fn=<function _collate_id at 0x168406fc0>)
 
         """
         if not _can_be_pickled(fn):
@@ -244,50 +240,38 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
             item = self._storage[0]
             with item.unlock_():
                 example_data = fn(item)
-            with tempfile.TemporaryDirectory() as mock_folder:
-                mmlike = example_data.expand(
-                    (self._storage.shape[0], *example_data.shape)
-                ).memmap_like(mock_folder, num_threads=32)
-                storage = self._storage._storage
-                if num_frames is not None:
-                    storage = storage[:num_frames]
-                with storage.unlock_():
-                    storage.map(
-                        fn=fn,
-                        dim=dim,
-                        num_workers=num_workers,
-                        chunksize=chunksize,
-                        num_chunks=num_chunks,
-                        pool=pool,
-                        generator=generator,
-                        max_tasks_per_child=max_tasks_per_child,
-                        worker_threads=worker_threads,
-                        index_with_generator=index_with_generator,
-                        pbar=pbar,
-                        mp_start_method=mp_start_method,
-                        out=mmlike,
-                    )
-                if dest is None or dest == "same":
-                    shutil.rmtree(self.data_path)
-                    shutil.move(mock_folder, self.data_path)
-                    self._storage._storage = TensorDictBase.load_memmap(self.data_path)
-                    return self
-                else:
-                    self_copy = ReplayBuffer(
-                        storage=TensorStorage(mmlike),
-                        sampler=self.sampler,
-                        writer=self.writer,
-                        collate_fn=self._collate_fn,
-                        batch_size=self._batch_size,
-                    )
-                    return self_copy
+                if num_frames is None:
+                    num_frames = self._storage.shape[0]
+            mmlike = example_data.expand((num_frames, *example_data.shape)).memmap_like(
+                dest, num_threads=32
+            )
+            storage = self._storage._storage
+            if num_frames != self._storage.shape[0]:
+                storage = storage[:num_frames]
+            with storage.unlock_():
+                storage.map(
+                    fn=fn,
+                    dim=dim,
+                    num_workers=num_workers,
+                    chunksize=chunksize,
+                    num_chunks=num_chunks,
+                    pool=pool,
+                    generator=generator,
+                    max_tasks_per_child=max_tasks_per_child,
+                    worker_threads=worker_threads,
+                    index_with_generator=index_with_generator,
+                    pbar=pbar,
+                    mp_start_method=mp_start_method,
+                    out=mmlike,
+                )
+            return TensorStorage(mmlike)
         else:
-            raise NotImplementedError
+            raise RuntimeError(
+                "preprocess is only implemented for storages that subclass TensorStorage. "
+                "To use this functionality with another type of storage, implement the "
+                "method directly or raise an issue on TorchRL's github repository."
+            )
 
-
-def _can_be_pickled(obj):
-    try:
-        pickle.dumps(obj)
-        return True
-    except (pickle.PickleError, AttributeError, TypeError):
-        return False
+    def delete(self):
+        """Deletes a dataset storage from disk."""
+        shutil.rmtree(self.data_path)

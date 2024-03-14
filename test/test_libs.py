@@ -5,6 +5,7 @@
 import importlib
 import os
 from contextlib import nullcontext
+from pathlib import Path
 
 from torchrl._utils import logger as torchrl_logger
 
@@ -61,6 +62,7 @@ from torchrl.data import (
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
+    ReplayBuffer,
     ReplayBufferEnsemble,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
@@ -2281,8 +2283,9 @@ class TestGenDGRL:
     @pytest.mark.parametrize("dataset_num", [4])
     def test_gen_dgrl_preproc(self, dataset_num, tmpdir, _patch_traj_len):
         dataset_id = GenDGRLExperienceReplay.available_datasets[dataset_num]
+        tmpdir = Path(tmpdir)
         dataset = GenDGRLExperienceReplay(
-            dataset_id, batch_size=32, root=tmpdir, download="force"
+            dataset_id, batch_size=32, root=tmpdir / "1", download="force"
         )
         from torchrl.envs import Compose, GrayScale, Resize
 
@@ -2294,11 +2297,15 @@ class TestGenDGRL:
         def fn(data):
             return t(data)
 
-        dataset.preprocess(fn, num_workers=max(1, os.cpu_count() - 2), num_chunks=1000)
-        sample = dataset.sample()
-        assert sample["observation"].shape == torch.Size([32, 1, 32, 32])
-        assert sample["next", "observation"].shape == torch.Size([32, 1, 32, 32])
-        dataset = GenDGRLExperienceReplay(dataset_id, batch_size=32, root=tmpdir)
+        new_storage = dataset.preprocess(
+            fn,
+            num_workers=max(1, os.cpu_count() - 2),
+            num_chunks=1000,
+            num_frames=100,
+            dest=tmpdir / "2",
+        )
+        dataset = ReplayBuffer(storage=new_storage)
+        assert len(dataset) == 100
         sample = dataset.sample()
         assert sample["observation"].shape == torch.Size([32, 1, 32, 32])
         assert sample["next", "observation"].shape == torch.Size([32, 1, 32, 32])
@@ -2337,10 +2344,11 @@ class TestGenDGRL:
 class TestD4RL:
     def test_d4rl_preproc(self, tmpdir):
         dataset_id = "walker2d-medium-replay-v2"
+        tmpdir = Path(tmpdir)
         dataset = D4RLExperienceReplay(
             dataset_id,
             batch_size=32,
-            root=tmpdir,
+            root=tmpdir / "1",
             download="force",
             direct_download=True,
         )
@@ -2364,18 +2372,16 @@ class TestD4RL:
         def fn(data):
             return t(data)
 
-        dataset.preprocess(
+        new_storage = dataset.preprocess(
             fn,
             num_workers=max(1, os.cpu_count() - 2),
             num_chunks=1000,
             mp_start_method="fork",
+            dest=tmpdir / "2",
+            num_frames=100,
         )
-        sample = dataset.sample()
-        assert sample["data"].shape == torch.Size([32, 35])
-        assert sample["next", "data"].shape == torch.Size([32, 35])
-        dataset = D4RLExperienceReplay(
-            dataset_id, batch_size=32, root=tmpdir, direct_download=True
-        )
+        dataset = ReplayBuffer(storage=new_storage)
+        assert len(dataset) == 100
         sample = dataset.sample()
         assert sample["data"].shape == torch.Size([32, 35])
         assert sample["next", "data"].shape == torch.Size([32, 35])
@@ -2587,9 +2593,11 @@ class TestMinari:
 
     def test_minari_preproc(self, tmpdir):
         selected_dataset = _MINARI_DATASETS[0]
-        dataset_id = "walker2d-medium-replay-v2"
         dataset = MinariExperienceReplay(
-            selected_dataset, batch_size=32, split_trajs=False, download="force"
+            selected_dataset,
+            batch_size=32,
+            split_trajs=False,
+            download="force",
         )
 
         from torchrl.envs import CatTensors, Compose
@@ -2616,21 +2624,17 @@ class TestMinari:
         def fn(data):
             return t(data)
 
-        dataset.preprocess(
+        new_storage = dataset.preprocess(
             fn,
             num_workers=max(1, os.cpu_count() - 2),
             num_chunks=1000,
             mp_start_method="fork",
+            num_frames=100,
+            dest=tmpdir,
         )
+        dataset = ReplayBuffer(storage=new_storage, batch_size=32)
         sample = dataset.sample()
-        assert sample["data"].shape == torch.Size([32, 8])
-        assert sample["next", "data"].shape == torch.Size([32, 8])
-        dataset = MinariExperienceReplay(
-            selected_dataset,
-            batch_size=32,
-            split_trajs=False,
-        )
-        sample = dataset.sample()
+        assert len(dataset) == 100
         assert sample["data"].shape == torch.Size([32, 8])
         assert sample["next", "data"].shape == torch.Size([32, 8])
 
@@ -2651,7 +2655,7 @@ class TestRoboset:
             if i == 10:
                 break
 
-    def test_roboset_preproc(self):
+    def test_roboset_preproc(self, tmpdir):
         dataset = RobosetExperienceReplay(
             "FK1-v4(expert)/FK1_MicroOpenRandom_v2d-v4", batch_size=32, download="force"
         )
@@ -2659,17 +2663,16 @@ class TestRoboset:
         def func(data):
             return data.set("obs_norm", data.get("observation").norm(dim=-1))
 
-        dataset.preprocess(
+        new_storage = dataset.preprocess(
             func,
             num_workers=max(1, os.cpu_count() - 2),
             num_chunks=1000,
             mp_start_method="fork",
+            dest=tmpdir,
+            num_frames=100,
         )
-        sample = dataset.sample()
-        assert "obs_norm" in sample.keys()
-        dataset = RobosetExperienceReplay(
-            "FK1-v4(expert)/FK1_MicroOpenRandom_v2d-v4", batch_size=32
-        )
+        dataset = ReplayBuffer(storage=new_storage)
+        assert len(dataset) == 100
         sample = dataset.sample()
         assert "obs_norm" in sample.keys()
 
@@ -2706,7 +2709,7 @@ class TestVD4RL:
                 if i == 10:
                     break
 
-    def test_vd4rl_preproc(self):
+    def test_vd4rl_preproc(self, tmpdir):
         torch.manual_seed(0)
         datasets = VD4RLExperienceReplay.available_datasets
         dataset_id = list(datasets)[4]
@@ -2717,12 +2720,16 @@ class TestVD4RL:
             ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
             GrayScale(in_keys=["pixels", ("next", "pixels")]),
         )
-        dataset.preprocess(
+        new_storage = dataset.preprocess(
             func,
             num_workers=max(1, os.cpu_count() - 2),
             num_chunks=1000,
             mp_start_method="fork",
+            dest=tmpdir,
+            num_frames=100,
         )
+        dataset = ReplayBuffer(storage=new_storage)
+        assert len(dataset) == 100
         sample = dataset.sample()
         assert sample["next", "pixels"].shape == torch.Size([32, 1, 64, 64])
         dataset = VD4RLExperienceReplay(
@@ -2786,7 +2793,7 @@ class TestAtariDQN:
         assert sample[1].get_non_tensor("metadata")["dataset_id"] == "Asterix/1"
 
     @pytest.mark.parametrize("dataset_id", ["Pong/4"])
-    def test_atari_preproc(self, dataset_id):
+    def test_atari_preproc(self, dataset_id, tmpdir):
         from torchrl.envs import Compose, RenameTransform, Resize, UnsqueezeTransform
 
         dataset = AtariDQNExperienceReplay(
@@ -2794,8 +2801,8 @@ class TestAtariDQN:
             slice_len=None,
             num_slices=8,
             batch_size=64,
-            num_procs=max(0, os.cpu_count() - 4),
-            download="force",
+            # num_procs=max(0, os.cpu_count() - 4),
+            num_procs=0,
         )
 
         t = Compose(
@@ -2809,22 +2816,18 @@ class TestAtariDQN:
         def preproc(data):
             return t(data)
 
-        dataset.preprocess(
+        new_storage = dataset.preprocess(
             preproc,
             num_workers=max(1, os.cpu_count() - 4),
             num_chunks=1000,
             mp_start_method="fork",
             pbar=True,
+            dest=tmpdir,
+            num_frames=100,
         )
 
-        dataset = AtariDQNExperienceReplay(
-            dataset_id,
-            slice_len=None,
-            num_slices=8,
-            batch_size=64,
-            num_procs=max(0, os.cpu_count() - 4),
-            download=True,
-        )
+        dataset = ReplayBuffer(storage=new_storage)
+        assert len(dataset) == 100
 
 
 @pytest.mark.slow

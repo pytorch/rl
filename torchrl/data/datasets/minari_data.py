@@ -224,17 +224,17 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         return os.path.exists(self.data_path_root)
 
     @property
-    def data_path(self):
+    def data_path(self) -> Path:
         if self.split_trajs:
             return Path(self.root) / (self.dataset_id + "_split")
         return self.data_path_root
 
     @property
-    def data_path_root(self):
+    def data_path_root(self) -> Path:
         return Path(self.root) / self.dataset_id
 
     @property
-    def metadata_path(self):
+    def metadata_path(self) -> Path:
         return Path(self.root) / self.dataset_id / "env_metadata.json"
 
     def _download_and_preproc(self):
