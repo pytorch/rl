@@ -2304,7 +2304,7 @@ class TestGenDGRL:
             num_frames=100,
             dest=tmpdir / "2",
         )
-        dataset = ReplayBuffer(storage=new_storage)
+        dataset = ReplayBuffer(storage=new_storage, batch_size=32)
         assert len(dataset) == 100
         sample = dataset.sample()
         assert sample["observation"].shape == torch.Size([32, 1, 32, 32])
@@ -2380,7 +2380,7 @@ class TestD4RL:
             dest=tmpdir / "2",
             num_frames=100,
         )
-        dataset = ReplayBuffer(storage=new_storage)
+        dataset = ReplayBuffer(storage=new_storage, batch_size=32)
         assert len(dataset) == 100
         sample = dataset.sample()
         assert sample["data"].shape == torch.Size([32, 35])
@@ -2671,7 +2671,7 @@ class TestRoboset:
             dest=tmpdir,
             num_frames=100,
         )
-        dataset = ReplayBuffer(storage=new_storage)
+        dataset = ReplayBuffer(storage=new_storage, batch_size=32)
         assert len(dataset) == 100
         sample = dataset.sample()
         assert "obs_norm" in sample.keys()
@@ -2728,7 +2728,7 @@ class TestVD4RL:
             dest=tmpdir,
             num_frames=100,
         )
-        dataset = ReplayBuffer(storage=new_storage)
+        dataset = ReplayBuffer(storage=new_storage, batch_size=32)
         assert len(dataset) == 100
         sample = dataset.sample()
         assert sample["next", "pixels"].shape == torch.Size([32, 1, 64, 64])
@@ -2826,7 +2826,7 @@ class TestAtariDQN:
             num_frames=100,
         )
 
-        dataset = ReplayBuffer(storage=new_storage)
+        dataset = ReplayBuffer(storage=new_storage, batch_size=32)
         assert len(dataset) == 100
 
 
