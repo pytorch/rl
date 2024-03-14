@@ -436,7 +436,9 @@ class A2CLoss(LossModule):
             raise RuntimeError(
                 f"tensordict stored {self.tensor_keys.action} require grad."
             )
-        tensordict_clone = tensordict.select(*self.actor_network.in_keys).clone()
+        tensordict_clone = tensordict.select(
+            *self.actor_network.in_keys, strict=False
+        ).clone()
         with self.actor_network_params.to_module(
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
@@ -450,7 +452,9 @@ class A2CLoss(LossModule):
             # TODO: if the advantage is gathered by forward, this introduces an
             # overhead that we could easily reduce.
             target_return = tensordict.get(self.tensor_keys.value_target)
-            tensordict_select = tensordict.select(*self.critic_network.in_keys)
+            tensordict_select = tensordict.select(
+                *self.critic_network.in_keys, strict=False
+            )
             with self.critic_network_params.to_module(
                 self.critic_network
             ) if self.functional else contextlib.nullcontext():
