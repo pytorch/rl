@@ -17,6 +17,7 @@ from tensordict.utils import NestedKey
 from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
+    _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
     default_value_kwargs,
@@ -470,22 +471,13 @@ class ReinforceLoss(LossModule):
 
         clip_fraction = None
         if self.clip_value:
-            clip_value = self.clip_value.to(state_value.device)
-            state_value_clipped = old_state_value + (
-                state_value - old_state_value
-            ).clamp(-clip_value, clip_value)
-            loss_value_clipped = distance_loss(
+            loss_value, clip_fraction = _clip_value_loss(
+                old_state_value,
+                state_value,
+                self.clip_value.to(state_value.device),
                 target_return,
-                state_value_clipped,
-                loss_function=self.loss_critic_type,
-            )
-            # Chose the most pessimistic value prediction between clipped and non-clipped
-            loss_value = torch.max(loss_value, loss_value_clipped)
-            clip_fraction = (
-                (state_value / old_state_value)
-                .clamp(1 - clip_value, 1 + clip_value)
-                .abs()
-                .detach()
+                loss_value,
+                self.loss_critic_type,
             )
 
         return loss_value, clip_fraction
