@@ -525,8 +525,8 @@ def _clip_value_loss(
     loss_critic_type: str,
 ):
     """Computed a clipped state value and returns the most
-     pessimistic value prediction between clipped and non-clipped.
-     the value loss and computes the clip fraction."""
+    pessimistic value prediction between clipped and non-clipped.
+    the value loss and computes the clip fraction."""
     state_value_clipped = old_state_value + (state_value - old_state_value).clamp(
         -clip_value, clip_value
     )

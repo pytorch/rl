@@ -454,7 +454,7 @@ class PPOLoss(LossModule):
     @property
     def out_keys(self):
         if self._out_keys is None:
-            keys = ["loss_objective", "clip_fraction"]
+            keys = ["loss_objective"]
             if self.entropy_bonus:
                 keys.extend(["entropy", "loss_entropy"])
             if self.loss_critic:
