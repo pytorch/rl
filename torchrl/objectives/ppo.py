@@ -1010,7 +1010,7 @@ class KLPENPPOLoss(PPOLoss):
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
-        clip_value: float = None,
+        clip_value: float | None = None,
         **kwargs,
     ):
         super(KLPENPPOLoss, self).__init__(
