@@ -301,7 +301,7 @@ class PPOLoss(LossModule):
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
         reduction: str = None,
-        clip_value: float = None,
+        clip_value: float | None = None,
         **kwargs,
     ):
         if actor is not None:
