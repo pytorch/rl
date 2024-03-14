@@ -532,7 +532,7 @@ class PPOLoss(LossModule):
 
         if self.clip_value:
             try:
-                old_state_value = tensordict.get(self.tensor_keys.value).clone()
+                old_state_value = tensordict.get(self.tensor_keys.value)
             except KeyError:
                 raise KeyError(
                     f"clip_value is set to {self.clip_value}, but "
