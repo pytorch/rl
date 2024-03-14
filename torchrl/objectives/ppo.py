@@ -1077,7 +1077,7 @@ class KLPENPPOLoss(PPOLoss):
     @property
     def out_keys(self):
         if self._out_keys is None:
-            keys = ["loss_objective", "clip_fraction", "kl"]
+            keys = ["loss_objective", "kl"]
             if self.entropy_bonus:
                 keys.extend(["entropy", "loss_entropy"])
             if self.loss_critic:
