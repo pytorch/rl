@@ -247,7 +247,7 @@ class A2CLoss(LossModule):
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
         reduction: str = None,
-        clip_value: float = None,
+        clip_value: float | None = None,
     ):
         if actor is not None:
             actor_network = actor
