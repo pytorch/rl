@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
 import torch
-from tensordict import tensorclass, is_tensor_collection, TensorDict, TensorDictBase
+from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
 from torch import nn
@@ -40,7 +40,6 @@ class _LossMeta(abc.ABCMeta):
 
 class LossContainerBase:
     """A Base Container class for loss class, which is a subclass of nn.Module."""
-    __getitem__ = TensorDictBase.__getitem__
 
     @property
     def aggregate_loss(self):
@@ -50,6 +49,7 @@ class LossContainerBase:
             if key.startswith("loss_"):
                 result += getattr(self, key)
         return result
+
 
 class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     """A parent class for RL losses.
@@ -309,7 +309,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         # set the functional module: we need to convert the params to non-differentiable params
         # otherwise they will appear twice in parameters
         with params.apply(
-            self._make_meta_params, device=torch.device("meta")
+            self._make_meta_params, device=torch.device("meta"), filter_empty=False
         ).to_module(module):
             # avoid buffers and params being exposed
             self.__dict__[module_name] = deepcopy(module)
@@ -320,7 +320,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             # we create a TensorDictParams to keep the target params as Buffer instances
             target_params = TensorDictParams(
                 params.apply(
-                    _make_target_param(clone=create_target_params)
+                    _make_target_param(clone=create_target_params), filter_empty=False
                 ),
                 no_convert=True,
             )

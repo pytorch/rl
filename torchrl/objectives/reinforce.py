@@ -14,7 +14,7 @@ from tensordict import tensorclass, TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
-from torchrl.objectives.common import LossModule, LossContainerBase
+from torchrl.objectives.common import LossContainerBase, LossModule
 
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -30,6 +30,7 @@ from torchrl.objectives.value import (
     TDLambdaEstimator,
     VTrace,
 )
+
 
 @tensorclass
 class ReinforceLosses(LossContainerBase):

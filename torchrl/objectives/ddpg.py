@@ -15,7 +15,7 @@ from tensordict.nn import dispatch, TensorDictModule
 
 from tensordict.utils import NestedKey, unravel_key
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
-from torchrl.objectives.common import LossModule, LossContainerBase
+from torchrl.objectives.common import LossContainerBase, LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -25,6 +25,7 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
 
 @tensorclass
 class DDPGLosses(LossContainerBase):

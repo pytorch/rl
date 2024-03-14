@@ -23,7 +23,7 @@ from tensordict.nn import (
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
-from torchrl.objectives.common import LossModule, LossContainerBase
+from torchrl.objectives.common import LossContainerBase, LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -40,6 +40,7 @@ from torchrl.objectives.value import (
     TDLambdaEstimator,
     VTrace,
 )
+
 
 @tensorclass
 class PPOLosses(LossContainerBase):

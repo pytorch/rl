@@ -16,7 +16,7 @@ from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDic
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
-from torchrl.objectives.common import LossModule, LossContainerBase
+from torchrl.objectives.common import LossContainerBase, LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -34,6 +34,7 @@ from torchrl.objectives.value import (
     VTrace,
 )
 
+
 @tensorclass
 class A2CLosses(LossContainerBase):
     """The tensorclass for The A2CLoss Loss class."""
@@ -43,6 +44,7 @@ class A2CLosses(LossContainerBase):
     loss_critic: torch.Tensor | None = None
     loss_entropy: torch.Tensor | None = None
     entropy: torch.Tensor | None = None
+
 
 class A2CLoss(LossModule):
     """TorchRL implementation of the A2C loss.
@@ -145,8 +147,8 @@ class A2CLoss(LossModule):
         A2CLosses(
             entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             loss_critic=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-            loss_entropy=Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-            loss_objective=Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_objective=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -323,7 +325,6 @@ class A2CLoss(LossModule):
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.loss_critic_type = loss_critic_type
         self.return_tensorclass = return_tensorclass
-        self.reduction = reduction
 
     @property
     def functional(self):

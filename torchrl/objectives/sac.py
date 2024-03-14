@@ -23,7 +23,7 @@ from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
-from torchrl.objectives.common import LossModule, LossContainerBase
+from torchrl.objectives.common import LossContainerBase, LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -44,6 +44,7 @@ def _delezify(func):
         return func(self, *args, **kwargs)
 
     return new_func
+
 
 @tensorclass
 class SACLosses(LossContainerBase):

@@ -24,9 +24,10 @@ from torchrl.modules.tensordict_module.actors import (
 )
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 
-from torchrl.objectives.common import LossModule, LossContainerBase
+from torchrl.objectives.common import LossContainerBase, LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -34,11 +35,11 @@ from torchrl.objectives.utils import (
 from torchrl.objectives.value import TDLambdaEstimator
 from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator
 
+
 @tensorclass
 class DQNLosses(LossContainerBase):
     """The tensorclass for The DQN Loss class."""
 
-    loss_objective: torch.Tensor
     loss: torch.Tensor
 
 
@@ -179,7 +180,7 @@ class DQNLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
-    out_keys = ["loss_objective"]
+    out_keys = ["loss"]
 
     def __init__(
         self,
@@ -254,7 +255,6 @@ class DQNLoss(LossModule):
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.return_tensorclass = return_tensorclass
-
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -480,8 +480,8 @@ class DistributionalDQNLoss(LossModule):
                 "script."
             )
             delay_value = False
-        if reduction is None:
-            reduction = "mean"
+        if self.reduction is None:
+            self.reduction = "mean"
         super().__init__()
         self._set_deprecated_ctor_keys(priority=priority_key)
         self.register_buffer("gamma", torch.tensor(gamma))
@@ -635,7 +635,7 @@ class DistributionalDQNLoss(LossModule):
         loss = _reduce(loss, reduction=self.reduction)
         td_out = TensorDict({"loss": loss}, [])
         if self.return_tensorclass:
-            return DQNLosses._from_tensordict(loss_td)
+            return DQNLosses._from_tensordict(td_out)
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
