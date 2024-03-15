@@ -435,15 +435,12 @@ if torch.cuda.is_available():
 else:
     num_episodes = 50
 
-for i_episode in range(num_episodes):
+for _i_episode in range(num_episodes):
     # Initialize the environment and get it's state
-    #state, info = env.reset()
     state, info = env.reset(), {}
     if len (info) != 0 :
         print("info: ", info)
-    #state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
     for t in count():
-        #print ( "episode: ", i_episode, " step/t: ", t)
         action = select_action(state["observation"].unsqueeze(0)).squeeze(0,1)
         action = torch.nn.functional.one_hot(action, env.action_space.n)
         tdact = TensorDict({"action":action}, batch_size=torch.Size([]))
@@ -462,7 +459,6 @@ for i_episode in range(num_episodes):
         # Store the transition in memory
         statem = state["observation"].squeeze(0)
         memory.extend([[statem, action, next_state, reward]])
-        #print ( statem, action, next_state, reward)
 
         # Move to the next state
         state["observation"] = next_state.squeeze(0)
