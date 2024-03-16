@@ -70,6 +70,8 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
 
         Args and Keyword Args are forwarded to :meth:`~tensordict.TensorDictBase.map`.
 
+        The dataset can subsequently be deleted using :meth:`~.delete`.
+
         Keyword Args:
             dest (path or equivalent): a path to the location of the new dataset.
             num_frames (int, optional): if provided, only the first `num_frames` will be

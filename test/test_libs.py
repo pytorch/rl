@@ -2732,12 +2732,6 @@ class TestVD4RL:
         assert len(dataset) == 100
         sample = dataset.sample()
         assert sample["next", "pixels"].shape == torch.Size([32, 1, 64, 64])
-        dataset = VD4RLExperienceReplay(
-            dataset_id,
-            batch_size=32,
-        )
-        sample = dataset.sample()
-        assert sample["next", "pixels"].shape == torch.Size([32, 1, 64, 64])
 
 
 @pytest.mark.slow
@@ -2834,7 +2828,7 @@ class TestAtariDQN:
 class TestOpenX:
     @pytest.mark.parametrize(
         "download,padding",
-        [[True, None], [False, None], [False, 0], [False, True], [False, False]],
+        [["force", None], [False, None], [False, 0], [False, True], [False, False]],
     )
     @pytest.mark.parametrize("shuffle", [True, False])
     @pytest.mark.parametrize("replacement", [True, False])
