@@ -107,6 +107,7 @@ from torchrl.envs import (
     UnsqueezeTransform,
     VC1Transform,
     VIPTransform,
+    History
 )
 from torchrl.envs.libs.dm_control import _has_dm_control
 from torchrl.envs.libs.gym import _has_gym, GymEnv, set_gym_backend
