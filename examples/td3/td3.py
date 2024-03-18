@@ -123,7 +123,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 q_losses,
             ) = ([], [])
             for _ in range(num_updates):
-
+                if update_counter % 5 == 0:
+                    loss_module.reset_parameters()
                 # Update actor every delayed_updates
                 update_counter += 1
                 update_actor = update_counter % delayed_updates == 0
