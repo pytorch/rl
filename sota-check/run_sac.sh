@@ -11,7 +11,7 @@ current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="sac"
 export PYTHONPATH=$(dirname $(dirname $PWD))
-python $PYTHONPATH/examples/sac/sac.py \
+python $PYTHONPATH/sota-implementations/sac/sac.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"

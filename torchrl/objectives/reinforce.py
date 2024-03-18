@@ -33,7 +33,7 @@ from torchrl.objectives.value import (
 class ReinforceLoss(LossModule):
     """Reinforce loss module.
 
-    Presented in "Simple statistical gradient-following algorithms for connectionist reinforcement learning", Williams, 1992
+    Presented in "Simple statistical gradient-following sota-implementations for connectionist reinforcement learning", Williams, 1992
     https://doi.org/10.1007/BF00992696
 
 
