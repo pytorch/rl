@@ -315,7 +315,7 @@ And it is `functorch` and `torch.compile` compatible!
   ```
   </details>
 
-  Check our [distributed collector examples](examples/distributed/collectors) to
+  Check our [distributed collector examples](sota-implementations/distributed/collectors) to
   learn more about ultra-fast data collection with TorchRL.
 
 - efficient<sup>(2)</sup> and generic<sup>(1)</sup> [replay buffers](torchrl/data/replay_buffers/replay_buffers.py) with modularized storage:
@@ -496,22 +496,22 @@ If you would like to contribute to new features, check our [call for contributio
 ## Examples, tutorials and demos
 
 A series of [examples](examples/) are provided with an illustrative purpose:
-- [DQN](examples/dqn)
-- [DDPG](examples/ddpg/ddpg.py)
-- [IQL](examples/iql/iql.py)
-- [CQL](examples/iql/cql.py)
-- [TD3](examples/td3/td3.py)
+- [DQN](sota-implementations/dqn)
+- [DDPG](sota-implementations/ddpg/ddpg.py)
+- [IQL](sota-implementations/iql/iql.py)
+- [CQL](sota-implementations/iql/cql.py)
+- [TD3](sota-implementations/td3/td3.py)
 - [A2C](examples/a2c_old/a2c.py)
-- [PPO](examples/ppo/ppo.py)
-- [SAC](examples/sac/sac.py)
-- [REDQ](examples/redq/redq.py)
-- [Dreamer](examples/dreamer/dreamer.py)
-- [Decision Transformers](examples/decision_transformer)
+- [PPO](sota-implementations/ppo/ppo.py)
+- [SAC](sota-implementations/sac/sac.py)
+- [REDQ](sota-implementations/redq/redq.py)
+- [Dreamer](sota-implementations/dreamer/dreamer.py)
+- [Decision Transformers](sota-implementations/decision_transformer)
 - [RLHF](examples/rlhf)
 
 and many more to come!
 
-Check the [examples markdown](examples/EXAMPLES.md) directory for more details 
+Check the [examples markdown](sota-implementations/SOTA-IMPLEMENTATIONS.md) directory for more details 
 about handling the various configuration settings.
 
 We also provide [tutorials and demos](https://pytorch.org/rl/#tutorials) that give a sense of

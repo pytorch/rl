@@ -43,7 +43,7 @@ TorchRL trainer: A DQN example
 #   estimated return;
 # - how to collect data from your environment efficiently and store them
 #   in a replay buffer;
-# - how to use multi-step, a simple preprocessing step for off-policy algorithms;
+# - how to use multi-step, a simple preprocessing step for off-policy sota-implementations;
 # - and finally how to evaluate your model.
 #
 # **Prerequisites**: We encourage you to get familiar with torchrl through the
@@ -356,7 +356,7 @@ def make_model(dummy_env):
 # Replay buffers
 # ~~~~~~~~~~~~~~
 #
-# Replay buffers play a central role in off-policy RL algorithms such as DQN.
+# Replay buffers play a central role in off-policy RL sota-implementations such as DQN.
 # They constitute the dataset we will be sampling from during training.
 #
 # Here, we will use a regular sampling strategy, although a prioritized RB
@@ -455,13 +455,13 @@ def get_collector(
 # Target parameters
 # ~~~~~~~~~~~~~~~~~
 #
-# Many off-policy RL algorithms use the concept of "target parameters" when it
+# Many off-policy RL sota-implementations use the concept of "target parameters" when it
 # comes to estimate the value of the next state or state-action pair.
 # The target parameters are lagged copies of the model parameters. Because
 # their predictions mismatch those of the current model configuration, they
 # help learning by putting a pessimistic bound on the value being estimated.
 # This is a powerful trick (known as "Double Q-Learning") that is ubiquitous
-# in similar algorithms.
+# in similar sota-implementations.
 #
 
 
