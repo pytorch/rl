@@ -7,7 +7,7 @@ import argparse
 
 import pytest
 import torch
-from mocking_classes import DiscreteActionVecMockEnv
+from mocking_classes import CountingEnv, DiscreteActionVecMockEnv
 from tensordict import pad, TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
 from torch import nn
@@ -16,10 +16,19 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs import EnvCreator, SerialEnv
+from torchrl.envs import (
+    CatFrames,
+    Compose,
+    EnvCreator,
+    InitTracker,
+    ParallelEnv,
+    SerialEnv,
+    TransformedEnv,
+)
 from torchrl.envs.utils import set_exploration_type, step_mdp
 from torchrl.modules import (
     AdditiveGaussianWrapper,
+    BatchedActionWrapper,
     DecisionTransformerInferenceWrapper,
     DTActor,
     GRUModule,
@@ -1441,6 +1450,57 @@ class TestDecisionTransformerInferenceWrapper:
         assert set(result.keys(True, True)) - set(td.keys(True, True)) == set(
             inference_actor.out_keys
         ) - set(inference_actor.in_keys)
+
+
+class TestBatchedActor:
+    def test_batched_actor_exceptions(self):
+        ...
+
+    @pytest.mark.parametrize("time_steps", [3, 5])
+    def test_batched_actor_simple(self, time_steps):
+        base_env = ParallelEnv(
+            2, [lambda: CountingEnv(max_steps=5), lambda: CountingEnv(max_steps=7)]
+        )
+        env = TransformedEnv(
+            base_env,
+            Compose(
+                InitTracker(),
+                CatFrames(
+                    N=time_steps,
+                    in_keys=["observation"],
+                    out_keys=["observation_cat"],
+                    dim=-1,
+                ),
+            ),
+        )
+
+        n_obs = 1
+        n_action = 1
+
+        def reshape_cat(obs, data: torch.Tensor):
+            return data.unflatten(-1, (time_steps, n_obs)).float()
+
+        linear = torch.nn.Linear(n_obs, n_action, bias=True)
+        linear.weight.data.fill_(0)
+        linear.bias.data.fill_(1)
+        actor_base = TensorDictSequential(
+            TensorDictModule(
+                reshape_cat,
+                in_keys=["observation", "observation_cat"],
+                out_keys=["observation_cat_reshape"],
+            ),
+            TensorDictModule(
+                linear, in_keys=["observation_cat_reshape"], out_keys=["action"]
+            ),
+        )
+        actor = BatchedActionWrapper(actor_base, n_steps=time_steps)
+        # rollout = env.rollout(100, break_when_any_done=False)
+        rollout = env.rollout(10, actor, break_when_any_done=False)
+        print(rollout)
+        print(rollout["is_init"])
+        print(rollout["observation"])
+        print(rollout["observation_cat"])
+        print(rollout["observation_cat_reshape"])
 
 
 if __name__ == "__main__":

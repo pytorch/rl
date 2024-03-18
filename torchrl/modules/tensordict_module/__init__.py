@@ -8,6 +8,7 @@ from .actors import (
     ActorCriticOperator,
     ActorCriticWrapper,
     ActorValueOperator,
+    BatchedActionWrapper,
     DecisionTransformerInferenceWrapper,
     DistributionalQValueActor,
     DistributionalQValueHook,
