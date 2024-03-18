@@ -10259,6 +10259,30 @@ class TestMultiStepTransform:
 
         assert_allclose_td(outs, outs_3)
 
+    def test_multistep_transform_changes(self):
+        data = TensorDict(
+            {
+                "steps": torch.arange(100),
+                "next": {
+                    "steps": torch.arange(1, 101),
+                    "reward": torch.ones(100, 1),
+                    "done": torch.zeros(100, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(100, 1, dtype=torch.bool),
+                    "truncated": torch.zeros(100, 1, dtype=torch.bool),
+                },
+            },
+            batch_size=[100],
+        )
+        data_splits = data.split(10)
+        t = MultiStepTransform(3, 0.98)
+        rb = ReplayBuffer(storage=LazyTensorStorage(100), transform=t)
+        for data in data_splits:
+            rb.extend(data)
+            t.n_steps = t.n_steps + 1
+            assert (rb[:]["steps"] == torch.arange(len(rb))).all()
+            assert rb[:]["next", "steps"][-1] == data["steps"][-1]
+            assert t._buffer["steps"][-1] == data["steps"][-1]
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

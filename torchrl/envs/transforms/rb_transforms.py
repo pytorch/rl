@@ -21,6 +21,10 @@ class MultiStepTransform(Transform):
     outputs the transformed previous ``n_steps`` with the ``T-n_steps`` current
     frames.
 
+    All entries in the ``"next"`` tensordict that are not part of the ``done_keys``
+    or ``reward_keys`` will be mapped to their respective ``t + n_steps - 1``
+    correspondent.
+
     This transform is a more hyperparameter resistant version of
     :class:`~torchrl.data.postprocs.postprocs.MultiStep`:
     the replay buffer transform will make the multi-step transform insensitive
@@ -29,18 +33,24 @@ class MultiStepTransform(Transform):
     (because collectors have no memory of previous output).
 
     Args:
-        n_steps (int): Number of steps in multi-step.
+        n_steps (int): Number of steps in multi-step. The number of steps can be
+            dynamically changed by changing the ``n_steps`` attribute of this
+            transform.
         gamma (float): Discount factor.
 
     Keyword Args:
-        reward_key (NestedKey, optional): the reward key in the input tensordict.
-            Defaults to ``"reward"``.
-        done_key (NestedKey, optional): the done key in the input tensordict.
+        reward_keys (list of NestedKey, optional): the reward keys in the input tensordict.
+            The reward entries indicated by these keys will be accumulated and discounted
+            across ``n_steps`` steps in the future. A corresponding ``<reward_key>_orig``
+            entry will be written in the ``"next"`` entry of the output tensordict
+            to keep track of the original value of the reward.
+            Defaults to ``["reward"]``.
+        done_key (NestedKey, optional): the done key in the input tensordict, used to indicate
+            an end of trajectory.
             Defaults to ``"done"``.
-        terminated_key (NestedKey, optional): the terminated key in the input tensordict.
-            Defaults to ``"terminated"``.
-        truncated_key (NestedKey, optional): the truncated key in the input tensordict.
-            Defaults to ``"truncated"``.
+        done_keys (list of NestedKey, optional): the list of end keys in the input tensordict.
+            All the entries indicated by these keys will be left untouched by the transform.
+            Defaults to ``["done", "truncated", "terminated"]``.
         mask_key (NestedKey, optional): the mask key in the input tensordict.
             The mask represents the valid frames in the input tensordict and
             should have a shape that allows the input tensordict to be masked
@@ -114,8 +124,24 @@ class MultiStepTransform(Transform):
         self.done_keys = done_keys
         self.mask_key = mask_key
         self.gamma = gamma
-        self.buffer = None
+        self._buffer = None
         self._validated = False
+
+    @property
+    def n_steps(self):
+        """The look ahead window of the transform.
+
+        This value can be dynamically edited during training.
+        """
+        return self._n_steps
+
+    @n_steps.setter
+    def n_steps(self, value):
+        if not isinstance(value, int) or not (value >= 1):
+            raise ValueError(
+                "The value of n_steps must be a strictly positive integer."
+            )
+        self._n_steps = value
 
     @property
     def done_key(self):
@@ -182,10 +208,10 @@ class MultiStepTransform(Transform):
             return out[..., : -self.n_steps]
 
     def _append_tensordict(self, data):
-        if self.buffer is None:
+        if self._buffer is None:
             total_cat = data
-            self.buffer = data[..., -self.n_steps :].copy()
+            self._buffer = data[..., -self.n_steps :].copy()
         else:
-            total_cat = torch.cat([self.buffer, data], -1)
-            self.buffer = total_cat[..., -self.n_steps :].copy()
+            total_cat = torch.cat([self._buffer, data], -1)
+            self._buffer = total_cat[..., -self.n_steps :].copy()
         return total_cat
