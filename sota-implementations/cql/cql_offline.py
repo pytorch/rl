@@ -81,7 +81,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Training loop
     start_time = time.time()
     for i in range(gradient_steps):
-        pbar.update(i)
+        pbar.update(1)
         # sample data
         data = replay_buffer.sample()
         # compute loss
