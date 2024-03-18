@@ -547,7 +547,7 @@ class TestDQN(LossModuleTestBase):
         loss_fn2 = DQNLoss(actor, loss_function="l2", delay_value=delay_value)
         loss_fn2.load_state_dict(sd)
 
-    @pytest.mark.parametrize("n", range(4))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
@@ -579,7 +579,7 @@ class TestDQN(LossModuleTestBase):
 
         with torch.no_grad():
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*td.keys(True, True)))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss")]
@@ -1125,7 +1125,7 @@ class TestQMixer(LossModuleTestBase):
         loss_fn2 = QMixerLoss(actor, mixer, loss_function="l2", delay_value=delay_value)
         loss_fn2.load_state_dict(sd)
 
-    @pytest.mark.parametrize("n", range(4))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
@@ -1158,7 +1158,7 @@ class TestQMixer(LossModuleTestBase):
 
         with torch.no_grad():
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*td.keys(True, True)))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss")]
@@ -1801,7 +1801,7 @@ class TestDDPG(LossModuleTestBase):
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
     def test_ddpg_batcher(self, n, delay_actor, delay_value, device, gamma=0.9):
@@ -1832,7 +1832,7 @@ class TestDDPG(LossModuleTestBase):
 
         with torch.no_grad():
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss_")]
@@ -2433,7 +2433,7 @@ class TestTD3(LossModuleTestBase):
                 loss_fn.zero_grad()
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("delay_actor,delay_qvalue", [(False, False), (True, True)])
     @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
@@ -2479,7 +2479,7 @@ class TestTD3(LossModuleTestBase):
             np.random.seed(0)
             loss = loss_fn(td)
 
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss_")]
@@ -3228,7 +3228,7 @@ class TestSAC(LossModuleTestBase):
                     raise NotImplementedError(k)
                 loss_fn.zero_grad()
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -3292,7 +3292,7 @@ class TestSAC(LossModuleTestBase):
                 torch.manual_seed(0)  # log-prob is computed with a random action
                 np.random.seed(0)
                 loss = loss_fn(td)
-            if n == 0:
+            if n == 1:
                 assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
                 _loss = sum(
                     [item for name, item in loss.items() if name.startswith("loss_")]
@@ -3927,7 +3927,7 @@ class TestDiscreteSAC(LossModuleTestBase):
         )
         loss_fn2.load_state_dict(sd)
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -3983,7 +3983,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             torch.manual_seed(0)  # log-prob is computed with a random action
             np.random.seed(0)
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss_")]
@@ -4871,7 +4871,7 @@ class TestREDQ(LossModuleTestBase):
         # TODO: find a way to compare the losses: problem is that we sample actions either sequentially or in batch,
         #  so setting seed has little impact
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -4914,7 +4914,7 @@ class TestREDQ(LossModuleTestBase):
                 torch.manual_seed(0)  # log-prob is computed with a random action
                 np.random.seed(0)
                 loss = loss_fn(td)
-            if n == 0:
+            if n == 1:
                 assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
                 _loss = sum(
                     [item for name, item in loss.items() if name.startswith("loss_")]
@@ -5482,7 +5482,7 @@ class TestCQL(LossModuleTestBase):
         )
         loss_fn2.load_state_dict(sd)
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("max_q_backup", [True, False])
@@ -5537,7 +5537,7 @@ class TestCQL(LossModuleTestBase):
                 torch.manual_seed(0)  # log-prob is computed with a random action
                 np.random.seed(0)
                 loss = loss_fn(td)
-            if n == 0:
+            if n == 1:
                 assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
                 _loss = sum(
                     [item for name, item in loss.items() if name.startswith("loss_")]
@@ -5843,7 +5843,7 @@ class TestDiscreteCQL(LossModuleTestBase):
         loss_fn2 = DiscreteCQLLoss(actor, loss_function="l2", delay_value=delay_value)
         loss_fn2.load_state_dict(sd)
 
-    @pytest.mark.parametrize("n", range(4))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
@@ -5874,7 +5874,7 @@ class TestDiscreteCQL(LossModuleTestBase):
 
         with torch.no_grad():
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*td.keys(True, True)))
             _loss = sum([item for key, item in loss.items() if key.startswith("loss_")])
             _loss_ms = sum(
@@ -9356,7 +9356,7 @@ class TestIQL(LossModuleTestBase):
                     raise NotImplementedError(k)
                 loss_fn.zero_grad()
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
     @pytest.mark.parametrize("expectile", [0.1, 0.5, 1.0])
@@ -9407,7 +9407,7 @@ class TestIQL(LossModuleTestBase):
             torch.manual_seed(0)  # log-prob is computed with a random action
             np.random.seed(0)
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss_")]
@@ -10168,7 +10168,7 @@ class TestDiscreteIQL(LossModuleTestBase):
                     raise NotImplementedError(k)
                 loss_fn.zero_grad()
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
     @pytest.mark.parametrize("expectile", [0.1, 0.5])
@@ -10219,7 +10219,7 @@ class TestDiscreteIQL(LossModuleTestBase):
             torch.manual_seed(0)  # log-prob is computed with a random action
             np.random.seed(0)
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss_")]

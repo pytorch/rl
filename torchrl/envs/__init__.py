@@ -57,6 +57,7 @@ from .transforms import (
     gSDENoise,
     InitTracker,
     KLRewardTransform,
+    MultiStepTransform,
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,
