@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import warnings
-from typing import Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
 
@@ -15,10 +15,11 @@ from tensordict.nn import (
     TensorDictModuleWrapper,
     TensorDictSequential,
 )
-from tensordict.utils import NestedKey
+from tensordict.utils import expand_as_right, NestedKey
 from torch import nn
 from torch.distributions import Categorical
 
+from torchrl._utils import _replace_last
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.data.utils import _process_action_space_spec
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet, SafeModule
@@ -2105,3 +2106,174 @@ class LMHeadActorValueOperator(ActorValueOperator):
         )
 
         super().__init__(common, actor_head, value_head)
+
+
+class BatchedActionWrapper(TensorDictModuleBase):
+    """A wrapper around a multi-action actor.
+
+    This class enables macros to be executed in an environment.
+    The actor action(s) entry must have an additional time dimension to
+    be consumed. It must be placed adjacent to the last dimension of the
+    input tensordict (i.e. at ``tensordict.ndim``).
+
+    The action entry keys are retrieved automatically from the actor if
+    not provided using a simple heuristic (any nested key ending with the
+    ``"action"`` string).
+
+    An ``"is_init"`` entry must also be present in the input tensordict
+    to track which and when the current collection should be interrupted
+    because a "done" state has been encountered. Unlike ``action_keys``,
+    this key must be unique.
+
+    """
+
+    def __init__(
+        self,
+        actor: TensorDictModule,
+        n_steps: int,
+        action_keys: List[NestedKey] | None = None,
+        init_key: List[NestedKey] | None = None,
+    ):
+        self.action_keys = action_keys
+        self.init_key = init_key
+        self.n_steps = n_steps
+
+        super().__init__()
+        self.actor = actor
+
+    @property
+    def in_keys(self):
+        return self.actor.in_keys + [self.init_key]
+
+    @property
+    def out_keys(self):
+        return (
+            self.actor.out_keys
+            + list(self._actor_keys_map.values())
+            + [self.counter_key]
+        )
+
+    def _get_and_move(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for action_key in self.action_keys:
+            action = tensordict.get(action_key)
+            if isinstance(action, tuple):
+                action_key_orig = (*action_key[:-1], action_key[-1] + "_orig")
+            else:
+                action_key_orig = action_key + "_orig"
+            tensordict.set(action_key_orig, action)
+
+    def _init(self, tensordict: TensorDictBase):
+        is_init = tensordict.get(self.init_key, default=None)
+        if is_init is None:
+            raise KeyError("No init key was passed to the batched action wrapper.")
+        counter = tensordict.get(self.counter_key, None)
+        if counter is None:
+            counter = is_init.int()
+        is_init = is_init | (counter == self.n_steps)
+        if is_init.any():
+            counter = counter.masked_fill(is_init, 0)
+            tensordict_filtered = tensordict[is_init.reshape(tensordict.shape)]
+            output = self.actor(tensordict_filtered)
+
+            for action_key, action_key_orig in self._actor_keys_map.items():
+                action_computed = output.get(action_key, default=None)
+                action_orig = tensordict.get(action_key_orig, default=None)
+                if action_orig is None:
+                    if not is_init.all():
+                        raise RuntimeError(
+                            "Cannot initialize the wrapper with partial is_init signal."
+                        )
+                else:
+                    is_init_expand = expand_as_right(is_init, action_orig)
+                    action_computed = torch.masked_scatter(
+                        action_orig, is_init_expand, action_computed
+                    )
+                tensordict.set(action_key_orig, action_computed)
+        tensordict.set("counter", counter + 1)
+
+    def forward(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        self._init(tensordict)
+        for action_key, action_key_orig in self._actor_keys_map.items():
+            # get orig
+            if isinstance(action_key_orig, str):
+                parent_td = tensordict
+                action_entry = parent_td.get(action_key_orig)
+            else:
+                parent_td = tensordict.get(action_key_orig[:-1])
+                action_entry = parent_td.get(action_key_orig[-1])
+            base_idx = (
+                slice(
+                    None,
+                ),
+            ) * parent_td.ndim
+            cur_action = action_entry[base_idx + (0,)]
+            tensordict.set(action_key, cur_action)
+            tensordict.set(
+                action_key_orig,
+                torch.roll(action_entry, shifts=-1, dims=parent_td.ndim),
+            )
+        return tensordict
+
+    @property
+    def action_keys(self) -> List[NestedKey]:
+        action_keys = self.__dict__.get("_action_keys", None)
+        if action_keys is None:
+
+            def ends_with_action(key):
+                if isinstance(key, str):
+                    return key == "action"
+                return key[-1] == "action"
+
+            action_keys = [key for key in self.actor.out_keys if ends_with_action(key)]
+
+            self.__dict__["_action_keys"] = action_keys
+        return action_keys
+
+    @action_keys.setter
+    def action_keys(self, value):
+        if value is None:
+            return
+        self.__dict__["_actor_keys_map_values"] = None
+        if not isinstance(value, list):
+            value = [value]
+        self._action_keys = [unravel_key(key) for key in value]
+
+    @property
+    def _actor_keys_map(self) -> Dict[NestedKey, NestedKey]:
+        val = self.__dict__.get("_actor_keys_map_values", None)
+        if val is None:
+
+            def _replace_last(action_key):
+                if isinstance(action_key, tuple):
+                    action_key_orig = (*action_key[:-1], action_key[-1] + "_orig")
+                else:
+                    action_key_orig = action_key + "_orig"
+                return action_key_orig
+
+            val = {key: _replace_last(key) for key in self.action_keys}
+            self.__dict__["_actor_keys_map_values"] = val
+        return val
+
+    @property
+    def init_key(self) -> NestedKey:
+        """The indicator of the initial step for a given element of the batch."""
+        init_key = self.__dict__.get("_init_key", None)
+        if init_key is None:
+            self.init_key = "is_init"
+            return self.init_key
+        return init_key
+
+    @init_key.setter
+    def init_key(self, value):
+        if value is None:
+            return
+        if isinstance(value, list):
+            raise ValueError("Only a single init_key can be passed.")
+        self._init_key = value
+
+    @property
+    def counter_key(self):
+        return _replace_last(self.init_key, "counter")
