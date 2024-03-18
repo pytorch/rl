@@ -9,9 +9,10 @@ import abc
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Iterator, List, Optional, Tuple
+from typing import Callable, Iterator, List, Optional, Tuple
 
 import torch
+import torch.nn.init as init
 from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
@@ -362,6 +363,35 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     def reset(self) -> None:
         # mainly used for PPO with KL target
         pass
+
+    def reset_parameters(
+        self,
+        module_names: Optional[List[Parameter]] = None,
+        init_func: Optional[Callable] = None,
+    ) -> None:
+        """Reset the parameters of the specified modules.
+
+        Args:
+            module_names (Optional[List[Parameter]]): A list of module names to reset the parameters for.
+                If None, all modules with names ending in "_params" will be reset.
+            init_func (Optional[Callable]): A function to initialize the parameters.
+                If None, the parameters will be initialized with uniform random values between -1 and 1.
+        """
+        if module_names is None:
+            params_2_reset = [
+                name for name in self._modules.keys() if name.endswith("_params")
+            ]
+        else:
+            params_2_reset = [name + "_params" for name in module_names]
+
+        def _reset_params(param):
+            if init_func is not None:
+                init_func(param.data)
+            else:
+                init.uniform_(param.data, -1, 1)
+
+        for name in params_2_reset:
+            getattr(self, name).apply(_reset_params)
 
     @property
     def value_estimator(self) -> ValueEstimatorBase:
