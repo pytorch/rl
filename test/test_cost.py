@@ -884,7 +884,7 @@ class TestDQN(LossModuleTestBase):
             for key in loss.keys():
                 if not key.startswith("loss"):
                     continue
-                assert loss[key].shape == torch.Size([])
+                assert loss[key].shape == torch.Size([2])
 
     @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
