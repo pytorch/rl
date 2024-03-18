@@ -5,6 +5,7 @@
 
 import argparse
 import dataclasses
+import pathlib
 import sys
 
 from time import sleep
@@ -68,12 +69,14 @@ else:
 
 @pytest.fixture
 def dreamer_constructor_fixture():
-    import os
 
     # we hack the env constructor
     import sys
 
-    sys.path.append(os.path.dirname(__file__) + "/../examples/dreamer/")
+    sys.path.append(
+        str(pathlib.Path(__file__).parent.parent / "sota-implementations" / "dreamer")
+    )
+
     from dreamer_utils import transformed_env_constructor
 
     yield transformed_env_constructor
