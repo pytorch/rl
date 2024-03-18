@@ -448,7 +448,9 @@ class ReinforceLoss(LossModule):
 
         try:
             target_return = tensordict.get(self.tensor_keys.value_target)
-            tensordict_select = tensordict.select(*self.critic_network.in_keys)
+            tensordict_select = tensordict.select(
+                *self.critic_network.in_keys, strict=False
+            )
             with self.critic_network_params.to_module(
                 self.critic_network
             ) if self.functional else contextlib.nullcontext():
