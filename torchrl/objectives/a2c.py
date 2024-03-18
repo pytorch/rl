@@ -558,8 +558,8 @@ class A2CLoss(LossModule):
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict).mean()
-            td_out.set("loss_critic", loss_critic.mean())
+            loss_critic, value_clip_fraction = self.loss_critic(tensordict)
+            td_out.set("loss_critic", loss_critic)
         if self.return_tensorclass:
             return A2CLosses._from_tensordict(td_out)
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
