@@ -6885,6 +6885,61 @@ class TestPPO(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    @pytest.mark.parametrize("clip_value", [True, False, None, 0.5, torch.tensor(0.5)])
+    def test_ppo_value_clipping(self, clip_value, loss_class, device):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_ppo(device=device)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        advantage = GAE(
+            gamma=0.9,
+            lmbda=0.9,
+            value_network=value,
+        )
+
+        if isinstance(clip_value, bool) and loss_class is not ClipPPOLoss:
+            with pytest.raises(
+                ValueError,
+                match=f"clip_value must be a float or a scalar tensor, got {clip_value}.",
+            ):
+                loss_fn = loss_class(
+                    actor,
+                    value,
+                    loss_critic_type="l2",
+                    clip_value=clip_value,
+                )
+
+        else:
+            loss_fn = loss_class(
+                actor,
+                value,
+                loss_critic_type="l2",
+                clip_value=clip_value,
+            )
+            advantage(td)
+
+            value = td.pop(loss_fn.tensor_keys.value)
+
+            if clip_value:
+                # Test it fails without value key
+                with pytest.raises(
+                    KeyError,
+                    match=f"clip_value is set to {loss_fn.clip_value}, but the key "
+                    "state_value was not found in the input tensordict. "
+                    "Make sure that the value_key passed to PPO exists in "
+                    "the input tensordict.",
+                ):
+                    loss = loss_fn(td)
+
+            # Add value back to td
+            td.set(loss_fn.tensor_keys.value, value)
+
+            # Test it works with value key
+            loss = loss_fn(td)
+            assert "loss_critic" in loss.keys()
+
 
 class TestA2C(LossModuleTestBase):
     seed = 0
@@ -7519,6 +7574,59 @@ class TestA2C(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("clip_value", [True, None, 0.5, torch.tensor(0.5)])
+    def test_a2c_value_clipping(self, clip_value, device):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_a2c(device=device)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        advantage = GAE(
+            gamma=0.9,
+            lmbda=0.9,
+            value_network=value,
+        )
+
+        if isinstance(clip_value, bool):
+            with pytest.raises(
+                ValueError,
+                match=f"clip_value must be a float or a scalar tensor, got {clip_value}.",
+            ):
+                loss_fn = A2CLoss(
+                    actor,
+                    value,
+                    loss_critic_type="l2",
+                    clip_value=clip_value,
+                )
+        else:
+            loss_fn = A2CLoss(
+                actor,
+                value,
+                loss_critic_type="l2",
+                clip_value=clip_value,
+            )
+            advantage(td)
+
+            value = td.pop(loss_fn.tensor_keys.value)
+
+            if clip_value:
+                # Test it fails without value key
+                with pytest.raises(
+                    KeyError,
+                    match=f"clip_value is set to {clip_value}, but the key "
+                    "state_value was not found in the input tensordict. "
+                    "Make sure that the value_key passed to A2C exists in "
+                    "the input tensordict.",
+                ):
+                    loss = loss_fn(td)
+
+            # Add value back to td
+            td.set(loss_fn.tensor_keys.value, value)
+
+            # Test it works with value key
+            loss = loss_fn(td)
+            assert "loss_critic" in loss.keys()
+
 
 class TestReinforce(LossModuleTestBase):
     seed = 0
@@ -7922,6 +8030,58 @@ class TestReinforce(LossModuleTestBase):
                 if not key.startswith("loss_"):
                     continue
                 assert loss[key].shape == torch.Size([])
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("clip_value", [True, None, 0.5, torch.tensor(0.5)])
+    def test_reinforce_value_clipping(self, clip_value, device):
+        torch.manual_seed(self.seed)
+        actor, critic, common, td = self._create_mock_common_layer_setup()
+        actor = actor.to(device)
+        critic = critic.to(device)
+        td = td.to(device)
+        advantage = GAE(
+            gamma=0.9,
+            lmbda=0.9,
+            value_network=critic,
+        )
+        if isinstance(clip_value, bool):
+            with pytest.raises(
+                ValueError,
+                match=f"clip_value must be a float or a scalar tensor, got {clip_value}.",
+            ):
+                loss_fn = ReinforceLoss(
+                    actor_network=actor,
+                    critic_network=critic,
+                    clip_value=clip_value,
+                )
+                return
+        else:
+            loss_fn = ReinforceLoss(
+                actor_network=actor,
+                critic_network=critic,
+                clip_value=clip_value,
+            )
+            advantage(td)
+
+            value = td.pop(loss_fn.tensor_keys.value)
+
+            if clip_value:
+                # Test it fails without value key
+                with pytest.raises(
+                    KeyError,
+                    match=f"clip_value is set to {loss_fn.clip_value}, but the key "
+                    "state_value was not found in the input tensordict. "
+                    "Make sure that the value_key passed to Reinforce exists in "
+                    "the input tensordict.",
+                ):
+                    loss = loss_fn(td)
+
+            # Add value back to td
+            td.set(loss_fn.tensor_keys.value, value)
+
+            # Test it works with value key
+            loss = loss_fn(td)
+            assert "loss_value" in loss.keys()
 
 
 @pytest.mark.parametrize("device", get_default_devices())
