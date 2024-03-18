@@ -904,7 +904,7 @@ class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
 
 
 class DummyModelBasedEnvBase(ModelBasedEnvBase):
-    """Dummy environnement for Model Based RL algorithms.
+    """Dummy environnement for Model Based RL sota-implementations.
 
     This class is meant to be used to test the model based environnement.
 

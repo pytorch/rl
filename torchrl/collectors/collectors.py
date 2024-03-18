@@ -1905,7 +1905,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
     The collection starts when the next item of the collector is queried,
     and no environment step is computed in between the reception of a batch of
     trajectory and the start of the next collection.
-    This class can be safely used with online RL algorithms.
+    This class can be safely used with online RL sota-implementations.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -2142,7 +2142,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     The collection keeps on occuring on all processes even between the time
     the batch of rollouts is collected and the next call to the iterator.
-    This class can be safely used with offline RL algorithms.
+    This class can be safely used with offline RL sota-implementations.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv

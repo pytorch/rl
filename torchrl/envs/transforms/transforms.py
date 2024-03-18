@@ -4033,7 +4033,7 @@ class FrameSkipTransform(Transform):
     """A frame-skip transform.
 
     This transform applies the same action repeatedly in the parent environment,
-    which improves stability on certain training algorithms.
+    which improves stability on certain training sota-implementations.
 
     Args:
         frame_skip (int, optional): a positive integer representing the number

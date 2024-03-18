@@ -519,7 +519,7 @@ collector = SyncDataCollector(
 # Replay buffer
 # -------------
 #
-# Replay buffers are a common building piece of off-policy RL algorithms.
+# Replay buffers are a common building piece of off-policy RL sota-implementations.
 # In on-policy contexts, a replay buffer is refilled every time a batch of
 # data is collected, and its data is repeatedly consumed for a certain number
 # of epochs.

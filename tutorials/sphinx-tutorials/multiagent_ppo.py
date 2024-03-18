@@ -9,14 +9,14 @@ Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
    If you are interested in Multi-Agent Reinforcement Learning (MARL) in
    TorchRL, check out
    `BenchMARL <https://github.com/facebookresearch/BenchMARL>`__: a benchmarking library where you
-   can train and compare MARL algorithms, tasks, and models using TorchRL!
+   can train and compare MARL sota-implementations, tasks, and models using TorchRL!
 
 This tutorial demonstrates how to use PyTorch and :py:mod:`torchrl` to
 solve a Multi-Agent Reinforcement Learning (MARL) problem.
 
 A code-only version of this tutorial is available in the
 `TorchRL examples <https://github.com/pytorch/rl/tree/main/examples/multiagent/mappo_ippo.py>`__,
-alongside other simple scripts for many MARL algorithms (QMIX, MADDPG, IQL).
+alongside other simple scripts for many MARL sota-implementations (QMIX, MADDPG, IQL).
 
 For ease of use, this tutorial will follow the general structure of the already available
 `single agent PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>`__.
@@ -63,7 +63,7 @@ Key learnings:
 # the foundational policy-optimization algorithm. For more information, see the
 # `Proximal Policy Optimization Algorithms <https://arxiv.org/abs/1707.06347>`_ paper.
 #
-# This type of algorithms is usually trained *on-policy*. This means that, at every learning iteration, we have a
+# This type of sota-implementations is usually trained *on-policy*. This means that, at every learning iteration, we have a
 # **sampling** and a **training** phase. In the **sampling** phase of iteration :math:`t`, rollouts are collected
 # form agents' interactions in the environment using the current policies :math:`\mathbf{\pi}_t`.
 # In the **training** phase, all the collected rollouts are immediately fed to the training process to perform
@@ -560,7 +560,7 @@ collector = SyncDataCollector(
 # Replay buffer
 # -------------
 #
-# Replay buffers are a common building piece of off-policy RL algorithms.
+# Replay buffers are a common building piece of off-policy RL sota-implementations.
 # In on-policy contexts, a replay buffer is refilled every time a batch of
 # data is collected, and its data is repeatedly consumed for a certain number
 # of epochs.
@@ -789,7 +789,7 @@ plt.show()
 #
 # Now that you are proficient with multi-agent PPO, you can check out all
 # `TorchRL multi-agent examples <https://github.com/pytorch/rl/tree/main/examples/multiagent>`__.
-# These are code-only scripts of many popular MARL algorithms such as the ones seen in this tutorial,
+# These are code-only scripts of many popular MARL sota-implementations such as the ones seen in this tutorial,
 # QMIX, MADDPG, IQL, and many more!
 #
 # If you are interested in creating or wrapping your own multi-agent environments in TorchRL,

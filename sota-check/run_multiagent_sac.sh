@@ -12,7 +12,7 @@ project_name="torchrl-example-check-$current_commit"
 group_name="marl_sac"
 
 export PYTHONPATH=$(dirname $(dirname $PWD))
-python $PYTHONPATH/examples/multiagent/sac.py \
+python $PYTHONPATH/sota-implementations/multiagent/sac.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"

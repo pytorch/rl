@@ -11,7 +11,7 @@ current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="mappo_ippo"
 export PYTHONPATH=$(dirname $(dirname $PWD))
-python $PYTHONPATH/examples/multiagent/mappo_ippo.py \
+python $PYTHONPATH/sota-implementations/multiagent/mappo_ippo.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"
