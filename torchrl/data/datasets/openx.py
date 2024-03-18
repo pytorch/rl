@@ -506,8 +506,11 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
                 if isinstance(x, NonTensorData):
                     return x.maybe_to_stack()
                 return x
-            td_data = td_data._apply_nest(expand_non_tensor, is_leaf=lambda x: issubclass(x, torch.Tensor) or _is_non_tensor(x))
-            td_data.memmap_like(self.root / self.dataset_id)
+            td_data = td_data._apply_nest(
+                expand_non_tensor,
+                is_leaf=lambda x: issubclass(x, torch.Tensor) or _is_non_tensor(x)
+            )
+            td_data = td_data.memmap_like(self.root / self.dataset_id)
             if _has_tqdm:
                 pbar = tqdm.tqdm(dataset, desc="preproc", total=total_frames)
             else:

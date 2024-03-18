@@ -44,7 +44,9 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
 
     @root.setter
     def root(self, value):
-        self._root = Path(value)
+        if value is not None:
+            value = Path(value)
+        self._root = value
 
     def preprocess(
         self,

@@ -2828,7 +2828,7 @@ class TestAtariDQN:
 class TestOpenX:
     @pytest.mark.parametrize(
         "download,padding",
-        [["force", None], [False, None], [False, 0], [False, True], [False, False]],
+        [[True, None], [False, None], [False, 0], [False, True], [False, False]],
     )
     @pytest.mark.parametrize("shuffle", [True, False])
     @pytest.mark.parametrize("replacement", [True, False])
@@ -2882,7 +2882,9 @@ class TestOpenX:
         ):
             raises_cm = pytest.raises(
                 RuntimeError,
-                match="The trajectory length (.*) is shorter than the slice length|Some stored trajectories have a length shorter than the slice that was asked for",
+                match="The trajectory length (.*) is shorter than the slice length|"
+                #       "Some stored trajectories have a length shorter than the slice that was asked for|"
+                    "Did not find a single trajectory with sufficient length",
             )
             with raises_cm:
                 for data in dataset:  # noqa: B007
@@ -2920,7 +2922,7 @@ class TestOpenX:
             if padding is None and (batch_size > 1000):
                 with pytest.raises(
                     RuntimeError,
-                    match="Some stored trajectories have a length shorter than the slice that was asked for"
+                    match="Did not find a single trajectory with sufficient length"
                     if not streaming
                     else "The trajectory length (.*) is shorter than the slice length",
                 ):
