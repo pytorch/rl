@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import shutil
 import tempfile
 import urllib
 import warnings
@@ -22,16 +23,16 @@ from tensordict import make_tensordict, PersistentTensorDict, TensorDict
 from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors.utils import split_trajectories
+from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.d4rl_infos import D4RL_DATASETS
 
 from torchrl.data.datasets.utils import _get_root_dir
-from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
 
 
-class D4RLExperienceReplay(TensorDictReplayBuffer):
+class D4RLExperienceReplay(BaseDatasetExperienceReplay):
     """An Experience replay class for D4RL.
 
     To install D4RL, follow the instructions on the
@@ -178,6 +179,9 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             self.from_env = from_env
 
         if (download == "force") or (download and not self._is_downloaded()):
+            if download == "force" and os.path.exists(self.data_path_root):
+                shutil.rmtree(self.data_path_root)
+
             if not direct_download:
                 if terminate_on_end is None:
                     # we use the default of d4rl
@@ -232,6 +236,14 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             prefetch=prefetch,
             transform=transform,
         )
+
+    @property
+    def data_path(self) -> Path:
+        return self._dataset_path
+
+    @property
+    def data_path_root(self) -> Path:
+        return self._dataset_path
 
     @property
     def _dataset_path(self):

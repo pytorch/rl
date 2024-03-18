@@ -235,6 +235,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         string = f"{self.__class__.__name__}()"
         return string
 
+    def __class_getitem__(self, index):
+        raise NotImplementedError
+
 
 @accept_remote_rref_udf_invocation
 class SyncDataCollector(DataCollectorBase):
