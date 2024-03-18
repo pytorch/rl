@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, Tuple
 
 import torch
 
-from tensordict import make_tensordict, pad, TensorDict, NonTensorData
+from tensordict import make_tensordict, NonTensorData, pad, TensorDict
 from tensordict.utils import _is_non_tensor
 
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
@@ -502,13 +502,15 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
                         td = td[0]
                 total_frames += len(data["data.pickle"]["steps"])
             td_data = td.expand(total_frames)
+
             def expand_non_tensor(x):
                 if isinstance(x, NonTensorData):
                     return x.maybe_to_stack()
                 return x
+
             td_data = td_data._apply_nest(
                 expand_non_tensor,
-                is_leaf=lambda x: issubclass(x, torch.Tensor) or _is_non_tensor(x)
+                is_leaf=lambda x: issubclass(x, torch.Tensor) or _is_non_tensor(x),
             )
             td_data = td_data.memmap_like(self.root / self.dataset_id)
             if _has_tqdm:

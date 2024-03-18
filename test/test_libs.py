@@ -2884,7 +2884,7 @@ class TestOpenX:
                 RuntimeError,
                 match="The trajectory length (.*) is shorter than the slice length|"
                 #       "Some stored trajectories have a length shorter than the slice that was asked for|"
-                    "Did not find a single trajectory with sufficient length",
+                "Did not find a single trajectory with sufficient length",
             )
             with raises_cm:
                 for data in dataset:  # noqa: B007
@@ -2938,10 +2938,10 @@ class TestOpenX:
         elif num_slices is not None:
             assert sample.get(("next", "done")).sum() == num_slices
 
-    def test_openx_preproc(self):
+    def test_openx_preproc(self, tmpdir):
         dataset = OpenXExperienceReplay(
             "cmu_stretch",
-            download="force",
+            download=True,
             streaming=False,
             batch_size=64,
             shuffle=True,
@@ -2986,12 +2986,14 @@ class TestOpenX:
             data = data.select(*data.keys(True, True))
             return data
 
-        dataset.preprocess(
+        new_storage = dataset.preprocess(
             CloudpickleWrapper(fn),
             num_workers=max(1, os.cpu_count() - 2),
             num_chunks=500,
             mp_start_method="fork",
+            dest=tmpdir,
         )
+        dataset = ReplayBuffer(storage=new_storage)
         sample = dataset.sample(32)
         assert "observation" not in sample.keys()
         assert "pixels" in sample.keys()
@@ -2999,21 +3001,6 @@ class TestOpenX:
         assert "state" in sample.keys()
         assert ("next", "state") in sample.keys(True)
         assert sample["pixels"].shape == torch.Size([32, 3, 64, 64])
-        dataset = OpenXExperienceReplay(
-            "cmu_stretch",
-            download=True,
-            streaming=False,
-            batch_size=64,
-            shuffle=True,
-            num_slices=8,
-            slice_len=None,
-        )
-        sample = dataset.sample(32)
-        assert "observation" not in sample.keys()
-        assert "pixels" in sample.keys()
-        assert ("next", "pixels") in sample.keys(True)
-        assert "state" in sample.keys()
-        assert ("next", "state") in sample.keys(True)
 
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")
