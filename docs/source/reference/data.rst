@@ -823,3 +823,11 @@ Utils
     consolidate_spec
     check_no_exclusive_keys
     contains_lazy_spec
+
+.. currentmodule:: torchrl.envs.transforms.rb_transforms
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    MultiStepTransform

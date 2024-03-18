@@ -548,7 +548,7 @@ class TestDQN(LossModuleTestBase):
         loss_fn2 = DQNLoss(actor, loss_function="l2", delay_value=delay_value)
         loss_fn2.load_state_dict(sd)
 
-    @pytest.mark.parametrize("n", range(4))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
@@ -580,7 +580,7 @@ class TestDQN(LossModuleTestBase):
 
         with torch.no_grad():
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*td.keys(True, True)))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss")]
@@ -1126,7 +1126,7 @@ class TestQMixer(LossModuleTestBase):
         loss_fn2 = QMixerLoss(actor, mixer, loss_function="l2", delay_value=delay_value)
         loss_fn2.load_state_dict(sd)
 
-    @pytest.mark.parametrize("n", range(4))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
@@ -1159,7 +1159,7 @@ class TestQMixer(LossModuleTestBase):
 
         with torch.no_grad():
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*td.keys(True, True)))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss")]
@@ -1803,7 +1803,7 @@ class TestDDPG(LossModuleTestBase):
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
     def test_ddpg_batcher(self, n, delay_actor, delay_value, device, gamma=0.9):
@@ -1834,7 +1834,7 @@ class TestDDPG(LossModuleTestBase):
 
         with torch.no_grad():
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss_")]
@@ -2436,7 +2436,7 @@ class TestTD3(LossModuleTestBase):
                 loss_fn.zero_grad()
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("delay_actor,delay_qvalue", [(False, False), (True, True)])
     @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
@@ -2482,7 +2482,7 @@ class TestTD3(LossModuleTestBase):
             np.random.seed(0)
             loss = loss_fn(td)
 
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss_")]
@@ -3231,7 +3231,7 @@ class TestSAC(LossModuleTestBase):
                     raise NotImplementedError(k)
                 loss_fn.zero_grad()
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -3295,7 +3295,7 @@ class TestSAC(LossModuleTestBase):
                 torch.manual_seed(0)  # log-prob is computed with a random action
                 np.random.seed(0)
                 loss = loss_fn(td)
-            if n == 0:
+            if n == 1:
                 assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
                 _loss = sum(
                     [item for name, item in loss.items() if name.startswith("loss_")]
@@ -3930,7 +3930,7 @@ class TestDiscreteSAC(LossModuleTestBase):
         )
         loss_fn2.load_state_dict(sd)
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -3986,7 +3986,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             torch.manual_seed(0)  # log-prob is computed with a random action
             np.random.seed(0)
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss_")]
@@ -4875,7 +4875,7 @@ class TestREDQ(LossModuleTestBase):
         # TODO: find a way to compare the losses: problem is that we sample actions either sequentially or in batch,
         #  so setting seed has little impact
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -4918,7 +4918,7 @@ class TestREDQ(LossModuleTestBase):
                 torch.manual_seed(0)  # log-prob is computed with a random action
                 np.random.seed(0)
                 loss = loss_fn(td)
-            if n == 0:
+            if n == 1:
                 assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
                 _loss = sum(
                     [item for name, item in loss.items() if name.startswith("loss_")]
@@ -5487,7 +5487,7 @@ class TestCQL(LossModuleTestBase):
         )
         loss_fn2.load_state_dict(sd)
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("max_q_backup", [True, False])
@@ -5542,7 +5542,7 @@ class TestCQL(LossModuleTestBase):
                 torch.manual_seed(0)  # log-prob is computed with a random action
                 np.random.seed(0)
                 loss = loss_fn(td)
-            if n == 0:
+            if n == 1:
                 assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
                 _loss = sum(
                     [item for name, item in loss.items() if name.startswith("loss_")]
@@ -5848,7 +5848,7 @@ class TestDiscreteCQL(LossModuleTestBase):
         loss_fn2 = DiscreteCQLLoss(actor, loss_function="l2", delay_value=delay_value)
         loss_fn2.load_state_dict(sd)
 
-    @pytest.mark.parametrize("n", range(4))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
@@ -5879,7 +5879,7 @@ class TestDiscreteCQL(LossModuleTestBase):
 
         with torch.no_grad():
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*td.keys(True, True)))
             _loss = sum([item for key, item in loss.items() if key.startswith("loss_")])
             _loss_ms = sum(
@@ -6890,6 +6890,61 @@ class TestPPO(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    @pytest.mark.parametrize("clip_value", [True, False, None, 0.5, torch.tensor(0.5)])
+    def test_ppo_value_clipping(self, clip_value, loss_class, device):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_ppo(device=device)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        advantage = GAE(
+            gamma=0.9,
+            lmbda=0.9,
+            value_network=value,
+        )
+
+        if isinstance(clip_value, bool) and loss_class is not ClipPPOLoss:
+            with pytest.raises(
+                ValueError,
+                match=f"clip_value must be a float or a scalar tensor, got {clip_value}.",
+            ):
+                loss_fn = loss_class(
+                    actor,
+                    value,
+                    loss_critic_type="l2",
+                    clip_value=clip_value,
+                )
+
+        else:
+            loss_fn = loss_class(
+                actor,
+                value,
+                loss_critic_type="l2",
+                clip_value=clip_value,
+            )
+            advantage(td)
+
+            value = td.pop(loss_fn.tensor_keys.value)
+
+            if clip_value:
+                # Test it fails without value key
+                with pytest.raises(
+                    KeyError,
+                    match=f"clip_value is set to {loss_fn.clip_value}, but the key "
+                    "state_value was not found in the input tensordict. "
+                    "Make sure that the value_key passed to PPO exists in "
+                    "the input tensordict.",
+                ):
+                    loss = loss_fn(td)
+
+            # Add value back to td
+            td.set(loss_fn.tensor_keys.value, value)
+
+            # Test it works with value key
+            loss = loss_fn(td)
+            assert "loss_critic" in loss.keys()
+
 
 class TestA2C(LossModuleTestBase):
     seed = 0
@@ -7524,6 +7579,59 @@ class TestA2C(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("clip_value", [True, None, 0.5, torch.tensor(0.5)])
+    def test_a2c_value_clipping(self, clip_value, device):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_a2c(device=device)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        advantage = GAE(
+            gamma=0.9,
+            lmbda=0.9,
+            value_network=value,
+        )
+
+        if isinstance(clip_value, bool):
+            with pytest.raises(
+                ValueError,
+                match=f"clip_value must be a float or a scalar tensor, got {clip_value}.",
+            ):
+                loss_fn = A2CLoss(
+                    actor,
+                    value,
+                    loss_critic_type="l2",
+                    clip_value=clip_value,
+                )
+        else:
+            loss_fn = A2CLoss(
+                actor,
+                value,
+                loss_critic_type="l2",
+                clip_value=clip_value,
+            )
+            advantage(td)
+
+            value = td.pop(loss_fn.tensor_keys.value)
+
+            if clip_value:
+                # Test it fails without value key
+                with pytest.raises(
+                    KeyError,
+                    match=f"clip_value is set to {clip_value}, but the key "
+                    "state_value was not found in the input tensordict. "
+                    "Make sure that the value_key passed to A2C exists in "
+                    "the input tensordict.",
+                ):
+                    loss = loss_fn(td)
+
+            # Add value back to td
+            td.set(loss_fn.tensor_keys.value, value)
+
+            # Test it works with value key
+            loss = loss_fn(td)
+            assert "loss_critic" in loss.keys()
+
 
 class TestReinforce(LossModuleTestBase):
     seed = 0
@@ -7928,6 +8036,58 @@ class TestReinforce(LossModuleTestBase):
                 if not key.startswith("loss_"):
                     continue
                 assert loss[key].shape == torch.Size([])
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("clip_value", [True, None, 0.5, torch.tensor(0.5)])
+    def test_reinforce_value_clipping(self, clip_value, device):
+        torch.manual_seed(self.seed)
+        actor, critic, common, td = self._create_mock_common_layer_setup()
+        actor = actor.to(device)
+        critic = critic.to(device)
+        td = td.to(device)
+        advantage = GAE(
+            gamma=0.9,
+            lmbda=0.9,
+            value_network=critic,
+        )
+        if isinstance(clip_value, bool):
+            with pytest.raises(
+                ValueError,
+                match=f"clip_value must be a float or a scalar tensor, got {clip_value}.",
+            ):
+                loss_fn = ReinforceLoss(
+                    actor_network=actor,
+                    critic_network=critic,
+                    clip_value=clip_value,
+                )
+                return
+        else:
+            loss_fn = ReinforceLoss(
+                actor_network=actor,
+                critic_network=critic,
+                clip_value=clip_value,
+            )
+            advantage(td)
+
+            value = td.pop(loss_fn.tensor_keys.value)
+
+            if clip_value:
+                # Test it fails without value key
+                with pytest.raises(
+                    KeyError,
+                    match=f"clip_value is set to {loss_fn.clip_value}, but the key "
+                    "state_value was not found in the input tensordict. "
+                    "Make sure that the value_key passed to Reinforce exists in "
+                    "the input tensordict.",
+                ):
+                    loss = loss_fn(td)
+
+            # Add value back to td
+            td.set(loss_fn.tensor_keys.value, value)
+
+            # Test it works with value key
+            loss = loss_fn(td)
+            assert "loss_value" in loss.keys()
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -9364,7 +9524,7 @@ class TestIQL(LossModuleTestBase):
                     raise NotImplementedError(k)
                 loss_fn.zero_grad()
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
     @pytest.mark.parametrize("expectile", [0.1, 0.5, 1.0])
@@ -9415,7 +9575,7 @@ class TestIQL(LossModuleTestBase):
             torch.manual_seed(0)  # log-prob is computed with a random action
             np.random.seed(0)
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss_")]
@@ -10176,7 +10336,7 @@ class TestDiscreteIQL(LossModuleTestBase):
                     raise NotImplementedError(k)
                 loss_fn.zero_grad()
 
-    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
     @pytest.mark.parametrize("expectile", [0.1, 0.5])
@@ -10227,7 +10387,7 @@ class TestDiscreteIQL(LossModuleTestBase):
             torch.manual_seed(0)  # log-prob is computed with a random action
             np.random.seed(0)
             loss = loss_fn(td)
-        if n == 0:
+        if n == 1:
             assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
             _loss = sum(
                 [item for name, item in loss.items() if name.startswith("loss_")]
