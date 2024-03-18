@@ -345,6 +345,9 @@ class RayCollector(DataCollectorBase):
                 remote_configs, "remote_config", num_collectors
             )
 
+        def __class_getitem__(key):
+            return
+
         def check_list_length_consistency(*lists):
             """Checks that all input lists have the same length.
 
