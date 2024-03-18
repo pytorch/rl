@@ -6255,7 +6255,7 @@ class Reward2GoTransform(Transform):
 
     As the :class:`~.Reward2GoTransform` is only an inverse transform the ``in_keys`` will be directly used for the ``in_keys_inv``.
     The reward-to-go can be only calculated once the episode is finished. Therefore, the transform should be applied to the replay buffer
-    and not to the collector.
+    and not to the collector or within an environment.
 
     Args:
         gamma (float or torch.Tensor): the discount factor. Defaults to 1.0.
@@ -6354,7 +6354,7 @@ class Reward2GoTransform(Transform):
 
     ENV_ERR = (
         "The Reward2GoTransform is only an inverse transform and can "
-        "only be applied to the replay buffer and not to the collector or the environment."
+        "only be applied to the replay buffer."
     )
 
     def __init__(
