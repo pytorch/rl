@@ -21,7 +21,6 @@ from torchrl.envs import (
     Compose,
     EnvCreator,
     InitTracker,
-    ParallelEnv,
     SerialEnv,
     TransformedEnv,
 )
@@ -1454,12 +1453,65 @@ class TestDecisionTransformerInferenceWrapper:
 
 class TestBatchedActor:
     def test_batched_actor_exceptions(self):
-        ...
+        time_steps = 5
+        actor_base = TensorDictModule(
+            lambda x: torch.ones(
+                x.shape[0], time_steps, 1, device=x.device, dtype=x.dtype
+            ),
+            in_keys=["observation_cat"],
+            out_keys=["action"],
+        )
+        with pytest.raises(ValueError, match="Only a single init_key can be passed"):
+            BatchedActionWrapper(actor_base, n_steps=time_steps, init_key=["init_key"])
+
+        n_obs = 1
+        n_action = 1
+        batch = 2
+
+        # The second env has frequent resets, the first none
+        base_env = SerialEnv(
+            batch,
+            [lambda: CountingEnv(max_steps=5000), lambda: CountingEnv(max_steps=5)],
+        )
+        env = TransformedEnv(
+            base_env,
+            CatFrames(
+                N=time_steps,
+                in_keys=["observation"],
+                out_keys=["observation_cat"],
+                dim=-1,
+            ),
+        )
+        actor = BatchedActionWrapper(actor_base, n_steps=time_steps)
+        with pytest.raises(KeyError, match="No init key was passed"):
+            env.rollout(2, actor)
+
+        env = TransformedEnv(
+            base_env,
+            Compose(
+                InitTracker(),
+                CatFrames(
+                    N=time_steps,
+                    in_keys=["observation"],
+                    out_keys=["observation_cat"],
+                    dim=-1,
+                ),
+            ),
+        )
+        td = env.rollout(10)[..., -1]["next"]
+        actor = BatchedActionWrapper(actor_base, n_steps=time_steps)
+        with pytest.raises(RuntimeError, match="Cannot initialize the wrapper"):
+            env.rollout(10, actor, tensordict=td, auto_reset=False)
 
     @pytest.mark.parametrize("time_steps", [3, 5])
     def test_batched_actor_simple(self, time_steps):
-        base_env = ParallelEnv(
-            2, [lambda: CountingEnv(max_steps=5), lambda: CountingEnv(max_steps=7)]
+
+        batch = 2
+
+        # The second env has frequent resets, the first none
+        base_env = SerialEnv(
+            batch,
+            [lambda: CountingEnv(max_steps=5000), lambda: CountingEnv(max_steps=5)],
         )
         env = TransformedEnv(
             base_env,
@@ -1474,33 +1526,23 @@ class TestBatchedActor:
             ),
         )
 
-        n_obs = 1
-        n_action = 1
-
-        def reshape_cat(obs, data: torch.Tensor):
-            return data.unflatten(-1, (time_steps, n_obs)).float()
-
-        linear = torch.nn.Linear(n_obs, n_action, bias=True)
-        linear.weight.data.fill_(0)
-        linear.bias.data.fill_(1)
-        actor_base = TensorDictSequential(
-            TensorDictModule(
-                reshape_cat,
-                in_keys=["observation", "observation_cat"],
-                out_keys=["observation_cat_reshape"],
+        actor_base = TensorDictModule(
+            lambda x: torch.ones(
+                x.shape[0], time_steps, 1, device=x.device, dtype=x.dtype
             ),
-            TensorDictModule(
-                linear, in_keys=["observation_cat_reshape"], out_keys=["action"]
-            ),
+            in_keys=["observation_cat"],
+            out_keys=["action"],
         )
         actor = BatchedActionWrapper(actor_base, n_steps=time_steps)
         # rollout = env.rollout(100, break_when_any_done=False)
-        rollout = env.rollout(10, actor, break_when_any_done=False)
-        print(rollout)
-        print(rollout["is_init"])
-        print(rollout["observation"])
-        print(rollout["observation_cat"])
-        print(rollout["observation_cat_reshape"])
+        rollout = env.rollout(50, actor, break_when_any_done=False)
+        unique = rollout[0]["observation"].unique()
+        predicted = torch.arange(unique.numel())
+        assert (unique == predicted).all()
+        assert (
+            rollout[1]["observation"]
+            == (torch.arange(50) % 6).reshape_as(rollout[1]["observation"])
+        ).all()
 
 
 if __name__ == "__main__":

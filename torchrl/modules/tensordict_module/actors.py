@@ -2164,6 +2164,10 @@ class BatchedActionWrapper(TensorDictModuleBase):
                 action_key_orig = action_key + "_orig"
             tensordict.set(action_key_orig, action)
 
+    _NO_INIT_ERR = RuntimeError(
+        "Cannot initialize the wrapper with partial is_init signal."
+    )
+
     def _init(self, tensordict: TensorDictBase):
         is_init = tensordict.get(self.init_key, default=None)
         if is_init is None:
@@ -2182,9 +2186,7 @@ class BatchedActionWrapper(TensorDictModuleBase):
                 action_orig = tensordict.get(action_key_orig, default=None)
                 if action_orig is None:
                     if not is_init.all():
-                        raise RuntimeError(
-                            "Cannot initialize the wrapper with partial is_init signal."
-                        )
+                        raise self._NO_INIT_ERR
                 else:
                     is_init_expand = expand_as_right(is_init, action_orig)
                     action_computed = torch.masked_scatter(
@@ -2202,10 +2204,12 @@ class BatchedActionWrapper(TensorDictModuleBase):
             # get orig
             if isinstance(action_key_orig, str):
                 parent_td = tensordict
-                action_entry = parent_td.get(action_key_orig)
+                action_entry = parent_td.get(action_key_orig, None)
             else:
                 parent_td = tensordict.get(action_key_orig[:-1])
-                action_entry = parent_td.get(action_key_orig[-1])
+                action_entry = parent_td.get(action_key_orig[-1], None)
+            if action_entry is None:
+                raise self._NO_INIT_ERR
             base_idx = (
                 slice(
                     None,
