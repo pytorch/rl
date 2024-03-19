@@ -1986,10 +1986,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
                             buffers[idx] = buffer[..., valid]
                     else:
                         for buffer in self.buffers.values():
-                            buffer.set(
-                                ("collector", "mask"),
-                                buffer.get(("collector", "traj_ids")) != -1,
-                            )
+                            with buffer.unlock_():
+                                buffer.set(
+                                    ("collector", "mask"),
+                                    buffer.get(("collector", "traj_ids")) != -1,
+                                )
                         buffers = self.buffers
                 else:
                     buffers = self.buffers
