@@ -7,7 +7,7 @@ import argparse
 
 import pytest
 import torch
-from mocking_classes import DiscreteActionVecMockEnv
+from mocking_classes import CountingEnv, DiscreteActionVecMockEnv
 from tensordict import pad, TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
 from torch import nn
@@ -16,7 +16,14 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs import EnvCreator, SerialEnv
+from torchrl.envs import (
+    CatFrames,
+    Compose,
+    EnvCreator,
+    InitTracker,
+    SerialEnv,
+    TransformedEnv,
+)
 from torchrl.envs.utils import set_exploration_type, step_mdp
 from torchrl.modules import (
     AdditiveGaussianWrapper,
@@ -25,6 +32,7 @@ from torchrl.modules import (
     GRUModule,
     LSTMModule,
     MLP,
+    MultiStepActorWrapper,
     NormalParamWrapper,
     OnlineDTActor,
     ProbabilisticActor,
@@ -1441,6 +1449,104 @@ class TestDecisionTransformerInferenceWrapper:
         assert set(result.keys(True, True)) - set(td.keys(True, True)) == set(
             inference_actor.out_keys
         ) - set(inference_actor.in_keys)
+
+
+class TestBatchedActor:
+    def test_batched_actor_exceptions(self):
+        time_steps = 5
+        actor_base = TensorDictModule(
+            lambda x: torch.ones(
+                x.shape[0], time_steps, 1, device=x.device, dtype=x.dtype
+            ),
+            in_keys=["observation_cat"],
+            out_keys=["action"],
+        )
+        with pytest.raises(ValueError, match="Only a single init_key can be passed"):
+            MultiStepActorWrapper(actor_base, n_steps=time_steps, init_key=["init_key"])
+
+        n_obs = 1
+        n_action = 1
+        batch = 2
+
+        # The second env has frequent resets, the first none
+        base_env = SerialEnv(
+            batch,
+            [lambda: CountingEnv(max_steps=5000), lambda: CountingEnv(max_steps=5)],
+        )
+        env = TransformedEnv(
+            base_env,
+            CatFrames(
+                N=time_steps,
+                in_keys=["observation"],
+                out_keys=["observation_cat"],
+                dim=-1,
+            ),
+        )
+        actor = MultiStepActorWrapper(actor_base, n_steps=time_steps)
+        with pytest.raises(KeyError, match="No init key was passed"):
+            env.rollout(2, actor)
+
+        env = TransformedEnv(
+            base_env,
+            Compose(
+                InitTracker(),
+                CatFrames(
+                    N=time_steps,
+                    in_keys=["observation"],
+                    out_keys=["observation_cat"],
+                    dim=-1,
+                ),
+            ),
+        )
+        td = env.rollout(10)[..., -1]["next"]
+        actor = MultiStepActorWrapper(actor_base, n_steps=time_steps)
+        with pytest.raises(RuntimeError, match="Cannot initialize the wrapper"):
+            env.rollout(10, actor, tensordict=td, auto_reset=False)
+
+        actor = MultiStepActorWrapper(actor_base, n_steps=time_steps - 1)
+        with pytest.raises(RuntimeError, match="The action's time dimension"):
+            env.rollout(10, actor)
+
+    @pytest.mark.parametrize("time_steps", [3, 5])
+    def test_batched_actor_simple(self, time_steps):
+
+        batch = 2
+
+        # The second env has frequent resets, the first none
+        base_env = SerialEnv(
+            batch,
+            [lambda: CountingEnv(max_steps=5000), lambda: CountingEnv(max_steps=5)],
+        )
+        env = TransformedEnv(
+            base_env,
+            Compose(
+                InitTracker(),
+                CatFrames(
+                    N=time_steps,
+                    in_keys=["observation"],
+                    out_keys=["observation_cat"],
+                    dim=-1,
+                ),
+            ),
+        )
+
+        actor_base = TensorDictModule(
+            lambda x: torch.ones(
+                x.shape[0], time_steps, 1, device=x.device, dtype=x.dtype
+            ),
+            in_keys=["observation_cat"],
+            out_keys=["action"],
+        )
+        actor = MultiStepActorWrapper(actor_base, n_steps=time_steps)
+        # rollout = env.rollout(100, break_when_any_done=False)
+        rollout = env.rollout(50, actor, break_when_any_done=False)
+        unique = rollout[0]["observation"].unique()
+        predicted = torch.arange(unique.numel())
+        assert (unique == predicted).all()
+        assert (
+            rollout[1]["observation"]
+            == (torch.arange(50) % 6).reshape_as(rollout[1]["observation"])
+        ).all()
 
 
 if __name__ == "__main__":
