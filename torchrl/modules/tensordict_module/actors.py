@@ -2110,7 +2110,7 @@ class LMHeadActorValueOperator(ActorValueOperator):
         super().__init__(common, actor_head, value_head)
 
 
-class BatchedActionWrapper(TensorDictModuleBase):
+class MultiStepActorWrapper(TensorDictModuleBase):
     """A wrapper around a multi-action actor.
 
     This class enables macros to be executed in an environment.
@@ -2137,7 +2137,69 @@ class BatchedActionWrapper(TensorDictModuleBase):
             the environment. Can be retrieved from ``env.action_keys``.
             Defaults to all ``out_keys`` of the ``actor`` which end
             with the ``"action"`` string.
-        init_key (NestedK
+        init_key (NestedKey, optional): the key of the entry indicating
+            when the environment has gone through a reset.
+            Defaults to ``"is_init"`` which is the ``out_key`` from the
+            :class:`~torchrl.envs.transforms.InitTracker` transform.
+
+    Examples:
+        >>> import torch.nn
+        >>> from torchrl.modules.tensordict_module.actors import MultiStepActorWrapper, Actor
+        >>> from torchrl.envs import CatFrames, GymEnv, TransformedEnv, SerialEnv, InitTracker, Compose
+        >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
+        >>>
+        >>> time_steps = 6
+        >>> n_obs = 4
+        >>> n_action = 2
+        >>> batch = 5
+        >>>
+        >>> # Transforms a CatFrames in a stack of frames
+        >>> def reshape_cat(data: torch.Tensor):
+        ...     return data.unflatten(-1, (time_steps, n_obs))
+        >>> # an actor that reads `time_steps` frames and outputs one action per frame
+        >>> # (actions are conditioned on the observation of `time_steps` in the past)
+        >>> actor_base = Seq(
+        ...     Mod(reshape_cat, in_keys=["obs_cat"], out_keys=["obs_cat_reshape"]),
+        ...     Mod(torch.nn.Linear(n_obs, n_action), in_keys=["obs_cat_reshape"], out_keys=["action"])
+        ... )
+        >>> # Wrap the actor to dispatch the actions
+        >>> actor = MultiStepActorWrapper(actor_base, n_steps=time_steps)
+        >>>
+        >>> env = TransformedEnv(
+        ...     SerialEnv(batch, lambda: GymEnv("CartPole-v1")),
+        ...     Compose(
+        ...         InitTracker(),
+        ...         CatFrames(N=time_steps, in_keys=["observation"], out_keys=["obs_cat"], dim=-1)
+        ...     )
+        ... )
+        >>>
+        >>> print(env.rollout(100, policy=actor, break_when_any_done=False))
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([5, 100, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                action_orig: Tensor(shape=torch.Size([5, 100, 6, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                counter: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.int32, is_shared=False),
+                done: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                is_init: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        is_init: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        obs_cat: Tensor(shape=torch.Size([5, 100, 24]), device=cpu, dtype=torch.float32, is_shared=False),
+                        observation: Tensor(shape=torch.Size([5, 100, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([5, 100]),
+                    device=cpu,
+                    is_shared=False),
+                obs_cat: Tensor(shape=torch.Size([5, 100, 24]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([5, 100, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([5, 100]),
+            device=cpu,
+            is_shared=False)
     """
 
     def __init__(

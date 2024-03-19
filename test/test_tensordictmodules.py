@@ -27,12 +27,12 @@ from torchrl.envs import (
 from torchrl.envs.utils import set_exploration_type, step_mdp
 from torchrl.modules import (
     AdditiveGaussianWrapper,
-    BatchedActionWrapper,
     DecisionTransformerInferenceWrapper,
     DTActor,
     GRUModule,
     LSTMModule,
     MLP,
+    MultiStepActorWrapper,
     NormalParamWrapper,
     OnlineDTActor,
     ProbabilisticActor,
@@ -1462,7 +1462,7 @@ class TestBatchedActor:
             out_keys=["action"],
         )
         with pytest.raises(ValueError, match="Only a single init_key can be passed"):
-            BatchedActionWrapper(actor_base, n_steps=time_steps, init_key=["init_key"])
+            MultiStepActorWrapper(actor_base, n_steps=time_steps, init_key=["init_key"])
 
         n_obs = 1
         n_action = 1
@@ -1482,7 +1482,7 @@ class TestBatchedActor:
                 dim=-1,
             ),
         )
-        actor = BatchedActionWrapper(actor_base, n_steps=time_steps)
+        actor = MultiStepActorWrapper(actor_base, n_steps=time_steps)
         with pytest.raises(KeyError, match="No init key was passed"):
             env.rollout(2, actor)
 
@@ -1499,11 +1499,11 @@ class TestBatchedActor:
             ),
         )
         td = env.rollout(10)[..., -1]["next"]
-        actor = BatchedActionWrapper(actor_base, n_steps=time_steps)
+        actor = MultiStepActorWrapper(actor_base, n_steps=time_steps)
         with pytest.raises(RuntimeError, match="Cannot initialize the wrapper"):
             env.rollout(10, actor, tensordict=td, auto_reset=False)
 
-        actor = BatchedActionWrapper(actor_base, n_steps=time_steps - 1)
+        actor = MultiStepActorWrapper(actor_base, n_steps=time_steps - 1)
         with pytest.raises(RuntimeError, match="The action's time dimension"):
             env.rollout(10, actor)
 
@@ -1537,7 +1537,7 @@ class TestBatchedActor:
             in_keys=["observation_cat"],
             out_keys=["action"],
         )
-        actor = BatchedActionWrapper(actor_base, n_steps=time_steps)
+        actor = MultiStepActorWrapper(actor_base, n_steps=time_steps)
         # rollout = env.rollout(100, break_when_any_done=False)
         rollout = env.rollout(50, actor, break_when_any_done=False)
         unique = rollout[0]["observation"].unique()
