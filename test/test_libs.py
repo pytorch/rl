@@ -3,7 +3,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib
+import os
 from contextlib import nullcontext
+from pathlib import Path
 
 from torchrl._utils import logger as torchrl_logger
 
@@ -60,6 +62,7 @@ from torchrl.data import (
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
+    ReplayBuffer,
     ReplayBufferEnsemble,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
@@ -72,6 +75,7 @@ from torchrl.data.datasets.openx import OpenXExperienceReplay
 from torchrl.data.datasets.roboset import RobosetExperienceReplay
 from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
+from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import (
     CatTensors,
     Compose,
@@ -2276,6 +2280,36 @@ class TestGenDGRL:
         yield
         GenDGRLExperienceReplay._get_category_len = _get_category_len
 
+    @pytest.mark.parametrize("dataset_num", [4])
+    def test_gen_dgrl_preproc(self, dataset_num, tmpdir, _patch_traj_len):
+        dataset_id = GenDGRLExperienceReplay.available_datasets[dataset_num]
+        tmpdir = Path(tmpdir)
+        dataset = GenDGRLExperienceReplay(
+            dataset_id, batch_size=32, root=tmpdir / "1", download="force"
+        )
+        from torchrl.envs import Compose, GrayScale, Resize
+
+        t = Compose(
+            Resize(32, in_keys=["observation", ("next", "observation")]),
+            GrayScale(in_keys=["observation", ("next", "observation")]),
+        )
+
+        def fn(data):
+            return t(data)
+
+        new_storage = dataset.preprocess(
+            fn,
+            num_workers=max(1, os.cpu_count() - 2),
+            num_chunks=1000,
+            num_frames=100,
+            dest=tmpdir / "2",
+        )
+        dataset = ReplayBuffer(storage=new_storage, batch_size=32)
+        assert len(dataset) == 100
+        sample = dataset.sample()
+        assert sample["observation"].shape == torch.Size([32, 1, 32, 32])
+        assert sample["next", "observation"].shape == torch.Size([32, 1, 32, 32])
+
     @pytest.mark.parametrize("dataset_num", [0, 4, 8])
     def test_gen_dgrl(self, dataset_num, tmpdir, _patch_traj_len):
         dataset_id = GenDGRLExperienceReplay.available_datasets[dataset_num]
@@ -2308,6 +2342,50 @@ class TestGenDGRL:
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
 @pytest.mark.slow
 class TestD4RL:
+    def test_d4rl_preproc(self, tmpdir):
+        dataset_id = "walker2d-medium-replay-v2"
+        tmpdir = Path(tmpdir)
+        dataset = D4RLExperienceReplay(
+            dataset_id,
+            batch_size=32,
+            root=tmpdir / "1",
+            download="force",
+            direct_download=True,
+        )
+        from torchrl.envs import CatTensors, Compose
+
+        t = Compose(
+            CatTensors(
+                in_keys=["observation", ("info", "qpos"), ("info", "qvel")],
+                out_key="data",
+            ),
+            CatTensors(
+                in_keys=[
+                    ("next", "observation"),
+                    ("next", "info", "qpos"),
+                    ("next", "info", "qvel"),
+                ],
+                out_key=("next", "data"),
+            ),
+        )
+
+        def fn(data):
+            return t(data)
+
+        new_storage = dataset.preprocess(
+            fn,
+            num_workers=max(1, os.cpu_count() - 2),
+            num_chunks=1000,
+            mp_start_method="fork",
+            dest=tmpdir / "2",
+            num_frames=100,
+        )
+        dataset = ReplayBuffer(storage=new_storage, batch_size=32)
+        assert len(dataset) == 100
+        sample = dataset.sample()
+        assert sample["data"].shape == torch.Size([32, 35])
+        assert sample["next", "data"].shape == torch.Size([32, 35])
+
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("use_truncated_as_done", [True, False])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -2494,10 +2572,10 @@ _minari_selected_datasets()
 
 
 @pytest.mark.skipif(not _has_minari or not _has_gymnasium, reason="Minari not found")
-@pytest.mark.parametrize("split", [False, True])
-@pytest.mark.parametrize("selected_dataset", _MINARI_DATASETS)
 @pytest.mark.slow
 class TestMinari:
+    @pytest.mark.parametrize("split", [False, True])
+    @pytest.mark.parametrize("selected_dataset", _MINARI_DATASETS)
     def test_load(self, selected_dataset, split):
         torchrl_logger.info(f"dataset {selected_dataset}")
         data = MinariExperienceReplay(
@@ -2512,6 +2590,53 @@ class TestMinari:
             t0 = time.time()
             if i == 10:
                 break
+
+    def test_minari_preproc(self, tmpdir):
+        selected_dataset = _MINARI_DATASETS[0]
+        dataset = MinariExperienceReplay(
+            selected_dataset,
+            batch_size=32,
+            split_trajs=False,
+            download="force",
+        )
+
+        from torchrl.envs import CatTensors, Compose
+
+        t = Compose(
+            CatTensors(
+                in_keys=[
+                    ("observation", "observation"),
+                    ("info", "qpos"),
+                    ("info", "qvel"),
+                ],
+                out_key="data",
+            ),
+            CatTensors(
+                in_keys=[
+                    ("next", "observation", "observation"),
+                    ("next", "info", "qpos"),
+                    ("next", "info", "qvel"),
+                ],
+                out_key=("next", "data"),
+            ),
+        )
+
+        def fn(data):
+            return t(data)
+
+        new_storage = dataset.preprocess(
+            fn,
+            num_workers=max(1, os.cpu_count() - 2),
+            num_chunks=1000,
+            mp_start_method="fork",
+            num_frames=100,
+            dest=tmpdir,
+        )
+        dataset = ReplayBuffer(storage=new_storage, batch_size=32)
+        sample = dataset.sample()
+        assert len(dataset) == 100
+        assert sample["data"].shape == torch.Size([32, 8])
+        assert sample["next", "data"].shape == torch.Size([32, 8])
 
 
 @pytest.mark.slow
@@ -2529,6 +2654,27 @@ class TestRoboset:
             t0 = time.time()
             if i == 10:
                 break
+
+    def test_roboset_preproc(self, tmpdir):
+        dataset = RobosetExperienceReplay(
+            "FK1-v4(expert)/FK1_MicroOpenRandom_v2d-v4", batch_size=32, download="force"
+        )
+
+        def func(data):
+            return data.set("obs_norm", data.get("observation").norm(dim=-1))
+
+        new_storage = dataset.preprocess(
+            func,
+            num_workers=max(1, os.cpu_count() - 2),
+            num_chunks=1000,
+            mp_start_method="fork",
+            dest=tmpdir,
+            num_frames=100,
+        )
+        dataset = ReplayBuffer(storage=new_storage, batch_size=32)
+        assert len(dataset) == 100
+        sample = dataset.sample()
+        assert "obs_norm" in sample.keys()
 
 
 @pytest.mark.slow
@@ -2562,6 +2708,30 @@ class TestVD4RL:
                 t0 = time.time()
                 if i == 10:
                     break
+
+    def test_vd4rl_preproc(self, tmpdir):
+        torch.manual_seed(0)
+        datasets = VD4RLExperienceReplay.available_datasets
+        dataset_id = list(datasets)[4]
+        dataset = VD4RLExperienceReplay(dataset_id, batch_size=32, download="force")
+        from torchrl.envs import Compose, GrayScale, ToTensorImage
+
+        func = Compose(
+            ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
+            GrayScale(in_keys=["pixels", ("next", "pixels")]),
+        )
+        new_storage = dataset.preprocess(
+            func,
+            num_workers=max(1, os.cpu_count() - 2),
+            num_chunks=1000,
+            mp_start_method="fork",
+            dest=tmpdir,
+            num_frames=100,
+        )
+        dataset = ReplayBuffer(storage=new_storage, batch_size=32)
+        assert len(dataset) == 100
+        sample = dataset.sample()
+        assert sample["next", "pixels"].shape == torch.Size([32, 1, 64, 64])
 
 
 @pytest.mark.slow
@@ -2615,6 +2785,43 @@ class TestAtariDQN:
         assert sample.shape == (2, 64)
         assert sample[0].get_non_tensor("metadata")["dataset_id"] == "Pong/4"
         assert sample[1].get_non_tensor("metadata")["dataset_id"] == "Asterix/1"
+
+    @pytest.mark.parametrize("dataset_id", ["Pong/4"])
+    def test_atari_preproc(self, dataset_id, tmpdir):
+        from torchrl.envs import Compose, RenameTransform, Resize, UnsqueezeTransform
+
+        dataset = AtariDQNExperienceReplay(
+            dataset_id,
+            slice_len=None,
+            num_slices=8,
+            batch_size=64,
+            # num_procs=max(0, os.cpu_count() - 4),
+            num_procs=0,
+        )
+
+        t = Compose(
+            UnsqueezeTransform(
+                unsqueeze_dim=-3, in_keys=["observation", ("next", "observation")]
+            ),
+            Resize(32, in_keys=["observation", ("next", "observation")]),
+            RenameTransform(in_keys=["action"], out_keys=["other_action"]),
+        )
+
+        def preproc(data):
+            return t(data)
+
+        new_storage = dataset.preprocess(
+            preproc,
+            num_workers=max(1, os.cpu_count() - 4),
+            num_chunks=1000,
+            mp_start_method="fork",
+            pbar=True,
+            dest=tmpdir,
+            num_frames=100,
+        )
+
+        dataset = ReplayBuffer(storage=new_storage, batch_size=32)
+        assert len(dataset) == 100
 
 
 @pytest.mark.slow
@@ -2675,7 +2882,9 @@ class TestOpenX:
         ):
             raises_cm = pytest.raises(
                 RuntimeError,
-                match="The trajectory length (.*) is shorter than the slice length|Some stored trajectories have a length shorter than the slice that was asked for",
+                match="The trajectory length (.*) is shorter than the slice length|"
+                #       "Some stored trajectories have a length shorter than the slice that was asked for|"
+                "Did not find a single trajectory with sufficient length",
             )
             with raises_cm:
                 for data in dataset:  # noqa: B007
@@ -2713,7 +2922,7 @@ class TestOpenX:
             if padding is None and (batch_size > 1000):
                 with pytest.raises(
                     RuntimeError,
-                    match="Some stored trajectories have a length shorter than the slice that was asked for"
+                    match="Did not find a single trajectory with sufficient length"
                     if not streaming
                     else "The trajectory length (.*) is shorter than the slice length",
                 ):
@@ -2728,6 +2937,70 @@ class TestOpenX:
             ), sample.get(("next", "done"))
         elif num_slices is not None:
             assert sample.get(("next", "done")).sum() == num_slices
+
+    def test_openx_preproc(self, tmpdir):
+        dataset = OpenXExperienceReplay(
+            "cmu_stretch",
+            download=True,
+            streaming=False,
+            batch_size=64,
+            shuffle=True,
+            num_slices=8,
+            slice_len=None,
+        )
+        from torchrl.envs import Compose, RenameTransform, Resize
+
+        t = Compose(
+            Resize(
+                64,
+                64,
+                in_keys=[("observation", "image"), ("next", "observation", "image")],
+            ),
+            RenameTransform(
+                in_keys=[
+                    ("observation", "image"),
+                    ("next", "observation", "image"),
+                    ("observation", "state"),
+                    ("next", "observation", "state"),
+                ],
+                out_keys=["pixels", ("next", "pixels"), "state", ("next", "state")],
+            ),
+        )
+
+        def fn(data: TensorDict):
+            data.unlock_()
+            data = data.select(
+                "action",
+                "done",
+                "episode",
+                ("next", "done"),
+                ("next", "observation"),
+                ("next", "reward"),
+                ("next", "terminated"),
+                ("next", "truncated"),
+                "observation",
+                "terminated",
+                "truncated",
+            )
+            data = t(data)
+            data = data.select(*data.keys(True, True))
+            return data
+
+        new_storage = dataset.preprocess(
+            CloudpickleWrapper(fn),
+            num_workers=max(1, os.cpu_count() - 2),
+            num_chunks=500,
+            mp_start_method="fork",
+            dest=tmpdir,
+        )
+        dataset = ReplayBuffer(storage=new_storage)
+        sample = dataset.sample(32)
+        assert "observation" not in sample.keys()
+        assert "pixels" in sample.keys()
+        assert ("next", "pixels") in sample.keys(True)
+        assert "state" in sample.keys()
+        assert ("next", "state") in sample.keys(True)
+        assert sample["pixels"].shape == torch.Size([32, 3, 64, 64])
 
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")

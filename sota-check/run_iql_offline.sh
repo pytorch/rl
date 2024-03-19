@@ -11,7 +11,7 @@ current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="iql_offline"
 export PYTHONPATH=$(dirname $(dirname $PWD))
-python $PYTHONPATH/examples/iql/iql_offline.py \
+python $PYTHONPATH/sota-implementations/iql/iql_offline.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"
