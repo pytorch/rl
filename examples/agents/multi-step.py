@@ -10,6 +10,9 @@ coming in the meantime.
 
 The core component of this example is the `MultiStepActorWrapper` class.
 
+`MultiStepActorWrapper` handles the calls to the actor when the macro has run out of actions or
+when the environment has been reset (which is indicated by the InitTracker transform).
+
 """
 
 import torch.nn
@@ -22,12 +25,13 @@ from torchrl.envs import (
     SerialEnv,
     TransformedEnv,
 )
-from torchrl.modules.tensordict_module.actors import Actor, MultiStepActorWrapper
+from torchrl.modules.tensordict_module.actors import MultiStepActorWrapper
 
 time_steps = 6
 n_obs = 4
 n_action = 2
 batch = 5
+
 
 # Transforms a CatFrames in a stack of frames
 def reshape_cat(data: torch.Tensor):
