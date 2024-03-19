@@ -475,6 +475,8 @@ class ReplayBuffer:
         if self._transform is not None and len(self._transform):
             with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
                 data = self._transform.inv(data)
+        if data is None:
+            return torch.zeros((0, self._storage.ndim), dtype=torch.long)
         return self._add(data)
 
     def _add(self, data):
@@ -517,6 +519,8 @@ class ReplayBuffer:
         if self._transform is not None and len(self._transform):
             with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
                 data = self._transform.inv(data)
+        if data is None:
+            return torch.zeros((0, self._storage.ndim), dtype=torch.long)
         return self._extend(data)
 
     def update_priority(
@@ -1008,6 +1012,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if self._transform is not None:
             with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
                 data = self._transform.inv(data)
+        if data is None:
+            return torch.zeros((0, self._storage.ndim), dtype=torch.long)
 
         index = super()._add(data)
         if index is not None:
@@ -1026,6 +1032,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
             )
         if self._transform is not None:
             tensordicts = self._transform.inv(tensordicts)
+        if tensordicts is None:
+            return torch.zeros((0, self._storage.ndim), dtype=torch.long)
 
         index = super()._extend(tensordicts)
         self._set_index_in_td(tensordicts, index)

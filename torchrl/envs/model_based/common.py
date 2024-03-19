@@ -17,7 +17,7 @@ from torchrl.envs.common import EnvBase
 
 
 class ModelBasedEnvBase(EnvBase):
-    """Basic environnement for Model Based RL algorithms.
+    """Basic environnement for Model Based RL sota-implementations.
 
     Wrapper around the model of the MBRL algorithm.
     It is meant to give an env framework to a world model (including but not limited to observations, reward, done state and safety constraints models).

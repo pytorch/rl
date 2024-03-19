@@ -1003,7 +1003,7 @@ def mask_batch(batch: TensorDictBase) -> TensorDictBase:
 
 
 class BatchSubSampler(TrainerHookBase):
-    """Data subsampler for online RL algorithms.
+    """Data subsampler for online RL sota-implementations.
 
     This class subsamples a part of a whole batch of data just collected from the
     environment.

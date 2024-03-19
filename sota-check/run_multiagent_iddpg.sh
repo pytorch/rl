@@ -11,7 +11,7 @@ current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="marl_iddpg"
 export PYTHONPATH=$(dirname $(dirname $PWD))
-python $PYTHONPATH/examples/multiagent/maddpg_iddpg.py \
+python $PYTHONPATH/sota-implementations/multiagent/maddpg_iddpg.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"

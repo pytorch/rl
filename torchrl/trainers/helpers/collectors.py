@@ -256,7 +256,7 @@ def make_collector_offpolicy(
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> DataCollectorBase:
-    """Returns a data collector for off-policy algorithms.
+    """Returns a data collector for off-policy sota-implementations.
 
     Args:
         make_env (Callable): environment creator
