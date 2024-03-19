@@ -1503,6 +1503,10 @@ class TestBatchedActor:
         with pytest.raises(RuntimeError, match="Cannot initialize the wrapper"):
             env.rollout(10, actor, tensordict=td, auto_reset=False)
 
+        actor = BatchedActionWrapper(actor_base, n_steps=time_steps - 1)
+        with pytest.raises(RuntimeError, match="The action's time dimension"):
+            env.rollout(10, actor)
+
     @pytest.mark.parametrize("time_steps", [3, 5])
     def test_batched_actor_simple(self, time_steps):
 

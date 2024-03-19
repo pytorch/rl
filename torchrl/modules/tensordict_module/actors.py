@@ -2127,12 +2127,24 @@ class BatchedActionWrapper(TensorDictModuleBase):
     because a "done" state has been encountered. Unlike ``action_keys``,
     this key must be unique.
 
+    Args:
+        actor (TensorDictModuleBase): An actor.
+        n_steps (int): the number of actions the actor outputs at once
+            (lookahead window).
+
+    Keyword Args:
+        action_keys (list of NestedKeys, optional): the action keys from
+            the environment. Can be retrieved from ``env.action_keys``.
+            Defaults to all ``out_keys`` of the ``actor`` which end
+            with the ``"action"`` string.
+        init_key (NestedK
     """
 
     def __init__(
         self,
-        actor: TensorDictModule,
+        actor: TensorDictModuleBase,
         n_steps: int,
+        *,
         action_keys: List[NestedKey] | None = None,
         init_key: List[NestedKey] | None = None,
     ):
@@ -2210,6 +2222,11 @@ class BatchedActionWrapper(TensorDictModuleBase):
                 action_entry = parent_td.get(action_key_orig[-1], None)
             if action_entry is None:
                 raise self._NO_INIT_ERR
+            if action_entry.shape[parent_td.ndim] != self.n_steps:
+                raise RuntimeError(
+                    f"The action's time dimension (dim={parent_td.ndim}) doesn't match the n_steps argument ({self.n_steps}). "
+                    f"The action shape was {action_entry.shape}."
+                )
             base_idx = (
                 slice(
                     None,
