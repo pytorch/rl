@@ -1231,6 +1231,20 @@ class _MultiDataCollector(DataCollectorBase):
             each subprocess (or one if a single process is launched).
             Defaults to 1 for safety: if none is indicated, launching multiple
             workers may charge the cpu load too much and harm performance.
+        cat_results (str, int or None): (:class:`~torchrl.collectors.MultiSyncDataCollector` exclusively).
+            If ``"stack"``, the data collected from the workers will be stacked along the
+            first dimension. This is the preferred behaviour as it is the most compatible
+            with the rest of the library.
+            If ``0``, results will be concatenated along the first dimension
+            of the outputs, which can be the batched dimension if the environments are
+            batched or the time dimension if not.
+            A ``cat_results`` value of ``-1`` will always concatenate results along the
+            time dimension. This should be preferred over the default. Intermediate values
+            are also accepted.
+            Defaults to ``0``.
+
+            .. note:: From v0.5, this argument will default to ``"stack"`` for a better
+                interoperability with the rest of the library.
 
     """
 
@@ -1263,7 +1277,7 @@ class _MultiDataCollector(DataCollectorBase):
         preemptive_threshold: float = None,
         num_threads: int = None,
         num_sub_threads: int = 1,
-        cat_results: bool | None = None,
+        cat_results: str | int | None = None,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
@@ -1428,7 +1442,14 @@ class _MultiDataCollector(DataCollectorBase):
         ):
             raise ValueError(
                 "cat_results must be a string ('stack') "
-                f"or an interger representing the cat dimension. Got {cat_results}."
+                f"or an integer representing the cat dimension. Got {cat_results}."
+            )
+        if not isinstance(self, MultiSyncDataCollector) and cat_results not in (
+            "stack",
+            None,
+        ):
+            raise ValueError(
+                "cat_results can only be used with ``MultiSyncDataCollector``."
             )
         self.cat_results = cat_results
 
@@ -2070,7 +2091,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if self.split_trajs:
                 out = split_trajectories(self.out_buffer, prefix="collector")
             else:
-                out = self.out_buffer  # .clone()
+                out = self.out_buffer
+            if cat_results in (-1, "stack"):
+                out.refine_names(*[None] * (out.ndim - 1) + ["time"])
 
             self._frames += n_collected
 
