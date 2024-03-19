@@ -522,7 +522,7 @@ If you would like to contribute to new features, check our [call for contributio
 
 ## Examples, tutorials and demos
 
-A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are provided with an illustrative purpose:
+A series of [State-of-the-Art implementations](https://github.com/pytorch/rl/blob/main/sota-implementations/) are provided with an illustrative purpose:
 
 <table>
   <tr>
@@ -798,6 +798,11 @@ A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are pr
   architecture and device.
 
 and many more to come!
+
+[Code examples](examples/) displaying toy code snippets and training scripts are also available 
+- [RLHF](examples/rlhf)
+- [Memory-mapped replay buffers](examples/torchrl_features)
+
 
 Check the [examples](https://github.com/pytorch/rl/blob/main/sota-implementations/) directory for more details 
 about handling the various configuration settings.
