@@ -1245,6 +1245,9 @@ class _MultiDataCollector(DataCollectorBase):
 
             .. note:: From v0.5, this argument will default to ``"stack"`` for a better
                 interoperability with the rest of the library.
+        mp_start_method (str, optional): the multiprocessing start method.
+            Uses the default start method if not indicated ('spawn' by default in
+            TorchRL if not initiated differently before first import).
 
     """
 
@@ -1278,6 +1281,7 @@ class _MultiDataCollector(DataCollectorBase):
         num_threads: int = None,
         num_sub_threads: int = 1,
         cat_results: str | int | None = None,
+        mp_start_method: str | None = None,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
@@ -1432,6 +1436,7 @@ class _MultiDataCollector(DataCollectorBase):
         else:
             self.preemptive_threshold = 1.0
             self.interruptor = None
+        self.mp_start_method = mp_start_method
         self._run_processes()
         self._exclude_private_keys = True
         self._frames = 0
@@ -1546,13 +1551,16 @@ class _MultiDataCollector(DataCollectorBase):
             )  # 1 more thread for this proc
 
         torch.set_num_threads(self.num_threads)
-        queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
+
+        mp_ctx = self.mp_start_method
+        ctx = mp.get_context(mp_ctx)
+        queue_out = ctx.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
         for i, (env_fun, env_fun_kwargs) in enumerate(
             zip(self.create_env_fn, self.create_env_kwargs)
         ):
-            pipe_parent, pipe_child = mp.Pipe()  # send messages to procs
+            pipe_parent, pipe_child = ctx.Pipe()  # send messages to procs
             if env_fun.__class__.__name__ != "EnvCreator" and not isinstance(
                 env_fun, EnvBase
             ):  # to avoid circular imports
@@ -1581,10 +1589,10 @@ class _MultiDataCollector(DataCollectorBase):
                     "reset_when_done": self.reset_when_done,
                     "idx": i,
                     "interruptor": self.interruptor,
+                    "num_threads": self.num_sub_threads,
                 }
-                proc = _ProcessNoWarn(
+                proc = ctx.Process(
                     target=_main_async_collector,
-                    num_threads=self.num_sub_threads,
                     kwargs=kwargs,
                 )
                 # proc.daemon can't be set as daemonic processes may be launched by the process itself
@@ -2535,6 +2543,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
 
 
 def _main_async_collector(
+    *,
     pipe_parent: connection.Connection,
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
@@ -2552,7 +2561,12 @@ def _main_async_collector(
     reset_when_done: bool = True,
     verbose: bool = VERBOSE,
     interruptor=None,
+    num_threads: int,
 ) -> None:
+
+    if num_threads is not None:
+        torch.set_num_threads(num_threads)
+
     pipe_parent.close()
     # init variables that will be cleared when closing
     collected_tensordict = data = next_data = data_in = inner_collector = dc_iter = None
