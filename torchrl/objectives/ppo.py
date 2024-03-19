@@ -856,12 +856,13 @@ class ClipPPOLoss(PPOLoss):
         gain1 = log_weight.exp() * advantage
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
+        clip_fraction = (log_weight_clip != log_weight).to(log_weight.dtype).mean()
         ratio = log_weight_clip.exp()
         gain2 = ratio * advantage
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
         td_out = TensorDict({"loss_objective": -gain}, batch_size=[])
-        td_out.set("clip_fraction", ratio.abs().detach())
+        td_out.set("clip_fraction", clip_fraction)
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
