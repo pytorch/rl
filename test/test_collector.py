@@ -2069,8 +2069,8 @@ class TestMultiKeyEnvsCollector:
         ccollector.shutdown()
         del ccollector
 
-        assert_allclose_td(c1, d1)
-        assert_allclose_td(c2, d2)
+        assert_allclose_td(c1.unsqueeze(0), d1)
+        assert_allclose_td(c2.unsqueeze(0), d2)
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No casting if no cuda")
