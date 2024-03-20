@@ -2731,6 +2731,7 @@ def test_parallel_another_ctx():
             pass
 
 
+@pytest.mark.skipif(not _has_gym, reason="gym not found")
 def test_single_task_share_individual_td():
     cartpole = CARTPOLE_VERSIONED()
     env = SerialEnv(2, lambda: GymEnv(cartpole))
