@@ -712,7 +712,6 @@ class TensorStorage(Storage):
                     f"for per-item addition."
                 )
 
-        self._get_new_len(data, cursor)
 
         if not self.initialized:
             if not isinstance(cursor, INT_CLASSES):
@@ -726,6 +725,9 @@ class TensorStorage(Storage):
             self._storage[cursor] = data
         else:
             self._set_tree_map(cursor, data, self._storage)
+
+        # Write new len at the end
+        self._get_new_len(data, cursor)
 
     @implement_for("torch", None, "2.0")
     def set(  # noqa: F811
@@ -749,7 +751,6 @@ class TensorStorage(Storage):
                     f"for per-item addition."
                 )
 
-        self._get_new_len(data, cursor)
 
         if not is_tensor_collection(data) and not isinstance(data, torch.Tensor):
             raise NotImplementedError(
@@ -776,6 +777,9 @@ class TensorStorage(Storage):
                     "batch size provided."
                 )
         self._storage[cursor] = data
+
+        # write new len at the end
+        self._get_new_len(data, cursor)
 
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         _storage = self._storage
