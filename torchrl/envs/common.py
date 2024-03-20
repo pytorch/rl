@@ -2080,7 +2080,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             raise RuntimeError(
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
-        print("tensordict in reset", tensordict)
         return self._reset_proc_data(tensordict, tensordict_reset)
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
@@ -2650,9 +2649,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict = self.step(tensordict)
         # done and truncated are in done_keys
         # We read if any key is done.
-        print("tensordict before mdp", tensordict)
         tensordict_ = self._step_mdp(tensordict)
-        print("tensordict after mdp", tensordict_)
         tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
 
@@ -2694,7 +2691,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 key="_reset",
             )
         if any_done:
-            print("td in maybe_reset", tensordict)
             tensordict = self.reset(tensordict)
         return tensordict
 

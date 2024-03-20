@@ -1729,7 +1729,7 @@ def test_reset_heterogeneous_envs(
         cls = ParallelEnv
     else:
         cls = SerialEnv
-    env = cls(2, [env1, env2], device=env_device)
+    env = cls(2, [env1, env2], device=env_device, share_individual_td=True)
     collector = SyncDataCollector(
         env,
         RandomPolicy(env.action_spec),
