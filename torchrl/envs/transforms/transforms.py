@@ -551,9 +551,22 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
 
     Args:
         env (EnvBase): original environment to be transformed_in.
-        transform (Transform, optional): transform to apply to the tensordict resulting
+        transform (Transform or callable, optional): transform to apply to the tensordict resulting
             from :obj:`env.step(td)`. If none is provided, an empty Compose
             placeholder in an eval mode is used.
+
+            .. note:: If ``transform`` is a callable, it must receive as input a single tensordict
+              and output a tensordict as well. The callable will be called at ``step``
+              and ``reset`` time: if it acts on the reward (which is absent at
+              reset time), a check needs to be implemented to ensure that
+              the transform will run smoothly:
+
+                >>> def add_1(data):
+                ...     if "reward" in data.keys():
+                ...         return data.set("reward", data.get("reward") + 1)
+                ...     return data
+                >>> env = TransformedEnv(base_env, add_1)
+
         cache_specs (bool, optional): if ``True``, the specs will be cached once
             and for all after the first call (i.e. the specs will be
             transformed_in only once). If the transform changes during
@@ -850,6 +863,10 @@ but got an object of type {type(transform)}."""
     def append_transform(
         self, transform: Transform | Callable[[TensorDictBase], TensorDictBase]
     ) -> None:
+        """Appends a transform to the env.
+
+        :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
+        """
         self.empty_cache()
         if not isinstance(transform, Transform):
             if callable(transform):
@@ -869,6 +886,10 @@ but got an object of type {type(transform)}."""
         self.transform.append(transform)
 
     def insert_transform(self, index: int, transform: Transform) -> None:
+        """Inserts a transform to the env at the desired index.
+
+        :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
+        """
         self.empty_cache()
         if not isinstance(transform, Transform):
             if callable(transform):
@@ -968,6 +989,8 @@ class ObservationTransform(Transform):
 
 class Compose(Transform):
     """Composes a chain of transforms.
+
+    :class:`~torchrl.envs.transforms.Transform` or ``callable``s are accepted.
 
     Examples:
         >>> env = GymEnv("Pendulum-v0")
@@ -1074,7 +1097,13 @@ class Compose(Transform):
         for t in self.transforms:
             t.init(tensordict)
 
-    def append(self, transform):
+    def append(
+        self, transform: Transform | Callable[[TensorDictBase], TensorDictBase]
+    ) -> None:
+        """Appends a transform in the chain.
+
+        :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
+        """
         self.empty_cache()
         if not isinstance(transform, Transform):
             if callable(transform):
@@ -1098,7 +1127,15 @@ class Compose(Transform):
         for t in self.transforms:
             t.set_container(self)
 
-    def insert(self, index: int, transform: Transform) -> None:
+    def insert(
+        self,
+        index: int,
+        transform: Transform | Callable[[TensorDictBase], TensorDictBase],
+    ) -> None:
+        """Inserts a transform in the chain at the desired index.
+
+        :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
+        """
         if not isinstance(transform, Transform):
             if callable(transform):
                 transform = _CallableTransform(transform)
