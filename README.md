@@ -495,7 +495,7 @@ If you would like to contribute to new features, check our [call for contributio
 
 ## Examples, tutorials and demos
 
-A series of [examples](examples/) are provided with an illustrative purpose:
+A series of [State-of-the-Art implementations](sota-implementations/) are provided with an illustrative purpose:
 - [DQN](sota-implementations/dqn)
 - [DDPG](sota-implementations/ddpg/ddpg.py)
 - [IQL](sota-implementations/iql/iql.py)
@@ -507,9 +507,13 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 - [REDQ](sota-implementations/redq/redq.py)
 - [Dreamer](sota-implementations/dreamer/dreamer.py)
 - [Decision Transformers](sota-implementations/decision_transformer)
-- [RLHF](examples/rlhf)
-
+  
 and many more to come!
+
+[Code examples](examples/) displaying toy code snippets and training scripts are also available 
+- [RLHF](examples/rlhf)
+- [Memory-mapped replay buffers](examples/torchrl_features)
+
 
 Check the [examples markdown](sota-implementations/SOTA-IMPLEMENTATIONS.md) directory for more details 
 about handling the various configuration settings.
