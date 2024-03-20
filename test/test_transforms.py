@@ -10208,11 +10208,11 @@ class TestMultiStepTransform:
         t = MultiStepTransform(3, 0.98)
 
         outs_2 = []
-        td = env.reset()
+        td = env.reset().contiguous()
         for _ in range(1):
             rollout = env.rollout(
                 250, auto_reset=False, tensordict=td, break_when_any_done=False
-            )
+            ).contiguous()
             out = t._inv_call(rollout)
             td = rollout[..., -1]
             outs_2.append(out)
@@ -10225,15 +10225,15 @@ class TestMultiStepTransform:
         torch.manual_seed(0)
 
         outs = []
-        td = env.reset()
+        td = env.reset().contiguous()
         for i in range(5):
             rollout = env.rollout(
                 50, auto_reset=False, tensordict=td, break_when_any_done=False
-            )
+            ).contiguous()
             out = t._inv_call(rollout)
             # tests that the data is insensitive to the collection schedule
             assert_allclose_td(out, outs_2[i])
-            td = rollout[..., -1]["next"]
+            td = rollout[..., -1]["next"].exclude("reward")
             outs.append(out)
 
         outs = torch.cat(outs, -1)
@@ -10245,11 +10245,11 @@ class TestMultiStepTransform:
         torch.manual_seed(0)
 
         outs_3 = []
-        td = env.reset()
+        td = env.reset().contiguous()
         for _ in range(125):
             rollout = env.rollout(
                 2, auto_reset=False, tensordict=td, break_when_any_done=False
-            )
+            ).contiguous()
             out = t._inv_call(rollout)
             td = rollout[..., -1]["next"]
             if out is not None:
