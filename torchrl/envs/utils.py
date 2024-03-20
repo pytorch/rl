@@ -1258,6 +1258,9 @@ def _update_during_reset(
                 reset = reset.any(-1)
             reset = reset.reshape(node.shape)
             # node.update(node.where(~reset, other=node_reset, pad=0))
+            print(reset)
+            print(node_reset)
+            print(node)
             node.where(~reset, other=node_reset, out=node, pad=0)
     return tensordict
 

@@ -582,6 +582,7 @@ class SyncDataCollector(DataCollectorBase):
         if self.policy_device != self.env_device or self.env_device is None:
             self._shuttle_has_no_device = True
             self._shuttle.clear_device_()
+            print("self._shuttle with no device", self._shuttle)
         else:
             self._shuttle_has_no_device = False
 
@@ -925,14 +926,33 @@ class SyncDataCollector(DataCollectorBase):
 
                 if self._cast_to_policy_device:
                     if self.env_device is not None:
+                        print("here")
                         env_input = self._shuttle.to(self.env_device, non_blocking=True)
                     elif self.env_device is None:
+                        print("there")
                         # we know the tensordict has a device otherwise we would not be here
                         # we can pass this, clear_device_ must have been called earlier
                         # env_input = self._shuttle.clear_device_()
                         env_input = self._shuttle
                 else:
+                    print(
+                        "and everywhere",
+                        self.env.device,
+                        self.env_device,
+                        self.policy_device,
+                        self.storing_device,
+                    )
                     env_input = self._shuttle
+                    collector_metadata = env_input.get("collector")
+                    if (
+                        self.env.device is not None
+                        and self.env.device != collector_metadata.device
+                    ):
+                        env_input = env_input.copy()
+                        env_input.set(
+                            "collector", collector_metadata.to(self.env.device)
+                        )
+                    print(env_input)
                 env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
                 if self._shuttle is not env_output:
