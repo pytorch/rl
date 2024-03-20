@@ -589,7 +589,6 @@ class SyncDataCollector(DataCollectorBase):
         if self.policy_device != self.env_device or self.env_device is None:
             self._shuttle_has_no_device = True
             self._shuttle.clear_device_()
-            print("self._shuttle with no device", self._shuttle)
         else:
             self._shuttle_has_no_device = False
 
