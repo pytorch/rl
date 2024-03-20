@@ -2080,7 +2080,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             raise RuntimeError(
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
-
         return self._reset_proc_data(tensordict, tensordict_reset)
 
     def _reset_proc_data(self, tensordict, tensordict_reset):

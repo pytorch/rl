@@ -506,6 +506,13 @@ class SyncDataCollector(DataCollectorBase):
             # we we did not receive an env device, we use the device of the env
             self.env_device = self.env.device
 
+        # If the storing device is not the same as the policy device, we have
+        # no guarantee that the "next" entry from the policy will be on the
+        # same device as the collector metadata.
+        self._cast_to_env_device = self._cast_to_policy_device or (
+            self.env.device != self.storing_device
+        )
+
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
         )
@@ -923,7 +930,7 @@ class SyncDataCollector(DataCollectorBase):
                             policy_output, keys_to_update=self._policy_output_keys
                         )
 
-                if self._cast_to_policy_device:
+                if self._cast_to_env_device:
                     if self.env_device is not None:
                         env_input = self._shuttle.to(self.env_device, non_blocking=True)
                     elif self.env_device is None:
