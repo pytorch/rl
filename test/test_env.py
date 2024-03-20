@@ -67,6 +67,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import (
+    CatFrames,
     CatTensors,
     DoubleToFloat,
     EnvBase,
@@ -74,6 +75,7 @@ from torchrl.envs import (
     ParallelEnv,
     SerialEnv,
 )
+from torchrl.envs.batched_envs import _stackable
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
@@ -488,19 +490,6 @@ class TestParallel:
             env_make = [
                 lambda task=task: DMControlEnv("humanoid", task) for task in tasks
             ]
-
-        if not share_individual_td and not single_task:
-            with pytest.raises(
-                ValueError, match="share_individual_td must be set to None"
-            ):
-                SerialEnv(3, env_make, share_individual_td=share_individual_td)
-            with pytest.raises(
-                ValueError, match="share_individual_td must be set to None"
-            ):
-                maybe_fork_ParallelEnv(
-                    3, env_make, share_individual_td=share_individual_td
-                )
-            return
 
         env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
         env_serial.start()
@@ -2608,7 +2597,8 @@ def test_auto_cast_to_device(break_when_any_done):
 
 
 @pytest.mark.parametrize("device", get_default_devices())
-def test_backprop(device, maybe_fork_ParallelEnv):
+@pytest.mark.parametrize("share_individual_td", [True, False])
+def test_backprop(device, maybe_fork_ParallelEnv, share_individual_td):
     # Tests that backprop through a series of single envs and through a serial env are identical
     # Also tests that no backprop can be achieved with parallel env.
     class DifferentiableEnv(EnvBase):
@@ -2669,8 +2659,14 @@ def test_backprop(device, maybe_fork_ParallelEnv):
         2,
         [functools.partial(make_env, seed=0), functools.partial(make_env, seed=seed)],
         device=device,
+        share_individual_td=share_individual_td,
     )
-    r_serial = serial_env.rollout(10, policy)
+    if share_individual_td:
+        r_serial = serial_env.rollout(10, policy)
+    else:
+        with pytest.raises(RuntimeError, match="Cannot update a view of a tensordict"):
+            r_serial = serial_env.rollout(10, policy)
+        return
 
     g_serial = torch.autograd.grad(
         r_serial["next", "reward"].sum(), policy.parameters()
