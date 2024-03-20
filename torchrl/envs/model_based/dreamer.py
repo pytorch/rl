@@ -39,14 +39,6 @@ class DreamerEnv(ModelBasedEnvBase):
     def set_specs_from_env(self, env: EnvBase):
         """Sets the specs of the environment from the specs of the given environment."""
         super().set_specs_from_env(env)
-        # self.observation_spec = CompositeSpec(
-        #     next_state=UnboundedContinuousTensorSpec(
-        #         shape=self.prior_shape, device=self.device
-        #     ),
-        #     next_belief=UnboundedContinuousTensorSpec(
-        #         shape=self.belief_shape, device=self.device
-        #     ),
-        # )
         self.action_spec = self.action_spec.to(self.device)
         self.state_spec = CompositeSpec(
             state=self.observation_spec["state"],
