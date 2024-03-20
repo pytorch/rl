@@ -367,10 +367,16 @@ class BatchedEnvBase(EnvBase):
                 self.meta_data.append(
                     get_env_metadata(create_env_fn[i], create_env_kwargs[i]).clone()
                 )
-            if self.share_individual_td is None:
-                self.share_individual_td = not _stackable(
+            if self.share_individual_td is not True:
+                share_individual_td = not _stackable(
                     *[meta_data.tensordict for meta_data in self.meta_data]
                 )
+                if share_individual_td and self.share_individual_td is False:
+                    raise ValueError(
+                        "share_individual_td=False was provided but share_individual_td must "
+                        "be True to accomodate non-stackable tensors."
+                    )
+                self.share_individual_td = share_individual_td
         self._set_properties()
 
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:

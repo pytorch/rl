@@ -500,19 +500,6 @@ class TestParallel:
                 lambda task=task: DMControlEnv("humanoid", task) for task in tasks
             ]
 
-        if not share_individual_td and not single_task:
-            with pytest.raises(
-                ValueError, match="share_individual_td must be set to None"
-            ):
-                SerialEnv(3, env_make, share_individual_td=share_individual_td)
-            with pytest.raises(
-                ValueError, match="share_individual_td must be set to None"
-            ):
-                maybe_fork_ParallelEnv(
-                    3, env_make, share_individual_td=share_individual_td
-                )
-            return
-
         env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
         env_serial.start()
         assert env_serial._single_task is single_task
@@ -2802,6 +2789,21 @@ def test_single_task_share_individual_td():
     assert not env._single_task
     env.rollout(2)
     assert isinstance(env.shared_tensordict_parent, LazyStackedTensorDict)
+
+    with pytest.raises(ValueError, match="share_individual_td=False"):
+        SerialEnv(
+            2,
+            [
+                EnvCreator(lambda: GymEnv(cartpole)),
+                EnvCreator(
+                    lambda: TransformedEnv(
+                        GymEnv(cartpole),
+                        CatFrames(N=4, dim=-1, in_keys=["observation"]),
+                    )
+                ),
+            ],
+            share_individual_td=False,
+        )
 
 
 def test_stackable():
