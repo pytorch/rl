@@ -357,13 +357,17 @@ class PrioritizedSampler(Sampler):
 
     def __getstate__(self):
         if get_spawning_popen() is not None:
-            logger.warning(
-                f"It seems you are sharing a {type(self).__name__} across processes. "
-                f"If the sampler is queried on another process than the one populating "
-                f"the storage, this will fail as the sampler is updated locally and "
-                f"not globally. If this feature is required, please file an issue on "
-                f"torchrl GitHub."
+            raise RuntimeError(
+                f"Samplers of type {type(self)} cannot be shared between processes."
             )
+            # TODO: Use a warning instead
+            # logger.warning(
+            #     f"It seems you are sharing a {type(self).__name__} across processes. "
+            #     f"If the sampler is queried on another process than the one populating "
+            #     f"the storage, this will fail as the sampler is updated locally and "
+            #     f"not globally. If this feature is required, please file an issue on "
+            #     f"torchrl GitHub."
+            # )
         state = copy(self.__dict__)
         return state
 
@@ -892,7 +896,6 @@ class SliceSampler(Sampler):
     @staticmethod
     def _end_to_start_stop(end, length):
         # Using transpose ensures the start and stop are sorted the same way
-        assert end.dtype == torch.bool
         stop_idx = end.transpose(0, -1).nonzero()
         stop_idx[:, [0, -1]] = stop_idx[:, [-1, 0]].clone()
         # First build the start indices as the stop + 1, we'll shift it later
@@ -1598,6 +1601,10 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
     def __getstate__(self):
         state = SliceSampler.__getstate__(self)
         state.update(PrioritizedSampler.__getstate__(self))
+
+    def extend(self, index: torch.Tensor) -> None:
+        super(PrioritizedSampler, self).extend(index)
+        return super(SliceSampler, self).extend(index)
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
         # Sample `batch_size` indices representing the start of a slice.
