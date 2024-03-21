@@ -358,7 +358,7 @@ class BatchedEnvBase(EnvBase):
                         torch.cuda.synchronize, device=self.device
                     )
                 elif self.device.type == "mps":
-                    sync_func = torch.mps.synchronizea
+                    sync_func = torch.mps.synchronize
                 elif self.device.type == "cpu":
                     if torch.cuda.is_available():
                         sync_func = torch.cuda.synchronize
@@ -374,7 +374,7 @@ class BatchedEnvBase(EnvBase):
                         f"device type {self.device.type} not supported with non_blocking=True. "
                         f"Please report this in a Github issue."
                     )
-            self._sync_func_value = sync_func
+            self.__dict__["_sync_func_value"] = sync_func
         return sync_func
 
     def _get_metadata(
@@ -1242,6 +1242,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         self.shared_tensordict_parent.update_(
             tensordict, keys_to_update=self._env_input_keys
         )
+        self._sync_func()
         next_td_passthrough = tensordict.get("next", None)
         if next_td_passthrough is not None:
             # if we have input "next" data (eg, RNNs which pass the next state)
@@ -1250,6 +1251,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             # should be passd to the env (we don't want to pass done states for instance)
             next_td_keys = list(next_td_passthrough.keys(True, True))
             self.shared_tensordict_parent.get("next").update_(next_td_passthrough)
+            self._sync_func()
         else:
             next_td_keys = None
         for i in range(self.num_workers):
@@ -1305,6 +1307,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         self.shared_tensordict_parent.update_(
             tensordict, keys_to_update=list(self._env_input_keys)
         )
+        self._sync_func()
         next_td_passthrough = tensordict.get("next", None)
         if next_td_passthrough is not None:
             # if we have input "next" data (eg, RNNs which pass the next state)
@@ -1313,6 +1316,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             # should be passd to the env (we don't want to pass done states for instance)
             next_td_keys = list(next_td_passthrough.keys(True, True))
             self.shared_tensordict_parent.get("next").update_(next_td_passthrough)
+            self._sync_func()
         else:
             next_td_keys = None
 
@@ -1388,10 +1392,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     self.shared_tensordicts[i].get("next"),
                     keys_to_update=list(self._selected_reset_keys),
                 )
+                self._sync_func()
                 if tensordict_ is not None:
                     self.shared_tensordicts[i].update_(
                         tensordict_, keys_to_update=list(self._selected_reset_keys)
                     )
+                    self._sync_func()
                 continue
             if tensordict_ is not None:
                 tdkeys = list(tensordict_.keys(True, True))
