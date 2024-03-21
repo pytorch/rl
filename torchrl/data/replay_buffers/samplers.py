@@ -795,8 +795,8 @@ class SliceSampler(Sampler):
             f"strict_length={self.strict_length})"
         )
 
-    @staticmethod
-    def _find_start_stop_traj(*, trajectory=None, end=None, at_capacity: bool):
+    # @staticmethod
+    def _find_start_stop_traj(self, *, trajectory=None, end=None, at_capacity: bool):
         if trajectory is not None:
             # slower
             # _, stop_idx = torch.unique_consecutive(trajectory, return_counts=True)
@@ -835,6 +835,9 @@ class SliceSampler(Sampler):
             raise RuntimeError(
                 "Expected the end-of-trajectory signal to be at least 1-dimensional."
             )
+        return self._find_start_stop_traj_sub(length=length, end=end)
+
+    def _find_start_stop_traj_sub(self, end, length):
         # Using transpose ensures the start and stop are sorted the same way
         stop_idx = end.transpose(0, -1).nonzero()
         stop_idx[:, [0, -1]] = stop_idx[:, [-1, 0]].clone()
