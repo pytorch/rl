@@ -174,8 +174,7 @@ class BatchedEnvBase(EnvBase):
             with a single worker will return a :class:`~SerialEnv` instead.
             This option has no effect with :class:`~SerialEnv`. Defaults to ``False``.
         non_blocking (bool, optional): if ``True``, device moves will be done using the
-            ``non_blocking=True`` option. Defaults to ``True`` for batched environments
-            on cuda devices, and ``False`` otherwise.
+            ``non_blocking=True`` option. Defaults to ``True``.
         mp_start_method (str, optional): the multiprocessing start method.
             Uses the default start method if not indicated ('spawn' by default in
             TorchRL if not initiated differently before first import).
@@ -345,9 +344,38 @@ class BatchedEnvBase(EnvBase):
     def non_blocking(self):
         nb = self._non_blocking
         if nb is None:
-            nb = self.device is not None and self.device.type == "cuda"
+            nb = True
             self._non_blocking = nb
         return nb
+
+    @property
+    def _sync_func(self):
+        sync_func = self.__dict__.get("_sync_func_value", None)
+        if sync_func is None:
+            if self.device is not None:
+                if self.device.type == "cuda":
+                    sync_func = functools.partial(
+                        torch.cuda.synchronize, device=self.device
+                    )
+                elif self.device.type == "mps":
+                    sync_func = torch.mps.synchronizea
+                elif self.device.type == "cpu":
+                    if torch.cuda.is_available():
+                        sync_func = torch.cuda.synchronize
+                    elif torch.backends.mps.is_available():
+                        sync_func = torch.cuda.synchronize
+                    else:
+                        raise RuntimeError(
+                            "Could not find a sync function. Please report this in a "
+                            "Github issue and/or set non_blocking=False."
+                        )
+                else:
+                    raise NotImplementedError(
+                        f"device type {self.device.type} not supported with non_blocking=True. "
+                        f"Please report this in a Github issue."
+                    )
+            self._sync_func_value = sync_func
+        return sync_func
 
     def _get_metadata(
         self, create_env_fn: List[Callable], create_env_kwargs: List[Dict]
@@ -809,6 +837,8 @@ class SerialEnv(BatchedEnvBase):
                         tensordict_ = tensordict_.to(
                             env_device, non_blocking=self.non_blocking
                         )
+                        if self.non_blocking:
+                            self._sync_func()
                     else:
                         tensordict_ = tensordict_.clone(False)
             else:
@@ -847,6 +877,8 @@ class SerialEnv(BatchedEnvBase):
                 out = out.clear_device_()
             else:
                 out = out.to(device, non_blocking=self.non_blocking)
+                if self.non_blocking:
+                    self._sync_func()
         return out
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
@@ -870,6 +902,8 @@ class SerialEnv(BatchedEnvBase):
                 data_in = tensordict_in[i].to(
                     env_device, non_blocking=self.non_blocking
                 )
+                if self.non_blocking:
+                    self._sync_func()
             else:
                 data_in = tensordict_in[i]
             out_td = self._envs[i]._step(data_in)
@@ -890,6 +924,8 @@ class SerialEnv(BatchedEnvBase):
                 out = out.clear_device_()
             elif out.device != device:
                 out = out.to(device, non_blocking=self.non_blocking)
+                if self.non_blocking:
+                    self._sync_func()
         return out
 
     def __getattr__(self, attr: str) -> Any:
@@ -1247,6 +1283,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 device=device,
                 filter_empty=True,
             )
+            if self.non_blocking:
+                self._sync_func()
         else:
             next_td = next_td.clone().clear_device_()
             tensordict_ = tensordict_.clone().clear_device_()
@@ -1308,6 +1346,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 out.clear_device_()
             else:
                 out = out.to(device, non_blocking=self.non_blocking)
+                if self.non_blocking:
+                    self._sync_func()
         return out
 
     @torch.no_grad()
@@ -1395,6 +1435,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 out.clear_device_()
             else:
                 out = out.to(device, non_blocking=self.non_blocking)
+                if self.non_blocking:
+                    self._sync_func()
         return out
 
     @_check_start

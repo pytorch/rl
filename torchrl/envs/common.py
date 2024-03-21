@@ -2531,24 +2531,29 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         env_device,
         callback,
     ):
+        # Get the sync func
+        if auto_cast_to_device:
+            sync_func = _get_sync_func(policy_device, env_device)
         tensordicts = []
         for i in range(max_steps):
             if auto_cast_to_device:
                 if policy_device is not None:
                     tensordict = tensordict.to(policy_device, non_blocking=True)
+                    sync_func()
                 else:
                     tensordict.clear_device_()
             tensordict = policy(tensordict)
             if auto_cast_to_device:
                 if env_device is not None:
                     tensordict = tensordict.to(env_device, non_blocking=True)
+                    sync_func()
                 else:
                     tensordict.clear_device_()
             tensordict = self.step(tensordict)
             tensordicts.append(tensordict.clone(False))
 
             if i == max_steps - 1:
-                # we don't truncated as one could potentially continue the run
+                # we don't truncate as one could potentially continue the run
                 break
             tensordict = self._step_mdp(tensordict)
 
@@ -2577,18 +2582,22 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         env_device,
         callback,
     ):
+        if auto_cast_to_device:
+            sync_func = _get_sync_func(policy_device, env_device)
         tensordicts = []
         tensordict_ = tensordict
         for i in range(max_steps):
             if auto_cast_to_device:
                 if policy_device is not None:
                     tensordict_ = tensordict_.to(policy_device, non_blocking=True)
+                    sync_func()
                 else:
                     tensordict_.clear_device_()
             tensordict_ = policy(tensordict_)
             if auto_cast_to_device:
                 if env_device is not None:
                     tensordict_ = tensordict_.to(env_device, non_blocking=True)
+                    sync_func()
                 else:
                     tensordict_.clear_device_()
             if i == max_steps - 1:
@@ -2597,7 +2606,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
             tensordicts.append(tensordict)
             if i == max_steps - 1:
-                # we don't truncated as one could potentially continue the run
+                # we don't truncate as one could potentially continue the run
                 break
             if callback is not None:
                 callback(self, tensordict)
@@ -2988,3 +2997,35 @@ def make_tensordict(
             tensordict.set("action", env.action_spec.rand(), inplace=False)
         tensordict = env.step(tensordict)
         return tensordict.zero_()
+
+
+def _get_sync_func(policy_device, env_device):
+    if policy_device.type == "cuda":
+        if env_device.type not in ("cpu", "cuda"):
+            raise NotImplementedError(
+                f"auto-casting from {policy_device.type} to {env_device.type} "
+                "isn't supported yet. Please file an issue on github."
+            )
+        sync_func = functools.partial(torch.cuda.synchronize, device=policy_device)
+    elif env_device.type == "cuda":
+        if policy_device.type not in ("cpu", "cuda"):
+            raise NotImplementedError(
+                f"auto-casting from {policy_device.type} to {env_device.type} "
+                "isn't supported yet. Please file an issue on github."
+            )
+        sync_func = functools.partial(torch.cuda.synchronize, device=env_device)
+    elif policy_device.type == "mps":
+        if env_device.type not in ("cpu", "mps"):
+            raise NotImplementedError(
+                f"auto-casting from {policy_device.type} to {env_device.type} "
+                "isn't supported yet. Please file an issue on github."
+            )
+        sync_func = torch.mps.synchronize
+    elif env_device.type == "mps":
+        if policy_device.type not in ("cpu", "mps"):
+            raise NotImplementedError(
+                f"auto-casting from {policy_device.type} to {env_device.type} "
+                "isn't supported yet. Please file an issue on github."
+            )
+        sync_func = torch.mps.synchronize
+    return sync_func
