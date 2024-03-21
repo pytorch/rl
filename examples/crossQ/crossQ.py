@@ -38,7 +38,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     device = torch.device(cfg.network.device)
 
     # Create logger
-    exp_name = generate_exp_name("SAC", cfg.logger.exp_name)
+    exp_name = generate_exp_name("CrossQ", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:
         logger = get_logger(
