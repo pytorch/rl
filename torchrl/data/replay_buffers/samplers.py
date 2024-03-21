@@ -22,7 +22,7 @@ from tensordict.utils import NestedKey
 
 from torchrl._extension import EXTENSION_WARNING
 
-from torchrl._utils import _replace_last
+from torchrl._utils import _replace_last, logger
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
 from torchrl.data.replay_buffers.utils import _is_int
 
@@ -54,7 +54,7 @@ class Sampler(ABC):
 
     def update_priority(
         self, index: Union[int, torch.Tensor], priority: Union[float, torch.Tensor]
-    ) -> dict:
+    ) -> dict | None:
         return
 
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
@@ -221,7 +221,7 @@ class SamplerWithoutReplacement(Sampler):
         if storage.ndim > 1:
             index = torch.unravel_index(index, storage.shape)
         # we 'always' return the indices. The 'drop_last' just instructs the
-        # sampler to turn to 'ran_out = True` whenever the next sample
+        # sampler to turn to `ran_out = True` whenever the next sample
         # will be too short. This will be read by the replay buffer
         # as a signal for an early break of the __iter__().
         return index, {}
@@ -357,8 +357,12 @@ class PrioritizedSampler(Sampler):
 
     def __getstate__(self):
         if get_spawning_popen() is not None:
-            raise RuntimeError(
-                f"Samplers of type {type(self)} cannot be shared between processes."
+            logger.warning(
+                f"It seems you are sharing a {type(self).__name__} across processes. "
+                f"If the sampler is queried on another process than the one populating "
+                f"the storage, this will fail as the sampler is updated locally and "
+                f"not globally. If this feature is required, please file an issue on "
+                f"torchrl GitHub."
             )
         state = copy(self.__dict__)
         return state
@@ -477,7 +481,7 @@ class PrioritizedSampler(Sampler):
         """
         priority = torch.as_tensor(priority, device=torch.device("cpu")).detach()
         index = torch.as_tensor(index, dtype=torch.long, device=torch.device("cpu"))
-        # we need to reshape priority if it has more than one elements or if it has
+        # we need to reshape priority if it has more than one element or if it has
         # a different shape than index
         if priority.numel() > 1 and priority.shape != index.shape:
             try:
@@ -645,12 +649,16 @@ class SliceSampler(Sampler):
                 storage that is extended by another buffer. For instance:
 
                     >>> buffer0 = ReplayBuffer(storage=storage,
-                    ...     sampler=SliceSampler(..., cache_values=True),
+                    ...     sampler=SliceSampler(num_slices=8, cache_values=True),
                     ...     writer=ImmutableWriter())
                     >>> buffer1 = ReplayBuffer(storage=storage,
                     ...     sampler=other_sampler)
                     >>> # Wrong! Does not erase the buffer from the sampler of buffer0
                     >>> buffer1.extend(data)
+
+            .. warning:: ``cache_values=True`` will not work as expected if the buffer is
+                shared between processes and one process is responsible for writing
+                and one process for sampling, as erasing the cache can only be done locally.
 
         truncated_key (NestedKey, optional): If not ``None``, this argument
             indicates where a truncated signal should be written in the output
@@ -810,6 +818,20 @@ class SliceSampler(Sampler):
             else:
                 kwargs = {}
             self._get_index = torch.compile(self._get_index, **kwargs)
+
+    def __getstate__(self):
+        if get_spawning_popen() is not None and self.cache_values:
+            logger.warning(
+                f"It seems you are sharing a {type(self).__name__} across processes with"
+                f"cache_values=True. "
+                f"While this isn't forbidden and could perfectly work if your dataset "
+                f"is unaltered on both processes, remember that calling extend/add on"
+                f"one process will NOT erase the cache on another process's sampler, "
+                f"which will cause synchronization issues."
+            )
+        state = copy(self.__dict__)
+        state["_cache"] = {}
+        return state
 
     def extend(self, index: torch.Tensor) -> None:
         if self.cache_values:
@@ -983,14 +1005,16 @@ class SliceSampler(Sampler):
         if self.num_slices is not None:
             if batch_size % self.num_slices != 0:
                 raise RuntimeError(
-                    f"The batch-size must be divisible by the number of slices, got batch_size={batch_size} and num_slices={self.num_slices}."
+                    f"The batch-size must be divisible by the number of slices, got "
+                    f"batch_size={batch_size} and num_slices={self.num_slices}."
                 )
             seq_length = batch_size // self.num_slices
             num_slices = self.num_slices
         else:
             if batch_size % self.slice_len != 0:
                 raise RuntimeError(
-                    f"The batch-size must be divisible by the slice length, got batch_size={batch_size} and slice_len={self.slice_len}."
+                    f"The batch-size must be divisible by the slice length, got "
+                    f"batch_size={batch_size} and slice_len={self.slice_len}."
                 )
             seq_length = self.slice_len
             num_slices = batch_size // self.slice_len
@@ -1186,11 +1210,6 @@ class SliceSampler(Sampler):
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         ...
-
-    def __getstate__(self):
-        state = copy(self.__dict__)
-        state["_cache"] = {}
-        return state
 
 
 class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
@@ -1446,10 +1465,17 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             .. warning:: ``cache_values=True`` will not work if the sampler is used with a
                 storage that is extended by another buffer. For instance:
 
-                    >>> buffer0 = ReplayBuffer(storage=storage, sampler=SliceSampler(..., cache_values=True), writer=ImmutableWriter())
-                    >>> buffer1 = ReplayBuffer(storage=storage, sampler=other_sampler)
+                    >>> buffer0 = ReplayBuffer(storage=storage,
+                    ...     sampler=SliceSampler(num_slices=8, cache_values=True),
+                    ...     writer=ImmutableWriter())
+                    >>> buffer1 = ReplayBuffer(storage=storage,
+                    ...     sampler=other_sampler)
                     >>> # Wrong! Does not erase the buffer from the sampler of buffer0
                     >>> buffer1.extend(data)
+
+            .. warning:: ``cache_values=True`` will not work as expected if the buffer is
+                shared between processes and one process is responsible for writing
+                and one process for sampling, as erasing the cache can only be done locally.
 
         truncated_key (NestedKey, optional): If not ``None``, this argument
             indicates where a truncated signal should be written in the output
@@ -1592,7 +1618,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             # make seq_length a tensor with values clamped by lengths
             seq_length = lengths[traj_idx].clamp_max(seq_length)
 
-        # build a list of index that we dont want to sample: all the steps at a `seq_length` distance of
+        # build a list of index that we don't want to sample: all the steps at a `seq_length` distance of
         # the end the trajectory, with the end of trajectory (`stop_idx`) included
         if not isinstance(seq_length, int):
             try:
@@ -1756,7 +1782,7 @@ class SamplerEnsemble(Sampler):
       The indices provided in the info dictionary are placed in a :class:`~tensordict.TensorDict` with
       keys ``index`` and ``buffer_ids`` that allow the upper :class:`~torchrl.data.ReplayBufferEnsemble`
       and :class:`~torchrl.data.StorageEnsemble` objects to retrieve the data.
-      This format is different than with other samplers which usually return indices
+      This format is different from with other samplers which usually return indices
       as regular tensors.
 
     """

@@ -582,16 +582,16 @@ class TensorStorage(Storage):
     def __getstate__(self):
         state = copy(self.__dict__)
         if get_spawning_popen() is None:
-            len = self._len
+            length = self._len
             del state["_len_value"]
-            state["len__context"] = len
+            state["len__context"] = length
         elif not self.initialized:
             # check that the storage is initialized
             raise RuntimeError(
-                f"Cannot share a storage of type {type(self)} between processed if "
+                f"Cannot share a storage of type {type(self)} between processes if "
                 f"it has not been initialized yet. Populate the buffer with "
                 f"some data in the main process before passing it to the other "
-                f"subprocesses (or create the buffer explicitely with a TensorStorage)."
+                f"subprocesses (or create the buffer explicitly with a TensorStorage)."
             )
         else:
             # check that the content is shared, otherwise tell the user we can't help
