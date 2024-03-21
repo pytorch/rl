@@ -859,30 +859,33 @@ class SliceSampler(Sampler):
         lengths[lengths < 0] = lengths[lengths < 0] + length
         return start_idx, stop_idx, lengths
 
+    def _start_to_end(self, st: torch.Tensor, length: int):
+        arange = torch.arange(length, device=st.device, dtype=st.dtype)
+        ndims = st.shape[-1] - 1 if st.ndim else 0
+        if ndims:
+            arange = torch.stack([arange] + [torch.zeros_like(arange)] * ndims, -1)
+        else:
+            arange = arange.unsqueeze(-1)
+        if st.shape != arange.shape:
+            # we do this to make sure that we're not broadcasting the start
+            # wrong as a tensor with shape [N] can't be expanded to [N, 1]
+            # without getting an error
+            st = st.expand_as(arange)
+        return arange + st
+
     def _tensor_slices_from_startend(self, seq_length, start, storage_length):
         # start is a 2d tensor resulting from nonzero()
         # seq_length is a 1d tensor indicating the desired length of each sequence
 
-        def _start_to_end(st: torch.Tensor, length: int):
-            arange = torch.arange(length, device=st.device, dtype=st.dtype)
-            ndims = st.shape[-1] - 1 if st.ndim else 0
-            arange = torch.stack([arange] + [torch.zeros_like(arange)] * ndims, -1)
-            if st.shape != arange.shape:
-                # we do this to make sure that we're not broadcasting the start
-                # wrong as a tensor with shape [N] can't be expanded to [N, 1]
-                # without getting an error
-                st = st.expand_as(arange)
-            return arange + st
-
         if isinstance(seq_length, int):
             result = torch.cat(
-                [_start_to_end(_start, length=seq_length) for _start in start]
+                [self._start_to_end(_start, length=seq_length) for _start in start]
             )
         else:
             # when padding is needed
             result = torch.cat(
                 [
-                    _start_to_end(_start, _seq_len)
+                    self._start_to_end(_start, _seq_len)
                     for _start, _seq_len in zip(start, seq_length)
                 ]
             )
@@ -981,6 +984,7 @@ class SliceSampler(Sampler):
             storage_length=storage_length,
         )
 
+    @torch.compile()
     def _sample_slices(
         self,
         lengths: torch.Tensor,
