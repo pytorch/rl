@@ -257,9 +257,9 @@ def test_loss_vmap_random(device, vmap_randomness, dropout):
             self.vmap_model = _vmap_func(
                 self.model,
                 (None, 0),
-                randomness="error"
-                if vmap_randomness == "error"
-                else self.vmap_randomness,
+                randomness=(
+                    "error" if vmap_randomness == "error" else self.vmap_randomness
+                ),
             )
 
         def forward(self, td):
@@ -315,9 +315,9 @@ class TestDQN(LossModuleTestBase):
             spec=CompositeSpec(
                 {
                     "action": action_spec,
-                    "action_value"
-                    if action_value_key is None
-                    else action_value_key: None,
+                    (
+                        "action_value" if action_value_key is None else action_value_key
+                    ): None,
                     "chosen_action_value": None,
                 },
                 shape=[],
@@ -4412,16 +4412,13 @@ class TestCrossQ(LossModuleTestBase):
         delay_actor,
         num_qvalue,
         device,
-        version,
         td_est,
     ):
         torch.manual_seed(self.seed)
-        td = self._create_mock_data_sac(device=device)
+        td = self._create_mock_data_crossq(device=device)
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
-
-        value = None
 
         kwargs = {}
         if delay_actor:
@@ -4524,14 +4521,11 @@ class TestCrossQ(LossModuleTestBase):
         delay_actor,
         num_qvalue,
         device,
-        version,
     ):
         torch.manual_seed(self.seed)
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
-
-        value = None
 
         kwargs = {}
         if delay_actor:
@@ -4560,7 +4554,6 @@ class TestCrossQ(LossModuleTestBase):
         self,
         device,
         separate_losses,
-        version,
         n_act=4,
     ):
         torch.manual_seed(self.seed)
@@ -4654,15 +4647,12 @@ class TestCrossQ(LossModuleTestBase):
         delay_actor,
         num_qvalue,
         device,
-        version,
     ):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_sac(device=device)
+        td = self._create_seq_mock_data_crossq(device=device)
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
-
-        value = None
 
         kwargs = {}
         if delay_actor:
@@ -4730,7 +4720,6 @@ class TestCrossQ(LossModuleTestBase):
                     include_nested=True, leaves_only=True
                 )
             ]
-            assert not hasattr(loss_fn, "target_qvalue_network_params")
             for p in loss_fn.parameters():
                 if p.requires_grad:
                     p.data += torch.randn_like(p)
@@ -4762,8 +4751,7 @@ class TestCrossQ(LossModuleTestBase):
     @pytest.mark.parametrize(
         "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
     )
-    def test_crossq_tensordict_keys(self, td_est, version):
-        td = self._create_mock_data_crossq()
+    def test_crossq_tensordict_keys(self, td_est):
 
         actor = self._create_mock_actor()
         qvalue = self._create_mock_qvalue()
@@ -4792,10 +4780,10 @@ class TestCrossQ(LossModuleTestBase):
             td_est=td_est,
         )
 
-        value = self._create_mock_value()
+        qvalue = self._create_mock_qvalue()
         loss_fn = CrossQLoss(
             actor,
-            value,
+            qvalue,
             loss_function="l2",
         )
 
@@ -4812,7 +4800,7 @@ class TestCrossQ(LossModuleTestBase):
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
     def test_crossq_notensordict(
-        self, action_key, observation_key, reward_key, done_key, terminated_key, version
+        self, action_key, observation_key, reward_key, done_key, terminated_key
     ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_crossq(
@@ -4831,8 +4819,6 @@ class TestCrossQ(LossModuleTestBase):
             action_key=action_key,
             out_keys=["state_action_value"],
         )
-
-        value = None
 
         loss = CrossQLoss(
             actor_network=actor,
@@ -4887,7 +4873,9 @@ class TestCrossQ(LossModuleTestBase):
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_alpha == loss_val_td["loss_alpha"]
 
-    def test_state_dict(self, version):
+    def test_state_dict(
+        self,
+    ):
 
         model = torch.nn.Linear(3, 4)
         actor_module = TensorDictModule(model, in_keys=["obs"], out_keys=["logits"])
@@ -4930,7 +4918,7 @@ class TestCrossQ(LossModuleTestBase):
         loss.load_state_dict(state)
 
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_crossq_reduction(self, reduction, version):
+    def test_crossq_reduction(self, reduction):
         torch.manual_seed(self.seed)
         device = (
             torch.device("cpu")
@@ -4940,7 +4928,7 @@ class TestCrossQ(LossModuleTestBase):
         td = self._create_mock_data_crossq(device=device)
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
-        value = None
+
         loss_fn = CrossQLoss(
             actor_network=actor,
             qvalue_network=qvalue,
@@ -6431,9 +6419,9 @@ class TestDiscreteCQL(LossModuleTestBase):
             spec=CompositeSpec(
                 {
                     "action": action_spec,
-                    "action_value"
-                    if action_value_key is None
-                    else action_value_key: None,
+                    (
+                        "action_value" if action_value_key is None else action_value_key
+                    ): None,
                     "chosen_action_value": None,
                 },
                 shape=[],
