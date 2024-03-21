@@ -8062,6 +8062,22 @@ class TestTransforms:
                     [nchannels * N, 16, 16]
                 )
 
+    def test_lambda_functions(self):
+        def trsf(data):
+            if "y" in data.keys():
+                data["y"] += 1
+                return data
+            return data.set("y", torch.zeros(data.shape))
+
+        env = TransformedEnv(CountingEnv(5), trsf)
+        env.append_transform(trsf)
+        env.insert_transform(0, trsf)
+        # With Compose
+        env.transform.append(trsf)
+        assert env.reset().get("y") == 3
+        env.transform = trsf
+        assert env.reset().get("y") == 0
+
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("keys_inv_1", [["action_1"], []])
     @pytest.mark.parametrize("keys_inv_2", [["action_2"], []])
