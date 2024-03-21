@@ -644,8 +644,11 @@ class SliceSampler(Sampler):
             .. warning:: ``cache_values=True`` will not work if the sampler is used with a
                 storage that is extended by another buffer. For instance:
 
-                    >>> buffer0 = ReplayBuffer(storage=storage, sampler=SliceSampler(..., cache_values=True), writer=ImmutableWriter())
-                    >>> buffer1 = ReplayBuffer(storage=storage, sampler=other_sampler)
+                    >>> buffer0 = ReplayBuffer(storage=storage,
+                    ...     sampler=SliceSampler(..., cache_values=True),
+                    ...     writer=ImmutableWriter())
+                    >>> buffer1 = ReplayBuffer(storage=storage,
+                    ...     sampler=other_sampler)
                     >>> # Wrong! Does not erase the buffer from the sampler of buffer0
                     >>> buffer1.extend(data)
 
