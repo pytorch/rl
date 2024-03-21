@@ -1337,6 +1337,8 @@ def _init_pytree(scratch_dir, max_size, data):  # noqa: F811
 
 
 def _flip_list(data):
+    if all(is_tensor_collection(_data) for _data in data):
+        return torch.stack(data)
     flat_data, flat_specs = zip(*[tree_flatten(item) for item in data])
     flat_data = zip(*flat_data)
     stacks = [torch.stack(item) for item in flat_data]

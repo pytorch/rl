@@ -739,6 +739,12 @@ class TestStorages:
         if data == "tc":
             assert storage._storage.text == storage_recover._storage.text
 
+    def test_add_list_of_tds(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(100))
+        rb.extend([TensorDict({"a": torch.randn(2, 3)}, [2])])
+        assert len(rb) == 1
+        assert rb[:].shape == torch.Size([1, 2])
+
 
 @pytest.mark.parametrize("max_size", [1000])
 @pytest.mark.parametrize("shape", [[3, 4]])
