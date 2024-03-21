@@ -52,10 +52,6 @@ class CrossQLoss(LossModule):
         qvalue_network (TensorDictModule): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
 
-            .. note::
-              If not provided, the second version of SAC is assumed, where
-              only the Q-Value network is needed.
-
         num_qvalue_nets (integer, optional): number of Q-Value networks used.
             Defaults to ``2``.
         loss_function (str, optional): loss function to be used with
@@ -98,7 +94,7 @@ class CrossQLoss(LossModule):
         >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
-        >>> from torchrl.objectives.sac import SACLoss
+        >>> from torchrl.objectives.crossq import CrossQLoss
         >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
@@ -119,11 +115,7 @@ class CrossQLoss(LossModule):
         >>> qvalue = ValueOperator(
         ...     module=module,
         ...     in_keys=['observation', 'action'])
-        >>> module = nn.Linear(n_obs, 1)
-        >>> value = ValueOperator(
-        ...     module=module,
-        ...     in_keys=["observation"])
-        >>> loss = SACLoss(actor, qvalue, value)
+        >>> loss = CrossQLoss(actor, qvalue)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
         >>> data = TensorDict({
@@ -141,8 +133,7 @@ class CrossQLoss(LossModule):
                 entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                loss_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -150,9 +141,9 @@ class CrossQLoss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor, value, and qvalue network.
+    ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and qvalue network.
     The return value is a tuple of tensors in the following order:
-    ``["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy"]`` + ``"loss_value"`` if version one is used.
+    ``["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy"]``
 
     Examples:
         >>> import torch
@@ -161,7 +152,7 @@ class CrossQLoss(LossModule):
         >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
-        >>> from torchrl.objectives.sac import SACLoss
+        >>> from torchrl.objectives import CrossQLoss
         >>> _ = torch.manual_seed(42)
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
@@ -182,14 +173,10 @@ class CrossQLoss(LossModule):
         >>> qvalue = ValueOperator(
         ...     module=module,
         ...     in_keys=['observation', 'action'])
-        >>> module = nn.Linear(n_obs, 1)
-        >>> value = ValueOperator(
-        ...     module=module,
-        ...     in_keys=["observation"])
-        >>> loss = SACLoss(actor, qvalue, value)
+        >>> loss = CrossQLoss(actor, qvalue)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
-        >>> loss_actor, loss_qvalue, _, _, _, _ = loss(
+        >>> loss_actor, loss_qvalue, _, _, _ = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
@@ -198,7 +185,7 @@ class CrossQLoss(LossModule):
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
 
-    The output keys can also be filtered using the :meth:`SACLoss.select_out_keys`
+    The output keys can also be filtered using the :meth:`CrossQLoss.select_out_keys`
     method.
 
     Examples:
@@ -344,6 +331,9 @@ class CrossQLoss(LossModule):
         self._vmap_qnetworkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
+        self._vmap_qnetwork00 = _vmap_func(
+            self.qvalue_network, randomness=self.vmap_randomness
+        )
         self.reduction = reduction
 
     @property
@@ -435,8 +425,6 @@ class CrossQLoss(LossModule):
             raise NotImplementedError(f"Unknown value type {value_type}")
 
         tensor_keys = {
-            # "value_target": "value_target",
-            # "value": self.tensor_keys.value,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
             "terminated": self.tensor_keys.terminated,
@@ -461,8 +449,6 @@ class CrossQLoss(LossModule):
             *[("next", key) for key in self.actor_network.in_keys],
             *self.qvalue_network.in_keys,
         ]
-        if self._version == 1:
-            keys.extend(self.value_network.in_keys)
         self._in_keys = list(set(keys))
 
     @property
@@ -515,9 +501,11 @@ class CrossQLoss(LossModule):
         }
         td_out = TensorDict(out, [])
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                _reduce(value, reduction=self.reduction)
+                if name.startswith("loss_")
+                else value
+            ),
             batch_size=[],
         )
         return td_out
@@ -526,6 +514,13 @@ class CrossQLoss(LossModule):
     @_cache_values
     def _cached_detached_qvalue_params(self):
         return self.qvalue_network_params.detach()
+
+    @property
+    @_cache_values
+    def _cached_qvalue_params(self):
+        return torch.cat(
+            [self.qvalue_network_params, self.qvalue_network_params.detach()], 0
+        )
 
     def _actor_loss(
         self, tensordict: TensorDictBase
@@ -555,9 +550,9 @@ class CrossQLoss(LossModule):
         return self._alpha * log_prob - min_q_logprob, {"log_prob": log_prob.detach()}
 
     def _compute_target(self, tensordict) -> Tensor:
-        r"""Value network for SAC v2.
+        r"""Value network for CrossQ.
 
-        SAC v2 is based on a value estimate of the form:
+        CrossQ is based on a value estimate of the form:
 
         .. math::
 
@@ -567,7 +562,6 @@ class CrossQLoss(LossModule):
 
         """
         tensordict = tensordict.clone(False)
-        # TODO asser that models are in train mode
         # get actions and log-probs
         with torch.no_grad():
             with set_exploration_type(
@@ -579,32 +573,32 @@ class CrossQLoss(LossModule):
                 next_tensordict.set(self.tensor_keys.action, next_action)
                 next_sample_log_prob = next_dist.log_prob(next_action)
 
-            # get q-values
-            next_tensordict_expand = self._vmap_qnetworkN0(
-                next_tensordict, self.qvalue_network_params
-            )
-            state_action_value = next_tensordict_expand.get(
-                self.tensor_keys.state_action_value
-            )
-            if (
-                state_action_value.shape[-len(next_sample_log_prob.shape) :]
-                != next_sample_log_prob.shape
-            ):
-                next_sample_log_prob = next_sample_log_prob.unsqueeze(-1)
-            next_state_value = state_action_value - self._alpha * next_sample_log_prob
-            next_state_value = next_state_value.min(0)[0]
-            tensordict.set(
-                ("next", self.value_estimator.tensor_keys.value), next_state_value
-            )
-            target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
-            return target_value
+        # get q-values
+        next_tensordict_expand = self._vmap_qnetworkN0(
+            next_tensordict, self.qvalue_network_params
+        )
+        state_action_value = next_tensordict_expand.get(
+            self.tensor_keys.state_action_value
+        )
+        if (
+            state_action_value.shape[-len(next_sample_log_prob.shape) :]
+            != next_sample_log_prob.shape
+        ):
+            next_sample_log_prob = next_sample_log_prob.unsqueeze(-1)
+        next_state_value = state_action_value - self._alpha * next_sample_log_prob
+        next_state_value = next_state_value.min(0)[0]
+        tensordict.set(
+            ("next", self.value_estimator.tensor_keys.value), next_state_value
+        )
+        target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
+        return target_value
 
     def _qvalue_loss(
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # we pass the alpha value to the tensordict. Since it's a scalar, we must erase the batch-size first.
-        target_value = self._compute_target(tensordict)
 
+        target_value = self._compute_target(tensordict)
         tensordict_expand = self._vmap_qnetworkN0(
             tensordict.select(*self.qvalue_network.in_keys, strict=False),
             self.qvalue_network_params,
@@ -612,6 +606,64 @@ class CrossQLoss(LossModule):
         pred_val = tensordict_expand.get(self.tensor_keys.state_action_value).squeeze(
             -1
         )
+
+        # ############################
+        # # compute next action
+        # with torch.no_grad():
+        #     with set_exploration_type(
+        #         ExplorationType.MODE
+        #     ), self.actor_network_params.to_module(self.actor_network):
+        #         next_tensordict = tensordict.get("next").clone(False)
+        #         next_dist = self.actor_network.get_dist(next_tensordict)
+        #         next_action = next_dist.loc #.rsample()
+        #         next_tensordict.set(self.tensor_keys.action, next_action)
+        #         next_sample_log_prob = next_dist.log_prob(next_action)
+
+        # q_values_tensordict = torch.cat(
+        #     [
+        #         tensordict.select(*self.qvalue_network.in_keys, strict=False).expand(
+        #             self.num_qvalue_nets, *tensordict.batch_size
+        #         ),
+        #         next_tensordict.select(
+        #             *self.qvalue_network.in_keys, strict=False
+        #         ).expand(self.num_qvalue_nets, *tensordict.batch_size),
+        #     ],
+        #     0,
+        # )  # shape (4, batch_size, *)
+        # q_values_tensordict = q_values_tensordict.contiguous()
+
+        # q_values_tensordict = self._vmap_qnetwork00(
+        #     q_values_tensordict, self._cached_qvalue_params
+        # )
+        # # split q values
+        # (current_state_action_value, next_state_action_value) = q_values_tensordict.get(
+        #     self.tensor_keys.state_action_value
+        # ).split(
+        #     [
+        #         self.num_qvalue_nets,
+        #         self.num_qvalue_nets,
+        #     ],
+        #     dim=0,
+        # )
+        # # compute target value
+        # next_state_action_value = next_state_action_value.detach()
+        # if (
+        #     next_state_action_value.shape[-len(next_sample_log_prob.shape) :]
+        #     != next_sample_log_prob.shape
+        # ):
+        #     next_sample_log_prob = next_sample_log_prob.unsqueeze(-1)
+        # next_state_action_value = (
+        #     next_state_action_value - self._alpha * next_sample_log_prob
+        # )
+        # next_state_action_value = next_state_action_value.min(0)[0]
+        # tensordict.set(
+        #     ("next", self.value_estimator.tensor_keys.value), next_state_action_value
+        # )
+        # target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
+        # # get current q-values
+        # pred_val = current_state_action_value.squeeze(-1)
+        ############################
+        # compute loss
         td_error = abs(pred_val - target_value)
         loss_qval = distance_loss(
             pred_val,

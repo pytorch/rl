@@ -143,8 +143,8 @@ def make_replay_buffer(
 # -----
 
 
-def make_sac_agent(cfg, train_env, eval_env, device):
-    """Make SAC agent."""
+def make_crossQ_agent(cfg, train_env, eval_env, device):
+    """Make CrossQ agent."""
     # Define Actor Network
     in_keys = ["observation"]
     action_spec = train_env.action_spec
@@ -233,13 +233,13 @@ def make_sac_agent(cfg, train_env, eval_env, device):
 
 
 # ====================================================================
-# SAC Loss
+# CrossQ Loss
 # ---------
 
 
 def make_loss_module(cfg, model):
     """Make loss module and target network updater."""
-    # Create SAC loss
+    # Create CrossQ loss
     loss_module = CrossQLoss(
         actor_network=model[0],
         qvalue_network=model[1],
@@ -264,7 +264,7 @@ def split_critic_params(critic_params):
     return critic1_params, critic2_params
 
 
-def make_sac_optimizer(cfg, loss_module):
+def make_crossQ_optimizer(cfg, loss_module):
     critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
     actor_params = list(loss_module.actor_network_params.flatten_keys().values())
 

@@ -25,11 +25,11 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
     log_metrics,
     make_collector,
+    make_crossQ_agent,
+    make_crossQ_optimizer,
     make_environment,
     make_loss_module,
     make_replay_buffer,
-    make_sac_agent,
-    make_sac_optimizer,
 )
 
 
@@ -38,7 +38,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     device = torch.device(cfg.network.device)
 
     # Create logger
-    exp_name = generate_exp_name("SAC", cfg.logger.exp_name)
+    exp_name = generate_exp_name("CrossQ", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:
         logger = get_logger(
@@ -60,9 +60,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     train_env, eval_env = make_environment(cfg)
 
     # Create agent
-    model, exploration_policy = make_sac_agent(cfg, train_env, eval_env, device)
+    model, exploration_policy = make_crossQ_agent(cfg, train_env, eval_env, device)
 
-    # Create SAC loss
+    # Create CrossQ loss
     loss_module = make_loss_module(cfg, model)
 
     # Create off-policy collector
@@ -82,7 +82,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         optimizer_actor,
         optimizer_critic,
         optimizer_alpha,
-    ) = make_sac_optimizer(cfg, loss_module)
+    ) = make_crossQ_optimizer(cfg, loss_module)
 
     # Main loop
     start_time = time.time()
@@ -141,33 +141,34 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # Compute loss
                 q_loss, *_ = loss_module._qvalue_loss(sampled_tensordict)
-
+                q_loss = q_loss.mean()
                 # Update critic
                 optimizer_critic.zero_grad()
-                q_loss.mean().backward()
+                q_loss.backward()
                 optimizer_critic.step()
-                q_losses.append(q_loss.mean().detach().item())
+                q_losses.append(q_loss.detach().item())
 
                 if update_actor:
                     actor_loss, metadata_actor = loss_module._actor_loss(
                         sampled_tensordict
                     )
+                    actor_loss = actor_loss.mean()
                     alpha_loss = loss_module._alpha_loss(
                         log_prob=metadata_actor["log_prob"]
                     )
-
+                    alpha_loss = alpha_loss.mean()
                     # Update actor
                     optimizer_actor.zero_grad()
-                    actor_loss.mean().backward()
+                    actor_loss.backward()
                     optimizer_actor.step()
 
                     # Update alpha
                     optimizer_alpha.zero_grad()
-                    alpha_loss.mean().backward()
+                    alpha_loss.backward()
                     optimizer_alpha.step()
 
-                    actor_losses.append(actor_loss.mean().detach().item())
-                    alpha_losses.append(alpha_loss.mean().detach().item())
+                    actor_losses.append(actor_loss.detach().item())
+                    alpha_losses.append(alpha_loss.detach().item())
 
                 # Update priority
                 if prb:
@@ -193,8 +194,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/q_loss"] = np.mean(q_losses).item()
             metrics_to_log["train/actor_loss"] = np.mean(actor_losses).item()
             metrics_to_log["train/alpha_loss"] = np.mean(alpha_losses).item()
-            # metrics_to_log["train/alpha"] = loss_td["alpha"].item()
-            # metrics_to_log["train/entropy"] = loss_td["entropy"].item()
             metrics_to_log["train/sampling_time"] = sampling_time
             metrics_to_log["train/training_time"] = training_time
 
