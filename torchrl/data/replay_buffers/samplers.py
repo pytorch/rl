@@ -730,6 +730,7 @@ class SliceSampler(Sampler):
         cache_values: bool = False,
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
+        compile: bool = False,
     ):
         self.num_slices = num_slices
         self.slice_len = slice_len
@@ -784,6 +785,9 @@ class SliceSampler(Sampler):
                 "Either num_slices or slice_len must be not None, and not both. "
                 f"Got num_slices={num_slices} and slice_len={slice_len}."
             )
+        self.compile = compile
+        if compile:
+            self._sample_slices = torch.compile(self._sample_slices)
 
     def __repr__(self):
         return (
@@ -795,8 +799,8 @@ class SliceSampler(Sampler):
             f"strict_length={self.strict_length})"
         )
 
-    # @staticmethod
-    def _find_start_stop_traj(self, *, trajectory=None, end=None, at_capacity: bool):
+    @classmethod
+    def _find_start_stop_traj(cls, *, trajectory=None, end=None, at_capacity: bool):
         if trajectory is not None:
             # slower
             # _, stop_idx = torch.unique_consecutive(trajectory, return_counts=True)
@@ -835,9 +839,10 @@ class SliceSampler(Sampler):
             raise RuntimeError(
                 "Expected the end-of-trajectory signal to be at least 1-dimensional."
             )
-        return self._find_start_stop_traj_sub(length=length, end=end)
+        return cls._end_to_start_stop(length=length, end=end)
 
-    def _find_start_stop_traj_sub(self, end, length):
+    @staticmethod
+    def _end_to_start_stop(end, length):
         # Using transpose ensures the start and stop are sorted the same way
         stop_idx = end.transpose(0, -1).nonzero()
         stop_idx[:, [0, -1]] = stop_idx[:, [-1, 0]].clone()
@@ -987,7 +992,6 @@ class SliceSampler(Sampler):
             storage_length=storage_length,
         )
 
-    @torch.compile()
     def _sample_slices(
         self,
         lengths: torch.Tensor,
