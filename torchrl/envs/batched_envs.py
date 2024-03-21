@@ -350,6 +350,7 @@ class BatchedEnvBase(EnvBase):
 
     @property
     def _sync_func(self):
+        # TODO: make this a no-op is needed
         sync_func = self.__dict__.get("_sync_func_value", None)
         if sync_func is None:
             if self.device is not None:
