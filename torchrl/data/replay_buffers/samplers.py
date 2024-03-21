@@ -637,7 +637,18 @@ class SliceSampler(Sampler):
             if the last element of the trajectory tensor is identical to the first,
             the same trajectory spans across end and beginning.
         cache_values (bool, optional): to be used with static datasets.
-            Will cache the start and end signal of the trajectory.
+            Will cache the start and end signal of the trajectory. This can be safely used even
+            if the trajectory indices change during calls to :class:`~torchrl.data.ReplayBuffer.extend`
+            as this operation will erase the cache.
+
+            .. warning:: ``cache_values=True`` will not work if the sampler is used with a
+                storage that is extended by another buffer. For instance:
+
+                    >>> buffer0 = ReplayBuffer(storage=storage, sampler=SliceSampler(..., cache_values=True), writer=ImmutableWriter())
+                    >>> buffer1 = ReplayBuffer(storage=storage, sampler=other_sampler)
+                    >>> # Wrong! Does not erase the buffer from the sampler of buffer0
+                    >>> buffer1.extend(data)
+
         truncated_key (NestedKey, optional): If not ``None``, this argument
             indicates where a truncated signal should be written in the output
             data. This is used to indicate to value estimators where the provided
@@ -652,6 +663,10 @@ class SliceSampler(Sampler):
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
+        compile (bool or dict of kwargs, optional): if ``True``, the bottleneck of
+            the :meth:`~sample` method will be compiled with :func:`~torch.compile`.
+            Keyword arguments can also be passed to torch.compile with this arg.
+            Defaults to ``False``.
 
     .. note:: To recover the trajectory splits in the storage,
         :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` will first
@@ -730,7 +745,7 @@ class SliceSampler(Sampler):
         cache_values: bool = False,
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
-        compile: bool = False,
+        compile: bool | dict = False,
     ):
         self.num_slices = num_slices
         self.slice_len = slice_len
@@ -785,9 +800,17 @@ class SliceSampler(Sampler):
                 "Either num_slices or slice_len must be not None, and not both. "
                 f"Got num_slices={num_slices} and slice_len={slice_len}."
             )
-        self.compile = compile
-        if compile:
-            self._sample_slices = torch.compile(self._sample_slices)
+        self.compile = bool(compile)
+        if self.compile:
+            if isinstance(compile, dict):
+                kwargs = compile
+            else:
+                kwargs = {}
+            self._get_index = torch.compile(self._get_index, **kwargs)
+
+    def extend(self, index: torch.Tensor) -> None:
+        if self.cache_values:
+            self._cache.clear()
 
     def __repr__(self):
         return (
@@ -844,6 +867,7 @@ class SliceSampler(Sampler):
     @staticmethod
     def _end_to_start_stop(end, length):
         # Using transpose ensures the start and stop are sorted the same way
+        assert end.dtype == torch.bool
         stop_idx = end.transpose(0, -1).nonzero()
         stop_idx[:, [0, -1]] = stop_idx[:, [-1, 0]].clone()
         # First build the start indices as the stop + 1, we'll shift it later
@@ -1004,8 +1028,8 @@ class SliceSampler(Sampler):
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, Any]]:
         # start_idx and stop_idx are 2d tensors organized like a non-zero
 
-        def get_traj_idx(lengths=lengths):
-            return torch.randint(lengths.shape[0], (num_slices,), device=lengths.device)
+        def get_traj_idx(maxval):
+            return torch.randint(maxval, (num_slices,), device=lengths.device)
 
         if (lengths < seq_length).any():
             if self.strict_length:
@@ -1024,7 +1048,7 @@ class SliceSampler(Sampler):
                 stop_idx = stop_idx[idx]
 
                 if traj_idx is None:
-                    traj_idx = get_traj_idx(lengths=lengths_idx)
+                    traj_idx = get_traj_idx(lengths_idx.shape[0])
                 else:
                     # Here we must filter out the indices that correspond to trajectories
                     # we don't want to keep. That could potentially lead to an empty sample.
@@ -1047,7 +1071,7 @@ class SliceSampler(Sampler):
                 lengths = lengths_idx
             else:
                 if traj_idx is None:
-                    traj_idx = get_traj_idx()
+                    traj_idx = get_traj_idx(lengths.shape[0])
                 else:
                     num_slices = traj_idx.shape[0]
 
@@ -1055,10 +1079,29 @@ class SliceSampler(Sampler):
                 seq_length = lengths[traj_idx].clamp_max(seq_length)
         else:
             if traj_idx is None:
-                traj_idx = get_traj_idx()
+                traj_idx = get_traj_idx(lengths.shape[0])
             else:
                 num_slices = traj_idx.shape[0]
+        return self._get_index(
+            lengths=lengths,
+            start_idx=start_idx,
+            stop_idx=stop_idx,
+            num_slices=num_slices,
+            seq_length=seq_length,
+            storage_length=storage_length,
+            traj_idx=traj_idx,
+        )
 
+    def _get_index(
+        self,
+        lengths: torch.Tensor,
+        start_idx: torch.Tensor,
+        stop_idx: torch.Tensor,
+        seq_length: int,
+        num_slices: int,
+        storage_length: int,
+        traj_idx: torch.Tensor | None = None,
+    ) -> Tuple[torch.Tensor, dict]:
         relative_starts = (
             (
                 torch.rand(num_slices, device=lengths.device)
@@ -1193,6 +1236,10 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
         shuffle (bool, optional): if ``False``, the order of the trajectories
             is not shuffled. Defaults to ``True``.
+        compile (bool or dict of kwargs, optional): if ``True``, the bottleneck of
+            the :meth:`~sample` method will be compiled with :func:`~torch.compile`.
+            Keyword arguments can also be passed to torch.compile with this arg.
+            Defaults to ``False``.
 
     .. note:: To recover the trajectory splits in the storage,
         :class:`~torchrl.data.replay_buffers.samplers.SliceSamplerWithoutReplacement` will first
@@ -1267,6 +1314,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
         shuffle: bool = True,
+        compile: bool | dict = False,
     ):
         SliceSampler.__init__(
             self,
@@ -1279,6 +1327,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             strict_length=strict_length,
             ends=ends,
             trajectories=trajectories,
+            compile=compile,
         )
         SamplerWithoutReplacement.__init__(self, drop_last=drop_last, shuffle=shuffle)
 
@@ -1387,7 +1436,18 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             or when this signal is readily available. Must be used with ``cache_values=True``
             and cannot be used in conjunction with ``end_key`` or ``traj_key``.
         cache_values (bool, optional): to be used with static datasets.
-            Will cache the start and end signal of the trajectory.
+            Will cache the start and end signal of the trajectory. This can be safely used even
+            if the trajectory indices change during calls to :class:`~torchrl.data.ReplayBuffer.extend`
+            as this operation will erase the cache.
+
+            .. warning:: ``cache_values=True`` will not work if the sampler is used with a
+                storage that is extended by another buffer. For instance:
+
+                    >>> buffer0 = ReplayBuffer(storage=storage, sampler=SliceSampler(..., cache_values=True), writer=ImmutableWriter())
+                    >>> buffer1 = ReplayBuffer(storage=storage, sampler=other_sampler)
+                    >>> # Wrong! Does not erase the buffer from the sampler of buffer0
+                    >>> buffer1.extend(data)
+
         truncated_key (NestedKey, optional): If not ``None``, this argument
             indicates where a truncated signal should be written in the output
             data. This is used to indicate to value estimators where the provided
@@ -1402,6 +1462,10 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
+        compile (bool or dict of kwargs, optional): if ``True``, the bottleneck of
+            the :meth:`~sample` method will be compiled with :func:`~torch.compile`.
+            Keyword arguments can also be passed to torch.compile with this arg.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -1458,6 +1522,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         cache_values: bool = False,
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
+        compile: bool | dict = False,
     ):
         SliceSampler.__init__(
             self,
@@ -1470,6 +1535,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             strict_length=strict_length,
             ends=ends,
             trajectories=trajectories,
+            compile=compile,
         )
         PrioritizedSampler.__init__(
             self,
