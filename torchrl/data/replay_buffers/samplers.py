@@ -730,6 +730,7 @@ class SliceSampler(Sampler):
         cache_values: bool = False,
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
+        compile: bool = False,
     ):
         self.num_slices = num_slices
         self.slice_len = slice_len
@@ -784,6 +785,9 @@ class SliceSampler(Sampler):
                 "Either num_slices or slice_len must be not None, and not both. "
                 f"Got num_slices={num_slices} and slice_len={slice_len}."
             )
+        self.compile = compile
+        if compile:
+            self._sample_slices = torch.compile(self._sample_slices)
 
     def __repr__(self):
         return (
@@ -795,8 +799,8 @@ class SliceSampler(Sampler):
             f"strict_length={self.strict_length})"
         )
 
-    @staticmethod
-    def _find_start_stop_traj(*, trajectory=None, end=None, at_capacity: bool):
+    @classmethod
+    def _find_start_stop_traj(cls, *, trajectory=None, end=None, at_capacity: bool):
         if trajectory is not None:
             # slower
             # _, stop_idx = torch.unique_consecutive(trajectory, return_counts=True)
@@ -835,6 +839,10 @@ class SliceSampler(Sampler):
             raise RuntimeError(
                 "Expected the end-of-trajectory signal to be at least 1-dimensional."
             )
+        return cls._end_to_start_stop(length=length, end=end)
+
+    @staticmethod
+    def _end_to_start_stop(end, length):
         # Using transpose ensures the start and stop are sorted the same way
         stop_idx = end.transpose(0, -1).nonzero()
         stop_idx[:, [0, -1]] = stop_idx[:, [-1, 0]].clone()
@@ -859,30 +867,33 @@ class SliceSampler(Sampler):
         lengths[lengths < 0] = lengths[lengths < 0] + length
         return start_idx, stop_idx, lengths
 
+    def _start_to_end(self, st: torch.Tensor, length: int):
+        arange = torch.arange(length, device=st.device, dtype=st.dtype)
+        ndims = st.shape[-1] - 1 if st.ndim else 0
+        if ndims:
+            arange = torch.stack([arange] + [torch.zeros_like(arange)] * ndims, -1)
+        else:
+            arange = arange.unsqueeze(-1)
+        if st.shape != arange.shape:
+            # we do this to make sure that we're not broadcasting the start
+            # wrong as a tensor with shape [N] can't be expanded to [N, 1]
+            # without getting an error
+            st = st.expand_as(arange)
+        return arange + st
+
     def _tensor_slices_from_startend(self, seq_length, start, storage_length):
         # start is a 2d tensor resulting from nonzero()
         # seq_length is a 1d tensor indicating the desired length of each sequence
 
-        def _start_to_end(st: torch.Tensor, length: int):
-            arange = torch.arange(length, device=st.device, dtype=st.dtype)
-            ndims = st.shape[-1] - 1 if st.ndim else 0
-            arange = torch.stack([arange] + [torch.zeros_like(arange)] * ndims, -1)
-            if st.shape != arange.shape:
-                # we do this to make sure that we're not broadcasting the start
-                # wrong as a tensor with shape [N] can't be expanded to [N, 1]
-                # without getting an error
-                st = st.expand_as(arange)
-            return arange + st
-
         if isinstance(seq_length, int):
             result = torch.cat(
-                [_start_to_end(_start, length=seq_length) for _start in start]
+                [self._start_to_end(_start, length=seq_length) for _start in start]
             )
         else:
             # when padding is needed
             result = torch.cat(
                 [
-                    _start_to_end(_start, _seq_len)
+                    self._start_to_end(_start, _seq_len)
                     for _start, _seq_len in zip(start, seq_length)
                 ]
             )
