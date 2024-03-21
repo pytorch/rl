@@ -13,6 +13,7 @@ import logging
 
 import math
 import os
+import pickle
 import sys
 import time
 import traceback
@@ -744,3 +745,11 @@ class _rng_decorator(_DecoratorContextManager):
 
         else:
             torch.random.set_rng_state(self._state)
+
+
+def _can_be_pickled(obj):
+    try:
+        pickle.dumps(obj)
+        return True
+    except (pickle.PickleError, AttributeError, TypeError):
+        return False

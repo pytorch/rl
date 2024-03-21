@@ -12,7 +12,7 @@ project_name="torchrl-example-check-$current_commit"
 group_name="cql_offline"
 
 export PYTHONPATH=$(dirname $(dirname $PWD))
-python $PYTHONPATH/examples/cql/cql_offline.py \
+python $PYTHONPATH/sota-implementations/cql/cql_offline.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"

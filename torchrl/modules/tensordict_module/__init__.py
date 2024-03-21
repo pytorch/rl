@@ -13,6 +13,7 @@ from .actors import (
     DistributionalQValueHook,
     DistributionalQValueModule,
     LMHeadActorValueOperator,
+    MultiStepActorWrapper,
     ProbabilisticActor,
     QValueActor,
     QValueHook,

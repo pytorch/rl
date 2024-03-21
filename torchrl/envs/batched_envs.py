@@ -295,19 +295,11 @@ class BatchedEnvBase(EnvBase):
         self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
         if callable(create_env_fn):
             create_env_fn = [create_env_fn for _ in range(num_workers)]
-        else:
-            if len(create_env_fn) != num_workers:
-                raise RuntimeError(
-                    f"num_workers and len(create_env_fn) mismatch, "
-                    f"got {len(create_env_fn)} and {num_workers}"
-                )
-            if (
-                share_individual_td is False and not self._single_task
-            ):  # then it has been explicitly set by the user
-                raise ValueError(
-                    "share_individual_td must be set to None or True when using multi-task batched environments"
-                )
-            share_individual_td = True
+        elif len(create_env_fn) != num_workers:
+            raise RuntimeError(
+                f"num_workers and len(create_env_fn) mismatch, "
+                f"got {len(create_env_fn)} and {num_workers}"
+            )
         create_env_kwargs = {} if create_env_kwargs is None else create_env_kwargs
         if isinstance(create_env_kwargs, dict):
             create_env_kwargs = [
@@ -322,7 +314,8 @@ class BatchedEnvBase(EnvBase):
         if pin_memory:
             raise ValueError("pin_memory for batched envs is deprecated")
 
-        self.share_individual_td = bool(share_individual_td)
+        # if share_individual_td is None, we will assess later if the output can be stacked
+        self.share_individual_td = share_individual_td
         self._share_memory = shared_memory
         self._memmap = memmap
         self.allow_step_when_done = allow_step_when_done
@@ -365,6 +358,8 @@ class BatchedEnvBase(EnvBase):
             self.meta_data = meta_data.expand(
                 *(self.num_workers, *meta_data.batch_size)
             )
+            if self.share_individual_td is None:
+                self.share_individual_td = False
         else:
             n_tasks = len(create_env_fn)
             self.meta_data = []
@@ -372,6 +367,16 @@ class BatchedEnvBase(EnvBase):
                 self.meta_data.append(
                     get_env_metadata(create_env_fn[i], create_env_kwargs[i]).clone()
                 )
+            if self.share_individual_td is not True:
+                share_individual_td = not _stackable(
+                    *[meta_data.tensordict for meta_data in self.meta_data]
+                )
+                if share_individual_td and self.share_individual_td is False:
+                    raise ValueError(
+                        "share_individual_td=False was provided but share_individual_td must "
+                        "be True to accomodate non-stackable tensors."
+                    )
+                self.share_individual_td = share_individual_td
         self._set_properties()
 
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
@@ -484,9 +489,14 @@ class BatchedEnvBase(EnvBase):
             self.done_spec = output_spec["full_done_spec"]
 
             self._dummy_env_str = str(meta_data[0])
-            self._env_tensordict = LazyStackedTensorDict.lazy_stack(
-                [meta_data.tensordict for meta_data in meta_data], 0
-            )
+            if self.share_individual_td:
+                self._env_tensordict = LazyStackedTensorDict.lazy_stack(
+                    [meta_data.tensordict for meta_data in meta_data], 0
+                )
+            else:
+                self._env_tensordict = torch.stack(
+                    [meta_data.tensordict for meta_data in meta_data], 0
+                )
             self._batch_locked = meta_data[0].batch_locked
         self.has_lazy_inputs = contains_lazy_spec(self.input_spec)
 
@@ -503,14 +513,11 @@ class BatchedEnvBase(EnvBase):
 
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
-        if self._single_task:
-            shared_tensordict_parent = self._env_tensordict.clone()
-            if not self._env_tensordict.shape[0] == self.num_workers:
-                raise RuntimeError(
-                    "batched environment base tensordict has the wrong shape"
-                )
-        else:
-            shared_tensordict_parent = self._env_tensordict.clone()
+        shared_tensordict_parent = self._env_tensordict.clone()
+        if self._env_tensordict.shape[0] != self.num_workers:
+            raise RuntimeError(
+                "batched environment base tensordict has the wrong shape"
+            )
 
         if self._single_task:
             self._env_input_keys = sorted(
@@ -525,6 +532,7 @@ class BatchedEnvBase(EnvBase):
                 self._env_obs_keys.append(key)
             self._env_output_keys += self.reward_keys + self.done_keys
         else:
+            # this is only possible if _single_task=False
             env_input_keys = set()
             for meta_data in self.meta_data:
                 if meta_data.specs["input_spec", "full_state_spec"] is not None:
@@ -577,7 +585,7 @@ class BatchedEnvBase(EnvBase):
         # output keys after step
         self._selected_step_keys = {unravel_key(key) for key in self._env_output_keys}
 
-        if self._single_task:
+        if not self.share_individual_td:
             shared_tensordict_parent = shared_tensordict_parent.select(
                 *self._selected_keys,
                 *(unravel_key(("next", key)) for key in self._env_output_keys),
@@ -807,10 +815,19 @@ class SerialEnv(BatchedEnvBase):
                 tensordict_ = None
 
             _td = _env.reset(tensordict=tensordict_, **kwargs)
-            self.shared_tensordicts[i].update_(
-                _td,
-                keys_to_update=list(self._selected_reset_keys_filt),
-            )
+            try:
+                self.shared_tensordicts[i].update_(
+                    _td,
+                    keys_to_update=list(self._selected_reset_keys_filt),
+                )
+            except RuntimeError as err:
+                if "no_grad mode" in str(err):
+                    raise RuntimeError(
+                        "Cannot update a view of a tensordict when gradients are required. "
+                        "To collect gradient across sub-environments, please set the "
+                        "share_individual_td argument to True."
+                    )
+                raise
         selected_output_keys = self._selected_reset_keys_filt
         device = self.device
 
@@ -1701,6 +1718,15 @@ def _run_worker_pipe_shared_mem(
 
 def _filter_empty(tensordict):
     return tensordict.select(*tensordict.keys(True, True))
+
+
+def _stackable(*tensordicts):
+    try:
+        ls = LazyStackedTensorDict(*tensordicts, stack_dim=0)
+        ls.contiguous()
+        return not ls._has_exclusive_keys
+    except RuntimeError:
+        return False
 
 
 # Create an alias for possible imports

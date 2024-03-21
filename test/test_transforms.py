@@ -8062,6 +8062,22 @@ class TestTransforms:
                     [nchannels * N, 16, 16]
                 )
 
+    def test_lambda_functions(self):
+        def trsf(data):
+            if "y" in data.keys():
+                data["y"] += 1
+                return data
+            return data.set("y", torch.zeros(data.shape))
+
+        env = TransformedEnv(CountingEnv(5), trsf)
+        env.append_transform(trsf)
+        env.insert_transform(0, trsf)
+        # With Compose
+        env.transform.append(trsf)
+        assert env.reset().get("y") == 3
+        env.transform = trsf
+        assert env.reset().get("y") == 0
+
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("keys_inv_1", [["action_1"], []])
     @pytest.mark.parametrize("keys_inv_2", [["action_2"], []])
@@ -10208,11 +10224,11 @@ class TestMultiStepTransform:
         t = MultiStepTransform(3, 0.98)
 
         outs_2 = []
-        td = env.reset()
+        td = env.reset().contiguous()
         for _ in range(1):
             rollout = env.rollout(
                 250, auto_reset=False, tensordict=td, break_when_any_done=False
-            )
+            ).contiguous()
             out = t._inv_call(rollout)
             td = rollout[..., -1]
             outs_2.append(out)
@@ -10225,15 +10241,15 @@ class TestMultiStepTransform:
         torch.manual_seed(0)
 
         outs = []
-        td = env.reset()
+        td = env.reset().contiguous()
         for i in range(5):
             rollout = env.rollout(
                 50, auto_reset=False, tensordict=td, break_when_any_done=False
-            )
+            ).contiguous()
             out = t._inv_call(rollout)
             # tests that the data is insensitive to the collection schedule
             assert_allclose_td(out, outs_2[i])
-            td = rollout[..., -1]["next"]
+            td = rollout[..., -1]["next"].exclude("reward")
             outs.append(out)
 
         outs = torch.cat(outs, -1)
@@ -10245,11 +10261,11 @@ class TestMultiStepTransform:
         torch.manual_seed(0)
 
         outs_3 = []
-        td = env.reset()
+        td = env.reset().contiguous()
         for _ in range(125):
             rollout = env.rollout(
                 2, auto_reset=False, tensordict=td, break_when_any_done=False
-            )
+            ).contiguous()
             out = t._inv_call(rollout)
             td = rollout[..., -1]["next"]
             if out is not None:

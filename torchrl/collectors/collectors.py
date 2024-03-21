@@ -429,7 +429,7 @@ class SyncDataCollector(DataCollectorBase):
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
         split_trajs: bool | None = None,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
-        exploration_mode=None,
+        exploration_mode: str | None = None,
         return_same_td: bool = False,
         reset_when_done: bool = True,
         interruptor=None,
@@ -505,6 +505,13 @@ class SyncDataCollector(DataCollectorBase):
         elif self.env.device is not None:
             # we we did not receive an env device, we use the device of the env
             self.env_device = self.env.device
+
+        # If the storing device is not the same as the policy device, we have
+        # no guarantee that the "next" entry from the policy will be on the
+        # same device as the collector metadata.
+        self._cast_to_env_device = self._cast_to_policy_device or (
+            self.env.device != self.storing_device
+        )
 
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
@@ -923,7 +930,7 @@ class SyncDataCollector(DataCollectorBase):
                             policy_output, keys_to_update=self._policy_output_keys
                         )
 
-                if self._cast_to_policy_device:
+                if self._cast_to_env_device:
                     if self.env_device is not None:
                         env_input = self._shuttle.to(self.env_device, non_blocking=True)
                     elif self.env_device is None:
@@ -967,14 +974,14 @@ class SyncDataCollector(DataCollectorBase):
                         torch.stack(
                             tensordicts,
                             self._final_rollout.ndim - 1,
-                            out=self._final_rollout[: t + 1],
+                            out=self._final_rollout[..., : t + 1],
                         )
                     except RuntimeError:
                         with self._final_rollout.unlock_():
                             torch.stack(
                                 tensordicts,
                                 self._final_rollout.ndim - 1,
-                                out=self._final_rollout[: t + 1],
+                                out=self._final_rollout[..., : t + 1],
                             )
                     break
             else:
@@ -1231,6 +1238,20 @@ class _MultiDataCollector(DataCollectorBase):
             each subprocess (or one if a single process is launched).
             Defaults to 1 for safety: if none is indicated, launching multiple
             workers may charge the cpu load too much and harm performance.
+        cat_results (str, int or None): (:class:`~torchrl.collectors.MultiSyncDataCollector` exclusively).
+            If ``"stack"``, the data collected from the workers will be stacked along the
+            first dimension. This is the preferred behaviour as it is the most compatible
+            with the rest of the library.
+            If ``0``, results will be concatenated along the first dimension
+            of the outputs, which can be the batched dimension if the environments are
+            batched or the time dimension if not.
+            A ``cat_results`` value of ``-1`` will always concatenate results along the
+            time dimension. This should be preferred over the default. Intermediate values
+            are also accepted.
+            Defaults to ``0``.
+
+            .. note:: From v0.5, this argument will default to ``"stack"`` for a better
+                interoperability with the rest of the library.
 
     """
 
@@ -1263,6 +1284,7 @@ class _MultiDataCollector(DataCollectorBase):
         preemptive_threshold: float = None,
         num_threads: int = None,
         num_sub_threads: int = 1,
+        cat_results: str | int | None = None,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
@@ -1421,6 +1443,22 @@ class _MultiDataCollector(DataCollectorBase):
         self._exclude_private_keys = True
         self._frames = 0
         self._iter = -1
+        if cat_results is not None and (
+            not isinstance(cat_results, (int, str))
+            or (isinstance(cat_results, str) and cat_results != "stack")
+        ):
+            raise ValueError(
+                "cat_results must be a string ('stack') "
+                f"or an integer representing the cat dimension. Got {cat_results}."
+            )
+        if not isinstance(self, MultiSyncDataCollector) and cat_results not in (
+            "stack",
+            None,
+        ):
+            raise ValueError(
+                "cat_results can only be used with ``MultiSyncDataCollector``."
+            )
+        self.cat_results = cat_results
 
     @classmethod
     def _total_workers_from_env(cls, env_creators):
@@ -1771,7 +1809,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
     The collection starts when the next item of the collector is queried,
     and no environment step is computed in between the reception of a batch of
     trajectory and the start of the next collection.
-    This class can be safely used with online RL algorithms.
+    This class can be safely used with online RL sota-implementations.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -1877,11 +1915,33 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     def iterator(self) -> Iterator[TensorDictBase]:
 
+        cat_results = self.cat_results
+        if cat_results is None:
+            cat_results = 0
+            warnings.warn(
+                f"`cat_results` was not specified in the constructor of {type(self).__name__}. "
+                f"For MultiSyncDataCollector, `cat_results` indicates how the data should "
+                f"be packed: the preferred option is `cat_results='stack'` which provides "
+                f"the best interoperability across torchrl components. "
+                f"Other accepted values are `cat_results=0` (previous behaviour) and "
+                f"`cat_results=-1` (cat along time dimension). Among these two, the latter "
+                f"should be preferred for consistency across environment configurations. "
+                f"Currently, the default value is `0` (using torch.cat along first dimension)."
+                f"From v0.5 onward, this will default to `'stack'`. "
+                f"To suppress this warning, set stack_results to the desired value.",
+                category=DeprecationWarning,
+            )
+
         self.buffers = {}
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
         self.out_buffer = None
+        last_traj_ids = [-10 for _ in range(self.num_workers)]
+        last_traj_ids_subs = [None for _ in range(self.num_workers)]
+        traj_max = -1
+        traj_ids_list = [None for _ in range(self.num_workers)]
+        preempt = self.interruptor is not None and self.preemptive_threshold < 1.0
 
         while not all(dones) and self._frames < self.total_frames:
             _check_for_faulty_process(self.procs)
@@ -1899,9 +1959,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 self.pipes[idx].send((None, msg))
 
             self._iter += 1
-            max_traj_idx = None
 
-            if self.interruptor is not None and self.preemptive_threshold < 1.0:
+            if preempt:
                 self.interruptor.start_collection()
                 while self.queue_out.qsize() < int(
                     self.num_workers * self.preemptive_threshold
@@ -1919,18 +1978,81 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     self.buffers[idx] = data
                 else:
                     idx = new_data
-                workers_frames[idx] = workers_frames[idx] + self.buffers[idx].numel()
+                    data = self.buffers[idx]
+
+                if preempt:
+                    # mask buffers if cat, and create a mask if stack
+                    if cat_results != "stack":
+                        buffers = {}
+                        for idx, buffer in self.buffers.items():
+                            valid = buffer.get(("collector", "traj_ids")) != -1
+                            if valid.ndim > 2:
+                                valid = valid.flatten(0, -2)
+                            if valid.ndim == 2:
+                                valid = valid.any(0)
+                            buffers[idx] = buffer[..., valid]
+                    else:
+                        for buffer in self.buffers.values():
+                            with buffer.unlock_():
+                                buffer.set(
+                                    ("collector", "mask"),
+                                    buffer.get(("collector", "traj_ids")) != -1,
+                                )
+                        buffers = self.buffers
+                else:
+                    buffers = self.buffers
+
+                workers_frames[idx] = workers_frames[idx] + buffers[idx].numel()
 
                 if workers_frames[idx] >= self.total_frames:
                     dones[idx] = True
+
             # we have to correct the traj_ids to make sure that they don't overlap
+            # We can count the number of frames collected for free in this loop
+            n_collected = 0
             for idx in range(self.num_workers):
-                traj_ids = self.buffers[idx].get(("collector", "traj_ids"))
-                if max_traj_idx is not None:
-                    traj_ids[traj_ids != -1] += max_traj_idx
-                    # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
-                max_traj_idx = traj_ids.max().item() + 1
-                # out = out_tensordicts_shared[idx]
+                buffer = buffers[idx]
+                traj_ids = buffer.get(("collector", "traj_ids"))
+                is_last = traj_ids == last_traj_ids[idx]
+                # If we `cat` interrupted data, we have already filtered out
+                # non-valid steps. If we stack, we haven't.
+                if preempt and cat_results == "stack":
+                    valid = buffer.get(("collector", "traj_ids")) != -1
+                    if valid.ndim > 2:
+                        valid = valid.flatten(0, -2)
+                    if valid.ndim == 2:
+                        valid = valid.any(0)
+                    last_traj_ids[idx] = traj_ids[..., valid][..., -1:].clone()
+                else:
+                    last_traj_ids[idx] = traj_ids[..., -1:].clone()
+                if not is_last.all():
+                    traj_to_correct = traj_ids[~is_last]
+                    traj_to_correct = (
+                        traj_to_correct + (traj_max + 1) - traj_to_correct.min()
+                    )
+                    traj_ids = traj_ids.masked_scatter(~is_last, traj_to_correct)
+                # is_last can only be true if we're after the first iteration
+                if is_last.any():
+                    traj_ids = torch.where(
+                        is_last, last_traj_ids_subs[idx].expand_as(traj_ids), traj_ids
+                    )
+
+                if preempt:
+                    if cat_results == "stack":
+                        mask_frames = buffer.get(("collector", "traj_ids")) != -1
+                        traj_ids = torch.where(mask_frames, traj_ids, -1)
+                        n_collected += mask_frames.sum().cpu()
+                        last_traj_ids_subs[idx] = traj_ids[..., valid][..., -1:].clone()
+                    else:
+                        last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
+                        n_collected += traj_ids.numel()
+                else:
+                    last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
+                    n_collected += traj_ids.numel()
+                traj_ids_list[idx] = traj_ids
+
+                traj_max = max(traj_max, traj_ids.max())
+
             if same_device is None:
                 prev_device = None
                 same_device = True
@@ -1940,23 +2062,49 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     else:
                         same_device = same_device and (item.device == prev_device)
 
-            if same_device:
-                self.out_buffer = torch.cat(
-                    list(self.buffers.values()), 0, out=self.out_buffer
+            if cat_results == "stack":
+                if same_device:
+                    self.out_buffer = torch.stack(list(buffers.values()), 0)
+                else:
+                    self.out_buffer = torch.stack(
+                        [item.cpu() for item in buffers.values()], 0
+                    )
+                self.out_buffer.set_(
+                    ("collector", "traj_ids"), torch.stack(traj_ids_list)
                 )
             else:
-                self.out_buffer = torch.cat(
-                    [item.cpu() for item in self.buffers.values()],
-                    0,
-                    out=self.out_buffer,
-                )
+                try:
+                    if same_device:
+                        self.out_buffer = torch.cat(list(buffers.values()), cat_results)
+                    else:
+                        self.out_buffer = torch.cat(
+                            [item.cpu() for item in buffers.values()], cat_results
+                        )
+                    self.out_buffer.set_(
+                        ("collector", "traj_ids"), torch.cat(traj_ids_list, cat_results)
+                    )
+                except RuntimeError as err:
+                    if (
+                        preempt
+                        and cat_results != -1
+                        and "Sizes of tensors must match" in str(err)
+                    ):
+                        raise RuntimeError(
+                            "The value provided to cat_results isn't compatible with the collectors outputs. "
+                            "Consider using `cat_results=-1`."
+                        )
+                    raise
 
+            # TODO: why do we need to do cat inplace and clone?
             if self.split_trajs:
                 out = split_trajectories(self.out_buffer, prefix="collector")
-                self._frames += out.get(("collector", "mask")).sum().item()
             else:
-                out = self.out_buffer.clone()
-                self._frames += prod(out.shape)
+                out = self.out_buffer
+            if cat_results in (-1, "stack"):
+                out.refine_names(*[None] * (out.ndim - 1) + ["time"])
+
+            self._frames += n_collected
+
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
@@ -1968,6 +2116,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             del out
 
         del self.buffers
+        self.out_buffer = None
         # We shall not call shutdown just yet as user may want to retrieve state_dict
         # self._shutdown_main()
 
@@ -2008,7 +2157,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     The collection keeps on occuring on all processes even between the time
     the batch of rollouts is collected and the next call to the iterator.
-    This class can be safely used with offline RL algorithms.
+    This class can be safely used with offline RL sota-implementations.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
