@@ -591,7 +591,7 @@ class CrossQLoss(LossModule):
             ("next", self.value_estimator.tensor_keys.value), next_state_value
         )
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
-        return target_value
+        return target_value.detach()
 
     def _qvalue_loss(
         self, tensordict: TensorDictBase
@@ -659,10 +659,10 @@ class CrossQLoss(LossModule):
         # tensordict.set(
         #     ("next", self.value_estimator.tensor_keys.value), next_state_action_value
         # )
-        # target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
+        # target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1).detach()
         # # get current q-values
         # pred_val = current_state_action_value.squeeze(-1)
-        ############################
+        # ###########################
         # compute loss
         td_error = abs(pred_val - target_value)
         loss_qval = distance_loss(
