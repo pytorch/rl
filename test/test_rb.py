@@ -1835,7 +1835,6 @@ class TestMultiProc:
     def test_error_prb(self):
         # PrioritizedSampler cannot be shared
         with pytest.raises(RuntimeError, match="cannot be shared between processes"):
-            # with pytest.warns():
             self.exec_multiproc_rb(
                 sampler_type=lambda: PrioritizedSampler(21, alpha=1.1, beta=0.5)
             )

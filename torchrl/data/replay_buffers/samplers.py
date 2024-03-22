@@ -360,14 +360,6 @@ class PrioritizedSampler(Sampler):
             raise RuntimeError(
                 f"Samplers of type {type(self)} cannot be shared between processes."
             )
-            # TODO: Use a warning instead
-            # logger.warning(
-            #     f"It seems you are sharing a {type(self).__name__} across processes. "
-            #     f"If the sampler is queried on another process than the one populating "
-            #     f"the storage, this will fail as the sampler is updated locally and "
-            #     f"not globally. If this feature is required, please file an issue on "
-            #     f"torchrl GitHub."
-            # )
         state = copy(self.__dict__)
         return state
 
