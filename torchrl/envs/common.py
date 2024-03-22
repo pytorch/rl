@@ -2132,7 +2132,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             elif not self._allow_done_after_reset:
                 for done_key in done_key_group:
                     if tensordict_reset.get(done_key).any():
-                        print(tensordict_reset.get(done_key))
                         raise RuntimeError(
                             f"The done entry '{done_key}' was (partially) True after a call to reset() in env {self}."
                         )

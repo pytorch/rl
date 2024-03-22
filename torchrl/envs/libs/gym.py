@@ -936,7 +936,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             return env.reward_space
 
     @implement_for("gymnasium")
-    def _reward_space(self, env):
+    def _reward_space(self, env):  # noqa: F811
         env = env.unwrapped
         if hasattr(env, "reward_space") and env.reward_space is not None:
             rs = env.reward_space
