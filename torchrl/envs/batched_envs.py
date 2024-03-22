@@ -373,7 +373,7 @@ class BatchedEnvBase(EnvBase):
         return sync_func
 
     def _find_sync_values(self):
-        """Returns the m2w and w2m sync values, in that order"""
+        """Returns the m2w and w2m sync values, in that order."""
         # Simplest case: everything is on the same device
         worker_device = self.shared_tensordict_parent.device
         self_device = self.device
