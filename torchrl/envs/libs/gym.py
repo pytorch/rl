@@ -963,7 +963,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         elif observation_spec.shape[: len(self.batch_size)] != self.batch_size:
             observation_spec.shape = self.batch_size
 
-        reward_space = self._reward_spec(env)
+        reward_space = self._reward_space(env)
         if reward_space is not None:
             reward_spec = _gym_to_torchrl_spec_transform(
                 reward_space,
