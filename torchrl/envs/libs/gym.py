@@ -936,9 +936,11 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             return env.reward_space
     @implement_for("gymnasium")
     def _reward_space(self, env):
+        print('getting reward space')
         env = env.unwrapped
         if hasattr(env, "reward_space") and env.reward_space is not None:
-            return env.reward_space
+            rs = env.reward_space
+            return rs
 
     def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
         action_spec = _gym_to_torchrl_spec_transform(

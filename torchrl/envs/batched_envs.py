@@ -334,10 +334,10 @@ class BatchedEnvBase(EnvBase):
         self._properties_set = False
         self._get_metadata(create_env_fn, create_env_kwargs)
         self._non_blocking = non_blocking
-        if non_blocking and self.device is not None and self.device.type == "mps":
-            raise RuntimeError(
-                "non_blocking=True is incompatible with ParallelEnv on MPS device."
-            )
+        # if non_blocking and self.device is not None and self.device.type == "mps":
+        #     raise RuntimeError(
+        #         "non_blocking=True is incompatible with ParallelEnv on MPS device."
+        #     )
         if mp_start_method is not None and not isinstance(self, ParallelEnv):
             raise TypeError(
                 f"Cannot use mp_start_method={mp_start_method} with envs of type {type(self)}."
