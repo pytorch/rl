@@ -198,7 +198,9 @@ class _StepMDP:
                     )
                 else:
                     val = cls._grab_and_place(subdict, val, val_out)
-            data_out._set_str(key, val, validated=True, inplace=False)
+            data_out._set_str(
+                key, val, validated=True, inplace=False, non_blocking=False
+            )
         return data_out
 
     def __call__(self, tensordict):
@@ -416,7 +418,9 @@ def _set_single_key(
                 new_val = dest._get_str(k, None)
                 if new_val is None:
                     new_val = val.empty()
-                    dest._set_str(k, new_val, inplace=False, validated=True)
+                    dest._set_str(
+                        k, new_val, inplace=False, validated=True, non_blocking=False
+                    )
                 source = val
                 dest = new_val
             else:
@@ -424,7 +428,7 @@ def _set_single_key(
                     val = val.to(device, non_blocking=True)
                 elif clone:
                     val = val.clone()
-                dest._set_str(k, val, inplace=False, validated=True)
+                dest._set_str(k, val, inplace=False, validated=True, non_blocking=False)
         # This is a temporary solution to understand if a key is heterogeneous
         # while not having performance impact when the exception is not raised
         except RuntimeError as err:
@@ -456,12 +460,16 @@ def _set(source, dest, key, total_key, excluded):
                     )
                 if non_empty_local:
                     # dest.set(key, new_val)
-                    dest._set_str(key, new_val, inplace=False, validated=True)
+                    dest._set_str(
+                        key, new_val, inplace=False, validated=True, non_blocking=False
+                    )
                 non_empty = non_empty_local
             else:
                 non_empty = True
                 # dest.set(key, val)
-                dest._set_str(key, val, inplace=False, validated=True)
+                dest._set_str(
+                    key, val, inplace=False, validated=True, non_blocking=False
+                )
         # This is a temporary solution to understand if a key is heterogeneous
         # while not having performance impact when the exception is not raised
         except RuntimeError as err:
