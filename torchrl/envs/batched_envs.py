@@ -12,7 +12,7 @@ import gc
 import os
 import weakref
 from collections import OrderedDict
-from copy import deepcopy
+from copy import copy, deepcopy
 from functools import wraps
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
@@ -334,10 +334,6 @@ class BatchedEnvBase(EnvBase):
         self._properties_set = False
         self._get_metadata(create_env_fn, create_env_kwargs)
         self._non_blocking = non_blocking
-        # if non_blocking and self.device is not None and self.device.type == "mps":
-        #     raise RuntimeError(
-        #         "non_blocking=True is incompatible with ParallelEnv on MPS device."
-        #     )
         if mp_start_method is not None and not isinstance(self, ParallelEnv):
             raise TypeError(
                 f"Cannot use mp_start_method={mp_start_method} with envs of type {type(self)}."
@@ -438,6 +434,12 @@ class BatchedEnvBase(EnvBase):
             and self_device.type == "mps"
         ):
             return _mps_sync(self_device), _mps_sync(self_device)
+
+    def __getstate__(self):
+        out = copy(self.__dict__)
+        out["_sync_m2w_value"] = None
+        out["_sync_w2m_value"] = None
+        return out
 
     def _get_metadata(
         self, create_env_fn: List[Callable], create_env_kwargs: List[Dict]
@@ -907,11 +909,12 @@ class SerialEnv(BatchedEnvBase):
                         tensordict_ = tensordict_.clone(False)
             else:
                 tensordict_ = None
-            tds.append(tensordict_)
+            tds.append((i, tensordict_))
 
         self._sync_m2w()
 
-        for i, (_env, tensordict_) in enumerate(zip(self._envs, tds)):
+        for i, tensordict_ in tds:
+            _env = self._envs[i]
             _td = _env.reset(tensordict=tensordict_, **kwargs)
             try:
                 self.shared_tensordicts[i].update_(
@@ -1258,7 +1261,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "_selected_step_keys": self._selected_step_keys,
                         "has_lazy_inputs": self.has_lazy_inputs,
                         "num_threads": num_sub_threads,
-                        "non_blocking": self.non_blocking,
+                        "non_blocking": False,  # self.non_blocking,
                     }
                 )
                 process = proc_fun(target=func, kwargs=kwargs[idx])
@@ -1420,21 +1423,25 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         next_td = self.shared_tensordict_parent.get("next")
         device = self.device
 
-        def select_and_clone(name, tensor):
-            if name in self._selected_step_keys:
-                return tensor.clone()
+        if next_td.device != device and device is not None:
+
+            def select_and_clone(name, tensor):
+                if name in self._selected_step_keys:
+                    return tensor.to(device, non_blocking=self.non_blocking)
+
+        else:
+
+            def select_and_clone(name, tensor):
+                if name in self._selected_step_keys:
+                    return tensor.clone()
 
         out = next_td.named_apply(
             select_and_clone,
             nested_keys=True,
             filter_empty=True,
+            device=device,
         )
-        if out.device != device:
-            if device is None:
-                out.clear_device_()
-            else:
-                out = out.to(device, non_blocking=self.non_blocking)
-                self._sync_w2m()
+        self._sync_w2m()
         return out
 
     @torch.no_grad()
@@ -1512,22 +1519,25 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         selected_output_keys = self._selected_reset_keys_filt
         device = self.device
 
-        def select_and_clone(name, tensor):
-            if name in selected_output_keys:
-                return tensor.clone()
+        if self.shared_tensordict_parent.device != device and device is not None:
+
+            def select_and_clone(name, tensor):
+                if name in selected_output_keys:
+                    return tensor.to(device, non_blocking=self.non_blocking)
+
+        else:
+
+            def select_and_clone(name, tensor):
+                if name in selected_output_keys:
+                    return tensor.clone()
 
         out = self.shared_tensordict_parent.named_apply(
             select_and_clone,
             nested_keys=True,
             filter_empty=True,
+            device=device,
         )
-
-        if out.device != device:
-            if device is None:
-                out.clear_device_()
-            else:
-                out = out.to(device, non_blocking=self.non_blocking)
-                self._sync_w2m()
+        self._sync_w2m()
         return out
 
     @_check_start
