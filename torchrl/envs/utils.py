@@ -154,7 +154,13 @@ class _StepMDP:
                 + [unravel_key(("next", key)) for key in self.done_keys]
                 + [unravel_key(("next", key)) for key in self.reward_keys]
             )
-            actual = set(tensordict.keys(True, True))
+
+            def _is_reset(key: NestedKey):
+                if isinstance(key, str):
+                    return key == "_reset"
+                return key[-1] == "_reset"
+
+            actual = {key for key in tensordict.keys(True, True) if not _is_reset(key)}
             self.validated = set(expected) == actual
             if not self.validated:
                 warnings.warn(

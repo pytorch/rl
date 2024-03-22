@@ -1456,7 +1456,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             )
 
         outs = []
-        for i, channel in enumerate(self.parent_channels):
+        for i in range(self.num_workers):
             if tensordict is not None:
                 tensordict_ = tensordict[i]
                 if tensordict_.is_empty():
