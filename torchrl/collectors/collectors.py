@@ -494,7 +494,7 @@ class SyncDataCollector(DataCollectorBase):
             elif torch.backends.mps.is_available():
                 self._sync_env = torch.mps.synchronize
             elif self.env_device.type == "cpu":
-                self._sync_storage = _do_nothing
+                self._sync_env = _do_nothing
             else:
                 raise RuntimeError("Non supported device")
         else:
@@ -507,7 +507,7 @@ class SyncDataCollector(DataCollectorBase):
             elif torch.backends.mps.is_available():
                 self._sync_policy = torch.mps.synchronize
             elif self.policy_device.type == "cpu":
-                self._sync_storage = _do_nothing
+                self._sync_policy = _do_nothing
             else:
                 raise RuntimeError("Non supported device")
         else:
