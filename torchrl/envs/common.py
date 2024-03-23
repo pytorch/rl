@@ -2942,7 +2942,7 @@ class _EnvWrapper(EnvBase):
                     self._sync_device_val = _do_nothing
             else:
                 self._sync_device_val = _do_nothing
-            return self._sync_orig_device
+            return self._sync_device
         return sync_func
 
     @abc.abstractmethod
