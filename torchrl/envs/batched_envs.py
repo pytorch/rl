@@ -32,7 +32,7 @@ from torchrl._utils import (
 )
 from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
-from torchrl.envs.common import _EnvPostInit, EnvBase
+from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
 # legacy
@@ -1880,10 +1880,6 @@ def _cuda_sync(device):
 
 def _mps_sync(device):
     return torch.mps.synchronize
-
-
-def _do_nothing():
-    return
 
 
 # Create an alias for possible imports

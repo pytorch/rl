@@ -49,8 +49,7 @@ from torchrl._utils import (
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
-from torchrl.envs.batched_envs import _do_nothing
-from torchrl.envs.common import EnvBase
+from torchrl.envs.common import _do_nothing, EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
@@ -1040,16 +1039,6 @@ class SyncDataCollector(DataCollectorBase):
                             out=self._final_rollout,
                         )
         return self._final_rollout
-
-    @staticmethod
-    def _update_device_wise(tensor0, tensor1):
-        # given 2 tensors, returns tensor0 if their identity matches,
-        # or a copy of tensor1 on the device of tensor0 otherwise
-        if tensor1 is None or tensor1 is tensor0:
-            return tensor0
-        if tensor1.device == tensor0.device:
-            return tensor1
-        return tensor1.to(tensor0.device, non_blocking=True)
 
     @torch.no_grad()
     def reset(self, index=None, **kwargs) -> None:

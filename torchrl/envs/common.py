@@ -15,6 +15,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict import LazyStackedTensorDict, TensorDictBase, unravel_key
+from tensordict.base import NO_DEFAULT
 from tensordict.utils import NestedKey
 from torchrl._utils import _replace_last, implement_for, prod, seed_generator
 
@@ -2887,12 +2888,20 @@ class _EnvWrapper(EnvBase):
         self,
         *args,
         dtype: Optional[np.dtype] = None,
-        device: DEVICE_TYPING = None,
+        device: DEVICE_TYPING = NO_DEFAULT,
         batch_size: Optional[torch.Size] = None,
         allow_done_after_reset: bool = False,
         **kwargs,
     ):
-        if device is None:
+        if device is NO_DEFAULT:
+            warnings.warn(
+                "Your wrapper was not given a device. Currently, this "
+                "value will default to 'cpu'. From v0.5 it will "
+                "default to `None`. With a device of None, no device casting "
+                "is performed and the resulting tensordicts are deviceless. "
+                "Please set your device accordingly.",
+                category=DeprecationWarning,
+            )
             device = torch.device("cpu")
         super().__init__(
             device=device,
@@ -2919,6 +2928,22 @@ class _EnvWrapper(EnvBase):
         self._make_specs(self._env)  # writes the self._env attribute
         self.is_closed = False
         self._init_env()  # runs all the steps to have a ready-to-use env
+
+    def _sync_device(self):
+        sync_func = self.__dict__.get("_sync_device_val", None)
+        if sync_func is None:
+            device = self.device
+            if device.type != "cuda":
+                if torch.cuda.is_available():
+                    self._sync_device_val = torch.cuda.synchronize
+                elif torch.backends.mps.is_available():
+                    self._sync_device_val = torch.cuda.synchronize
+                elif device.type == "cpu":
+                    self._sync_device_val = _do_nothing
+            else:
+                self._sync_device_val = _do_nothing
+            return self._sync_orig_device
+        return sync_func
 
     @abc.abstractmethod
     def _check_kwargs(self, kwargs: Dict):
@@ -3033,3 +3058,7 @@ def _get_sync_func(policy_device, env_device):
             )
         sync_func = torch.mps.synchronize
     return sync_func
+
+
+def _do_nothing():
+    return
