@@ -479,6 +479,8 @@ class SyncDataCollector(DataCollectorBase):
                 self._sync_storage = torch.cuda.synchronize
             elif torch.backends.mps.is_available():
                 self._sync_storage = torch.mps.synchronize
+            elif self.storing_device.type == "cpu":
+                self._sync_storage = _do_nothing
             else:
                 raise RuntimeError("Non supported device")
         else:
@@ -491,6 +493,8 @@ class SyncDataCollector(DataCollectorBase):
                 self._sync_env = torch.cuda.synchronize
             elif torch.backends.mps.is_available():
                 self._sync_env = torch.mps.synchronize
+            elif self.env_device.type == "cpu":
+                self._sync_storage = _do_nothing
             else:
                 raise RuntimeError("Non supported device")
         else:
@@ -502,6 +506,8 @@ class SyncDataCollector(DataCollectorBase):
                 self._sync_policy = torch.cuda.synchronize
             elif torch.backends.mps.is_available():
                 self._sync_policy = torch.mps.synchronize
+            elif self.policy_device.type == "cpu":
+                self._sync_storage = _do_nothing
             else:
                 raise RuntimeError("Non supported device")
         else:
