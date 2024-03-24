@@ -1055,7 +1055,7 @@ class SliceSampler(Sampler):
 
         if (lengths < seq_length).any():
             if self.strict_length:
-                idx = lengths == seq_length
+                idx = lengths >= seq_length
                 if not idx.any():
                     raise RuntimeError(
                         f"Did not find a single trajectory with sufficient length (length range: {lengths.min()} - {lengths.max()} / required={seq_length}))."
