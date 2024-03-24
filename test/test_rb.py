@@ -2173,18 +2173,25 @@ class TestSamplers:
 
         torch.manual_seed(0)
 
-        data = TensorDict({
-            "traj": torch.cat([
-                torch.ones(2, dtype=torch.int),
-                torch.zeros(10, dtype=torch.int),
-            ], dim=0),
-            "x": torch.arange(12),
-        }, [12])
+        data = TensorDict(
+            {
+                "traj": torch.cat(
+                    [
+                        torch.ones(2, dtype=torch.int),
+                        torch.zeros(10, dtype=torch.int),
+                    ],
+                    dim=0,
+                ),
+                "x": torch.arange(12),
+            },
+            [12],
+        )
 
         buffer = ReplayBuffer(
             storage=LazyTensorStorage(12),
             sampler=SliceSampler(num_slices=2, strict_length=True, traj_key="traj"),
-            batch_size=8)
+            batch_size=8,
+        )
         buffer.extend(data)
 
         for _ in range(50):
@@ -2195,7 +2202,8 @@ class TestSamplers:
         buffer = ReplayBuffer(
             storage=LazyTensorStorage(12),
             sampler=SliceSampler(num_slices=2, strict_length=False, traj_key="traj"),
-            batch_size=8)
+            batch_size=8,
+        )
         buffer.extend(data)
 
         for _ in range(50):
