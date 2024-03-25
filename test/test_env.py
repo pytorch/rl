@@ -2664,7 +2664,8 @@ def test_backprop(device, maybe_fork_ParallelEnv, share_individual_td):
                     "reward": action.sum().unsqueeze(0),
                     **self.full_done_spec.zero(),
                     "observation": obs,
-                }
+                },
+                batch_size=[],
             )
 
     torch.manual_seed(0)
@@ -2829,19 +2830,19 @@ def test_single_task_share_individual_td():
 
 def test_stackable():
     # Tests the _stackable util
-    stack = [TensorDict({"a": 0}), TensorDict({"b": 1})]
+    stack = [TensorDict({"a": 0}, []), TensorDict({"b": 1}, [])]
     assert not _stackable(*stack), torch.stack(stack)
-    stack = [TensorDict({"a": [0]}), TensorDict({"a": 1})]
+    stack = [TensorDict({"a": [0]}, []), TensorDict({"a": 1}, [])]
     assert not _stackable(*stack)
-    stack = [TensorDict({"a": [0]}), TensorDict({"a": [1]})]
+    stack = [TensorDict({"a": [0]}, []), TensorDict({"a": [1]}, [])]
     assert _stackable(*stack)
-    stack = [TensorDict({"a": [0]}), TensorDict({"a": [1], "b": {}})]
+    stack = [TensorDict({"a": [0]}, []), TensorDict({"a": [1], "b": {}}, [])]
     assert _stackable(*stack)
-    stack = [TensorDict({"a": {"b": [0]}}), TensorDict({"a": {"b": [1]}})]
+    stack = [TensorDict({"a": {"b": [0]}}, []), TensorDict({"a": {"b": [1]}}, [])]
     assert _stackable(*stack)
-    stack = [TensorDict({"a": {"b": [0]}}), TensorDict({"a": {"b": 1}})]
+    stack = [TensorDict({"a": {"b": [0]}}, []), TensorDict({"a": {"b": 1}}, [])]
     assert not _stackable(*stack)
-    stack = [TensorDict({"a": "a string"}), TensorDict({"a": "another string"})]
+    stack = [TensorDict({"a": "a string"}, []), TensorDict({"a": "another string"}, [])]
     assert _stackable(*stack)
 
 
