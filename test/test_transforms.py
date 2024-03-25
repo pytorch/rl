@@ -10266,6 +10266,7 @@ class TestMultiStepTransform:
             rollout = env.rollout(
                 2, auto_reset=False, tensordict=td, break_when_any_done=False
             ).contiguous()
+            assert "reward" not in rollout.keys()
             out = t._inv_call(rollout)
             td = rollout[..., -1]["next"]
             if out is not None:
