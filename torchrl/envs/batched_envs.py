@@ -790,17 +790,6 @@ class BatchedEnvBase(EnvBase):
         if device == self.device:
             return self
         self._device = device
-        # if not self.is_closed:
-        #     warn(
-        #         "Casting an open environment to another device requires closing and re-opening it. "
-        #         "This may have unexpected and unwanted effects (e.g. on seeding etc.)"
-        #     )
-        #     # the tensordicts must be re-created on device
-        #     super().to(device)
-        #     self.close()
-        #     self.start()
-        # else:
-
         self.__dict__["_sync_m2w_value"] = None
         self.__dict__["_sync_w2m_value"] = None
         if self.__dict__["_input_spec"] is not None:
@@ -1264,7 +1253,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "_selected_step_keys": self._selected_step_keys,
                         "has_lazy_inputs": self.has_lazy_inputs,
                         "num_threads": num_sub_threads,
-                        "non_blocking": False,  # self.non_blocking,
+                        "non_blocking": self.non_blocking,
                     }
                 )
                 process = proc_fun(target=func, kwargs=kwargs[idx])
