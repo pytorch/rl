@@ -473,7 +473,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self.ndimension()
 
     def append_transform(
-        self, transform: "Transform" | Callable[[TensorDictBase], TensorDictBase]  # noqa: F821
+        self,
+        transform: "Transform"
+        | Callable[[TensorDictBase], TensorDictBase],  # noqa: F821
     ) -> None:
         """Returns a transformed environment where the callable/transform passed is applied.
 
