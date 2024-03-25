@@ -126,6 +126,7 @@ class _StepMDP:
         self.keep_other = keep_other
         self.exclude_action = exclude_action
 
+        self.exclude_from_root = ["next", *self.done_keys]
         self.keys_from_next = list(self.observation_keys)
         if not exclude_reward:
             self.keys_from_next += self.reward_keys
@@ -134,8 +135,18 @@ class _StepMDP:
         self.keys_from_root = []
         if not exclude_action:
             self.keys_from_root += self.action_keys
+        else:
+            self.exclude_from_root += self.action_keys
         if keep_other:
             self.keys_from_root += self.state_keys
+        else:
+            self.exclude_from_root += self.state_keys
+
+        reset_keys = {_replace_last(key, "_reset") for key in self.done_keys}
+        self.exclude_from_root += list(reset_keys)
+        self.exclude_from_root += list(self.reward_keys)
+
+        self.exclude_from_root = self._repr_key_list_as_tree(self.exclude_from_root)
         self.keys_from_root = self._repr_key_list_as_tree(self.keys_from_root)
         self.keys_from_next = self._repr_key_list_as_tree(self.keys_from_next)
         self.validated = None
@@ -155,23 +166,26 @@ class _StepMDP:
                 + [unravel_key(("next", key)) for key in self.reward_keys]
             )
             actual = set(tensordict.keys(True, True))
-            self.validated = set(expected) == actual
+            expected = set(expected)
+            self.validated = expected.intersection(actual) == expected
             if not self.validated:
                 warnings.warn(
                     "The expected key set and actual key set differ. "
                     "This will work but with a slower throughput than "
                     "when the specs match exactly the actual key set "
                     "in the data. "
-                    f"Expected - Actual keys={set(expected) - actual}, \n"
-                    f"Actual - Expected keys={actual- set(expected)}."
+                    f"{{Expected keys}}-{{Actual keys}}={set(expected) - actual}, \n"
+                    f"{{Actual keys}}-{{Expected keys}}={actual- set(expected)}."
                 )
         return self.validated
 
     @staticmethod
     def _repr_key_list_as_tree(key_list):
         """Represents the keys as a tree to facilitate iteration."""
+        if not key_list:
+            return {}
         key_dict = {key: torch.zeros(()) for key in key_list}
-        td = TensorDict(key_dict)
+        td = TensorDict(key_dict, batch_size=torch.Size([]))
         return tree_map(lambda x: None, td.to_dict())
 
     @classmethod
@@ -201,6 +215,36 @@ class _StepMDP:
             data_out._set_str(key, val, validated=True, inplace=False)
         return data_out
 
+    @classmethod
+    def _exclude(
+        cls, nested_key_dict: dict, data_in: TensorDictBase, out: TensorDictBase | None
+    ) -> None:
+        """Copies the entries if they're not part of the list of keys to exclude."""
+        if isinstance(data_in, LazyStackedTensorDict):
+            if out is None:
+                out = data_in.empty()
+            for td, td_out in zip(data_in.tensordicts, out.tensordicts):
+                cls._exclude(nested_key_dict, td, td_out)
+            return out
+        has_set = False
+        for key, value in data_in.items():
+            subdict = nested_key_dict.get(key, NO_DEFAULT)
+            if subdict is NO_DEFAULT:
+                value = value.copy() if is_tensor_collection(value) else value
+                if not has_set and out is None:
+                    out = data_in.empty()
+                out._set_str(key, value, validated=True, inplace=False)
+                has_set = True
+            elif subdict is not None:
+                value = cls._exclude(subdict, value, None)
+                if value is not None:
+                    if not has_set and out is None:
+                        out = data_in.empty()
+                    out._set_str(key, value, validated=True, inplace=False)
+                    has_set = True
+        if has_set:
+            return out
+
     def __call__(self, tensordict):
         if isinstance(tensordict, LazyStackedTensorDict):
             out = LazyStackedTensorDict.lazy_stack(
@@ -210,12 +254,16 @@ class _StepMDP:
             return out
 
         next_td = tensordict._get_str("next", None)
-        out = next_td.empty()
         if self.validate(tensordict):
-            self._grab_and_place(self.keys_from_root, tensordict, out)
+            if self.keep_other:
+                out = self._exclude(self.exclude_from_root, tensordict, out=None)
+            else:
+                out = next_td.empty()
+                self._grab_and_place(self.keys_from_root, tensordict, out)
             self._grab_and_place(self.keys_from_next, next_td, out)
             return out
         else:
+            out = next_td.empty()
             total_key = ()
             if self.keep_other:
                 for key in tensordict.keys():

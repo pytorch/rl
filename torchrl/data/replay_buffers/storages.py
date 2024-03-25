@@ -582,16 +582,16 @@ class TensorStorage(Storage):
     def __getstate__(self):
         state = copy(self.__dict__)
         if get_spawning_popen() is None:
-            len = self._len
+            length = self._len
             del state["_len_value"]
-            state["len__context"] = len
+            state["len__context"] = length
         elif not self.initialized:
             # check that the storage is initialized
             raise RuntimeError(
-                f"Cannot share a storage of type {type(self)} between processed if "
+                f"Cannot share a storage of type {type(self)} between processes if "
                 f"it has not been initialized yet. Populate the buffer with "
                 f"some data in the main process before passing it to the other "
-                f"subprocesses (or create the buffer explicitely with a TensorStorage)."
+                f"subprocesses (or create the buffer explicitly with a TensorStorage)."
             )
         else:
             # check that the content is shared, otherwise tell the user we can't help
@@ -1527,6 +1527,8 @@ def _init_pytree(scratch_dir, max_size, data):  # noqa: F811
 
 
 def _flip_list(data):
+    if all(is_tensor_collection(_data) for _data in data):
+        return torch.stack(data)
     flat_data, flat_specs = zip(*[tree_flatten(item) for item in data])
     flat_data = zip(*flat_data)
     stacks = [torch.stack(item) for item in flat_data]

@@ -219,8 +219,11 @@ class ReplayBuffer:
 
         self._replay_lock = threading.RLock()
         self._futures_lock = threading.RLock()
-        from torchrl.data.replay_buffers.transforms import _CallableTransform
-        from torchrl.envs.transforms.transforms import Compose, Transform
+        from torchrl.envs.transforms.transforms import (
+            _CallableTransform,
+            Compose,
+            Transform,
+        )
 
         if transform is None:
             transform = Compose()
@@ -617,8 +620,7 @@ class ReplayBuffer:
         Args:
             transform (Transform): The transform to be appended
         """
-        from torchrl.data.replay_buffers.transforms import _CallableTransform
-        from torchrl.envs.transforms.transforms import Transform
+        from torchrl.envs.transforms.transforms import _CallableTransform, Transform
 
         if not isinstance(transform, Transform) and callable(transform):
             transform = _CallableTransform(transform)

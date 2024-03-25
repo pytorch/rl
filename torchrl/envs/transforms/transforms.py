@@ -555,9 +555,22 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
 
     Args:
         env (EnvBase): original environment to be transformed_in.
-        transform (Transform, optional): transform to apply to the tensordict resulting
+        transform (Transform or callable, optional): transform to apply to the tensordict resulting
             from :obj:`env.step(td)`. If none is provided, an empty Compose
             placeholder in an eval mode is used.
+
+            .. note:: If ``transform`` is a callable, it must receive as input a single tensordict
+              and output a tensordict as well. The callable will be called at ``step``
+              and ``reset`` time: if it acts on the reward (which is absent at
+              reset time), a check needs to be implemented to ensure that
+              the transform will run smoothly:
+
+                >>> def add_1(data):
+                ...     if "reward" in data.keys():
+                ...         return data.set("reward", data.get("reward") + 1)
+                ...     return data
+                >>> env = TransformedEnv(base_env, add_1)
+
         cache_specs (bool, optional): if ``True``, the specs will be cached once
             and for all after the first call (i.e. the specs will be
             transformed_in only once). If the transform changes during
@@ -591,7 +604,15 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             self._set_env(env.base_env, device)
             if type(transform) is not Compose:
                 # we don't use isinstance as some transforms may be subclassed from
-                # Compose but with other features that we don't want to loose.
+                # Compose but with other features that we don't want to lose.
+                if not isinstance(transform, Transform):
+                    if callable(transform):
+                        transform = _CallableTransform(transform)
+                    else:
+                        raise ValueError(
+                            "Invalid transform type, expected a Transform instance or a callable "
+                            f"but got an object of type {type(transform)}."
+                        )
                 if transform is not None:
                     transform = [transform]
                 else:
@@ -647,18 +668,17 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
     @transform.setter
     def transform(self, transform: Transform):
         if not isinstance(transform, Transform):
-            raise ValueError(
-                f"""Expected a transform of type torchrl.envs.transforms.Transform,
+            if callable(transform):
+                transform = _CallableTransform(transform)
+            else:
+                raise ValueError(
+                    f"""Expected a transform of type torchrl.envs.transforms.Transform or a callable,
 but got an object of type {type(transform)}."""
-            )
+                )
         prev_transform = getattr(self, "_transform", None)
         if prev_transform is not None:
             prev_transform.empty_cache()
             prev_transform.reset_parent()
-        if not isinstance(transform, Transform):
-            raise ValueError(
-                f"Transforms passed to {type(self)} must be instances of a `torch.envs.Transform` subclass. Got {type(transform)}."
-            )
         transform = transform.to(self.device)
         transform.set_container(self)
         transform.eval()
@@ -846,13 +866,22 @@ but got an object of type {type(transform)}."""
         self.__dict__["_input_spec"] = None
         super().empty_cache()
 
-    def append_transform(self, transform: Transform) -> None:
+    def append_transform(
+        self, transform: Transform | Callable[[TensorDictBase], TensorDictBase]
+    ) -> None:
+        """Appends a transform to the env.
+
+        :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
+        """
         self.empty_cache()
         if not isinstance(transform, Transform):
-            raise ValueError(
-                "TransformedEnv.append_transform expected a transform but received an object of "
-                f"type {type(transform)} instead."
-            )
+            if callable(transform):
+                transform = _CallableTransform(transform)
+            else:
+                raise ValueError(
+                    "TransformedEnv.append_transform expected a transform or a callable, "
+                    f"but received an object of type {type(transform)} instead."
+                )
         transform = transform.to(self.device)
         if not isinstance(self.transform, Compose):
             prev_transform = self.transform
@@ -863,12 +892,19 @@ but got an object of type {type(transform)}."""
         self.transform.append(transform)
 
     def insert_transform(self, index: int, transform: Transform) -> None:
+        """Inserts a transform to the env at the desired index.
+
+        :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
+        """
         self.empty_cache()
         if not isinstance(transform, Transform):
-            raise ValueError(
-                "TransformedEnv.insert_transform expected a transform but received an object of "
-                f"type {type(transform)} instead."
-            )
+            if callable(transform):
+                transform = _CallableTransform(transform)
+            else:
+                raise ValueError(
+                    "TransformedEnv.insert_transform expected a transform or a callable, "
+                    f"but received an object of type {type(transform)} instead."
+                )
         transform = transform.to(self.device)
         if not isinstance(self.transform, Compose):
             compose = Compose(self.transform.clone())
@@ -960,6 +996,8 @@ class ObservationTransform(Transform):
 class Compose(Transform):
     """Composes a chain of transforms.
 
+    :class:`~torchrl.envs.transforms.Transform` or ``callable``s are accepted.
+
     Examples:
         >>> env = GymEnv("Pendulum-v0")
         >>> transforms = [RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0)]
@@ -970,6 +1008,18 @@ class Compose(Transform):
 
     def __init__(self, *transforms: Transform):
         super().__init__()
+
+        def map_transform(trsf):
+            if isinstance(trsf, Transform):
+                return trsf
+            if callable(trsf):
+                return _CallableTransform(trsf)
+            raise ValueError(
+                f"Transform list must contain only transforms or "
+                f"callable. Got a element of type {type(trsf)}."
+            )
+
+        transforms = [map_transform(trsf) for trsf in transforms]
         self.transforms = nn.ModuleList(transforms)
         for t in transforms:
             t.set_container(self)
@@ -1058,13 +1108,22 @@ class Compose(Transform):
         for t in self.transforms:
             t.init(tensordict)
 
-    def append(self, transform):
+    def append(
+        self, transform: Transform | Callable[[TensorDictBase], TensorDictBase]
+    ) -> None:
+        """Appends a transform in the chain.
+
+        :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
+        """
         self.empty_cache()
         if not isinstance(transform, Transform):
-            raise ValueError(
-                "Compose.append expected a transform but received an object of "
-                f"type {type(transform)} instead."
-            )
+            if callable(transform):
+                transform = _CallableTransform(transform)
+            else:
+                raise ValueError(
+                    "Compose.append expected a transform or a callable, "
+                    f"but received an object of type {type(transform)} instead."
+                )
         transform.eval()
         if type(self) == type(transform) == Compose:
             for t in transform:
@@ -1079,12 +1138,23 @@ class Compose(Transform):
         for t in self.transforms:
             t.set_container(self)
 
-    def insert(self, index: int, transform: Transform) -> None:
+    def insert(
+        self,
+        index: int,
+        transform: Transform | Callable[[TensorDictBase], TensorDictBase],
+    ) -> None:
+        """Inserts a transform in the chain at the desired index.
+
+        :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
+        """
         if not isinstance(transform, Transform):
-            raise ValueError(
-                "Compose.append expected a transform but received an object of "
-                f"type {type(transform)} instead."
-            )
+            if callable(transform):
+                transform = _CallableTransform(transform)
+            else:
+                raise ValueError(
+                    "Compose.append expected a transform or a callable, "
+                    f"but received an object of type {type(transform)} instead."
+                )
 
         if abs(index) > len(self.transforms):
             raise ValueError(
@@ -7161,6 +7231,27 @@ class RemoveEmptySpecs(Transform):
         return self._call(tensordict_reset)
 
     forward = _call
+
+
+class _CallableTransform(Transform):
+    # A wrapper around a custom callable to make it possible to transform any data type
+    def __init__(self, func):
+        super().__init__()
+        self.func = func
+
+    def forward(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+
+    def _call(self, tensordict: TensorDictBase):
+        return self.func(tensordict)
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._call(tensordict_reset)
 
 
 class BatchSizeTransform(Transform):

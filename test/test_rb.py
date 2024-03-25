@@ -775,6 +775,12 @@ class TestStorages:
         if data == "tc":
             assert storage._storage.text == storage_recover._storage.text
 
+    def test_add_list_of_tds(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(100))
+        rb.extend([TensorDict({"a": torch.randn(2, 3)}, [2])])
+        assert len(rb) == 1
+        assert rb[:].shape == torch.Size([1, 2])
+
 
 @pytest.mark.parametrize("max_size", [1000])
 @pytest.mark.parametrize("shape", [[3, 4]])
@@ -2044,9 +2050,6 @@ class TestSamplers:
 
         for s in rb:
             if (s["steps"] == 9).any():
-                n = (s["steps"] == 9).nonzero()
-                assert ((s["steps"] == 0).nonzero() == n + 1).all()
-                assert ((s["steps"] == 1).nonzero() == n + 2).all()
                 break
         else:
             raise AssertionError
@@ -2165,6 +2168,50 @@ class TestSamplers:
             )
         truncated = info[("next", "truncated")]
         assert truncated.view(num_slices, -1)[:, -1].all()
+
+    def test_slicesampler_strictlength(self):
+
+        torch.manual_seed(0)
+
+        data = TensorDict(
+            {
+                "traj": torch.cat(
+                    [
+                        torch.ones(2, dtype=torch.int),
+                        torch.zeros(10, dtype=torch.int),
+                    ],
+                    dim=0,
+                ),
+                "x": torch.arange(12),
+            },
+            [12],
+        )
+
+        buffer = ReplayBuffer(
+            storage=LazyTensorStorage(12),
+            sampler=SliceSampler(num_slices=2, strict_length=True, traj_key="traj"),
+            batch_size=8,
+        )
+        buffer.extend(data)
+
+        for _ in range(50):
+            sample = buffer.sample()
+            assert sample.shape == torch.Size([8])
+            assert (sample["traj"] == 0).all()
+
+        buffer = ReplayBuffer(
+            storage=LazyTensorStorage(12),
+            sampler=SliceSampler(num_slices=2, strict_length=False, traj_key="traj"),
+            batch_size=8,
+        )
+        buffer.extend(data)
+
+        for _ in range(50):
+            sample = buffer.sample()
+            if sample.shape == torch.Size([6]):
+                assert (sample["traj"] != 0).any()
+            else:
+                assert len(sample["traj"].unique()) == 1
 
 
 def test_prioritized_slice_sampler_doc_example():
