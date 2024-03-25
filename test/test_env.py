@@ -1732,7 +1732,7 @@ class TestStepMdp:
         c = SyncDataCollector(
             env, env.rand_action, frames_per_batch=10, total_frames=20
         )
-        for data in c:
+        for data in c:  # noqa: B007
             pass
         assert ("collector", "traj_ids") in data.keys(True)
         assert env._step_mdp.validate(None)
