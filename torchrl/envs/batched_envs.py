@@ -726,6 +726,9 @@ class BatchedEnvBase(EnvBase):
                 if not self.shared_tensordict_parent.is_memmap():
                     raise RuntimeError("memmap_() failed")
             self.shared_tensordicts = self.shared_tensordict_parent.unbind(0)
+            for td in self.shared_tensordicts:
+                td.lock_()
+
         # we cache all the keys of the shared parent td for future use. This is
         # safe since the td is locked.
         self._cache_shared_keys = set(self.shared_tensordict_parent.keys(True, True))
@@ -1468,6 +1471,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 tensordict_ = tensordict[i]
                 if tensordict_.is_empty():
                     tensordict_ = None
+                elif self.device is not None and self.device.type == "mps":
+                    # copy_ fails when moving mps->cpu using copy_
+                    # in some cases when a view of an mps tensor is used.
+                    # We know the shared tensors are not MPS, so we can
+                    # safely assume that the shared tensors are on cpu
+                    tensordict_ = tensordict_.to("cpu")
             else:
                 tensordict_ = None
             if not needs_resetting[i]:
