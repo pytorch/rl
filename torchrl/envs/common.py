@@ -3029,35 +3029,19 @@ def make_tensordict(
 
 
 def _get_sync_func(policy_device, env_device):
-    if policy_device.type == "cuda":
-        if env_device.type not in ("cpu", "cuda"):
-            raise NotImplementedError(
-                f"auto-casting from {policy_device.type} to {env_device.type} "
-                "isn't supported yet. Please file an issue on github."
-            )
-        sync_func = functools.partial(torch.cuda.synchronize, device=policy_device)
-    elif env_device.type == "cuda":
-        if policy_device.type not in ("cpu", "cuda"):
-            raise NotImplementedError(
-                f"auto-casting from {policy_device.type} to {env_device.type} "
-                "isn't supported yet. Please file an issue on github."
-            )
-        sync_func = functools.partial(torch.cuda.synchronize, device=env_device)
-    elif policy_device.type == "mps":
-        if env_device.type not in ("cpu", "mps"):
-            raise NotImplementedError(
-                f"auto-casting from {policy_device.type} to {env_device.type} "
-                "isn't supported yet. Please file an issue on github."
-            )
-        sync_func = torch.mps.synchronize
-    elif env_device.type == "mps":
-        if policy_device.type not in ("cpu", "mps"):
-            raise NotImplementedError(
-                f"auto-casting from {policy_device.type} to {env_device.type} "
-                "isn't supported yet. Please file an issue on github."
-            )
-        sync_func = torch.mps.synchronize
-    return sync_func
+    if torch.cuda.is_available():
+        # Look for a specific device
+        if policy_device is not None and policy_device.type == "cuda":
+            if env_device is None or env_device.type == "cuda":
+                return torch.cuda.synchronize
+            return functools.partial(torch.cuda.synchronize, device=policy_device)
+        if env_device is not None and env_device.type == "cuda":
+            if policy_device is None:
+                return torch.cuda.synchronize
+            return functools.partial(torch.cuda.synchronize, device=env_device)
+        return torch.cuda.synchronize
+    if torch.backends.mps.is_available():
+        return torch.mps.synchronize
 
 
 def _do_nothing():
