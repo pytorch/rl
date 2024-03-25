@@ -472,6 +472,33 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def ndim(self):
         return self.ndimension()
 
+    def append_transform(
+        self, transform: "Transform" | Callable[[TensorDictBase], TensorDictBase]  # noqa: F821
+    ) -> None:
+        """Returns a transformed environment where the callable/transform passed is applied.
+
+        Args:
+            transform (Transform or Callable[[TensorDictBase], TensorDictBase]): the transform to apply
+                to the environment.
+
+        Examples:
+            >>> from torchrl.envs import GymEnv
+            >>> import torch
+            >>> env = GymEnv("CartPole-v1")
+            >>> loc = 0.5
+            >>> scale = 1.0
+            >>> transform = lambda data: data.set("observation", (data.get("observation") - loc)/scale)
+            >>> env = env.append_transform(transform=transform)
+            >>> print(env)
+            TransformedEnv(
+                env=GymEnv(env=CartPole-v1, batch_size=torch.Size([]), device=cpu),
+                transform=_CallableTransform(keys=[]))
+
+        """
+        from torchrl.envs.transforms.transforms import TransformedEnv
+
+        return TransformedEnv(self, transform)
+
     # Parent specs: input and output spec.
     @property
     def input_spec(self) -> TensorSpec:
