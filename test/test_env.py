@@ -1216,6 +1216,7 @@ def test_seed():
     torch.testing.assert_close(rollout1["observation"], rollout2["observation"])
 
 
+@pytest.mark.filterwarnings("error")
 class TestStepMdp:
     @pytest.mark.parametrize("keep_other", [True, False])
     @pytest.mark.parametrize("exclude_reward", [True, False])
@@ -1339,7 +1340,7 @@ class TestStepMdp:
         env = envcls()
 
         tensordict = env.rand_step(env.reset())
-        out = step_mdp(
+        out_func = step_mdp(
             tensordict.lock_(),
             keep_other=keep_other,
             exclude_reward=exclude_reward,
@@ -1356,8 +1357,8 @@ class TestStepMdp:
             exclude_done=exclude_done,
             exclude_action=exclude_action,
         )
-        out2 = step_func(tensordict)
-        assert (out == out2).all()
+        out_cls = step_func(tensordict)
+        assert (out_func == out_cls).all()
 
     @pytest.mark.parametrize("nested_obs", [True, False])
     @pytest.mark.parametrize("nested_action", [True, False])
@@ -1717,6 +1718,25 @@ class TestStepMdp:
                 else:
                     assert td[..., i][nested_other_key].shape == (td_batch_size, 1)
                 assert (td[..., i][nested_other_key] == 0).all()
+
+    @pytest.mark.parametrize("serial", [False, True])
+    def test_multi_purpose_env(self, serial):
+        # Tests that even if it's validated, the same env can be used within a collector
+        # and independently of it.
+        if serial:
+            env = SerialEnv(2, ContinuousActionVecMockEnv)
+        else:
+            env = ContinuousActionVecMockEnv()
+        rollout = env.rollout(10)
+        assert env._step_mdp.validate(None)
+        c = SyncDataCollector(
+            env, env.rand_action, frames_per_batch=10, total_frames=20
+        )
+        for data in c:
+            pass
+        assert ("collector", "traj_ids") in data.keys(True)
+        assert env._step_mdp.validate(None)
+        rollout = env.rollout(10)
 
 
 @pytest.mark.parametrize("device", get_default_devices())
