@@ -47,7 +47,7 @@ pip install -U charset-normalizer
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  pip3 install git+https://github.com/pytorch/tensordict.git@release/0.3.2
 else
   pip3 install tensordict
 fi

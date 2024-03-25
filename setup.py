@@ -73,7 +73,7 @@ def _get_pytorch_version(is_nightly):
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
     if is_nightly:
         return "torch>=2.2.0.dev"
-    return "torch>=2.1.0"
+    return "torch==2.1.2"
 
 
 def _get_packages():
@@ -170,7 +170,7 @@ def _main(argv):
     if is_nightly:
         tensordict_dep = "tensordict-nightly"
     else:
-        tensordict_dep = "tensordict>=0.3.1"
+        tensordict_dep = "tensordict==0.3.2"
 
     if is_nightly:
         version = get_nightly_version()
