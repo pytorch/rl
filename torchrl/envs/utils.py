@@ -167,7 +167,7 @@ class _StepMDP:
             )
             actual = set(tensordict.keys(True, True))
             expected = set(expected)
-            self.validated = expected.union(actual) == expected
+            self.validated = expected.intersection(actual) == expected
             if not self.validated:
                 warnings.warn(
                     "The expected key set and actual key set differ. "
