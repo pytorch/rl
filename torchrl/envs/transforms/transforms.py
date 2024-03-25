@@ -3764,12 +3764,18 @@ class DeviceCastTransform(Transform):
         self,
         device,
         orig_device=None,
+        *,
+        in_keys=None,
+        out_keys=None,
+        in_keys_inv=None,
+            out_keys_inv=None,
     ):
         self.device = torch.device(device)
         self.orig_device = (
             torch.device(orig_device) if orig_device is not None else orig_device
         )
-        super().__init__()
+        super().__init__(in_keys=in_keys, out_keys=out_keys, in_keys_inv=in_keys_inv, out_keys_inv=out_keys_inv)
+        self._map_env_device = not self.in_keys and not self.in_keys_inv
 
     def set_container(self, container: Union[Transform, EnvBase]) -> None:
         if self.orig_device is None:
@@ -3806,22 +3812,31 @@ class DeviceCastTransform(Transform):
         return tensordict.to(parent.device, non_blocking=True)
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        return input_spec.to(self.device)
-
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        return reward_spec.to(self.device)
-
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        return observation_spec.to(self.device)
+        if self.self._map_env_device:
+            return input_spec.to(self.device)
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
-        return output_spec.to(self.device)
+        if self.self._map_env_device:
+            return output_spec.to(self.device)
+        else:
+            # TODO: test nested keys, test no out_keys, test mismatching number of keys
+            # Find the in-keys
+            for key, out_key in zip(self.in_keys, self.out_keys):
+                if key in output_spec["full_reward_spec"].keys(True, True):
+                    output_spec["full_reward_spec", out_key] = output_spec["full_reward_spec", key].to(self.device)
+                elif key in output_spec["full_done_spec"].keys(True, True):
+                    ...
+                elif key in output_spec["full_observation_spec"].keys(True, True):
+                    ...
+                else:
+                    raise KeyError(f"Key {key} not found in output spec")
 
-    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
-        return done_spec.to(self.device)
 
     def transform_env_device(self, device):
-        return self.device
+        if self.self._map_env_device:
+            return self.device
+        # In all other cases the device is not defined
+        return None
 
     def __repr__(self) -> str:
         s = f"{self.__class__.__name__}(device={self.device}, orig_device={self.orig_device})"
