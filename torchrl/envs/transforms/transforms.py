@@ -738,7 +738,6 @@ but got an object of type {type(transform)}."""
 
             # remove cached key values, but not _input_spec
             super().empty_cache()
-
             output_spec = output_spec.unlock_()
             output_spec = self.transform.transform_output_spec(output_spec)
             output_spec.lock_()
@@ -7255,14 +7254,29 @@ class _CallableTransform(Transform):
 
 
 class BatchSizeTransform(Transform):
-    """A transform to set a batch-size to non-batch-locked environments.
+    """A transform to modify the batch-size of an environmt.
+
+    This transform has two distinct usages: it can be used to set the
+    batch-size for non-batch-locked (e.g. stateless) environments to
+    enable data collection using data collectors. It can also be used
+    to modify the batch-size of an environment (e.g. squeeze, unsqueeze or
+    reshape).
 
     This transform modifies the environment batch-size to match the one provided.
     It expects the parent environment batch-size to be expandable to the
     provided one.
 
-    Args:
-        batch_size (torch.Size or equivalent): the new batch-size of the environment.
+    Keyword Args:
+        batch_size (torch.Size or equivalent, optional): the new batch-size of the environment.
+            Exclusive with ``reshape_fn``.
+        reshape_fn (callable, optional): a callable to modify the environment batch-size.
+            Exclusive with ``batch_size``.
+
+            .. note:: Currently, transformations involving
+                ``reshape``, ``flatten``, ``unflatten``, ``squeeze`` and ``unsqueeze``
+                are supported. If another reshape operation is required, please submit
+                a feature request on TorchRL github.
+
         reset_func (callable, optional): a function that produces a reset tensordict.
             The signature must match ``Callable[[TensorDictBase, TensorDictBase], TensorDictBase]``
             where the first input argument is the optional tensordict passed to the
@@ -7274,6 +7288,12 @@ class BatchSizeTransform(Transform):
             be the env accompanied by its transform.
 
     Example:
+        >>> # Changing the batch-size with a function
+        >>> from torchrl.envs import GymEnv
+        >>> base_env = GymEnv("CartPole-v1")
+        >>> env = TransformedEnv(base_env, BatchSizeTransform(reshape_fn=lambda data: data.reshape(1, 1)))
+        >>> env.rollout(4)
+        >>> # Setting the shape of a stateless environment
         >>> class MyEnv(EnvBase):
         ...     batch_locked = False
         ...     def __init__(self):
@@ -7368,15 +7388,29 @@ class BatchSizeTransform(Transform):
         >>> collector.shutdown()
     """
 
+    _ENV_ERR = "BatchSizeTransform.{} requires a parent env."
+
     def __init__(
         self,
-        batch_size: torch.Size,
+        *,
+        batch_size: torch.Size | None = None,
+        reshape_fn: Callable[[TensorDictBase], TensorDictBase] | None = None,
         reset_func: Callable[[TensorDictBase, TensorDictBase], TensorDictBase]
         | None = None,
         env_kwarg: bool = False,
     ):
         super().__init__()
-        self.batch_size = torch.Size(batch_size)
+        if not ((batch_size is None) ^ (reshape_fn is None)):
+            raise ValueError(
+                "One and only one of batch_size OR reshape_fn must be provided."
+            )
+        if batch_size is not None:
+            self.batch_size = torch.Size(batch_size)
+            self.reshape_fn = None
+        else:
+            self.reshape_fn = reshape_fn
+            self.batch_size = None
+        self.reshape_fn = reshape_fn
         self.reset_func = reset_func
         self.env_kwarg = env_kwarg
 
@@ -7390,14 +7424,36 @@ class BatchSizeTransform(Transform):
                 )
             else:
                 tensordict_reset = self.reset_func(tensordict, tensordict_reset)
+        if self.batch_size is not None:
+            return tensordict_reset.expand(self.batch_size)
+        return self.reshape_fn(tensordict_reset)
 
-        return tensordict_reset.expand(self.batch_size)
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.reshape_fn is not None:
+            tensordict = self.reshape_fn(tensordict)
+        return tensordict
+
+    forward = _call
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.reshape_fn is not None:
+            parent = self.parent
+            if parent is not None:
+                parent_batch_size = parent.batch_size
+                tensordict = tensordict.reshape(parent_batch_size)
+        return tensordict
 
     def transform_env_batch_size(self, batch_size: torch.Size):
-        return self.batch_size
+        if self.batch_size is not None:
+            return self.batch_size
+        return self.reshape_fn(torch.zeros(batch_size, device="meta")).shape
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
-        return output_spec.expand(self.batch_size)
+        if self.batch_size is not None:
+            return output_spec.expand(self.batch_size)
+        return self.reshape_fn(output_spec)
 
     def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
-        return input_spec.expand(self.batch_size)
+        if self.batch_size is not None:
+            return input_spec.expand(self.batch_size)
+        return self.reshape_fn(input_spec)
