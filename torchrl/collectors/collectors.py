@@ -44,7 +44,7 @@ from torchrl._utils import (
     logger as torchrl_logger,
     prod,
     RL_WARNINGS,
-    VERBOSE,
+    VERBOSE, _ends_with,
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.tensor_specs import TensorSpec
@@ -346,6 +346,11 @@ class SyncDataCollector(DataCollectorBase):
             The _Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
             strategies such as preeptively stopping rollout collection.
             Default is ``False``.
+        set_truncated (bool, optional): if ``True``, the truncated signals (and corresponding
+            ``"done"`` but not ``"terminated"``) will be set to ``True`` when the last frame of
+            a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
+            Truncated keys can be set through ``env.add_truncated_keys``.
+            Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -433,6 +438,7 @@ class SyncDataCollector(DataCollectorBase):
         return_same_td: bool = False,
         reset_when_done: bool = True,
         interruptor=None,
+        set_truncated: bool = False,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
 
@@ -770,6 +776,15 @@ class SyncDataCollector(DataCollectorBase):
         self.interruptor = interruptor
         self._frames = 0
         self._iter = -1
+        self.set_truncated = set_truncated
+        if self.set_truncated and not any(
+            _ends_with(key, "truncated") for key in self._final_rollout.keys(True, True)
+        ):
+            raise RuntimeError(
+                "set_truncated was set to True but no truncated key could be found "
+                "in the environment. Make sure the truncated keys are properly set using "
+                "`env.add_truncated_keys()`."
+            )
 
     @classmethod
     def _get_devices(

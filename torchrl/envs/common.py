@@ -17,7 +17,13 @@ import torch.nn as nn
 from tensordict import LazyStackedTensorDict, TensorDictBase, unravel_key
 from tensordict.base import NO_DEFAULT
 from tensordict.utils import NestedKey
-from torchrl._utils import _replace_last, implement_for, prod, seed_generator
+from torchrl._utils import (
+    _ends_with,
+    _replace_last,
+    implement_for,
+    prod,
+    seed_generator,
+)
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -2280,6 +2286,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         break_when_any_done: bool = True,
         return_contiguous: bool = True,
         tensordict: Optional[TensorDictBase] = None,
+        set_truncated: bool = False,
         out=None,
     ):
         """Executes a rollout in the environment.
@@ -2308,6 +2315,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 tensordict must be provided. Rollout will check if this tensordict has done flags and reset the
                 environment in those dimensions (if needed). This normally should not occur if ``tensordict`` is the
                 output of a reset, but can occur if ``tensordict`` is the last step of a previous rollout.
+            set_truncated (bool, optional): if ``True``, ``"truncated"`` and ``"done"`` keys will be set to
+                ``True`` after completion of the rollout. If no ``"truncated"`` is found within the
+                ``done_spec``, an exception is raised.
+                Truncated keys can be set through ``env.add_truncated_keys``.
+                Defaults to ``False``.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -2539,8 +2551,33 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             out_td = LazyStackedTensorDict.lazy_stack(
                 tensordicts, len(batch_size), out=out
             )
+        if set_truncated:
+            found_truncated = False
+            for key in self.done_keys:
+                if _ends_with(key, "truncated"):
+                    val = out_td.get(("next", key))
+                    val[(slice(None),) * (out_td.ndim - 1) + (-1,)] = True
+                    out_td.set(("next", key), val)
+                    out_td.set(("next", _replace_last(key, "done")), val)
+                    found_truncated = True
+            if not found_truncated:
+                raise RuntimeError(
+                    "set_truncated was set to True but no truncated key could be found. "
+                    "Make sure a 'truncated' entry was set in the environment "
+                    "full_done_keys using `env.add_truncated_keys()`."
+                )
+
         out_td.refine_names(..., "time")
         return out_td
+
+    def add_truncated_keys(self):
+        """Adds truncated keys to the environment."""
+        for key in self.done_keys:
+            self.full_done_spec[_replace_last(key, "truncated")] = self.full_done_spec[
+                key
+            ]
+        self.__dict__["_done_keys"] = None
+        return self
 
     @property
     def _step_mdp(self):
