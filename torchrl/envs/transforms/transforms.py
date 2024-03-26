@@ -57,7 +57,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs.common import _EnvPostInit, EnvBase, make_tensordict
+from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import (
     _get_reset,
@@ -3771,7 +3771,7 @@ class DeviceCastTransform(Transform):
         in_keys_inv=None,
         out_keys_inv=None,
     ):
-        self.device = torch.device(device)
+        device = self.device = torch.device(device)
         self.orig_device = (
             torch.device(orig_device) if orig_device is not None else orig_device
         )
@@ -3785,6 +3785,16 @@ class DeviceCastTransform(Transform):
 
         self._rename_keys = self.in_keys != self.out_keys
         self._rename_keys_inv = self.in_keys_inv != self.out_keys_inv
+
+        if device.type != "cuda":
+            if torch.cuda.is_available():
+                self._sync_device = torch.cuda.synchronize
+            elif torch.backends.mps.is_available():
+                self._sync_device = torch.cuda.synchronize
+            elif device.type == "cpu":
+                self._sync_device = _do_nothing
+        else:
+            self._sync_device = _do_nothing
 
     def set_container(self, container: Union[Transform, EnvBase]) -> None:
         if self.orig_device is None:
@@ -3812,24 +3822,30 @@ class DeviceCastTransform(Transform):
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self._map_env_device:
-            return tensordict.to(self.device, non_blocking=True)
+            result = tensordict.to(self.device, non_blocking=True)
+            self._sync_device()
+            return result
         tensordict_t = tensordict.named_apply(self._to, nested_keys=True, device=None)
         if self._rename_keys:
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if out_key != in_key:
                     tensordict_t.rename_key_(in_key, out_key)
                     tensordict_t.set(in_key, tensordict.get(in_key))
+        self._sync_device()
         return tensordict_t
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self._map_env_device:
-            return tensordict.to(self.device, non_blocking=True)
+            result = tensordict.to(self.device, non_blocking=True)
+            self._sync_device()
+            return result
         tensordict_t = tensordict.named_apply(self._to, nested_keys=True, device=None)
         if self._rename_keys:
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if out_key != in_key:
                     tensordict_t.rename_key_(in_key, out_key)
                     tensordict_t.set(in_key, tensordict.get(in_key))
+        self._sync_device()
         return tensordict_t
 
     def _reset(
@@ -3844,7 +3860,9 @@ class DeviceCastTransform(Transform):
         if device is None:
             return tensordict
         if self._map_env_device:
-            return tensordict.to(device, non_blocking=True)
+            result = tensordict.to(device, non_blocking=True)
+            self._sync_orig_device()
+            return result
         tensordict_t = tensordict.named_apply(
             functools.partial(self._to_inv, device=device),
             nested_keys=True,
@@ -3855,7 +3873,26 @@ class DeviceCastTransform(Transform):
                 if out_key != in_key:
                     tensordict_t.rename_key_(in_key, out_key)
                     tensordict_t.set(in_key, tensordict.get(in_key))
+        self._sync_orig_device()
         return tensordict_t
+
+    @property
+    def _sync_orig_device(self):
+        sync_func = self.__dict__.get("_sync_orig_device_val", None)
+        if sync_func is None:
+            parent = self.parent
+            device = self.orig_device if parent is None else parent.device
+            if device.type != "cuda":
+                if torch.cuda.is_available():
+                    self._sync_orig_device_val = torch.cuda.synchronize
+                elif torch.backends.mps.is_available():
+                    self._sync_orig_device_val = torch.cuda.synchronize
+                elif device.type == "cpu":
+                    self._sync_orig_device_val = _do_nothing
+            else:
+                self._sync_orig_device_val = _do_nothing
+            return self._sync_orig_device
+        return sync_func
 
     def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
         if self._map_env_device:

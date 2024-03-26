@@ -15,6 +15,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict import LazyStackedTensorDict, TensorDictBase, unravel_key
+from tensordict.base import NO_DEFAULT
 from tensordict.utils import NestedKey
 from torchrl._utils import _replace_last, implement_for, prod, seed_generator
 
@@ -2560,24 +2561,29 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         env_device,
         callback,
     ):
+        # Get the sync func
+        if auto_cast_to_device:
+            sync_func = _get_sync_func(policy_device, env_device)
         tensordicts = []
         for i in range(max_steps):
             if auto_cast_to_device:
                 if policy_device is not None:
                     tensordict = tensordict.to(policy_device, non_blocking=True)
+                    sync_func()
                 else:
                     tensordict.clear_device_()
             tensordict = policy(tensordict)
             if auto_cast_to_device:
                 if env_device is not None:
                     tensordict = tensordict.to(env_device, non_blocking=True)
+                    sync_func()
                 else:
                     tensordict.clear_device_()
             tensordict = self.step(tensordict)
             tensordicts.append(tensordict.clone(False))
 
             if i == max_steps - 1:
-                # we don't truncated as one could potentially continue the run
+                # we don't truncate as one could potentially continue the run
                 break
             tensordict = self._step_mdp(tensordict)
 
@@ -2606,18 +2612,22 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         env_device,
         callback,
     ):
+        if auto_cast_to_device:
+            sync_func = _get_sync_func(policy_device, env_device)
         tensordicts = []
         tensordict_ = tensordict
         for i in range(max_steps):
             if auto_cast_to_device:
                 if policy_device is not None:
                     tensordict_ = tensordict_.to(policy_device, non_blocking=True)
+                    sync_func()
                 else:
                     tensordict_.clear_device_()
             tensordict_ = policy(tensordict_)
             if auto_cast_to_device:
                 if env_device is not None:
                     tensordict_ = tensordict_.to(env_device, non_blocking=True)
+                    sync_func()
                 else:
                     tensordict_.clear_device_()
             if i == max_steps - 1:
@@ -2626,7 +2636,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
             tensordicts.append(tensordict)
             if i == max_steps - 1:
-                # we don't truncated as one could potentially continue the run
+                # we don't truncate as one could potentially continue the run
                 break
             if callback is not None:
                 callback(self, tensordict)
@@ -2711,7 +2721,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             any_done = done.any()
             if any_done:
                 tensordict._set_str(
-                    "_reset", done.clone(), validated=True, inplace=False
+                    "_reset",
+                    done.clone(),
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
                 )
         else:
             any_done = _terminated_or_truncated(
@@ -2903,12 +2917,20 @@ class _EnvWrapper(EnvBase):
         self,
         *args,
         dtype: Optional[np.dtype] = None,
-        device: DEVICE_TYPING = None,
+        device: DEVICE_TYPING = NO_DEFAULT,
         batch_size: Optional[torch.Size] = None,
         allow_done_after_reset: bool = False,
         **kwargs,
     ):
-        if device is None:
+        if device is NO_DEFAULT:
+            warnings.warn(
+                "Your wrapper was not given a device. Currently, this "
+                "value will default to 'cpu'. From v0.5 it will "
+                "default to `None`. With a device of None, no device casting "
+                "is performed and the resulting tensordicts are deviceless. "
+                "Please set your device accordingly.",
+                category=DeprecationWarning,
+            )
             device = torch.device("cpu")
         super().__init__(
             device=device,
@@ -2935,6 +2957,22 @@ class _EnvWrapper(EnvBase):
         self._make_specs(self._env)  # writes the self._env attribute
         self.is_closed = False
         self._init_env()  # runs all the steps to have a ready-to-use env
+
+    def _sync_device(self):
+        sync_func = self.__dict__.get("_sync_device_val", None)
+        if sync_func is None:
+            device = self.device
+            if device.type != "cuda":
+                if torch.cuda.is_available():
+                    self._sync_device_val = torch.cuda.synchronize
+                elif torch.backends.mps.is_available():
+                    self._sync_device_val = torch.cuda.synchronize
+                elif device.type == "cpu":
+                    self._sync_device_val = _do_nothing
+            else:
+                self._sync_device_val = _do_nothing
+            return self._sync_device
+        return sync_func
 
     @abc.abstractmethod
     def _check_kwargs(self, kwargs: Dict):
@@ -3017,3 +3055,24 @@ def make_tensordict(
             tensordict.set("action", env.action_spec.rand(), inplace=False)
         tensordict = env.step(tensordict)
         return tensordict.zero_()
+
+
+def _get_sync_func(policy_device, env_device):
+    if torch.cuda.is_available():
+        # Look for a specific device
+        if policy_device is not None and policy_device.type == "cuda":
+            if env_device is None or env_device.type == "cuda":
+                return torch.cuda.synchronize
+            return functools.partial(torch.cuda.synchronize, device=policy_device)
+        if env_device is not None and env_device.type == "cuda":
+            if policy_device is None:
+                return torch.cuda.synchronize
+            return functools.partial(torch.cuda.synchronize, device=env_device)
+        return torch.cuda.synchronize
+    if torch.backends.mps.is_available():
+        return torch.mps.synchronize
+    return _do_nothing
+
+
+def _do_nothing():
+    return
