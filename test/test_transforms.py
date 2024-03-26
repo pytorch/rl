@@ -9327,7 +9327,231 @@ class TestActionMask(TransformBase):
         return
 
 
-class TestDeviceCastTransform(TransformBase):
+class TestDeviceCastTransformPart(TransformBase):
+    @pytest.mark.parametrize("in_keys", ["observation"])
+    @pytest.mark.parametrize("out_keys", [None, ["obs_device"]])
+    @pytest.mark.parametrize("in_keys_inv", ["action"])
+    @pytest.mark.parametrize("out_keys_inv", [None, ["action_device"]])
+    def test_single_trans_env_check(self, in_keys, out_keys, in_keys_inv, out_keys_inv):
+        env = ContinuousActionVecMockEnv(device="cpu:0")
+        env = TransformedEnv(
+            env,
+            DeviceCastTransform(
+                "cpu:1",
+                in_keys=in_keys,
+                out_keys=out_keys,
+                in_keys_inv=in_keys_inv,
+                out_keys_inv=out_keys_inv,
+            ),
+        )
+        assert env.device == None
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("in_keys", ["observation"])
+    @pytest.mark.parametrize("out_keys", [None, ["obs_device"]])
+    @pytest.mark.parametrize("in_keys_inv", ["action"])
+    @pytest.mark.parametrize("out_keys_inv", [None, ["action_device"]])
+    def test_serial_trans_env_check(self, in_keys, out_keys, in_keys_inv, out_keys_inv):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(device="cpu:0"),
+                DeviceCastTransform(
+                    "cpu:1",
+                    in_keys=in_keys,
+                    out_keys=out_keys,
+                    in_keys_inv=in_keys_inv,
+                    out_keys_inv=out_keys_inv,
+                ),
+            )
+
+        env = SerialEnv(2, make_env)
+        assert env.device == None
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("in_keys", ["observation"])
+    @pytest.mark.parametrize("out_keys", [None, ["obs_device"]])
+    @pytest.mark.parametrize("in_keys_inv", ["action"])
+    @pytest.mark.parametrize("out_keys_inv", [None, ["action_device"]])
+    def test_parallel_trans_env_check(
+        self, in_keys, out_keys, in_keys_inv, out_keys_inv
+    ):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(device="cpu:0"),
+                DeviceCastTransform(
+                    "cpu:1",
+                    in_keys=in_keys,
+                    out_keys=out_keys,
+                    in_keys_inv=in_keys_inv,
+                    out_keys_inv=out_keys_inv,
+                ),
+            )
+
+        env = ParallelEnv(2, make_env, mp_start_method="fork")
+        assert env.device == None
+        try:
+            check_env_specs(env)
+        finally:
+            env.close()
+
+    @pytest.mark.parametrize("in_keys", ["observation"])
+    @pytest.mark.parametrize("out_keys", [None, ["obs_device"]])
+    @pytest.mark.parametrize("in_keys_inv", ["action"])
+    @pytest.mark.parametrize("out_keys_inv", [None, ["action_device"]])
+    def test_trans_serial_env_check(self, in_keys, out_keys, in_keys_inv, out_keys_inv):
+        def make_env():
+            return ContinuousActionVecMockEnv(device="cpu:0")
+
+        env = TransformedEnv(
+            SerialEnv(2, make_env),
+            DeviceCastTransform(
+                "cpu:1",
+                in_keys=in_keys,
+                out_keys=out_keys,
+                in_keys_inv=in_keys_inv,
+                out_keys_inv=out_keys_inv,
+            ),
+        )
+        assert env.device == None
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("in_keys", ["observation"])
+    @pytest.mark.parametrize("out_keys", [None, ["obs_device"]])
+    @pytest.mark.parametrize("in_keys_inv", ["action"])
+    @pytest.mark.parametrize("out_keys_inv", [None, ["action_device"]])
+    def test_trans_parallel_env_check(
+        self, in_keys, out_keys, in_keys_inv, out_keys_inv
+    ):
+        def make_env():
+            return ContinuousActionVecMockEnv(device="cpu:0")
+
+        env = TransformedEnv(
+            ParallelEnv(2, make_env, mp_start_method="fork"),
+            DeviceCastTransform(
+                "cpu:1",
+                in_keys=in_keys,
+                out_keys=out_keys,
+                in_keys_inv=in_keys_inv,
+                out_keys_inv=out_keys_inv,
+            ),
+        )
+        assert env.device == None
+        try:
+            check_env_specs(env)
+        finally:
+            env.close()
+
+    def test_transform_no_env(self):
+        t = DeviceCastTransform("cpu:1", "cpu:0", in_keys=["a"], out_keys=["b"])
+        td = TensorDict({"a": torch.randn((), device="cpu:0")}, [], device="cpu:0")
+        tdt = t._call(td)
+        assert tdt.device == None
+
+    @pytest.mark.parametrize("in_keys", ["observation"])
+    @pytest.mark.parametrize("out_keys", [None, ["obs_device"]])
+    @pytest.mark.parametrize("in_keys_inv", ["action"])
+    @pytest.mark.parametrize("out_keys_inv", [None, ["action_device"]])
+    def test_transform_env(self, in_keys, out_keys, in_keys_inv, out_keys_inv):
+        env = ContinuousActionVecMockEnv(device="cpu:0")
+        env = TransformedEnv(
+            env,
+            DeviceCastTransform(
+                "cpu:1",
+                in_keys=in_keys,
+                out_keys=out_keys,
+                in_keys_inv=in_keys_inv,
+                out_keys_inv=out_keys_inv,
+            ),
+        )
+        assert env.device == None
+        assert env.transform.device == torch.device("cpu:1")
+        assert env.transform.orig_device == torch.device("cpu:0")
+
+    def test_transform_compose(self):
+        t = Compose(
+            DeviceCastTransform(
+                "cpu:1",
+                "cpu:0",
+                in_keys=["a"],
+                out_keys=["b"],
+                in_keys_inv=["c"],
+                out_keys_inv=["d"],
+            )
+        )
+
+        td = TensorDict(
+            {
+                "a": torch.randn((), device="cpu:0"),
+                "c": torch.randn((), device="cpu:1"),
+            },
+            [],
+            device="cpu:0",
+        )
+        tdt = t._call(td)
+        tdit = t._inv_call(td)
+
+        assert tdt.device == None
+        assert tdit.device == None
+
+    def test_transform_model(self):
+        t = nn.Sequential(
+            Compose(
+                DeviceCastTransform(
+                    "cpu:1",
+                    "cpu:0",
+                    in_keys=["a"],
+                    out_keys=["b"],
+                    in_keys_inv=["c"],
+                    out_keys_inv=["d"],
+                )
+            )
+        )
+        td = TensorDict(
+            {
+                "a": torch.randn((), device="cpu:0"),
+                "c": torch.randn((), device="cpu:1"),
+            },
+            [],
+            device="cpu:0",
+        )
+        tdt = t(td)
+
+        assert tdt.device == None
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    @pytest.mark.parametrize("storage", [LazyTensorStorage])
+    def test_transform_rb(self, rbclass, storage):
+        # we don't test casting to cuda on Memmap tensor storage since it's discouraged
+        t = Compose(
+            DeviceCastTransform(
+                "cpu:1",
+                "cpu:0",
+                in_keys=["a"],
+                out_keys=["b"],
+                in_keys_inv=["c"],
+                out_keys_inv=["d"],
+            )
+        )
+        rb = rbclass(storage=storage(max_size=20, device="auto"))
+        rb.append_transform(t)
+        td = TensorDict(
+            {
+                "a": torch.randn((), device="cpu:0"),
+                "c": torch.randn((), device="cpu:1"),
+            },
+            [],
+            device="cpu:0",
+        )
+        rb.add(td)
+        assert rb._storage._storage.device == None
+        assert rb.sample(4).device == None
+
+    def test_transform_inverse(self):
+        # Tested before
+        return
+
+
+class TestDeviceCastTransformWhole(TransformBase):
     def test_single_trans_env_check(self):
         env = ContinuousActionVecMockEnv(device="cpu:0")
         env = TransformedEnv(env, DeviceCastTransform("cpu:1"))

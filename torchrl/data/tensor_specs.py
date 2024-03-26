@@ -542,7 +542,7 @@ class TensorSpec:
 
     def clear_device_(self):
         """A no-op for all leaf specs (which must have a device)."""
-        pass
+        return self
 
     def encode(
         self, val: Union[np.ndarray, torch.Tensor], *, ignore_device=False
@@ -826,6 +826,7 @@ class _LazyStackedMixin(Generic[T]):
         """Clears the device of the CompositeSpec."""
         for spec in self._specs:
             spec.clear_device_()
+        return self
 
     def __getitem__(self, item):
         is_key = isinstance(item, str) or (
@@ -3425,8 +3426,10 @@ class CompositeSpec(TensorSpec):
 
     def clear_device_(self):
         """Clears the device of the CompositeSpec."""
-        for spec in self._specs:
+        self._device = None
+        for spec in self._specs.values():
             spec.clear_device_()
+        return self
 
     def __getitem__(self, idx):
         """Indexes the current CompositeSpec based on the provided index."""
