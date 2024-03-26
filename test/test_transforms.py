@@ -10552,21 +10552,6 @@ class TestBatchSizeTransform(TransformBase):
         base_env = CountingEnv(max_steps=3)
         assert transform(base_env.reset()).batch_size == expected_batch_size
 
-    def test_transform_rb(self, rbclass):
-        t = Compose(RemoveEmptySpecs())
-
-        batch = (20,)
-        td = TensorDict({"a": {"b": {"c": {}}}}, batch)
-
-        torch.manual_seed(0)
-        rb = rbclass(storage=LazyTensorStorage(20))
-        rb.append_transform(t)
-        rb.extend(td)
-        td = rb.sample(1)
-        if "index" in td.keys():
-            del td["index"]
-        assert len(td.keys()) == 0
-
     @pytest.mark.parametrize("stateless,reshape_fn", [[False, "reshape"]])
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(self, rbclass, stateless, reshape_fn):
