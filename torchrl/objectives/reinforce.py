@@ -10,11 +10,11 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossContainerBase, LossModule
 
 from torchrl.objectives.utils import (
     _clip_value_loss,
@@ -31,6 +31,14 @@ from torchrl.objectives.value import (
     TDLambdaEstimator,
     VTrace,
 )
+
+
+@tensorclass
+class ReinforceLosses(LossContainerBase):
+    """The tensorclass for The Reinforce Loss class."""
+
+    loss_actor: torch.Tensor
+    loss_value: torch.Tensor
 
 
 class ReinforceLoss(LossModule):
@@ -81,22 +89,22 @@ class ReinforceLoss(LossModule):
       input tensordict, the advantage will be computed by the :meth:`~.forward`
       method.
 
-        >>> reinforce_loss = ReinforceLoss(actor, critic)
-        >>> advantage = GAE(critic)
-        >>> data = next(datacollector)
-        >>> losses = reinforce_loss(data)
+        >>> reinforce_loss = ReinforceLoss(actor, critic)  # doctest: +SKIP
+        >>> advantage = GAE(critic)  # doctest: +SKIP
+        >>> data = next(datacollector)  # doctest: +SKIP
+        >>> losses = reinforce_loss(data)  # doctest: +SKIP
         >>> # equivalent
-        >>> advantage(data)
-        >>> losses = reinforce_loss(data)
+        >>> advantage(data)  # doctest: +SKIP
+        >>> losses = reinforce_loss(data)  # doctest: +SKIP
 
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
       The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
       dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
-        >>> reinforce_loss = ReinforceLoss(actor, critic)
-        >>> reinforce_loss.make_value_estimator(ValueEstimators.TDLambda)
-        >>> data = next(datacollector)
-        >>> losses = reinforce_loss(data)
+        >>> reinforce_loss = ReinforceLoss(actor, critic)  # doctest: +SKIP
+        >>> reinforce_loss.make_value_estimator(ValueEstimators.TDLambda)  # doctest: +SKIP
+        >>> data = next(datacollector)  # doctest: +SKIP
+        >>> losses = reinforce_loss(data)  # doctest: +SKIP
 
     Examples:
         >>> import torch
@@ -134,6 +142,14 @@ class ReinforceLoss(LossModule):
             fields={
                 loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> loss = ReinforceLoss(actor_net, value_net, return_tensorclass=True)
+        >>> loss(data)
+        ReinforceLosses(
+            loss_actor=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -235,6 +251,7 @@ class ReinforceLoss(LossModule):
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
+        return_tensorclass: bool = False,
         reduction: str = None,
         clip_value: float | None = None,
     ) -> None:
@@ -298,6 +315,8 @@ class ReinforceLoss(LossModule):
 
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+        self.return_tensorclass = return_tensorclass
+        self.reduction = reduction
 
         if clip_value is not None:
             if isinstance(clip_value, float):
@@ -397,7 +416,7 @@ class ReinforceLoss(LossModule):
         self._in_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> ReinforceLosses | TensorDictBase:
         advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
@@ -431,7 +450,8 @@ class ReinforceLoss(LossModule):
             else value,
             batch_size=[],
         )
-
+        if self.return_tensorclass:
+            return ReinforceLosses._from_tensordict(td_out)
         return td_out
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:

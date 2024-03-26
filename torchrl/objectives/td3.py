@@ -9,13 +9,13 @@ from typing import Optional, Tuple
 
 import torch
 
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec, TensorSpec
 
 from torchrl.envs.utils import step_mdp
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossContainerBase, LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -27,6 +27,18 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+
+@tensorclass
+class TD3Losses(LossContainerBase):
+    """The tensorclass for The TD3 Loss class."""
+
+    loss_actor: torch.Tensor
+    loss_qvalue: torch.Tensor
+    target_value: torch.Tensor | None = None
+    state_action_value_actor: torch.Tensor | None = None
+    pred_value: torch.Tensor | None = None
+    next_state_value: torch.Tensor | None = None
 
 
 class TD3Loss(LossModule):
@@ -118,6 +130,18 @@ class TD3Loss(LossModule):
                 pred_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 state_action_value_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> loss = TD3Loss(actor, qvalue, action_spec=actor.spec, return_tensorclass=True)
+        >>> loss(data)
+        TD3Losses(
+            loss_actor=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_qvalue=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            next_state_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            pred_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            state_action_value_actor=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            target_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -224,6 +248,7 @@ class TD3Loss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        return_tensorclass: bool = False,
         reduction: str = None,
     ) -> None:
         if reduction is None:
@@ -309,6 +334,7 @@ class TD3Loss(LossModule):
         self._vmap_actor_network00 = _vmap_func(
             self.actor_network, randomness=self.vmap_randomness
         )
+        self.return_tensorclass = return_tensorclass
         self.reduction = reduction
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
@@ -459,7 +485,7 @@ class TD3Loss(LossModule):
         return loss_qval, metadata
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> TD3Losses | TensorDictBase:
         tensordict_save = tensordict
         loss_actor, metadata_actor = self.actor_loss(tensordict)
         loss_qval, metadata_value = self.value_loss(tensordict_save)
@@ -479,6 +505,7 @@ class TD3Loss(LossModule):
             },
             batch_size=[],
         )
+
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):

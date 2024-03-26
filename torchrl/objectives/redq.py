@@ -10,7 +10,7 @@ from numbers import Number
 from typing import Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, TensorDictModule, TensorDictSequential
 from tensordict.utils import NestedKey
@@ -18,7 +18,7 @@ from torch import Tensor
 
 from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossContainerBase, LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -30,6 +30,21 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+
+@tensorclass
+class REDQLosses(LossContainerBase):
+    """The tensorclass for The REDQLoss Loss class."""
+
+    loss_actor: torch.Tensor
+    loss_qvalue: torch.Tensor
+    loss_alpha: torch.Tensor
+    alpha: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+    state_action_value_actor: torch.Tensor | None = None
+    action_log_prob_actor: torch.Tensor | None = None
+    state_value: torch.Tensor | None = None
+    target_value: torch.Tensor | None = None
 
 
 class REDQLoss(LossModule):
@@ -135,6 +150,21 @@ class REDQLoss(LossModule):
                 next.state_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 state_action_value_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> loss = REDQLoss(actor, qvalue, return_tensorclass=True)
+        >>> loss(data)
+        REDQLosses(
+            action_log_prob_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            next.state_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            state_action_value_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -259,6 +289,7 @@ class REDQLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        return_tensorclass: bool = False,
         reduction: str = None,
     ):
         if reduction is None:
@@ -330,6 +361,8 @@ class REDQLoss(LossModule):
         self._vmap_getdist = _vmap_func(
             self.actor_network, func="get_dist_params", randomness=self.vmap_randomness
         )
+        self.return_tensorclass = return_tensorclass
+        self.reduction = reduction
 
     @property
     def target_entropy(self):
@@ -431,7 +464,7 @@ class REDQLoss(LossModule):
         return qvalue_params
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> REDQLosses | TensorDictBase:
         obs_keys = self.actor_network.in_keys
         tensordict_select = tensordict.clone(False).select(
             "next", *obs_keys, self.tensor_keys.action, strict=False
@@ -579,6 +612,9 @@ class REDQLoss(LossModule):
             else value,
             batch_size=[],
         )
+        if self.return_tensorclass:
+            return REDQLosses._from_tensordict(td_out)
+
         return td_out
 
     def _loss_alpha(self, log_pi: Tensor) -> Tensor:

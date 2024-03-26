@@ -14,7 +14,7 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
@@ -25,7 +25,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.modules import ProbabilisticActor, QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossContainerBase, LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -37,6 +37,19 @@ from torchrl.objectives.utils import (
 )
 
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+
+@tensorclass
+class CQLLosses(LossContainerBase):
+    """The tensorclass for The CQLLoss Loss class."""
+
+    alpha: torch.Tensor
+    loss_actor: torch.Tensor | None = None
+    loss_actor_bc: torch.Tensor | None = None
+    loss_qvalue: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+    loss_alpha: torch.Tensor | None = None
+    loss_cql: torch.Tensor | None = None
 
 
 class CQLLoss(LossModule):
@@ -136,9 +149,24 @@ class CQLLoss(LossModule):
                 entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_actor_bc: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_actor_bc: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_cql: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_cql: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> loss = CQLLoss(actor, qvalue, return_tensorclass=True)
+        >>> loss(data)
+        CQLLosses(
+            alpha=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_actor=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_actor_bc=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_alpha=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_cql=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_qvalue=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -181,20 +209,21 @@ class CQLLoss(LossModule):
         >>> loss = CQLLoss(actor, qvalue)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
-        >>> loss_actor, loss_actor_bc, loss_qvalue, loss_cql, *_ = loss(
+        >>> loss_actor, loss_qvalue, loss_actor_bc, loss_qvalue, loss_cql, loss_alpha = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_observation=torch.zeros(*batch, n_obs),
-        ...     next_reward=torch.randn(*batch, 1))
+        ...     next_reward=torch.randn(*batch, 1),
+        ... )
         >>> loss_actor.backward()
 
     The output keys can also be filtered using the :meth:`CQLLoss.select_out_keys`
     method.
 
     Examples:
-        >>> _ = loss.select_out_keys('loss_actor', 'loss_qvalue')
+        >>> loss.select_out_keys('loss_actor', 'loss_qvalue')
         >>> loss_actor, loss_qvalue = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
@@ -278,6 +307,7 @@ class CQLLoss(LossModule):
         num_random: int = 10,
         with_lagrange: bool = False,
         lagrange_thresh: float = 0.0,
+        return_tensorclass: bool = False,
         reduction: str = None,
     ) -> None:
         self._out_keys = None
@@ -366,6 +396,7 @@ class CQLLoss(LossModule):
         self._vmap_qvalue_network00 = _vmap_func(
             self.qvalue_network, randomness=self.vmap_randomness
         )
+        self.return_tensorclass = return_tensorclass
         self.reduction = reduction
 
     @property
@@ -497,7 +528,7 @@ class CQLLoss(LossModule):
         self._out_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> CQLLosses | TensorDictBase:
         shape = None
         if tensordict.ndimension() > 1:
             shape = tensordict.shape
@@ -535,7 +566,10 @@ class CQLLoss(LossModule):
         }
         if self.with_lagrange:
             out["loss_alpha_prime"] = alpha_prime_loss.mean()
-        return TensorDict(out, [])
+        td_out = TensorDict(out, [])
+        if self.return_tensorclass:
+            return CQLLosses._from_tensordict(td_out)
+        return td_out
 
     @property
     @_cache_values
@@ -1034,6 +1068,7 @@ class DiscreteCQLLoss(LossModule):
         delay_value: bool = True,
         gamma: float = None,
         action_space=None,
+        return_tensorclass: bool = False,
         reduction: str = None,
     ) -> None:
         self._in_keys = None
@@ -1078,6 +1113,8 @@ class DiscreteCQLLoss(LossModule):
 
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+        self.return_tensorclass = return_tensorclass
+        self.reduction = reduction
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -1208,7 +1245,7 @@ class DiscreteCQLLoss(LossModule):
         return loss, metadata
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> CQLLosses:
         """Computes the (DQN) CQL loss given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
@@ -1233,6 +1270,8 @@ class DiscreteCQLLoss(LossModule):
             source=source,
             batch_size=[],
         )
+        if self.return_tensorclass:
+            return CQLLosses._from_tensordict(td_out)
 
         return td_out
 

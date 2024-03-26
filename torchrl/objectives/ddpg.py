@@ -10,12 +10,12 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
 
 from tensordict.utils import NestedKey, unravel_key
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossContainerBase, LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -25,6 +25,19 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+
+@tensorclass
+class DDPGLosses(LossContainerBase):
+    """The tensorclass for The DDPGLoss class."""
+
+    pred_value: torch.Tensor
+    pred_value_max: torch.Tensor
+    td_error: torch.Tensor | None = None
+    target_value: torch.Tensor | None = None
+    loss_actor: torch.Tensor | None = None
+    loss_value: torch.Tensor | None = None
+    target_value_max: torch.Tensor | None = None
 
 
 class DDPGLoss(LossModule):
@@ -85,7 +98,21 @@ class DDPGLoss(LossModule):
                 pred_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 pred_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                target_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                target_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                td_error: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> loss = DDPGLoss(actor, value, return_tensorclass=True)
+        >>> loss(data)
+        DDPGLosses(
+            loss_actor=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            pred_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            pred_value_max=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            target_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            target_value_max=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            td_error=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -131,7 +158,7 @@ class DDPGLoss(LossModule):
     method.
 
     Examples:
-        >>> loss.select_out_keys('loss_actor', 'loss_value')
+        >>> _ = loss.select_out_keys('loss_actor', 'loss_value')
         >>> loss_actor, loss_value = loss(
         ...     observation=torch.randn(n_obs),
         ...     action=spec.rand(),
@@ -194,6 +221,7 @@ class DDPGLoss(LossModule):
         delay_value: bool = True,
         gamma: float = None,
         separate_losses: bool = False,
+        return_tensorclass: bool = False,
         reduction: str = None,
     ) -> None:
         self._in_keys = None
@@ -237,7 +265,9 @@ class DDPGLoss(LossModule):
         )
 
         self.loss_function = loss_function
+        self.return_tensorclass = return_tensorclass
         self.reduction = reduction
+
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
@@ -274,7 +304,7 @@ class DDPGLoss(LossModule):
         self._in_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> DDPGLosses | TensorDictBase:
         """Computes the DDPG losses given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
@@ -295,6 +325,9 @@ class DDPGLoss(LossModule):
             source={"loss_actor": loss_actor, "loss_value": loss_value, **metadata},
             batch_size=[],
         )
+        if self.return_tensorclass:
+            return DDPGLosses._from_tensordict(td_out)
+        return td_out
         return td_out
 
     def loss_actor(

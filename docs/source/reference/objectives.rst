@@ -92,6 +92,7 @@ DQN
 
     DQNLoss
     DistributionalDQNLoss
+    DQNLosses
 
 DDPG
 ----
@@ -101,6 +102,7 @@ DDPG
     :template: rl_template_noinherit.rst
 
     DDPGLoss
+    DDPGLosses
 
 SAC
 ---
@@ -111,6 +113,7 @@ SAC
 
     SACLoss
     DiscreteSACLoss
+    SACLosses
 
 REDQ
 ----
@@ -120,6 +123,7 @@ REDQ
     :template: rl_template_noinherit.rst
 
     REDQLoss
+    REDQLosses
 
 IQL
 ----
@@ -130,6 +134,7 @@ IQL
 
     IQLLoss
     DiscreteIQLLoss
+    IQLLosses
 
 CQL
 ----
@@ -140,6 +145,7 @@ CQL
 
     CQLLoss
     DiscreteCQLLoss
+    CQLLosses
 
 DT
 ----
@@ -150,6 +156,7 @@ DT
 
     DTLoss
     OnlineDTLoss
+    DTLosses
 
 TD3
 ----
@@ -159,6 +166,7 @@ TD3
     :template: rl_template_noinherit.rst
 
     TD3Loss
+    TD3Losses
 
 PPO
 ---
@@ -170,6 +178,7 @@ PPO
     PPOLoss
     ClipPPOLoss
     KLPENPPOLoss
+    PPOLosses
 
 A2C
 ---
@@ -179,6 +188,7 @@ A2C
     :template: rl_template_noinherit.rst
 
     A2CLoss
+    A2CLosses
 
 Reinforce
 ---------
@@ -188,6 +198,7 @@ Reinforce
     :template: rl_template_noinherit.rst
 
     ReinforceLoss
+    ReinforceLosses
 
 Dreamer
 -------
@@ -199,6 +210,7 @@ Dreamer
     DreamerActorLoss
     DreamerModelLoss
     DreamerValueLoss
+    DreamerActorLosses
 
 Multi-agent objectives
 -----------------------
