@@ -3044,5 +3044,6 @@ def _get_sync_func(policy_device, env_device):
         return torch.mps.synchronize
     return _do_nothing
 
+
 def _do_nothing():
     return
