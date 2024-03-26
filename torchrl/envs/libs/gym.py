@@ -769,8 +769,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @implement_for("gymnasium")  # gymnasium wants the unwrapped env
     def _get_batch_size(self, env):  # noqa: F811
-        if hasattr(env, "num_envs"):
-            batch_size = torch.Size([env.unwrapped.num_envs, *self.batch_size])
+        env_unwrapped = env.unwrapped
+        if hasattr(env_unwrapped, "num_envs"):
+            batch_size = torch.Size([env_unwrapped.num_envs, *self.batch_size])
         else:
             batch_size = self.batch_size
         return batch_size
@@ -929,6 +930,18 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self._seed_calls_reset = False
             self._env.seed(seed=seed)
 
+    @implement_for("gym")
+    def _reward_space(self, env):
+        if hasattr(env, "reward_space") and env.reward_space is not None:
+            return env.reward_space
+
+    @implement_for("gymnasium")
+    def _reward_space(self, env):  # noqa: F811
+        env = env.unwrapped
+        if hasattr(env, "reward_space") and env.reward_space is not None:
+            rs = env.reward_space
+            return rs
+
     def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
         action_spec = _gym_to_torchrl_spec_transform(
             env.action_space,
@@ -952,9 +965,10 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         elif observation_spec.shape[: len(self.batch_size)] != self.batch_size:
             observation_spec.shape = self.batch_size
 
-        if hasattr(env, "reward_space") and env.reward_space is not None:
+        reward_space = self._reward_space(env)
+        if reward_space is not None:
             reward_spec = _gym_to_torchrl_spec_transform(
-                env.reward_space,
+                reward_space,
                 device=self.device,
                 categorical_action_encoding=self._categorical_action_encoding,
             )

@@ -909,7 +909,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         # to be deprecated in v0.4
         def map_device(tensor):
             if tensor.device != self.device:
-                return tensor.to(self.device, non_blocking=True)
+                return tensor.to(self.device, non_blocking=False)
             return tensor
 
         if is_tensor_collection(result):
