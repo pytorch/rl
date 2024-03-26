@@ -357,6 +357,10 @@ class Transform(nn.Module):
         """Transforms the device of the parent env."""
         return device
 
+    def transform_env_batch_size(self, batch_size: torch.Size):
+        """Transforms the batch-size of the parent env."""
+        return batch_size
+
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
         """Transforms the output spec such that the resulting spec matches transform mapping.
 
@@ -637,6 +641,8 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
     @property
     def batch_size(self) -> torch.Size:
         try:
+            if self.transform is not None:
+                return self.transform.transform_env_batch_size(self.base_env.batch_size)
             return self.base_env.batch_size
         except AttributeError:
             # during init, the base_env is not yet defined
@@ -732,7 +738,6 @@ but got an object of type {type(transform)}."""
 
             # remove cached key values, but not _input_spec
             super().empty_cache()
-
             output_spec = output_spec.unlock_()
             output_spec = self.transform.transform_output_spec(output_spec)
             output_spec.lock_()
@@ -1052,6 +1057,11 @@ class Compose(Transform):
         for t in self.transforms:
             device = t.transform_env_device(device)
         return device
+
+    def transform_env_batch_size(self, batch_size: torch.batch_size):
+        for t in self.transforms:
+            batch_size = t.transform_env_batch_size(batch_size)
+        return batch_size
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms[::-1]:
@@ -7273,3 +7283,209 @@ class _CallableTransform(Transform):
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         return self._call(tensordict_reset)
+
+
+class BatchSizeTransform(Transform):
+    """A transform to modify the batch-size of an environmt.
+
+    This transform has two distinct usages: it can be used to set the
+    batch-size for non-batch-locked (e.g. stateless) environments to
+    enable data collection using data collectors. It can also be used
+    to modify the batch-size of an environment (e.g. squeeze, unsqueeze or
+    reshape).
+
+    This transform modifies the environment batch-size to match the one provided.
+    It expects the parent environment batch-size to be expandable to the
+    provided one.
+
+    Keyword Args:
+        batch_size (torch.Size or equivalent, optional): the new batch-size of the environment.
+            Exclusive with ``reshape_fn``.
+        reshape_fn (callable, optional): a callable to modify the environment batch-size.
+            Exclusive with ``batch_size``.
+
+            .. note:: Currently, transformations involving
+                ``reshape``, ``flatten``, ``unflatten``, ``squeeze`` and ``unsqueeze``
+                are supported. If another reshape operation is required, please submit
+                a feature request on TorchRL github.
+
+        reset_func (callable, optional): a function that produces a reset tensordict.
+            The signature must match ``Callable[[TensorDictBase, TensorDictBase], TensorDictBase]``
+            where the first input argument is the optional tensordict passed to the
+            environment during the call to :meth:`~EnvBase.reset` and the second
+            is the output of ``TransformedEnv.base_env.reset``. It can also support an
+            optional ``env`` keyword argument if ``env_kwarg=True``.
+        env_kwarg (bool, optional): if ``True``, ``reset_func`` must support a
+            ``env`` keyword argument. Defaults to ``False``. The env passed will
+            be the env accompanied by its transform.
+
+    Example:
+        >>> # Changing the batch-size with a function
+        >>> from torchrl.envs import GymEnv
+        >>> base_env = GymEnv("CartPole-v1")
+        >>> env = TransformedEnv(base_env, BatchSizeTransform(reshape_fn=lambda data: data.reshape(1, 1)))
+        >>> env.rollout(4)
+        >>> # Setting the shape of a stateless environment
+        >>> class MyEnv(EnvBase):
+        ...     batch_locked = False
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.observation_spec = CompositeSpec(observation=UnboundedContinuousTensorSpec(3))
+        ...         self.reward_spec = UnboundedContinuousTensorSpec(1)
+        ...         self.action_spec = UnboundedContinuousTensorSpec(1)
+        ...
+        ...     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        ...         tensordict_batch_size = tensordict.batch_size if tensordict is not None else torch.Size([])
+        ...         result = self.observation_spec.rand(tensordict_batch_size)
+        ...         result.update(self.full_done_spec.zero(tensordict_batch_size))
+        ...         return result
+        ...
+        ...     def _step(
+        ...         self,
+        ...         tensordict: TensorDictBase,
+        ...     ) -> TensorDictBase:
+        ...         result = self.observation_spec.rand(tensordict.batch_size)
+        ...         result.update(self.full_done_spec.zero(tensordict.batch_size))
+        ...         result.update(self.full_reward_spec.zero(tensordict.batch_size))
+        ...         return result
+        ...
+        ...     def _set_seed(self, seed: Optional[int]):
+        ...         pass
+        ...
+        >>> env = TransformedEnv(MyEnv(), BatchSizeTransform([5]))
+        >>> assert env.batch_size == torch.Size([5])
+        >>> assert env.rollout(10).shape == torch.Size([5, 10])
+
+    The ``reset_func`` can create a tensordict with the desired batch-size, allowing for
+    a fine-grained reset call:
+
+        >>> def reset_func(tensordict, tensordict_reset, env):
+        ...     result = env.observation_spec.rand()
+        ...     result.update(env.full_done_spec.zero())
+        ...     assert result.batch_size != torch.Size([])
+        ...     return result
+        >>> env = TransformedEnv(MyEnv(), BatchSizeTransform([5], reset_func=reset_func, env_kwarg=True))
+        >>> print(env.rollout(2))
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([5, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([5, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([5, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([5, 2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([5, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([5, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([5, 2]),
+                    device=None,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([5, 2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([5, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([5, 2]),
+            device=None,
+            is_shared=False)
+
+    This transform can be used to deploy non-batch-locked environments within data
+    collectors:
+
+        >>> from torchrl.collectors import SyncDataCollector
+        >>> collector = SyncDataCollector(env, lambda td: env.rand_action(td), frames_per_batch=10, total_frames=-1)
+        >>> for data in collector:
+        ...     print(data)
+        ...     break
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([5, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                collector: TensorDict(
+                    fields={
+                        traj_ids: Tensor(shape=torch.Size([5, 2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([5, 2]),
+                    device=None,
+                    is_shared=False),
+                done: Tensor(shape=torch.Size([5, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([5, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([5, 2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([5, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([5, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([5, 2]),
+                    device=None,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([5, 2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([5, 2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([5, 2]),
+            device=None,
+            is_shared=False)
+        >>> collector.shutdown()
+    """
+
+    _ENV_ERR = "BatchSizeTransform.{} requires a parent env."
+
+    def __init__(
+        self,
+        *,
+        batch_size: torch.Size | None = None,
+        reshape_fn: Callable[[TensorDictBase], TensorDictBase] | None = None,
+        reset_func: Callable[[TensorDictBase, TensorDictBase], TensorDictBase]
+        | None = None,
+        env_kwarg: bool = False,
+    ):
+        super().__init__()
+        if not ((batch_size is None) ^ (reshape_fn is None)):
+            raise ValueError(
+                "One and only one of batch_size OR reshape_fn must be provided."
+            )
+        if batch_size is not None:
+            self.batch_size = torch.Size(batch_size)
+            self.reshape_fn = None
+        else:
+            self.reshape_fn = reshape_fn
+            self.batch_size = None
+        self.reshape_fn = reshape_fn
+        self.reset_func = reset_func
+        self.env_kwarg = env_kwarg
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        if self.reset_func is not None:
+            if self.env_kwarg:
+                tensordict_reset = self.reset_func(
+                    tensordict, tensordict_reset, env=self.container
+                )
+            else:
+                tensordict_reset = self.reset_func(tensordict, tensordict_reset)
+        if self.batch_size is not None:
+            return tensordict_reset.expand(self.batch_size)
+        return self.reshape_fn(tensordict_reset)
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.reshape_fn is not None:
+            tensordict = self.reshape_fn(tensordict)
+        return tensordict
+
+    forward = _call
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.reshape_fn is not None:
+            parent = self.parent
+            if parent is not None:
+                parent_batch_size = parent.batch_size
+                tensordict = tensordict.reshape(parent_batch_size)
+        return tensordict
+
+    def transform_env_batch_size(self, batch_size: torch.Size):
+        if self.batch_size is not None:
+            return self.batch_size
+        return self.reshape_fn(torch.zeros(batch_size, device="meta")).shape
+
+    def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
+        if self.batch_size is not None:
+            return output_spec.expand(self.batch_size)
+        return self.reshape_fn(output_spec)
+
+    def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
+        if self.batch_size is not None:
+            return input_spec.expand(self.batch_size)
+        return self.reshape_fn(input_spec)
