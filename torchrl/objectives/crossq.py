@@ -331,9 +331,6 @@ class CrossQLoss(LossModule):
         self._vmap_qnetworkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
-        self._vmap_qnetwork00 = _vmap_func(
-            self.qvalue_network, randomness=self.vmap_randomness
-        )
         self.reduction = reduction
 
     @property
@@ -515,13 +512,6 @@ class CrossQLoss(LossModule):
     def _cached_detached_qvalue_params(self):
         return self.qvalue_network_params.detach()
 
-    @property
-    @_cache_values
-    def _cached_qvalue_params(self):
-        return torch.cat(
-            [self.qvalue_network_params, self.qvalue_network_params], 0  # .detach()
-        )
-
     def _actor_loss(
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
@@ -564,43 +554,28 @@ class CrossQLoss(LossModule):
                 next_tensordict.set(self.tensor_keys.action, next_action)
                 next_sample_log_prob = next_dist.log_prob(next_action)
 
-        # TODO: we should pass them together to the qvalue network
-        # q_values_tensordict = torch.cat(
-        #     [
-        #         tensordict.select(*self.qvalue_network.in_keys, strict=False).expand(
-        #             self.num_qvalue_nets, *tensordict.batch_size
-        #         ),
-        #         next_tensordict.select(
-        #             *self.qvalue_network.in_keys, strict=False
-        #         ).expand(self.num_qvalue_nets, *tensordict.batch_size),
-        #     ],
-        #     0,
-        # )  # shape (4, batch_size, *)
-        # q_values_tensordict = q_values_tensordict.contiguous()
+        # next_state_action_value = self._vmap_qnetworkN0(
+        #     next_tensordict.select(*self.qvalue_network.in_keys, strict=False),
+        #     self.qvalue_network_params,
+        # ).get(self.tensor_keys.state_action_value)
 
-        # q_values_tensordict = self._vmap_qnetwork00(
-        #     q_values_tensordict, self._cached_qvalue_params
-        # )
-        # # split q values
-        # (current_state_action_value, next_state_action_value) = q_values_tensordict.get(
-        #     self.tensor_keys.state_action_value
-        # ).split(
-        #     [
-        #         self.num_qvalue_nets,
-        #         self.num_qvalue_nets,
-        #     ],
-        #     dim=0,
-        # )
+        # current_state_action_value = self._vmap_qnetworkN0(
+        #     tensordict.select(*self.qvalue_network.in_keys, strict=False),
+        #     self.qvalue_network_params,
+        # ).get(self.tensor_keys.state_action_value)
 
-        next_state_action_value = self._vmap_qnetworkN0(
-            next_tensordict.select(*self.qvalue_network.in_keys, strict=False),
-            self.qvalue_network_params,
-        ).get(self.tensor_keys.state_action_value)
-
-        current_state_action_value = self._vmap_qnetworkN0(
-            tensordict.select(*self.qvalue_network.in_keys, strict=False),
-            self.qvalue_network_params,
-        ).get(self.tensor_keys.state_action_value)
+        combined = torch.cat(
+            [
+                tensordict.select(*self.qvalue_network.in_keys, strict=False),
+                next_tensordict.select(*self.qvalue_network.in_keys, strict=False),
+            ]
+        )
+        pred_qs = self._vmap_qnetworkN0(combined, self.qvalue_network_params).get(
+            self.tensor_keys.state_action_value
+        )
+        (current_state_action_value, next_state_action_value) = pred_qs.split(
+            tensordict.batch_size[0], dim=1
+        )
 
         # compute target value
         if (
