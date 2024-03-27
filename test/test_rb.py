@@ -18,6 +18,8 @@ import pytest
 import torch
 
 from _utils_internal import get_default_devices, make_tc
+
+from mocking_classes import CountingEnv
 from packaging import version
 from packaging.version import parse
 from tensordict import (
@@ -30,7 +32,6 @@ from tensordict import (
 )
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
-
 from torchrl.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -2791,6 +2792,43 @@ class TestRBMultidim:
             print(f"Failing at iter {i}")  # noqa: T201
             print(f"rb {rb}")  # noqa: T201
             raise
+
+    @pytest.mark.parametrize("strict_length", [True, False])
+    def test_done_slicesampler(self, strict_length):
+        env = SerialEnv(
+            3,
+            [
+                lambda: CountingEnv(max_steps=31),
+                lambda: CountingEnv(max_steps=32),
+                lambda: CountingEnv(max_steps=33),
+            ],
+        )
+        full_action_spec = CountingEnv(max_steps=32).full_action_spec
+        policy = lambda td: td.update(
+            full_action_spec.zero((3,)).apply_(lambda x: x + 1)
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(200, ndim=2),
+            sampler=SliceSampler(
+                slice_len=32,
+                strict_length=strict_length,
+                truncated_key=("next", "truncated"),
+            ),
+            batch_size=128,
+        )
+
+        for i in range(50):
+            r = env.rollout(50, policy=policy, break_when_any_done=False)
+            r["next", "done"][:, -1] = 1
+            rb.extend(r)
+
+            sample = rb.sample()
+
+            assert sample["next", "done"].sum() == 128 // 32, (
+                i,
+                sample["next", "done"].sum(),
+            )
+            assert (split_trajectories(sample)["next", "done"].sum(-2) == 1).all()
 
 
 if __name__ == "__main__":

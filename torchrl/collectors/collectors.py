@@ -39,7 +39,9 @@ from torch.utils.data import IterableDataset
 
 from torchrl._utils import (
     _check_for_faulty_process,
+    _ends_with,
     _ProcessNoWarn,
+    _replace_last,
     accept_remote_rref_udf_invocation,
     logger as torchrl_logger,
     prod,
@@ -346,6 +348,11 @@ class SyncDataCollector(DataCollectorBase):
             The _Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
             strategies such as preeptively stopping rollout collection.
             Default is ``False``.
+        set_truncated (bool, optional): if ``True``, the truncated signals (and corresponding
+            ``"done"`` but not ``"terminated"``) will be set to ``True`` when the last frame of
+            a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
+            Truncated keys can be set through ``env.add_truncated_keys``.
+            Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -433,6 +440,7 @@ class SyncDataCollector(DataCollectorBase):
         return_same_td: bool = False,
         reset_when_done: bool = True,
         interruptor=None,
+        set_truncated: bool = False,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
 
@@ -770,6 +778,23 @@ class SyncDataCollector(DataCollectorBase):
         self.interruptor = interruptor
         self._frames = 0
         self._iter = -1
+        self.set_truncated = set_truncated
+        self._truncated_keys = []
+        if self.set_truncated:
+            if not any(
+                _ends_with(key, "truncated")
+                for key in self._final_rollout.keys(True, True)
+            ):
+                raise RuntimeError(
+                    "set_truncated was set to True but no truncated key could be found "
+                    "in the environment. Make sure the truncated keys are properly set using "
+                    "`env.add_truncated_keys()` before passing the env to the collector."
+                )
+            self._truncated_keys = [
+                key
+                for key in self._final_rollout["next"].keys(True, True)
+                if _ends_with(key, "truncated")
+            ]
 
     @classmethod
     def _get_devices(
@@ -1038,7 +1063,16 @@ class SyncDataCollector(DataCollectorBase):
                             self._final_rollout.ndim - 1,
                             out=self._final_rollout,
                         )
-        return self._final_rollout
+        return self._maybe_set_truncated(self._final_rollout)
+
+    def _maybe_set_truncated(self, final_rollout):
+        last_step = (slice(None),) * (final_rollout.ndim - 1) + (-1,)
+        for truncated_key in self._truncated_keys:
+            truncated = final_rollout["next", truncated_key]
+            truncated[last_step] = True
+            final_rollout["next", truncated_key] = truncated
+            final_rollout["next", _replace_last(truncated_key, "done")] = truncated
+        return final_rollout
 
     @torch.no_grad()
     def reset(self, index=None, **kwargs) -> None:
@@ -1283,6 +1317,12 @@ class _MultiDataCollector(DataCollectorBase):
             .. note:: From v0.5, this argument will default to ``"stack"`` for a better
                 interoperability with the rest of the library.
 
+        set_truncated (bool, optional): if ``True``, the truncated signals (and corresponding
+            ``"done"`` but not ``"terminated"``) will be set to ``True`` when the last frame of
+            a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
+            Truncated keys can be set through ``env.add_truncated_keys``.
+            Defaults to ``False``.
+
     """
 
     def __init__(
@@ -1315,6 +1355,7 @@ class _MultiDataCollector(DataCollectorBase):
         num_threads: int = None,
         num_sub_threads: int = 1,
         cat_results: str | int | None = None,
+        set_truncated: bool = False,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
@@ -1322,6 +1363,7 @@ class _MultiDataCollector(DataCollectorBase):
         self.closed = True
         self.num_workers = len(create_env_fn)
 
+        self.set_truncated = set_truncated
         self.num_sub_threads = num_sub_threads
         self.num_threads = num_threads
         self.create_env_fn = create_env_fn
@@ -1618,6 +1660,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "reset_when_done": self.reset_when_done,
                     "idx": i,
                     "interruptor": self.interruptor,
+                    "set_truncated": self.set_truncated,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -2493,6 +2536,11 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             each subprocess (or one if a single process is launched).
             Defaults to 1 for safety: if none is indicated, launching multiple
             workers may charge the cpu load too much and harm performance.
+        set_truncated (bool, optional): if ``True``, the truncated signals (and corresponding
+            ``"done"`` but not ``"terminated"``) will be set to ``True`` when the last frame of
+            a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
+            Truncated keys can be set through ``env.add_truncated_keys``.
+            Defaults to ``False``.
 
     """
 
@@ -2525,6 +2573,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         preemptive_threshold: float = None,
         num_threads: int = None,
         num_sub_threads: int = 1,
+        set_truncated: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -2549,6 +2598,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             preemptive_threshold=preemptive_threshold,
             num_threads=num_threads,
             num_sub_threads=num_sub_threads,
+            set_truncated=set_truncated,
         )
 
     # for RPC
@@ -2590,6 +2640,7 @@ def _main_async_collector(
     reset_when_done: bool = True,
     verbose: bool = VERBOSE,
     interruptor=None,
+    set_truncated: bool = False,
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
@@ -2612,6 +2663,7 @@ def _main_async_collector(
         reset_when_done=reset_when_done,
         return_same_td=True,
         interruptor=interruptor,
+        set_truncated=set_truncated,
     )
     if verbose:
         torchrl_logger.info("Sync data collector created")

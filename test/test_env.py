@@ -223,6 +223,17 @@ def test_rollout(env_name, frame_skip, seed=0):
     env.close()
 
 
+def test_rollout_set_truncated():
+    env = ContinuousActionVecMockEnv()
+    with pytest.raises(RuntimeError, match="set_truncated was set to True"):
+        env.rollout(max_steps=10, set_truncated=True, break_when_any_done=False)
+    env.add_truncated_keys()
+    r = env.rollout(max_steps=10, set_truncated=True, break_when_any_done=False)
+    assert r.shape == torch.Size([10])
+    assert r[..., -1]["next", "truncated"].all()
+    assert r[..., -1]["next", "done"].all()
+
+
 @pytest.mark.parametrize("max_steps", [1, 5])
 def test_rollouts_chaining(max_steps, batch_size=(4,), epochs=4):
     # CountingEnv is done at max_steps + 1, so to emulate it being done at max_steps, we feed max_steps=max_steps - 1
