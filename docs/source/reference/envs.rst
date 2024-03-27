@@ -580,6 +580,7 @@ to be able to create this other composition:
     Transform
     TransformedEnv
     ActionMask
+    BatchSizeTransform
     BinarizeReward
     BurnInTransform
     CatFrames

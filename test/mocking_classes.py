@@ -1215,10 +1215,10 @@ class NestedCountingEnv(CountingEnv):
             for done_key in self.done_keys:
                 if isinstance(done_key, str):
                     continue
-                if self.has_root_done:
-                    done = tensordict_reset.get(done_key[-1])
                 else:
-                    done = tensordict_reset.pop(done_key[-1])
+                    done = tensordict_reset.pop(done_key[-1], None)
+                if done is None:
+                    continue
                 tensordict_reset.set(
                     done_key,
                     (done.unsqueeze(-2).expand(*self.batch_size, self.nested_dim, 1)),
@@ -1254,10 +1254,10 @@ class NestedCountingEnv(CountingEnv):
             for done_key in self.done_keys:
                 if isinstance(done_key, str):
                     continue
-                if self.has_root_done:
-                    done = next_tensordict.get(done_key[-1])
                 else:
-                    done = next_tensordict.pop(done_key[-1])
+                    done = next_tensordict.pop(done_key[-1], None)
+                if done is None:
+                    continue
                 next_tensordict.set(
                     done_key,
                     (done.unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)),
