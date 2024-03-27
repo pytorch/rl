@@ -2570,7 +2570,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         out_td.refine_names(..., "time")
         return out_td
 
-    def add_truncated_keys(self):
+    def add_truncated_keys(self) -> EnvBase:
         """Adds truncated keys to the environment."""
         for key in self.done_keys:
             self.full_done_spec[_replace_last(key, "truncated")] = self.full_done_spec[

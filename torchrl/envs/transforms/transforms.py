@@ -654,6 +654,11 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             "Cannot modify the batch-size of a transformed env. Change the batch size of the base_env instead."
         )
 
+    def add_truncated_keys(self) -> TransformedEnv:
+        self.base_env.add_truncated_keys()
+        self.empty_cache()
+        return self
+
     def _set_env(self, env: EnvBase, device) -> None:
         if device != env.device:
             env = env.to(device)
