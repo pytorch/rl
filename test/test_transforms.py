@@ -9348,7 +9348,7 @@ class TestDeviceCastTransformPart(TransformBase):
                 out_keys_inv=out_keys_inv,
             ),
         )
-        assert env.device == None
+        assert env.device is None
         check_env_specs(env)
 
     @pytest.mark.parametrize("in_keys", ["observation"])
@@ -9369,7 +9369,7 @@ class TestDeviceCastTransformPart(TransformBase):
             )
 
         env = SerialEnv(2, make_env)
-        assert env.device == None
+        assert env.device is None
         check_env_specs(env)
 
     @pytest.mark.parametrize("in_keys", ["observation"])
@@ -9396,7 +9396,7 @@ class TestDeviceCastTransformPart(TransformBase):
             make_env,
             mp_start_method="fork" if not torch.cuda.is_available() else "spawn",
         )
-        assert env.device == None
+        assert env.device is None
         try:
             check_env_specs(env)
         finally:
@@ -9420,7 +9420,7 @@ class TestDeviceCastTransformPart(TransformBase):
                 out_keys_inv=out_keys_inv,
             ),
         )
-        assert env.device == None
+        assert env.device is None
         check_env_specs(env)
 
     @pytest.mark.parametrize("in_keys", ["observation"])
@@ -9447,7 +9447,7 @@ class TestDeviceCastTransformPart(TransformBase):
                 out_keys_inv=out_keys_inv,
             ),
         )
-        assert env.device == None
+        assert env.device is None
         try:
             check_env_specs(env)
         finally:
@@ -9475,7 +9475,7 @@ class TestDeviceCastTransformPart(TransformBase):
                 out_keys_inv=out_keys_inv,
             ),
         )
-        assert env.device == None
+        assert env.device is None
         assert env.transform.device == torch.device("cpu:1")
         assert env.transform.orig_device == torch.device("cpu:0")
 
