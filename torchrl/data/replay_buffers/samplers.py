@@ -1160,9 +1160,9 @@ class SliceSampler(Sampler):
             terminated = torch.zeros_like(truncated)
             if traj_terminated.any():
                 if isinstance(seq_length, int):
-                    truncated.view(num_slices, -1)[traj_terminated] = 1
+                    terminated.view(num_slices, -1)[traj_terminated, -1] = 1
                 else:
-                    truncated[(seq_length.cumsum(0) - 1)[traj_terminated]] = 1
+                    terminated[(seq_length.cumsum(0) - 1)[traj_terminated]] = 1
             truncated = truncated & ~terminated
             done = terminated | truncated
             return index.to(torch.long).unbind(-1), {
@@ -1726,9 +1726,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             terminated = torch.zeros_like(truncated)
             if traj_terminated.any():
                 if isinstance(seq_length, int):
-                    truncated.view(num_slices, -1)[traj_terminated] = 1
+                    terminated.view(num_slices, -1)[:, traj_terminated] = 1
                 else:
-                    truncated[(seq_length.cumsum(0) - 1)[traj_terminated]] = 1
+                    terminated[(seq_length.cumsum(0) - 1)[traj_terminated]] = 1
             truncated = truncated & ~terminated
             done = terminated | truncated
 
