@@ -703,6 +703,12 @@ def print_directory_tree(path, indent="", display_metadata=True):
         logger.info(indent + os.path.basename(path))
 
 
+def _ends_with(key, match):
+    if isinstance(key, str):
+        return key == match
+    return key[-1] == match
+
+
 def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
     if isinstance(key, str):
         return new_ending
