@@ -310,6 +310,28 @@ class TestSplits:
             == split_trajs.get(("collector", "traj_ids")).max() + 1
         )
 
+    @pytest.mark.parametrize("num_workers", range(3, 34, 3))
+    @pytest.mark.parametrize("traj_len", [10, 17, 50, 97])
+    @pytest.mark.parametrize(
+        "constr",
+        [
+            functools.partial(split_trajectories, prefix="collector", as_nested=True),
+            functools.partial(split_trajectories, as_nested=True),
+            functools.partial(
+                split_trajectories,
+                trajectory_key=("collector", "traj_ids"),
+                as_nested=True,
+            ),
+        ],
+    )
+    def test_split_traj_nested(self, num_workers, traj_len, constr):
+        trajs = TestSplits.create_fake_trajs(num_workers, traj_len)
+        assert trajs.shape[0] == num_workers
+        assert trajs.shape[1] == traj_len
+        split_trajs = constr(trajs)
+        assert split_trajs.shape[-1] == -1
+        assert split_trajs["next", "done"].is_nested
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

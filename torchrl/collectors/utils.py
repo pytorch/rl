@@ -34,6 +34,7 @@ def split_trajectories(
     prefix=None,
     trajectory_key: NestedKey | None = None,
     done_key: NestedKey | None = None,
+    as_nested: bool = False,
 ) -> TensorDictBase:
     """A util function for trajectory separation.
 
@@ -44,6 +45,8 @@ def split_trajectories(
     Args:
         rollout_tensordict (TensorDictBase): a rollout with adjacent trajectories
             along the last dimension.
+
+    Keyword Args:
         prefix (NestedKey, optional): the prefix used to read and write meta-data,
             such as ``"traj_ids"`` (the optional integer id of each trajectory)
             and the ``"mask"`` entry indicating which data are valid and which
@@ -56,6 +59,8 @@ def split_trajectories(
             to ``(prefix, "traj_ids")``.
         done_key (NestedKey, optional): the key pointing to the ``"done""`` signal,
             if the trajectory could not be directly recovered. Defaults to ``"done"``.
+        as_nested (bool, optional): whether to return the results as nested
+            tensors. Defaults to ``False``.
 
     Returns:
         A new tensordict with a leading dimension corresponding to the trajectory.
@@ -172,6 +177,17 @@ def split_trajectories(
         return rollout_tensordict
 
     out_splits = rollout_tensordict.reshape(-1).split(splits, 0)
+
+    if as_nested:
+
+        def nest(name, *x):
+            return torch.nested.nested_tensor(list(x))
+
+        return out_splits[0].named_apply(
+            nest,
+            *out_splits[1:],
+            batch_size=[len(out_splits), *out_splits[0].batch_size[:-1], -1],
+        )
 
     for out_split in out_splits:
         out_split.set(
