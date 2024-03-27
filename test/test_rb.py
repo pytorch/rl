@@ -2026,8 +2026,11 @@ class TestSamplers:
             assert too_short
 
         assert len(trajs_unique_id) == 4
+        done = info[("next", "done")]
+        assert done.view(num_slices, -1)[:, -1].all()
         truncated = info[("next", "truncated")]
-        assert truncated.view(num_slices, -1)[:, -1].all()
+        terminated = info[("next", "terminated")]
+        assert (truncated | terminated).view(num_slices, -1)[:, -1].all()
 
     @pytest.mark.parametrize("sampler", [SliceSampler, SliceSamplerWithoutReplacement])
     def test_slice_sampler_at_capacity(self, sampler):
@@ -2167,8 +2170,10 @@ class TestSamplers:
             trajs_unique_id = trajs_unique_id.union(
                 cur_episodes,
             )
-        truncated = info[("next", "truncated")]
-        assert truncated.view(num_slices, -1)[:, -1].all()
+        done = info[("next", "done")]
+        assert done.view(num_slices, -1)[:, -1].all()
+        done_recon = info[("next", "truncated")] | info[("next", "terminated")]
+        assert done_recon.view(num_slices, -1)[:, -1].all()
 
     def test_slicesampler_strictlength(self):
 
