@@ -180,26 +180,27 @@ def split_trajectories(
 
     if as_nested:
         if hasattr(torch, "_nested_compute_contiguous_strides_offsets"):
-            def nest(name, x, splits=splits):
+
+            def nest(x, splits=splits):
                 # Convert splits into shapes
                 shape = torch.tensor([[int(split), *x.shape[1:]] for split in splits])
                 return torch._nested_view_from_buffer(
                     x.reshape(-1),
                     shape,
-                    *torch._nested_compute_contiguous_strides_offsets(shape)
+                    *torch._nested_compute_contiguous_strides_offsets(shape),
                 )
 
-            return out_splits.named_apply(
+            return out_splits._fast_apply(
                 nest,
                 batch_size=[len(splits), -1],
             )
         else:
             out_splits = out_splits.split(splits, 0)
 
-            def nest(name, *x):
+            def nest(*x):
                 return torch.nested.nested_tensor(list(x))
 
-            return out_splits[0].named_apply(
+            return out_splits[0]._fast_apply(
                 nest,
                 *out_splits[1:],
                 batch_size=[len(out_splits), *out_splits[0].batch_size[:-1], -1],
