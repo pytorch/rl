@@ -9391,7 +9391,11 @@ class TestDeviceCastTransformPart(TransformBase):
                 ),
             )
 
-        env = ParallelEnv(2, make_env, mp_start_method="fork")
+        env = ParallelEnv(
+            2,
+            make_env,
+            mp_start_method="fork" if not torch.cuda.is_available() else "spawn",
+        )
         assert env.device == None
         try:
             check_env_specs(env)
@@ -9430,7 +9434,11 @@ class TestDeviceCastTransformPart(TransformBase):
             return ContinuousActionVecMockEnv(device="cpu:0")
 
         env = TransformedEnv(
-            ParallelEnv(2, make_env, mp_start_method="fork"),
+            ParallelEnv(
+                2,
+                make_env,
+                mp_start_method="fork" if not torch.cuda.is_available() else "spawn",
+            ),
             DeviceCastTransform(
                 "cpu:1",
                 in_keys=in_keys,
