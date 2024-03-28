@@ -9,6 +9,8 @@ import pytest
 import torch
 from _utils_internal import get_default_devices
 from tensordict import assert_allclose_td, TensorDict
+
+from torchrl._utils import _ends_with
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.postprocs.postprocs import MultiStep
 
@@ -331,6 +333,50 @@ class TestSplits:
         split_trajs = constr(trajs)
         assert split_trajs.shape[-1] == -1
         assert split_trajs["next", "done"].is_nested
+
+    @pytest.mark.parametrize("num_workers", range(3, 34, 3))
+    @pytest.mark.parametrize("traj_len", [10, 17, 50, 97])
+    @pytest.mark.parametrize(
+        "constr0,constr1",
+        [
+            [
+                functools.partial(
+                    split_trajectories, prefix="collector", as_nested=True
+                ),
+                functools.partial(
+                    split_trajectories, prefix="collector", as_nested=False
+                ),
+            ],
+            [
+                functools.partial(split_trajectories, as_nested=True),
+                functools.partial(split_trajectories, as_nested=False),
+            ],
+            [
+                functools.partial(
+                    split_trajectories,
+                    trajectory_key=("collector", "traj_ids"),
+                    as_nested=True,
+                ),
+                functools.partial(
+                    split_trajectories,
+                    trajectory_key=("collector", "traj_ids"),
+                    as_nested=False,
+                ),
+            ],
+        ],
+    )
+    def test_split_traj_nested_equiv(self, num_workers, traj_len, constr0, constr1):
+        trajs = TestSplits.create_fake_trajs(num_workers, traj_len)
+        assert trajs.shape[0] == num_workers
+        assert trajs.shape[1] == traj_len
+        split_trajs1 = constr1(trajs)
+        mask_key = None
+        for key in split_trajs1.keys(True, True):
+            if _ends_with(key, "mask"):
+                mask_key = key
+                break
+        split_trajs0 = constr0(trajs).to_padded_tensor(mask_key=mask_key)
+        assert (split_trajs0 == split_trajs1).all()
 
 
 if __name__ == "__main__":

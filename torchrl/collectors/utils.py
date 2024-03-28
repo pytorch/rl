@@ -60,7 +60,9 @@ def split_trajectories(
         done_key (NestedKey, optional): the key pointing to the ``"done""`` signal,
             if the trajectory could not be directly recovered. Defaults to ``"done"``.
         as_nested (bool, optional): whether to return the results as nested
-            tensors. Defaults to ``False``.
+            tensors. Defaults to ``False``.\
+
+            .. note::
 
     Returns:
         A new tensordict with a leading dimension corresponding to the trajectory.
