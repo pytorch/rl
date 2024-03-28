@@ -11,16 +11,50 @@ import numpy as np
 
 import torch
 
+import torchrl.modules
 from tensordict import TensorDict
 from torch import nn
-from torchrl.data.utils import DEVICE_TYPING
 
+from torch.utils._pytree import tree_map
+from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules.models import ConvNet, MLP
 from torchrl.modules.models.utils import _reset_parameters_recursive
 
 
 class MultiAgentNetBase(nn.Module):
-    """A base class for multi-agent networks."""
+    """A base class for multi-agent networks.
+
+    This is a base class for creating multi-agent networks that can be used in various contexts, such as policies,
+    value functions, or other types of neural networks. To use,
+    subclass this base class and implement the abstract methods
+    _build_single_net() and _pre_forward_check().
+
+    It expects inputs as a tuple of tensors with shape (*B, n_agents, ...), where *B represents the batch dimensions,
+    n_agents is the number of agents, and ... represents the input dimensions for each agent.
+    It returns outputs as a tuple or a single tensor with shape (*B, n_agents, ...), where ... represents the output
+    dimensions for each agent.
+
+    If `share_params` is True, the same network will be used to make the forward pass for all agents (homogeneous
+    networks). Otherwise, each agent will use a different network to process its input (heterogeneous networks).
+
+    If `centralised` is True, each agent will use the inputs of all agents to compute its output. Otherwise, each agent
+    will only use its own input data.
+
+    Args:
+        n_agents (int): number of agents.
+        centralised (bool): If `centralised` is True, each agent will use the inputs of all agents to compute its output.
+            Otherwise, each agent will only use its own data as input.
+        share_params (bool): If `share_params` is True, the same network will be used to make the forward pass
+            for all agents (homogeneous networks). Otherwise, each agent will use a different network to process
+            its input (heterogeneous networks).
+        agent_dim (int): the dimension along which the agent dimension is located in the input and output tensors.
+            Default: -2.
+        input_tuple_len (int, optional): the length of the input tuple. Default: 1.
+        output_tuple_len (int, optional): the length of the output tuple. Default: 1.
+        vmap_randomness (str, optional): the randomness strategy for `torch.vmap`. Can be 'same' or 'different'.
+            Default: 'different'.
+        **kwargs: additional arguments to be passed to the `_build_single_net` method.
+    """
 
     _empty_net: nn.Module
 
@@ -31,6 +65,8 @@ class MultiAgentNetBase(nn.Module):
         centralised: bool,
         share_params: bool,
         agent_dim: int,
+        input_tuple_len: int = 1,
+        output_tuple_len: int = 1,
         vmap_randomness: str = "different",
         **kwargs,
     ):
@@ -40,6 +76,7 @@ class MultiAgentNetBase(nn.Module):
         self.share_params = share_params
         self.centralised = centralised
         self.agent_dim = agent_dim
+        self.output_tuple_len = output_tuple_len
         self._vmap_randomness = vmap_randomness
 
         agent_networks = [
@@ -55,6 +92,8 @@ class MultiAgentNetBase(nn.Module):
         self._make_params(agent_networks)
         kwargs["device"] = "meta"
         self.__dict__["_empty_net"] = self._build_single_net(**kwargs)
+
+        self._checked = False
 
     @property
     def vmap_randomness(self):
@@ -88,48 +127,71 @@ class MultiAgentNetBase(nn.Module):
 
         return torch.vmap(exec_module, *args, **kwargs)
 
-    def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
-        if len(inputs) > 1:
-            inputs = torch.cat([*inputs], -1)
-        else:
-            inputs = inputs[0]
+    def _in_dim(self, input: Tuple[...]):
+        # We must define a structure that resembles the input data with the
+        # agent dims in it, smth like (None,) if there is a single input
+        # of (None, (None, None)) for an LSTM
+        in_dim = self.__dict__.get("_in_dim_value", None)
+        if in_dim is None:
+            in_dim = tree_map(
+                lambda x: None if self.centralised else self.agent_dim, input
+            )
+            self.__dict__["_in_dim_value"] = in_dim
+        return in_dim
 
+    def _expand_centralized_output(self, output):
+        # If the parameters are shared, and it is centralised, all agents will have the same output
+        # We expand it to maintain the agent dimension, but values will be the same for all agents
+        def expand_output(output):
+            n_agent_outputs = output.shape[-1]
+            output = output.view(*output.shape[:-1], n_agent_outputs)
+            output = output.unsqueeze(-2)
+            output = output.expand(*output.shape[:-2], self.n_agents, n_agent_outputs)
+            return output
+
+        if self.output_tuple_len == 1:
+            return expand_output(output)
+        else:
+            return tree_map(expand_output, output)
+
+    def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
         inputs = self._pre_forward_check(inputs)
-        # If parameters are not shared, each agent has its own network
-        if not self.share_params:
+
+        # If parameters are shared, agents use the same network
+        if self.share_params:
+            # Centralized = networks get concat of all agent inputs
             if self.centralised:
-                output = self.vmap_func_module(
-                    self._empty_net, (0, None), (-2,), randomness=self.vmap_randomness
-                )(self.params, inputs)
+                with self.params.to_module(self._empty_net):
+                    output = self._empty_net(*inputs)
+                    return self._expand_centralized_output(output)
             else:
                 output = self.vmap_func_module(
                     self._empty_net,
-                    (0, self.agent_dim),
-                    (-2,),
-                    randomness=self.vmap_randomness,
-                )(self.params, inputs)
-
-        # If parameters are shared, agents use the same network
+                    (None, *self._in_dim(inputs)),
+                    (-2,) * self.output_tuple_len,
+                    randomness=self._vmap_randomness,
+                )(self.params, *inputs)
+        # If parameters are not shared, each agent has its own network
         else:
-            with self.params.to_module(self._empty_net):
-                output = self._empty_net(inputs)
+            # self._in_dim() handles expanding the input size for centralized (by concatenating all agent inputs)
+            output = self.vmap_func_module(
+                self._empty_net,
+                (0, *self._in_dim(inputs)),
+                (-2,) * self.output_tuple_len,
+                randomness=self._vmap_randomness,
+            )(self.params, *inputs)
 
-            if self.centralised:
-                # If the parameters are shared, and it is centralised, all agents will have the same output
-                # We expand it to maintain the agent dimension, but values will be the same for all agents
-                n_agent_outputs = output.shape[-1]
-                output = output.view(*output.shape[:-1], n_agent_outputs)
-                output = output.unsqueeze(-2)
-                output = output.expand(
-                    *output.shape[:-2], self.n_agents, n_agent_outputs
-                )
+        if not self._checked:
 
-        if output.shape[-2] != (self.n_agents):
-            raise ValueError(
-                f"Multi-agent network expected output with shape[-2]={self.n_agents}"
-                f" but got {output.shape}"
-            )
+            def check_output(output):
+                if output.shape[-2] != self.n_agents:
+                    raise ValueError(
+                        f"Multi-agent network expected output with shape[-2]={self.n_agents}"
+                        f" but got {output.shape}"
+                    )
 
+            tree_map(check_output, output)
+            self._checked = True
         return output
 
     def reset_parameters(self):
@@ -151,7 +213,7 @@ class MultiAgentNetBase(nn.Module):
 
 
 class MultiAgentMLP(MultiAgentNetBase):
-    """Mult-agent MLP.
+    """Multi-agent MLP.
 
     This is an MLP that can be used in multi-agent contexts.
     For example, as a policy or as a value function.
@@ -305,6 +367,10 @@ class MultiAgentMLP(MultiAgentNetBase):
         )
 
     def _pre_forward_check(self, inputs):
+        if len(inputs) > 1:
+            inputs = torch.cat([*inputs], -1)
+        else:
+            inputs = inputs[0]
         if inputs.shape[-2] != self.n_agents:
             raise ValueError(
                 f"Multi-agent network expected input with shape[-2]={self.n_agents},"
@@ -313,7 +379,7 @@ class MultiAgentMLP(MultiAgentNetBase):
         # If the model is centralized, agents have full observability
         if self.centralised:
             inputs = inputs.flatten(-2, -1)
-        return inputs
+        return (inputs,)
 
     def _build_single_net(self, *, device, **kwargs):
         n_agent_inputs = self.n_agent_inputs
@@ -519,6 +585,11 @@ class MultiAgentConvNet(MultiAgentNetBase):
         )
 
     def _pre_forward_check(self, inputs):
+        if len(inputs) > 1:
+            raise TypeError(f"Multiple inputs isn't supported by {type(self)}.")
+        else:
+            inputs = inputs[0]
+
         if len(inputs.shape) < 4:
             raise ValueError(
                 """Multi-agent network expects (*batch_size, agent_index, x, y, channels)"""
@@ -530,7 +601,254 @@ class MultiAgentConvNet(MultiAgentNetBase):
         if self.centralised:
             # If the model is centralized, agents have full observability
             inputs = torch.flatten(inputs, -4, -3)
+        return (inputs,)
+
+
+class MultiAgentGRU(MultiAgentNetBase):
+    """Multi-agent GRU.
+
+    This is a GRU that can be used in multi-agent contexts, such as policies or value functions.
+
+    If `share_params` is True, the same GRU will be used for all agents (homogeneous networks).
+    Otherwise, each agent will use a different GRU (heterogeneous networks).
+
+    If `centralised` is True, each agent will use the inputs of all agents to compute its output.
+    Otherwise, each agent will only use its own input.
+
+    Input/Output Shapes:
+
+    If `centralised=True` and `share_params=True`:
+        Input: x (Batch, Time, Agents, Features), h_x (Layers, Batch, Hidden)
+        Output: y (Batch, Time, Agents, Hidden), h_x (Layers, Batch, Hidden)
+
+    If `centralised=True` and `share_params=False`:
+        Input: x (Batch, Time, Agents, Features), h_x (Layers, Batch, Agents, Hidden)
+        Output: y (Batch, Time, Agents, Hidden), h_x (Layers, Batch, Agents, Hidden)
+
+    If `centralised=False` and `share_params=True`:
+        Input: x (Batch, Time, Agents, Features), h_x (Layers, Batch, Agents, Hidden)
+        Output: y (Batch, Time, Agents, Hidden), h_x (Layers, Batch, Agents, Hidden)
+
+    If `centralised=False` and `share_params=False`:
+        Input: x (Batch, Time, Agents, Features), h_x (Layers, Batch, Agents, Hidden)
+        Output: y (Batch, Time, Agents, Hidden), h_x (Layers, Batch, Agents, Hidden)
+
+    Args:
+        n_agent_inputs (int): Number of input features for each agent.
+        n_agents (int): Number of agents.
+        centralised (bool): If True, each agent uses inputs of all agents. Otherwise, each agent only uses its own input.
+        share_params (bool): If True, all agents share the same GRU. Otherwise, each agent has its own GRU.
+        out_features (int): Number of output features for each agent.
+        device (str or torch.device, optional): Device to create the module on.
+        **kwargs: Additional arguments to pass to the GRU module.
+    """
+
+    def __init__(
+        self,
+        n_agent_inputs: int,
+        n_agents: int,
+        centralised: bool,
+        share_params: bool,
+        *,
+        out_features: int,
+        device: Optional[DEVICE_TYPING] = None,
+        **kwargs,
+    ):
+        self.n_agent_inputs = n_agent_inputs
+        self.out_features = out_features
+        super().__init__(
+            n_agents=n_agents,
+            centralised=centralised,
+            share_params=share_params,
+            device=device,
+            agent_dim=-2,
+            output_tuple_len=2,
+            **kwargs,
+        )
+
+    def _in_dim(self, input: Tuple[...]):
+        in_dim = self.__dict__.get("_in_dim_value", None)
+        if in_dim is None:
+            if self.centralised:
+                if self.share_params:
+                    # simplest case: everything is flattened
+                    in_dim = (None, None)
+                else:
+                    in_dim = (None, self.agent_dim)
+            else:
+                in_dim = (self.agent_dim, self.agent_dim)
+            self.__dict__["_in_dim_value"] = in_dim
+        return in_dim
+
+    def _build_single_net(self, *, device, **kwargs):
+        n_agent_inputs = self.n_agent_inputs
+        out_features = self.out_features
+        if n_agent_inputs is None:
+            raise RuntimeError("Lazy initialization of GRU is not supported yet.")
+        if self.centralised:
+            n_agent_inputs = self.n_agent_inputs * self.n_agents
+
+        return torchrl.modules.GRU(
+            input_size=n_agent_inputs, hidden_size=out_features, **kwargs
+        )
+
+    def _pre_forward_check(self, inputs):
+        if len(inputs) == 1:
+            hx = self._empty_net._make_zero_recurrent(inputs[0])
+            if not self.centralised or not self.share_params:
+                # we need to expand the hidden states
+                hx = hx.unsqueeze(self.agent_dim).repeat_interleave(
+                    self.n_agents, dim=self.agent_dim
+                )
+            inputs = (inputs[0], hx)
+
+        if not self._checked:
+            input = inputs[0]
+            if input is None:
+                return
+            # _checked will be turned off later
+            if input.shape[-2] != self.n_agents:
+                raise ValueError(
+                    f"Multi-agent network expected input with shape[-2]={self.n_agents},"
+                    f" but got {input.shape}"
+                )
+
+        # If the model is centralized, agents have full observability, so merge all of the input observations
+        if self.centralised:
+            inputs = (inputs[0].flatten(-2, -1), *inputs[1:])
+
         return inputs
+
+    def _expand_centralized_output(self, output):
+        if self.share_params:
+            return (super()._expand_centralized_output(output[0]), *output[1:])
+        else:
+            return super()._expand_centralized_output(output)
+
+
+class MultiAgentLSTM(MultiAgentNetBase):
+    """Multi-agent LSTM.
+
+    This is an LSTM that can be used in multi-agent contexts, such as policies or value functions.
+
+    If `share_params` is True, the same LSTM will be used for all agents (homogeneous networks).
+    Otherwise, each agent will use a different LSTM (heterogeneous networks).
+
+    If `centralised` is True, each agent will use the inputs of all agents to compute its output.
+    Otherwise, each agent will only use its own input.
+
+    Input/Output Shapes:
+
+    If `centralised=True` and `share_params=True`:
+        Input: x (Batch, Time, Agents, Features), h_x (Layers, Batch, Hidden), c_x (Layers, Batch, Hidden)
+        Output: y (Batch, Time, Agents, Hidden), h_x (Layers, Batch, Hidden), c_x (Layers, Batch, Hidden)
+
+    If `centralised=True` and `share_params=False`:
+        Input: x (Batch, Time, Agents, Features), h_x (Layers, Batch, Agents, Hidden), c_x (Layers, Batch, Agents, Hidden)
+        Output: y (Batch, Time, Agents, Hidden), h_x (Layers, Batch, Agents, Hidden), c_x (Layers, Batch, Agents, Hidden)
+
+    If `centralised=False` and `share_params=True`:
+        Input: x (Batch, Time, Agents, Features), h_x (Layers, Batch, Agents, Hidden), c_x (Layers, Batch, Agents, Hidden)
+        Output: y (Batch, Time, Agents, Hidden), h_x (Layers, Batch, Agents, Hidden), c_x (Layers, Batch, Agents, Hidden)
+
+    If `centralised=False` and `share_params=False`:
+        Input: x (Batch, Time, Agents, Features), h_x (Layers, Batch, Agents, Hidden), c_x (Layers, Batch, Agents, Hidden)
+        Output: y (Batch, Time, Agents, Hidden), h_x (Layers, Batch, Agents, Hidden), c_x (Layers, Batch, Agents, Hidden)
+
+    Args:
+        n_agent_inputs (int): Number of input features for each agent.
+        n_agents (int): Number of agents.
+        centralised (bool): If True, each agent uses inputs of all agents. Otherwise, each agent only uses its own input.
+        share_params (bool): If True, all agents share the same LSTM. Otherwise, each agent has its own LSTM.
+        out_features (int): Number of output features for each agent.
+        device (str or torch.device, optional): Device to create the module on.
+        **kwargs: Additional arguments to pass to the LSTM module.
+    """
+
+    def __init__(
+        self,
+        *,
+        n_agent_inputs: int,
+        n_agents: int,
+        centralised: bool,
+        share_params: bool,
+        out_features: int,
+        device: Optional[DEVICE_TYPING] = None,
+        **kwargs,
+    ):
+        self.n_agent_inputs = n_agent_inputs
+        self.out_features = out_features
+        super().__init__(
+            n_agents=n_agents,
+            centralised=centralised,
+            share_params=share_params,
+            device=device,
+            agent_dim=-2,
+            output_tuple_len=2,
+            **kwargs,
+        )
+
+    def _in_dim(self, input: Tuple[...]):
+        in_dim = self.__dict__.get("_in_dim_value", None)
+        if in_dim is None:
+            if self.centralised:
+                if self.share_params:
+                    # simplest case: everything is flattened
+                    in_dim = (None, (None, None))
+                else:
+                    in_dim = (None, (self.agent_dim, self.agent_dim))
+            else:
+                in_dim = (self.agent_dim, (self.agent_dim, self.agent_dim))
+            self.__dict__["_in_dim_value"] = in_dim
+        return in_dim
+
+    def _build_single_net(self, *, device, **kwargs):
+        n_agent_inputs = self.n_agent_inputs
+        out_features = self.out_features
+        if n_agent_inputs is None:
+            raise RuntimeError("Lazy initialization of LSTM is not supported yet.")
+        if self.centralised:
+            n_agent_inputs = self.n_agent_inputs * self.n_agents
+
+        return torchrl.modules.LSTM(
+            input_size=n_agent_inputs, hidden_size=out_features, **kwargs
+        )
+
+    def _pre_forward_check(self, inputs):
+        if len(inputs) == 1:
+            hx = self._empty_net._make_zero_recurrent(inputs[0])
+            if not self.centralised or not self.share_params:
+                # we need to expand the hidden states
+                hx = tuple(
+                    _hx.unsqueeze(self.agent_dim).repeat_interleave(
+                        self.n_agents, dim=self.agent_dim
+                    )
+                    for _hx in hx
+                )
+            inputs = (inputs[0], hx)
+
+        if not self._checked:
+            input = inputs[0]
+            if input is None:
+                return
+            # _checked will be turned off later
+            if input.shape[-2] != self.n_agents:
+                raise ValueError(
+                    f"Multi-agent network expected input with shape[-2]={self.n_agents},"
+                    f" but got {input.shape}"
+                )
+
+        # If the model is centralized, agents have full observability, so merge all of the input observations
+        if self.centralised:
+            inputs = (inputs[0].flatten(-2, -1), *inputs[1:])
+
+        return inputs
+
+    def _expand_centralized_output(self, output):
+        if self.share_params:
+            return (super()._expand_centralized_output(output[0]), *output[1:])
+        else:
+            return super()._expand_centralized_output(output)
 
 
 class Mixer(nn.Module):
