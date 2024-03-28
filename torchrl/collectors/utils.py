@@ -34,6 +34,7 @@ def split_trajectories(
     prefix=None,
     trajectory_key: NestedKey | None = None,
     done_key: NestedKey | None = None,
+    as_nested: bool = False,
 ) -> TensorDictBase:
     """A util function for trajectory separation.
 
@@ -44,6 +45,8 @@ def split_trajectories(
     Args:
         rollout_tensordict (TensorDictBase): a rollout with adjacent trajectories
             along the last dimension.
+
+    Keyword Args:
         prefix (NestedKey, optional): the prefix used to read and write meta-data,
             such as ``"traj_ids"`` (the optional integer id of each trajectory)
             and the ``"mask"`` entry indicating which data are valid and which
@@ -56,6 +59,13 @@ def split_trajectories(
             to ``(prefix, "traj_ids")``.
         done_key (NestedKey, optional): the key pointing to the ``"done""`` signal,
             if the trajectory could not be directly recovered. Defaults to ``"done"``.
+        as_nested (bool, optional): whether to return the results as nested
+            tensors. Defaults to ``False``.\
+
+            .. note:: Using ``split_trajectories(tensordict, as_nested=True).to_padded_tensor(mask=mask_key)``
+                should result in the exact same result as ``as_nested=False``. Since this is an experimental
+                feature and relies on nested_tensors, which API may change in the future, we made this
+                an optional feature. The runtime should be faster with ``as_nested=True``.
 
     Returns:
         A new tensordict with a leading dimension corresponding to the trajectory.
@@ -171,7 +181,37 @@ def split_trajectories(
             rollout_tensordict = rollout_tensordict.unsqueeze(0)
         return rollout_tensordict
 
-    out_splits = rollout_tensordict.reshape(-1).split(splits, 0)
+    out_splits = rollout_tensordict.reshape(-1)
+
+    if as_nested:
+        if hasattr(torch, "_nested_compute_contiguous_strides_offsets"):
+
+            def nest(x, splits=splits):
+                # Convert splits into shapes
+                shape = torch.tensor([[int(split), *x.shape[1:]] for split in splits])
+                return torch._nested_view_from_buffer(
+                    x.reshape(-1),
+                    shape,
+                    *torch._nested_compute_contiguous_strides_offsets(shape),
+                )
+
+            return out_splits._fast_apply(
+                nest,
+                batch_size=[len(splits), -1],
+            )
+        else:
+            out_splits = out_splits.split(splits, 0)
+
+            def nest(*x):
+                return torch.nested.nested_tensor(list(x))
+
+            return out_splits[0]._fast_apply(
+                nest,
+                *out_splits[1:],
+                batch_size=[len(out_splits), *out_splits[0].batch_size[:-1], -1],
+            )
+
+    out_splits = out_splits.split(splits, 0)
 
     for out_split in out_splits:
         out_split.set(
