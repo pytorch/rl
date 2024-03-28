@@ -4813,6 +4813,7 @@ class VecNorm(Transform):
         """Converts VecNorm into an ObservationNorm class that can be used at inference time."""
         out = []
         for key in self.in_keys:
+            key = self._key_str(key)
             _sum = self._td.get(key + "_sum")
             _ssq = self._td.get(key + "_ssq")
             _count = self._td.get(key + "_count")
