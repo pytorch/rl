@@ -62,7 +62,10 @@ def split_trajectories(
         as_nested (bool, optional): whether to return the results as nested
             tensors. Defaults to ``False``.\
 
-            .. note::
+            .. note:: Using ``split_trajectories(tensordict, as_nested=True).to_padded_tensor(mask=mask_key)``
+                should result in the exact same result as ``as_nested=False``. Since this is an experimental
+                feature and relies on nested_tensors, which API may change in the future, we made this
+                an optional feature. The runtime should be faster with ``as_nested=True``.
 
     Returns:
         A new tensordict with a leading dimension corresponding to the trajectory.
