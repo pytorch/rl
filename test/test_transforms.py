@@ -9457,7 +9457,7 @@ class TestDeviceCastTransformPart(TransformBase):
         t = DeviceCastTransform("cpu:1", "cpu:0", in_keys=["a"], out_keys=["b"])
         td = TensorDict({"a": torch.randn((), device="cpu:0")}, [], device="cpu:0")
         tdt = t._call(td)
-        assert tdt.device == None
+        assert tdt.device is None
 
     @pytest.mark.parametrize("in_keys", ["observation"])
     @pytest.mark.parametrize("out_keys", [None, ["obs_device"]])
@@ -9502,8 +9502,8 @@ class TestDeviceCastTransformPart(TransformBase):
         tdt = t._call(td)
         tdit = t._inv_call(td)
 
-        assert tdt.device == None
-        assert tdit.device == None
+        assert tdt.device is None
+        assert tdit.device is None
 
     def test_transform_model(self):
         t = nn.Sequential(
@@ -9528,7 +9528,7 @@ class TestDeviceCastTransformPart(TransformBase):
         )
         tdt = t(td)
 
-        assert tdt.device == None
+        assert tdt.device is None
 
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     @pytest.mark.parametrize("storage", [LazyTensorStorage])
@@ -9555,8 +9555,8 @@ class TestDeviceCastTransformPart(TransformBase):
             device="cpu:0",
         )
         rb.add(td)
-        assert rb._storage._storage.device == None
-        assert rb.sample(4).device == None
+        assert rb._storage._storage.device is None
+        assert rb.sample(4).device is None
 
     def test_transform_inverse(self):
         # Tested before
