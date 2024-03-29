@@ -743,7 +743,6 @@ class PettingZooWrapper(_EnvWrapper):
         self,
         tensordict: TensorDictBase,
     ) -> Tuple[Dict, Dict, Dict, Dict, Dict]:
-
         for group, agents in self.group_map.items():
             if self.agent_selection in agents:
                 agent_index = agents.index(self._env.agent_selection)
@@ -771,7 +770,6 @@ class PettingZooWrapper(_EnvWrapper):
         )
 
     def _update_action_mask(self, td, observation_dict, info_dict):
-
         # Since we remove the action_mask keys we need to copy the data
         observation_dict = copy.deepcopy(observation_dict)
         info_dict = copy.deepcopy(info_dict)

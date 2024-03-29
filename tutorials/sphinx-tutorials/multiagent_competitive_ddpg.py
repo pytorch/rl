@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
-===============================================================
+Multi-Agent Competitive Reinforcement Learning (DDPG) with TorchRL Tutorial
+===========================================================================
 **Author**: `Matteo Bettini <https://github.com/matteobettini>`_
 
 .. note::
@@ -54,6 +54,7 @@ Key learnings:
 #
 #    !pip3 install torchrl
 #    !pip3 install vmas==1.2.11
+#    !pip3 install pettingzoo[mpe]==1.24.1
 #    !pip3 install tqdm
 #
 # Proximal Policy Optimization (PPO) is a policy-gradient algorithm where a
@@ -123,8 +124,7 @@ Key learnings:
 import torch
 
 # Tensordict modules
-from tensordict.nn import TensorDictModule
-from tensordict.nn.distributions import NormalParamExtractor
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import multiprocessing
 
 # Data collection
@@ -134,12 +134,17 @@ from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 
 # Env
-from torchrl.envs import RewardSum, TransformedEnv
+from torchrl.envs import PettingZooEnv, RewardSum, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import check_env_specs
 
 # Multi-agent network
-from torchrl.modules import MultiAgentMLP, ProbabilisticActor, TanhNormal
+from torchrl.modules import (
+    AdditiveGaussianWrapper,
+    MultiAgentMLP,
+    ProbabilisticActor,
+    TanhDelta,
+)
 
 # Loss
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
@@ -231,21 +236,40 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 #
 
 max_steps = 100  # Episode steps before done
+
+n_chasers = 3
+n_evaders = 1
+n_obstacles = 2
+
+
+env = PettingZooEnv(
+    task="simple_tag_v3",
+    parallel=True,
+    seed=0,
+    # Scenario specific
+    continuous_actions=True,
+    num_good=n_evaders,
+    num_adversaries=n_chasers,
+    num_obstacles=n_obstacles,
+    max_cycles=max_steps,
+)
+
+
 num_vmas_envs = (
     frames_per_batch // max_steps
 )  # Number of vectorized envs. frames_per_batch should be divisible by this number
-scenario_name = "navigation"
-n_agents = 3
-
 env = VmasEnv(
-    scenario=scenario_name,
+    scenario="simple_tag",
     num_envs=num_vmas_envs,
-    continuous_actions=True,  # VMAS supports both continuous and discrete actions
+    continuous_actions=True,
     max_steps=max_steps,
     device=vmas_device,
-    # Scenario kwargs
-    n_agents=n_agents,  # These are custom kwargs that change for each VMAS scenario, see the VMAS repo to know more.
+    # Scenario specific
+    num_good_agents=n_evaders,
+    num_adversaries=n_chasers,
+    num_landmarks=n_obstacles,
 )
+
 
 ######################################################################
 # The environment is not only defined by its simulator and transforms, but also
@@ -312,10 +336,9 @@ print("done_keys:", env.done_keys)
 # of transforms it contains.
 #
 
-
 env = TransformedEnv(
     env,
-    RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")]),
+    RewardSum(reset_keys=["_reset"] * len(env.group_map.keys())),
 )
 
 
@@ -402,24 +425,32 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # multiple agents, with much customisation available.
 #
 
-share_parameters_policy = True
+policy_modules = {}
+for group, agents in env.group_map.items():
+    share_parameters_policy = True  # Can change this based on the group
 
-policy_net = torch.nn.Sequential(
-    MultiAgentMLP(
-        n_agent_inputs=env.observation_spec["agents", "observation"].shape[
+    policy_net = MultiAgentMLP(
+        n_agent_inputs=env.observation_spec[group, "observation"].shape[
             -1
         ],  # n_obs_per_agent
-        n_agent_outputs=2 * env.action_spec.shape[-1],  # 2 * n_actions_per_agents
-        n_agents=env.n_agents,
+        n_agent_outputs=env.action_spec[group, "action"].shape[
+            -1
+        ],  # n_actions_per_agents
+        n_agents=len(agents),  # Number of agents in the group
         centralised=False,  # the policies are decentralised (ie each agent will act from its observation)
         share_params=share_parameters_policy,
         device=device,
         depth=2,
         num_cells=256,
         activation_class=torch.nn.Tanh,
-    ),
-    NormalParamExtractor(),  # this will just separate the last dimension into two outputs: a loc and a non-negative scale
-)
+    )
+    policy_module = TensorDictModule(
+        policy_net,
+        in_keys=[(group, "observation")],
+        out_keys=[(group, "param")],
+    )
+    policy_modules[group] = policy_module
+
 
 ######################################################################
 # **Second**: wrap the neural network in a :class:`TensorDictModule`
@@ -431,11 +462,7 @@ policy_net = torch.nn.Sequential(
 # Note that we use ``("agents", ...)`` keys as these keys are denoting data with the
 # additional ``n_agents`` dimension.
 #
-policy_module = TensorDictModule(
-    policy_net,
-    in_keys=[("agents", "observation")],
-    out_keys=[("agents", "loc"), ("agents", "scale")],
-)
+
 
 ######################################################################
 # **Third**: wrap the :class:`TensorDictModule` in a :class:`ProbabilisticActor`
@@ -451,19 +478,33 @@ policy_module = TensorDictModule(
 # :class:`TanhNormal` distribution constructor keyword arguments (loc and scale).
 #
 
-policy = ProbabilisticActor(
-    module=policy_module,
-    spec=env.unbatched_action_spec,
-    in_keys=[("agents", "loc"), ("agents", "scale")],
-    out_keys=[env.action_key],
-    distribution_class=TanhNormal,
-    distribution_kwargs={
-        "min": env.unbatched_action_spec[env.action_key].space.low,
-        "max": env.unbatched_action_spec[env.action_key].space.high,
-    },
-    return_log_prob=True,
-    log_prob_key=("agents", "sample_log_prob"),
-)  # we'll need the log-prob for the PPO loss
+policies = {}
+for group, _agents in env.group_map.items():
+    policy = ProbabilisticActor(
+        module=policy_modules[group],
+        spec=env.action_spec[group, "action"],
+        in_keys=[(group, "param")],
+        out_keys=[(group, "action")],
+        distribution_class=TanhDelta,
+        distribution_kwargs={
+            "min": env.action_spec[group, "action"].space.low,
+            "max": env.action_spec[group, "action"].space.high,
+        },
+        return_log_prob=False,
+    )
+    policies[group] = policy
+
+exploration_policies = {}
+for group, _agents in env.group_map.items():
+    exploration_policy = AdditiveGaussianWrapper(
+        policies[group],
+        annealing_num_steps=100,
+        action_key=(group, "action"),
+        sigma_init=0.9,
+        sigma_end=0.1,
+    )
+    exploration_policies[group] = exploration_policy
+
 
 ######################################################################
 # Critic network
@@ -500,26 +541,35 @@ policy = ProbabilisticActor(
 # all the values along the ``n_agents`` dimension will be identical.
 #
 
-share_parameters_critic = True
-mappo = True  # IPPO if False
+critics = {}
+for group, agents in env.group_map.items():
+    share_parameters_critic = True  # Can change for each group
+    maddpg = True  # IDDPG if False
 
-critic_net = MultiAgentMLP(
-    n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-    n_agent_outputs=1,  # 1 value per agent
-    n_agents=env.n_agents,
-    centralised=mappo,
-    share_params=share_parameters_critic,
-    device=device,
-    depth=2,
-    num_cells=256,
-    activation_class=torch.nn.Tanh,
-)
+    cat_module = TensorDictModule(
+        lambda obs, action: torch.cat([obs, action], dim=-1),
+        in_keys=[(group, "observation"), (group, "action")],
+        out_keys=[(group, "obs_action")],
+    )
 
-critic = TensorDictModule(
-    module=critic_net,
-    in_keys=[("agents", "observation")],
-    out_keys=[("agents", "state_value")],
-)
+    critic_module = TensorDictModule(
+        module=MultiAgentMLP(
+            n_agent_inputs=env.observation_spec[group, "observation"].shape[-1]
+            + env.action_spec[group, "action"].shape[-1],
+            n_agent_outputs=1,  # 1 value per agent
+            n_agents=len(agents),
+            centralised=maddpg,
+            share_params=share_parameters_critic,
+            device=device,
+            depth=2,
+            num_cells=256,
+            activation_class=torch.nn.Tanh,
+        ),
+        in_keys=[(group, "obs_action")],
+        out_keys=[(group, "state_action_value")],
+    )
+    critics[group] = TensorDictSequential(cat_module, critic_module)
+
 
 ######################################################################
 # Let us try our policy and critic modules. As pointed earlier, the usage of
@@ -530,8 +580,11 @@ critic = TensorDictModule(
 # **From this point on, the multi-agent-specific components have been instantiated, and we will simply use the same
 # components as in single-agent learning. Isn't this fantastic?**
 #
-print("Running policy:", policy(env.reset()))
-print("Running value:", critic(env.reset()))
+for group, _agents in env.group_map.items():
+    print(
+        f"Running value and policy for group {group}:",
+        critics[group](policies[group](env.reset())),
+    )
 
 ######################################################################
 # Data collector
@@ -602,7 +655,7 @@ replay_buffer = ReplayBuffer(
 
 loss_module = ClipPPOLoss(
     actor_network=policy,
-    critic_network=critic,
+    critic_network=critics["agents"],
     clip_epsilon=clip_epsilon,
     entropy_coef=entropy_eps,
     normalize_advantage=False,  # Important to avoid normalizing across the agent dimension
