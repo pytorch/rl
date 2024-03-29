@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Multi-Agent Competitive Reinforcement Learning (DDPG) with TorchRL Tutorial
+Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
 ===========================================================================
 **Author**: `Matteo Bettini <https://github.com/matteobettini>`_
 
@@ -12,38 +12,42 @@ Multi-Agent Competitive Reinforcement Learning (DDPG) with TorchRL Tutorial
    can train and compare MARL sota-implementations, tasks, and models using TorchRL!
 
 This tutorial demonstrates how to use PyTorch and :py:mod:`torchrl` to
-solve a Multi-Agent Reinforcement Learning (MARL) problem.
+solve a Competitive Multi-Agent Reinforcement Learning (MARL) problem.
 
 A code-only version of this tutorial is available in the
-`TorchRL examples <https://github.com/pytorch/rl/tree/main/examples/multiagent/mappo_ippo.py>`__,
-alongside other simple scripts for many MARL sota-implementations (QMIX, MADDPG, IQL).
+`TorchRL tutorials <https://github.com/pytorch/rl/tree/main/torchrl/tutorials/sphinx-tutorials/multiagent_competitive_ddpg.py>`__.
 
 For ease of use, this tutorial will follow the general structure of the already available
-`single agent PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>`__.
-It is suggested but not mandatory to get familiar with that prior to starting this tutorial.
+`multi-agent PPO tutorial <https://pytorch.org/rl/tutorials/multiagent_ppo.html>`__.
 
-In this tutorial, we will use the *Navigation* environment from
-`VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__,
-a multi-robot simulator, also
-based on PyTorch, that runs parallel batched simulation on device.
+In this tutorial, we will use the *simple_tag* environment from the
+`MADDPG paper <https://arxiv.org/abs/1706.02275>`__. This environment is part
+of a set called MultiAgentParticleEnvironments (MPE) introduced with the paper.
 
-In the *Navigation* environment,
-we need to train multiple robots (spawned at random positions)
-to navigate to their goals (also at random positions), while
-using  `LIDAR sensors <https://en.wikipedia.org/wiki/Lidar>`__ to avoid collisions among each other.
+There are currently multiple simulators providing MPE environments.
+In this tutorial we show how to train this environment in TorchRL using either:
 
-.. figure:: https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/navigation.gif
-   :alt: Navigation
+- `PettingZoo <https://pettingzoo.farama.org/>`__, in the classical version of the environment.
+- `VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__, which provides a vectorized implementation in PyTorch,
+ simulating multiple environments in a GPU batch to speed up computation.
 
-   Multi-agent *Navigation* scenario
+In the *simple_tag* environment,
+there are two teams of agents: the chasers (or "adversaries") and the evaders (of "agents").
+Chasers are rewarded for touching evaders. Upon a contact the team of chasers is collectively rewarded and the
+evader touched is penalized with the same value. Evaders have higher speed and acceleration than chasers.
+
+.. figure:: https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/simple_tag.gif
+   :alt: Simple tag
+
+   Multi-agent *simple_tag* scenario
 
 Key learnings:
 
-- How to create a multi-agent environment in TorchRL, how its specs work, and how it integrates with the library;
-- How you use GPU vectorized environments in TorchRL;
-- How to create different multi-agent network architectures in TorchRL (e.g., using parameter sharing, centralised critic)
-- How we can use :class:`tensordict.TensorDict` to carry multi-agent data;
-- How we can tie all the library components (collectors, modules, replay buffers, and losses) in a multi-agent MAPPO/IPPO training loop.
+- How to use a competitive multi-agent environment in TorchRL, how their specs work, and how they integrate with the library;
+- How to use Parallel PettingZoo environments with multiple groups in TorchRL;
+- How to create different multi-agent network architectures in TorchRL (e.g., using parameter sharing, centralized critic)
+- How we can use :class:`tensordict.TensorDict` to carry multi-agent multi-group data;
+- How we can tie all the library components (collectors, modules, replay buffers, and losses) in an off-policy multi-agent MADDPG/IDDPG training loop.
 
 """
 
@@ -237,7 +241,7 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 
 max_steps = 100  # Episode steps before done
 
-n_chasers = 3
+n_chasers = 2
 n_evaders = 1
 n_obstacles = 2
 
