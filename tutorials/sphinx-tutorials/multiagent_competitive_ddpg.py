@@ -29,7 +29,7 @@ In this tutorial we show how to train this environment in TorchRL using either:
 
 - `PettingZoo <https://pettingzoo.farama.org/>`__, in the classical version of the environment.
 - `VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__, which provides a vectorized implementation in PyTorch,
- simulating multiple environments in a GPU batch to speed up computation.
+  simulating multiple environments in a GPU batch to speed up computation.
 
 In the *simple_tag* environment,
 there are two teams of agents: the chasers (or "adversaries") and the evaders (of "agents").
@@ -170,6 +170,10 @@ from tqdm import tqdm
 # You can tune some of these values to adjust the computational requirements.
 #
 
+# Seed
+seed = 0
+torch.manual_seed(seed)
+
 # Devices
 is_fork = multiprocessing.get_start_method() == "fork"
 device = (
@@ -177,7 +181,6 @@ device = (
     if torch.cuda.is_available() and not is_fork
     else torch.device("cpu")
 )
-vmas_device = device  # The device where the simulator is run (VMAS can run on GPU)
 
 # Sampling
 frames_per_batch = 6_000  # Number of team frames collected per training iteration
@@ -245,34 +248,36 @@ n_chasers = 2
 n_evaders = 1
 n_obstacles = 2
 
+use_vmas = False
 
-env = PettingZooEnv(
-    task="simple_tag_v3",
-    parallel=True,
-    seed=0,
-    # Scenario specific
-    continuous_actions=True,
-    num_good=n_evaders,
-    num_adversaries=n_chasers,
-    num_obstacles=n_obstacles,
-    max_cycles=max_steps,
-)
-
-
-num_vmas_envs = (
-    frames_per_batch // max_steps
-)  # Number of vectorized envs. frames_per_batch should be divisible by this number
-env = VmasEnv(
-    scenario="simple_tag",
-    num_envs=num_vmas_envs,
-    continuous_actions=True,
-    max_steps=max_steps,
-    device=vmas_device,
-    # Scenario specific
-    num_good_agents=n_evaders,
-    num_adversaries=n_chasers,
-    num_landmarks=n_obstacles,
-)
+if not use_vmas:
+    env = PettingZooEnv(
+        task="simple_tag_v3",
+        parallel=True,
+        seed=seed,
+        # Scenario specific
+        continuous_actions=True,
+        num_good=n_evaders,
+        num_adversaries=n_chasers,
+        num_obstacles=n_obstacles,
+        max_cycles=max_steps,
+    )
+else:
+    num_vmas_envs = (
+        frames_per_batch // max_steps
+    )  # Number of vectorized envs. frames_per_batch should be divisible by this number
+    env = VmasEnv(
+        scenario="simple_tag",
+        num_envs=num_vmas_envs,
+        continuous_actions=True,
+        max_steps=max_steps,
+        device=device,
+        seed=seed,
+        # Scenario specific
+        num_good_agents=n_evaders,
+        num_adversaries=n_chasers,
+        num_landmarks=n_obstacles,
+    )
 
 
 ######################################################################
@@ -606,7 +611,7 @@ for group, _agents in env.group_map.items():
 collector = SyncDataCollector(
     env,
     policy,
-    device=vmas_device,
+    device=device,
     storing_device=device,
     frames_per_batch=frames_per_batch,
     total_frames=total_frames,
