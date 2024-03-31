@@ -95,6 +95,10 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             be returned (by default under the ``"pixels"`` entry in the output tensordict).
             If ``False``, observations (eg, states) and pixels will be returned
             whenever ``from_pixels=True``. Defaults to ``True``.
+        from_depths (bool, optional): if ``True``, an attempt to return the depth
+            observations from the env will be performed. By default, these observations
+            will be written under the ``"depths"`` entry. Requires ``from_pixels`` to be ``True``.
+            Defaults to ``False``.
         frame_skip (int, optional): if provided, indicates for how many steps the
             same action is to be repeated. The observation returned will be the
             last observation of the sequence, whereas the reward will be the sum
@@ -155,6 +159,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         env_name: str,
         from_pixels: bool = False,
         pixels_only: bool = False,
+        from_depths: bool = False,
         **kwargs,
     ) -> "gym.core.Env":  # noqa: F821
         if from_pixels:
@@ -168,7 +173,9 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
                 )
                 kwargs["cameras"] = self.get_available_cams(env_name)
             cams = list(kwargs.pop("cameras"))
-            env_name = self.register_visual_env(cams=cams, env_name=env_name)
+            env_name = self.register_visual_env(
+                cams=cams, env_name=env_name, from_depths=from_depths
+            )
 
         elif "cameras" in kwargs and kwargs["cameras"]:
             raise RuntimeError("Got a list of cameras but from_pixels is set to False.")
@@ -209,6 +216,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         # except Exception as err:
         #     raise RuntimeError(f"Failed to build env {env_name}.") from err
         self.from_pixels = from_pixels
+        self.from_depths = from_depths
         self.render_device = render_device
         if kwargs.get("read_info", True):
             self.set_info_dict_reader(self.read_info)
@@ -224,7 +232,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         return out
 
     @classmethod
-    def register_visual_env(cls, env_name, cams):
+    def register_visual_env(cls, env_name, cams, from_depths):
         with set_directory(cls.CURR_DIR):
             from robohive.envs.env_variants import register_env_variant
 
@@ -236,6 +244,8 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             if new_env_name in cls.env_list:
                 return new_env_name
             visual_keys = [f"rgb:{c}:224x224:2d" for c in cams]
+            if from_depths:
+                visual_keys.extend([f"d:{c}:224x224:2d" for c in cams])
             register_env_variant(
                 env_name,
                 variants={
@@ -262,13 +272,17 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             if self.from_pixels:
                 visual = self.env.get_exteroception()
                 obs_dict.update(visual)
-            pixel_list = []
+            pixel_list, depth_list = [], []
             for obs_key in obs_dict:
                 if obs_key.startswith("rgb"):
                     pix = obs_dict[obs_key]
                     if not pix.shape[0] == 1:
                         pix = pix[None]
                     pixel_list.append(pix)
+                elif obs_key.startswith("d:"):
+                    dep = obs_dict[obs_key]
+                    dep = dep[None]
+                    depth_list.append(dep)
                 elif obs_key in env.obs_keys:
                     value = env.obs_dict[obs_key]
                     if not value.shape:
@@ -276,6 +290,8 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
                     _dict[obs_key] = value
             if pixel_list:
                 _dict["pixels"] = np.concatenate(pixel_list, 0)
+            if depth_list:
+                _dict["depths"] = np.concatenate(depth_list, 0)
             return _dict
 
         for i in range(3):
@@ -335,7 +351,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             pass
         # recover vec
         obsdict = {}
-        pixel_list = []
+        pixel_list, depth_list = [], []
         if self.from_pixels:
             visual = self.env.get_exteroception()
             observations.update(visual)
@@ -345,6 +361,10 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
                 if not pix.shape[0] == 1:
                     pix = pix[None]
                 pixel_list.append(pix)
+            elif key.startswith("d:"):
+                dep = observations[key]
+                dep = dep[None]
+                depth_list.append(dep)
             elif key in self._env.obs_keys:
                 value = observations[key]
                 if not value.shape:
@@ -354,6 +374,8 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         #     obsvec = np.concatenate(obsvec, 0)
         if self.from_pixels:
             obsdict.update({"pixels": np.concatenate(pixel_list, 0)})
+        if self.from_pixels and self.from_depths:
+            obsdict.update({"depths": np.concatenate(depth_list, 0)})
         out = obsdict
         return super().read_obs(out)
 
