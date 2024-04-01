@@ -53,7 +53,7 @@ Key learnings:
 # .. code-block:: bash
 #
 #    !pip3 install torchrl
-#    !pip3 install vmas==1.2.11
+#    !pip3 install vmas
 #    !pip3 install tqdm
 #
 # Proximal Policy Optimization (PPO) is a policy-gradient algorithm where a

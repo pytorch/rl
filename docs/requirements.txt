@@ -25,4 +25,5 @@ imageio[ffmpeg,pyav]
 memory_profiler
 pyrender
 pytest
-vmas==1.2.11
+vmas
+pettingzoo[mpe]==1.24.3
