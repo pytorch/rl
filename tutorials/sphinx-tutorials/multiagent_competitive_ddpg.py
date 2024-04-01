@@ -50,6 +50,7 @@ Key learnings:
 - How we can tie all the library components (collectors, modules, replay buffers, and losses) in an off-policy multi-agent MADDPG/IDDPG training loop.
 
 """
+import copy
 
 ######################################################################
 # If you are running this in Google Colab, make sure you install the following dependencies:
@@ -126,6 +127,7 @@ Key learnings:
 
 # Torch
 import torch
+from tensordict import TensorDictBase
 
 # Tensordict modules
 from tensordict.nn import TensorDictModule, TensorDictSequential
@@ -134,7 +136,7 @@ from torch import multiprocessing
 # Data collection
 from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
-from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
+from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 
 # Env
@@ -151,7 +153,7 @@ from torchrl.modules import (
 )
 
 # Loss
-from torchrl.objectives import ClipPPOLoss, ValueEstimators
+from torchrl.objectives import DDPGLoss, SoftUpdate, ValueEstimators
 
 # Utils
 torch.manual_seed(0)
@@ -183,21 +185,21 @@ device = (
 )
 
 # Sampling
-frames_per_batch = 6_000  # Number of team frames collected per training iteration
+frames_per_batch = 1_000  # Number of team frames collected per training iteration
 n_iters = 10  # Number of sampling and training iterations
 total_frames = frames_per_batch * n_iters
 
+# Replay buffer
+memory_size = 100_000
+
 # Training
-num_epochs = 30  # Number of optimization steps per training iteration
-minibatch_size = 400  # Size of the mini-batches in each optimization step
+n_optimizer_steps = 10  # Number of optimization steps per training iteration
+train_batch_size = 100  # Size of the mini-batches in each optimization step
 lr = 3e-4  # Learning rate
 max_grad_norm = 1.0  # Maximum norm for the gradients
 
-# PPO
-clip_epsilon = 0.2  # clip value for PPO loss
-gamma = 0.9  # discount factor
-lmbda = 0.9  # lambda for generalised advantage estimation
-entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
+# DDPG
+gamma = 0.99  # discount factor
 
 ######################################################################
 # Environment
@@ -442,7 +444,7 @@ for group, agents in env.group_map.items():
         n_agent_inputs=env.observation_spec[group, "observation"].shape[
             -1
         ],  # n_obs_per_agent
-        n_agent_outputs=env.action_spec[group, "action"].shape[
+        n_agent_outputs=env.full_action_spec[group, "action"].shape[
             -1
         ],  # n_actions_per_agents
         n_agents=len(agents),  # Number of agents in the group
@@ -502,6 +504,7 @@ for group, _agents in env.group_map.items():
         return_log_prob=False,
     )
     policies[group] = policy
+
 
 exploration_policies = {}
 for group, _agents in env.group_map.items():
@@ -608,11 +611,14 @@ for group, _agents in env.group_map.items():
 # We will use the simplest possible data collector, which has the same output as an environment rollout,
 # with the only difference that it will auto reset done states until the desired frames are collected.
 #
+
+agents_exploration_policy = TensorDictSequential(*exploration_policies.values())
+
+
 collector = SyncDataCollector(
     env,
-    policy,
+    agents_exploration_policy,
     device=device,
-    storing_device=device,
     frames_per_batch=frames_per_batch,
     total_frames=total_frames,
 )
@@ -630,14 +636,16 @@ collector = SyncDataCollector(
 # use the collected data online, but using these classes
 # makes it easy for us to build the inner training loop in a reproducible way.
 #
-
-replay_buffer = ReplayBuffer(
-    storage=LazyTensorStorage(
-        frames_per_batch, device=device
-    ),  # We store the frames_per_batch collected at each iteration
-    sampler=SamplerWithoutReplacement(),
-    batch_size=minibatch_size,  # We will sample minibatches of this size
-)
+replay_buffers = {}
+for group, _agents in env.group_map.items():
+    replay_buffer = ReplayBuffer(
+        storage=LazyTensorStorage(
+            memory_size, device=device
+        ),  # We store the frames_per_batch collected at each iteration
+        sampler=RandomSampler(),
+        batch_size=train_batch_size,  # We will sample minibatches of this size
+    )
+    replay_buffers[group] = replay_buffer
 
 ######################################################################
 # Loss function
@@ -661,31 +669,39 @@ replay_buffer = ReplayBuffer(
 # Both of these will be used by :class:`ClipPPOLoss` to
 # return the policy and value losses.
 #
+losses = {}
+for group, _agents in env.group_map.items():
+    loss_module = DDPGLoss(
+        actor_network=policies[group],
+        value_network=critics[group],
+        delay_value=True,
+        loss_function="l2",
+    )
+    loss_module.set_keys(
+        state_action_value=(group, "state_action_value"),
+        reward=(group, "reward"),
+        done=(group, "done"),
+        terminated=(group, "terminated"),
+    )
 
-loss_module = ClipPPOLoss(
-    actor_network=policy,
-    critic_network=critics["agents"],
-    clip_epsilon=clip_epsilon,
-    entropy_coef=entropy_eps,
-    normalize_advantage=False,  # Important to avoid normalizing across the agent dimension
-)
-loss_module.set_keys(  # We have to tell the loss where to find the keys
-    reward=env.reward_key,
-    action=env.action_key,
-    sample_log_prob=("agents", "sample_log_prob"),
-    value=("agents", "state_value"),
-    # These last 2 keys will be expanded to match the reward shape
-    done=("agents", "done"),
-    terminated=("agents", "terminated"),
-)
+    loss_module.make_value_estimator(ValueEstimators.TD0, gamma=gamma)
 
+    losses[group] = loss_module
 
-loss_module.make_value_estimator(
-    ValueEstimators.GAE, gamma=gamma, lmbda=lmbda
-)  # We build GAE
-GAE = loss_module.value_estimator
+target_updaters = {group: SoftUpdate(loss, tau=0.05) for group, loss in losses.items()}
 
-optim = torch.optim.Adam(loss_module.parameters(), lr)
+optimizers = {
+    group: {
+        "loss_actor": torch.optim.Adam(
+            loss.actor_network_params.flatten_keys().values(), lr=lr
+        ),
+        "loss_value": torch.optim.Adam(
+            loss.value_network_params.flatten_keys().values(), lr=lr
+        ),
+    }
+    for group, loss in losses.items()
+}
+
 
 ######################################################################
 # Training loop
@@ -705,65 +721,106 @@ optim = torch.optim.Adam(loss_module.parameters(), lr)
 # * Repeat
 #
 #
+def get_excluded_keys(group: str):
+    excluded_keys = []
+    for other_group in env.group_map.keys():
+        if other_group != group:
+            excluded_keys += [other_group, ("next", other_group)]
+    excluded_keys += ["info", (group, "info"), ("next", group, "info")]
+    return excluded_keys
 
-pbar = tqdm(total=n_iters, desc="episode_reward_mean = 0")
 
-episode_reward_mean_list = []
-for tensordict_data in collector:
-    tensordict_data.set(
-        ("next", "agents", "done"),
-        tensordict_data.get(("next", "done"))
-        .unsqueeze(-1)
-        .expand(tensordict_data.get_item_shape(("next", env.reward_key))),
+def process_batch(group: str, batch: TensorDictBase) -> TensorDictBase:
+    keys = list(batch.keys(True, True))
+    group_shape = batch.get(group).shape
+
+    nested_done_key = ("next", group, "done")
+    nested_terminated_key = ("next", group, "terminated")
+    nested_reward_key = ("next", group, "reward")
+
+    if nested_done_key not in keys:
+        batch.set(
+            nested_done_key,
+            batch.get(("next", "done")).unsqueeze(-1).expand((*group_shape, 1)),
+        )
+    if nested_terminated_key not in keys:
+        batch.set(
+            nested_terminated_key,
+            batch.get(("next", "terminated")).unsqueeze(-1).expand((*group_shape, 1)),
+        )
+
+    if nested_reward_key not in keys:
+        batch.set(
+            nested_reward_key,
+            batch.get(("next", "reward")).unsqueeze(-1).expand((*group_shape, 1)),
+        )
+
+    return batch
+
+
+pbar = tqdm(
+    total=n_iters,
+    desc=", ".join(
+        [f"episode_reward_mean_{group} = 0" for group in env.group_map.keys()]
+    ),
+)
+episode_reward_mean_map = {group: [] for group in env.group_map.keys()}
+train_group_map = copy.deepcopy(env.group_map)
+
+# Training/collection iterations
+for iteration, batch in enumerate(collector):
+    current_frames = batch.numel()
+    # Loop over groups
+    for group in train_group_map.keys():
+        group_batch = batch.exclude(*get_excluded_keys(group))
+        group_batch = process_batch(group, group_batch)
+        group_batch = group_batch.reshape(-1)
+        replay_buffers[group].extend(group_batch)
+
+        for _ in range(n_optimizer_steps):
+            subdata = replay_buffers[group].sample()
+            loss_vals = losses[group](subdata)
+
+            for loss_name in ["loss_actor", "loss_value"]:
+                loss = loss_vals[loss_name]
+                optimizer = optimizers[group][loss_name]
+
+                loss.backward()
+
+                # Optional
+                params = optimizer.param_groups[0]["params"]
+                torch.nn.utils.clip_grad_norm_(params, max_grad_norm)
+
+                optimizer.step()
+                optimizer.zero_grad()
+
+            target_updaters[group].step()
+
+        # Exploration sigma anneal update
+        exploration_policies[group].step(current_frames)
+
+        # Logging
+        done = group_batch.get(("next", group, "done"))
+        episode_reward_mean = (
+            group_batch.get(("next", group, "episode_reward"))[done].mean().item()
+        )
+        episode_reward_mean_map[group].append(episode_reward_mean)
+
+    pbar.set_description(
+        ", ".join(
+            [
+                f"episode_reward_mean_{group} = {episode_reward_mean_map[group][-1]}"
+                for group in env.group_map.keys()
+            ]
+        ),
+        refresh=False,
     )
-    tensordict_data.set(
-        ("next", "agents", "terminated"),
-        tensordict_data.get(("next", "terminated"))
-        .unsqueeze(-1)
-        .expand(tensordict_data.get_item_shape(("next", env.reward_key))),
-    )
-    # We need to expand the done and terminated to match the reward shape (this is expected by the value estimator)
-
-    with torch.no_grad():
-        GAE(
-            tensordict_data,
-            params=loss_module.critic_network_params,
-            target_params=loss_module.target_critic_network_params,
-        )  # Compute GAE and add it to the data
-
-    data_view = tensordict_data.reshape(-1)  # Flatten the batch size to shuffle data
-    replay_buffer.extend(data_view)
-
-    for _ in range(num_epochs):
-        for _ in range(frames_per_batch // minibatch_size):
-            subdata = replay_buffer.sample()
-            loss_vals = loss_module(subdata)
-
-            loss_value = (
-                loss_vals["loss_objective"]
-                + loss_vals["loss_critic"]
-                + loss_vals["loss_entropy"]
-            )
-
-            loss_value.backward()
-
-            torch.nn.utils.clip_grad_norm_(
-                loss_module.parameters(), max_grad_norm
-            )  # Optional
-
-            optim.step()
-            optim.zero_grad()
-
-    collector.update_policy_weights_()
-
-    # Logging
-    done = tensordict_data.get(("next", "agents", "done"))
-    episode_reward_mean = (
-        tensordict_data.get(("next", "agents", "episode_reward"))[done].mean().item()
-    )
-    episode_reward_mean_list.append(episode_reward_mean)
-    pbar.set_description(f"episode_reward_mean = {episode_reward_mean}", refresh=False)
     pbar.update()
+
+    # If you uncomment this you can stop training a certain group when a condition is met
+    # (e.g., number of training iterations)
+    if iteration > 5:
+        del train_group_map["agent"]
 
 ######################################################################
 # Results
@@ -773,10 +830,12 @@ for tensordict_data in collector:
 #
 # To make training last longer, increase the ``n_iters`` hyperparameter.
 #
-plt.plot(episode_reward_mean_list)
-plt.xlabel("Training iterations")
-plt.ylabel("Reward")
-plt.title("Episode reward mean")
+fig, axs = plt.subplots(2, 1)
+for i, group in enumerate(env.group_map.keys()):
+    axs[i].plot(episode_reward_mean_map[group])
+    axs[i].set_xlabel("Training iterations")
+    axs[i].set_ylabel("Reward")
+    axs[i].set_title(f"Episode reward mean {group}")
 plt.show()
 
 ######################################################################
