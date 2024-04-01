@@ -819,7 +819,7 @@ for iteration, batch in enumerate(collector):
 
     # If you uncomment this you can stop training a certain group when a condition is met
     # (e.g., number of training iterations)
-    if iteration > 5:
+    if iteration == 5:
         del train_group_map["agent"]
 
 ######################################################################
