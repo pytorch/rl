@@ -15,7 +15,7 @@ This tutorial demonstrates how to use PyTorch and :py:mod:`torchrl` to
 solve a Multi-Agent Reinforcement Learning (MARL) problem.
 
 A code-only version of this tutorial is available in the
-`TorchRL examples <https://github.com/pytorch/rl/tree/main/examples/multiagent/mappo_ippo.py>`__,
+`TorchRL examples <https://github.com/pytorch/rl/tree/main/sota-implementations/multiagent/mappo_ippo.py>`__,
 alongside other simple scripts for many MARL sota-implementations (QMIX, MADDPG, IQL).
 
 For ease of use, this tutorial will follow the general structure of the already available
@@ -183,7 +183,7 @@ max_grad_norm = 1.0  # Maximum norm for the gradients
 
 # PPO
 clip_epsilon = 0.2  # clip value for PPO loss
-gamma = 0.9  # discount factor
+gamma = 0.99  # discount factor
 lmbda = 0.9  # lambda for generalised advantage estimation
 entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 
@@ -262,7 +262,7 @@ env = VmasEnv(
 # - ``action_spec`` defines the action space;
 # - ``reward_spec`` defines the reward domain;
 # - ``done_spec`` defines the done domain;
-# - ``observation_spec`` which defines the domain of all other outputs from environmnet steps;
+# - ``observation_spec`` which defines the domain of all other outputs from environment steps;
 #
 #
 
@@ -301,7 +301,7 @@ print("done_keys:", env.done_keys)
 # Transforms
 # ~~~~~~~~~~
 #
-# We can append any TorchRL transform we need to our enviornment.
+# We can append any TorchRL transform we need to our environment.
 # These will modify its input/output in some desired way.
 # We stress that, in multi-agent contexts, it is paramount to provide explicitly the keys to modify.
 #
@@ -787,7 +787,7 @@ plt.show()
 # - How we can tie all the library components (collectors, modules, replay buffers, and losses) in a multi-agent MAPPO/IPPO training loop.
 #
 # Now that you are proficient with multi-agent PPO, you can check out all
-# `TorchRL multi-agent examples <https://github.com/pytorch/rl/tree/main/examples/multiagent>`__.
+# `TorchRL multi-agent examples <https://github.com/pytorch/rl/tree/main/sota-implementations/multiagent>`__.
 # These are code-only scripts of many popular MARL sota-implementations such as the ones seen in this tutorial,
 # QMIX, MADDPG, IQL, and many more!
 #
