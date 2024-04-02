@@ -3178,7 +3178,7 @@ class TestPettingZoo:
                 auto_reset=False,
                 tensordict=td_reset,
             )
-            done = td.get(("next", "walker", "done")).clone()
+            done = td.get(("next", "walker", "done"))
             mask = td.get(("next", "walker", "mask"))
 
             if done_on_any:
