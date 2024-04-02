@@ -71,7 +71,7 @@ Key learnings:
 # This type of algorithm is usually trained *off-policy*. At every learning iteration, we have a
 # **sampling** and a **training** phase. In the **sampling** phase of iteration :math:`t`, rollouts are collected
 # form agents' interactions in the environment using the policies :math:`\mathbf{\pi}_t` and stored in the replay buffer.
-# In the **training** phase, rollouts from any time prior and including :math:`t` are sampled from the replay buffer and fed
+# In the **training** phase, rollouts from any time prior and including :math:`t` are randomly sampled from the replay buffer and fed
 # to the training process to perform backpropagation. This leads to updated policies which are then used again for sampling.
 # It is important to note that, unlike on-policy methods, any policy can be used to collect the data fed to the training phase
 # as these methods learn the optimal value function. In fact many users like to prefill their buffer with data from a random policy.
@@ -292,7 +292,7 @@ else:
 # Group map
 # ~~~~~~~~~
 #
-# PettingZoo and VMAS environment use the TorchRL MARL grouping API.
+# PettingZoo and VMAS environments use the TorchRL MARL grouping API.
 # We can access the group map, mapping each group to the agents in it, as follows:
 #
 
@@ -332,7 +332,7 @@ print("observation_spec:", env.observation_spec)
 # Furthermore, the specs of each group have leading shape ``(n_agents_in_that_group)`` (1 for agents, 2 for adversaries),
 # meaning that the tensor data of that group will always have that leading shape (agents within a group have the data stacked).
 #
-# Looking at the done_spec, we can see that there are some keys that are outside of agent groups
+# Looking at the ``done_spec``, we can see that there are some keys that are outside of agent groups
 # (``"done","terminated","truncated"``), which do not have a leading multi-agent dimension.
 # These keys are shared by all agents and represent the environment global done state used for resetting.
 # By default, like in this case, parallel PettingZoo environments are done when any agent is done, but this behavior
@@ -358,7 +358,8 @@ print("done_keys:", env.done_keys)
 # We stress that, in multi-agent contexts, it is paramount to provide explicitly the keys to modify.
 #
 # For example, in this case, we will instantiate a ``RewardSum`` transform which will sum rewards over the episode.
-# We will tell this transform where to find the reset keys for each reward key (essentially we just say that the
+# We will tell this transform where to find the reset keys for each reward key.
+# Essentially we just say that the
 # episode reward of each group should be reset when the ``"_reset"`` tensordict key is set, meaning that ``env.reset()``
 # was called.
 # The transformed environment will inherit
