@@ -3144,7 +3144,7 @@ class TestPettingZoo:
         env = PettingZooEnv(
             task="multiwalker_v9",
             parallel=True,
-            seed=0,
+            seed=seed,
             use_mask=False,
             done_on_any=False,
             **scenario_args,
@@ -3163,7 +3163,7 @@ class TestPettingZoo:
             env = PettingZooEnv(
                 task="multiwalker_v9",
                 parallel=True,
-                seed=0,
+                seed=seed,
                 use_mask=True,
                 done_on_any=done_on_any,
                 **scenario_args,
