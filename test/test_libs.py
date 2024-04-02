@@ -3149,14 +3149,17 @@ class TestPettingZoo:
             done_on_any=False,
             **scenario_args,
         )
+        td_reset = env.reset(seed=seed)
         with pytest.raises(
             ValueError,
             match="Dead agents found in the environment, "
             "you need to set use_mask=True to allow this.",
         ):
             env.rollout(
-                max_steps=100,
+                max_steps=500,
                 break_when_any_done=True,  # This looks at root done set with done_on_any
+                auto_reset=False,
+                tensordict=td_reset,
             )
 
         for done_on_any in [True, False]:
@@ -3168,11 +3171,14 @@ class TestPettingZoo:
                 done_on_any=done_on_any,
                 **scenario_args,
             )
+            td_reset = env.reset(seed=seed)
             td = env.rollout(
-                max_steps=100,
+                max_steps=500,
                 break_when_any_done=True,  # This looks at root done set with done_on_any
+                auto_reset=False,
+                tensordict=td_reset,
             )
-            done = td.get(("next", "walker", "done"))
+            done = td.get(("next", "walker", "done")).clone()
             mask = td.get(("next", "walker", "mask"))
 
             if done_on_any:
