@@ -33,13 +33,11 @@ In this tutorial we show how to train this environment in TorchRL using either:
   able to simulate multiple environments in a GPU batch to speed up computation.
 
 In the *simple_tag* environment,
-there are two teams of agents: the chasers (or "adversaries") and the evaders (of "agents").
+there are two teams of agents: the chasers (or "adversaries") and the evaders (or "agents").
 Chasers are rewarded for touching evaders. Upon a contact the team of chasers is collectively rewarded and the
 evader touched is penalized with the same value. Evaders have higher speed and acceleration than chasers.
 
-The PettingZoo and VMAS versions differ slightly in the reward functions as PettingZoo penalizes evaders for going
-out-of-bounds, while VMAS impedes it physically. This is the reason why you will observe that in VMAS the rewards of the
-two teams are identical, just with opposite sign, while in PettingZoo the evaders will have lower rewards.
+
 
 .. figure:: https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/simple_tag.gif
    :alt: Simple tag
@@ -56,9 +54,6 @@ Key learnings:
 
 """
 
-import copy
-from typing import Dict, List
-
 ######################################################################
 # If you are running this in Google Colab, make sure you install the following dependencies:
 #
@@ -71,7 +66,7 @@ from typing import Dict, List
 #
 # Deep Deterministic Policy Gradient (DDPG) is an off-policy actor-critic algorithm
 # where a deterministic policy is optimized using the gradients from the critic network.
-# For more information, see the `Deep Deterministic Policy Gradients <https://arxiv.org/abs/1707.06347>`_ paper.
+# For more information, see the `Deep Deterministic Policy Gradients <https://arxiv.org/abs/1509.02971>`_ paper.
 #
 # This type of algorithm is usually trained *off-policy*. At every learning iteration, we have a
 # **sampling** and a **training** phase. In the **sampling** phase of iteration :math:`t`, rollouts are collected
@@ -93,15 +88,15 @@ from typing import Dict, List
 # both state and action to the critic (preserving gradients). Then the loss simply maximizes the critic output,
 # backpropagating through both actor and critic.
 #
-# This approach has been extended to multi-agent learning in ` <>`__, which introduces the Multi Agent DDPG (MADDPG)
-# algorithm.
+# This approach has been extended to multi-agent learning in `Multi-Agent Actor-Critic for Mixed Cooperative-Competitive Environments <https://arxiv.org/abs/1706.02275>`__,
+# which introduces the Multi Agent DDPG (MADDPG) algorithm.
 # In multi-agent settings, things are a bit different. We now have multiple policies :math:`\mathbf{\pi}`,
 # one for each agent. Policies are typically local and decentralised. This means that
 # the policy for a single agent will output an action for that agent based only on its observation.
 # In the MARL literature, this is referred to as **decentralised execution**.
 # On the other hand, different formulations exist for the critic, mainly:
 #
-# - In `MADDPG <>`_ the critic is centralised and takes as input the global state and global action
+# - In `MADDPG <https://arxiv.org/abs/1706.02275>`_ the critic is centralised and takes as input the global state and global action
 #   of the system. The global state can be a global observation or simply the concatenation of the agents' observation.
 #   The global action is the concatenation of agent actions. MADDPG
 #   can be used in contexts where **centralised training** is performed as it needs access to global information.
@@ -133,6 +128,8 @@ from typing import Dict, List
 #
 # Let's import our dependencies
 #
+import copy
+from typing import Dict, List
 
 # Torch
 import torch
@@ -166,6 +163,8 @@ from torchrl.modules import (
 
 # Loss
 from torchrl.objectives import DDPGLoss, SoftUpdate, ValueEstimators
+
+# Utils
 from tqdm import tqdm
 
 
@@ -220,41 +219,36 @@ polyak_tau = 0.005  # Tau for the soft-update of the target network
 #
 # Multi-agent environments simulate multiple agents interacting with the world.
 # TorchRL API allows integrating various types of multi-agent environment flavours.
-# Some examples include environments with shared or individual agent rewards, done flags, and observations.
-# For more information on how the multi-agent environments API works in TorchRL, you can check out the dedicated
-# `doc section <https://pytorch.org/rl/reference/envs.html#multi-agent-environments>`_.
+# In this tutorial we will focus on environments where multiple agent groups interact in parallel.
+# That is: at every step all agents will get an observation and take an action synchronously.
 #
-# The VMAS simulator, in particular, models agents with individual rewards, info, observations, and actions, but
-# with a collective done flag.
-# Furthermore, it uses *vectorization* to perform simulation in a batch.
-# This means that all its state and physics
-# are PyTorch tensors with a first dimension representing the number of parallel environments in a batch.
-# This allows leveraging the Single Instruction Multiple Data (SIMD) paradigm of GPUs and significantly
-# speed up parallel computation by leveraging parallelisation in GPU warps. It also means
-# that, when using it in TorchRL, both simulation and training can be run on-device, without ever passing
-# data to the CPU.
+# Furthermore, the TorchRL MARL API allows to separate agents into groups. Each group will be a separate entry in the
+# tensordict. The data of agents within a group is stacked together. Therefore, by choosing how to group your agents,
+# you can decide which data is stacked/kept as separate entries.
+# The grouping strategy can be specified at construction in environments like VMAS and PettingZoo.
+# For more info on grouping, see :class:`~torchrl.envs.utils.MarlGroupMapType`,
 #
-# The multi-agent task we will solve today is *Navigation* (see animated figure above).
-# In *Navigation*, randomly spawned agents
-# (circles with surrounding dots) need to navigate
-# to randomly spawned goals (smaller circles).
-# Agents need to use LIDARs (dots around them) to
-# avoid colliding into each other.
+# In the *simple_tag* environment,
+# there are two teams of agents: the chasers (or "adversaries")(red circles) and the evaders (or "agents")(green circles).
+# Chasers are rewarded for touching evaders (+10).
+# Upon a contact the team of chasers is collectively rewarded and the
+# evader touched is penalized with the same value (-10).
+# Evaders have higher speed and acceleration than chasers.
+# In the environment there are also obstacles (black circles).
+# Agents and obstacles are spawned according to a uniform random distribution.
 # Agents act in a 2D continuous world with drag and elastic collisions.
 # Their actions are 2D continuous forces which determine their acceleration.
-# The reward is composed of three terms: a collision penalisation, a reward based on the distance to the goal, and a
-# final shared reward given when all agents reach their goal.
-# The distance-based term is computed as the difference in the relative distance
-# between an agent and its goal over two consecutive timesteps.
 # Each agent observes its position,
-# velocity, lidar readings, and relative position to its goal.
+# velocity, relative positions to all other agents and obstacles, and velocities of evaders.
+#
+# The PettingZoo and VMAS versions differ slightly in the reward functions as PettingZoo penalizes evaders for going
+# out-of-bounds, while VMAS impedes it physically. This is the reason why you will observe that in VMAS the rewards of the
+# two teams are identical, just with opposite sign, while in PettingZoo the evaders will have lower rewards.
 #
 # We will now instantiate the environment.
-# For this tutorial, we will limit the episodes to ``max_steps``, after which the done flag is set. This is
-# functionality is already provided in the VMAS simulator but the TorchRL :class:`~.envs.transforms.StepCount`
+# For this tutorial, we will limit the episodes to ``max_steps``, after which the terminated flag is set. This is
+# functionality is already provided in the VMAS simulator but the TorchRL :class:`~torchrl.envs.transforms.StepCounter`
 # transform could alternatively be used.
-# We will also use ``num_vmas_envs`` vectorized environments, to leverage batch simulation.
-#
 #
 
 max_steps = 100  # Episode steps before done
@@ -263,12 +257,12 @@ n_chasers = 2
 n_evaders = 1
 n_obstacles = 2
 
-use_vmas = True
+use_vmas = True  # Set this to True for a great performance speedup
 
 if not use_vmas:
     env = PettingZooEnv(
         task="simple_tag_v3",
-        parallel=True,
+        parallel=True,  # Use the Parallel version
         seed=seed,
         # Scenario specific
         continuous_actions=True,
@@ -280,7 +274,7 @@ if not use_vmas:
 else:
     num_vmas_envs = (
         frames_per_batch // max_steps
-    )  # Number of vectorized envs. frames_per_batch should be divisible by this number
+    )  # Number of vectorized envs. frames_per_batch collection will be divided among these environments
     env = VmasEnv(
         scenario="simple_tag",
         num_envs=num_vmas_envs,
@@ -864,6 +858,11 @@ fig, axs = plt.subplots(2, 1)
 for i, group in enumerate(env.group_map.keys()):
     axs[i].plot(episode_reward_mean_map[group], label=f"Episode reward mean {group}")
     axs[i].set_ylabel("Reward")
+    axs[i].axvline(
+        x=iteration_when_stop_training_evaders,
+        label="Agent (evader) stop training",
+        color="orange",
+    )
     axs[i].legend()
 axs[-1].set_xlabel("Training iterations")
 plt.show()
