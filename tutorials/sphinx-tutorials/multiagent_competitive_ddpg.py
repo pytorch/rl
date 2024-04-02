@@ -22,19 +22,24 @@ For ease of use, this tutorial will follow the general structure of the already 
 
 In this tutorial, we will use the *simple_tag* environment from the
 `MADDPG paper <https://arxiv.org/abs/1706.02275>`__. This environment is part
-of a set called MultiAgentParticleEnvironments (MPE) introduced with the paper.
+of a set called `MultiAgentParticleEnvironments (MPE) <https://github.com/openai/multiagent-particle-envs>`__
+introduced with the paper.
 
 There are currently multiple simulators providing MPE environments.
 In this tutorial we show how to train this environment in TorchRL using either:
 
-- `PettingZoo <https://pettingzoo.farama.org/>`__, in the classical version of the environment.
+- `PettingZoo <https://pettingzoo.farama.org/>`__, in the traditional CPU version of the environment;
 - `VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__, which provides a vectorized implementation in PyTorch,
-  simulating multiple environments in a GPU batch to speed up computation.
+  able to simulate multiple environments in a GPU batch to speed up computation.
 
 In the *simple_tag* environment,
 there are two teams of agents: the chasers (or "adversaries") and the evaders (of "agents").
 Chasers are rewarded for touching evaders. Upon a contact the team of chasers is collectively rewarded and the
 evader touched is penalized with the same value. Evaders have higher speed and acceleration than chasers.
+
+The PettingZoo and VMAS versions differ slightly in the reward functions as PettingZoo penalizes evaders for going
+out-of-bounds, while VMAS impedes it physically. This is the reason why you will observe that in VMAS the rewards of the
+two teams are identical, just with opposite sign, while in PettingZoo the evaders will have lower rewards.
 
 .. figure:: https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/simple_tag.gif
    :alt: Simple tag
@@ -43,14 +48,16 @@ evader touched is penalized with the same value. Evaders have higher speed and a
 
 Key learnings:
 
-- How to use a competitive multi-agent environment in TorchRL, how their specs work, and how they integrate with the library;
-- How to use Parallel PettingZoo environments with multiple groups in TorchRL;
-- How to create different multi-agent network architectures in TorchRL (e.g., using parameter sharing, centralized critic)
+- How to use competitive multi-agent environments in TorchRL, how their specs work, and how they integrate with the library;
+- How to use Parallel PettingZoo and VMAS environments with multiple agent groups in TorchRL;
+- How to create different multi-agent network architectures in TorchRL (e.g., using parameter sharing, centralised critic)
 - How we can use :class:`tensordict.TensorDict` to carry multi-agent multi-group data;
 - How we can tie all the library components (collectors, modules, replay buffers, and losses) in an off-policy multi-agent MADDPG/IDDPG training loop.
 
 """
+
 import copy
+from typing import Dict, List
 
 ######################################################################
 # If you are running this in Google Colab, make sure you install the following dependencies:
@@ -62,42 +69,44 @@ import copy
 #    !pip3 install pettingzoo[mpe]==1.24.3
 #    !pip3 install tqdm
 #
-# Proximal Policy Optimization (PPO) is a policy-gradient algorithm where a
-# batch of data is being collected and directly consumed to train the policy to maximise
-# the expected return given some proximality constraints. You can think of it
-# as a sophisticated version of `REINFORCE <https://link.springer.com/content/pdf/10.1007/BF00992696.pdf>`_,
-# the foundational policy-optimization algorithm. For more information, see the
-# `Proximal Policy Optimization Algorithms <https://arxiv.org/abs/1707.06347>`_ paper.
+# Deep Deterministic Policy Gradient (DDPG) is an off-policy actor-critic algorithm
+# where a deterministic policy is optimized using the gradients from the critic network.
+# For more information, see the `Deep Deterministic Policy Gradients <https://arxiv.org/abs/1707.06347>`_ paper.
 #
-# This type of sota-implementations is usually trained *on-policy*. This means that, at every learning iteration, we have a
+# This type of algorithm is usually trained *off-policy*. At every learning iteration, we have a
 # **sampling** and a **training** phase. In the **sampling** phase of iteration :math:`t`, rollouts are collected
-# form agents' interactions in the environment using the current policies :math:`\mathbf{\pi}_t`.
-# In the **training** phase, all the collected rollouts are immediately fed to the training process to perform
-# backpropagation. This leads to updated policies which are then used again for sampling.
-# The execution of this process in a loop constitutes *on-policy learning*.
+# form agents' interactions in the environment using the policies :math:`\mathbf{\pi}_t` and stored in the replay buffer.
+# In the **training** phase, rollouts from any time prior and including :math:`t` are sampled from the replay buffer and fed
+# to the training process to perform backpropagation. This leads to updated policies which are then used again for sampling.
+# It is important to note that, unlike on-policy methods, any policy can be used to collect the data fed to the training phase
+# as these methods learn the optimal value function. In fact many users like to prefill their buffer with data from a random policy.
+# The execution of this process in a loop constitutes *off-policy learning*.
 #
-# .. figure:: https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/on_policy_vmas.png
-#    :alt: On-policy learning
+# .. figure:: https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/off_policy_training_pettingzoo_vmas.png
+#    :alt: Off-policy learning
 #
-#    On-policy learning
+#    Off-policy learning
 #
+# In the training phase of the DDPG algorithm, a *critic*, which takes as input the action and state, is used to estimate
+# the Q value. This critic is trained using the TD(0) bootstrapping error.
+# To train the *actor* (policy), the DDPG loss feeds a state to the actor network, gathers the output action, and feeds
+# both state and action to the critic (preserving gradients). Then the loss simply maximizes the critic output,
+# backpropagating through both actor and critic.
 #
-# In the training phase of the PPO algorithm, a *critic* is used to estimate the goodness of the actions
-# taken by the policy. The critic learns to approximate the value (mean discounted return) of a specific state.
-# The PPO loss then compares the actual return obtained by the policy to the one estimated by the critic to determine
-# the advantage of the action taken and guide the policy optimization.
-#
+# This approach has been extended to multi-agent learning in ` <>`__, which introduces the Multi Agent DDPG (MADDPG)
+# algorithm.
 # In multi-agent settings, things are a bit different. We now have multiple policies :math:`\mathbf{\pi}`,
 # one for each agent. Policies are typically local and decentralised. This means that
 # the policy for a single agent will output an action for that agent based only on its observation.
 # In the MARL literature, this is referred to as **decentralised execution**.
 # On the other hand, different formulations exist for the critic, mainly:
 #
-# - In `MAPPO <https://arxiv.org/abs/2103.01955>`_ the critic is centralised and takes as input the global state
-#   of the system. This can be a global observation or simply the concatenation of the agents' observation. MAPPO
+# - In `MADDPG <>`_ the critic is centralised and takes as input the global state and global action
+#   of the system. The global state can be a global observation or simply the concatenation of the agents' observation.
+#   The global action is the concatenation of agent actions. MADDPG
 #   can be used in contexts where **centralised training** is performed as it needs access to global information.
-# - In `IPPO <https://arxiv.org/abs/2011.09533>`_ the critic takes as input just the observation of the respective agent,
-#   exactly like the policy. This allows **decentralised training** as both the critic and the policy will only need local
+# - In IDDPG, the critic takes as input just the observation and action of one agent.
+#   This allows **decentralised training** as both the critic and the policy will only need local
 #   information to compute their outputs.
 #
 # Centralised critics help overcome the non-stationary of multiple agents learning concurrently, but,
@@ -109,8 +118,8 @@ import copy
 #
 # 1. First, we will define a set of hyperparameters we will be using.
 #
-# 2. Next, we will create a vectorized multi-agent environment, using TorchRL's
-#    wrapper for the VMAS simulator.
+# 2. Next, we will create a multi-agent environment, using TorchRL's
+#    wrapper for PettingZoo or VMAS.
 #
 # 3. Next, we will design the policy and the critic networks, discussing the impact of the various choices on
 #    parameter sharing and critic centralisation.
@@ -127,6 +136,9 @@ import copy
 
 # Torch
 import torch
+
+# Utils
+from matplotlib import pyplot as plt
 from tensordict import TensorDictBase
 
 # Tensordict modules
@@ -154,10 +166,6 @@ from torchrl.modules import (
 
 # Loss
 from torchrl.objectives import DDPGLoss, SoftUpdate, ValueEstimators
-
-# Utils
-torch.manual_seed(0)
-from matplotlib import pyplot as plt
 from tqdm import tqdm
 
 
@@ -185,21 +193,26 @@ device = (
 )
 
 # Sampling
-frames_per_batch = 1_000  # Number of team frames collected per training iteration
+frames_per_batch = 1_000  # Number of team frames collected per sampling iteration
 n_iters = 10  # Number of sampling and training iterations
 total_frames = frames_per_batch * n_iters
 
+# We will stop training the evaders after this many iterations,
+# should be 0 <= iteration_when_stop_training_evaders <= n_iters
+iteration_when_stop_training_evaders = n_iters // 2
+
 # Replay buffer
-memory_size = 100_000
+memory_size = 1_000_000  # The replay buffer of each group can store this many frames
 
 # Training
-n_optimizer_steps = 10  # Number of optimization steps per training iteration
-train_batch_size = 100  # Size of the mini-batches in each optimization step
+n_optimizer_steps = 100  # Number of optimization steps per training iteration
+train_batch_size = 128  # Number of frames trained in each optimizer step
 lr = 3e-4  # Learning rate
 max_grad_norm = 1.0  # Maximum norm for the gradients
 
 # DDPG
-gamma = 0.99  # discount factor
+gamma = 0.99  # Discount factor
+polyak_tau = 0.005  # Tau for the soft-update of the target network
 
 ######################################################################
 # Environment
@@ -250,7 +263,7 @@ n_chasers = 2
 n_evaders = 1
 n_obstacles = 2
 
-use_vmas = False
+use_vmas = True
 
 if not use_vmas:
     env = PettingZooEnv(
@@ -510,7 +523,7 @@ exploration_policies = {}
 for group, _agents in env.group_map.items():
     exploration_policy = AdditiveGaussianWrapper(
         policies[group],
-        annealing_num_steps=100,
+        annealing_num_steps=total_frames // 2,
         action_key=(group, "action"),
         sigma_init=0.9,
         sigma_end=0.1,
@@ -688,7 +701,9 @@ for group, _agents in env.group_map.items():
 
     losses[group] = loss_module
 
-target_updaters = {group: SoftUpdate(loss, tau=0.05) for group, loss in losses.items()}
+target_updaters = {
+    group: SoftUpdate(loss, tau=polyak_tau) for group, loss in losses.items()
+}
 
 optimizers = {
     group: {
@@ -701,6 +716,53 @@ optimizers = {
     }
     for group, loss in losses.items()
 }
+
+######################################################################
+# Training utils
+# --------------
+#
+
+
+def get_excluded_keys(group: str):
+    excluded_keys = []
+    for other_group in env.group_map.keys():
+        if other_group != group:
+            excluded_keys += [other_group, ("next", other_group)]
+    excluded_keys += ["info", (group, "info"), ("next", group, "info")]
+    return excluded_keys
+
+
+def process_batch(
+    batch: TensorDictBase, group_map: Dict[str, List[str]]
+) -> TensorDictBase:
+    for group in group_map.keys():
+        keys = list(batch.keys(True, True))
+        group_shape = batch.get(group).shape
+
+        nested_done_key = ("next", group, "done")
+        nested_terminated_key = ("next", group, "terminated")
+        nested_reward_key = ("next", group, "reward")
+
+        if nested_done_key not in keys:
+            batch.set(
+                nested_done_key,
+                batch.get(("next", "done")).unsqueeze(-1).expand((*group_shape, 1)),
+            )
+        if nested_terminated_key not in keys:
+            batch.set(
+                nested_terminated_key,
+                batch.get(("next", "terminated"))
+                .unsqueeze(-1)
+                .expand((*group_shape, 1)),
+            )
+
+        if nested_reward_key not in keys:
+            batch.set(
+                nested_reward_key,
+                batch.get(("next", "reward")).unsqueeze(-1).expand((*group_shape, 1)),
+            )
+
+    return batch
 
 
 ######################################################################
@@ -721,42 +783,6 @@ optimizers = {
 # * Repeat
 #
 #
-def get_excluded_keys(group: str):
-    excluded_keys = []
-    for other_group in env.group_map.keys():
-        if other_group != group:
-            excluded_keys += [other_group, ("next", other_group)]
-    excluded_keys += ["info", (group, "info"), ("next", group, "info")]
-    return excluded_keys
-
-
-def process_batch(group: str, batch: TensorDictBase) -> TensorDictBase:
-    keys = list(batch.keys(True, True))
-    group_shape = batch.get(group).shape
-
-    nested_done_key = ("next", group, "done")
-    nested_terminated_key = ("next", group, "terminated")
-    nested_reward_key = ("next", group, "reward")
-
-    if nested_done_key not in keys:
-        batch.set(
-            nested_done_key,
-            batch.get(("next", "done")).unsqueeze(-1).expand((*group_shape, 1)),
-        )
-    if nested_terminated_key not in keys:
-        batch.set(
-            nested_terminated_key,
-            batch.get(("next", "terminated")).unsqueeze(-1).expand((*group_shape, 1)),
-        )
-
-    if nested_reward_key not in keys:
-        batch.set(
-            nested_reward_key,
-            batch.get(("next", "reward")).unsqueeze(-1).expand((*group_shape, 1)),
-        )
-
-    return batch
-
 
 pbar = tqdm(
     total=n_iters,
@@ -770,10 +796,10 @@ train_group_map = copy.deepcopy(env.group_map)
 # Training/collection iterations
 for iteration, batch in enumerate(collector):
     current_frames = batch.numel()
+    batch = process_batch(batch, env.group_map)
     # Loop over groups
     for group in train_group_map.keys():
         group_batch = batch.exclude(*get_excluded_keys(group))
-        group_batch = process_batch(group, group_batch)
         group_batch = group_batch.reshape(-1)
         replay_buffers[group].extend(group_batch)
 
@@ -799,10 +825,14 @@ for iteration, batch in enumerate(collector):
         # Exploration sigma anneal update
         exploration_policies[group].step(current_frames)
 
-        # Logging
-        done = group_batch.get(("next", group, "done"))
+    # Logging
+    for group in env.group_map.keys():
         episode_reward_mean = (
-            group_batch.get(("next", group, "episode_reward"))[done].mean().item()
+            batch.get(("next", group, "episode_reward"))[
+                batch.get(("next", group, "done"))
+            ]
+            .mean()
+            .item()
         )
         episode_reward_mean_map[group].append(episode_reward_mean)
 
@@ -819,7 +849,7 @@ for iteration, batch in enumerate(collector):
 
     # If you uncomment this you can stop training a certain group when a condition is met
     # (e.g., number of training iterations)
-    if iteration == 5:
+    if iteration == iteration_when_stop_training_evaders:
         del train_group_map["agent"]
 
 ######################################################################
@@ -832,10 +862,10 @@ for iteration, batch in enumerate(collector):
 #
 fig, axs = plt.subplots(2, 1)
 for i, group in enumerate(env.group_map.keys()):
-    axs[i].plot(episode_reward_mean_map[group])
-    axs[i].set_xlabel("Training iterations")
+    axs[i].plot(episode_reward_mean_map[group], label=f"Episode reward mean {group}")
     axs[i].set_ylabel("Reward")
-    axs[i].set_title(f"Episode reward mean {group}")
+    axs[i].legend()
+axs[-1].set_xlabel("Training iterations")
 plt.show()
 
 ######################################################################
