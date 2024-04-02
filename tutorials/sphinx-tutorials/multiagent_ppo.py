@@ -791,6 +791,9 @@ plt.show()
 # These are code-only scripts of many popular MARL sota-implementations such as the ones seen in this tutorial,
 # QMIX, MADDPG, IQL, and many more!
 #
+# You can also check out our other multi-agent tutorial on how to train competitive
+# MADDPG/IDDPG in PettingZoo/VMAS with multiple agent groups `here <https://pytorch.org/rl/tutorials/multiagent_competitive_ddpg.html`>__.
+#
 # If you are interested in creating or wrapping your own multi-agent environments in TorchRL,
 # you can check out the dedicated
 # `doc section <https://pytorch.org/rl/reference/envs.html#multi-agent-environments>`_.
@@ -799,7 +802,7 @@ plt.show()
 # to become a MARL master.
 # Here are a few videos of some possible scenarios you can try in VMAS.
 #
-# .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/VMAS_scenarios.gif?raw=true
+# .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/vmas_scenarios_more.gif.gif?raw=true
 #    :alt: VMAS scenarios
 #
 #    Scenarios available in `VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__

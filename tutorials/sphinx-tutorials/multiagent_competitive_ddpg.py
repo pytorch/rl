@@ -424,26 +424,19 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # with the policy you will train yourself!
 #
 # To render a rollout, follow the instructions in the *Render* section at the end of this tutorial
-# and just remove the line ``policy=policy`` from ``env.rollout()`` .
+# and just remove the line ``policy=agents_exploration_policy`` from ``env.rollout()``.
 #
 #
 # Policy
 # ------
 #
-# PPO utilises a stochastic policy to handle exploration. This means that our
-# neural network will have to output the parameters of a distribution, rather
-# than a single value corresponding to the action taken.
+# DDPG utilises a deterministic policy. This means that our
+# neural network will output the action to take.
+# As the action is continuous, we use a Tanh-Delta distribution to respect the
+# action space boundaries. The only thing that this class does is apply a Tanh transformation to make sure the action
+# is withing the domain bounds.
 #
-# As the data is continuous, we use a Tanh-Normal distribution to respect the
-# action space boundaries. TorchRL provides such distribution, and the only
-# thing we need to care about is to build a neural network that outputs the
-# right number of parameters.
-#
-# In this case, each agent's action will be represented by a 2-dimensional independent normal distribution.
-# For this, our neural network will have to output a mean and a standard deviation for each action.
-# Each agent will thus have ``2 * n_actions_per_agents`` outputs.
-#
-# Another important decision we need to make is whether we want our agents to **share the policy parameters**.
+# Another important decision we need to make is whether we want the agents within a team to **share the policy parameters**.
 # On the one hand, sharing parameters means that they will all share the same policy, which will allow them to benefit from
 # each other's experiences. This will also result in faster training.
 # On the other hand, it will make them behaviorally *homogenous*, as they will in fact share the same model.
@@ -452,10 +445,13 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 #
 # We design the policy in three steps.
 #
-# **First**: define a neural network ``n_obs_per_agent`` -> ``2 * n_actions_per_agents``
+# **First**: define a neural network ``n_obs_per_agent`` -> ``n_actions_per_agents``
 #
 # For this we use the ``MultiAgentMLP``, a TorchRL module made exactly for
 # multiple agents, with much customisation available.
+#
+# We will define a different policy for each group and store them in a dictionary.
+#
 #
 
 policy_modules = {}
@@ -470,72 +466,81 @@ for group, agents in env.group_map.items():
             -1
         ],  # n_actions_per_agents
         n_agents=len(agents),  # Number of agents in the group
-        centralised=False,  # the policies are decentralised (ie each agent will act from its observation)
+        centralised=False,  # the policies are decentralised (i.e., each agent will act from its local observation)
         share_params=share_parameters_policy,
         device=device,
         depth=2,
         num_cells=256,
         activation_class=torch.nn.Tanh,
     )
+
+    # Wrap the neural network in a :class:`TensorDictModule`.
+    # This is simply a module that will read the ``in_keys`` from a tensordict, feed them to the
+    # neural networks, and write the
+    # outputs in-place at the ``out_keys``.
+
     policy_module = TensorDictModule(
         policy_net,
         in_keys=[(group, "observation")],
         out_keys=[(group, "param")],
-    )
+    )  # We just name the input and output that the network will read and write to the input tensordict
     policy_modules[group] = policy_module
 
 
 ######################################################################
-# **Second**: wrap the neural network in a :class:`TensorDictModule`
+# **Second**: wrap the :class:`TensorDictModule` in a :class:`ProbabilisticActor`
 #
-# This is simply a module that will read the ``in_keys`` from a tensordict, feed them to the
-# neural networks, and write the
-# outputs in-place at the ``out_keys``.
-#
-# Note that we use ``("agents", ...)`` keys as these keys are denoting data with the
-# additional ``n_agents`` dimension.
-#
-
-
-######################################################################
-# **Third**: wrap the :class:`TensorDictModule` in a :class:`ProbabilisticActor`
-#
-# We now need to build a distribution out of the location and scale of our
-# normal distribution. To do so, we instruct the :class:`ProbabilisticActor`
-# class to build a :class:`TanhNormal` out of the location and scale
+# We now need to build the TanhDelta distribution.
+# We instruct the :class:`ProbabilisticActor`
+# class to build a :class:`TanhDelta` out of the policy action
 # parameters. We also provide the minimum and maximum values of this
 # distribution, which we gather from the environment specs.
 #
 # The name of the ``in_keys`` (and hence the name of the ``out_keys`` from
 # the :class:`TensorDictModule` above) has to end with the
-# :class:`TanhNormal` distribution constructor keyword arguments (loc and scale).
+# :class:`TanhDelta` distribution constructor keyword arguments (param).
 #
 
 policies = {}
 for group, _agents in env.group_map.items():
     policy = ProbabilisticActor(
         module=policy_modules[group],
-        spec=env.action_spec[group, "action"],
+        spec=env.full_action_spec[group, "action"],
         in_keys=[(group, "param")],
         out_keys=[(group, "action")],
         distribution_class=TanhDelta,
         distribution_kwargs={
-            "min": env.action_spec[group, "action"].space.low,
-            "max": env.action_spec[group, "action"].space.high,
+            "min": env.full_action_spec[group, "action"].space.low,
+            "max": env.full_action_spec[group, "action"].space.high,
         },
         return_log_prob=False,
     )
     policies[group] = policy
+
+######################################################################
+# **Third**: Exploration
+#
+# Since the DDPG policy is deterministic, we need a way to perform exploration during collection.
+#
+# For this purpose, we need to append an exploration layer to our policies before passing them to the collector.
+# In this case we use a :class:`~torchrl.modules.AdditiveGaussianWrapper`, which adds gaussian noise to our action
+# (and clamps it if the noise makes the action out of bounds).
+#
+# This exploration wrapper uses a ``sigma`` parameter which is multiplied by the noise to determine its magnitude.
+# Sigma can be annealed throughout training to reduce exploration.
+# Sigma will go from ``sigma_init`` to ``sigma_end`` in ``annealing_num_steps``.
+#
 
 
 exploration_policies = {}
 for group, _agents in env.group_map.items():
     exploration_policy = AdditiveGaussianWrapper(
         policies[group],
-        annealing_num_steps=total_frames // 2,
+        annealing_num_steps=total_frames
+        // 2,  # Number of frames after which sigma is sigma_end
         action_key=(group, "action"),
-        sigma_init=0.9,
-        sigma_end=0.1,
+        sigma_init=0.9,  # Initial value of the sigma
+        sigma_end=0.1,  # Final value of the sigma
     )
     exploration_policies[group] = exploration_policy
 
@@ -544,42 +549,48 @@ for group, _agents in env.group_map.items():
 # Critic network
 # --------------
 #
-# The critic network is a crucial component of the PPO algorithm, even though it
-# isn't used at sampling time. This module will read the observations and
+# The critic network is a crucial component of the DDPG algorithm, even though it
+# isn't used at sampling time. This module will read the observations & actions taken and
 # return the corresponding value estimates.
 #
-# As before, one should think carefully about the decision of **sharing the critic parameters**.
+# As before, one should think carefully about the decision of **sharing the critic parameters** within an agent group.
 # In general, parameter sharing will grant faster training convergence, but there are a few important
 # considerations to be made:
 #
 # - Sharing is not recommended when agents have different reward functions, as the critics will need to learn
 #   to assign different values to the same state (e.g., in mixed cooperative-competitive settings).
+#   In this case, since the two groups are already using separate networks, the sharing decision only applies
+#   for agents within a group, which we already know have the same reward function.
 # - In decentralised training settings, sharing cannot be performed without additional infrastructure to
 #   synchronise parameters.
 #
 # In all other cases where the reward function (to be differentiated from the reward) is the same for all agents
-# (as in the current scenario),
+# in a group (as in the current scenario),
 # sharing can provide improved performance. This can come at the cost of homogeneity in the agent strategies.
 # In general, the best way to know which choice is preferable is to quickly experiment both options.
 #
-# Here is also where we have to choose between **MAPPO and IPPO**:
+# Here is also where we have to choose between **MADDPG and IDDPG**:
 #
-# - With MAPPO, we will obtain a central critic with full-observability
-#   (i.e., it will take all the concatenated agent observations as input).
+# - With MADDPG, we will obtain a central critic with full-observability
+#   (i.e., it will take all the concatenated global agent observations and actions as input).
 #   We can do this because we are in a simulator
 #   and training is centralised.
-# - With IPPO, we will have a local decentralised critic, just like the policy.
+# - With IDDPG, we will have a local decentralised critic, just like the policy.
 #
-# In any case, the critic output will have shape ``(..., n_agents, 1)``.
+# In any case, the critic output will have shape ``(..., n_agents_in_group, 1)``.
 # If the critic is centralised and shared,
-# all the values along the ``n_agents`` dimension will be identical.
+# all the values along the ``n_agents_in_group`` dimension will be identical.
+#
+# As with the policy, we create a critic network for each group and store them in a dictionary.
 #
 
 critics = {}
 for group, agents in env.group_map.items():
     share_parameters_critic = True  # Can change for each group
-    maddpg = True  # IDDPG if False
+    MADDPG = True  # IDDPG if False, can change for each group
 
+    # This module applies the lambda function: reading the action and observation entries for the group
+    # and concatenating them in a new ``(group, "obs_action")`` entry
     cat_module = TensorDictModule(
         lambda obs, action: torch.cat([obs, action], dim=-1),
         in_keys=[(group, "observation"), (group, "action")],
@@ -589,35 +600,44 @@ for group, agents in env.group_map.items():
     critic_module = TensorDictModule(
         module=MultiAgentMLP(
             n_agent_inputs=env.observation_spec[group, "observation"].shape[-1]
-            + env.action_spec[group, "action"].shape[-1],
+            + env.full_action_spec[group, "action"].shape[-1],
             n_agent_outputs=1,  # 1 value per agent
             n_agents=len(agents),
-            centralised=maddpg,
+            centralised=MADDPG,
             share_params=share_parameters_critic,
             device=device,
             depth=2,
             num_cells=256,
             activation_class=torch.nn.Tanh,
         ),
-        in_keys=[(group, "obs_action")],
-        out_keys=[(group, "state_action_value")],
+        in_keys=[(group, "obs_action")],  # Read ``(group, "obs_action")``
+        out_keys=[
+            (group, "state_action_value")
+        ],  # Write ``(group, "state_action_value")``
     )
-    critics[group] = TensorDictSequential(cat_module, critic_module)
+
+    critics[group] = TensorDictSequential(
+        cat_module, critic_module
+    )  # Run them in sequence
 
 
 ######################################################################
 # Let us try our policy and critic modules. As pointed earlier, the usage of
 # :class:`TensorDictModule` makes it possible to directly read the output
 # of the environment to run these modules, as they know what information to read
-# and where to write it:
+# and where to write it.
+#
+# We can see that after each group's networks are run their output keys are added to the data under the
+# group entry.
 #
 # **From this point on, the multi-agent-specific components have been instantiated, and we will simply use the same
 # components as in single-agent learning. Isn't this fantastic?**
 #
+reset_td = env.reset()
 for group, _agents in env.group_map.items():
     print(
-        f"Running value and policy for group {group}:",
-        critics[group](policies[group](env.reset())),
+        f"Running value and policy for group '{group}':",
+        critics[group](policies[group](reset_td)),
     )
 
 ######################################################################
@@ -633,9 +653,12 @@ for group, _agents in env.group_map.items():
 # We will use the simplest possible data collector, which has the same output as an environment rollout,
 # with the only difference that it will auto reset done states until the desired frames are collected.
 #
+# We need to feed it our exploration policies. Furthermore, to run the policies from all groups as if they were one,
+# we put them in a sequence. They will not interfere with each other as each group writes and reads keys in different places.
+#
 
+# Put exploration policies from each group in a sequence
 agents_exploration_policy = TensorDictSequential(*exploration_policies.values())
-
 
 collector = SyncDataCollector(
     env,
@@ -650,22 +673,18 @@ collector = SyncDataCollector(
 # -------------
 #
 # Replay buffers are a common building piece of off-policy RL sota-implementations.
-# In on-policy contexts, a replay buffer is refilled every time a batch of
-# data is collected, and its data is repeatedly consumed for a certain number
-# of epochs.
+# There are many types of buffers, in this tutorial we use a basic buffer to store and sample tensordict
+# data randomly.
 #
-# Using a replay buffer for PPO is not mandatory and we could simply
-# use the collected data online, but using these classes
-# makes it easy for us to build the inner training loop in a reproducible way.
-#
+
 replay_buffers = {}
 for group, _agents in env.group_map.items():
     replay_buffer = ReplayBuffer(
         storage=LazyTensorStorage(
             memory_size, device=device
-        ),  # We store the frames_per_batch collected at each iteration
+        ),  # We will store up to memory_size multi-agent transitions
         sampler=RandomSampler(),
-        batch_size=train_batch_size,  # We will sample minibatches of this size
+        batch_size=train_batch_size,  # We will sample batches of this size
     )
     replay_buffers[group] = replay_buffer
 
@@ -673,30 +692,19 @@ for group, _agents in env.group_map.items():
 # Loss function
 # -------------
 #
-# The PPO loss can be directly imported from TorchRL for convenience using the
-# :class:`~.objectives.ClipPPOLoss` class. This is the easiest way of utilising PPO:
-# it hides away the mathematical operations of PPO and the control flow that
+# The DDPG loss can be directly imported from TorchRL for convenience using the
+# :class:`~.objectives.DDPGLoss` class. This is the easiest way of utilising DDPG:
+# it hides away the mathematical operations of DDPG and the control flow that
 # goes with it.
 #
-# PPO requires some "advantage estimation" to be computed. In short, an advantage
-# is a value that reflects an expectancy over the return value while dealing with
-# the bias / variance tradeoff.
-# To compute the advantage, one just needs to (1) build the advantage module, which
-# utilises our value operator, and (2) pass each batch of data through it before each
-# epoch.
-# The GAE module will update the input :class:`TensorDict` with new ``"advantage"`` and
-# ``"value_target"`` entries.
-# The ``"value_target"`` is a gradient-free tensor that represents the empirical
-# value that the value network should represent with the input observation.
-# Both of these will be used by :class:`ClipPPOLoss` to
-# return the policy and value losses.
+# It is also possible to have different policies for each group.
 #
 losses = {}
 for group, _agents in env.group_map.items():
     loss_module = DDPGLoss(
-        actor_network=policies[group],
+        actor_network=policies[group],  # Use the non-explorative policies
         value_network=critics[group],
-        delay_value=True,
+        delay_value=True,  # Whether to use a target network for the value
         loss_function="l2",
     )
     loss_module.set_keys(
@@ -705,7 +713,6 @@ for group, _agents in env.group_map.items():
         done=(group, "done"),
         terminated=(group, "terminated"),
     )
-
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=gamma)
 
     losses[group] = loss_module
@@ -730,9 +737,18 @@ optimizers = {
 # Training utils
 # --------------
 #
+# We do have to define two helper functions that we will use in the training loop.
+# They are very simple and do not contain any important logic.
+#
+#
 
 
 def get_excluded_keys(group: str):
+    """
+    Return all keys that should be excluded from the tensordict of group `group`.
+    This removes all keys from other groups and info keys so that we do not store those
+    in the buffer of group `group`.
+    """
     excluded_keys = []
     for other_group in env.group_map.keys():
         if other_group != group:
@@ -744,14 +760,16 @@ def get_excluded_keys(group: str):
 def process_batch(
     batch: TensorDictBase, group_map: Dict[str, List[str]]
 ) -> TensorDictBase:
+    """
+    If the `(group, "terminated")` and `(group, "done")` keys are not present, create them by expanding
+    `"terminated"` and `"done"`.
+    This is needed to present them with the same shape as the reward to the loss.
+    """
     for group in group_map.keys():
         keys = list(batch.keys(True, True))
-        group_shape = batch.get(group).shape
-
+        group_shape = batch.get_item_shape(group)
         nested_done_key = ("next", group, "done")
         nested_terminated_key = ("next", group, "terminated")
-        nested_reward_key = ("next", group, "reward")
-
         if nested_done_key not in keys:
             batch.set(
                 nested_done_key,
@@ -764,13 +782,6 @@ def process_batch(
                 .unsqueeze(-1)
                 .expand((*group_shape, 1)),
             )
-
-        if nested_reward_key not in keys:
-            batch.set(
-                nested_reward_key,
-                batch.get(("next", "reward")).unsqueeze(-1).expand((*group_shape, 1)),
-            )
-
     return batch
 
 
@@ -780,13 +791,14 @@ def process_batch(
 # We now have all the pieces needed to code our training loop.
 # The steps include:
 #
-# * Collect data
-#     * Compute advantage
+# * Collect data for all groups
+#     * Loop over groups
+#         * Store group data in group buffer
 #         * Loop over epochs
-#             * Loop over minibatches to compute loss values
-#                 * Back propagate
-#                 * Optimise
-#             * Repeat
+#             * Sample from group buffer
+#             * Compute loss on sampled data
+#             * Back propagate loss
+#             * Optimise
 #         * Repeat
 #     * Repeat
 # * Repeat
@@ -805,11 +817,15 @@ train_group_map = copy.deepcopy(env.group_map)
 # Training/collection iterations
 for iteration, batch in enumerate(collector):
     current_frames = batch.numel()
-    batch = process_batch(batch, env.group_map)
+    batch = process_batch(batch, env.group_map)  # Util to expand done keys if needed
     # Loop over groups
     for group in train_group_map.keys():
-        group_batch = batch.exclude(*get_excluded_keys(group))
-        group_batch = group_batch.reshape(-1)
+        group_batch = batch.exclude(
+            *get_excluded_keys(group)
+        )  # Exclude data from other groups
+        group_batch = group_batch.reshape(
+            -1
+        )  # This just affects the leading dimensions in batch_size of the tensordict
         replay_buffers[group].extend(group_batch)
 
         for _ in range(n_optimizer_steps):
@@ -829,10 +845,15 @@ for iteration, batch in enumerate(collector):
                 optimizer.step()
                 optimizer.zero_grad()
 
+            # Soft-update the target network
             target_updaters[group].step()
 
         # Exploration sigma anneal update
         exploration_policies[group].step(current_frames)
+
+    # Stop training a certain group when a condition is met (e.g., number of training iterations)
+    if iteration == iteration_when_stop_training_evaders:
+        del train_group_map["agent"]
 
     # Logging
     for group in env.group_map.keys():
@@ -856,11 +877,6 @@ for iteration, batch in enumerate(collector):
     )
     pbar.update()
 
-    # If you uncomment this you can stop training a certain group when a condition is met
-    # (e.g., number of training iterations)
-    if iteration == iteration_when_stop_training_evaders:
-        del train_group_map["agent"]
-
 ######################################################################
 # Results
 # -------
@@ -869,6 +885,7 @@ for iteration, batch in enumerate(collector):
 #
 # To make training last longer, increase the ``n_iters`` hyperparameter.
 #
+
 fig, axs = plt.subplots(2, 1)
 for i, group in enumerate(env.group_map.keys()):
     axs[i].plot(episode_reward_mean_map[group], label=f"Episode reward mean {group}")
@@ -886,14 +903,17 @@ plt.show()
 # Render
 # ------
 #
+# *Rendering instruction are for VMAS*, aka when running with ``use_vmas=True``.
+#
 # If you are running this in a machine with GUI, you can render the trained policy by running:
 #
 # .. code-block:: python
 #
-#    with torch.no_grad():
+#    from torchrl.envs.utils import ExplorationType, set_exploration_type
+#    with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
 #       env.rollout(
 #           max_steps=max_steps,
-#           policy=policy,
+#           policy=agents_exploration_policy,
 #           callback=lambda env, _: env.render(),
 #           auto_cast_to_device=True,
 #           break_when_any_done=False,
@@ -903,9 +923,8 @@ plt.show()
 #
 # .. code-block:: bash
 #
-#    !apt-get update
-#    !apt-get install -y x11-utils
-#    !apt-get install -y xvfb
+#    !sudo apt-get update
+#    !sudo apt-get install python3-opengl xvfb
 #    !pip install pyvirtualdisplay
 #
 # .. code-block:: python
@@ -914,14 +933,16 @@ plt.show()
 #    display = pyvirtualdisplay.Display(visible=False, size=(1400, 900))
 #    display.start()
 #    from PIL import Image
+#    from torchrl.envs.utils import ExplorationType, set_exploration_type
 #
 #    def rendering_callback(env, td):
 #        env.frames.append(Image.fromarray(env.render(mode="rgb_array")))
 #    env.frames = []
-#    with torch.no_grad():
+#    scenario_name = "simple_tag"
+#    with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
 #       env.rollout(
 #           max_steps=max_steps,
-#           policy=policy,
+#           policy=agents_exploration_policy,
 #           callback=rendering_callback,
 #           auto_cast_to_device=True,
 #           break_when_any_done=False,
@@ -945,26 +966,26 @@ plt.show()
 #
 # In this tutorial, we have seen:
 #
-# - How to create a multi-agent environment in TorchRL, how its specs work, and how it integrates with the library;
-# - How you use GPU vectorized environments in TorchRL;
-# - How to create different multi-agent network architectures in TorchRL (e.g., using parameter sharing, centralised critic)
-# - How we can use :class:`tensordict.TensorDict` to carry multi-agent data;
-# - How we can tie all the library components (collectors, modules, replay buffers, and losses) in a multi-agent MAPPO/IPPO training loop.
+# - How to create a competitive multi-group multi-agent environment in TorchRL, how its specs work, and how it integrates with the library;
+# - How to create multi-agent network architectures in TorchRL for multiple groups;
+# - How we can use :class:`tensordict.TensorDict` to carry multi-agent multi-group data;
+# - How we can tie all the library components (collectors, modules, replay buffers, and losses) in a multi-agent multi-group MADDPG/IDDPG training loop.
 #
-# Now that you are proficient with multi-agent PPO, you can check out all
-# `TorchRL multi-agent examples <https://github.com/pytorch/rl/tree/main/examples/multiagent>`__.
+# Now that you are proficient with multi-agent DDPG, you can check out all
+# `TorchRL multi-agent examples <https://github.com/pytorch/rl/tree/main/sota-implementations/multiagent>`__.
 # These are code-only scripts of many popular MARL sota-implementations such as the ones seen in this tutorial,
 # QMIX, MADDPG, IQL, and many more!
 #
-# If you are interested in creating or wrapping your own multi-agent environments in TorchRL,
-# you can check out the dedicated
-# `doc section <https://pytorch.org/rl/reference/envs.html#multi-agent-environments>`_.
+# Also do remember to check out our
+# `multi-agent PPO tutorial <https://pytorch.org/rl/tutorials/multiagent_ppo.html>`__ in VMAS.
 #
 # Finally, you can modify the parameters of this tutorial to try many other configurations and scenarios
 # to become a MARL master.
+#
+# `PettingZoo <https://pettingzoo.farama.org/>`__ and VMAS contain many more scenarios.
 # Here are a few videos of some possible scenarios you can try in VMAS.
 #
-# .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/VMAS_scenarios.gif?raw=true
+# .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/vmas_scenarios_more.gif?raw=true
 #    :alt: VMAS scenarios
 #
 #    Scenarios available in `VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__
