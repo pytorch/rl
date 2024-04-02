@@ -226,10 +226,10 @@ polyak_tau = 0.005  # Tau for the soft-update of the target network
 # tensordict. The data of agents within a group is stacked together. Therefore, by choosing how to group your agents,
 # you can decide which data is stacked/kept as separate entries.
 # The grouping strategy can be specified at construction in environments like VMAS and PettingZoo.
-# For more info on grouping, see :class:`~torchrl.envs.utils.MarlGroupMapType`,
+# For more info on grouping, see :class:`torchrl.envs.utils.MarlGroupMapType` ,
 #
-# In the *simple_tag* environment,
-# there are two teams of agents: the chasers (or "adversaries")(red circles) and the evaders (or "agents")(green circles).
+# In the *simple_tag* environment
+# there are two teams of agents: the chasers (or "adversaries") (red circles) and the evaders (or "agents") (green circles).
 # Chasers are rewarded for touching evaders (+10).
 # Upon a contact the team of chasers is collectively rewarded and the
 # evader touched is penalized with the same value (-10).
@@ -247,17 +247,17 @@ polyak_tau = 0.005  # Tau for the soft-update of the target network
 #
 # We will now instantiate the environment.
 # For this tutorial, we will limit the episodes to ``max_steps``, after which the terminated flag is set. This is
-# functionality is already provided in the VMAS simulator but the TorchRL :class:`~torchrl.envs.transforms.StepCounter`
+# functionality is already provided in the PettingZoo and VMAS simulators but the TorchRL :class:`~torchrl.envs.transforms.StepCounter`
 # transform could alternatively be used.
 #
 
-max_steps = 100  # Episode steps before done
+max_steps = 100  # Environment steps before done
 
 n_chasers = 2
 n_evaders = 1
 n_obstacles = 2
 
-use_vmas = True  # Set this to True for a great performance speedup
+use_vmas = False  # Set this to True for a great performance speedup
 
 if not use_vmas:
     env = PettingZooEnv(
@@ -274,7 +274,7 @@ if not use_vmas:
 else:
     num_vmas_envs = (
         frames_per_batch // max_steps
-    )  # Number of vectorized envs. frames_per_batch collection will be divided among these environments
+    )  # Number of vectorized environments. frames_per_batch collection will be divided among these environments
     env = VmasEnv(
         scenario="simple_tag",
         num_envs=num_vmas_envs,
@@ -288,15 +288,26 @@ else:
         num_landmarks=n_obstacles,
     )
 
+######################################################################
+# Group map
+# ~~~~~~~~~
+#
+# PettingZoo and VMAS environment use the TorchRL MARL grouping API.
+# We can access the group map, mapping each group to the agents in it, as follows:
+#
+
+print(f"group_map: {env.group_map}")
 
 ######################################################################
+# as we can see it contains 2 groups: "agents" (evaders) and "adversaries" (chasers).
+#
 # The environment is not only defined by its simulator and transforms, but also
 # by a series of metadata that describe what can be expected during its
 # execution.
 # For efficiency purposes, TorchRL is quite stringent when it comes to
 # environment specs, but you can easily check that your environment specs are
 # adequate.
-# In our example, the :class:`~.envs.libs.vmas.VmasEnv` takes care of setting the proper specs for your env so
+# In our example, the simulator wrapper takes care of setting the proper specs for your env, so
 # you should not have to care about this.
 #
 # There are four specs to look at:
@@ -304,7 +315,7 @@ else:
 # - ``action_spec`` defines the action space;
 # - ``reward_spec`` defines the reward domain;
 # - ``done_spec`` defines the done domain;
-# - ``observation_spec`` which defines the domain of all other outputs from environmnet steps;
+# - ``observation_spec`` which defines the domain of all other outputs from environment steps;
 #
 #
 
@@ -315,18 +326,17 @@ print("observation_spec:", env.observation_spec)
 
 ######################################################################
 # Using the commands just shown we can access the domain of each value.
-# Doing this we can see that all specs apart from done have a leading shape ``(num_vmas_envs, n_agents)``.
-# This represents the fact that those values will be present for each agent in each individual environment.
-# The done spec, on the other hand, has leading shape ``num_vmas_envs``, representing that done is shared among
-# agents.
 #
-# TorchRL has a way to keep track of which MARL specs are shared and which are not.
-# In fact, specs that have the additional agent dimension
-# (i.e., they vary for each agent) will be contained in a inner "agents" key.
+# We can see that all specs are a dictionary where at the root we can always find the group names.
+# This structure will be followed in all tensordict data coming and going to the environment.
+# Furthermore, the specs of each group have leading shape ``(n_agents_in_that_group)`` (1 for agents, 2 for adversaries),
+# meaning that the tensor data of that group will always have that leading shape (agents within a group have the data stacked).
 #
-# As you can see the reward and action spec present the "agent" key,
-# meaning that entries in tensordicts belonging to those specs will be nested in an "agents" tensordict,
-# grouping all per-agent values.
+# Looking at the done_spec, we can see that there are some keys that are outside of agent groups
+# (``"done","terminated","truncated"``), which do not have a leading multi-agent dimension.
+# These keys are shared by all agents and represent the environment global done state used for resetting.
+# By default, like in this case, parallel PettingZoo environments are done when any agent is done, but this behavior
+# can be overridden by setting ``done_on_any`` at PettingZoo environment construction.
 #
 # To quickly access the keys for each of these values in tensordicts, we can simply ask the environment for the
 # respective keys, and
@@ -343,12 +353,14 @@ print("done_keys:", env.done_keys)
 # Transforms
 # ~~~~~~~~~~
 #
-# We can append any TorchRL transform we need to our enviornment.
+# We can append any TorchRL transform we need to our environment.
 # These will modify its input/output in some desired way.
 # We stress that, in multi-agent contexts, it is paramount to provide explicitly the keys to modify.
 #
 # For example, in this case, we will instantiate a ``RewardSum`` transform which will sum rewards over the episode.
-# We will tell this transform where to find the reward key and where to write the summed episode reward.
+# We will tell this transform where to find the reset keys for each reward key (essentially we just say that the
+# episode reward of each group should be reset when the ``"_reset"`` tensordict key is set, meaning that ``env.reset()``
+# was called.
 # The transformed environment will inherit
 # the device and meta-data of the wrapped environment, and transform these depending on the sequence
 # of transforms it contains.
@@ -356,7 +368,9 @@ print("done_keys:", env.done_keys)
 
 env = TransformedEnv(
     env,
-    RewardSum(reset_keys=["_reset"] * len(env.group_map.keys())),
+    RewardSum(
+        in_keys=env.reward_keys, reset_keys=["_reset"] * len(env.group_map.keys())
+    ),
 )
 
 
@@ -377,20 +391,20 @@ check_env_specs(env)
 #
 n_rollout_steps = 5
 rollout = env.rollout(n_rollout_steps)
-print("rollout of three steps:", rollout)
+print(f"rollout of {n_rollout_steps} steps:", rollout)
 print("Shape of the rollout TensorDict:", rollout.batch_size)
 ######################################################################
-# We can see that our rollout has ``batch_size`` of ``(num_vmas_envs, n_rollout_steps)``.
-# This means that all the tensors in it will have those leading dimensions.
+# We can see that our rollout has ``batch_size`` of ``(n_rollout_steps)``.
+# This means that all the tensors in it will have this leading dimension.
 #
 # Looking more in depth, we can see that the output tensordict can be divided in the following way:
 #
 # - *In the root* (accessible by running ``rollout.exclude("next")`` ) we will find all the keys that are available
 #   after a reset is called at the first timestep. We can see their evolution through the rollout steps by indexing
 #   the ``n_rollout_steps`` dimension. Among these keys, we will find the ones that are different for each agent
-#   in the ``rollout["agents"]`` tensordict, which will have batch size ``(num_vmas_envs, n_rollout_steps, n_agents)``
-#   signifying that it is storing the additional agent dimension. The ones outside this agent tensordict
-#   will be the shared ones (in this case only done).
+#   in the ``rollout[group_name]`` tensordicts, which will have batch size ``(n_rollout_steps, n_agents_in_group)``
+#   signifying that it is storing the additional agent dimension. The ones outside the group tensordicts
+#   will be the shared ones.
 # - *In the next* (accessible by running ``rollout.get("next")`` ). We will find the same structure as the root,
 #   but for keys that are available only after a step.
 #
