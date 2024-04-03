@@ -376,6 +376,19 @@ class MeltingpotWrapper(_EnvWrapper):
 
         return td
 
+    def render(self, mode="human", filename=None):
+        from matplotlib import pyplot as plt
+
+        rgb_arr = self._env.observation()[0]["WORLD.RGB"]
+        if mode == "human":
+            plt.cla()
+            plt.imshow(rgb_arr, interpolation="nearest")
+            if filename is None:
+                plt.show(block=False)
+            else:
+                plt.savefig(filename)
+        return rgb_arr
+
 
 class MeltingpotEnv(MeltingpotWrapper):
     """Meltingpot environment wrapper.
