@@ -207,7 +207,7 @@ class PettingZooWrapper(_EnvWrapper):
         use_mask: bool = False,
         categorical_actions: bool = True,
         seed: int | None = None,
-        done_on_any: bool = None,
+        done_on_any: bool | None = None,
         **kwargs,
     ):
         if env is not None:
