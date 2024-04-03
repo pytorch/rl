@@ -8,6 +8,7 @@ import importlib
 
 from typing import Dict, List, Mapping, Optional, Sequence
 
+import numpy as np
 import torch
 
 from tensordict import TensorDict, TensorDictBase
@@ -277,9 +278,6 @@ class MeltingpotWrapper(_EnvWrapper):
     def _set_seed(self, seed: Optional[int]):
         raise NotImplementedError
 
-    def close(self) -> None:
-        self._env.close()
-
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
@@ -376,7 +374,19 @@ class MeltingpotWrapper(_EnvWrapper):
 
         return td
 
-    def render(self, mode="human", filename=None):
+    def render(self, mode="human", filename=None) -> np.ndarray:
+        """Renders the environment using matplotlib.
+
+        Args:
+            mode (str, optional): One of ``"human"``, ``"rgb_array"``. If ``"human"`` it renders the
+                environment in the GUI. In any case the function returns a RGB array. Defaults to ``"human"``
+            filename (str, optional): Filename to save the render to. Defaults to ``None``,
+                in which case no file is saved.
+
+        Returns:
+            np.ndarray: The rendered image
+
+        """
         from matplotlib import pyplot as plt
 
         rgb_arr = self._env.observation()[0]["WORLD.RGB"]
