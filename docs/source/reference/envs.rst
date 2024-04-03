@@ -813,6 +813,8 @@ the following function will return ``1`` when queried:
     IsaacGymWrapper
     JumanjiEnv
     JumanjiWrapper
+    MeltingpotEnv
+    MeltingpotWrapper
     MOGymEnv
     MOGymWrapper
     MultiThreadedEnv
