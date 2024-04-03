@@ -276,7 +276,10 @@ class MeltingpotWrapper(_EnvWrapper):
         self.cached_full_done_spec_zero = self.full_done_spec.zero()
 
     def _set_seed(self, seed: Optional[int]):
-        raise NotImplementedError
+        raise NotImplementedError(
+            "It is unclear how to set a seed in Meltingpot"
+            " (https://github.com/google-deepmind/meltingpot/issues/129)"
+        )
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs

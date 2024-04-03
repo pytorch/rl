@@ -103,7 +103,7 @@ from torchrl.envs.libs.gym import (
 )
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
-from torchrl.envs.libs.meltingpot import MeltingpotEnv
+from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
@@ -3456,6 +3456,36 @@ class TestMeltingpot:
     @pytest.mark.parametrize("substrate", MeltingpotEnv.available_envs)
     def test_all_envs(self, substrate):
         env = MeltingpotEnv(substrate=substrate)
+        check_env_specs(env)
+
+    def test_passing_config(self, substrate="commons_harvest__open"):
+        from meltingpot import substrate as mp_substrate
+
+        substrate_config = mp_substrate.get_config(substrate)
+        env_torchrl = MeltingpotEnv(substrate_config)
+        env_torchrl.rollout(max_steps=5)
+
+    def test_wrapper(self, substrate="commons_harvest__open"):
+        from meltingpot import substrate as mp_substrate
+
+        substrate_config = mp_substrate.get_config(substrate)
+        mp_env = mp_substrate.build_from_config(
+            substrate_config, roles=substrate_config.default_player_roles
+        )
+        env_torchrl = MeltingpotWrapper(env=mp_env)
+        env_torchrl.rollout(max_steps=5)
+
+    @pytest.mark.parametrize("max_steps", [1, 5])
+    def test_max_steps(self, max_steps):
+        env = MeltingpotEnv(substrate="commons_harvest__open", max_steps=max_steps)
+        td = env.rollout(max_steps=100, break_when_any_done=True)
+        assert td.batch_size[0] == max_steps
+
+    @pytest.mark.parametrize("categorical_actions", [True, False])
+    def test_categorical_actions(self, categorical_actions):
+        env = MeltingpotEnv(
+            substrate="commons_harvest__open", categorical_actions=categorical_actions
+        )
         check_env_specs(env)
 
 
