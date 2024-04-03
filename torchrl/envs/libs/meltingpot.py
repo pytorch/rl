@@ -123,6 +123,7 @@ class MeltingpotWrapper(_EnvWrapper):
         self.group_map = group_map
         self.categorical_actions = categorical_actions
         self.max_steps = max_steps
+        self.num_cycles = 0
         super().__init__(**kwargs)
 
     def _build_env(
@@ -321,7 +322,59 @@ class MeltingpotWrapper(_EnvWrapper):
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
-        return tensordict
+        action_dict = {}
+        for group, agents in self.group_map.items():
+            group_action = tensordict.get((group, "action"))
+            group_action_np = self.full_action_spec[group, "action"].to_numpy(
+                group_action
+            )
+            for index, agent in enumerate(agents):
+                action_dict[agent] = group_action_np[index]
+
+        actions = [action_dict[agent] for agent in self.agent_names]
+        timestep = self._env.step(actions)
+        self.num_cycles += 1
+
+        rewards = timestep.reward
+        done = timestep.last() or (
+            (self.num_cycles >= self.max_steps) if self.max_steps is not None else False
+        )
+        obs = timestep.observation
+
+        td = TensorDict(
+            {
+                "done": self.full_done_spec["done"].encode(done),
+                "terminated": self.full_done_spec["terminated"].encode(done),
+            },
+            batch_size=self.batch_size,
+        )
+        # Global state
+        td.update(_filter_global_state_from_dict(obs[0], world=True))
+
+        for group, agent_names in self.group_map.items():
+            agent_tds = []
+            for index_in_group, agent_name in enumerate(agent_names):
+                global_index = self.agent_names_to_indices_map[agent_name]
+                agent_obs = self.observation_spec[group, "observation"][
+                    index_in_group
+                ].encode(_filter_global_state_from_dict(obs[global_index], world=False))
+                agent_reward = self.full_reward_spec[group, "reward"][
+                    index_in_group
+                ].encode(rewards[global_index])
+                agent_td = TensorDict(
+                    source={
+                        "observation": agent_obs,
+                        "reward": agent_reward,
+                    },
+                    batch_size=self.batch_size,
+                    device=self.device,
+                )
+
+                agent_tds.append(agent_td)
+            agent_tds = torch.stack(agent_tds, dim=0)
+            td.update({group: agent_tds})
+
+        return td
 
 
 class MeltingpotEnv(MeltingpotWrapper):
