@@ -915,7 +915,7 @@ class PettingZooEnv(PettingZooWrapper):
             them to categorical or one-hot.
         seed (int, optional): the seed.  Defaults to ``None``.
         done_on_any (bool, optional): whether the environment's done keys are set by aggregating the agent keys
-            using ``any()`` (when True) or ``all()`` (when False). Default (``None``) is to use ``any()`` for
+            using ``any()`` (when ``True``) or ``all()`` (when ``False``). Default (``None``) is to use ``any()`` for
             parallel environments and ``all()`` for AEC ones.
 
     Examples:
