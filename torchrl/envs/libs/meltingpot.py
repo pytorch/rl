@@ -6,11 +6,12 @@ from __future__ import annotations
 
 import importlib
 
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Dict, List, Mapping, Optional, Sequence, Union
 
+import numpy as np
 import torch
 
-from tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import CompositeSpec, DiscreteTensorSpec, TensorSpec
 from torchrl.envs.common import _EnvWrapper
@@ -21,17 +22,6 @@ _has_meltingpot = importlib.util.find_spec("meltingpot") is not None
 
 PLAYER_STR_FORMAT = "player_{index}"
 _WORLD_PREFIX = "WORLD."
-
-
-def _timestep_to_observations(
-    timestep: "dm_env.TimeStep",  # noqa
-) -> Mapping[str, Any]:
-    gym_observations = {}
-    for index, observation in enumerate(timestep.observation):
-        gym_observations[PLAYER_STR_FORMAT.format(index=index)] = {
-            key: value for key, value in observation.items() if _WORLD_PREFIX not in key
-        }
-    return gym_observations
 
 
 def _remove_world_observations_from_obs_spec(
@@ -286,13 +276,65 @@ class MeltingpotWrapper(_EnvWrapper):
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
-        return tensordict
+        timestep = self._env.reset()
+        obs = timestep.observation
+        td = self.full_done_spec.zero()
+
+        self.num_cycles = 0
+
+        for group, agent_names in self.group_map.items():
+            agent_tds = []
+            for agent_name in agent_names:
+                i = self.agent_names_to_indices_map[agent_name]
+                agent_obs = self._read_obs(obs[i], world=False)
+                agent_td = TensorDict(
+                    source={
+                        "observation": agent_obs,
+                    },
+                    batch_size=self.batch_size,
+                    device=self.device,
+                )
+
+                agent_tds.append(agent_td)
+            agent_tds = torch.stack(agent_tds, dim=0)
+            td.update({group: agent_tds})
+
+        # Global state
+        td.update(self._read_obs(obs[0], world=True))
+
+        tensordict_out = TensorDict(
+            source=td,
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+        return tensordict_out
 
     def _step(
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         return tensordict
+
+    def _read_obs(
+        self, observation: Union[Dict[str, np.ndarray], np.ndarray], world: bool
+    ) -> Union[TensorDictBase, torch.Tensor]:
+        if isinstance(observation, np.ndarray):
+            return torch.from_numpy(observation)
+        elif isinstance(observation, Dict):
+            return TensorDict(
+                source={
+                    key: self._read_obs(value, world=world)
+                    for key, value in observation.items()
+                    if (
+                        (_WORLD_PREFIX not in key)
+                        if not world
+                        else (_WORLD_PREFIX in key)
+                    )
+                },
+                batch_size=self.batch_size,
+            )
+        else:
+            return torch.tensor(observation)
 
 
 class MeltingpotEnv(MeltingpotWrapper):
