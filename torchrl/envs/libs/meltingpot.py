@@ -6,9 +6,8 @@ from __future__ import annotations
 
 import importlib
 
-from typing import Dict, List, Mapping, Optional, Sequence, Union
+from typing import Dict, List, Mapping, Optional, Sequence
 
-import numpy as np
 import torch
 
 from tensordict import TensorDict, TensorDictBase
@@ -24,11 +23,19 @@ PLAYER_STR_FORMAT = "player_{index}"
 _WORLD_PREFIX = "WORLD."
 
 
+def _filter_global_state_from_dict(obs_dict: Dict, world: bool) -> Dict:  # noqa
+    return {
+        key: value
+        for key, value in obs_dict.items()
+        if ((_WORLD_PREFIX not in key) if not world else (_WORLD_PREFIX in key))
+    }
+
+
 def _remove_world_observations_from_obs_spec(
     observation_spec: Sequence[Mapping[str, "dm_env.specs.Array"]],  # noqa
 ) -> Sequence[Mapping[str, "dm_env.specs.Array"]]:  # noqa
     return [
-        {key: value for key, value in agent_obs.items() if _WORLD_PREFIX not in key}
+        _filter_global_state_from_dict(agent_obs, world=False)
         for agent_obs in observation_spec
     ]
 
@@ -37,9 +44,7 @@ def _global_state_spec_from_obs_spec(
     observation_spec: Sequence[Mapping[str, "dm_env.specs.Array"]]  # noqa
 ) -> Mapping[str, "dm_env.specs.Array"]:  # noqa
     # We only look at agent 0 since world entries are the same for all agents
-    world_entries = {
-        key: value for key, value in observation_spec[0].items() if _WORLD_PREFIX in key
-    }
+    world_entries = _filter_global_state_from_dict(observation_spec[0], world=True)
     if len(world_entries) != 1 and "WORLD.RGB" not in world_entries:
         raise ValueError(
             f"Expected only one world entry named WORLD.RGB in observation_spec, but got {world_entries}"
@@ -285,9 +290,11 @@ class MeltingpotWrapper(_EnvWrapper):
 
         for group, agent_names in self.group_map.items():
             agent_tds = []
-            for agent_name in agent_names:
-                i = self.agent_names_to_indices_map[agent_name]
-                agent_obs = self._read_obs(obs[i], world=False)
+            for index_in_group, agent_name in enumerate(agent_names):
+                global_index = self.agent_names_to_indices_map[agent_name]
+                agent_obs = self.observation_spec[group, "observation"][
+                    index_in_group
+                ].encode(_filter_global_state_from_dict(obs[global_index], world=False))
                 agent_td = TensorDict(
                     source={
                         "observation": agent_obs,
@@ -301,7 +308,7 @@ class MeltingpotWrapper(_EnvWrapper):
             td.update({group: agent_tds})
 
         # Global state
-        td.update(self._read_obs(obs[0], world=True))
+        td.update(_filter_global_state_from_dict(obs[0], world=True))
 
         tensordict_out = TensorDict(
             source=td,
@@ -315,27 +322,6 @@ class MeltingpotWrapper(_EnvWrapper):
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         return tensordict
-
-    def _read_obs(
-        self, observation: Union[Dict[str, np.ndarray], np.ndarray], world: bool
-    ) -> Union[TensorDictBase, torch.Tensor]:
-        if isinstance(observation, np.ndarray):
-            return torch.from_numpy(observation)
-        elif isinstance(observation, Dict):
-            return TensorDict(
-                source={
-                    key: self._read_obs(value, world=world)
-                    for key, value in observation.items()
-                    if (
-                        (_WORLD_PREFIX not in key)
-                        if not world
-                        else (_WORLD_PREFIX in key)
-                    )
-                },
-                batch_size=self.batch_size,
-            )
-        else:
-            return torch.tensor(observation)
 
 
 class MeltingpotEnv(MeltingpotWrapper):
