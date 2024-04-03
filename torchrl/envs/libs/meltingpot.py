@@ -1,0 +1,383 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+import importlib
+
+from typing import Any, Dict, List, Mapping, Optional, Sequence
+
+import dm_env
+
+import torch
+
+from tensordict import TensorDictBase
+
+from torchrl.data import CompositeSpec, DiscreteTensorSpec, TensorSpec
+from torchrl.envs.common import _EnvWrapper
+from torchrl.envs.libs.dm_control import _dmcontrol_to_torchrl_spec_transform
+from torchrl.envs.utils import _classproperty, check_marl_grouping, MarlGroupMapType
+
+_has_meltingpot = importlib.util.find_spec("meltingpot") is not None
+
+PLAYER_STR_FORMAT = "player_{index}"
+_WORLD_PREFIX = "WORLD."
+
+
+class MeltingpotWrapper(_EnvWrapper):
+    """Meltingpot environment wrapper.
+
+    GitHub: https://github.com/google-deepmind/meltingpot
+
+    Paper: https://arxiv.org/abs/2211.13746
+
+    Args:
+        env (``meltingpot.utils.substrates.substrate.Substrate``): the meltingpot substrate to wrap.
+
+    Keyword Args:
+        max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon).
+            Each Meltingpot substrate can
+            be terminating or not. If ``max_steps`` is specified,
+            the scenario is also terminated (and the ``"terminated"`` flag is set) whenever this horizon is reached.
+            Unlike gym's ``TimeLimit`` transform or torchrl's :class:`~torchrl.envs.transforms.StepCounter`,
+            this argument will not set the ``"truncated"`` entry in the tensordict.
+        categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
+            them to categorical or one-hot. Defaults to ``True``.
+        group_map (MarlGroupMapType or Dict[str, List[str]], optional): how to group agents in tensordicts for
+            input/output. By default, they will be all put
+            in one group named ``"agents"``.
+            Otherwise, a group map can be specified or selected from some premade options.
+            See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
+
+    Attributes:
+        group_map (Dict[str, List[str]]): how to group agents in tensordicts for
+            input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
+        agent_names (list of str): names of the agent in the environment
+        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the environment
+        available_envs (List[str]): the list of the scenarios available to build.
+
+    .. warning::
+        Meltingpot returns a single ``done`` flag which does not distinguish between
+        when the env reached ``max_steps`` and termination.
+        If you deem the ``truncation`` signal necessary, set ``max_steps`` to
+        ``None`` and use a :class:`~torchrl.envs.transforms.StepCounter` transform.
+
+    """
+
+    git_url = "https://github.com/google-deepmind/meltingpot"
+    libname = "melitingpot"
+
+    @property
+    def lib(self):
+        import meltingpot
+
+        return meltingpot
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_meltingpot:
+            return []
+        from meltingpot.substrate import SUBSTRATES
+
+        return list(SUBSTRATES)
+
+    def __init__(
+        self,
+        env: "meltingpot.utils.substrates.substrate.Substrate" = None,  # noqa
+        categorical_actions: bool = True,
+        group_map: MarlGroupMapType
+        | Dict[str, List[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        max_steps: int = None,
+        **kwargs,
+    ):
+        if env is not None:
+            kwargs["env"] = env
+        self.group_map = group_map
+        self.categorical_actions = categorical_actions
+        self.max_steps = max_steps
+        super().__init__(**kwargs)
+
+    def _build_env(
+        self,
+        env: "meltingpot.utils.substrates.substrate.Substrate",  # noqa
+    ):
+        return env
+
+    def _make_group_map(self):
+        if isinstance(self.group_map, MarlGroupMapType):
+            self.group_map = self.group_map.get_group_map(self.agent_names)
+        check_marl_grouping(self.group_map, self.agent_names)
+
+    def _make_specs(
+        self, env: "meltingpot.utils.substrates.substrate.Substrate"  # noqa
+    ) -> None:
+        mp_obs_spec = self._env.observation_spec()  # List of dict of arrays
+        mp_obs_spec_no_world = _remove_world_observations_from_obs_spec(
+            mp_obs_spec
+        )  # List of dict of arrays
+        mp_global_state_spec = _global_state_spec_from_obs_spec(
+            mp_obs_spec
+        )  # Dict of arrays
+        mp_act_spec = self._env.action_spec()  # List of discrete arrays
+        mp_rew_spec = self._env.reward_spec()  # List of arrays
+
+        torchrl_agent_obs_specs = [
+            _dmcontrol_to_torchrl_spec_transform(agent_obs_spec)
+            for agent_obs_spec in mp_obs_spec_no_world
+        ]
+        torchrl_agent_act_specs = [
+            _dmcontrol_to_torchrl_spec_transform(
+                agent_act_spec, categorical_discrete_encoding=self.categorical_actions
+            )
+            for agent_act_spec in mp_act_spec
+        ]
+        torchrl_state_spec = _dmcontrol_to_torchrl_spec_transform(mp_global_state_spec)
+        torchrl_rew_spec = [
+            _dmcontrol_to_torchrl_spec_transform(agent_rew_spec)
+            for agent_rew_spec in mp_rew_spec
+        ]
+
+        # Create and check group map
+        _num_players = len(torchrl_rew_spec)
+        self.agent_names = [
+            PLAYER_STR_FORMAT.format(index=index) for index in range(_num_players)
+        ]
+        self.agent_names_to_indices_map = {
+            agent_name: i for i, agent_name in enumerate(self.agent_names)
+        }
+        self._make_group_map()
+
+        action_spec = CompositeSpec()
+        observation_spec = CompositeSpec()
+        reward_spec = CompositeSpec()
+
+        for group in self.group_map.keys():
+            (
+                group_observation_spec,
+                group_action_spec,
+                group_reward_spec,
+            ) = self._make_group_specs(
+                group,
+                torchrl_agent_obs_specs,
+                torchrl_agent_act_specs,
+                torchrl_rew_spec,
+            )
+            action_spec[group] = group_action_spec
+            observation_spec[group] = group_observation_spec
+            reward_spec[group] = group_reward_spec
+
+        observation_spec.update(torchrl_state_spec)
+        self.done_spec = CompositeSpec(
+            {
+                "done": DiscreteTensorSpec(
+                    n=2, shape=torch.Size((1,)), dtype=torch.bool
+                ),
+            },
+        )
+        self.action_spec = action_spec
+        self.observation_spec = observation_spec
+        self.reward_spec = reward_spec
+
+    def _make_group_specs(
+        self,
+        group: str,
+        torchrl_agent_obs_specs: List[TensorSpec],
+        torchrl_agent_act_specs: List[TensorSpec],
+        torchrl_rew_spec: List[TensorSpec],
+    ):
+        # Agent specs
+        action_specs = []
+        observation_specs = []
+        reward_specs = []
+
+        for agent_name in self.group_map[group]:
+            agent_index = self.agent_names_to_indices_map[agent_name]
+            action_specs.append(
+                CompositeSpec(
+                    {
+                        "action": torchrl_agent_act_specs[
+                            agent_index
+                        ]  # shape = (n_actions_per_agent,)
+                    },
+                )
+            )
+            observation_specs.append(
+                CompositeSpec(
+                    {
+                        "observation": torchrl_agent_obs_specs[
+                            agent_index
+                        ]  # shape = (n_obs_per_agent,)
+                    },
+                )
+            )
+            reward_specs.append(
+                CompositeSpec({"reward": torchrl_rew_spec[agent_index]})  # shape = (1,)
+            )
+
+        # Create multi-agent specs
+        group_action_spec = torch.stack(
+            action_specs, dim=0
+        )  # shape = (n_agents_in_group, n_actions_per_agent)
+        group_observation_spec = torch.stack(
+            observation_specs, dim=0
+        )  # shape = (n_agents_in_group, n_obs_per_agent)
+        group_reward_spec = torch.stack(
+            reward_specs, dim=0
+        )  # shape = (n_agents_in_group, 1)
+        return (
+            group_observation_spec,
+            group_action_spec,
+            group_reward_spec,
+        )
+
+    def _check_kwargs(self, kwargs: Dict):
+        meltingpot = self.lib
+
+        if "env" not in kwargs:
+            raise TypeError("Could not find environment key 'env' in kwargs.")
+        env = kwargs["env"]
+        if not isinstance(env, meltingpot.utils.substrates.substrate.Substrate):
+            raise TypeError(
+                "env is not of type 'meltingpot.utils.substrates.substrate.Substrate'."
+            )
+
+    def _init_env(self) -> Optional[int]:
+        pass
+
+    def _set_seed(self, seed: Optional[int]):
+        raise NotImplementedError
+
+    def close(self) -> None:
+        self._env.close()
+
+    def _reset(
+        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+    ) -> TensorDictBase:
+        return tensordict
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        return tensordict
+
+
+class MeltingpotEnv(MeltingpotWrapper):
+    """Meltingpot environment wrapper.
+
+    GitHub: https://github.com/google-deepmind/meltingpot
+
+    Paper: https://arxiv.org/abs/2211.13746
+
+    Args:
+        substrate(str or ml_collections.config_dict.ConfigDict): the meltingpot substrate to build.
+            Can be a string from :attr:`~.available_envs` or a ConfigDict for the substrate
+
+    Keyword Args:
+        max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon).
+            Each Meltingpot substrate can
+            be terminating or not. If ``max_steps`` is specified,
+            the scenario is also terminated (and the ``"terminated"`` flag is set) whenever this horizon is reached.
+            Unlike gym's ``TimeLimit`` transform or torchrl's :class:`~torchrl.envs.transforms.StepCounter`,
+            this argument will not set the ``"truncated"`` entry in the tensordict.
+        categorical_actions (bool, optional): if the environment actions are discrete, whether to transform
+            them to categorical or one-hot. Defaults to ``True``.
+        group_map (MarlGroupMapType or Dict[str, List[str]], optional): how to group agents in tensordicts for
+            input/output. By default, they will be all put
+            in one group named ``"agents"``.
+            Otherwise, a group map can be specified or selected from some premade options.
+            See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
+
+
+    Attributes:
+        group_map (Dict[str, List[str]]): how to group agents in tensordicts for
+            input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
+        agent_names (list of str): names of the agent in the environment
+        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the enviornment
+        available_envs (List[str]): the list of the scenarios available to build.
+
+    .. warning::
+        Meltingpot returns a single ``done`` flag which does not distinguish between
+        when the env reached ``max_steps`` and termination.
+        If you deem the ``truncation`` signal necessary, set ``max_steps`` to
+        ``None`` and use a :class:`~torchrl.envs.transforms.StepCounter` transform.
+
+
+    """
+
+    def __init__(
+        self,
+        substrate: str | "ml_collections.config_dict.ConfigDict",  # noqa
+        *,
+        max_steps: Optional[int] = None,
+        categorical_actions: bool = True,
+        group_map: MarlGroupMapType
+        | Dict[str, List[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        **kwargs,
+    ):
+        if not _has_meltingpot:
+            raise ImportError(
+                f"meltingpot python package was not found. Please install this dependency. "
+                f"More info: {self.git_url}."
+            )
+        super().__init__(
+            substrate=substrate,
+            max_steps=max_steps,
+            categorical_actions=categorical_actions,
+            group_map=group_map,
+            **kwargs,
+        )
+
+    def _check_kwargs(self, kwargs: Dict):
+        if "substrate" not in kwargs:
+            raise TypeError("Could not find environment key 'substrate' in kwargs.")
+
+    def _build_env(
+        self,
+        substrate: str | "ml_collections.config_dict.ConfigDict",  # noqa
+    ) -> "meltingpot.utils.substrates.substrate.Substrate":  # noqa
+        from meltingpot import substrate as mp_substrate
+
+        if isinstance(substrate, str):
+            substrate_config = mp_substrate.get_config(substrate)
+        else:
+            substrate_config = substrate
+
+        return super()._build_env(
+            env=mp_substrate.build_from_config(
+                substrate_config, roles=substrate_config.default_player_roles
+            )
+        )
+
+
+def _timestep_to_observations(timestep: dm_env.TimeStep) -> Mapping[str, Any]:
+    gym_observations = {}
+    for index, observation in enumerate(timestep.observation):
+        gym_observations[PLAYER_STR_FORMAT.format(index=index)] = {
+            key: value for key, value in observation.items() if _WORLD_PREFIX not in key
+        }
+    return gym_observations
+
+
+def _remove_world_observations_from_obs_spec(
+    observation_spec: Sequence[Mapping[str, dm_env.specs.Array]]
+) -> Sequence[Mapping[str, dm_env.specs.Array]]:
+    return [
+        {key: value for key, value in agent_obs.items() if _WORLD_PREFIX not in key}
+        for agent_obs in observation_spec
+    ]
+
+
+def _global_state_spec_from_obs_spec(
+    observation_spec: Sequence[Mapping[str, dm_env.specs.Array]]
+) -> Mapping[str, dm_env.specs.Array]:
+    # We only look at agent 0 since world entries are the same for all agents
+    world_entries = {
+        key: value for key, value in observation_spec[0].items() if _WORLD_PREFIX in key
+    }
+    if len(world_entries) != 1 and "WORLD.RGB" not in world_entries:
+        raise ValueError(
+            f"Expected only one world entry named WORLD.RGB in observation_spec, but got {world_entries}"
+        )
+    return world_entries
