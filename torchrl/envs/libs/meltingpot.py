@@ -8,8 +8,6 @@ import importlib
 
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-import dm_env
-
 import torch
 
 from tensordict import TensorDictBase
@@ -23,6 +21,40 @@ _has_meltingpot = importlib.util.find_spec("meltingpot") is not None
 
 PLAYER_STR_FORMAT = "player_{index}"
 _WORLD_PREFIX = "WORLD."
+
+
+def _timestep_to_observations(
+    timestep: "dm_env.TimeStep",  # noqa
+) -> Mapping[str, Any]:
+    gym_observations = {}
+    for index, observation in enumerate(timestep.observation):
+        gym_observations[PLAYER_STR_FORMAT.format(index=index)] = {
+            key: value for key, value in observation.items() if _WORLD_PREFIX not in key
+        }
+    return gym_observations
+
+
+def _remove_world_observations_from_obs_spec(
+    observation_spec: Sequence[Mapping[str, "dm_env.specs.Array"]],  # noqa
+) -> Sequence[Mapping[str, "dm_env.specs.Array"]]:  # noqa
+    return [
+        {key: value for key, value in agent_obs.items() if _WORLD_PREFIX not in key}
+        for agent_obs in observation_spec
+    ]
+
+
+def _global_state_spec_from_obs_spec(
+    observation_spec: Sequence[Mapping[str, "dm_env.specs.Array"]]  # noqa
+) -> Mapping[str, "dm_env.specs.Array"]:  # noqa
+    # We only look at agent 0 since world entries are the same for all agents
+    world_entries = {
+        key: value for key, value in observation_spec[0].items() if _WORLD_PREFIX in key
+    }
+    if len(world_entries) != 1 and "WORLD.RGB" not in world_entries:
+        raise ValueError(
+            f"Expected only one world entry named WORLD.RGB in observation_spec, but got {world_entries}"
+        )
+    return world_entries
 
 
 class MeltingpotWrapper(_EnvWrapper):
@@ -349,35 +381,3 @@ class MeltingpotEnv(MeltingpotWrapper):
                 substrate_config, roles=substrate_config.default_player_roles
             )
         )
-
-
-def _timestep_to_observations(timestep: dm_env.TimeStep) -> Mapping[str, Any]:
-    gym_observations = {}
-    for index, observation in enumerate(timestep.observation):
-        gym_observations[PLAYER_STR_FORMAT.format(index=index)] = {
-            key: value for key, value in observation.items() if _WORLD_PREFIX not in key
-        }
-    return gym_observations
-
-
-def _remove_world_observations_from_obs_spec(
-    observation_spec: Sequence[Mapping[str, dm_env.specs.Array]]
-) -> Sequence[Mapping[str, dm_env.specs.Array]]:
-    return [
-        {key: value for key, value in agent_obs.items() if _WORLD_PREFIX not in key}
-        for agent_obs in observation_spec
-    ]
-
-
-def _global_state_spec_from_obs_spec(
-    observation_spec: Sequence[Mapping[str, dm_env.specs.Array]]
-) -> Mapping[str, dm_env.specs.Array]:
-    # We only look at agent 0 since world entries are the same for all agents
-    world_entries = {
-        key: value for key, value in observation_spec[0].items() if _WORLD_PREFIX in key
-    }
-    if len(world_entries) != 1 and "WORLD.RGB" not in world_entries:
-        raise ValueError(
-            f"Expected only one world entry named WORLD.RGB in observation_spec, but got {world_entries}"
-        )
-    return world_entries
