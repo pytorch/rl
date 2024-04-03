@@ -103,6 +103,7 @@ from torchrl.envs.libs.gym import (
 )
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
+from torchrl.envs.libs.meltingpot import MeltingpotEnv
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
@@ -138,6 +139,8 @@ elif _has_gym:
     import gym
 
     assert gym_backend() is gym
+
+_has_meltingpot = importlib.util.find_spec("meltingpot") is not None
 
 
 def get_gym_pixel_wrapper():
@@ -278,7 +281,6 @@ class TestGym:
 
     @pytest.mark.parametrize("categorical", [True, False])
     def test_gym_spec_cast(self, categorical):
-
         batch_size = [3, 4]
         cat = DiscreteTensorSpec if categorical else OneHotDiscreteTensorSpec
         cat_shape = batch_size if categorical else (*batch_size, 5)
@@ -543,7 +545,6 @@ class TestGym:
         ],
     )
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
-
         if env_name == PONG_VERSIONED() and not from_pixels:
             # raise pytest.skip("already pixel")
             # we don't skip because that would raise an exception
@@ -3126,7 +3127,6 @@ class TestPettingZoo:
     def test_pistonball(
         self, parallel, continuous_actions, use_mask, return_state, group_map
     ):
-
         kwargs = {"n_pistons": 21, "continuous": continuous_actions}
 
         env = PettingZooEnv(
@@ -3156,7 +3156,6 @@ class TestPettingZoo:
         )
 
         class Policy:
-
             action = 0
             t = 0
 
@@ -3329,7 +3328,7 @@ class TestPettingZoo:
             break
 
 
-@pytest.mark.skipif(not _has_robohive, reason="SMACv2 not found")
+@pytest.mark.skipif(not _has_robohive, reason="Robohive not found")
 class TestRoboHive:
     # unfortunately we must import robohive to get the available envs
     # and this import will occur whenever pytest is run on this file.
@@ -3450,6 +3449,14 @@ class TestSmacv2:
         for _ in collector:
             break
         collector.shutdown()
+
+
+@pytest.mark.skipif(not _has_meltingpot, reason="Meltingpot not found")
+class TestMeltingpot:
+    @pytest.mark.parametrize("substrate", MeltingpotEnv.available_envs)
+    def test_all_envs(self, substrate):
+        env = MeltingpotEnv(substrate=substrate)
+        check_env_specs(env)
 
 
 if __name__ == "__main__":
