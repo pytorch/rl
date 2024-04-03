@@ -264,8 +264,9 @@ class MeltingpotWrapper(_EnvWrapper):
                 "env is not of type 'meltingpot.utils.substrates.substrate.Substrate'."
             )
 
-    def _init_env(self) -> Optional[int]:
-        pass
+    def _init_env(self):
+        # Caching
+        self.cached_full_done_spec_zero = self.full_done_spec.zero()
 
     def _set_seed(self, seed: Optional[int]):
         raise NotImplementedError
@@ -276,11 +277,11 @@ class MeltingpotWrapper(_EnvWrapper):
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
+        self.num_cycles = 0
         timestep = self._env.reset()
         obs = timestep.observation
-        td = self.full_done_spec.zero()
 
-        self.num_cycles = 0
+        td = self.cached_full_done_spec_zero.clone()
 
         for group, agent_names in self.group_map.items():
             agent_tds = []
