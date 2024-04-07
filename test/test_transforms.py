@@ -2417,7 +2417,7 @@ class TestDiscreteActionProjection(TransformBase):
         )
         rb.extend(td)
 
-        storage = rb._storage._storage[:]
+        storage = rb._storage[:]
 
         assert storage["action"].shape[-1] == 7
         td = rb.sample(10)
@@ -8734,7 +8734,7 @@ class TestRenameTransform(TransformBase):
         rb.append_transform(t)
         rb.extend(tensordict)
 
-        assert "a" in rb._storage._storage.keys()
+        assert "a" in rb._storage[:].keys()
         sample = rb.sample(2)
         if create_copy:
             assert "a" in sample.keys()

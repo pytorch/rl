@@ -224,7 +224,9 @@ class QMixerLoss(LossModule):
         global_value_network = SafeSequential(local_value_network, mixer_network)
         params = TensorDict.from_module(global_value_network)
         with params.apply(
-            self._make_meta_params, device=torch.device("meta")
+            self._make_meta_params,
+            device=torch.device("meta"),
+            filter_empty=True,
         ).to_module(global_value_network):
             self.__dict__["global_value_network"] = deepcopy(global_value_network)
 

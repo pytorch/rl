@@ -446,22 +446,19 @@ class TestParallel:
                 env.shared_tensordict_parent.device.type == torch.device(edevice).type
             )
 
-    @pytest.mark.parametrize("start_method", [None, "fork"])
-    def test_serial_for_single(self, maybe_fork_ParallelEnv, start_method):
+    def test_serial_for_single(self, maybe_fork_ParallelEnv):
         env = ParallelEnv(
             1,
             ContinuousActionVecMockEnv,
             serial_for_single=True,
-            mp_start_method=start_method,
         )
         assert isinstance(env, SerialEnv)
-        env = ParallelEnv(1, ContinuousActionVecMockEnv, mp_start_method=start_method)
+        env = ParallelEnv(1, ContinuousActionVecMockEnv)
         assert isinstance(env, ParallelEnv)
         env = ParallelEnv(
             2,
             ContinuousActionVecMockEnv,
             serial_for_single=True,
-            mp_start_method=start_method,
         )
         assert isinstance(env, ParallelEnv)
 

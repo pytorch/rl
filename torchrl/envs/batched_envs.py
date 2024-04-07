@@ -917,7 +917,6 @@ class SerialEnv(BatchedEnvBase):
             nested_keys=True,
             filter_empty=True,
         )
-        del out["next"]
 
         if out.device != device:
             if device is None:

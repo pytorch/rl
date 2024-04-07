@@ -108,7 +108,7 @@ class EnvMetaData:
         def fill_device_map(name, val, device_map=device_map):
             device_map[name] = val.device
 
-        tensordict.named_apply(fill_device_map, nested_keys=True)
+        tensordict.named_apply(fill_device_map, nested_keys=True, filter_empty=True)
         return EnvMetaData(
             tensordict, specs, batch_size, env_str, device, batch_locked, device_map
         )
@@ -2843,7 +2843,7 @@ class _EnvWrapper(EnvBase):
         sync_func = self.__dict__.get("_sync_device_val", None)
         if sync_func is None:
             device = self.device
-            if device.type != "cuda":
+            if device is not None and device.type != "cuda":
                 if torch.cuda.is_available():
                     self._sync_device_val = torch.cuda.synchronize
                 elif torch.backends.mps.is_available():

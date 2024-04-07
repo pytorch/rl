@@ -6191,7 +6191,7 @@ class TestPPO(LossModuleTestBase):
             if isinstance(p, nn.Parameter):
                 p.data.zero_()
 
-        params.apply(zero_param)
+        params.apply(zero_param, filter_empty=True)
 
         # assert len(list(floss_fn.parameters())) == 0
         with params.to_module(loss_fn):
