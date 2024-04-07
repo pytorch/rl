@@ -331,7 +331,7 @@ class MeltingpotWrapper(_EnvWrapper):
 
     def _set_seed(self, seed: Optional[int]):
         raise NotImplementedError(
-            "It is unclear how to set a seed in Meltingpot"
+            "It is currently unclear how to set a seed in Meltingpot"
             " (https://github.com/google-deepmind/meltingpot/issues/129)"
         )
 
