@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import importlib
 
-from typing import Dict, List, Mapping, Optional, Sequence
+from typing import Dict, List, Mapping, Sequence
 
 import numpy as np
 import torch
@@ -329,14 +329,14 @@ class MeltingpotWrapper(_EnvWrapper):
         # Caching
         self.cached_full_done_spec_zero = self.full_done_spec.zero()
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         raise NotImplementedError(
             "It is unclear how to set a seed in Meltingpot"
             " (https://github.com/google-deepmind/meltingpot/issues/129)"
         )
 
     def _reset(
-        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+        self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
         self.num_cycles = 0
         timestep = self._env.reset()
@@ -553,7 +553,7 @@ class MeltingpotEnv(MeltingpotWrapper):
         self,
         substrate: str | "ml_collections.config_dict.ConfigDict",  # noqa
         *,
-        max_steps: Optional[int] = None,
+        max_steps: int | None = None,
         categorical_actions: bool = True,
         group_map: MarlGroupMapType
         | Dict[str, List[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
