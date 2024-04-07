@@ -60,6 +60,12 @@ class MeltingpotWrapper(_EnvWrapper):
 
     Paper: https://arxiv.org/abs/2211.13746
 
+    Melting Pot assesses generalization to novel social situations involving both familiar and unfamiliar individuals,
+    and has been designed to test a broad range of social interactions such as: cooperation, competition, deception,
+    reciprocation, trust, stubbornness and so on. Melting Pot offers researchers a set of over 50 multi-agent
+    reinforcement learning substrates (multi-agent games) on which to train agents, and over 256 unique test scenarios
+    on which to evaluate these trained agents.
+
     Args:
         env (``meltingpot.utils.substrates.substrate.Substrate``): the meltingpot substrate to wrap.
 
@@ -464,6 +470,12 @@ class MeltingpotEnv(MeltingpotWrapper):
     GitHub: https://github.com/google-deepmind/meltingpot
 
     Paper: https://arxiv.org/abs/2211.13746
+
+    Melting Pot assesses generalization to novel social situations involving both familiar and unfamiliar individuals,
+    and has been designed to test a broad range of social interactions such as: cooperation, competition, deception,
+    reciprocation, trust, stubbornness and so on. Melting Pot offers researchers a set of over 50 multi-agent
+    reinforcement learning substrates (multi-agent games) on which to train agents, and over 256 unique test scenarios
+    on which to evaluate these trained agents.
 
     Args:
         substrate(str or ml_collections.config_dict.ConfigDict): the meltingpot substrate to build.
