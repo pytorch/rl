@@ -323,7 +323,7 @@ class GymLikeEnv(_EnvWrapper):
                 obs_dict, batch_size=tensordict.batch_size, _run_checks=False
             )
         tensordict_out = tensordict_out.to(self.device, non_blocking=True)
-            self._sync_device()
+        self._sync_device()
 
         if self.info_dict_reader and (info_dict is not None):
             if not isinstance(info_dict, dict):
