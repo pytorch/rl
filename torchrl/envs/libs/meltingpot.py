@@ -160,9 +160,10 @@ class MeltingpotWrapper(_EnvWrapper):
     def available_envs(cls):
         if not _has_meltingpot:
             return []
-        from meltingpot.substrate import SUBSTRATES
+        else:
+            from meltingpot.substrate import SUBSTRATES
 
-        return list(SUBSTRATES)
+            return list(SUBSTRATES)
 
     def __init__(
         self,
