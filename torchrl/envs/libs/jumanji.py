@@ -3,11 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib.util
-
 from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from packaging import version
 from tensordict import TensorDict, TensorDictBase
 from torchrl.envs.utils import _classproperty
 
@@ -306,6 +306,9 @@ class JumanjiWrapper(GymLikeEnv):
     @property
     def lib(self):
         import jumanji
+
+        if version.parse(jumanji.__version__) < version.parse("1.0.0"):
+            raise ImportError("jumanji version must be >= 1.0.0")
 
         return jumanji
 
