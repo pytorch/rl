@@ -76,4 +76,6 @@ pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
+conda install conda-forge::ffmpeg -y
+
 pip install git+https://github.com/vikashplus/robohive@main
