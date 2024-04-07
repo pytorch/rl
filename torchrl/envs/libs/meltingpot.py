@@ -368,7 +368,7 @@ class MeltingpotWrapper(_EnvWrapper):
 
                 agent_tds.append(agent_td)
             agent_tds = torch.stack(agent_tds, dim=0)
-            td.update({group: agent_tds})
+            td.set(group, agent_tds)
 
         # Global state
         td.update(_filter_global_state_from_dict(obs[0], world=True))
@@ -434,7 +434,7 @@ class MeltingpotWrapper(_EnvWrapper):
 
                 agent_tds.append(agent_td)
             agent_tds = torch.stack(agent_tds, dim=0)
-            td.update({group: agent_tds})
+            td.set(group, agent_tds)
 
         return td
 
