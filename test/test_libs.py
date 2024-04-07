@@ -3329,7 +3329,7 @@ class TestPettingZoo:
             break
 
 
-@pytest.mark.skipif(not _has_robohive, reason="SMACv2 not found")
+@pytest.mark.skipif(not _has_robohive, reason="RoboHive not found")
 class TestRoboHive:
     # unfortunately we must import robohive to get the available envs
     # and this import will occur whenever pytest is run on this file.
@@ -3339,37 +3339,33 @@ class TestRoboHive:
     # Locally these imports can be annoying, especially given the amount of
     # stuff printed by robohive.
     @pytest.mark.parametrize("from_pixels", [True, False])
+    @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs)
     @set_gym_backend("gym")
-    def test_robohive(self, from_pixels):
-        for envname in RoboHiveEnv.available_envs:
-            try:
-                if any(
-                    substr in envname
-                    for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")
-                ):
-                    torchrl_logger.info("not testing envs with prebuilt rendering")
-                    return
-                if "Adroit" in envname:
-                    torchrl_logger.info("tcdm are broken")
-                    return
-                try:
-                    env = RoboHiveEnv(envname)
-                except AttributeError as err:
-                    if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
-                        torchrl_logger.info("tcdm are broken")
-                        return
-                    else:
-                        raise err
-                if (
-                    from_pixels
-                    and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0
-                ):
-                    torchrl_logger.info("no camera")
-                    return
-                check_env_specs(env)
-            except Exception as err:
-                raise RuntimeError(f"Test with robohive end {envname} failed.") from err
-
+    def test_robohive(self, envname, from_pixels):
+        if any(
+            substr in envname
+            for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")
+        ):
+            torchrl_logger.info("not testing envs with prebuilt rendering")
+            return
+        if "Adroit" in envname:
+            torchrl_logger.info("tcdm are broken")
+            return
+        if (
+            from_pixels
+            and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0
+        ):
+            torchrl_logger.info("no camera")
+            return
+        try:
+            env = RoboHiveEnv(envname, from_pixels=from_pixels)
+        except AttributeError as err:
+            if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
+                torchrl_logger.info("tcdm are broken")
+                return
+            else:
+                raise err
+        check_env_specs(env)
 
 @pytest.mark.skipif(not _has_smacv2, reason="SMACv2 not found")
 class TestSmacv2:
