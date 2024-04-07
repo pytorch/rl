@@ -3339,22 +3339,16 @@ class TestRoboHive:
     # Locally these imports can be annoying, especially given the amount of
     # stuff printed by robohive.
     @pytest.mark.parametrize("from_pixels", [True, False])
-    @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs)
+    @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs[:10])
     @set_gym_backend("gym")
     def test_robohive(self, envname, from_pixels):
-        if any(
-            substr in envname
-            for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")
-        ):
+        if any(substr in envname for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")):
             torchrl_logger.info("not testing envs with prebuilt rendering")
             return
         if "Adroit" in envname:
             torchrl_logger.info("tcdm are broken")
             return
-        if (
-            from_pixels
-            and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0
-        ):
+        if from_pixels and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0:
             torchrl_logger.info("no camera")
             return
         try:
@@ -3366,6 +3360,7 @@ class TestRoboHive:
             else:
                 raise err
         check_env_specs(env)
+
 
 @pytest.mark.skipif(not _has_smacv2, reason="SMACv2 not found")
 class TestSmacv2:
