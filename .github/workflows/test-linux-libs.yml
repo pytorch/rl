@@ -255,6 +255,38 @@ jobs:
         bash .github/unittest/linux_libs/scripts_jumanji/run_test.sh
         bash .github/unittest/linux_libs/scripts_jumanji/post_process.sh
 
+  unittests-meltingpot:
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "11.7"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="12.1"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_meltingpot/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_meltingpot/install.sh
+        bash .github/unittest/linux_libs/scripts_meltingpot/run_test.sh
+        bash .github/unittest/linux_libs/scripts_meltingpot/post_process.sh
+
   unittests-minari:
     strategy:
       matrix:
@@ -562,35 +594,3 @@ jobs:
         bash .github/unittest/linux_libs/scripts_vmas/install.sh
         bash .github/unittest/linux_libs/scripts_vmas/run_test.sh
         bash .github/unittest/linux_libs/scripts_vmas/post_process.sh
-
-  unittests-meltingpot:
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
-    with:
-      repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
-      gpu-arch-type: cuda
-      gpu-arch-version: "11.7"
-      timeout: 120
-      script: |
-        if [[ "${{ github.ref }}" =~ release/* ]]; then
-          export RELEASE=1
-          export TORCH_VERSION=stable
-        else
-          export RELEASE=0
-          export TORCH_VERSION=nightly
-        fi
-
-        set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="12.1"
-        export TAR_OPTIONS="--no-same-owner"
-        export UPLOAD_CHANNEL="nightly"
-        export TF_CPP_MIN_LOG_LEVEL=0
-        export BATCHED_PIPE_TIMEOUT=60
-
-        nvidia-smi
-
-        bash .github/unittest/linux_libs/scripts_meltingpot/setup_env.sh
-        bash .github/unittest/linux_libs/scripts_meltingpot/install.sh
-        bash .github/unittest/linux_libs/scripts_meltingpot/run_test.sh
-        bash .github/unittest/linux_libs/scripts_meltingpot/post_process.sh
