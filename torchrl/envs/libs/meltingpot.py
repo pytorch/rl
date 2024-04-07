@@ -438,29 +438,14 @@ class MeltingpotWrapper(_EnvWrapper):
 
         return td
 
-    def render(self, mode="human", filename=None) -> np.ndarray:
-        """Renders the environment using matplotlib.
-
-        Args:
-            mode (str, optional): One of ``"human"``, ``"rgb_array"``. If ``"human"`` it renders the
-                environment in the GUI. In any case the function returns a RGB array. Defaults to ``"human"``
-            filename (str, optional): Filename to save the render to. Defaults to ``None``,
-                in which case no file is saved.
+    def get_rgb_image(self) -> np.ndarray:
+        """Returns an RGB image of the environment.
 
         Returns:
-            np.ndarray: The rendered image
+            np.ndarray: The  image
 
         """
-        from matplotlib import pyplot as plt
-
         rgb_arr = self._env.observation()[0]["WORLD.RGB"]
-        if mode == "human":
-            plt.cla()
-            plt.imshow(rgb_arr, interpolation="nearest")
-            if filename is None:
-                plt.show(block=False)
-            else:
-                plt.savefig(filename)
         return rgb_arr
 
 
