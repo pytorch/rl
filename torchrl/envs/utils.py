@@ -152,9 +152,8 @@ class _StepMDP:
         self.validated = None
 
         # Model based envs can have missing keys
-        from torchrl.envs import ModelBasedEnvBase
-
-        self._allow_absent_keys = isinstance(env, ModelBasedEnvBase)
+        # TODO: do we want to always allow this? check_env_specs should catch these or downstream ops
+        self._allow_absent_keys = True
 
     def validate(self, tensordict):
         if self.validated:
