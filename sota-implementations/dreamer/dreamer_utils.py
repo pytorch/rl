@@ -109,7 +109,7 @@ def transform_env(cfg, env, parallel_envs, dummy=False):
 
 def make_environments(cfg, device, parallel_envs=1):
     """Make environments for training and evaluation."""
-    func = lambda _cfg=cfg: _make_env(cfg=_cfg, device=device)
+    func = functools.partial(_make_env, cfg=cfg, device=device)
     train_env = ParallelEnv(
         parallel_envs,
         EnvCreator(func),
