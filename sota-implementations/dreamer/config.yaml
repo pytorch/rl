@@ -20,7 +20,7 @@ collector:
 optimization:
   train_every: 1000
   grad_clip: 100
-  batch_size: 50
+  batch_size: 2500
   batch_length: 50
 
   world_model_lr: 6e-4
