@@ -127,7 +127,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     print('Compiling')
     def compile_rssms(module):
-        if isinstance(module, RSSMRollout):
+        if isinstance(module, RSSMRollout) and not getattr(module, "_compiled", False):
+            module._compiled = True
             module.rssm_prior = torch.compile(module.rssm_prior)
             module.rssm_posterior = torch.compile(module.rssm_posterior)
     world_model_loss.apply(compile_rssms)
