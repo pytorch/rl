@@ -7,7 +7,7 @@ from lightning.pytorch.accelerators.cuda import CUDAAccelerator
 from lightning.pytorch.accelerators.mps import MPSAccelerator
 
 
-def find_device(accelerator: ty.Union[torch.device, str] = None) -> torch.device:
+def find_device(accelerator: torch.device | str = None) -> torch.device:
     """Automatically finds system's device for PyTorch."""
     if accelerator is None:
         accelerator = "auto"
