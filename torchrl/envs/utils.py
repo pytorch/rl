@@ -151,6 +151,11 @@ class _StepMDP:
         self.keys_from_next = self._repr_key_list_as_tree(self.keys_from_next)
         self.validated = None
 
+        # Model based envs can have missing keys
+        from torchrl.envs import ModelBasedEnvBase
+
+        self._allow_absent_keys = isinstance(env, ModelBasedEnvBase)
+
     def validate(self, tensordict):
         if self.validated:
             return True
@@ -196,7 +201,11 @@ class _StepMDP:
 
     @classmethod
     def _grab_and_place(
-        cls, nested_key_dict: dict, data_in: TensorDictBase, data_out: TensorDictBase
+        cls,
+        nested_key_dict: dict,
+        data_in: TensorDictBase,
+        data_out: TensorDictBase,
+        _allow_absent_keys: bool,
     ):
         for key, subdict in nested_key_dict.items():
             val = data_in._get_str(key, NO_DEFAULT)
@@ -208,7 +217,12 @@ class _StepMDP:
 
                     val = LazyStackedTensorDict(
                         *(
-                            cls._grab_and_place(subdict, _val, _val_out)
+                            cls._grab_and_place(
+                                subdict,
+                                _val,
+                                _val_out,
+                                _allow_absent_keys=_allow_absent_keys,
+                            )
                             for (_val, _val_out) in zip(
                                 val.unbind(val.stack_dim),
                                 val_out.unbind(val_out.stack_dim),
@@ -217,10 +231,16 @@ class _StepMDP:
                         stack_dim=val.stack_dim,
                     )
                 else:
-                    val = cls._grab_and_place(subdict, val, val_out)
-            data_out._set_str(
-                key, val, validated=True, inplace=False, non_blocking=False
-            )
+                    val = cls._grab_and_place(
+                        subdict, val, val_out, _allow_absent_keys=_allow_absent_keys
+                    )
+            if val is NO_DEFAULT:
+                if not _allow_absent_keys:
+                    raise KeyError(f"key {key} not found.")
+            else:
+                data_out._set_str(
+                    key, val, validated=True, inplace=False, non_blocking=False
+                )
         return data_out
 
     @classmethod
@@ -267,8 +287,18 @@ class _StepMDP:
                 out = self._exclude(self.exclude_from_root, tensordict, out=None)
             else:
                 out = next_td.empty()
-                self._grab_and_place(self.keys_from_root, tensordict, out)
-            self._grab_and_place(self.keys_from_next, next_td, out)
+                self._grab_and_place(
+                    self.keys_from_root,
+                    tensordict,
+                    out,
+                    _allow_absent_keys=self._allow_absent_keys,
+                )
+            self._grab_and_place(
+                self.keys_from_next,
+                next_td,
+                out,
+                _allow_absent_keys=self._allow_absent_keys,
+            )
             return out
         else:
             out = next_td.empty()

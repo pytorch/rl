@@ -253,11 +253,6 @@ class DreamerActorLoss(LossModule):
             tensordict = tensordict.select("state", self.tensor_keys.belief)
             tensordict = tensordict.reshape(-1)
 
-            # td = tensordict.select(("next", self.tensor_keys.state), ("next", self.tensor_keys.belief))
-            # td = td.rename_key_(("next", "state"), "state")
-            # td = td.rename_key_(("next", "belief"), "belief")
-            # td = td.reshape(-1)
-
         # TODO: do we need exploration here?
         with hold_out_net(self.model_based_env), set_exploration_type(
             ExplorationType.MEAN
@@ -265,7 +260,7 @@ class DreamerActorLoss(LossModule):
             # action_td = self.actor_model(td)
 
             # TODO: we are not using the actual batch beliefs as starting ones - should be solved! took of the primer for the mb_env
-            tensordict = self.model_based_env.reset(tensordict.clone(recurse=False))
+            tensordict = self.model_based_env.reset(tensordict.copy())
             # TODO: do we detach state gradients when passing again for new actions: action = self.actor(state.detach())
             fake_data = self.model_based_env.rollout(
                 max_steps=self.imagination_horizon,
@@ -274,10 +269,7 @@ class DreamerActorLoss(LossModule):
                 tensordict=tensordict,
             )
 
-            next_tensordict = step_mdp(
-                fake_data,
-                keep_other=True,
-            )
+            next_tensordict = step_mdp(fake_data, keep_other=True)
             with hold_out_net(self.value_model):
                 next_tensordict = self.value_model(next_tensordict)
 

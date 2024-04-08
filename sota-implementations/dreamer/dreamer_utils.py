@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import functools
 import tempfile
 from contextlib import nullcontext
 
@@ -34,7 +35,7 @@ from torchrl.envs.transforms import (
     TransformedEnv,
 )
 from torchrl.envs.transforms.transforms import TensorDictPrimer
-from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
 from torchrl.modules import (
     MLP,
     SafeModule,
@@ -64,8 +65,7 @@ def _make_env(cfg, device):
                 device=device,
             )
     elif lib == "dm_control":
-        env = DMControlEnv(cfg.env.name, cfg.env.task, from_pixels=cfg.env.from_pixels)
-        return env
+        return DMControlEnv(cfg.env.name, cfg.env.task, from_pixels=cfg.env.from_pixels)
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
 
@@ -109,19 +109,23 @@ def transform_env(cfg, env, parallel_envs, dummy=False):
 
 def make_environments(cfg, device, parallel_envs=1):
     """Make environments for training and evaluation."""
+    func = lambda _cfg=cfg: _make_env(cfg=_cfg, device=device)
     train_env = ParallelEnv(
         parallel_envs,
-        EnvCreator(lambda cfg=cfg: _make_env(cfg, device=device)),
+        EnvCreator(func),
+        serial_for_single=True,
     )
     train_env = transform_env(cfg, train_env, parallel_envs)
     train_env.set_seed(cfg.env.seed)
     eval_env = ParallelEnv(
         parallel_envs,
-        EnvCreator(lambda cfg=cfg: _make_env(cfg, device=device)),
+        EnvCreator(func),
+        serial_for_single=True,
     )
     eval_env = transform_env(cfg, eval_env, parallel_envs)
     eval_env.set_seed(cfg.env.seed + 1)
-
+    check_env_specs(train_env)
+    check_env_specs(eval_env)
     return train_env, eval_env
 
 
@@ -211,6 +215,14 @@ def make_dreamer(
         state_dim=config.networks.state_dim,
         rssm_hidden_dim=config.networks.rssm_hidden_dim,
     )
+
+    def detach_state_and_belief(data):
+        data.set("state", data.get("state").detach())
+        data.set("belief", data.get("belief").detach())
+        return data
+
+    model_based_env = model_based_env.append_transform(detach_state_and_belief)
+    check_env_specs(model_based_env)
 
     # Make actor
     actor_simulator, actor_realworld = _dreamer_make_actors(
