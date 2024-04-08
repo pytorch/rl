@@ -63,7 +63,8 @@ class DreamerActor(nn.Module):
         )
         self.backbone.append(
             NormalParamExtractor(
-                scale_mapping=f"biased_softplus_{std_bias}_{std_min_val}",
+                # scale_mapping=f"biased_softplus_{std_bias}_{std_min_val}",
+                scale_mapping=f"exp",
             ),
         )
 
@@ -305,7 +306,7 @@ class RSSMPrior(nn.Module):
             nn.Linear(hidden_dim, 2 * state_dim),
             NormalParamExtractor(
                 scale_lb=scale_lb,
-                scale_mapping="softplus",
+                scale_mapping="exp",
             ),
         )
 
@@ -357,7 +358,7 @@ class RSSMPosterior(nn.Module):
             nn.Linear(hidden_dim, 2 * state_dim),
             NormalParamExtractor(
                 scale_lb=scale_lb,
-                scale_mapping="softplus",
+                scale_mapping="exp",
             ),
         )
         self.hidden_dim = hidden_dim
