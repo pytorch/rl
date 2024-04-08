@@ -87,9 +87,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector = make_collector(cfg, train_env, policy)
 
     # Make replay buffer
+    batch_length = cfg.optimization.batch_length
     replay_buffer = make_replay_buffer(
         batch_size=cfg.replay_buffer.batch_size,
-        batch_seq_len=cfg.optimization.batch_length,
+        batch_seq_len=batch_length,
         buffer_size=cfg.replay_buffer.buffer_size,
         buffer_scratch_dir=cfg.replay_buffer.scratch_dir,
         device=cfg.networks.device,
@@ -143,7 +144,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             for _ in range(optim_steps_per_batch):
                 # sample from replay buffer
                 t_sample_init = time.time()
-                sampled_tensordict = replay_buffer.sample(batch_size)
+                sampled_tensordict = replay_buffer.sample(batch_size).reshape(-1, batch_length)
                 t_sample = time.time() - t_sample_init
 
                 t_loss_model_init = time.time()

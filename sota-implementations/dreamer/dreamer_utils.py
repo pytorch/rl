@@ -9,7 +9,8 @@ from contextlib import nullcontext
 import torch
 
 import torch.nn as nn
-from tensordict.nn import InteractionType
+from tensordict.nn import InteractionType, TensorDictModule, ProbabilisticTensorDictModule, \
+    ProbabilisticTensorDictSequential, TensorDictSequential
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import SliceSampler, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -576,7 +577,7 @@ def _dreamer_make_world_model(
 ):
     # World Model and reward model
     rssm_rollout = RSSMRollout(
-        SafeModule(
+        TensorDictModule(
             rssm_prior,
             in_keys=["state", "belief", "action"],
             out_keys=[
@@ -586,7 +587,7 @@ def _dreamer_make_world_model(
                 ("next", "belief"),
             ],
         ),
-        SafeModule(
+        TensorDictModule(
             rssm_posterior,
             in_keys=[("next", "belief"), ("next", "encoded_latents")],
             out_keys=[
@@ -597,13 +598,13 @@ def _dreamer_make_world_model(
         ),
     )
     event_dim = 3 if observation_out_key == "reco_pixels" else 1  # 3 for RGB
-    decoder = SafeProbabilisticTensorDictSequential(
-        SafeModule(
+    decoder = ProbabilisticTensorDictSequential(
+        TensorDictModule(
             decoder,
             in_keys=[("next", "state"), ("next", "belief")],
             out_keys=["loc"],
         ),
-        SafeProbabilisticModule(
+        ProbabilisticTensorDictModule(
             in_keys=["loc"],
             out_keys=[("next", observation_out_key)],
             distribution_class=IndependentNormal,
@@ -611,8 +612,8 @@ def _dreamer_make_world_model(
         ),
     )
 
-    transition_model = SafeSequential(
-        SafeModule(
+    transition_model = TensorDictSequential(
+        TensorDictModule(
             encoder,
             in_keys=[("next", observation_in_key)],
             out_keys=[("next", "encoded_latents")],
@@ -621,13 +622,13 @@ def _dreamer_make_world_model(
         decoder,
     )
 
-    reward_model = SafeProbabilisticTensorDictSequential(
-        SafeModule(
+    reward_model = ProbabilisticTensorDictSequential(
+        TensorDictModule(
             reward_module,
             in_keys=[("next", "state"), ("next", "belief")],
             out_keys=[("next", "loc")],
         ),
-        SafeProbabilisticModule(
+        ProbabilisticTensorDictModule(
             in_keys=[("next", "loc")],
             out_keys=[("next", "reward")],
             distribution_class=IndependentNormal,

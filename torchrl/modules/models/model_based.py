@@ -250,7 +250,7 @@ class RSSMRollout(TensorDictModuleBase):
                 )
                 _tensordict = update_values[..., t + 1].update(_tensordict)
 
-        return torch.stack(tensordict_out, tensordict.ndimension() - 1).contiguous()
+        return torch.stack(tensordict_out, tensordict.ndim - 1)
 
 
 class RSSMPrior(nn.Module):

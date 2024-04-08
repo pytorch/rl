@@ -116,8 +116,8 @@ class DreamerModelLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
 
-    def forward(self, tensordict: TensorDict) -> torch.Tensor:
-        tensordict = tensordict.clone(recurse=False)
+    def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
+        tensordict = tensordict.copy()
         tensordict.rename_key_(
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.true_reward),
