@@ -7,7 +7,7 @@ dependencies:
     - cloudpickle
     - gym
     - gym-notices
-    - importlib-metadata
+    - importlib_metadata
     - zipp
     - pytest
     - pytest-cov
