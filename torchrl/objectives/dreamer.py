@@ -141,11 +141,7 @@ class DreamerModelLoss(LossModule):
         x = tensordict.get(("next", self.tensor_keys.pixels))
         loc = dist.base_dist.loc
         scale = dist.base_dist.scale
-        reco_loss = -self.normal_log_probability(
-            x,
-            loc,
-            scale
-        ).mean()
+        reco_loss = -self.normal_log_probability(x, loc, scale).mean()
 
         dist: IndependentNormal = self.reward_model.get_dist(tensordict)
         # reward_loss = -dist.log_prob(
@@ -154,11 +150,7 @@ class DreamerModelLoss(LossModule):
         x = tensordict.get(("next", self.tensor_keys.true_reward))
         loc = dist.base_dist.loc
         scale = dist.base_dist.scale
-        reward_loss = -self.normal_log_probability(
-            x,
-            loc,
-            scale
-        ).mean()
+        reward_loss = -self.normal_log_probability(x, loc, scale).mean()
 
         return (
             TensorDict(
@@ -171,9 +163,12 @@ class DreamerModelLoss(LossModule):
             ),
             tensordict.detach(),
         )
+
     @staticmethod
     def normal_log_probability(x, mean, std):
-        return -0.5 * ((x.to(mean.dtype) - mean) / std).pow(2) - std.log() # - 0.5 * math.log(2 * math.pi)
+        return (
+            -0.5 * ((x.to(mean.dtype) - mean) / std).pow(2) - std.log()
+        )  # - 0.5 * math.log(2 * math.pi)
 
     def kl_loss(
         self,

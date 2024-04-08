@@ -163,9 +163,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             for _ in range(optim_steps_per_batch):
                 # sample from replay buffer
                 t_sample_init = time.time()
-                sampled_tensordict = replay_buffer.sample().reshape(
-                    -1, batch_length
-                )
+                sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
                 t_sample = time.time() - t_sample_init
 
                 t_loss_model_init = time.time()
@@ -182,7 +180,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         + model_loss_td["loss_model_reward"]
                     )
                     if use_autocast:
-                        assert loss_world_model.dtype in (torch.bfloat16, torch.float16), loss_world_model.dtype
+                        assert loss_world_model.dtype in (
+                            torch.bfloat16,
+                            torch.float16,
+                        ), loss_world_model.dtype
 
                 world_model_opt.zero_grad()
                 if use_autocast:
