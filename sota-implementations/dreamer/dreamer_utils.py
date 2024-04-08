@@ -330,7 +330,7 @@ use_autocast,
             )
         transforms.append(DeviceCastTransform(device=device))
         if use_autocast:
-            transforms.append(DTypeCastTransform(dtype_in=torch.float32, dtype_out=torch.float16))
+            transforms.append(DTypeCastTransform(dtype_in=torch.float32, dtype_out=torch.bfloat16))
 
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
