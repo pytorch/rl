@@ -20,6 +20,7 @@ from dreamer_utils import (
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.modules.models.model_based import RSSMRollout
 
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
