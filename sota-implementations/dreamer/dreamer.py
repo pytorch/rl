@@ -183,7 +183,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         assert loss_world_model.dtype in (
                             torch.bfloat16,
                             torch.float16,
-                        ), loss_world_model.dtype
+                        ), model_loss_td
 
                 world_model_opt.zero_grad()
                 if use_autocast:
