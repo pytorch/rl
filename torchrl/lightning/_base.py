@@ -85,11 +85,7 @@ class BaseRL(RLTrainingLoop):
         base_env = self.make_env()
         # Env transformations
         env = self.transformed_env(base_env)
-        # Specs
-        observation_spec = base_env.observation_spec["observation"]
-        action_space = base_env.action_spec
         # Actor
-        out_features = action_space.shape[-1]
         actor_net = torch.nn.Sequential(
             torch.nn.Flatten(0) if flatten_state else torch.nn.Identity(),
             actor_nn,
@@ -174,11 +170,10 @@ class BaseRL(RLTrainingLoop):
         super().__init__(
             loss_module=loss_module,
             policy_module=policy_module,
-            value_module=value_module,
+            advantage_module=advantage_module,
             target_net_updater=target_net_updater,
             **kwargs,
         )
-        self.advantage_module = advantage_module
 
     def make_env(self) -> EnvBase:
         """Utility function to init an env.

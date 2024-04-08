@@ -52,7 +52,7 @@ class RLTrainingLoop(pl.LightningModule):
         self,
         loss_module: TensorDictModule,
         policy_module: TensorDictModule,
-        value_module: TensorDictModule = None,
+        advantage_module: TensorDictModule = None,
         target_net_updater: SoftUpdate | None = None,
         lr: float = 3e-4,
         max_grad_norm: float = 1.0,
@@ -78,7 +78,7 @@ class RLTrainingLoop(pl.LightningModule):
             policy_module (TensorDictModule):
                 Policy module.
 
-            value_module (TensorDictModule, optional):
+            advantage_module (TensorDictModule, optional):
                 Value module.
 
             target_net_updater (SoftUpdate, optional):
@@ -176,7 +176,7 @@ class RLTrainingLoop(pl.LightningModule):
         # Modules
         self.loss_module = loss_module
         self.policy_module = policy_module
-        self.value_module = value_module
+        self.advantage_module = advantage_module
         self.target_net_updater = target_net_updater
         # Important: This property activates manual optimization
         self.automatic_optimization = automatic_optimization
@@ -433,8 +433,9 @@ class RLTrainingLoop(pl.LightningModule):
         self.log(f"loss/{tag}", loss, prog_bar=True)
         reward: Tensor = batch["next", "reward"]
         self.log(f"reward/{tag}", reward.mean().item(), prog_bar=True)
-        step_count: Tensor = batch["step_count"]
-        self.log(f"step_count/{tag}", step_count.max().item(), prog_bar=True)
+        if "step_count" in batch:
+            step_count: Tensor = batch["step_count"]
+            self.log(f"step_count/{tag}", step_count.max().item(), prog_bar=True)
         # Return loss value
         return loss
 
@@ -490,8 +491,9 @@ class RLTrainingLoop(pl.LightningModule):
             reward = eval_rollout["next", "reward"]
             self.log(f"reward/{tag}", reward.mean().item())
             self.log(f"reward_sum/{tag}", reward.sum().item())
-            step_count = eval_rollout["step_count"]
-            self.log(f"step_count/{tag}", step_count.max().item())
+            if "step_count" in eval_rollout:
+                step_count = eval_rollout["step_count"]
+                self.log(f"step_count/{tag}", step_count.max().item())
             del eval_rollout
 
     def transformed_env(self, base_env: EnvBase) -> EnvBase:

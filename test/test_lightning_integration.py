@@ -8,6 +8,17 @@ from lightning.pytorch.loggers import CSVLogger
 from torchrl.lightning.ppo import PPOPendulum
 
 
+def test_example_ppo_pl() -> None:
+    """Tray to run the example from here,
+    to make sure it is tested."""
+    import sys, os
+
+    sys.path.append(os.path.join("examples", "lightning"))
+    from train_ppo_on_pendulum_with_lightning import main
+
+    main()
+
+
 def test_ppo() -> None:
     """Test PPO on InvertedDoublePendulum."""
     frame_skip = 1
@@ -26,7 +37,6 @@ def test_ppo() -> None:
     print(f"Shape of the rollout TensorDict: {rollout.batch_size}")
     print(f"Env reset: {model.env.reset()}")
     print(f"Running policy: {model.policy_module(model.env.reset())}")
-    print(f"Running value: {model.value_module(model.env.reset())}")
     # Collector
     model.setup()
     collector = model.train_dataloader()
