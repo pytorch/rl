@@ -117,7 +117,7 @@ class MeltingpotWrapper(_EnvWrapper):
         ... )
         >>> env_torchrl = MeltingpotWrapper(env=mp_env)
         >>> print(env_torchrl.rollout(max_steps=5))
-                TensorDict(
+        TensorDict(
             fields={
                 RGB: Tensor(shape=torch.Size([5, 144, 192, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
                 agents: TensorDict(
