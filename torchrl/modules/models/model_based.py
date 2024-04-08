@@ -208,8 +208,8 @@ class RSSMRollout(TensorDictModuleBase):
         _module = SafeSequential(rssm_prior, rssm_posterior)
         self.in_keys = _module.in_keys
         self.out_keys = _module.out_keys
-        self.rssm_prior = rssm_prior
-        self.rssm_posterior = rssm_posterior
+        self.rssm_prior = torch.compile(rssm_prior)
+        self.rssm_posterior = torch.compile(rssm_posterior)
 
     def forward(self, tensordict):
         """Runs a rollout of simulated transitions in the latent space given a sequence of actions and environment observations.
