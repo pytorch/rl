@@ -88,8 +88,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector = make_collector(cfg, train_env, policy)
 
     # Make replay buffer
+    batch_size = cfg.optimization.batch_size
     batch_length = cfg.optimization.batch_length
     replay_buffer = make_replay_buffer(
+        batch_size=batch_size,
         batch_seq_len=batch_length,
         buffer_size=cfg.replay_buffer.buffer_size,
         buffer_scratch_dir=cfg.replay_buffer.scratch_dir,
@@ -118,7 +120,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         scaler3 = GradScaler()
 
     init_random_frames = cfg.collector.init_random_frames
-    batch_size = cfg.optimization.batch_size
     optim_steps_per_batch = cfg.optimization.optim_steps_per_batch
     grad_clip = cfg.optimization.grad_clip
     eval_iter = cfg.logger.eval_iter
@@ -162,7 +163,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             for _ in range(optim_steps_per_batch):
                 # sample from replay buffer
                 t_sample_init = time.time()
-                sampled_tensordict = replay_buffer.sample(batch_size).reshape(
+                sampled_tensordict = replay_buffer.sample().reshape(
                     -1, batch_length
                 )
                 t_sample = time.time() - t_sample_init
@@ -170,7 +171,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 t_loss_model_init = time.time()
                 # update world model
                 with torch.autocast(
-                    device_type=device.type, dtype=torch.float16
+                    device_type=device.type
                 ) if use_autocast else contextlib.nullcontext():
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
@@ -181,8 +182,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         + model_loss_td["loss_model_reward"]
                     )
                     if use_autocast:
-                        print(loss_world_model.dtype)
-                        assert loss_world_model.dtype == torch.bfloat16
+                        assert loss_world_model.dtype in (torch.bfloat16, torch.float16), loss_world_model.dtype
 
                 world_model_opt.zero_grad()
                 if use_autocast:
@@ -199,7 +199,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # update actor network
                 t_loss_actor_init = time.time()
                 with torch.autocast(
-                    device_type=device.type, dtype=torch.float16
+                    device_type=device.type
                 ) if use_autocast else contextlib.nullcontext():
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
 
@@ -218,7 +218,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # update value network
                 t_loss_critic_init = time.time()
                 with torch.autocast(
-                    device_type=device.type, dtype=torch.float16
+                    device_type=device.type
                 ) if use_autocast else contextlib.nullcontext():
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 

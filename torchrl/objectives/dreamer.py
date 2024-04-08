@@ -14,6 +14,7 @@ from tensordict.utils import NestedKey
 
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
+from torchrl.modules import IndependentNormal
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -133,14 +134,30 @@ class DreamerModelLoss(LossModule):
             tensordict.get(("next", self.tensor_keys.posterior_std)),
         )
 
-        dist = self.decoder.get_dist(tensordict)
-        reco_loss = -dist.log_prob(
-            tensordict.get(("next", self.tensor_keys.pixels))
+        dist: IndependentNormal = self.decoder.get_dist(tensordict)
+        # reco_loss = -dist.log_prob(
+        #     tensordict.get(("next", self.tensor_keys.pixels))
+        # ).mean()
+        x = tensordict.get(("next", self.tensor_keys.pixels))
+        loc = dist.base_dist.loc
+        scale = dist.base_dist.scale
+        reco_loss = -self.normal_log_probability(
+            x,
+            loc,
+            scale
         ).mean()
 
-        dist = self.reward_model.get_dist(tensordict)
-        reward_loss = -dist.log_prob(
-            tensordict.get(("next", self.tensor_keys.true_reward))
+        dist: IndependentNormal = self.reward_model.get_dist(tensordict)
+        # reward_loss = -dist.log_prob(
+        #     tensordict.get(("next", self.tensor_keys.true_reward))
+        # ).mean()
+        x = tensordict.get(("next", self.tensor_keys.true_reward))
+        loc = dist.base_dist.loc
+        scale = dist.base_dist.scale
+        reward_loss = -self.normal_log_probability(
+            x,
+            loc,
+            scale
         ).mean()
 
         return (
@@ -154,6 +171,9 @@ class DreamerModelLoss(LossModule):
             ),
             tensordict.detach(),
         )
+    @staticmethod
+    def normal_log_probability(x, mean, std):
+        return -0.5 * ((x.to(mean.dtype) - mean) / std).pow(2) - std.log() # - 0.5 * math.log(2 * math.pi)
 
     def kl_loss(
         self,

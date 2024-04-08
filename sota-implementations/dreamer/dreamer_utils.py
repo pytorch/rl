@@ -294,6 +294,7 @@ def make_collector(cfg, train_env, actor_model_explore):
 
 def make_replay_buffer(
     *,
+    batch_size,
     batch_seq_len,
     buffer_size=1000000,
     buffer_scratch_dir=None,
@@ -347,6 +348,7 @@ def make_replay_buffer(
                 compile=True,
             ),
             transform=transforms,
+            batch_size=batch_size,
         )
         return replay_buffer
 
@@ -360,13 +362,13 @@ def _dreamer_make_value_model(
         num_cells=hidden_dim,
         activation_class=get_activation(activation),
     )
-    value_model = SafeProbabilisticTensorDictSequential(
-        SafeModule(
+    value_model = ProbabilisticTensorDictSequential(
+        TensorDictModule(
             value_model,
             in_keys=["state", "belief"],
             out_keys=["loc"],
         ),
-        SafeProbabilisticModule(
+        ProbabilisticTensorDictModule(
             in_keys=["loc"],
             out_keys=[value_key],
             distribution_class=IndependentNormal,
