@@ -10,7 +10,7 @@ from tensordict.nn import NormalParamExtractor, TensorDictModule, TensorDictModu
 from torch import nn
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import GRUCell
+from torchrl.modules.tensordict_module.rnn import GRUCell
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
