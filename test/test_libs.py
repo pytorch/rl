@@ -3339,7 +3339,7 @@ class TestRoboHive:
     # Locally these imports can be annoying, especially given the amount of
     # stuff printed by robohive.
     @pytest.mark.parametrize("from_pixels", [True, False])
-    @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs[:10])
+    @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs)
     @set_gym_backend("gym")
     def test_robohive(self, envname, from_pixels):
         if any(substr in envname for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")):
