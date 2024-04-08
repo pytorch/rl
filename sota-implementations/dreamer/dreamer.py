@@ -117,7 +117,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_iter = cfg.logger.eval_iter
     eval_rollout_steps = cfg.logger.eval_rollout_steps
 
-    for _, tensordict in enumerate(collector):
+    for i, tensordict in enumerate(collector):
         pbar.update(tensordict.numel())
         current_frames = tensordict.numel()
         collected_frames += current_frames
@@ -128,9 +128,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if collected_frames >= init_random_frames:
             for _ in range(optim_steps_per_batch):
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample(batch_size).to(
-                    device, non_blocking=True
-                )
+                sampled_tensordict = replay_buffer.sample(batch_size)
                 # update world model
                 with autocast(dtype=torch.float16):
                     model_loss_td, sampled_tensordict = world_model_loss(
@@ -188,7 +186,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         policy.step(current_frames)
         collector.update_policy_weights_()
         # Evaluation
-        if abs(collected_frames % eval_iter) < frames_per_batch:
+        if (i % eval_iter) == 0:
             with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 eval_rollout = test_env.rollout(
                     eval_rollout_steps,

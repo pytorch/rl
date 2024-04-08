@@ -52,5 +52,6 @@ logger:
   project: dreamer-v1
   exp_name: ${env.name}-${env.task}-${env.seed}
   mode: online
-  eval_iter: 1000
+  # eval interval, in collection counts
+  eval_iter: 10
   eval_rollout_steps: 1000
