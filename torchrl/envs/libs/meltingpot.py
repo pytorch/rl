@@ -446,11 +446,10 @@ class MeltingpotWrapper(_EnvWrapper):
         """Returns an RGB image of the environment.
 
         Returns:
-            torch.Tensor: The  image
+            a ``torch.Tensor`` containing image in format WHC.
 
         """
-        rgb_arr = torch.from_numpy(self._env.observation()[0]["WORLD.RGB"])
-        return rgb_arr
+        return torch.from_numpy(self._env.observation()[0]["WORLD.RGB"])
 
 
 class MeltingpotEnv(MeltingpotWrapper):
