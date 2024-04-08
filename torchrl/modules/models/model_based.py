@@ -234,12 +234,13 @@ class RSSMRollout(TensorDictModuleBase):
         """
         tensordict_out = []
         *batch, time_steps = tensordict.shape
-        _tensordict = tensordict[..., 0]
 
-        update_values = tensordict.exclude(*self.out_keys)
+        update_values = tensordict.exclude(*self.out_keys).unbind(-1)
+        _tensordict = update_values[0]
         for t in range(time_steps):
             # samples according to p(s_{t+1} | s_t, a_t, b_t)
             # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
+            print('t', t)
             self.rssm_prior(_tensordict)
 
             # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
@@ -251,7 +252,7 @@ class RSSMRollout(TensorDictModuleBase):
                 _tensordict = step_mdp(
                     _tensordict.select(*self.out_keys, strict=False), keep_other=False
                 )
-                _tensordict = update_values[..., t + 1].update(_tensordict)
+                _tensordict = update_values[t + 1].update(_tensordict)
 
         return torch.stack(tensordict_out, tensordict.ndim - 1)
 

@@ -131,7 +131,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             if isinstance(module, RSSMRollout) and not getattr(module, "_compiled", False):
                 module._compiled = True
                 module.rssm_prior.module = torch.compile(module.rssm_prior.module, backend="cudagraphs")
-                # module.rssm_posterior.module = torch.compile(module.rssm_posterior.module, backend="cudagraphs")
+                module.rssm_posterior.module = torch.compile(module.rssm_posterior.module, backend="cudagraphs")
         world_model_loss.apply(compile_rssms)
 
     t_collect_init = time.time()
