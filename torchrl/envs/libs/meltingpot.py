@@ -53,9 +53,9 @@ def _global_state_spec_from_obs_spec(
 ) -> Mapping[str, "dm_env.specs.Array"]:  # noqa
     # We only look at agent 0 since world entries are the same for all agents
     world_entries = _filter_global_state_from_dict(observation_spec[0], world=True)
-    if len(world_entries) != 1 and "WORLD.RGB" not in world_entries:
+    if len(world_entries) != 1 and _WORLD_PREFIX + "RGB" not in world_entries:
         raise ValueError(
-            f"Expected only one world entry named WORLD.RGB in observation_spec, but got {world_entries}"
+            f"Expected only one world entry named {_WORLD_PREFIX}RGB in observation_spec, but got {world_entries}"
         )
     return world_entries
 
@@ -449,7 +449,7 @@ class MeltingpotWrapper(_EnvWrapper):
             a ``torch.Tensor`` containing image in format WHC.
 
         """
-        return torch.from_numpy(self._env.observation()[0]["WORLD.RGB"])
+        return torch.from_numpy(self._env.observation()[0][_WORLD_PREFIX + "RGB"])
 
 
 class MeltingpotEnv(MeltingpotWrapper):

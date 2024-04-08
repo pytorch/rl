@@ -103,7 +103,7 @@ from torchrl.envs.libs.gym import (
 )
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
-from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
+from torchrl.envs.libs.meltingpot import _WORLD_PREFIX, MeltingpotEnv, MeltingpotWrapper
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
@@ -3492,8 +3492,8 @@ class TestMeltingpot:
     def test_render(self, rollout_steps):
         env = MeltingpotEnv(substrate="commons_harvest__open")
         td = env.rollout(2)
-        rollout_penultimate_image = td[-1].get("WORLD.RGB")
-        rollout_last_image = td[-1].get(("next", "WORLD.RGB"))
+        rollout_penultimate_image = td[-1].get(_WORLD_PREFIX + "RGB")
+        rollout_last_image = td[-1].get(("next", _WORLD_PREFIX + "RGB"))
         image_from_env = env.get_rgb_image()
         assert torch.equal(rollout_last_image, image_from_env)
         assert not torch.equal(rollout_penultimate_image, image_from_env)
