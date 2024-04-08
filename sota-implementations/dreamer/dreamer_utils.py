@@ -84,11 +84,13 @@ def _make_env(cfg, device):
     env = env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
     )
+    assert env is not None
     return env
 
 
 def transform_env(cfg, env):
-    env = TransformedEnv(env)
+    if not isinstance(env, TransformedEnv):
+        env = TransformedEnv(env)
     if cfg.env.from_pixels:
         # transforms pixel from 0-255 to 0-1 (uint8 to float32)
         env.append_transform(
