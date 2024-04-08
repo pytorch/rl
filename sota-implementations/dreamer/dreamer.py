@@ -51,7 +51,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
             wandb_kwargs={"mode": cfg.logger.mode},  # "config": cfg},
         )
 
-    train_env, test_env = make_environments(cfg=cfg, parallel_envs=cfg.env.n_parallel_envs)
+    train_env, test_env = make_environments(
+        cfg=cfg, parallel_envs=cfg.env.n_parallel_envs
+    )
 
     # Make dreamer components
     action_key = "action"
@@ -144,7 +146,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
             for _ in range(optim_steps_per_batch):
                 # sample from replay buffer
                 t_sample_init = time.time()
-                sampled_tensordict = replay_buffer.sample(batch_size).reshape(-1, batch_length)
+                sampled_tensordict = replay_buffer.sample(batch_size).reshape(
+                    -1, batch_length
+                )
                 t_sample = time.time() - t_sample_init
 
                 t_loss_model_init = time.time()
@@ -165,7 +169,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 clip_grad_norm_(world_model.parameters(), grad_clip)
                 scaler1.step(world_model_opt)
                 scaler1.update()
-                t_loss_model += (time.time()-t_loss_model_init)
+                t_loss_model += time.time() - t_loss_model_init
 
                 # update actor network
                 t_loss_actor_init = time.time()
@@ -229,6 +233,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if logger is not None:
                     log_metrics(logger, eval_metrics, collected_frames)
         t_collect_init = time.time()
+
 
 if __name__ == "__main__":
     main()

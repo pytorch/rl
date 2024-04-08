@@ -9,8 +9,13 @@ from contextlib import nullcontext
 import torch
 
 import torch.nn as nn
-from tensordict.nn import InteractionType, TensorDictModule, ProbabilisticTensorDictModule, \
-    ProbabilisticTensorDictSequential, TensorDictSequential
+from tensordict.nn import (
+    InteractionType,
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+    TensorDictSequential,
+)
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import SliceSampler, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -36,10 +41,11 @@ from torchrl.envs.transforms import (
     TransformedEnv,
 )
 from torchrl.envs.transforms.transforms import (
+    DeviceCastTransform,
     ExcludeTransform,
     RenameTransform,
     StepCounter,
-    TensorDictPrimer, DeviceCastTransform,
+    TensorDictPrimer,
 )
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
 from torchrl.modules import (
@@ -75,12 +81,8 @@ def _make_env(cfg, device):
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
     default_dict = {
-        "state": UnboundedContinuousTensorSpec(
-            shape=(cfg.networks.state_dim,)
-        ),
-        "belief": UnboundedContinuousTensorSpec(
-            shape=(cfg.networks.rssm_hidden_dim,)
-        ),
+        "state": UnboundedContinuousTensorSpec(shape=(cfg.networks.state_dim,)),
+        "belief": UnboundedContinuousTensorSpec(shape=(cfg.networks.rssm_hidden_dim,)),
     }
     env = env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -142,7 +144,7 @@ def make_dreamer(
     action_key: str = "action",
     value_key: str = "state_value",
     use_decoder_in_env: bool = False,
-    compile: bool=True,
+    compile: bool = True,
 ):
     test_env = _make_env(config, device="cpu")
     test_env = transform_env(config, test_env)

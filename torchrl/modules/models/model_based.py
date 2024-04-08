@@ -6,11 +6,10 @@ import warnings
 
 import torch
 from packaging import version
-from tensordict.nn import TensorDictModule, TensorDictModuleBase
+from tensordict.nn import NormalParamExtractor, TensorDictModule, TensorDictModuleBase
 from torch import nn
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules.distributions import NormalParamWrapper
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
@@ -49,14 +48,16 @@ class DreamerActor(nn.Module):
         std_min_val=1e-4,
     ):
         super().__init__()
-        self.backbone = NormalParamWrapper(
+        self.backbone = nn.Sequential(
             MLP(
                 out_features=2 * out_features,
                 depth=depth,
                 num_cells=num_cells,
                 activation_class=activation_class,
             ),
-            scale_mapping=f"biased_softplus_{std_bias}_{std_min_val}",
+            NormalParamExtractor(
+                scale_mapping=f"biased_softplus_{std_bias}_{std_min_val}",
+            ),
         )
 
     def forward(self, state, belief):
@@ -289,14 +290,14 @@ class RSSMPrior(nn.Module):
         # Prior
         self.rnn = nn.GRUCell(hidden_dim, rnn_hidden_dim)
         self.action_state_projector = nn.Sequential(nn.LazyLinear(hidden_dim), nn.ELU())
-        self.rnn_to_prior_projector = NormalParamWrapper(
-            nn.Sequential(
-                nn.Linear(hidden_dim, hidden_dim),
-                nn.ELU(),
-                nn.Linear(hidden_dim, 2 * state_dim),
+        self.rnn_to_prior_projector = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, 2 * state_dim),
+            NormalParamExtractor(
+                scale_lb=scale_lb,
+                scale_mapping="softplus",
             ),
-            scale_lb=scale_lb,
-            scale_mapping="softplus",
         )
 
         self.state_dim = state_dim
@@ -344,14 +345,14 @@ class RSSMPosterior(nn.Module):
 
     def __init__(self, hidden_dim=200, state_dim=30, scale_lb=0.1):
         super().__init__()
-        self.obs_rnn_to_post_projector = NormalParamWrapper(
-            nn.Sequential(
-                nn.LazyLinear(hidden_dim),
-                nn.ELU(),
-                nn.Linear(hidden_dim, 2 * state_dim),
+        self.obs_rnn_to_post_projector = nn.Sequential(
+            nn.LazyLinear(hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, 2 * state_dim),
+            NormalParamExtractor(
+                scale_lb=scale_lb,
+                scale_mapping="softplus",
             ),
-            scale_lb=scale_lb,
-            scale_mapping="softplus",
         )
         self.hidden_dim = hidden_dim
 
