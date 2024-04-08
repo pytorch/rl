@@ -48,13 +48,13 @@ class DreamerActor(nn.Module):
         std_min_val=1e-4,
     ):
         super().__init__()
-        self.backbone = nn.Sequential(
-            MLP(
+        self.backbone = MLP(
                 out_features=2 * out_features,
                 depth=depth,
                 num_cells=num_cells,
                 activation_class=activation_class,
-            ),
+            )
+        self.backbone.append(
             NormalParamExtractor(
                 scale_mapping=f"biased_softplus_{std_bias}_{std_min_val}",
             ),
