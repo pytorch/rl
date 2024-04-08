@@ -50,7 +50,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             wandb_kwargs={"mode": cfg.logger.mode},  # "config": cfg},
         )
 
-    train_env, test_env = make_environments(cfg=cfg, device=device, parallel_envs=cfg.env.n_parallel_envs)
+    train_env, test_env = make_environments(cfg=cfg, parallel_envs=cfg.env.n_parallel_envs)
 
     # Make dreamer components
     action_key = "action"

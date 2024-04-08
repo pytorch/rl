@@ -113,9 +113,9 @@ def transform_env(cfg, env):
     return env
 
 
-def make_environments(cfg, device, parallel_envs=1):
+def make_environments(cfg, parallel_envs=1):
     """Make environments for training and evaluation."""
-    func = functools.partial(_make_env, cfg=cfg, device=device)
+    func = functools.partial(_make_env, cfg=cfg, device=cfg.env.device)
     train_env = ParallelEnv(
         parallel_envs,
         EnvCreator(func),
@@ -141,6 +141,7 @@ def make_dreamer(
     action_key: str = "action",
     value_key: str = "state_value",
     use_decoder_in_env: bool = False,
+    compile: bool=True,
 ):
     test_env = _make_env(config, device="cpu")
     test_env = transform_env(config, test_env)
@@ -163,10 +164,6 @@ def make_dreamer(
             num_cells=config.networks.hidden_dim,
             activation_class=get_activation(config.networks.activation),
         )
-        # if config.env.backend == "dm_control":
-        #     observation_in_key = ("position", "velocity")
-        #     obsevation_out_key = "reco_observation"
-        # else:
         observation_in_key = "observation"
         obsevation_out_key = "reco_observation"
 
@@ -283,7 +280,9 @@ def make_collector(cfg, train_env, actor_model_explore):
         init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
-        device=cfg.collector.device,
+        policy_device=cfg.collector.device,
+        env_device=train_env.device,
+        storing_device="cpu",
     )
     collector.set_seed(cfg.env.seed)
 
