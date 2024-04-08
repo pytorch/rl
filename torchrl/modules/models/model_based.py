@@ -16,7 +16,8 @@ from torch import nn
 
 from torchrl.envs.utils import step_mdp
 from torchrl.modules.models.models import MLP
-from torchrl.modules.tensordict_module.rnn import GRUCell
+# from torchrl.modules.tensordict_module.rnn import GRUCell
+from torch.nn import GRUCell
 
 UNSQUEEZE_RNN_INPUT = version.parse(torch.__version__) < version.parse("1.11")
 
