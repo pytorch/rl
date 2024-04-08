@@ -13,7 +13,7 @@ env:
 
 collector:
   total_frames: 5_000_000
-  init_random_frames: 8000
+  init_random_frames: 1000
   frames_per_batch: 8000
   device: cuda:0
 
