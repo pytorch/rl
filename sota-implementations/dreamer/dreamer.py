@@ -20,9 +20,9 @@ from dreamer_utils import (
 # mixed precision training
 from torch.cuda.amp import GradScaler
 from torch.nn.utils import clip_grad_norm_
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.models.model_based import RSSMRollout
-from torchrl._utils import logger as torchrl_logger
 
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
@@ -90,7 +90,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Make replay buffer
     batch_length = cfg.optimization.batch_length
     replay_buffer = make_replay_buffer(
-        batch_size=cfg.replay_buffer.batch_size,
         batch_seq_len=batch_length,
         buffer_size=cfg.replay_buffer.buffer_size,
         buffer_scratch_dir=cfg.replay_buffer.scratch_dir,
@@ -126,12 +125,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_rollout_steps = cfg.logger.eval_rollout_steps
 
     if cfg.optimization.compile:
-        torchrl_logger.info('Compiling')
+        torchrl_logger.info("Compiling")
+
         def compile_rssms(module):
-            if isinstance(module, RSSMRollout) and not getattr(module, "_compiled", False):
+            if isinstance(module, RSSMRollout) and not getattr(
+                module, "_compiled", False
+            ):
                 module._compiled = True
-                module.rssm_prior.module = torch.compile(module.rssm_prior.module, backend="cudagraphs")
-                module.rssm_posterior.module = torch.compile(module.rssm_posterior.module, backend="cudagraphs")
+                module.rssm_prior.module = torch.compile(
+                    module.rssm_prior.module, backend="cudagraphs"
+                )
+                module.rssm_posterior.module = torch.compile(
+                    module.rssm_posterior.module, backend="cudagraphs"
+                )
+
         world_model_loss.apply(compile_rssms)
 
     t_collect_init = time.time()
@@ -162,7 +169,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 t_loss_model_init = time.time()
                 # update world model
-                with torch.autocast(device_type=device.type, dtype=torch.float16) if use_autocast else contextlib.nullcontext():
+                with torch.autocast(
+                    device_type=device.type, dtype=torch.float16
+                ) if use_autocast else contextlib.nullcontext():
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
@@ -171,7 +180,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         + model_loss_td["loss_model_reco"]
                         + model_loss_td["loss_model_reward"]
                     )
-                    print(loss_world_model.dtype)
+                    if use_autocast:
+                        print(loss_world_model.dtype)
+                        assert loss_world_model.dtype == torch.bfloat16
 
                 world_model_opt.zero_grad()
                 if use_autocast:
@@ -187,7 +198,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # update actor network
                 t_loss_actor_init = time.time()
-                with torch.autocast(device_type=device.type, dtype=torch.float16) if use_autocast else contextlib.nullcontext():
+                with torch.autocast(
+                    device_type=device.type, dtype=torch.float16
+                ) if use_autocast else contextlib.nullcontext():
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
 
                 actor_opt.zero_grad()
@@ -204,7 +217,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # update value network
                 t_loss_critic_init = time.time()
-                with torch.autocast(device_type=device.type, dtype=torch.float16) if use_autocast else contextlib.nullcontext():
+                with torch.autocast(
+                    device_type=device.type, dtype=torch.float16
+                ) if use_autocast else contextlib.nullcontext():
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
                 value_opt.zero_grad()

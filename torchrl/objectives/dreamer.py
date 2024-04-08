@@ -112,6 +112,8 @@ class DreamerModelLoss(LossModule):
         self.free_nats = free_nats
         self.delayed_clamp = delayed_clamp
         self.global_average = global_average
+        self.__dict__["decoder"] = self.world_model[0][-1]
+        self.__dict__["reward_model"] = self.world_model[1]
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
@@ -131,14 +133,12 @@ class DreamerModelLoss(LossModule):
             tensordict.get(("next", self.tensor_keys.posterior_std)),
         )
 
-        decoder = self.world_model[0][-1]
-        dist = decoder.get_dist(tensordict)
+        dist = self.decoder.get_dist(tensordict)
         reco_loss = -dist.log_prob(
             tensordict.get(("next", self.tensor_keys.pixels))
         ).mean()
 
-        reward_model = self.world_model[1]
-        dist = reward_model.get_dist(tensordict)
+        dist = self.reward_model.get_dist(tensordict)
         reward_loss = -dist.log_prob(
             tensordict.get(("next", self.tensor_keys.true_reward))
         ).mean()

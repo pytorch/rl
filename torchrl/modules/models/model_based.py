@@ -6,15 +6,21 @@ import warnings
 
 import torch
 from packaging import version
-from tensordict.nn import NormalParamExtractor, TensorDictModule, TensorDictModuleBase, TensorDictSequential
+from tensordict.nn import (
+    NormalParamExtractor,
+    TensorDictModule,
+    TensorDictModuleBase,
+    TensorDictSequential,
+)
 from torch import nn
 
 from torchrl.envs.utils import step_mdp
-from torchrl.modules.tensordict_module.rnn import GRUCell
 from torchrl.modules.models.models import MLP
+from torchrl.modules.tensordict_module.rnn import GRUCell
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 UNSQUEEZE_RNN_INPUT = version.parse(torch.__version__) < version.parse("1.11")
+
 
 class DreamerActor(nn.Module):
     """Dreamer actor network.
@@ -51,11 +57,11 @@ class DreamerActor(nn.Module):
     ):
         super().__init__()
         self.backbone = MLP(
-                out_features=2 * out_features,
-                depth=depth,
-                num_cells=num_cells,
-                activation_class=activation_class,
-            )
+            out_features=2 * out_features,
+            depth=depth,
+            num_cells=num_cells,
+            activation_class=activation_class,
+        )
         self.backbone.append(
             NormalParamExtractor(
                 scale_mapping=f"biased_softplus_{std_bias}_{std_min_val}",
@@ -241,10 +247,12 @@ class RSSMRollout(TensorDictModuleBase):
             # samples according to p(s_{t+1} | s_t, a_t, b_t)
             # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
             self.rssm_prior(_tensordict)
+            print("prior", _tensordict)
 
             # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
             # [("next", "belief"), ("next", "encoded_latents")] -> [("next", "posterior_mean"), ("next", "posterior_std"), ("next", "state")]
             self.rssm_posterior(_tensordict)
+            print("posterior", _tensordict)
 
             tensordict_out.append(_tensordict)
             if t < time_steps - 1:

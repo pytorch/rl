@@ -293,7 +293,6 @@ def make_collector(cfg, train_env, actor_model_explore):
 
 
 def make_replay_buffer(
-    batch_size,
     *,
     batch_seq_len,
     buffer_size=1000000,
@@ -348,7 +347,6 @@ def make_replay_buffer(
                 compile=True,
             ),
             transform=transforms,
-            batch_size=batch_size,
         )
         return replay_buffer
 
