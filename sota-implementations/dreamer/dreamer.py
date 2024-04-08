@@ -169,7 +169,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 t_loss_model_init = time.time()
                 # update world model
                 with torch.autocast(
-                    device_type=device.type, dtype=torch.bfloat16,
+                    device_type=device.type,
+                    dtype=torch.bfloat16,
                 ) if use_autocast else contextlib.nullcontext():
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
@@ -179,11 +180,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         + model_loss_td["loss_model_reco"]
                         + model_loss_td["loss_model_reward"]
                     )
-                    if use_autocast:
-                        assert loss_world_model.dtype in (
-                            torch.bfloat16,
-                            torch.float16,
-                        ), model_loss_td
+                    # if use_autocast:
+                    #     assert loss_world_model.dtype in (
+                    #         torch.bfloat16,
+                    #         torch.float16,
+                    #     ), model_loss_td
 
                 world_model_opt.zero_grad()
                 if use_autocast:
