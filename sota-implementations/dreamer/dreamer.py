@@ -18,7 +18,7 @@ from dreamer_utils import (
 )
 
 # mixed precision training
-from torch.cuda.amp import autocast, GradScaler
+from torch.cuda.amp import GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.models.model_based import RSSMRollout
@@ -36,7 +36,7 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 def main(cfg: "DictConfig"):  # noqa: F821
     # cfg = correct_for_frame_skip(cfg)
 
-    if torch.cuda.is_available() and cfg.networks.device == "":
+    if torch.cuda.is_available() and cfg.networks.device in (None, ""):
         device = torch.device("cuda:0")
     elif cfg.networks.device:
         device = torch.device(cfg.networks.device)
@@ -162,7 +162,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 t_loss_model_init = time.time()
                 # update world model
-                with torch.autocast(device_type="cuda", dtype=torch.float16) if use_autocast else contextlib.nullcontext():
+                with torch.autocast(device_type=device.type, dtype=torch.float16) if use_autocast else contextlib.nullcontext():
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
@@ -187,7 +187,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # update actor network
                 t_loss_actor_init = time.time()
-                with torch.autocast(device_type="cuda", dtype=torch.float16) if use_autocast else contextlib.nullcontext():
+                with torch.autocast(device_type=device.type, dtype=torch.float16) if use_autocast else contextlib.nullcontext():
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
 
                 actor_opt.zero_grad()
@@ -204,7 +204,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # update value network
                 t_loss_critic_init = time.time()
-                with torch.autocast(device_type="cuda", dtype=torch.float16) if use_autocast else contextlib.nullcontext():
+                with torch.autocast(device_type=device.type, dtype=torch.float16) if use_autocast else contextlib.nullcontext():
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
                 value_opt.zero_grad()
