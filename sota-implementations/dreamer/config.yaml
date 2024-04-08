@@ -14,7 +14,7 @@ env:
 collector:
   total_frames: 5_000_000
   init_random_frames: 1000
-  frames_per_batch: 8000
+  frames_per_batch: 1000
   device: cuda:0
 
 optimization:
@@ -28,7 +28,7 @@ optimization:
   value_lr: 8e-5
   kl_scale: 1.0
   free_nats: 3.0
-  optim_steps_per_batch: 640
+  optim_steps_per_batch: 80
   gamma: 0.99
   lambda: 0.95
   imagination_horizon: 15
