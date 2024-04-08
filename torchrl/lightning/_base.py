@@ -1,9 +1,11 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 """Creates a helper class for more complex models."""
 
-__all__ = ["BaseRL"]
-
 import typing as ty
-from loguru import logger
 
 import torch
 from tensordict.nn import TensorDictModule  # type: ignore
@@ -86,21 +88,13 @@ class BaseRL(RLTrainingLoop):
         # Specs
         observation_spec = base_env.observation_spec["observation"]
         action_space = base_env.action_spec
-        # Sanity check
-        logger.debug(f"observation_spec: {observation_spec}")
-        logger.debug(f"reward_spec: {base_env.reward_spec}")
-        logger.debug(f"done_spec: {base_env.done_spec}")
-        logger.debug(f"action_spec: {base_env.action_spec}")
-        logger.debug(f"state_spec: {base_env.state_spec}")
         # Actor
         out_features = action_space.shape[-1]
-        logger.debug(f"MLP out_shape: {out_features}")
         actor_net = torch.nn.Sequential(
             torch.nn.Flatten(0) if flatten_state else torch.nn.Identity(),
             actor_nn,
             NormalParamExtractor(),
         )
-        logger.debug(f"Initialized actor: {actor_net}")
         policy_module = TensorDictModule(
             actor_net,
             in_keys=["observation"],
@@ -119,7 +113,6 @@ class BaseRL(RLTrainingLoop):
             },
             return_log_prob=True,  # we'll need the log-prob for the numerator of the importance weights
         )
-        logger.debug(f"Initialized policy: {policy_module}")
         # Critic and loss depend on the model
         target_net_updater = None
         if model in ["cql"]:
@@ -134,7 +127,6 @@ class BaseRL(RLTrainingLoop):
             td = env.rand_action(td)
             td = env.step(td)
             td = value_module(td)
-            logger.debug(f"Initialized value_module: {td}")
             # Loss CQL
             loss_module = CQLLoss(
                 actor_network=policy_module,

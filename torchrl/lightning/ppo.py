@@ -1,6 +1,9 @@
-"""Template for a PPO model on the pendulum env, for Lightning."""
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
-__all__ = ["PPOPendulum"]
+"""Template for a PPO model on the pendulum env, for Lightning."""
 
 import typing as ty
 
@@ -21,7 +24,9 @@ from ._base import BaseRL
 
 
 class PPO(BaseRL):
-    """Basic PPO Model. See: https://pytorch.org/rl/tutorials/coding_ppo.html#training-loop"""
+    """Basic PPO Model.
+
+    See: https://pytorch.org/rl/tutorials/coding_ppo.html#training-loop"""
 
     def __init__(
         self,

@@ -1,7 +1,9 @@
-# pylint: disable=abstract-method
-"""Create the `CollectorDataset` needed by the `pl.Trainer`."""
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
-__all__ = ["CollectorDataset"]
+"""Create the `CollectorDataset` needed by the `pl.Trainer`."""
 
 import typing as ty
 
@@ -71,7 +73,10 @@ class CollectorDataset(IterableDataset):
         """Yield experiences from `SyncDataCollector` and store them in `ReplayBuffer`."""
         i = 0
         for i, tensordict_data in enumerate(self.collector):
-            assert isinstance(tensordict_data, TensorDict)
+            if not isinstance(tensordict_data, TensorDict):
+                raise TypeError(
+                    f"Collector returned an object of type {type(tensordict_data)}, expected {TensorDict}."
+                )
             data_view: TensorDict = tensordict_data.reshape(-1)
             self.replay_buffer.extend(data_view.cpu())
             yield tensordict_data.to(self.device)

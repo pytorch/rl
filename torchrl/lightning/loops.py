@@ -1,7 +1,11 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 # pylint: disable=arguments-differ
 """This module creates a `RLTrainingLoop` base class for integration with `lightning`."""
 
-__all__ = ["RLTrainingLoop"]
 
 import typing as ty
 
@@ -33,13 +37,22 @@ from .collector import CollectorDataset
 
 
 class RLTrainingLoop(pl.LightningModule):
-    """RL training loop. See: https://pytorch.org/rl/tutorials/coding_ppo.html#training-loop"""
+    """RL training loop.
+
+    This class inherits from PyTorch Lightning `LightningModule` and makes use
+    of its API and hooks to correcly recreate the training loop shown at:
+    https://pytorch.org/rl/tutorials/coding_ppo.html#training-loop
+
+    By populating the correct hooks with the right code from the RL training loop,
+    one can create a new RL model by inheriting from this class, and their model
+    can then be trained using PyTorch Lightning's `Trainer`.
+    """
 
     def __init__(
         self,
         loss_module: TensorDictModule,
         policy_module: TensorDictModule,
-        value_module: TensorDictModule,
+        value_module: TensorDictModule = None,
         target_net_updater: SoftUpdate | None = None,
         lr: float = 3e-4,
         max_grad_norm: float = 1.0,
@@ -65,7 +78,7 @@ class RLTrainingLoop(pl.LightningModule):
             policy_module (TensorDictModule):
                 Policy module.
 
-            value_module (TensorDictModule):
+            value_module (TensorDictModule, optional):
                 Value module.
 
             target_net_updater (SoftUpdate, optional):
@@ -125,11 +138,11 @@ class RLTrainingLoop(pl.LightningModule):
                 Parameters for your environment.
                 Defaults to {}.
         """
-        super().__init__()
         if not HAS_PL:
             raise RuntimeError(
                 "PyTorch Lightning is not installed. Please run `pip install lightning`."
             )
+        super().__init__()
         self.save_hyperparameters(
             ignore=[
                 "base_env",
@@ -303,7 +316,7 @@ class RLTrainingLoop(pl.LightningModule):
             return
 
     def stop(self, msg: str = "") -> None:
-        """Change `Trainer` flat to make this stop."""
+        """Change `Trainer` flag to make this stop."""
         self.trainer.should_stop = True
 
     def manual_optimization_step(self, loss: Tensor) -> None:
@@ -312,7 +325,13 @@ class RLTrainingLoop(pl.LightningModule):
             return
         # Get optimizers
         optimizer = self.optimizers()
-        assert isinstance(optimizer, (torch.optim.Optimizer, LightningOptimizer))
+        if not isinstance(optimizer, (torch.optim.Optimizer, LightningOptimizer)):
+            raise TypeError(
+                f"Method `self.optimizers` returned a {type(optimizer)} object. "
+                "Please make sure that the method `self.configure_optimizers()` "
+                "returns the expected output as explained here: "
+                "https://lightning.ai/docs/pytorch/stable/common/lightning_module.html#configure-optimizers"
+            )
         # Zero grad before accumulating them
         optimizer.zero_grad()
         # Run backward
@@ -341,7 +360,13 @@ class RLTrainingLoop(pl.LightningModule):
         this will never be called by the `pl.Trainer` in the `on_train_epoch_end` hook.
         We have to call it manually in the `training_step`."""
         scheduler = self.lr_schedulers()
-        assert isinstance(scheduler, LRScheduler)
+        if not isinstance(scheduler, LRScheduler):
+            raise TypeError(
+                f"Method `self.lr_schedulers` returned a {type(scheduler)} object. "
+                "Please make sure that the method `self.configure_optimizers()` "
+                "returns the expected output as explained here: "
+                "https://lightning.ai/docs/pytorch/stable/common/lightning_module.html#configure-optimizers"
+            )
         try:
             # c = self.trainer.callback_metrics[self.lr_monitor]
             scheduler.step(self.trainer.global_step)
@@ -368,7 +393,25 @@ class RLTrainingLoop(pl.LightningModule):
         batch_idx: int = 0,
         tag: str = "train",
     ) -> Tensor:
-        """Common step."""
+        """This method will possible call the advantage module (if any),
+        then sample from the replay buffer and compute the loss.
+
+        Args:
+            batch (TensorDict):
+                Batch object returned by the data loader.
+
+            batch_idx (int, optional):
+                Batch ID. Defaults to 0.
+
+            tag (str, optional):
+                "train", "val" or "test". Defaults to "train".
+
+        Raises:
+            RuntimeError: If `self.frames_per_batch // self.sub_batch_size < 1`.
+
+        Returns:
+            Tensor: Loss.
+        """
         # Call advantage hook: this can also be an empty method
         self.advantage(batch)
         # Initialize loss
@@ -425,7 +468,10 @@ class RLTrainingLoop(pl.LightningModule):
                 loss = loss + value
                 loss_dict[f"{key}/{tag}"] = value
         # Sanity check and return
-        assert isinstance(loss, torch.Tensor)
+        if not isinstance(loss, torch.Tensor):
+            raise TypeError(
+                f"Loss expected to be {torch.Tensor} but found of type {type(loss)}."
+            )
         return loss, loss_dict
 
     def rollout(self, tag: str = "eval") -> None:
