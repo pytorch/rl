@@ -346,6 +346,8 @@ def make_replay_buffer(
                 slice_len=batch_seq_len,
                 strict_length=False,
                 traj_key=("collector", "traj_ids"),
+                cache_values=True,
+                compile=True,
             ),
             transform=transforms,
             batch_size=batch_size,
