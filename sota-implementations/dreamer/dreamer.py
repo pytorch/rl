@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import time
 
 import hydra
 import torch
@@ -121,18 +122,31 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_iter = cfg.logger.eval_iter
     eval_rollout_steps = cfg.logger.eval_rollout_steps
 
+    t_collect_init = time.time()
     for i, tensordict in enumerate(collector):
+        t_collect = time.time() - t_collect_init
+
+        t_preproc_init = time.time()
         pbar.update(tensordict.numel())
         current_frames = tensordict.numel()
         collected_frames += current_frames
 
         ep_reward = tensordict.get("episode_reward")[:, -1]
         replay_buffer.extend(tensordict.cpu())
+        t_preproc = time.time() - t_preproc_init
 
         if collected_frames >= init_random_frames:
+            t_loss_actor = 0.0
+            t_loss_critic = 0.0
+            t_loss_model = 0.0
+
             for _ in range(optim_steps_per_batch):
                 # sample from replay buffer
+                t_sample_init = time.time()
                 sampled_tensordict = replay_buffer.sample(batch_size)
+                t_sample = time.time() - t_sample_init
+
+                t_loss_model_init = time.time()
                 # update world model
                 with autocast(dtype=torch.float16):
                     model_loss_td, sampled_tensordict = world_model_loss(
@@ -150,8 +164,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 clip_grad_norm_(world_model.parameters(), grad_clip)
                 scaler1.step(world_model_opt)
                 scaler1.update()
+                t_loss_model += (time.time()-t_loss_model_init)
 
                 # update actor network
+                t_loss_actor_init = time.time()
                 with autocast(dtype=torch.float16):
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
 
@@ -161,8 +177,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 clip_grad_norm_(actor_model.parameters(), grad_clip)
                 scaler2.step(actor_opt)
                 scaler2.update()
+                t_loss_actor += time.time() - t_loss_actor_init
 
                 # update value network
+                t_loss_critic_init = time.time()
                 with autocast(dtype=torch.float16):
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
@@ -172,6 +190,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 clip_grad_norm_(value_model.parameters(), grad_clip)
                 scaler3.step(value_opt)
                 scaler3.update()
+                t_loss_critic += time.time() - t_loss_critic_init
 
         metrics_to_log = {"reward": ep_reward.mean().item()}
         if collected_frames >= init_random_frames:
@@ -181,6 +200,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "loss_model_reward": model_loss_td["loss_model_reward"].item(),
                 "loss_actor": actor_loss_td["loss_actor"].item(),
                 "loss_value": value_loss_td["loss_value"].item(),
+                "t_loss_actor": t_loss_actor,
+                "t_loss_critic": t_loss_critic,
+                "t_loss_model": t_loss_model,
+                "t_sample": t_sample,
+                "t_preproc": t_preproc,
+                "t_collect": t_collect,
             }
             metrics_to_log.update(loss_metrics)
 
@@ -202,7 +227,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 eval_metrics = {"eval/reward": eval_reward}
                 if logger is not None:
                     log_metrics(logger, eval_metrics, collected_frames)
-
+        t_collect_init = time.time()
 
 if __name__ == "__main__":
     main()
