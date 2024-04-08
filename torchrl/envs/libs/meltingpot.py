@@ -23,6 +23,14 @@ PLAYER_STR_FORMAT = "player_{index}"
 _WORLD_PREFIX = "WORLD."
 
 
+def _get_envs():
+    if not _has_meltingpot:
+        raise ImportError("meltingpot is not installed in your virtual environment.")
+    from meltingpot.substrate import SUBSTRATES
+
+    return list(SUBSTRATES)
+
+
 def _filter_global_state_from_dict(obs_dict: Dict, world: bool) -> Dict:  # noqa
     return {
         key: value
@@ -165,10 +173,7 @@ class MeltingpotWrapper(_EnvWrapper):
     def available_envs(cls):
         if not _has_meltingpot:
             return []
-        else:
-            from meltingpot.substrate import SUBSTRATES
-
-            return list(SUBSTRATES)
+        return _get_envs()
 
     def __init__(
         self,
