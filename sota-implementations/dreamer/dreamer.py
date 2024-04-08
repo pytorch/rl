@@ -21,6 +21,7 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.models.model_based import RSSMRollout
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
@@ -125,12 +126,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_iter = cfg.logger.eval_iter
     eval_rollout_steps = cfg.logger.eval_rollout_steps
 
-    print('Compiling')
-    def compile_rssms(module):
-        if isinstance(module, RSSMRollout) and not getattr(module, "_compiled", False):
-            module._compiled = True
-            module.rssm_prior.module = torch.compile(module.rssm_prior.module, backend="cudagraphs")
-            module.rssm_posterior.module = torch.compile(module.rssm_posterior.module, backend="cudagraphs")
+    if cfg.optimization.compile:
+        torchrl_logger.info('Compiling')
+        def compile_rssms(module):
+            if isinstance(module, RSSMRollout) and not getattr(module, "_compiled", False):
+                module._compiled = True
+                module.rssm_prior.module = torch.compile(module.rssm_prior.module, backend="cudagraphs")
+                module.rssm_posterior.module = torch.compile(module.rssm_posterior.module, backend="cudagraphs")
     world_model_loss.apply(compile_rssms)
 
     t_collect_init = time.time()

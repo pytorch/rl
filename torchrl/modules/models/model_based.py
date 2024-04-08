@@ -10,6 +10,7 @@ from tensordict.nn import NormalParamExtractor, TensorDictModule, TensorDictModu
 from torch import nn
 
 from torchrl.envs.utils import step_mdp
+from torchrl.modules import GRUCell
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
@@ -288,7 +289,7 @@ class RSSMPrior(nn.Module):
         super().__init__()
 
         # Prior
-        self.rnn = nn.GRUCell(hidden_dim, rnn_hidden_dim)
+        self.rnn = GRUCell(hidden_dim, rnn_hidden_dim)
         self.action_state_projector = nn.Sequential(nn.LazyLinear(hidden_dim), nn.ELU())
         self.rnn_to_prior_projector = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
