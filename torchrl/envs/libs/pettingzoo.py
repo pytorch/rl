@@ -9,6 +9,7 @@ import importlib
 import warnings
 from typing import Dict, List, Tuple, Union
 
+import packaging
 import torch
 from tensordict import TensorDictBase
 
@@ -270,7 +271,7 @@ class PettingZooWrapper(_EnvWrapper):
     ):
         import pettingzoo
 
-        if importlib.metadata.version("pettingzoo") != "1.24.3":
+        if packaging.version.parse(pettingzoo.__version__).base_version != "1.24.3":
             warnings.warn(
                 "PettingZoo in TorchRL is tested using version == 1.24.3 , "
                 "If you are using a different version and are experiencing compatibility issues,"
