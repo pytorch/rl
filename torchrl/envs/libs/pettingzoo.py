@@ -270,10 +270,10 @@ class PettingZooWrapper(_EnvWrapper):
     ):
         import pettingzoo
 
-        if importlib.metadata.version("pettingzoo") > "1.24.3":
+        if importlib.metadata.version("pettingzoo") != "1.24.3":
             warnings.warn(
                 "PettingZoo in TorchRL is tested using version == 1.24.3 , "
-                "If you are using a later version and are experiencing backwards compatibility issues,"
+                "If you are using a different version and are experiencing compatibility issues,"
                 "please raise an issue in the TorchRL github."
             )
 
