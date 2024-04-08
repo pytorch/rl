@@ -38,7 +38,7 @@ from torchrl.envs.transforms.transforms import (
     ExcludeTransform,
     RenameTransform,
     StepCounter,
-    TensorDictPrimer,
+    TensorDictPrimer, DeviceCastTransform,
 )
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
 from torchrl.modules import (
@@ -301,6 +301,7 @@ def make_replay_buffer(
     batch_seq_len,
     buffer_size=1000000,
     buffer_scratch_dir=None,
+    device=None,
     prefetch=3,
     pixel_obs=True,
     grayscale=True,
@@ -311,7 +312,7 @@ def make_replay_buffer(
         if buffer_scratch_dir is None
         else nullcontext(buffer_scratch_dir)
     ) as scratch_dir:
-        transforms = None
+        transforms = Compose()
         if pixel_obs:
 
             def check_no_pixels(data):
@@ -331,6 +332,7 @@ def make_replay_buffer(
             transforms.append(
                 Resize(image_size, image_size, in_keys=["pixels", ("next", "pixels")])
             )
+        transforms.append(DeviceCastTransform(device=device))
 
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
