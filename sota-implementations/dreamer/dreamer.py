@@ -177,6 +177,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if use_autocast:
                     scaler1.scale(loss_world_model).backward()
                     scaler1.unscale_(world_model_opt)
+                else:
+                    loss_world_model.backward()
                 clip_grad_norm_(world_model.parameters(), grad_clip)
                 if use_autocast:
                     scaler1.step(world_model_opt)
@@ -192,6 +194,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if use_autocast:
                     scaler2.scale(actor_loss_td["loss_actor"]).backward()
                     scaler2.unscale_(actor_opt)
+                else:
+                    actor_loss_td["loss_actor"].backward()
                 clip_grad_norm_(actor_model.parameters(), grad_clip)
                 if use_autocast:
                     scaler2.step(actor_opt)
@@ -207,6 +211,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if use_autocast:
                     scaler3.scale(value_loss_td["loss_value"]).backward()
                     scaler3.unscale_(value_opt)
+                else:
+                    value_loss_td["loss_value"].backward()
                 clip_grad_norm_(value_model.parameters(), grad_clip)
                 if use_autocast:
                     scaler3.step(value_opt)
