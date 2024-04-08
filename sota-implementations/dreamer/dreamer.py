@@ -99,6 +99,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.grayscale,
         image_size=cfg.env.image_size,
+        use_autocast=cfg.optimization.use_autocast,
     )
 
     # Training loop
@@ -180,11 +181,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         + model_loss_td["loss_model_reco"]
                         + model_loss_td["loss_model_reward"]
                     )
-                    # if use_autocast:
-                    #     assert loss_world_model.dtype in (
-                    #         torch.bfloat16,
-                    #         torch.float16,
-                    #     ), model_loss_td
+                    if use_autocast:
+                        assert loss_world_model.dtype in (
+                            torch.bfloat16,
+                            torch.float16,
+                        ), model_loss_td
 
                 world_model_opt.zero_grad()
                 if use_autocast:

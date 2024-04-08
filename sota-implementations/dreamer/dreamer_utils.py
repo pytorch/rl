@@ -43,7 +43,7 @@ from torchrl.envs.transforms.transforms import (
     ExcludeTransform,
     RenameTransform,
     StepCounter,
-    TensorDictPrimer,
+    TensorDictPrimer, DTypeCastTransform,
 )
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
 from torchrl.modules import (
@@ -301,6 +301,7 @@ def make_replay_buffer(
     pixel_obs=True,
     grayscale=True,
     image_size,
+use_autocast,
 ):
     with (
         tempfile.TemporaryDirectory()
@@ -328,6 +329,8 @@ def make_replay_buffer(
                 Resize(image_size, image_size, in_keys=["pixels", ("next", "pixels")])
             )
         transforms.append(DeviceCastTransform(device=device))
+        if use_autocast:
+            transforms.append(DTypeCastTransform(dtype_in=torch.float32, dtype_out=torch.float16))
 
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
