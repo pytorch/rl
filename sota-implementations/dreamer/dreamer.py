@@ -21,7 +21,6 @@ from dreamer_utils import (
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import WorldModelWrapper
 from torchrl.modules.models.model_based import RSSMRollout
 from torchrl._utils import logger as torchrl_logger
 
@@ -129,9 +128,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if cfg.optimization.compile:
         torchrl_logger.info('Compiling')
         def compile_rssms(module):
-            if isinstance(module, WorldModelWrapper) and not getattr(module, "_compiled", False):
+            if isinstance(module, RSSMRollout) and not getattr(module, "_compiled", False):
                 module._compiled = True
-                module[0] = torch.compile(module[0], backend="cudagraphs")
+                module.rssm_prior.module = torch.compile(module.rssm_prior.module, backend="cudagraphs")
+                # module.rssm_posterior.module = torch.compile(module.rssm_posterior.module, backend="cudagraphs")
         world_model_loss.apply(compile_rssms)
 
     t_collect_init = time.time()
