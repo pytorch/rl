@@ -40,7 +40,7 @@ class RLTrainingLoop(pl.LightningModule):
         loss_module: TensorDictModule,
         policy_module: TensorDictModule,
         value_module: TensorDictModule,
-        target_net_updater: ty.Optional[SoftUpdate] = None,
+        target_net_updater: SoftUpdate | None = None,
         lr: float = 3e-4,
         max_grad_norm: float = 1.0,
         frame_skip: int = 1,
