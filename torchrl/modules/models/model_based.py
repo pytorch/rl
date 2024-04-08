@@ -6,7 +6,7 @@ import warnings
 
 import torch
 from packaging import version
-from tensordict.nn import NormalParamExtractor, TensorDictModule, TensorDictModuleBase
+from tensordict.nn import NormalParamExtractor, TensorDictModule, TensorDictModuleBase, TensorDictSequential
 from torch import nn
 
 from torchrl.envs.utils import step_mdp
@@ -208,7 +208,7 @@ class RSSMRollout(TensorDictModuleBase):
 
     def __init__(self, rssm_prior: TensorDictModule, rssm_posterior: TensorDictModule):
         super().__init__()
-        _module = SafeSequential(rssm_prior, rssm_posterior)
+        _module = TensorDictSequential(rssm_prior, rssm_posterior)
         self.in_keys = _module.in_keys
         self.out_keys = _module.out_keys
         self.rssm_prior = rssm_prior
@@ -240,12 +240,10 @@ class RSSMRollout(TensorDictModuleBase):
         for t in range(time_steps):
             # samples according to p(s_{t+1} | s_t, a_t, b_t)
             # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
-            print("_tensordict", _tensordict)
             self.rssm_prior(_tensordict)
 
             # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
             # [("next", "belief"), ("next", "encoded_latents")] -> [("next", "posterior_mean"), ("next", "posterior_std"), ("next", "state")]
-            print("_tensordict", _tensordict)
             self.rssm_posterior(_tensordict)
 
             tensordict_out.append(_tensordict)

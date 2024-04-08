@@ -83,10 +83,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     value_loss = DreamerValueLoss(value_model, discount_loss=True)
 
-    # world_model_loss = torch.compile(world_model_loss)
-    # actor_loss = torch.compile(actor_loss)
-    # value_loss = torch.compile(value_loss)
-
     # Make collector
     collector = make_collector(cfg, train_env, policy)
 
@@ -133,7 +129,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 module._compiled = True
                 module.rssm_prior.module = torch.compile(module.rssm_prior.module, backend="cudagraphs")
                 module.rssm_posterior.module = torch.compile(module.rssm_posterior.module, backend="cudagraphs")
-    world_model_loss.apply(compile_rssms)
+        world_model_loss.apply(compile_rssms)
 
     t_collect_init = time.time()
     for i, tensordict in enumerate(collector):
