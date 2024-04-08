@@ -65,7 +65,7 @@ class CollectorDataset(IterableDataset):
             batch_size=self.batch_size,
         )
         # States
-        self.length: ty.Optional[int] = None
+        self.length: int  | None = None
 
     def __iter__(self) -> ty.Iterator[TensorDict]:
         """Yield experiences from `SyncDataCollector` and store them in `ReplayBuffer`."""
