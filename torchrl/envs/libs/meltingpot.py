@@ -26,9 +26,9 @@ _WORLD_PREFIX = "WORLD."
 def _get_envs():
     if not _has_meltingpot:
         raise ImportError("meltingpot is not installed in your virtual environment.")
-    from meltingpot.substrate import SUBSTRATES
+    import meltingpot
 
-    return list(SUBSTRATES)
+    return list(meltingpot.substrate.SUBSTRATES)
 
 
 def _filter_global_state_from_dict(obs_dict: Dict, world: bool) -> Dict:  # noqa

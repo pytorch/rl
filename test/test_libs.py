@@ -3453,7 +3453,7 @@ class TestSmacv2:
 
 @pytest.mark.skipif(not _has_meltingpot, reason="Meltingpot not found")
 class TestMeltingpot:
-    @pytest.mark.parametrize("substrate", MeltingpotEnv.available_envs)
+    @pytest.mark.parametrize("substrate", MeltingpotWrapper.available_envs)
     def test_all_envs(self, substrate):
         env = MeltingpotEnv(substrate=substrate)
         check_env_specs(env)
