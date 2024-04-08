@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from tensordict.nn import InteractionType
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import TensorDictReplayBuffer
+from torchrl.data import SliceSampler, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 
 from torchrl.data.tensor_specs import CompositeSpec, UnboundedContinuousTensorSpec
@@ -34,7 +34,12 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
 )
-from torchrl.envs.transforms.transforms import TensorDictPrimer
+from torchrl.envs.transforms.transforms import (
+    ExcludeTransform,
+    RenameTransform,
+    StepCounter,
+    TensorDictPrimer,
+)
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
 from torchrl.modules import (
     MLP,
@@ -74,16 +79,22 @@ def transform_env(cfg, env, parallel_envs, dummy=False):
     env = TransformedEnv(env)
     if cfg.env.from_pixels:
         # transforms pixel from 0-255 to 0-1 (uint8 to float32)
-        env.append_transform(ToTensorImage(from_int=True))
+        env.append_transform(
+            RenameTransform(in_keys=["pixels"], out_keys=["pixels_int"])
+        )
+        env.append_transform(
+            ToTensorImage(from_int=True, in_keys=["pixels_int"], out_keys=["pixels"])
+        )
         if cfg.env.grayscale:
             env.append_transform(GrayScale())
 
-        img_size = cfg.env.image_size
-        env.append_transform(Resize(img_size, img_size))
+        image_size = cfg.env.image_size
+        env.append_transform(Resize(image_size, image_size))
 
     env.append_transform(DoubleToFloat())
     env.append_transform(RewardSum())
     env.append_transform(FrameSkipTransform(cfg.env.frame_skip))
+    env.append_transform(StepCounter(cfg.env.horizon))
     if dummy:
         default_dict = {
             "state": UnboundedContinuousTensorSpec(shape=(cfg.networks.state_dim)),
@@ -278,10 +289,6 @@ def make_collector(cfg, train_env, actor_model_explore):
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.device,
-        reset_at_each_iter=True,
-        # postproc=ExcludeTransform(
-        #     "belief", "state", ("next", "belief"), ("next", "state"), "encoded_latents"
-        # ),
     )
     collector.set_seed(cfg.env.seed)
 
@@ -290,34 +297,41 @@ def make_collector(cfg, train_env, actor_model_explore):
 
 def make_replay_buffer(
     batch_size,
+    *,
     batch_seq_len,
     buffer_size=1000000,
     buffer_scratch_dir=None,
     device="cpu",
     prefetch=3,
     pixel_obs=True,
-    cast_to_uint8=True,
+    grayscale=True,
+    image_size,
 ):
     with (
         tempfile.TemporaryDirectory()
         if buffer_scratch_dir is None
         else nullcontext(buffer_scratch_dir)
     ) as scratch_dir:
-        transforms = []
-        crop_seq = RandomCropTensorDict(sub_seq_len=batch_seq_len, sample_dim=-1)
-        transforms.append(crop_seq)
+        transforms = None
+        if pixel_obs:
 
-        if pixel_obs and cast_to_uint8:
-            # from 0-255 to 0-1
-            norm_obs = ObservationNorm(
-                loc=0,
-                scale=255,
-                standard_normal=True,
-                in_keys=["pixels", ("next", "pixels")],
+            def check_no_pixels(data):
+                assert "pixels" not in data.keys()
+                return data
+
+            transforms = Compose(
+                ExcludeTransform("pixels", ("next", "pixels"), inverse=True),
+                check_no_pixels,  # will be called only during forward
+                ToTensorImage(
+                    in_keys=["pixels_int", ("next", "pixels_int")],
+                    out_keys=["pixels", ("next", "pixels")],
+                ),
             )
-            transforms.append(norm_obs)
-
-        transforms = Compose(*transforms)
+            if grayscale:
+                transforms.append(GrayScale(in_keys=["pixels", ("next", "pixels")]))
+            transforms.append(
+                Resize(image_size, image_size, in_keys=["pixels", ("next", "pixels")])
+            )
 
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
@@ -326,6 +340,12 @@ def make_replay_buffer(
                 buffer_size,
                 scratch_dir=scratch_dir,
                 device=device,
+                ndim=2,
+            ),
+            sampler=SliceSampler(
+                slice_len=batch_seq_len,
+                strict_length=False,
+                traj_key=("collector", "traj_ids"),
             ),
             transform=transforms,
             batch_size=batch_size,
@@ -623,12 +643,6 @@ def _dreamer_make_world_model(
         reward_model,
     )
     return world_model
-
-
-def cast_to_uint8(tensordict):
-    tensordict["pixels"] = (tensordict["pixels"] * 255).to(torch.uint8)
-    tensordict["next", "pixels"] = (tensordict["next", "pixels"] * 255).to(torch.uint8)
-    return tensordict
 
 
 def log_metrics(logger, metrics, step):

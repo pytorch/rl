@@ -8,7 +8,6 @@ import torch
 import torch.cuda
 import tqdm
 from dreamer_utils import (
-    cast_to_uint8,
     log_metrics,
     make_collector,
     make_dreamer,
@@ -90,7 +89,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         buffer_scratch_dir=cfg.replay_buffer.scratch_dir,
         device=cfg.networks.device,
         pixel_obs=cfg.env.from_pixels,
-        cast_to_uint8=cfg.replay_buffer.uint8_casting,
+        grayscale=cfg.env.grayscale,
+        image_size=cfg.env.image_size,
     )
 
     # Training loop
@@ -113,8 +113,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     batch_size = cfg.optimization.batch_size
     optim_steps_per_batch = cfg.optimization.optim_steps_per_batch
     grad_clip = cfg.optimization.grad_clip
-    uint8_casting = cfg.replay_buffer.uint8_casting
-    pixel_obs = cfg.env.from_pixels
     frames_per_batch = cfg.collector.frames_per_batch
     eval_iter = cfg.logger.eval_iter
     eval_rollout_steps = cfg.logger.eval_rollout_steps
@@ -123,9 +121,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(tensordict.numel())
         current_frames = tensordict.numel()
         collected_frames += current_frames
-
-        if uint8_casting and pixel_obs:
-            tensordict = cast_to_uint8(tensordict)
 
         ep_reward = tensordict.get("episode_reward")[:, -1]
         replay_buffer.extend(tensordict.cpu())

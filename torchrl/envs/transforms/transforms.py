@@ -5668,6 +5668,8 @@ class ExcludeTransform(Transform):
     Args:
         *excluded_keys (iterable of NestedKey): The name of the keys to exclude. If the key is
             not present, it is simply ignored.
+        inverse (bool, optional): if ``True``, the exclusion will occur during the ``inv`` call.
+            Defaults to ``False``.
 
     Examples:
         >>> import gymnasium
@@ -5696,7 +5698,7 @@ class ExcludeTransform(Transform):
 
     """
 
-    def __init__(self, *excluded_keys):
+    def __init__(self, *excluded_keys, inverse: bool = False):
         super().__init__()
         try:
             excluded_keys = unravel_key_list(excluded_keys)
@@ -5705,35 +5707,46 @@ class ExcludeTransform(Transform):
                 "excluded keys must be a list or tuple of strings or tuples of strings."
             )
         self.excluded_keys = excluded_keys
+        self.inverse = inverse
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return tensordict.exclude(*self.excluded_keys)
+        if not self.inverse:
+            return tensordict.exclude(*self.excluded_keys)
+        return tensordict
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.inverse:
+            return tensordict.exclude(*self.excluded_keys)
+        return tensordict
 
     forward = _call
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
-        return tensordict_reset.exclude(*self.excluded_keys)
+        if not self.inverse:
+            return tensordict.exclude(*self.excluded_keys)
+        return tensordict
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
-        full_done_spec = output_spec["full_done_spec"]
-        full_reward_spec = output_spec["full_reward_spec"]
-        full_observation_spec = output_spec["full_observation_spec"]
-        for key in self.excluded_keys:
-            # done_spec
-            if unravel_key(key) in list(full_done_spec.keys(True, True)):
-                del full_done_spec[key]
-                continue
-            # reward_spec
-            if unravel_key(key) in list(full_reward_spec.keys(True, True)):
-                del full_reward_spec[key]
-                continue
-            # observation_spec
-            if unravel_key(key) in list(full_observation_spec.keys(True, True)):
-                del full_observation_spec[key]
-                continue
-            raise KeyError(f"Key {key} not found in the environment outputs.")
+        if not self.inverse:
+            full_done_spec = output_spec["full_done_spec"]
+            full_reward_spec = output_spec["full_reward_spec"]
+            full_observation_spec = output_spec["full_observation_spec"]
+            for key in self.excluded_keys:
+                # done_spec
+                if unravel_key(key) in list(full_done_spec.keys(True, True)):
+                    del full_done_spec[key]
+                    continue
+                # reward_spec
+                if unravel_key(key) in list(full_reward_spec.keys(True, True)):
+                    del full_reward_spec[key]
+                    continue
+                # observation_spec
+                if unravel_key(key) in list(full_observation_spec.keys(True, True)):
+                    del full_observation_spec[key]
+                    continue
+                raise KeyError(f"Key {key} not found in the environment outputs.")
         return output_spec
 
 

@@ -29,7 +29,6 @@ from torchrl._utils import (
     _CKPT_BACKEND,
     implement_for,
     logger as torchrl_logger,
-    VERBOSE,
 )
 from torchrl.data.replay_buffers.utils import _is_int, INT_CLASSES
 
@@ -913,8 +912,7 @@ class LazyTensorStorage(TensorStorage):
         self,
         data: Union[TensorDictBase, torch.Tensor, "PyTree"],  # noqa: F821
     ) -> None:
-        if VERBOSE:
-            torchrl_logger.info("Creating a TensorStorage...")
+        torchrl_logger.debug("Creating a TensorStorage...")
         if self.device == "auto":
             self.device = data.device
 
@@ -1090,8 +1088,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         self._len = state_dict["_len"]
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
-        if VERBOSE:
-            torchrl_logger.info("Creating a MemmapStorage...")
+        torchrl_logger.debug("Creating a MemmapStorage...")
         if self.device == "auto":
             self.device = data.device
         if self.device.type != "cpu":
@@ -1116,11 +1113,10 @@ class LazyMemmapStorage(LazyTensorStorage):
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
-                if VERBOSE:
-                    filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                    torchrl_logger.info(
-                        f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
-                    )
+                filesize = os.path.getsize(tensor.filename) / 1024 / 1024
+                torchrl_logger.debug(
+                    f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
+                )
         else:
             out = _init_pytree(self.scratch_dir, max_size_along_dim0, data)
         self._storage = out
@@ -1476,11 +1472,10 @@ def _init_pytree_common(tensor_path, scratch_dir, max_size_fn, tensor):
         filename=total_tensor_path,
         dtype=tensor.dtype,
     )
-    if VERBOSE:
-        filesize = os.path.getsize(out.filename) / 1024 / 1024
-        torchrl_logger.info(
-            f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
-        )
+    filesize = os.path.getsize(out.filename) / 1024 / 1024
+    torchrl_logger.debug(
+        f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
+    )
     return out
 
 

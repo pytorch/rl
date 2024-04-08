@@ -7,6 +7,7 @@ env:
   from_pixels: True
   grayscale: False
   image_size : 64
+  horizon: 500
 
 collector:
   total_frames: 5_000_000
@@ -41,7 +42,6 @@ networks:
 
 
 replay_buffer: 
-  uint8_casting: True
   buffer_size: 20000
   batch_size: 50
   scratch_dir: ${logger.exp_name}_${env.seed}
