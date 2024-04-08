@@ -301,7 +301,6 @@ def make_replay_buffer(
     batch_seq_len,
     buffer_size=1000000,
     buffer_scratch_dir=None,
-    device="cpu",
     prefetch=3,
     pixel_obs=True,
     grayscale=True,
@@ -339,7 +338,7 @@ def make_replay_buffer(
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=scratch_dir,
-                device=device,
+                device="cpu",
                 ndim=2,
             ),
             sampler=SliceSampler(

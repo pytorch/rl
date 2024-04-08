@@ -87,7 +87,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         batch_seq_len=cfg.optimization.batch_length,
         buffer_size=cfg.replay_buffer.buffer_size,
         buffer_scratch_dir=cfg.replay_buffer.scratch_dir,
-        device=cfg.networks.device,
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.grayscale,
         image_size=cfg.env.image_size,
