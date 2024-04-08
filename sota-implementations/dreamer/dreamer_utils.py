@@ -124,7 +124,7 @@ def make_environments(cfg, parallel_envs=1):
     train_env = transform_env(cfg, train_env)
     train_env.set_seed(cfg.env.seed)
     eval_env = ParallelEnv(
-        parallel_envs,
+        1,
         EnvCreator(func),
         serial_for_single=True,
     )
