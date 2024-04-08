@@ -31,7 +31,7 @@ from packaging.version import parse
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
 
-LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "LOGGING")
+LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "INFO")
 logger = logging.getLogger("torchrl")
 logger.setLevel(getattr(logging, LOGGING_LEVEL))
 # Disable propagation to the root logger
