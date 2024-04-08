@@ -28,7 +28,7 @@ optimization:
   value_lr: 8e-5
   kl_scale: 1.0
   free_nats: 3.0
-  optim_steps_per_batch: 80
+  optim_steps_per_batch: 640
   gamma: 0.99
   lambda: 0.95
   imagination_horizon: 15
