@@ -165,13 +165,13 @@ This demo was presented at ICML 2022 on the industry demo day.
 #       │   └── "trainers.py"
 #       └── "version.py"
 #
-# Unlike other domains, RL is less about media than *algorithms*. As such, it
+# Unlike other domains, RL is less about media than *sota-implementations*. As such, it
 # is harder to make truly independent components.
 #
 # What TorchRL is not:
 #
-# * a collection of algorithms: we do not intend to provide SOTA implementations of RL algorithms,
-#   but we provide these algorithms only as examples of how to use the library.
+# * a collection of sota-implementations: we do not intend to provide SOTA implementations of RL sota-implementations,
+#   but we provide these sota-implementations only as examples of how to use the library.
 #
 # * a research framework: modularity in TorchRL comes in two flavours. First, we try
 #   to build re-usable components, such that they can be easily swapped with each other.
@@ -543,21 +543,30 @@ print(tensordict)
 # Functional Programming (Ensembling / Meta-RL)
 # ----------------------------------------------
 
-from tensordict.nn import make_functional
+from tensordict import TensorDict
 
-params = make_functional(sequence)
-len(list(sequence.parameters()))  # functional modules have no parameters
-
-###############################################################################
-
-sequence(tensordict, params)
+params = TensorDict.from_module(sequence)
+print("extracted params", params)
 
 ###############################################################################
+# functional call using tensordict:
 
+with params.to_module(sequence):
+    sequence(tensordict)
+
+###############################################################################
+# Using vectorized map for model ensembling
 from torch import vmap
 
 params_expand = params.expand(4)
-tensordict_exp = vmap(sequence, (None, 0))(tensordict, params_expand)
+
+
+def exec_sequence(params, data):
+    with params.to_module(sequence):
+        return sequence(data)
+
+
+tensordict_exp = vmap(exec_sequence, (0, None))(params_expand, tensordict)
 print(tensordict_exp)
 
 ###############################################################################

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
 from torch import nn
@@ -248,6 +248,13 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             # For buffers, a cloned expansion (or equivalently a repeat) is returned.
 
             def _compare_and_expand(param):
+                if is_tensor_collection(param):
+                    return param._apply_nest(
+                        _compare_and_expand,
+                        batch_size=[expand_dim, *param.shape],
+                        filter_empty=False,
+                        call_on_nested=True,
+                    )
                 if not isinstance(param, nn.Parameter):
                     buffer = param.expand(expand_dim, *param.shape).clone()
                     return buffer
@@ -257,7 +264,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                     # is called:
                     return expanded_param
                 else:
-                    p_out = param.repeat(expand_dim, *[1 for _ in param.shape])
+                    p_out = param.expand(expand_dim, *param.shape).clone()
                     p_out = nn.Parameter(
                         p_out.uniform_(
                             p_out.min().item(), p_out.max().item()
@@ -270,6 +277,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                     _compare_and_expand,
                     batch_size=[expand_dim, *params.shape],
                     filter_empty=False,
+                    call_on_nested=True,
                 ),
                 no_convert=True,
             )

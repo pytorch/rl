@@ -31,6 +31,14 @@ jobs:
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
         # Commenting these out for now because the GPU test are not working inside docker

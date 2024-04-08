@@ -31,10 +31,16 @@ jobs:
       docker-image: "nvidia/cuda:12.2.0-devel-ubuntu22.04"
       timeout: 90
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
         export CU_VERSION="cpu"
-        export TORCH_VERSION=nightly
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
@@ -45,7 +51,7 @@ jobs:
   tests-gpu:
     strategy:
       matrix:
-        python_version: ["3.8"]
+        python_version: ["3.10"]
         cuda_arch_version: ["12.1"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
@@ -62,7 +68,13 @@ jobs:
         # Commenting these out for now because the GPU test are not working inside docker
         export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
         export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
-        export TORCH_VERSION=nightly
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
         # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
         #export CU_VERSION="cpu"
 
@@ -90,7 +102,13 @@ jobs:
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu116"
         export TAR_OPTIONS="--no-same-owner"
-        export UPLOAD_CHANNEL="nightly"
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
         export TF_CPP_MIN_LOG_LEVEL=0
 
 
@@ -101,7 +119,7 @@ jobs:
   tests-optdeps:
     strategy:
       matrix:
-        python_version: ["3.9"] # "3.8", "3.9", "3.10", "3.11"
+        python_version: ["3.10"] # "3.8", "3.9", "3.10", "3.11"
         cuda_arch_version: ["12.1"] # "11.6", "11.7"
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
@@ -121,6 +139,14 @@ jobs:
         # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
         #export CU_VERSION="cpu"
 
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
 
@@ -130,7 +156,7 @@ jobs:
   tests-stable-gpu:
     strategy:
       matrix:
-        python_version: ["3.8"] # "3.8", "3.9", "3.10", "3.11"
+        python_version: ["3.10"] # "3.8", "3.9", "3.10", "3.11"
         cuda_arch_version: ["11.8"] # "11.6", "11.7"
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
@@ -147,7 +173,15 @@ jobs:
         # Commenting these out for now because the GPU test are not working inside docker
         export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
         export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
-        export TORCH_VERSION=stable
+
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
         #export CU_VERSION="cpu"
 

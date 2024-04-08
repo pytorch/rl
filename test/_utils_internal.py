@@ -24,7 +24,7 @@ from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
 from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
 from torchrl.envs.libs.envpool import _has_envpool
-from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv
 from torchrl.envs.transforms import (
     Compose,
     RewardClipping,
@@ -35,41 +35,72 @@ from torchrl.envs.transforms import (
 # Specified for test_utils.py
 __version__ = "0.3"
 
-# Default versions of the environments.
-CARTPOLE_VERSIONED = "CartPole-v1"
-HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
-PENDULUM_VERSIONED = "Pendulum-v1"
-PONG_VERSIONED = "ALE/Pong-v5"
+
+def CARTPOLE_VERSIONED():
+    # load gym
+    if gym_backend() is not None:
+        _set_gym_environments()
+        return _CARTPOLE_VERSIONED
+
+
+def HALFCHEETAH_VERSIONED():
+    # load gym
+    if gym_backend() is not None:
+        _set_gym_environments()
+        return _HALFCHEETAH_VERSIONED
+
+
+def PONG_VERSIONED():
+    # load gym
+    if gym_backend() is not None:
+        _set_gym_environments()
+        return _PONG_VERSIONED
+
+
+def PENDULUM_VERSIONED():
+    # load gym
+    if gym_backend() is not None:
+        _set_gym_environments()
+        return _PENDULUM_VERSIONED
+
+
+def _set_gym_environments():
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED
+
+    _CARTPOLE_VERSIONED = None
+    _HALFCHEETAH_VERSIONED = None
+    _PENDULUM_VERSIONED = None
+    _PONG_VERSIONED = None
 
 
 @implement_for("gym", None, "0.21.0")
 def _set_gym_environments():  # noqa: F811
-    global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED
 
-    CARTPOLE_VERSIONED = "CartPole-v0"
-    HALFCHEETAH_VERSIONED = "HalfCheetah-v2"
-    PENDULUM_VERSIONED = "Pendulum-v0"
-    PONG_VERSIONED = "Pong-v4"
+    _CARTPOLE_VERSIONED = "CartPole-v0"
+    _HALFCHEETAH_VERSIONED = "HalfCheetah-v2"
+    _PENDULUM_VERSIONED = "Pendulum-v0"
+    _PONG_VERSIONED = "Pong-v4"
 
 
 @implement_for("gym", "0.21.0", None)
 def _set_gym_environments():  # noqa: F811
-    global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED
 
-    CARTPOLE_VERSIONED = "CartPole-v1"
-    HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
-    PENDULUM_VERSIONED = "Pendulum-v1"
-    PONG_VERSIONED = "ALE/Pong-v5"
+    _CARTPOLE_VERSIONED = "CartPole-v1"
+    _HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
+    _PENDULUM_VERSIONED = "Pendulum-v1"
+    _PONG_VERSIONED = "ALE/Pong-v5"
 
 
 @implement_for("gymnasium")
 def _set_gym_environments():  # noqa: F811
-    global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED
 
-    CARTPOLE_VERSIONED = "CartPole-v1"
-    HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
-    PENDULUM_VERSIONED = "Pendulum-v1"
-    PONG_VERSIONED = "ALE/Pong-v5"
+    _CARTPOLE_VERSIONED = "CartPole-v1"
+    _HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
+    _PENDULUM_VERSIONED = "Pendulum-v1"
+    _PONG_VERSIONED = "ALE/Pong-v5"
 
 
 if _has_gym:
@@ -171,7 +202,7 @@ def _make_envs(
             return GymEnv(env_name, frame_skip=frame_skip, device=device)
 
     else:
-        if env_name == PONG_VERSIONED:
+        if env_name == PONG_VERSIONED():
 
             def create_env_fn():
                 base_env = GymEnv(env_name, frame_skip=frame_skip, device=device)
@@ -250,7 +281,7 @@ def _make_multithreaded_env(
 
     torch.manual_seed(0)
     multithreaded_kwargs = (
-        {"frame_skip": frame_skip} if env_name == PONG_VERSIONED else {}
+        {"frame_skip": frame_skip} if env_name == PONG_VERSIONED() else {}
     )
     env_multithread = MultiThreadedEnv(
         N,
@@ -274,7 +305,7 @@ def _make_multithreaded_env(
 
 def get_transform_out(env_name, transformed_in, obs_key=None):
 
-    if env_name == PONG_VERSIONED:
+    if env_name == PONG_VERSIONED():
         if obs_key is None:
             obs_key = "pixels"
 

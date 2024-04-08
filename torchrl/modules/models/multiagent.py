@@ -2,20 +2,155 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
+import abc
 from typing import Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 
 import torch
-from torch import nn
 
+from tensordict import TensorDict
+from torch import nn
 from torchrl.data.utils import DEVICE_TYPING
 
 from torchrl.modules.models import ConvNet, MLP
+from torchrl.modules.models.utils import _reset_parameters_recursive
 
 
-class MultiAgentMLP(nn.Module):
+class MultiAgentNetBase(nn.Module):
+    """A base class for multi-agent networks."""
+
+    _empty_net: nn.Module
+
+    def __init__(
+        self,
+        *,
+        n_agents: int,
+        centralised: bool,
+        share_params: bool,
+        agent_dim: int,
+        vmap_randomness: str = "different",
+        **kwargs,
+    ):
+        super().__init__()
+
+        self.n_agents = n_agents
+        self.share_params = share_params
+        self.centralised = centralised
+        self.agent_dim = agent_dim
+        self._vmap_randomness = vmap_randomness
+
+        agent_networks = [
+            self._build_single_net(**kwargs)
+            for _ in range(self.n_agents if not self.share_params else 1)
+        ]
+        initialized = True
+        for p in agent_networks[0].parameters():
+            if isinstance(p, torch.nn.UninitializedParameter):
+                initialized = False
+                break
+        self.initialized = initialized
+        self._make_params(agent_networks)
+        kwargs["device"] = "meta"
+        self.__dict__["_empty_net"] = self._build_single_net(**kwargs)
+
+    @property
+    def vmap_randomness(self):
+        if self.initialized:
+            return self._vmap_randomness
+        # The class _BatchedUninitializedParameter and buffer are not batched
+        # by vmap so using "different" will raise an exception because vmap can't find
+        # the batch dimension. This is ok though since we won't have the same config
+        # for every element (as one might expect from "same").
+        return "same"
+
+    def _make_params(self, agent_networks):
+        if self.share_params:
+            self.params = TensorDict.from_module(agent_networks[0], as_module=True)
+        else:
+            self.params = TensorDict.from_modules(*agent_networks, as_module=True)
+
+    @abc.abstractmethod
+    def _build_single_net(self, *, device, **kwargs):
+        ...
+
+    @abc.abstractmethod
+    def _pre_forward_check(self, inputs):
+        ...
+
+    @staticmethod
+    def vmap_func_module(module, *args, **kwargs):
+        def exec_module(params, *input):
+            with params.to_module(module):
+                return module(*input)
+
+        return torch.vmap(exec_module, *args, **kwargs)
+
+    def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
+        if len(inputs) > 1:
+            inputs = torch.cat([*inputs], -1)
+        else:
+            inputs = inputs[0]
+
+        inputs = self._pre_forward_check(inputs)
+        # If parameters are not shared, each agent has its own network
+        if not self.share_params:
+            if self.centralised:
+                output = self.vmap_func_module(
+                    self._empty_net, (0, None), (-2,), randomness=self.vmap_randomness
+                )(self.params, inputs)
+            else:
+                output = self.vmap_func_module(
+                    self._empty_net,
+                    (0, self.agent_dim),
+                    (-2,),
+                    randomness=self.vmap_randomness,
+                )(self.params, inputs)
+
+        # If parameters are shared, agents use the same network
+        else:
+            with self.params.to_module(self._empty_net):
+                output = self._empty_net(inputs)
+
+            if self.centralised:
+                # If the parameters are shared, and it is centralised, all agents will have the same output
+                # We expand it to maintain the agent dimension, but values will be the same for all agents
+                n_agent_outputs = output.shape[-1]
+                output = output.view(*output.shape[:-1], n_agent_outputs)
+                output = output.unsqueeze(-2)
+                output = output.expand(
+                    *output.shape[:-2], self.n_agents, n_agent_outputs
+                )
+
+        if output.shape[-2] != (self.n_agents):
+            raise ValueError(
+                f"Multi-agent network expected output with shape[-2]={self.n_agents}"
+                f" but got {output.shape}"
+            )
+
+        return output
+
+    def reset_parameters(self):
+        """Resets the parameters of the model."""
+
+        def vmap_reset_module(module, *args, **kwargs):
+            def reset_module(params):
+                with params.to_module(module):
+                    _reset_parameters_recursive(module)
+                    return params
+
+            return torch.vmap(reset_module, *args, **kwargs)
+
+        if not self.share_params:
+            vmap_reset_module(self._empty_net, randomness="different")(self.params)
+        else:
+            with self.params.to_module(self._empty_net):
+                _reset_parameters_recursive(self._empty_net)
+
+
+class MultiAgentMLP(MultiAgentNetBase):
     """Mult-agent MLP.
 
     This is an MLP that can be used in multi-agent contexts.
@@ -33,7 +168,8 @@ class MultiAgentMLP(nn.Module):
     Otherwise, each agent will only use its data as input.
 
     Args:
-        n_agent_inputs (int): number of inputs for each agent.
+        n_agent_inputs (int or None): number of inputs for each agent. If ``None``,
+            the number of inputs is lazily instantiated during the first call.
         n_agent_outputs (int): number of outputs for each agent.
         n_agents (int): number of agents.
         centralised (bool): If `centralised` is True, each agent will use the inputs of all agents to compute its output
@@ -139,7 +275,7 @@ class MultiAgentMLP(nn.Module):
 
     def __init__(
         self,
-        n_agent_inputs: int,
+        n_agent_inputs: int | None,
         n_agent_outputs: int,
         n_agents: int,
         centralised: bool,
@@ -150,87 +286,51 @@ class MultiAgentMLP(nn.Module):
         activation_class: Optional[Type[nn.Module]] = nn.Tanh,
         **kwargs,
     ):
-        super().__init__()
-
         self.n_agents = n_agents
         self.n_agent_inputs = n_agent_inputs
         self.n_agent_outputs = n_agent_outputs
         self.share_params = share_params
         self.centralised = centralised
+        self.num_cells = num_cells
+        self.activation_class = activation_class
+        self.depth = depth
 
-        self.agent_networks = nn.ModuleList(
-            [
-                MLP(
-                    in_features=n_agent_inputs
-                    if not centralised
-                    else n_agent_inputs * n_agents,
-                    out_features=n_agent_outputs,
-                    depth=depth,
-                    num_cells=num_cells,
-                    activation_class=activation_class,
-                    device=device,
-                    **kwargs,
-                )
-                for _ in range(self.n_agents if not self.share_params else 1)
-            ]
+        super().__init__(
+            n_agents=n_agents,
+            centralised=centralised,
+            share_params=share_params,
+            device=device,
+            agent_dim=-2,
+            **kwargs,
         )
 
-    def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
-        if len(inputs) > 1:
-            inputs = torch.cat([*inputs], -1)
-        else:
-            inputs = inputs[0]
-
-        if inputs.shape[-2:] != (self.n_agents, self.n_agent_inputs):
+    def _pre_forward_check(self, inputs):
+        if inputs.shape[-2] != self.n_agents:
             raise ValueError(
-                f"Multi-agent network expected input with last 2 dimensions {[self.n_agents, self.n_agent_inputs]},"
+                f"Multi-agent network expected input with shape[-2]={self.n_agents},"
                 f" but got {inputs.shape}"
             )
-
         # If the model is centralized, agents have full observability
         if self.centralised:
-            inputs = inputs.reshape(
-                *inputs.shape[:-2], self.n_agents * self.n_agent_inputs
-            )
+            inputs = inputs.flatten(-2, -1)
+        return inputs
 
-        # If parameters are not shared, each agent has its own network
-        if not self.share_params:
-            if self.centralised:
-                output = torch.stack(
-                    [net(inputs) for i, net in enumerate(self.agent_networks)],
-                    dim=-2,
-                )
-            else:
-                output = torch.stack(
-                    [
-                        net(inputs[..., i, :])
-                        for i, net in enumerate(self.agent_networks)
-                    ],
-                    dim=-2,
-                )
-        # If parameters are shared, agents use the same network
-        else:
-            output = self.agent_networks[0](inputs)
-
-            if self.centralised:
-                # If the parameters are shared, and it is centralised, all agents will have the same output
-                # We expand it to maintain the agent dimension, but values will be the same for all agents
-                output = output.view(*output.shape[:-1], self.n_agent_outputs)
-                output = output.unsqueeze(-2)
-                output = output.expand(
-                    *output.shape[:-2], self.n_agents, self.n_agent_outputs
-                )
-
-        if output.shape[-2:] != (self.n_agents, self.n_agent_outputs):
-            raise ValueError(
-                f"Multi-agent network expected output with last 2 dimensions {[self.n_agents, self.n_agent_outputs]},"
-                f" but got {output.shape}"
-            )
-
-        return output
+    def _build_single_net(self, *, device, **kwargs):
+        n_agent_inputs = self.n_agent_inputs
+        if self.centralised and n_agent_inputs is not None:
+            n_agent_inputs = self.n_agent_inputs * self.n_agents
+        return MLP(
+            in_features=n_agent_inputs,
+            out_features=self.n_agent_outputs,
+            depth=self.depth,
+            num_cells=self.num_cells,
+            activation_class=self.activation_class,
+            device=device,
+            **kwargs,
+        )
 
 
-class MultiAgentConvNet(nn.Module):
+class MultiAgentConvNet(MultiAgentNetBase):
     """Multi-agent CNN.
 
     In MARL settings, agents may or may not share the same policy for their actions: we say that the parameters can be shared or not. Similarly, a network may take the entire observation space (across agents) or on a per-agent basis to compute its output, which we refer to as "centralized" and "non-centralized", respectively.
@@ -243,6 +343,10 @@ class MultiAgentConvNet(nn.Module):
         share_params (bool): If ``True``, the same :class:`~torchrl.modules.ConvNet` will be used to make the forward pass
             for all agents (homogeneous policies). Otherwise, each agent will use a different :class:`~torchrl.modules.ConvNet` to process
             its input (heterogeneous policies).
+
+    Keyword Args:
+        in_features (int, optional): the input feature dimension. If left to ``None``,
+            a lazy module is used.
         device (str or torch.device, optional): device to create the module on.
         num_cells (int or Sequence[int], optional): number of cells of every layer in between the input and output. If
             an integer is provided, every layer will have the same number of cells. If an iterable is provided,
@@ -374,36 +478,47 @@ class MultiAgentConvNet(nn.Module):
         n_agents: int,
         centralised: bool,
         share_params: bool,
-        device: Optional[DEVICE_TYPING] = None,
-        num_cells: Optional[Sequence[int]] = None,
+        *,
+        in_features: int | None = None,
+        device: DEVICE_TYPING | None = None,
+        num_cells: Sequence[int] | None = None,
         kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 5,
         strides: Union[Sequence, int] = 2,
         paddings: Union[Sequence, int] = 0,
         activation_class: Type[nn.Module] = nn.ELU,
         **kwargs,
     ):
-        super().__init__()
-
-        self.n_agents = n_agents
-        self.centralised = centralised
-        self.share_params = share_params
-
-        self.agent_networks = nn.ModuleList(
-            [
-                ConvNet(
-                    num_cells=num_cells,
-                    kernel_sizes=kernel_sizes,
-                    strides=strides,
-                    paddings=paddings,
-                    activation_class=activation_class,
-                    device=device,
-                    **kwargs,
-                )
-                for _ in range(self.n_agents if not self.share_params else 1)
-            ]
+        self.in_features = in_features
+        self.num_cells = num_cells
+        self.strides = strides
+        self.kernel_sizes = kernel_sizes
+        self.paddings = paddings
+        self.activation_class = activation_class
+        super().__init__(
+            n_agents=n_agents,
+            centralised=centralised,
+            share_params=share_params,
+            device=device,
+            agent_dim=-4,
+            **kwargs,
         )
 
-    def forward(self, inputs: torch.Tensor):
+    def _build_single_net(self, *, device, **kwargs):
+        in_features = self.in_features
+        if self.centralised and in_features is not None:
+            in_features = in_features * self.n_agents
+        return ConvNet(
+            in_features=in_features,
+            num_cells=self.num_cells,
+            kernel_sizes=self.kernel_sizes,
+            strides=self.strides,
+            paddings=self.paddings,
+            activation_class=self.activation_class,
+            device=device,
+            **kwargs,
+        )
+
+    def _pre_forward_check(self, inputs):
         if len(inputs.shape) < 4:
             raise ValueError(
                 """Multi-agent network expects (*batch_size, agent_index, x, y, channels)"""
@@ -412,44 +527,10 @@ class MultiAgentConvNet(nn.Module):
             raise ValueError(
                 f"""Multi-agent network expects {self.n_agents} but got {inputs.shape[-4]}"""
             )
-        # If the model is centralized, agents have full observability
         if self.centralised:
-            shape = (
-                *inputs.shape[:-4],
-                self.n_agents * inputs.shape[-3],
-                inputs.shape[-2],
-                inputs.shape[-1],
-            )
-            inputs = torch.reshape(inputs, shape)
-
-        # If the parameters are not shared, each agent has its own network
-        if not self.share_params:
-            if self.centralised:
-                output = torch.stack(
-                    [net(inputs) for net in self.agent_networks], dim=-2
-                )
-            else:
-                output = torch.stack(
-                    [
-                        net(inp)
-                        for i, (net, inp) in enumerate(
-                            zip(self.agent_networks, inputs.unbind(-4))
-                        )
-                    ],
-                    dim=-2,
-                )
-        else:
-            output = self.agent_networks[0](inputs)
-            if self.centralised:
-                # If the parameters are shared, and it is centralised all agents will have the same output.
-                # We expand it to maintain the agent dimension, but values will be the same for all agents
-                n_agent_outputs = output.shape[-1]
-                output = output.view(*output.shape[:-1], n_agent_outputs)
-                output = output.unsqueeze(-2)
-                output = output.expand(
-                    *output.shape[:-2], self.n_agents, n_agent_outputs
-                )
-        return output
+            # If the model is centralized, agents have full observability
+            inputs = torch.flatten(inputs, -4, -3)
+        return inputs
 
 
 class Mixer(nn.Module):

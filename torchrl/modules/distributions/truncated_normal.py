@@ -33,8 +33,10 @@ class TruncatedStandardNormal(Distribution):
     has_rsample = True
     eps = 1e-6
 
-    def __init__(self, a, b, validate_args=None):
+    def __init__(self, a, b, validate_args=None, device=None):
         self.a, self.b = broadcast_all(a, b)
+        self.a = self.a.to(device)
+        self.b = self.b.to(device)
         if isinstance(a, Number) and isinstance(b, Number):
             batch_shape = torch.Size()
         else:
@@ -139,9 +141,11 @@ class TruncatedNormal(TruncatedStandardNormal):
 
     has_rsample = True
 
-    def __init__(self, loc, scale, a, b, validate_args=None):
+    def __init__(self, loc, scale, a, b, validate_args=None, device=None):
         scale = scale.clamp_min(self.eps)
         self.loc, self.scale, a, b = broadcast_all(loc, scale, a, b)
+        a = a.to(device)
+        b = b.to(device)
         self._non_std_a = a
         self._non_std_b = b
         a = (a - self.loc) / self.scale

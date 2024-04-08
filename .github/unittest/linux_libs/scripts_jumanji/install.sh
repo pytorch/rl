@@ -25,18 +25,30 @@ fi
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-printf "Installing PyTorch with %s\n" "${CU_VERSION}"
-if [ "${CU_VERSION:-}" == cpu ] ; then
-    # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
-    # use pip to install pytorch as conda can frequently pick older release
-#    conda install -y pytorch cpuonly -c pytorch-nightly
-    pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu --force-reinstall
+printf "Installing PyTorch with cu121"
+if [[ "$TORCH_VERSION" == "nightly" ]]; then
+  if [ "${CU_VERSION:-}" == cpu ] ; then
+      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+  else
+      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu121 -U
+  fi
+elif [[ "$TORCH_VERSION" == "stable" ]]; then
+    if [ "${CU_VERSION:-}" == cpu ] ; then
+      pip3 install torch --index-url https://download.pytorch.org/whl/cpu
+  else
+      pip3 install torch --index-url https://download.pytorch.org/whl/cu121
+  fi
 else
-    pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu121 --force-reinstall
+  printf "Failed to install pytorch"
+  exit 1
 fi
 
 # install tensordict
-pip install git+https://github.com/pytorch/tensordict.git
+if [[ "$RELEASE" == 0 ]]; then
+  pip3 install git+https://github.com/pytorch/tensordict.git
+else
+  pip3 install tensordict
+fi
 
 # smoke test
 python -c "import functorch;import tensordict"

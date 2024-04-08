@@ -5,6 +5,7 @@
 
 import argparse
 import dataclasses
+import pathlib
 import sys
 
 from time import sleep
@@ -68,12 +69,14 @@ else:
 
 @pytest.fixture
 def dreamer_constructor_fixture():
-    import os
 
     # we hack the env constructor
     import sys
 
-    sys.path.append(os.path.dirname(__file__) + "/../examples/dreamer/")
+    sys.path.append(
+        str(pathlib.Path(__file__).parent.parent / "sota-implementations" / "dreamer")
+    )
+
     from dreamer_utils import transformed_env_constructor
 
     yield transformed_env_constructor
@@ -512,7 +515,7 @@ def test_initialize_stats_from_observation_norms(device, keys, composed, initial
         with pytest.raises(
             ValueError, match="Attempted to use an uninitialized parameter"
         ):
-            pre_init_state_dict = t_env.transform.state_dict()
+            t_env.transform.state_dict()
         return
     pre_init_state_dict = t_env.transform.state_dict()
     initialize_observation_norm_transforms(

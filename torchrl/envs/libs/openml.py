@@ -6,7 +6,6 @@ import importlib.util
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 
 from torchrl.data.tensor_specs import (
@@ -94,6 +93,8 @@ class OpenMLEnv(EnvBase):
         ]
 
     def __init__(self, dataset_name, device="cpu", batch_size=None):
+        from torchrl.data.datasets.openml import OpenMLExperienceReplay
+
         if batch_size is None:
             batch_size = torch.Size([])
         else:

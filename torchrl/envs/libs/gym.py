@@ -494,12 +494,11 @@ def _get_gym_envs():  # noqa: F811
 
 
 def _is_from_pixels(env):
-    gym = gym_backend()
     observation_spec = env.observation_space
     try:
         PixelObservationWrapper = gym_backend(
-            "wrappers.pixel_observation.PixelObservationWrapper"
-        )
+            "wrappers.pixel_observation"
+        ).PixelObservationWrapper
     except ModuleNotFoundError:
 
         class PixelObservationWrapper:
@@ -509,22 +508,33 @@ def _is_from_pixels(env):
         GymPixelObservationWrapper as LegacyPixelObservationWrapper,
     )
 
+    gDict = gym_backend("spaces").dict.Dict
+    Box = gym_backend("spaces").Box
+
     if isinstance(observation_spec, (Dict,)):
         if "pixels" in set(observation_spec.keys()):
             return True
-    if isinstance(observation_spec, (gym.spaces.dict.Dict,)):
+    if isinstance(observation_spec, (gDict,)):
         if "pixels" in set(observation_spec.spaces.keys()):
             return True
     elif (
-        isinstance(observation_spec, gym.spaces.Box)
+        isinstance(observation_spec, Box)
         and (observation_spec.low == 0).all()
         and (observation_spec.high == 255).all()
         and observation_spec.low.shape[-1] == 3
         and observation_spec.low.ndim == 3
     ):
         return True
-    elif isinstance(env, (LegacyPixelObservationWrapper, PixelObservationWrapper)):
-        return True
+    else:
+        while True:
+            if isinstance(
+                env, (LegacyPixelObservationWrapper, PixelObservationWrapper)
+            ):
+                return True
+            if hasattr(env, "env"):
+                env = env.env
+            else:
+                break
     return False
 
 
@@ -759,8 +769,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @implement_for("gymnasium")  # gymnasium wants the unwrapped env
     def _get_batch_size(self, env):  # noqa: F811
-        if hasattr(env, "num_envs"):
-            batch_size = torch.Size([env.unwrapped.num_envs, *self.batch_size])
+        env_unwrapped = env.unwrapped
+        if hasattr(env_unwrapped, "num_envs"):
+            batch_size = torch.Size([env_unwrapped.num_envs, *self.batch_size])
         else:
             batch_size = self.batch_size
         return batch_size
@@ -919,6 +930,18 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self._seed_calls_reset = False
             self._env.seed(seed=seed)
 
+    @implement_for("gym")
+    def _reward_space(self, env):
+        if hasattr(env, "reward_space") and env.reward_space is not None:
+            return env.reward_space
+
+    @implement_for("gymnasium")
+    def _reward_space(self, env):  # noqa: F811
+        env = env.unwrapped
+        if hasattr(env, "reward_space") and env.reward_space is not None:
+            rs = env.reward_space
+            return rs
+
     def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
         action_spec = _gym_to_torchrl_spec_transform(
             env.action_space,
@@ -942,9 +965,10 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         elif observation_spec.shape[: len(self.batch_size)] != self.batch_size:
             observation_spec.shape = self.batch_size
 
-        if hasattr(env, "reward_space") and env.reward_space is not None:
+        reward_space = self._reward_space(env)
+        if reward_space is not None:
             reward_spec = _gym_to_torchrl_spec_transform(
-                env.reward_space,
+                reward_space,
                 device=self.device,
                 categorical_action_encoding=self._categorical_action_encoding,
             )
@@ -1052,6 +1076,11 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             # if it's not a ndarray, we must return bool
             # since it's not a bool, we make it so
             terminated = bool(terminated)
+
+        if isinstance(observations, list) and len(observations) == 1:
+            # Until gym 0.25.2 we had rendered frames returned in lists of length 1
+            observations = observations[0]
+
         return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.24", "0.26")
@@ -1073,6 +1102,11 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             # if it's not a ndarray, we must return bool
             # since it's not a bool, we make it so
             terminated = bool(terminated)
+
+        if isinstance(observations, list) and len(observations) == 1:
+            # Until gym 0.25.2 we had rendered frames returned in lists of length 1
+            observations = observations[0]
+
         return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.26", None)
@@ -1113,14 +1147,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         self._constructor_kwargs.update(new_kwargs)
         self._env = self._build_env(**self._constructor_kwargs)
         self._make_specs(self._env)
-
-    @property
-    def info_dict_reader(self):
-        return self._info_dict_reader
-
-    @info_dict_reader.setter
-    def info_dict_reader(self, value: callable):
-        self._info_dict_reader = value
 
     def _reset(
         self, tensordict: TensorDictBase | None = None, **kwargs
@@ -1265,7 +1291,7 @@ class GymEnv(GymWrapper):
     ) -> None:
         kwargs.setdefault("disable_env_checker", True)
 
-    @implement_for("gymnasium", "0.27.0", None)
+    @implement_for("gymnasium")
     def _set_gym_args(  # noqa: F811
         self,
         kwargs,

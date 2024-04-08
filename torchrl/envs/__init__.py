@@ -37,6 +37,7 @@ from .libs import (
 from .model_based import ModelBasedEnvBase
 from .transforms import (
     ActionMask,
+    BatchSizeTransform,
     BinarizeReward,
     BurnInTransform,
     CatFrames,
@@ -57,6 +58,7 @@ from .transforms import (
     gSDENoise,
     InitTracker,
     KLRewardTransform,
+    MultiStepTransform,
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,

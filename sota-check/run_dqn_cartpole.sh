@@ -11,7 +11,7 @@ current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="dqn_cartpole"
 export PYTHONPATH=$(dirname $(dirname $PWD))
-python $PYTHONPATH/examples/dqn/dqn_cartpole.py \
+python $PYTHONPATH/sota-implementations/dqn/dqn_cartpole.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"

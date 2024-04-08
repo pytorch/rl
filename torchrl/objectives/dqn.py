@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import warnings
 from dataclasses import dataclass
 from typing import Optional, Union
@@ -25,6 +27,7 @@ from torchrl.modules.tensordict_module.common import ensure_tensordict_compatibl
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -58,6 +61,10 @@ class DQNLoss(LossModule):
             The key at which priority is assumed to be stored within TensorDicts added
             to this ReplayBuffer.  This is to be used when the sampler is of type
             :class:`~torchrl.data.PrioritizedSampler`.  Defaults to ``"td_error"``.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
         >>> from torchrl.modules import MLP
@@ -171,6 +178,7 @@ class DQNLoss(LossModule):
         gamma: float = None,
         action_space: Union[str, TensorSpec] = None,
         priority_key: str = None,
+        reduction: str = None,
     ) -> None:
         if delay_value is None:
             warnings.warn(
@@ -182,6 +190,8 @@ class DQNLoss(LossModule):
                 "script."
             )
             delay_value = False
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
         self._in_keys = None
         if double_dqn and not delay_value:
@@ -225,7 +235,7 @@ class DQNLoss(LossModule):
             )
             action_space = "one-hot"
         self.action_space = _find_action_space(action_space)
-
+        self.reduction = reduction
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
@@ -362,7 +372,9 @@ class DQNLoss(LossModule):
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
-        return TensorDict({"loss": loss.mean()}, [])
+        loss = _reduce(loss, reduction=self.reduction)
+        td_out = TensorDict({"loss": loss}, [])
+        return td_out
 
 
 class DistributionalDQNLoss(LossModule):
@@ -385,13 +397,16 @@ class DistributionalDQNLoss(LossModule):
               Unlike :class:`DQNLoss`, this class does not currently support
               custom value functions. The next value estimation is always
               bootstrapped.
+        delay_value (bool): whether to duplicate the value network into a new
+            target value network to create double DQN
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             The key at which priority is assumed to be stored within TensorDicts added
             to this ReplayBuffer.  This is to be used when the sampler is of type
             :class:`~torchrl.data.PrioritizedSampler`.  Defaults to ``"td_error"``.
-
-        delay_value (bool): whether to duplicate the value network into a new
-            target value network to create double DQN
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
     """
 
     @dataclass
@@ -432,9 +447,11 @@ class DistributionalDQNLoss(LossModule):
     def __init__(
         self,
         value_network: Union[DistributionalQValueActor, nn.Module],
+        *,
         gamma: float,
         delay_value: bool = None,
         priority_key: str = None,
+        reduction: str = None,
     ):
         if delay_value is None:
             warnings.warn(
@@ -446,6 +463,8 @@ class DistributionalDQNLoss(LossModule):
                 "script."
             )
             delay_value = False
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
         self._set_deprecated_ctor_keys(priority=priority_key)
         self.register_buffer("gamma", torch.tensor(gamma))
@@ -461,6 +480,7 @@ class DistributionalDQNLoss(LossModule):
             create_target_params=self.delay_value,
         )
         self.action_space = self.value_network.action_space
+        self.reduction = reduction
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
@@ -596,8 +616,9 @@ class DistributionalDQNLoss(LossModule):
             loss.detach().unsqueeze(1).to(input_tensordict.device),
             inplace=True,
         )
-        loss_td = TensorDict({"loss": loss.mean()}, [])
-        return loss_td
+        loss = _reduce(loss, reduction=self.reduction)
+        td_out = TensorDict({"loss": loss}, [])
+        return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:

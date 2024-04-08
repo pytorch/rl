@@ -10,6 +10,7 @@ from typing import Any, Callable, Union
 
 import numpy as np
 import torch
+
 from torch import Tensor
 
 INT_CLASSES_TYPING = Union[int, np.integer]
@@ -87,3 +88,11 @@ def _reduce(
     if isinstance(result, tuple):
         result = result[0]
     return result.item() if dim is None else result
+
+
+def _is_int(index):
+    if isinstance(index, INT_CLASSES):
+        return True
+    if isinstance(index, (np.ndarray, torch.Tensor)):
+        return index.ndim == 0
+    return False

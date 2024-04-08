@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import contextlib
-import functools
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
@@ -18,6 +17,7 @@ from tensordict.utils import NestedKey
 from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
+    _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
     default_value_kwargs,
@@ -36,7 +36,7 @@ from torchrl.objectives.value import (
 class ReinforceLoss(LossModule):
     """Reinforce loss module.
 
-    Presented in "Simple statistical gradient-following algorithms for connectionist reinforcement learning", Williams, 1992
+    Presented in "Simple statistical gradient-following sota-implementations for connectionist reinforcement learning", Williams, 1992
     https://doi.org/10.1007/BF00992696
 
 
@@ -67,6 +67,11 @@ class ReinforceLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        clip_value (float, optional): If provided, it will be used to compute a clipped version of the value
+            prediction with respect to the input tensordict value estimate and use it to calculate the value loss.
+            The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
+            and preventing large updates. However, it will have no impact if the value estimate was done by the current
+            version of the value estimator. Defaults to ``None``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -231,6 +236,7 @@ class ReinforceLoss(LossModule):
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
         reduction: str = None,
+        clip_value: float | None = None,
     ) -> None:
         if actor is not None:
             actor_network = actor
@@ -292,6 +298,20 @@ class ReinforceLoss(LossModule):
 
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+
+        if clip_value is not None:
+            if isinstance(clip_value, float):
+                clip_value = torch.tensor(clip_value)
+            elif isinstance(clip_value, torch.Tensor):
+                if clip_value.numel() != 1:
+                    raise ValueError(
+                        f"clip_value must be a float or a scalar tensor, got {clip_value}."
+                    )
+            else:
+                raise ValueError(
+                    f"clip_value must be a float or a scalar tensor, got {clip_value}."
+                )
+        self.register_buffer("clip_value", clip_value)
 
     @property
     def functional(self):
@@ -401,17 +421,36 @@ class ReinforceLoss(LossModule):
         loss_actor = -log_prob * advantage.detach()
         td_out = TensorDict({"loss_actor": loss_actor}, batch_size=[])
 
-        td_out.set("loss_value", self.loss_critic(tensordict))
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        loss_value, value_clip_fraction = self.loss_critic(tensordict)
+        td_out.set("loss_value", loss_value)
+        if value_clip_fraction is not None:
+            td_out.set("value_clip_fraction", value_clip_fraction)
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
 
         return td_out
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
+
+        if self.clip_value:
+            try:
+                old_state_value = tensordict.get(self.tensor_keys.value).clone()
+            except KeyError:
+                raise KeyError(
+                    f"clip_value is set to {self.clip_value}, but "
+                    f"the key {self.tensor_keys.value} was not found in the input tensordict. "
+                    f"Make sure that the value_key passed to Reinforce exists in the input tensordict."
+                )
+
         try:
             target_return = tensordict.get(self.tensor_keys.value_target)
-            tensordict_select = tensordict.select(*self.critic_network.in_keys)
+            tensordict_select = tensordict.select(
+                *self.critic_network.in_keys, strict=False
+            )
             with self.critic_network_params.to_module(
                 self.critic_network
             ) if self.functional else contextlib.nullcontext():
@@ -431,7 +470,19 @@ class ReinforceLoss(LossModule):
                 f"TDLambdaEstimate and TDEstimate all return a 'value_target' entry that "
                 f"can be used for the value loss."
             )
-        return loss_value
+
+        clip_fraction = None
+        if self.clip_value:
+            loss_value, clip_fraction = _clip_value_loss(
+                old_state_value,
+                state_value,
+                self.clip_value.to(state_value.device),
+                target_return,
+                loss_value,
+                self.loss_critic_type,
+            )
+
+        return loss_value, clip_fraction
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:

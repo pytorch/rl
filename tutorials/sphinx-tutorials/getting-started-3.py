@@ -30,7 +30,7 @@ Get started with data collection and storage
 # dataloaders are referred to as ``DataCollectors``. Most of the time,
 # data collection does not stop at the collection of raw data,
 # as the data needs to be stored temporarily in a buffer
-# (or equivalent structure for on-policy algorithms) before being consumed
+# (or equivalent structure for on-policy sota-implementations) before being consumed
 # by the :ref:`loss module <gs_optim>`. This tutorial will explore
 # these two classes.
 #
@@ -59,8 +59,9 @@ import torch
 
 torch.manual_seed(0)
 
-from torchrl.collectors import RandomPolicy, SyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.envs import GymEnv
+from torchrl.envs.utils import RandomPolicy
 
 env = GymEnv("CartPole-v1")
 env.set_seed(0)
@@ -93,7 +94,7 @@ print(data["collector", "traj_ids"])
 
 #################################
 # Data collectors are very useful when it comes to coding state-of-the-art
-# algorithms, as performance is usually measured by the capability of a
+# sota-implementations, as performance is usually measured by the capability of a
 # specific technique to solve a problem in a given number of interactions with
 # the environment (the ``total_frames`` argument in the collector).
 # For this reason, most training loops in our examples look like this:

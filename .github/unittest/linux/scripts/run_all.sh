@@ -124,15 +124,15 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
+      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu
   else
-      pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/$CU_VERSION
+      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
   fi
 else
   printf "Failed to install pytorch"
@@ -142,15 +142,19 @@ fi
 # smoke test
 python -c "import functorch"
 
-# install snapshot
-if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  pip3 install git+https://github.com/pytorch/torchsnapshot
-else
-  pip3 install torchsnapshot
-fi
+## install snapshot
+#if [[ "$TORCH_VERSION" == "nightly" ]]; then
+#  pip3 install git+https://github.com/pytorch/torchsnapshot
+#else
+#  pip3 install torchsnapshot
+#fi
 
 # install tensordict
-pip3 install git+https://github.com/pytorch/tensordict.git
+if [[ "$RELEASE" == 0 ]]; then
+  pip3 install git+https://github.com/pytorch/tensordict.git
+else
+  pip3 install tensordict
+fi
 
 printf "* Installing torchrl\n"
 python setup.py develop
@@ -190,11 +194,11 @@ pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_contro
 if [ "${CU_VERSION:-}" != cpu ] ; then
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
-    --timeout=120
+    --timeout=120 --mp_fork_if_no_cuda
 else
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py --ignore test/test_distributed.py \
-    --timeout=120
+    --timeout=120 --mp_fork_if_no_cuda
 fi
 
 coverage combine

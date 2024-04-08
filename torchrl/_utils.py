@@ -13,6 +13,7 @@ import logging
 
 import math
 import os
+import pickle
 import sys
 import time
 import traceback
@@ -363,6 +364,7 @@ class implement_for:
     _lazy_impl = collections.defaultdict(list)
 
     def _delazify(self, func_name):
+        out = None
         for local_call in implement_for._lazy_impl[func_name]:
             out = local_call()
         return out
@@ -636,11 +638,13 @@ class _ProcessNoWarn(mp.Process):
     """A private Process class that shuts down warnings on the subprocess and controls the number of threads in the subprocess."""
 
     @wraps(mp.Process.__init__)
-    def __init__(self, *args, num_threads=None, **kwargs):
+    def __init__(self, *args, num_threads=None, _start_method=None, **kwargs):
         import torchrl
 
         self.filter_warnings_subprocess = torchrl.filter_warnings_subprocess
         self.num_threads = num_threads
+        if _start_method is not None:
+            self._start_method = _start_method
         super().__init__(*args, **kwargs)
 
     def run(self, *args, **kwargs):
@@ -699,6 +703,12 @@ def print_directory_tree(path, indent="", display_metadata=True):
         logger.info(indent + os.path.basename(path))
 
 
+def _ends_with(key, match):
+    if isinstance(key, str):
+        return key == match
+    return key[-1] == match
+
+
 def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
     if isinstance(key, str):
         return new_ending
@@ -741,3 +751,11 @@ class _rng_decorator(_DecoratorContextManager):
 
         else:
             torch.random.set_rng_state(self._state)
+
+
+def _can_be_pickled(obj):
+    try:
+        pickle.dumps(obj)
+        return True
+    except (pickle.PickleError, AttributeError, TypeError):
+        return False

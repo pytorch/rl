@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import importlib.util
 from copy import copy
 from typing import Optional, Sequence
 
@@ -15,11 +16,7 @@ from tensordict.utils import NestedKey
 from torchrl.envs.transforms import ObservationTransform, Transform
 from torchrl.record.loggers import Logger
 
-try:
-    from torchvision.transforms.functional import center_crop as center_crop_fn
-    from torchvision.utils import make_grid
-except ImportError:
-    center_crop_fn = None
+_has_tv = importlib.util.find_spec("torchvision", None) is not None
 
 
 class VideoRecorder(ObservationTransform):
@@ -46,23 +43,27 @@ class VideoRecorder(ObservationTransform):
 
     Examples:
         The following example shows how to save a rollout under a video. First a few imports:
+
         >>> from torchrl.record import VideoRecorder
         >>> from torchrl.record.loggers.csv import CSVLogger
         >>> from torchrl.envs import TransformedEnv, DMControlEnv
 
         The video format is chosen in the logger. Wandb and tensorboard will take care of that
         on their own, CSV accepts various video formats.
+
         >>> logger = CSVLogger(exp_name="cheetah", log_dir="cheetah_videos", video_format="mp4")
 
         Some envs (eg, Atari games) natively return images, some require the user to ask for them.
-        Check :class:`~torchrl.env.GymEnv` or :class:`~torchrl.envs.DMControlEnv` to see how to render images
+        Check :class:`~torchrl.envs.GymEnv` or :class:`~torchrl.envs.DMControlEnv` to see how to render images
         in these contexts.
+
         >>> base_env = DMControlEnv("cheetah", "run", from_pixels=True)
         >>> env = TransformedEnv(base_env, VideoRecorder(logger=logger, tag="run_video"))
         >>> env.rollout(100)
 
-        All transforms have a dump function, mostly a no-op except for ``VideoRecorder``, and :class:`~torchrl.envs.transforms.Composite`
+        All transforms have a dump function, mostly a no-op except for ``VideoRecorder``, and :class:`~torchrl.envs.transforms.Compose`
         which will dispatch the `dumps` to all its members.
+
         >>> env.transform.dump()
 
     Our video is available under ``./cheetah_videos/cheetah/videos/run_video_0.mp4``!
@@ -95,7 +96,7 @@ class VideoRecorder(ObservationTransform):
         self.count = 0
         self.center_crop = center_crop
         self.make_grid = make_grid
-        if center_crop and not center_crop_fn:
+        if center_crop and not _has_tv:
             raise ImportError(
                 "Could not load center_crop from torchvision. Make sure torchvision is installed."
             )
@@ -118,20 +119,26 @@ class VideoRecorder(ObservationTransform):
                 trailing_dim = range(observation_trsf.ndimension() - 3)
                 observation_trsf = observation_trsf.permute(*trailing_dim, -1, -3, -2)
             if self.center_crop:
-                if center_crop_fn is None:
+                if not _has_tv:
                     raise ImportError(
                         "Could not import torchvision, `center_crop` not available."
                         "Make sure torchvision is installed in your environment."
                     )
+                from torchvision.transforms.functional import (
+                    center_crop as center_crop_fn,
+                )
+
                 observation_trsf = center_crop_fn(
                     observation_trsf, [self.center_crop, self.center_crop]
                 )
             if self.make_grid and observation_trsf.ndimension() == 4:
-                if make_grid is None:
+                if not _has_tv:
                     raise ImportError(
                         "Could not import torchvision, `make_grid` not available."
                         "Make sure torchvision is installed in your environment."
                     )
+                from torchvision.utils import make_grid
+
                 observation_trsf = make_grid(observation_trsf)
             self.obs.append(observation_trsf.to(torch.uint8))
         return observation

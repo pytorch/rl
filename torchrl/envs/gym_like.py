@@ -6,9 +6,8 @@
 from __future__ import annotations
 
 import abc
-import itertools
 import warnings
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -32,7 +31,8 @@ class BaseInfoDictReader(metaclass=abc.ABCMeta):
     ) -> TensorDictBase:
         raise NotImplementedError
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def info_spec(self) -> Dict[str, TensorSpec]:
         raise NotImplementedError
 
@@ -235,7 +235,14 @@ class GymLikeEnv(_EnvWrapper):
             reward (torch.Tensor or TensorDict): reward to be mapped.
 
         """
-        return self.reward_spec.encode(reward, ignore_device=True)
+        if isinstance(reward, int) and reward == 0:
+            return self.reward_spec.zero()
+        reward = self.reward_spec.encode(reward, ignore_device=True)
+
+        if reward is None:
+            reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
+
+        return reward
 
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
@@ -253,14 +260,21 @@ class GymLikeEnv(_EnvWrapper):
                 # naming it 'state' will result in envs that have a different name for the state vector
                 # when queried with and without pixels
                 observations["observation"] = observations.pop("state")
-        if not isinstance(observations, (TensorDict, dict)):
-            (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
-            observations = {key: observations}
-        for key, val in observations.items():
-            observations[key] = self.observation_spec[key].encode(
-                val, ignore_device=True
-            )
-        # observations = self.observation_spec.encode(observations, ignore_device=True)
+        if not isinstance(observations, Mapping):
+            for key, spec in self.observation_spec.items(True, True):
+                observations_dict = {}
+                observations_dict[key] = spec.encode(observations, ignore_device=True)
+                # we don't check that there is only one spec because obs spec also
+                # contains the data spec of the info dict.
+                break
+            else:
+                raise RuntimeError("Could not find any element in observation_spec.")
+            observations = observations_dict
+        else:
+            for key, val in observations.items():
+                observations[key] = self.observation_spec[key].encode(
+                    val, ignore_device=True
+                )
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -277,14 +291,9 @@ class GymLikeEnv(_EnvWrapper):
                 done,
                 info_dict,
             ) = self._output_transform(self._env.step(action_np))
-            if isinstance(obs, list) and len(obs) == 1:
-                # Until gym 0.25.2 we had rendered frames returned in lists of length 1
-                obs = obs[0]
 
-            if _reward is None:
-                _reward = self.reward_spec.zero()
-
-            reward = reward + _reward
+            if _reward is not None:
+                reward = reward + _reward
 
             terminated, truncated, done, do_break = self.read_done(
                 terminated=terminated, truncated=truncated, done=done
@@ -294,17 +303,13 @@ class GymLikeEnv(_EnvWrapper):
 
         reward = self.read_reward(reward)
         obs_dict = self.read_obs(obs)
-
-        if reward is None:
-            reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
-
         obs_dict[self.reward_key] = reward
 
         # if truncated/terminated is not in the keys, we just don't pass it even if it
         # is defined.
         if terminated is None:
             terminated = done
-        if truncated is not None and "truncated" in self.done_keys:
+        if truncated is not None:
             obs_dict["truncated"] = truncated
         obs_dict["done"] = done
         obs_dict["terminated"] = terminated
@@ -322,7 +327,9 @@ class GymLikeEnv(_EnvWrapper):
             tensordict_out = TensorDict(
                 obs_dict, batch_size=tensordict.batch_size, _run_checks=False
             )
-        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+        if self.device is not None:
+            tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+            self._sync_device()
 
         if self.info_dict_reader and (info_dict is not None):
             if not isinstance(info_dict, dict):
@@ -366,7 +373,9 @@ class GymLikeEnv(_EnvWrapper):
             for key, item in self.observation_spec.items(True, True):
                 if key not in tensordict_out.keys(True, True):
                     tensordict_out[key] = item.zero()
-        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+        if self.device is not None:
+            tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+            self._sync_device()
         return tensordict_out
 
     @abc.abstractmethod

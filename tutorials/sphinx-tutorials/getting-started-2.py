@@ -40,9 +40,9 @@ Getting started with model optimization
 # ----------------------
 #
 # In RL, innovation typically involves the exploration of novel methods
-# for optimizing a policy (i.e., new algorithms), rather than focusing
+# for optimizing a policy (i.e., new sota-implementations), rather than focusing
 # on new architectures, as seen in other domains. Within TorchRL,
-# these algorithms are encapsulated within loss modules. A loss
+# these sota-implementations are encapsulated within loss modules. A loss
 # module orchestrates the various components of your algorithm and
 # yields a set of loss values that can be backpropagated
 # through to train the corresponding components.
@@ -146,7 +146,7 @@ optim.zero_grad()
 # -----------------------------------------
 #
 # Another important aspect to consider is the presence of target parameters
-# in off-policy algorithms like DDPG. Target parameters typically represent
+# in off-policy sota-implementations like DDPG. Target parameters typically represent
 # a delayed or smoothed version of the parameters over time, and they play
 # a crucial role in value estimation during policy training. Utilizing target
 # parameters for policy training often proves to be significantly more

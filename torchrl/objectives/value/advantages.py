@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+from __future__ import annotations
 
 import abc
 import functools
@@ -10,7 +10,7 @@ import warnings
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from functools import wraps
-from typing import Callable, List, Optional, Union
+from typing import Callable, List, Union
 
 import torch
 from tensordict import TensorDictBase
@@ -27,7 +27,7 @@ from torch import nn, Tensor
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
 
-from torchrl.objectives.utils import _vmap_func, hold_out_net
+from torchrl.objectives.utils import _vmap_func, hold_out_net, RANDOM_MODULE_LIST
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,
@@ -78,6 +78,7 @@ def _call_value_nets(
     single_call: bool,
     value_key: NestedKey,
     detach_next: bool,
+    vmap_randomness: str = "error",
 ):
     in_keys = value_net.in_keys
     if single_call:
@@ -141,9 +142,11 @@ def _call_value_nets(
             )
         elif params is not None:
             params_stack = torch.stack([params, next_params], 0).contiguous()
-            data_out = _vmap_func(value_net, (0, 0))(data_in, params_stack)
+            data_out = _vmap_func(value_net, (0, 0), randomness=vmap_randomness)(
+                data_in, params_stack
+            )
         else:
-            data_out = vmap(value_net, (0,))(data_in)
+            data_out = vmap(value_net, (0,), randomness=vmap_randomness)(data_in)
         value_est = data_out.get(value_key)
         value, value_ = value_est[0], value_est[1]
     data.set(value_key, value)
@@ -160,7 +163,7 @@ def _call_actor_net(
     log_prob_key: NestedKey,
 ):
     # TODO: extend to handle time dimension (and vmap?)
-    log_pi = actor_net(data.select(*actor_net.in_keys)).get(log_prob_key)
+    log_pi = actor_net(data.select(*actor_net.in_keys, strict=False)).get(log_prob_key)
     return log_pi
 
 
@@ -214,6 +217,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     default_keys = _AcceptedKeys()
     value_network: Union[TensorDictModule, Callable]
+    _vmap_randomness = None
 
     @property
     def advantage_key(self):
@@ -251,8 +255,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
     def forward(
         self,
         tensordict: TensorDictBase,
-        params: Optional[TensorDictBase] = None,
-        target_params: Optional[TensorDictBase] = None,
+        *,
+        params: TensorDictBase | None = None,
+        target_params: TensorDictBase | None = None,
     ) -> TensorDictBase:
         """Computes the advantage estimate given the data in tensordict.
 
@@ -269,6 +274,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 :obj:`[*B, T, *F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the
                 feature dimension(s). The tensordict must have shape ``[*B, T]``.
+
+        Keyword Args:
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
@@ -277,7 +284,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         Returns:
             An updated TensorDict with an advantage and a value_error keys as defined in the constructor.
         """
-        raise NotImplementedError
+        ...
 
     def __init__(
         self,
@@ -285,7 +292,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         value_network: TensorDictModule,
         shifted: bool = False,
         differentiable: bool = False,
-        skip_existing: Optional[bool] = None,
+        skip_existing: bool | None = None,
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
@@ -380,8 +387,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
     def value_estimate(
         self,
         tensordict,
-        target_params: Optional[TensorDictBase] = None,
-        next_value: Optional[torch.Tensor] = None,
+        target_params: TensorDictBase | None = None,
+        next_value: torch.Tensor | None = None,
         **kwargs,
     ):
         """Gets a value estimate, usually used as a target value for the value network.
@@ -428,6 +435,44 @@ class ValueEstimatorBase(TensorDictModuleBase):
         next_value = step_td.get(self.tensor_keys.value)
         return next_value
 
+    @property
+    def vmap_randomness(self):
+        if self._vmap_randomness is None:
+            do_break = False
+            for val in self.__dict__.values():
+                if isinstance(val, torch.nn.Module):
+                    for module in val.modules():
+                        if isinstance(module, RANDOM_MODULE_LIST):
+                            self._vmap_randomness = "different"
+                            do_break = True
+                            break
+                if do_break:
+                    # double break
+                    break
+            else:
+                self._vmap_randomness = "error"
+
+        return self._vmap_randomness
+
+    def set_vmap_randomness(self, value):
+        self._vmap_randomness = value
+
+    def _get_time_dim(self, time_dim: int | None, data: TensorDictBase):
+        if time_dim is not None:
+            if time_dim < 0:
+                time_dim = data.ndim + time_dim
+            return time_dim
+        time_dim_attr = getattr(self, "time_dim", None)
+        if time_dim_attr is not None:
+            if time_dim_attr < 0:
+                time_dim_attr = data.ndim + time_dim_attr
+            return time_dim_attr
+        if data._has_names():
+            for i, name in enumerate(data.names):
+                if name == "time":
+                    return i
+        return data.ndim - 1
+
 
 class TD0Estimator(ValueEstimatorBase):
     """Temporal Difference (TD(0)) estimate of advantage function.
@@ -472,7 +517,7 @@ class TD0Estimator(ValueEstimatorBase):
     def __init__(
         self,
         *,
-        gamma: Union[float, torch.Tensor],
+        gamma: float | torch.Tensor,
         value_network: TensorDictModule,
         shifted: bool = False,
         average_rewards: bool = False,
@@ -480,8 +525,8 @@ class TD0Estimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
-        skip_existing: Optional[bool] = None,
-        device: Optional[torch.device] = None,
+        skip_existing: bool | None = None,
+        device: torch.device | None = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -501,8 +546,9 @@ class TD0Estimator(ValueEstimatorBase):
     def forward(
         self,
         tensordict: TensorDictBase,
-        params: Optional[TensorDictBase] = None,
-        target_params: Optional[TensorDictBase] = None,
+        *,
+        params: TensorDictBase | None = None,
+        target_params: TensorDictBase | None = None,
     ) -> TensorDictBase:
         """Computes the TD(0) advantage given the data in tensordict.
 
@@ -519,6 +565,8 @@ class TD0Estimator(ValueEstimatorBase):
                 :obj:`[*B, T, *F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the
                 feature dimension(s). The tensordict must have shape ``[*B, T]``.
+
+        Keyword Args:
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
@@ -589,6 +637,7 @@ class TD0Estimator(ValueEstimatorBase):
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
                     detach_next=True,
+                    vmap_randomness=self.vmap_randomness,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -602,8 +651,8 @@ class TD0Estimator(ValueEstimatorBase):
     def value_estimate(
         self,
         tensordict,
-        target_params: Optional[TensorDictBase] = None,
-        next_value: Optional[torch.Tensor] = None,
+        target_params: TensorDictBase | None = None,
+        next_value: torch.Tensor | None = None,
         **kwargs,
     ):
         reward = tensordict.get(("next", self.tensor_keys.reward))
@@ -668,22 +717,30 @@ class TD1Estimator(ValueEstimatorBase):
             ``t`` and ``t+1`` are identical (which is not the case when target
             parameters are to be used). Defaults to ``False``.
         device (torch.device, optional): device of the module.
+        time_dim (int, optional): the dimension corresponding to the time
+            in the input tensordict. If not provided, defaults to the dimension
+            markes with the ``"time"`` name if any, and to the last dimension
+            otherwise. Can be overridden during a call to
+            :meth:`~.value_estimate`.
+            Negative dimensions are considered with respect to the input
+            tensordict.
 
     """
 
     def __init__(
         self,
         *,
-        gamma: Union[float, torch.Tensor],
+        gamma: float | torch.Tensor,
         value_network: TensorDictModule,
         average_rewards: bool = False,
         differentiable: bool = False,
-        skip_existing: Optional[bool] = None,
+        skip_existing: bool | None = None,
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
         shifted: bool = False,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
+        time_dim: int | None = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -696,6 +753,7 @@ class TD1Estimator(ValueEstimatorBase):
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
         self.average_rewards = average_rewards
+        self.time_dim = time_dim
 
     @_self_set_skip_existing
     @_self_set_grad_enabled
@@ -703,8 +761,9 @@ class TD1Estimator(ValueEstimatorBase):
     def forward(
         self,
         tensordict: TensorDictBase,
-        params: Optional[TensorDictBase] = None,
-        target_params: Optional[TensorDictBase] = None,
+        *,
+        params: TensorDictBase | None = None,
+        target_params: TensorDictBase | None = None,
     ) -> TensorDictBase:
         """Computes the TD(1) advantage given the data in tensordict.
 
@@ -720,6 +779,8 @@ class TD1Estimator(ValueEstimatorBase):
                 The data passed to this module should be structured as :obj:`[*B, T, *F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
                 The tensordict must have shape ``[*B, T]``.
+
+        Keyword Args:
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
@@ -790,6 +851,7 @@ class TD1Estimator(ValueEstimatorBase):
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
                     detach_next=True,
+                    vmap_randomness=self.vmap_randomness,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -804,8 +866,9 @@ class TD1Estimator(ValueEstimatorBase):
     def value_estimate(
         self,
         tensordict,
-        target_params: Optional[TensorDictBase] = None,
-        next_value: Optional[torch.Tensor] = None,
+        target_params: TensorDictBase | None = None,
+        next_value: torch.Tensor | None = None,
+        time_dim: int | None = None,
         **kwargs,
     ):
         reward = tensordict.get(("next", self.tensor_keys.reward))
@@ -826,13 +889,14 @@ class TD1Estimator(ValueEstimatorBase):
 
         done = tensordict.get(("next", self.tensor_keys.done))
         terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
+        time_dim = self._get_time_dim(time_dim, tensordict)
         value_target = vec_td1_return_estimate(
             gamma,
             next_value,
             reward,
             done=done,
             terminated=terminated,
-            time_dim=tensordict.ndim - 1,
+            time_dim=time_dim,
         )
         return value_target
 
@@ -874,24 +938,32 @@ class TDLambdaEstimator(ValueEstimatorBase):
             ``t`` and ``t+1`` are identical (which is not the case when target
             parameters are to be used). Defaults to ``False``.
         device (torch.device, optional): device of the module.
+        time_dim (int, optional): the dimension corresponding to the time
+            in the input tensordict. If not provided, defaults to the dimension
+            markes with the ``"time"`` name if any, and to the last dimension
+            otherwise. Can be overridden during a call to
+            :meth:`~.value_estimate`.
+            Negative dimensions are considered with respect to the input
+            tensordict.
 
     """
 
     def __init__(
         self,
         *,
-        gamma: Union[float, torch.Tensor],
-        lmbda: Union[float, torch.Tensor],
+        gamma: float | torch.Tensor,
+        lmbda: float | torch.Tensor,
         value_network: TensorDictModule,
         average_rewards: bool = False,
         differentiable: bool = False,
         vectorized: bool = True,
-        skip_existing: Optional[bool] = None,
+        skip_existing: bool | None = None,
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
         shifted: bool = False,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
+        time_dim: int | None = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -906,6 +978,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         self.register_buffer("lmbda", torch.tensor(lmbda, device=device))
         self.average_rewards = average_rewards
         self.vectorized = vectorized
+        self.time_dim = time_dim
 
     @_self_set_skip_existing
     @_self_set_grad_enabled
@@ -913,8 +986,9 @@ class TDLambdaEstimator(ValueEstimatorBase):
     def forward(
         self,
         tensordict: TensorDictBase,
-        params: Optional[List[Tensor]] = None,
-        target_params: Optional[List[Tensor]] = None,
+        *,
+        params: List[Tensor] | None = None,
+        target_params: List[Tensor] | None = None,
     ) -> TensorDictBase:
         r"""Computes the TD(:math:`\lambda`) advantage given the data in tensordict.
 
@@ -930,6 +1004,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
                 The data passed to this module should be structured as :obj:`[*B, T, *F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
                 The tensordict must have shape ``[*B, T]``.
+
+        Keyword Args:
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
@@ -1001,6 +1077,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
                     detach_next=True,
+                    vmap_randomness=self.vmap_randomness,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -1014,8 +1091,9 @@ class TDLambdaEstimator(ValueEstimatorBase):
     def value_estimate(
         self,
         tensordict,
-        target_params: Optional[TensorDictBase] = None,
-        next_value: Optional[torch.Tensor] = None,
+        target_params: TensorDictBase | None = None,
+        next_value: torch.Tensor | None = None,
+        time_dim: int | None = None,
         **kwargs,
     ):
         reward = tensordict.get(("next", self.tensor_keys.reward))
@@ -1038,6 +1116,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
 
         done = tensordict.get(("next", self.tensor_keys.done))
         terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
+        time_dim = self._get_time_dim(time_dim, tensordict)
         if self.vectorized:
             val = vec_td_lambda_return_estimate(
                 gamma,
@@ -1046,7 +1125,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
                 reward,
                 done=done,
                 terminated=terminated,
-                time_dim=tensordict.ndim - 1,
+                time_dim=time_dim,
             )
         else:
             val = td_lambda_return_estimate(
@@ -1056,7 +1135,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
                 reward,
                 done=done,
                 terminated=terminated,
-                time_dim=tensordict.ndim - 1,
+                time_dim=time_dim,
             )
         return val
 
@@ -1102,6 +1181,13 @@ class GAE(ValueEstimatorBase):
             ``t`` and ``t+1`` are identical (which is not the case when target
             parameters are to be used). Defaults to ``False``.
         device (torch.device, optional): device of the module.
+        time_dim (int, optional): the dimension corresponding to the time
+            in the input tensordict. If not provided, defaults to the dimension
+            markes with the ``"time"`` name if any, and to the last dimension
+            otherwise. Can be overridden during a call to
+            :meth:`~.value_estimate`.
+            Negative dimensions are considered with respect to the input
+            tensordict.
 
     GAE will return an :obj:`"advantage"` entry containing the advange value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
@@ -1120,18 +1206,19 @@ class GAE(ValueEstimatorBase):
     def __init__(
         self,
         *,
-        gamma: Union[float, torch.Tensor],
-        lmbda: float,
+        gamma: float | torch.Tensor,
+        lmbda: float | torch.Tensor,
         value_network: TensorDictModule,
         average_gae: bool = False,
         differentiable: bool = False,
         vectorized: bool = True,
-        skip_existing: Optional[bool] = None,
+        skip_existing: bool | None = None,
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
         shifted: bool = False,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
+        time_dim: int | None = None,
     ):
         super().__init__(
             shifted=shifted,
@@ -1146,6 +1233,7 @@ class GAE(ValueEstimatorBase):
         self.register_buffer("lmbda", torch.tensor(lmbda, device=device))
         self.average_gae = average_gae
         self.vectorized = vectorized
+        self.time_dim = time_dim
 
     @_self_set_skip_existing
     @_self_set_grad_enabled
@@ -1154,8 +1242,9 @@ class GAE(ValueEstimatorBase):
         self,
         tensordict: TensorDictBase,
         *,
-        params: Optional[List[Tensor]] = None,
-        target_params: Optional[List[Tensor]] = None,
+        params: List[Tensor] | None = None,
+        target_params: List[Tensor] | None = None,
+        time_dim: int | None = None,
     ) -> TensorDictBase:
         """Computes the GAE given the data in tensordict.
 
@@ -1171,10 +1260,18 @@ class GAE(ValueEstimatorBase):
                 The data passed to this module should be structured as :obj:`[*B, T, *F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
                 The tensordict must have shape ``[*B, T]``.
+
+        Keyword Args:
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
                 target params to be passed to the functional value network module.
+            time_dim (int, optional): the dimension corresponding to the time
+                in the input tensordict. If not provided, defaults to the dimension
+                markes with the ``"time"`` name if any, and to the last dimension
+                otherwise.
+                Negative dimensions are considered with respect to the input
+                tensordict.
 
         Returns:
             An updated TensorDict with an advantage and a value_error keys as defined in the constructor.
@@ -1247,6 +1344,7 @@ class GAE(ValueEstimatorBase):
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
                     detach_next=True,
+                    vmap_randomness=self.vmap_randomness,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -1254,6 +1352,7 @@ class GAE(ValueEstimatorBase):
 
         done = tensordict.get(("next", self.tensor_keys.done))
         terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
+        time_dim = self._get_time_dim(time_dim, tensordict)
         if self.vectorized:
             adv, value_target = vec_generalized_advantage_estimate(
                 gamma,
@@ -1263,7 +1362,7 @@ class GAE(ValueEstimatorBase):
                 reward,
                 done=done,
                 terminated=terminated,
-                time_dim=tensordict.ndim - 1,
+                time_dim=time_dim,
             )
         else:
             adv, value_target = generalized_advantage_estimate(
@@ -1274,7 +1373,7 @@ class GAE(ValueEstimatorBase):
                 reward,
                 done=done,
                 terminated=terminated,
-                time_dim=tensordict.ndim - 1,
+                time_dim=time_dim,
             )
 
         if self.average_gae:
@@ -1291,8 +1390,9 @@ class GAE(ValueEstimatorBase):
     def value_estimate(
         self,
         tensordict,
-        params: Optional[TensorDictBase] = None,
-        target_params: Optional[TensorDictBase] = None,
+        params: TensorDictBase | None = None,
+        target_params: TensorDictBase | None = None,
+        time_dim: int | None = None,
         **kwargs,
     ):
         if tensordict.batch_dims < 1:
@@ -1306,6 +1406,8 @@ class GAE(ValueEstimatorBase):
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
+
+        time_dim = self._get_time_dim(time_dim, tensordict)
 
         if self.is_stateless and params is None:
             raise RuntimeError(
@@ -1329,6 +1431,7 @@ class GAE(ValueEstimatorBase):
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
                     detach_next=True,
+                    vmap_randomness=self.vmap_randomness,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -1343,7 +1446,7 @@ class GAE(ValueEstimatorBase):
             reward,
             done=done,
             terminated=terminated,
-            time_dim=tensordict.ndim - 1,
+            time_dim=time_dim,
         )
         return value_target
 
@@ -1354,7 +1457,7 @@ class VTrace(ValueEstimatorBase):
     Refer to "IMPALA: Scalable Distributed Deep-RL with Importance Weighted  Actor-Learner Architectures"
     :ref:`here <https://arxiv.org/abs/1802.01561>`_ for more context.
 
-    Args:
+    Keyword Args:
         gamma (scalar): exponential mean discount.
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
         actor_network (TensorDictModule): actor operator used to retrieve the log prob.
@@ -1390,6 +1493,13 @@ class VTrace(ValueEstimatorBase):
             ``t`` and ``t+1`` are identical (which is not the case when target
             parameters are to be used). Defaults to ``False``.
         device (torch.device, optional): device of the module.
+        time_dim (int, optional): the dimension corresponding to the time
+            in the input tensordict. If not provided, defaults to the dimension
+            markes with the ``"time"`` name if any, and to the last dimension
+            otherwise. Can be overridden during a call to
+            :meth:`~.value_estimate`.
+            Negative dimensions are considered with respect to the input
+            tensordict.
 
     VTrace will return an :obj:`"advantage"` entry containing the advantage value. It will also
     return a :obj:`"value_target"` entry with the V-Trace target value.
@@ -1404,19 +1514,20 @@ class VTrace(ValueEstimatorBase):
     def __init__(
         self,
         *,
-        gamma: Union[float, torch.Tensor],
+        gamma: float | torch.Tensor,
         actor_network: TensorDictModule,
         value_network: TensorDictModule,
-        rho_thresh: Union[float, torch.Tensor] = 1.0,
-        c_thresh: Union[float, torch.Tensor] = 1.0,
+        rho_thresh: float | torch.Tensor = 1.0,
+        c_thresh: float | torch.Tensor = 1.0,
         average_adv: bool = False,
         differentiable: bool = False,
-        skip_existing: Optional[bool] = None,
-        advantage_key: Optional[NestedKey] = None,
-        value_target_key: Optional[NestedKey] = None,
-        value_key: Optional[NestedKey] = None,
+        skip_existing: bool | None = None,
+        advantage_key: NestedKey | None = None,
+        value_target_key: NestedKey | None = None,
+        value_key: NestedKey | None = None,
         shifted: bool = False,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
+        time_dim: int | None = None,
     ):
         super().__init__(
             shifted=shifted,
@@ -1439,6 +1550,7 @@ class VTrace(ValueEstimatorBase):
         self.register_buffer("c_thresh", c_thresh)
         self.average_adv = average_adv
         self.actor_network = actor_network
+        self.time_dim = time_dim
 
         if isinstance(gamma, torch.Tensor) and gamma.shape != ():
             raise NotImplementedError(
@@ -1458,8 +1570,9 @@ class VTrace(ValueEstimatorBase):
         self,
         tensordict: TensorDictBase,
         *,
-        params: Optional[List[Tensor]] = None,
-        target_params: Optional[List[Tensor]] = None,
+        params: List[Tensor] | None = None,
+        target_params: List[Tensor] | None = None,
+        time_dim: int | None = None,
     ) -> TensorDictBase:
         """Computes the V-Trace correction given the data in tensordict.
 
@@ -1472,10 +1585,18 @@ class VTrace(ValueEstimatorBase):
                 as returned by the environment) necessary to compute the value estimates and the GAE.
                 The data passed to this module should be structured as :obj:`[*B, T, F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
+
+        Keyword Args:
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
                 target params to be passed to the functional value network module.
+            time_dim (int, optional): the dimension corresponding to the time
+                in the input tensordict. If not provided, defaults to the dimension
+                markes with the ``"time"`` name if any, and to the last dimension
+                otherwise.
+                Negative dimensions are considered with respect to the input
+                tensordict.
 
         Returns:
             An updated TensorDict with an advantage and a value_error keys as defined in the constructor.
@@ -1575,6 +1696,7 @@ class VTrace(ValueEstimatorBase):
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
                     detach_next=True,
+                    vmap_randomness=self.vmap_randomness,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -1600,6 +1722,7 @@ class VTrace(ValueEstimatorBase):
         done = tensordict.get(("next", self.tensor_keys.done))
         terminated = tensordict.get(("next", self.tensor_keys.terminated))
 
+        time_dim = self._get_time_dim(time_dim, tensordict)
         adv, value_target = vtrace_advantage_estimate(
             gamma,
             log_pi,
@@ -1611,7 +1734,7 @@ class VTrace(ValueEstimatorBase):
             terminated,
             rho_thresh=self.rho_thresh,
             c_thresh=self.c_thresh,
-            time_dim=tensordict.ndim - 1,
+            time_dim=time_dim,
         )
 
         if self.average_adv:

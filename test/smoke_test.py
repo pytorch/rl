@@ -14,3 +14,5 @@ def test_imports():
     from torchrl.envs.gym_like import GymLikeEnv  # noqa: F401
     from torchrl.modules import SafeModule  # noqa: F401
     from torchrl.objectives.common import LossModule  # noqa: F401
+
+    PrioritizedReplayBuffer(alpha=1.1, beta=1.1)

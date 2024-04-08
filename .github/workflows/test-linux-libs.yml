@@ -30,6 +30,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -55,6 +63,14 @@ jobs:
       gpu-arch-version: "11.7"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
 
         export PYTHON_VERSION="3.9"
@@ -81,6 +97,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -107,6 +131,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -133,6 +165,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -159,6 +199,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euxo pipefail
         export PYTHON_VERSION="3.9"
         # export CU_VERSION="${{ inputs.gpu-arch-version }}"
@@ -184,6 +232,14 @@ jobs:
       gpu-arch-version: "11.7"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="12.1"
@@ -212,6 +268,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -238,6 +302,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -260,6 +332,14 @@ jobs:
       gpu-arch-version: "11.7"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="12.1"
@@ -287,6 +367,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -312,6 +400,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -339,6 +435,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -366,6 +470,14 @@ jobs:
       gpu-arch-version: "11.7"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="12.1"
@@ -394,6 +506,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -420,6 +540,14 @@ jobs:
       gpu-arch-version: "11.7"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="12.1"

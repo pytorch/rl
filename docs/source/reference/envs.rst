@@ -496,6 +496,8 @@ Composed transforms are built using the :class:`Compose` class:
         >>> transform = Compose(ToTensorImage(in_keys=["pixels"]), Resize(64, 64, in_keys=["pixels"]))
         >>> env = TransformedEnv(base_env, transform)
 
+Transforms are usually subclasses of :class:`~torchrl.envs.transforms.Transform`, although any
+``Callable[[TensorDictBase], TensorDictBase]``.
 
 By default, the transformed environment will inherit the device of the
 :obj:`base_env` that is passed to it. The transforms will then be executed on that device.
@@ -578,6 +580,7 @@ to be able to create this other composition:
     Transform
     TransformedEnv
     ActionMask
+    BatchSizeTransform
     BinarizeReward
     BurnInTransform
     CatFrames

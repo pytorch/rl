@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib.util
 from typing import List, Optional, Union
 
 import torch
@@ -26,21 +27,7 @@ from torchrl.envs.transforms.transforms import (
 )
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 
-try:
-    from torchvision import models
-
-    _has_tv = True
-except ImportError:
-    _has_tv = False
-
-try:
-    from torchvision.models import ResNet50_Weights
-    from torchvision.models._api import WeightsEnum
-except ImportError:
-
-    class WeightsEnum:  # noqa: D101
-        # placeholder
-        pass
+_has_tv = importlib.util.find_spec("torchvision", None) is not None
 
 
 VIP_MODEL_MAP = {
@@ -58,6 +45,9 @@ class _VIPNet(Transform):
                 "Tried to instantiate VIP without torchvision. Make sure you have "
                 "torchvision installed in your environment."
             )
+
+        from torchvision import models
+
         self.model_name = model_name
         if model_name == "resnet50":
             self.outdim = 2048
@@ -138,6 +128,9 @@ class _VIPNet(Transform):
         vip_instance.convnet.load_state_dict(state_dict)
 
     def load_weights(self, dir_prefix=None, tv_weights=None):
+        from torchvision import models
+        from torchvision.models import ResNet50_Weights
+
         if dir_prefix is not None and tv_weights is not None:
             raise RuntimeError(
                 "torchvision weights API does not allow for custom download path."
@@ -218,7 +211,7 @@ class VIPTransform(Compose):
         out_keys: List[str] = None,
         size: int = 244,
         stack_images: bool = True,
-        download: Union[bool, WeightsEnum, str] = False,
+        download: Union[bool, "WeightsEnum", str] = False,  # noqa: F821
         download_path: Optional[str] = None,
         tensor_pixels_keys: List[str] = None,
     ):

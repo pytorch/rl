@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -408,7 +410,7 @@ class DreamerValueLoss(LossModule):
         td = fake_data.select(("next", "state"), ("next", "belief"))
         td = td.rename_key_(("next", "state"), "state")
         tensordict_select = td.rename_key_(("next", "belief"), "belief")
-        # tensordict_select = fake_data.select(*self.value_model.in_keys)
+        # tensordict_select = fake_data.select(*self.value_model.in_keys, strict=False)
         dist = self.value_model.get_dist(tensordict_select)
         if self.discount_loss:
             discount = self.gamma * torch.ones_like(

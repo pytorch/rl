@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import importlib.util
 from typing import List, Optional, Union
 
 import torch
@@ -28,21 +29,7 @@ from torchrl.envs.transforms.transforms import (
 )
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 
-try:
-    from torchvision import models
-
-    _has_tv = True
-except ImportError:
-    _has_tv = False
-
-try:
-    from torchvision.models import ResNet18_Weights, ResNet34_Weights, ResNet50_Weights
-    from torchvision.models._api import WeightsEnum
-except ImportError:
-
-    class WeightsEnum:  # noqa: D101
-        # placeholder
-        pass
+_has_tv = importlib.util.find_spec("torchvision", None) is not None
 
 
 R3M_MODEL_MAP = {
@@ -62,6 +49,8 @@ class _R3MNet(Transform):
                 "Tried to instantiate R3M without torchvision. Make sure you have "
                 "torchvision installed in your environment."
             )
+        from torchvision import models
+
         self.model_name = model_name
         if model_name == "resnet18":
             # self.model_name = "r3m_18"
@@ -152,6 +141,13 @@ class _R3MNet(Transform):
         r3m_instance.convnet.load_state_dict(state_dict)
 
     def load_weights(self, dir_prefix=None, tv_weights=None):
+        from torchvision import models
+        from torchvision.models import (
+            ResNet18_Weights,
+            ResNet34_Weights,
+            ResNet50_Weights,
+        )
+
         if dir_prefix is not None and tv_weights is not None:
             raise RuntimeError(
                 "torchvision weights API does not allow for custom download path."
@@ -244,7 +240,7 @@ class R3MTransform(Compose):
         out_keys: List[str] = None,
         size: int = 244,
         stack_images: bool = True,
-        download: Union[bool, WeightsEnum, str] = False,
+        download: Union[bool, "WeightsEnum", str] = False,  # noqa: F821
         download_path: Optional[str] = None,
         tensor_pixels_keys: List[str] = None,
     ):
