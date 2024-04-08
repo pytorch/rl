@@ -32,7 +32,7 @@ optimization:
   gamma: 0.99
   lambda: 0.95
   imagination_horizon: 15
-  compile: True
+  compile: False
 
 networks:
   exploration_noise: 0.3
