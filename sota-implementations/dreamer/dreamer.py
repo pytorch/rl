@@ -121,9 +121,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     batch_size = cfg.optimization.batch_size
     optim_steps_per_batch = cfg.optimization.optim_steps_per_batch
     grad_clip = cfg.optimization.grad_clip
-    frames_per_batch = cfg.collector.frames_per_batch
     eval_iter = cfg.logger.eval_iter
     eval_rollout_steps = cfg.logger.eval_rollout_steps
+
+    print('Compiling')
+    world_model_loss.world_model.rssm_prior = torch.compile(world_model_loss.world_model.rssm_prior)
+    world_model_loss.world_model.rssm_posterior = torch.compile(world_model_loss.world_model.rssm_posterior)
 
     t_collect_init = time.time()
     for i, tensordict in enumerate(collector):
