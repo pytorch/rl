@@ -169,7 +169,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 t_loss_model_init = time.time()
                 # update world model
                 with torch.autocast(
-                    device_type=device.type
+                    device_type=device.type, dtype=torch.bfloat16,
                 ) if use_autocast else contextlib.nullcontext():
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
@@ -200,7 +200,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # update actor network
                 t_loss_actor_init = time.time()
                 with torch.autocast(
-                    device_type=device.type
+                    device_type=device.type, dtype=torch.bfloat16
                 ) if use_autocast else contextlib.nullcontext():
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
 
@@ -219,7 +219,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # update value network
                 t_loss_critic_init = time.time()
                 with torch.autocast(
-                    device_type=device.type
+                    device_type=device.type, dtype=torch.bfloat16
                 ) if use_autocast else contextlib.nullcontext():
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
