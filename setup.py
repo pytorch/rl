@@ -224,7 +224,7 @@ def _main(argv):
             "h5py",
             "pillow",
         ],
-        "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1"],
+        "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot"],
     }
     extra_requires["all"] = set()
     for key in list(extra_requires.keys()):
