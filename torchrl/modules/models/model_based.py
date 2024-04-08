@@ -14,6 +14,7 @@ from torchrl.modules.tensordict_module.rnn import GRUCell
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
+UNSQUEEZE_RNN_INPUT = version.parse(torch.__version__) < version.parse("1.11")
 
 class DreamerActor(nn.Module):
     """Dreamer actor network.
@@ -239,10 +240,12 @@ class RSSMRollout(TensorDictModuleBase):
         for t in range(time_steps):
             # samples according to p(s_{t+1} | s_t, a_t, b_t)
             # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
+            print("_tensordict", _tensordict)
             self.rssm_prior(_tensordict)
 
             # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
             # [("next", "belief"), ("next", "encoded_latents")] -> [("next", "posterior_mean"), ("next", "posterior_std"), ("next", "state")]
+            print("_tensordict", _tensordict)
             self.rssm_posterior(_tensordict)
 
             tensordict_out.append(_tensordict)
@@ -304,15 +307,12 @@ class RSSMPrior(nn.Module):
         self.state_dim = state_dim
         self.rnn_hidden_dim = rnn_hidden_dim
         self.action_shape = action_spec.shape
-        self._unsqueeze_rnn_input = version.parse(torch.__version__) < version.parse(
-            "1.11"
-        )
 
     def forward(self, state, belief, action):
         projector_input = torch.cat([state, action], dim=-1)
         action_state = self.action_state_projector(projector_input)
         unsqueeze = False
-        if self._unsqueeze_rnn_input and action_state.ndimension() == 1:
+        if UNSQUEEZE_RNN_INPUT and action_state.ndimension() == 1:
             if belief is not None:
                 belief = belief.unsqueeze(0)
             action_state = action_state.unsqueeze(0)
