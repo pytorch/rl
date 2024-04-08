@@ -25,8 +25,8 @@ class CollectorDataset(IterableDataset):
 
     def __init__(
         self,
-        collector: ty.Optional[SyncDataCollector] = None,
-        env: ty.Optional[EnvBase] = None,
+        collector: SyncDataCollector | None = None,
+        env: EnvBase  | None = None,
         policy_module: TensorDictModule = None,
         frames_per_batch: int = 1,
         total_frames: int = 1000,
