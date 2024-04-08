@@ -17,4 +17,4 @@ dependencies:
     - pytest-error-for-skips
     - expecttest
     - pyyaml
-    - meltingpot
+    - dm-meltingpot
