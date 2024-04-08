@@ -125,8 +125,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_rollout_steps = cfg.logger.eval_rollout_steps
 
     print('Compiling')
-    world_model_loss.world_model[0][1].rssm_prior = torch.compile(world_model_loss.world_model.rssm_prior)
-    world_model_loss.world_model[0][1].rssm_posterior = torch.compile(world_model_loss.world_model.rssm_posterior)
+    def compile_rssms(module):
+        if isinstance(module, RSSMRollout):
+            module.rssm_prior = torch.compile(module.rssm_prior)
+            module.rssm_posterior = torch.compile(module.rssm_posterior)
+    world_model_loss.apply(compile_rssms)
 
     t_collect_init = time.time()
     for i, tensordict in enumerate(collector):
