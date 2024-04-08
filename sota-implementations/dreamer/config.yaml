@@ -8,13 +8,14 @@ env:
   grayscale: False
   image_size : 64
   horizon: 500
+  n_parallel_envs: 8
 
 collector:
   total_frames: 5_000_000
   init_random_frames: 1000
   frames_per_batch: 1000
   max_frames_per_traj: 1000
-  device: cpu
+  device: cuda:0
 
 optimization:
   train_every: 1000
