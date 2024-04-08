@@ -78,6 +78,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     value_loss = DreamerValueLoss(value_model, discount_loss=True)
 
+    world_model_loss = torch.compile(world_model_loss)
+    actor_loss = torch.compile(actor_loss)
+    value_loss = torch.compile(value_loss)
+
     # Make collector
     collector = make_collector(cfg, train_env, policy)
 
