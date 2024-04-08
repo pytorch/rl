@@ -32,8 +32,8 @@ optimization:
   gamma: 0.99
   lambda: 0.95
   imagination_horizon: 15
-  compile: True
-  use_autocast: False
+  compile: False
+  use_autocast: True
 
 networks:
   exploration_noise: 0.3

@@ -171,6 +171,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         + model_loss_td["loss_model_reco"]
                         + model_loss_td["loss_model_reward"]
                     )
+                    print(loss_world_model.dtype)
 
                 world_model_opt.zero_grad()
                 if use_autocast:
