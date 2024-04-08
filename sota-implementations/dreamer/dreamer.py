@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import contextlib
 import time
 
 import hydra
@@ -111,9 +112,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.optimization.value_lr)
 
     # Grad scaler for mixed precision training https://pytorch.org/docs/stable/amp.html
-    scaler1 = GradScaler()
-    scaler2 = GradScaler()
-    scaler3 = GradScaler()
+    use_autocast = cfg.optimization.use_autocast
+    if use_autocast:
+        scaler1 = GradScaler()
+        scaler2 = GradScaler()
+        scaler3 = GradScaler()
 
     init_random_frames = cfg.collector.init_random_frames
     batch_size = cfg.optimization.batch_size
@@ -159,7 +162,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 t_loss_model_init = time.time()
                 # update world model
-                with autocast(dtype=torch.float16):
+                with autocast(dtype=torch.float16) if use_autocast else contextlib.nullcontext():
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
@@ -170,37 +173,43 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     )
 
                 world_model_opt.zero_grad()
-                scaler1.scale(loss_world_model).backward()
-                scaler1.unscale_(world_model_opt)
+                if use_autocast:
+                    scaler1.scale(loss_world_model).backward()
+                    scaler1.unscale_(world_model_opt)
                 clip_grad_norm_(world_model.parameters(), grad_clip)
-                scaler1.step(world_model_opt)
-                scaler1.update()
+                if use_autocast:
+                    scaler1.step(world_model_opt)
+                    scaler1.update()
                 t_loss_model += time.time() - t_loss_model_init
 
                 # update actor network
                 t_loss_actor_init = time.time()
-                with autocast(dtype=torch.float16):
+                with autocast(dtype=torch.float16) if use_autocast else contextlib.nullcontext():
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
 
                 actor_opt.zero_grad()
-                scaler2.scale(actor_loss_td["loss_actor"]).backward()
-                scaler2.unscale_(actor_opt)
+                if use_autocast:
+                    scaler2.scale(actor_loss_td["loss_actor"]).backward()
+                    scaler2.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), grad_clip)
-                scaler2.step(actor_opt)
-                scaler2.update()
+                if use_autocast:
+                    scaler2.step(actor_opt)
+                    scaler2.update()
                 t_loss_actor += time.time() - t_loss_actor_init
 
                 # update value network
                 t_loss_critic_init = time.time()
-                with autocast(dtype=torch.float16):
+                with autocast(dtype=torch.float16) if use_autocast else contextlib.nullcontext():
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
                 value_opt.zero_grad()
-                scaler3.scale(value_loss_td["loss_value"]).backward()
-                scaler3.unscale_(value_opt)
+                if use_autocast:
+                    scaler3.scale(value_loss_td["loss_value"]).backward()
+                    scaler3.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), grad_clip)
-                scaler3.step(value_opt)
-                scaler3.update()
+                if use_autocast:
+                    scaler3.step(value_opt)
+                    scaler3.update()
                 t_loss_critic += time.time() - t_loss_critic_init
 
         metrics_to_log = {"reward": ep_reward.mean().item()}
