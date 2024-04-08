@@ -3494,7 +3494,7 @@ class TestMeltingpot:
         td = env.rollout(2)
         rollout_penultimate_image = td[-1].get("WORLD.RGB")
         rollout_last_image = td[-1].get(("next", "WORLD.RGB"))
-        image_from_env = torch.from_numpy(env.get_rgb_image())
+        image_from_env = env.get_rgb_image()
         assert torch.equal(rollout_last_image, image_from_env)
         assert not torch.equal(rollout_penultimate_image, image_from_env)
 

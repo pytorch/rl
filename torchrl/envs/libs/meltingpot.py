@@ -8,7 +8,6 @@ import importlib
 
 from typing import Dict, List, Mapping, Sequence
 
-import numpy as np
 import torch
 
 from tensordict import TensorDict, TensorDictBase
@@ -438,14 +437,14 @@ class MeltingpotWrapper(_EnvWrapper):
 
         return td
 
-    def get_rgb_image(self) -> np.ndarray:
+    def get_rgb_image(self) -> torch.Tensor:
         """Returns an RGB image of the environment.
 
         Returns:
-            np.ndarray: The  image
+            torch.Tensor: The  image
 
         """
-        rgb_arr = self._env.observation()[0]["WORLD.RGB"]
+        rgb_arr = torch.from_numpy(self._env.observation()[0]["WORLD.RGB"])
         return rgb_arr
 
 
