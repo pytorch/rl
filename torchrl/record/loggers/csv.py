@@ -41,7 +41,8 @@ class CSVExperiment:
         self.scalars[name].append((global_step, value))
         filepath = os.path.join(self.log_dir, "scalars", "".join([name, ".csv"]))
         if filepath not in self.files:
-            self.files[filepath] = open(filepath, "a")
+            os.makedirs(Path(filepath).parent, exist_ok=True)
+            self.files[filepath] = open(filepath, "a+")
         fd = self.files[filepath]
         fd.write(",".join([str(global_step), str(value)]) + "\n")
         fd.flush()

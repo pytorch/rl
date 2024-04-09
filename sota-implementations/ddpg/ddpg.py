@@ -23,6 +23,7 @@ from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
+    dump_video,
     log_metrics,
     make_collector,
     make_ddpg_agent,
@@ -35,7 +36,13 @@ from utils import (
 
 @hydra.main(version_base="1.1", config_path="", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
-    device = torch.device(cfg.network.device)
+    device = cfg.optim.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = "cuda:0"
+        else:
+            device = "cpu"
+    device = torch.device(device)
 
     # Create logger
     exp_name = generate_exp_name("DDPG", cfg.logger.exp_name)
@@ -58,7 +65,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     np.random.seed(cfg.env.seed)
 
     # Create environments
-    train_env, eval_env = make_environment(cfg)
+    train_env, eval_env = make_environment(cfg, logger=logger)
 
     # Create agent
     model, exploration_policy = make_ddpg_agent(cfg, train_env, eval_env, device)
@@ -186,6 +193,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     auto_cast_to_device=True,
                     break_when_any_done=True,
                 )
+                eval_env.apply(dump_video)
                 eval_time = time.time() - eval_start
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 metrics_to_log["eval/reward"] = eval_reward

@@ -9,14 +9,16 @@ from torchrl.data import CompositeSpec
 from torchrl.envs import RewardSum, StepCounter, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import MLP, QValueActor
+from torchrl.record import VideoRecorder
+
 
 # ====================================================================
 # Environment utils
 # --------------------------------------------------------------------
 
 
-def make_env(env_name="CartPole-v1", device="cpu"):
-    env = GymEnv(env_name, device=device)
+def make_env(env_name="CartPole-v1", device="cpu", from_pixels=False):
+    env = GymEnv(env_name, device=device, from_pixels=from_pixels, pixels_only=False)
     env = TransformedEnv(env)
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
@@ -74,7 +76,13 @@ def eval_model(actor, test_env, num_episodes=3):
             break_when_any_done=True,
             max_steps=10_000_000,
         )
+        test_env.apply(dump_video)
         reward = td_test["next", "episode_reward"][td_test["next", "done"]]
         test_rewards[i] = reward.sum()
     del td_test
     return test_rewards.mean()
+
+
+def dump_video(module):
+    if isinstance(module, VideoRecorder):
+        module.dump()

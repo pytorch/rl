@@ -315,7 +315,7 @@ And it is `functorch` and `torch.compile` compatible!
   ```
   </details>
 
-  Check our [distributed collector examples](sota-implementations/distributed/collectors) to
+  Check our [distributed collector examples](examples/distributed/collectors) to
   learn more about ultra-fast data collection with TorchRL.
 
 - efficient<sup>(2)</sup> and generic<sup>(1)</sup> [replay buffers](torchrl/data/replay_buffers/replay_buffers.py) with modularized storage:
