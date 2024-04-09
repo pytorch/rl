@@ -9,15 +9,26 @@ from dataclasses import dataclass
 from typing import Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch
 from tensordict.utils import NestedKey
 
 from torch import distributions as d
 from torchrl.modules import ProbabilisticActor
 
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossContainerBase, LossModule
 from torchrl.objectives.utils import _reduce, distance_loss
+
+
+@tensorclass
+class OnlineDTLosses(LossContainerBase):
+    """The tensorclass for The OnlineDTLoss Loss class."""
+
+    loss_actor: torch.Tensor
+    loss_objective: torch.Tensor
+    loss_critic: torch.Tensor | None = None
+    loss_entropy: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
 
 
 class OnlineDTLoss(LossModule):
@@ -82,6 +93,7 @@ class OnlineDTLoss(LossModule):
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         samples_mc_entropy: int = 1,
+        return_tensorclass: bool = False,
         reduction: str = None,
     ) -> None:
         self._in_keys = None
@@ -153,6 +165,7 @@ class OnlineDTLoss(LossModule):
         )
 
         self.samples_mc_entropy = samples_mc_entropy
+        self.return_tensorclass = return_tensorclass
         self._set_in_keys()
         self.reduction = reduction
 
@@ -207,7 +220,7 @@ class OnlineDTLoss(LossModule):
         return -log_p.mean(axis=0)
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> OnlineDTLosses | TensorDictBase:
         """Compute the loss for the Online Decision Transformer."""
         # extract action targets
         tensordict = tensordict.clone(False)
@@ -232,6 +245,8 @@ class OnlineDTLoss(LossModule):
             "alpha": self.alpha.detach(),
         }
         td_out = TensorDict(out, [])
+        if self.return_tensorclass:
+            return OnlineDTLosses._from_tensordict(td_out)
         td_out = td_out.named_apply(
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
@@ -283,6 +298,7 @@ class DTLoss(LossModule):
         actor_network: ProbabilisticActor,
         *,
         loss_function: str = "l2",
+        return_tensorclass: bool = False,
         reduction: str = None,
     ) -> None:
         self._in_keys = None
@@ -298,6 +314,7 @@ class DTLoss(LossModule):
             create_target_params=False,
         )
         self.loss_function = loss_function
+        self.return_tensorclass = return_tensorclass
         self.reduction = reduction
 
     def _set_in_keys(self):
@@ -332,7 +349,7 @@ class DTLoss(LossModule):
         self._out_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> OnlineDTLosses | TensorDictBase:
         """Compute the loss for the Online Decision Transformer."""
         # extract action targets
         tensordict = tensordict.clone(False)
@@ -352,4 +369,6 @@ class DTLoss(LossModule):
             "loss": loss,
         }
         td_out = TensorDict(out, [])
+        if self.return_tensorclass:
+            return OnlineDTLosses._from_tensordict(td_out)
         return td_out

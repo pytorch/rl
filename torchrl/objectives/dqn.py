@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch
 from tensordict.utils import NestedKey
 from torch import nn
@@ -24,7 +24,7 @@ from torchrl.modules.tensordict_module.actors import (
 )
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossContainerBase, LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
@@ -34,6 +34,13 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value import TDLambdaEstimator
 from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator
+
+
+@tensorclass
+class DQNLosses(LossContainerBase):
+    """The tensorclass for The DQN Loss class."""
+
+    loss: torch.Tensor
 
 
 class DQNLoss(LossModule):
@@ -86,7 +93,14 @@ class DQNLoss(LossModule):
         >>> loss(data)
         TensorDict(
             fields={
-                loss: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                loss_objective: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> loss = DQNLoss(actor, action_space=spec, return_tensorclass=True)
+        >>> loss(data)
+        DQNLosses(
+            loss_objective=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -178,6 +192,7 @@ class DQNLoss(LossModule):
         gamma: float = None,
         action_space: Union[str, TensorSpec] = None,
         priority_key: str = None,
+        return_tensorclass: bool = False,
         reduction: str = None,
     ) -> None:
         if delay_value is None:
@@ -190,6 +205,7 @@ class DQNLoss(LossModule):
                 "script."
             )
             delay_value = False
+        self.reduction = reduction
         if reduction is None:
             reduction = "mean"
         super().__init__()
@@ -235,9 +251,10 @@ class DQNLoss(LossModule):
             )
             action_space = "one-hot"
         self.action_space = _find_action_space(action_space)
-        self.reduction = reduction
+
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+        self.return_tensorclass = return_tensorclass
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -302,7 +319,7 @@ class DQNLoss(LossModule):
         self._value_estimator.set_keys(**tensor_keys)
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> DQNLosses | TensorDictBase:
         """Computes the DQN loss given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
@@ -372,9 +389,10 @@ class DQNLoss(LossModule):
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
-        loss = _reduce(loss, reduction=self.reduction)
-        td_out = TensorDict({"loss": loss}, [])
-        return td_out
+        loss_td = TensorDict({"loss": loss.mean()}, [])
+        if self.return_tensorclass:
+            return DQNLosses._from_tensordict(loss_td)
+        return loss_td
 
 
 class DistributionalDQNLoss(LossModule):
@@ -451,7 +469,6 @@ class DistributionalDQNLoss(LossModule):
         gamma: float,
         delay_value: bool = None,
         priority_key: str = None,
-        reduction: str = None,
     ):
         if delay_value is None:
             warnings.warn(
@@ -463,8 +480,8 @@ class DistributionalDQNLoss(LossModule):
                 "script."
             )
             delay_value = False
-        if reduction is None:
-            reduction = "mean"
+        if self.reduction is None:
+            self.reduction = "mean"
         super().__init__()
         self._set_deprecated_ctor_keys(priority=priority_key)
         self.register_buffer("gamma", torch.tensor(gamma))
@@ -480,7 +497,6 @@ class DistributionalDQNLoss(LossModule):
             create_target_params=self.delay_value,
         )
         self.action_space = self.value_network.action_space
-        self.reduction = reduction
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
@@ -503,7 +519,7 @@ class DistributionalDQNLoss(LossModule):
         action = action.expand(new_shape)
         return torch.gather(action_log_softmax, -1, index=action).squeeze(-1)
 
-    def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
+    def forward(self, input_tensordict: TensorDictBase) -> DQNLosses | TensorDictBase:
         # from https://github.com/Kaixhin/Rainbow/blob/9ff5567ad1234ae0ed30d8471e8f13ae07119395/agent.py
         tensordict = TensorDict(
             source=input_tensordict, batch_size=input_tensordict.batch_size
@@ -618,6 +634,8 @@ class DistributionalDQNLoss(LossModule):
         )
         loss = _reduce(loss, reduction=self.reduction)
         td_out = TensorDict({"loss": loss}, [])
+        if self.return_tensorclass:
+            return DQNLosses._from_tensordict(td_out)
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):

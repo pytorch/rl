@@ -494,6 +494,7 @@ class TestDQN(LossModuleTestBase):
             loss_function="l2",
             delay_value=delay_value,
             double_dqn=double_dqn,
+            return_tensorclass=False,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -799,7 +800,7 @@ class TestDQN(LossModuleTestBase):
         SoftUpdate(dqn_loss, eps=0.5)
         loss_val = dqn_loss(**kwargs)
         loss_val_td = dqn_loss(td)
-        torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
+        torch.testing.assert_close(loss_val_td.get("loss_objective"), loss_val)
 
     def test_distributional_dqn_tensordict_keys(self):
         torch.manual_seed(self.seed)
@@ -883,7 +884,7 @@ class TestDQN(LossModuleTestBase):
             for key in loss.keys():
                 if not key.startswith("loss"):
                     continue
-                assert loss[key].shape == torch.Size([])
+                assert loss[key].shape == torch.Size([2])
 
     @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
@@ -911,7 +912,7 @@ class TestDQN(LossModuleTestBase):
             for key in loss.keys():
                 if not key.startswith("loss"):
                     continue
-                assert loss[key].shape == torch.Size([])
+                assert loss[key].shape == torch.Size([2, 4])
 
 
 class TestQMixer(LossModuleTestBase):
@@ -1565,6 +1566,7 @@ class TestDDPG(LossModuleTestBase):
             loss_function="l2",
             delay_actor=delay_actor,
             delay_value=delay_value,
+            return_tensorclass=False,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -2232,6 +2234,7 @@ class TestTD3(LossModuleTestBase):
             noise_clip=noise_clip,
             delay_actor=delay_actor,
             delay_qvalue=delay_qvalue,
+            return_tensorclass=False,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -4457,6 +4460,7 @@ class TestREDQ(LossModuleTestBase):
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
             delay_qvalue=delay_qvalue,
+            return_tensorclass=False,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
@@ -5302,6 +5306,7 @@ class TestCQL(LossModuleTestBase):
             with_lagrange=with_lagrange,
             delay_actor=delay_actor,
             delay_qvalue=delay_qvalue,
+            return_tensorclass=False,
         )
 
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
@@ -7695,6 +7700,7 @@ class TestReinforce(LossModuleTestBase):
             critic_network=value_net,
             delay_value=delay_value,
             functional=functional,
+            return_tensorclass=False,
         )
 
         td = TensorDict(
@@ -8361,6 +8367,7 @@ class TestDreamer(LossModuleTestBase):
             reco_loss=reco_loss,
             delayed_clamp=delayed_clamp,
             free_nats=free_nats,
+            return_tensorclass=False,
         )
         loss_td, _ = loss_module(tensordict)
         for loss_str, lmbda in zip(
@@ -9220,6 +9227,7 @@ class TestIQL(LossModuleTestBase):
             temperature=temperature,
             expectile=expectile,
             loss_function="l2",
+            return_tensorclass=False,
         )
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):

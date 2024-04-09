@@ -11,12 +11,12 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossContainerBase, LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -34,6 +34,17 @@ from torchrl.objectives.value import (
     TDLambdaEstimator,
     VTrace,
 )
+
+
+@tensorclass
+class A2CLosses(LossContainerBase):
+    """The tensorclass for The A2CLoss Loss class."""
+
+    loss_actor: torch.Tensor
+    loss_objective: torch.Tensor
+    loss_critic: torch.Tensor | None = None
+    loss_entropy: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
 
 
 class A2CLoss(LossModule):
@@ -137,6 +148,16 @@ class A2CLoss(LossModule):
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
+        >>> loss = A2CLoss(actor, value, loss_critic_type="l2", return_tensorclass=True)
+        >>> loss(data)
+        A2CLosses(
+            entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_critic=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_objective=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
 
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
@@ -182,7 +203,7 @@ class A2CLoss(LossModule):
     method.
 
     Examples:
-        >>> loss.select_out_keys('loss_objective', 'loss_critic')
+        >>> _ = loss.select_out_keys('loss_objective', 'loss_critic')
         >>> loss_obj, loss_critic = loss(
         ...     observation = torch.randn(*batch, n_obs),
         ...     action = spec.rand(batch),
@@ -248,6 +269,7 @@ class A2CLoss(LossModule):
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
+        return_tensorclass: bool = False,
         reduction: str = None,
         clip_value: float | None = None,
     ):
@@ -309,6 +331,21 @@ class A2CLoss(LossModule):
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.loss_critic_type = loss_critic_type
+        self.return_tensorclass = return_tensorclass
+
+        if clip_value is not None:
+            if isinstance(clip_value, float):
+                clip_value = torch.tensor(clip_value)
+            elif isinstance(clip_value, torch.Tensor):
+                if clip_value.numel() != 1:
+                    raise ValueError(
+                        f"clip_value must be a float or a scalar tensor, got {clip_value}."
+                    )
+            else:
+                raise ValueError(
+                    f"clip_value must be a float or a scalar tensor, got {clip_value}."
+                )
+        self.register_buffer("clip_value", clip_value)
 
         if clip_value is not None:
             if isinstance(clip_value, float):
@@ -502,7 +539,7 @@ class A2CLoss(LossModule):
         return self.critic_network_params.detach()
 
     @dispatch()
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> A2CLosses | TensorDictBase:
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
@@ -521,6 +558,10 @@ class A2CLoss(LossModule):
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
+            loss_critic, value_clip_fraction = self.loss_critic(tensordict)
+            td_out.set("loss_critic", loss_critic)
+        if self.return_tensorclass:
+            return A2CLosses._from_tensordict(td_out)
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:

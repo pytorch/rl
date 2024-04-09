@@ -38,6 +38,19 @@ class _LossMeta(abc.ABCMeta):
         cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
 
 
+class LossContainerBase:
+    """A Base Container class for loss class, which is a subclass of nn.Module."""
+
+    @property
+    def aggregate_loss(self):
+        """Aggregate the loss across all losses."""
+        result = torch.zeros((), device=self.device)
+        for key in self.__dataclass_attr__:
+            if key.startswith("loss_"):
+                result += getattr(self, key)
+        return result
+
+
 class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     """A parent class for RL losses.
 
@@ -252,7 +265,6 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                     return param._apply_nest(
                         _compare_and_expand,
                         batch_size=[expand_dim, *param.shape],
-                        filter_empty=False,
                         call_on_nested=True,
                     )
                 if not isinstance(param, nn.Parameter):
@@ -276,7 +288,6 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 params.apply(
                     _compare_and_expand,
                     batch_size=[expand_dim, *params.shape],
-                    filter_empty=False,
                     call_on_nested=True,
                 ),
                 no_convert=True,

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
@@ -17,7 +17,7 @@ from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import _find_action_space
 
 from torchrl.modules import ProbabilisticActor
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossContainerBase, LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
@@ -29,14 +29,24 @@ from torchrl.objectives.utils import (
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
+@tensorclass
+class IQLLosses(LossContainerBase):
+    """The tensorclass for The PPOLoss Loss class."""
+
+    loss_actor: torch.Tensor
+    loss_qvalue: torch.Tensor | None = None
+    loss_value: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
+
+
 class IQLLoss(LossModule):
     r"""TorchRL implementation of the IQL loss.
 
     Presented in "Offline Reinforcement Learning with Implicit Q-Learning" https://arxiv.org/abs/2110.06169
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
-        qvalue_network (TensorDictModule): Q(s, a) parametric model
+        actor_network (ProbabilisticActor): stochastic actor.
+        qvalue_network (TensorDictModule): Q(s, a) parametric model.
         value_network (TensorDictModule, optional): V(s) parametric model.
 
     Keyword Args:
@@ -114,6 +124,16 @@ class IQLLoss(LossModule):
                 loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> loss = IQLLoss(actor, qvalue, value, return_tensorclass=True)
+        >>> loss(data)
+        IQLLosses(
+            entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_actor=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_qvalue=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -247,6 +267,7 @@ class IQLLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        return_tensorclass: bool = False,
         reduction: str = None,
     ) -> None:
         self._in_keys = None
@@ -303,6 +324,7 @@ class IQLLoss(LossModule):
         self._vmap_qvalue_networkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
+        self.return_tensorclass = return_tensorclass
         self.reduction = reduction
 
     @property
@@ -351,7 +373,7 @@ class IQLLoss(LossModule):
         self._set_in_keys()
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> IQLLosses | TensorDictBase:
         shape = None
         if tensordict.ndimension() > 1:
             shape = tensordict.shape
@@ -383,11 +405,13 @@ class IQLLoss(LossModule):
             "loss_value": loss_value,
             "entropy": entropy.mean(),
         }
-
-        return TensorDict(
+        td_out = TensorDict(
             out,
             [],
         )
+        if self.return_tensorclass:
+            return IQLLosses._from_tensordict(td_out)
+        return td_out
 
     def actor_loss(self, tensordict: TensorDictBase) -> Tensor:
         # KL loss

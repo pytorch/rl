@@ -97,7 +97,7 @@ class OneHotCategorical(D.Categorical):
         self.num_samples = self._param.shape[-1]
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
-        return super().log_prob(value.argmax(dim=-1))
+        return super().log_prob(value.int().argmax(dim=-1))
 
     @property
     def mode(self) -> torch.Tensor:

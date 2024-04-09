@@ -13,7 +13,7 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
@@ -23,7 +23,7 @@ from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import LossContainerBase, LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
@@ -44,6 +44,18 @@ def _delezify(func):
         return func(self, *args, **kwargs)
 
     return new_func
+
+
+@tensorclass
+class SACLosses(LossContainerBase):
+    """The tensorclass for The SACLoss Loss class."""
+
+    loss_actor: torch.Tensor
+    loss_value: torch.Tensor
+    loss_qvalue: torch.Tensor
+    alpha: torch.Tensor | None = None
+    loss_alpha: torch.Tensor | None = None
+    entropy: torch.Tensor | None = None
 
 
 class SACLoss(LossModule):
@@ -160,6 +172,19 @@ class SACLoss(LossModule):
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
+        >>> loss = SACLoss(actor, qvalue, value, return_tensorclass=True)
+        >>> loss(data)
+        SACLosses(
+            alpha=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            entropy=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_actor=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_alpha=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_qvalue=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_value=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
 
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
@@ -287,6 +312,7 @@ class SACLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        return_tensorclass: bool = False,
         reduction: str = None,
     ) -> None:
         self._in_keys = None
@@ -391,6 +417,7 @@ class SACLoss(LossModule):
             self._vmap_qnetwork00 = _vmap_func(
                 qvalue_network, randomness=self.vmap_randomness
             )
+        self.return_tensorclass = return_tensorclass
         self.reduction = reduction
 
     @property
@@ -543,7 +570,7 @@ class SACLoss(LossModule):
         self._out_keys = values
 
     @dispatch
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(self, tensordict: TensorDictBase) -> SACLosses | TensorDictBase:
         shape = None
         if tensordict.ndimension() > 1:
             shape = tensordict.shape
@@ -585,6 +612,8 @@ class SACLoss(LossModule):
             else value,
             batch_size=[],
         )
+        if self.return_tensorclass:
+            return SACLosses._from_tensordict(td_out)
         return td_out
 
     @property
@@ -866,15 +895,15 @@ class DiscreteSACLoss(LossModule):
     ...     }, batch)
     >>> loss(data)
     TensorDict(
-    fields={
-        alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-        entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-        loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-        loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-        loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-    batch_size=torch.Size([]),
-    device=None,
-    is_shared=False)
+        fields={
+            alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+        batch_size=torch.Size([]),
+        device=None,
+        is_shared=False)
 
 
     This class is compatible with non-tensordict based modules too and can be
@@ -1076,6 +1105,7 @@ class DiscreteSACLoss(LossModule):
         self._vmap_qnetworkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
+
         self.reduction = reduction
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
