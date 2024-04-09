@@ -83,8 +83,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         discount_loss=True,
     )
     actor_loss.make_value_estimator(gamma=cfg.optimization.gamma, lmbda=cfg.optimization.lmbda)
-    value_loss = DreamerValueLoss(value_model, discount_loss=True)
-    value_loss.make_value_estimator(gamma=cfg.optimization.gamma, lmbda=cfg.optimization.lmbda)
+    value_loss = DreamerValueLoss(value_model, discount_loss=True, gamma=cfg.optimization.gamma)
 
     # Make collector
     collector = make_collector(cfg, train_env, policy)
