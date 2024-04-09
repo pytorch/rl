@@ -56,3 +56,7 @@ python -c "import tensordict"
 printf "* Installing torchrl\n"
 python setup.py develop
 python -c "import torchrl"
+
+# Install meltingpot from git
+LATEST_TAG=$(curl  "https://api.github.com/repos/google-deepmind/meltingpot/tags" | jq -r '.[0].name')
+pip3 install git+https://github.com/google-deepmind/meltingpot@${LATEST_TAG}
