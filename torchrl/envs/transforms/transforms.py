@@ -4519,7 +4519,13 @@ class TensorDictPrimer(Transform):
                 "Setting random to True and providing a default_value are incompatible."
             )
         self.random = random
-        if isinstance(self.default_value, dict):
+        if isinstance(default_value, dict):
+            if len(default_value) != len(primers) and set(dict.keys()) != set(
+                primers.keys(True, True)
+            ):
+                raise ValueError(
+                    "If a default_value dictionary is provided, it must match the primers keys."
+                )
             default_value = {key: default_value for key in primers.keys(True, True)}
         self.default_value = default_value
         self._validated = False
@@ -4612,6 +4618,10 @@ class TensorDictPrimer(Transform):
     def _batch_size(self):
         return self.parent.batch_size
 
+    def validate(self, value, spec):
+        # TODO: implement this
+        return True
+
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         for key, spec in self.primers.items(True, True):
             if spec.shape[: len(tensordict.shape)] != tensordict.shape:
@@ -4624,18 +4634,23 @@ class TensorDictPrimer(Transform):
             if self.random:
                 value = spec.rand()
             else:
-                import ipdb; ipdb.set_trace()
-                if callable(self.default_value[key]):
-                    value = self.default_value[key]()
-                    # validate the value
-                    if not self._validated:
-                        self.validate(value)
-                        self._validated = True
+                if isinstance(self.default_value, dict):
+                    value = self.default_value[key]
+                    if callable(value):
+                        value = value()
+                        if not self._validated:
+                            self.validate(value, self.primers[key])
+                    else:
+                        value = torch.full_like(
+                            spec.zero(),
+                            value,
+                        )
                 else:
                     value = torch.full_like(
                         spec.zero(),
-                        self.default_value[key],
+                        self.default_value,
                     )
+                self._validated = True
             tensordict.set(key, value)
         return tensordict
 
