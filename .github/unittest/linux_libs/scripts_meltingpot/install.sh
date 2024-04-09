@@ -57,6 +57,7 @@ printf "* Installing torchrl\n"
 python setup.py develop
 python -c "import torchrl"
 
+conda install conda-forge::jq -y
 # Install meltingpot from git
 LATEST_TAG=$(curl  "https://api.github.com/repos/google-deepmind/lab2d/tags" | jq -r '.[0].name')
 pip3 install git+https://github.com/google-deepmind/lab2d@${LATEST_TAG}
