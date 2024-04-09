@@ -255,8 +255,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "t_sample": t_sample,
                 "t_preproc": t_preproc,
                 "t_collect": t_collect,
-                **timeit.todict()
+                **timeit.todict(percall=False)
             }
+            timeit.erase()
             metrics_to_log.update(loss_metrics)
 
         if logger is not None:
