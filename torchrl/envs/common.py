@@ -2753,6 +2753,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             not reset and contains the new reset data where the environment was reset.
 
         """
+        if self.auto_reset:
+            return tensordict
         if self._simple_done:
             done = tensordict._get_str("done", default=None)
             any_done = done.any()
@@ -2773,6 +2775,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if any_done:
             tensordict = self.reset(tensordict)
         return tensordict
+
+    @property
+    def auto_reset(self) -> bool:
+        """A property indicating if the environment resets automatically.
+
+        Default behaviour is to return ``False``.
+
+        Using a property allows a fine-grained control over this feature.
+        """
+        return False
 
     def empty_cache(self):
         """Erases all the cached values.
