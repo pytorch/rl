@@ -129,6 +129,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     if cfg.optimization.compile:
         torchrl_logger.info("Compiling")
+        backend = cfg.optimization.compile_backend
 
         def compile_rssms(module):
             if isinstance(module, RSSMRollout) and not getattr(
@@ -136,10 +137,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             ):
                 module._compiled = True
                 module.rssm_prior.module = torch.compile(
-                    module.rssm_prior.module, backend="cudagraphs"
+                    module.rssm_prior.module, backend=backend
                 )
                 module.rssm_posterior.module = torch.compile(
-                    module.rssm_posterior.module, backend="cudagraphs"
+                    module.rssm_posterior.module, backend=backend
                 )
 
         world_model_loss.apply(compile_rssms)
@@ -167,10 +168,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 t_sample_init = time.time()
                 sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
                 t_sample = time.time() - t_sample_init
-
-                # print("sampled_tensordict", sampled_tensordict)
-                # print("steps", sampled_tensordict["next", "steps"])
-                # print("traj_ids", sampled_tensordict["collector", "traj_ids"])
 
                 t_loss_model_init = time.time()
                 # update world model

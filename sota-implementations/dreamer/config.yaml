@@ -33,6 +33,7 @@ optimization:
   lmbda: 0.95
   imagination_horizon: 15
   compile: False
+  compile_backend: inductor
   use_autocast: True
 
 networks:
