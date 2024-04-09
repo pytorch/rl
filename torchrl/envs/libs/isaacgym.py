@@ -14,9 +14,10 @@ import numpy as np
 import torch
 
 from tensordict import TensorDictBase
+from torchrl.data import CompositeSpec
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs.utils import _classproperty, make_composite_from_td
-from torchrl.data import CompositeSpec
+
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
 
@@ -49,7 +50,6 @@ class IsaacGymWrapper(GymWrapper):
         warnings.warn(
             "IsaacGym environment support is an experimental feature that may change in the future."
         )
-        num_envs = env.num_envs
         super().__init__(
             env, torch.device(env.device), batch_size=torch.Size([]), **kwargs
         )
@@ -58,12 +58,14 @@ class IsaacGymWrapper(GymWrapper):
             self.task = env.__name__
 
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
-        print("self.batch_size", self.batch_size)
         super()._make_specs(env, batch_size=self.batch_size)
-        self.full_done_spec = CompositeSpec({
-            key: spec.squeeze(-1) for key, spec in self.full_done_spec.items(True, True)
-        }, shape=self.batch_size)
-        print(self.output_spec)
+        self.full_done_spec = CompositeSpec(
+            {
+                key: spec.squeeze(-1)
+                for key, spec in self.full_done_spec.items(True, True)
+            },
+            shape=self.batch_size,
+        )
 
         self.observation_spec["obs"] = self.observation_spec["observation"]
         del self.observation_spec["observation"]

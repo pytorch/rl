@@ -956,7 +956,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
         )
-        print("-1", observation_spec)
         if not isinstance(observation_spec, CompositeSpec):
             if self.from_pixels:
                 observation_spec = CompositeSpec(
@@ -982,13 +981,11 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 device=self.device,
             )
         if batch_size is not None:
-            print("0", observation_spec)
             action_spec = action_spec.expand(*batch_size, *action_spec.shape)
             reward_spec = reward_spec.expand(*batch_size, *reward_spec.shape)
             observation_spec = observation_spec.expand(
                 *batch_size, *observation_spec.shape
             )
-            print("1", observation_spec)
 
         self.done_spec = self._make_done_spec()
         self.action_spec = action_spec
