@@ -4652,9 +4652,9 @@ class TensorDictPrimer(Transform):
                         spec.zero(),
                         value,
                     )
-                if not self._validated:
-                    self._validated = True
             tensordict.set(key, value)
+        if not self._validated:
+            self._validated = True
         return tensordict
 
     def _step(
