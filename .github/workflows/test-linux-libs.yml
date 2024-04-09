@@ -257,6 +257,7 @@ jobs:
 
   unittests-meltingpot:
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
