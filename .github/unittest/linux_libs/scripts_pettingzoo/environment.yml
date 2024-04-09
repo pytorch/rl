@@ -8,7 +8,6 @@ dependencies:
     - cloudpickle
     - gym
     - gym-notices
-    - importlib-metadata
     - six
     - zipp
     - pytest

@@ -9,6 +9,7 @@ import importlib
 import warnings
 from typing import Dict, List, Tuple, Union
 
+import packaging
 import torch
 from tensordict import TensorDictBase
 
@@ -157,7 +158,7 @@ class PettingZooWrapper(_EnvWrapper):
             them to categorical or one-hot.
         seed (int, optional): the seed. Defaults to ``None``.
         done_on_any (bool, optional): whether the environment's done keys are set by aggregating the agent keys
-            using ``any()`` (when True) or ``all()`` (when False). Default (``None``) is to use ``any()`` for
+            using ``any()`` (when ``True``) or ``all()`` (when ``False``). Default (``None``) is to use ``any()`` for
             parallel environments and ``all()`` for AEC ones.
 
     Examples:
@@ -207,7 +208,7 @@ class PettingZooWrapper(_EnvWrapper):
         use_mask: bool = False,
         categorical_actions: bool = True,
         seed: int | None = None,
-        done_on_any: bool = None,
+        done_on_any: bool | None = None,
         **kwargs,
     ):
         if env is not None:
@@ -269,6 +270,13 @@ class PettingZooWrapper(_EnvWrapper):
         ],
     ):
         import pettingzoo
+
+        if packaging.version.parse(pettingzoo.__version__).base_version != "1.24.3":
+            warnings.warn(
+                "PettingZoo in TorchRL is tested using version == 1.24.3 , "
+                "If you are using a different version and are experiencing compatibility issues,"
+                "please raise an issue in the TorchRL github."
+            )
 
         self.parallel = isinstance(env, pettingzoo.utils.env.ParallelEnv)
         if not self.parallel and not self.use_mask:
@@ -915,7 +923,7 @@ class PettingZooEnv(PettingZooWrapper):
             them to categorical or one-hot.
         seed (int, optional): the seed.  Defaults to ``None``.
         done_on_any (bool, optional): whether the environment's done keys are set by aggregating the agent keys
-            using ``any()`` (when True) or ``all()`` (when False). Default (``None``) is to use ``any()`` for
+            using ``any()`` (when ``True``) or ``all()`` (when ``False``). Default (``None``) is to use ``any()`` for
             parallel environments and ``all()`` for AEC ones.
 
     Examples:
@@ -955,7 +963,7 @@ class PettingZooEnv(PettingZooWrapper):
         use_mask: bool = False,
         categorical_actions: bool = True,
         seed: int | None = None,
-        done_on_any: bool = None,
+        done_on_any: bool | None = None,
         **kwargs,
     ):
         if not _has_pettingzoo:

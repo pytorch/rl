@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import collections
+import functools
 import importlib.util
 import multiprocessing as mp
 import warnings
@@ -3779,17 +3780,32 @@ class DeviceCastTransform(Transform):
         self,
         device,
         orig_device=None,
+        *,
+        in_keys=None,
+        out_keys=None,
+        in_keys_inv=None,
+        out_keys_inv=None,
     ):
         device = self.device = torch.device(device)
         self.orig_device = (
             torch.device(orig_device) if orig_device is not None else orig_device
         )
-        super().__init__()
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+        )
+        self._map_env_device = not self.in_keys and not self.in_keys_inv
+
+        self._rename_keys = self.in_keys != self.out_keys
+        self._rename_keys_inv = self.in_keys_inv != self.out_keys_inv
+
         if device.type != "cuda":
             if torch.cuda.is_available():
                 self._sync_device = torch.cuda.synchronize
             elif torch.backends.mps.is_available():
-                self._sync_device = torch.cuda.synchronize
+                self._sync_device = torch.mps.synchronize
             elif device.type == "cpu":
                 self._sync_device = _do_nothing
         else:
@@ -3808,16 +3824,44 @@ class DeviceCastTransform(Transform):
             self.orig_device = device
         return super().set_container(container)
 
+    def _to(self, name, tensor):
+        if name in self.in_keys:
+            return tensor.to(self.device, non_blocking=True)
+        return tensor
+
+    def _to_inv(self, name, tensor, device):
+        if name in self.in_keys_inv:
+            return tensor.to(device, non_blocking=True)
+        return tensor
+
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        result = tensordict.to(self.device, non_blocking=True)
+        if self._map_env_device:
+            result = tensordict.to(self.device, non_blocking=True)
+            self._sync_device()
+            return result
+        tensordict_t = tensordict.named_apply(self._to, nested_keys=True, device=None)
+        if self._rename_keys:
+            for in_key, out_key in zip(self.in_keys, self.out_keys):
+                if out_key != in_key:
+                    tensordict_t.rename_key_(in_key, out_key)
+                    tensordict_t.set(in_key, tensordict.get(in_key))
         self._sync_device()
-        return result
+        return tensordict_t
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        result = tensordict.to(self.device, non_blocking=True)
+        if self._map_env_device:
+            result = tensordict.to(self.device, non_blocking=True)
+            self._sync_device()
+            return result
+        tensordict_t = tensordict.named_apply(self._to, nested_keys=True, device=None)
+        if self._rename_keys:
+            for in_key, out_key in zip(self.in_keys, self.out_keys):
+                if out_key != in_key:
+                    tensordict_t.rename_key_(in_key, out_key)
+                    tensordict_t.set(in_key, tensordict.get(in_key))
         self._sync_device()
-        return result
+        return tensordict_t
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
@@ -3827,12 +3871,25 @@ class DeviceCastTransform(Transform):
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         parent = self.parent
-        orig_device = self.orig_device if parent is None else parent.device
-        if orig_device is not None:
-            result = tensordict.to(orig_device, non_blocking=True)
+        device = self.orig_device if parent is None else parent.device
+        if device is None:
+            return tensordict
+        if self._map_env_device:
+            result = tensordict.to(device, non_blocking=True)
             self._sync_orig_device()
             return result
-        return tensordict
+        tensordict_t = tensordict.named_apply(
+            functools.partial(self._to_inv, device=device),
+            nested_keys=True,
+            device=None,
+        )
+        if self._rename_keys_inv:
+            for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+                if out_key != in_key:
+                    tensordict_t.rename_key_(in_key, out_key)
+                    tensordict_t.set(in_key, tensordict.get(in_key))
+        self._sync_orig_device()
+        return tensordict_t
 
     @property
     def _sync_orig_device(self):
@@ -3844,7 +3901,7 @@ class DeviceCastTransform(Transform):
                 if torch.cuda.is_available():
                     self._sync_orig_device_val = torch.cuda.synchronize
                 elif torch.backends.mps.is_available():
-                    self._sync_orig_device_val = torch.cuda.synchronize
+                    self._sync_orig_device_val = torch.mps.synchronize
                 elif device.type == "cpu":
                     self._sync_orig_device_val = _do_nothing
             else:
@@ -3852,27 +3909,76 @@ class DeviceCastTransform(Transform):
             return self._sync_orig_device
         return sync_func
 
-    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        return input_spec.to(self.device)
+    def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
+        if self._map_env_device:
+            return input_spec.to(self.device)
+        else:
+            return super().transform_input_spec(input_spec)
 
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        return reward_spec.to(self.device)
+    def transform_action_spec(self, full_action_spec: CompositeSpec) -> CompositeSpec:
+        full_action_spec = full_action_spec.clear_device_()
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+            if in_key not in full_action_spec.keys(True, True):
+                continue
+            full_action_spec[out_key] = full_action_spec[in_key].to(self.device)
+        return full_action_spec
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        return observation_spec.to(self.device)
+    def transform_state_spec(self, full_state_spec: CompositeSpec) -> CompositeSpec:
+        full_state_spec = full_state_spec.clear_device_()
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+            if in_key not in full_state_spec.keys(True, True):
+                continue
+            full_state_spec[out_key] = full_state_spec[in_key].to(self.device)
+        return full_state_spec
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
-        return output_spec.to(self.device)
+        if self._map_env_device:
+            return output_spec.to(self.device)
+        else:
+            return super().transform_output_spec(output_spec)
 
-    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
-        return done_spec.to(self.device)
+    def transform_observation_spec(
+        self, observation_spec: CompositeSpec
+    ) -> CompositeSpec:
+        observation_spec = observation_spec.clear_device_()
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            if in_key not in observation_spec.keys(True, True):
+                continue
+            observation_spec[out_key] = observation_spec[in_key].to(self.device)
+        return observation_spec
+
+    def transform_done_spec(self, full_done_spec: CompositeSpec) -> CompositeSpec:
+        full_done_spec = full_done_spec.clear_device_()
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            if in_key not in full_done_spec.keys(True, True):
+                continue
+            full_done_spec[out_key] = full_done_spec[in_key].to(self.device)
+        return full_done_spec
+
+    def transform_reward_spec(self, full_reward_spec: CompositeSpec) -> CompositeSpec:
+        full_reward_spec = full_reward_spec.clear_device_()
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            if in_key not in full_reward_spec.keys(True, True):
+                continue
+            full_reward_spec[out_key] = full_reward_spec[in_key].to(self.device)
+        return full_reward_spec
 
     def transform_env_device(self, device):
-        return self.device
+        if self._map_env_device:
+            return self.device
+        # In all other cases the device is not defined
+        return None
 
     def __repr__(self) -> str:
-        s = f"{self.__class__.__name__}(device={self.device}, orig_device={self.orig_device})"
-        return s
+        if self._map_env_device:
+            return f"{self.__class__.__name__}(device={self.device}, orig_device={self.orig_device})"
+        device = indent(4 * " ", f"device={self.device}")
+        orig_device = indent(4 * " ", f"orig_device={self.orig_device}")
+        in_keys = indent(4 * " ", f"in_keys={self.in_keys}")
+        out_keys = indent(4 * " ", f"out_keys={self.out_keys}")
+        in_keys_inv = indent(4 * " ", f"in_keys_inv={self.in_keys_inv}")
+        out_keys_inv = indent(4 * " ", f"out_keys_inv={self.out_keys_inv}")
+        return f"{self.__class__.__name__}(\n{device},\n{orig_device},\n{in_keys},\n{out_keys},\n{in_keys_inv},\n{out_keys_inv})"
 
 
 class CatTensors(Transform):
@@ -6570,7 +6676,7 @@ class ActionMask(Transform):
         ...         self.observation_spec = CompositeSpec(obs=UnboundedContinuousTensorSpec(3))
         ...         self.reward_spec = UnboundedContinuousTensorSpec(1)
         ...
-        ...     def _reset(self, data):
+        ...     def _reset(self, tensordict=None):
         ...         td = self.observation_spec.rand()
         ...         td.update(torch.ones_like(self.state_spec.rand()))
         ...         return td

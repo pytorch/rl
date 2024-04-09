@@ -278,7 +278,6 @@ class TestGym:
 
     @pytest.mark.parametrize("categorical", [True, False])
     def test_gym_spec_cast(self, categorical):
-
         batch_size = [3, 4]
         cat = DiscreteTensorSpec if categorical else OneHotDiscreteTensorSpec
         cat_shape = batch_size if categorical else (*batch_size, 5)
@@ -543,7 +542,6 @@ class TestGym:
         ],
     )
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
-
         if env_name == PONG_VERSIONED() and not from_pixels:
             # raise pytest.skip("already pixel")
             # we don't skip because that would raise an exception
@@ -3126,7 +3124,6 @@ class TestPettingZoo:
     def test_pistonball(
         self, parallel, continuous_actions, use_mask, return_state, group_map
     ):
-
         kwargs = {"n_pistons": 21, "continuous": continuous_actions}
 
         env = PettingZooEnv(
@@ -3140,6 +3137,60 @@ class TestPettingZoo:
         )
 
         check_env_specs(env)
+
+    def test_dead_agents_done(self, seed=0):
+        scenario_args = {"n_walkers": 3, "terminate_on_fall": False}
+
+        env = PettingZooEnv(
+            task="multiwalker_v9",
+            parallel=True,
+            seed=seed,
+            use_mask=False,
+            done_on_any=False,
+            **scenario_args,
+        )
+        td_reset = env.reset(seed=seed)
+        with pytest.raises(
+            ValueError,
+            match="Dead agents found in the environment, "
+            "you need to set use_mask=True to allow this.",
+        ):
+            env.rollout(
+                max_steps=500,
+                break_when_any_done=True,  # This looks at root done set with done_on_any
+                auto_reset=False,
+                tensordict=td_reset,
+            )
+
+        for done_on_any in [True, False]:
+            env = PettingZooEnv(
+                task="multiwalker_v9",
+                parallel=True,
+                seed=seed,
+                use_mask=True,
+                done_on_any=done_on_any,
+                **scenario_args,
+            )
+            td_reset = env.reset(seed=seed)
+            td = env.rollout(
+                max_steps=500,
+                break_when_any_done=True,  # This looks at root done set with done_on_any
+                auto_reset=False,
+                tensordict=td_reset,
+            )
+            done = td.get(("next", "walker", "done"))
+            mask = td.get(("next", "walker", "mask"))
+
+            if done_on_any:
+                assert not done[-1].all()  # Done triggered on any
+            else:
+                assert done[-1].all()  # Done triggered on all
+            assert not done[
+                mask
+            ].any()  # When mask is true (alive agent), all agents are not done
+            assert done[
+                ~mask
+            ].all()  # When mask is false (dead agent), all agents are done
 
     @pytest.mark.parametrize(
         "wins_player_0",
@@ -3156,7 +3207,6 @@ class TestPettingZoo:
         )
 
         class Policy:
-
             action = 0
             t = 0
 
