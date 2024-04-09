@@ -12,6 +12,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
 
+from torchrl._utils import timeit
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.modules import IndependentNormal
@@ -269,7 +270,7 @@ class DreamerActorLoss(LossModule):
             tensordict = tensordict.reshape(-1)
 
         # TODO: do we need exploration here?
-        with hold_out_net(self.model_based_env), set_exploration_type(
+        with timeit("actor_loss/rollout"), hold_out_net(self.model_based_env), set_exploration_type(
             ExplorationType.MEAN
         ):
             # action_td = self.actor_model(td)

@@ -94,6 +94,12 @@ class timeit:
             )
             logger.info(" -- ".join(strings))
 
+    @classmethod
+    def todict(cls, percall=True):
+        if percall:
+            return {key: val[0] for key, val in cls._REG.items()}
+        return {key: val[1] for key, val in cls._REG.items()}
+
     @staticmethod
     def erase():
         for k in timeit._REG:

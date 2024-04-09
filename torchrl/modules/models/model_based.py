@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import warnings
+from torchrl._utils import timeit
 
 import torch
 from packaging import version
@@ -248,11 +249,13 @@ class RSSMRollout(TensorDictModuleBase):
         for t in range(time_steps):
             # samples according to p(s_{t+1} | s_t, a_t, b_t)
             # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
-            self.rssm_prior(_tensordict)
+            with timeit("rssm_rollout/rssm_prior"):
+                self.rssm_prior(_tensordict)
 
             # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
             # [("next", "belief"), ("next", "encoded_latents")] -> [("next", "posterior_mean"), ("next", "posterior_std"), ("next", "state")]
-            self.rssm_posterior(_tensordict)
+            with timeit("rssm_rollout/rssm_posterior"):
+                self.rssm_posterior(_tensordict)
 
             tensordict_out.append(_tensordict)
             if t < time_steps - 1:

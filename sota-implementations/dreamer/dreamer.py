@@ -9,6 +9,7 @@ import hydra
 import torch
 import torch.cuda
 import tqdm
+from torchrl._utils import timeit
 from dreamer_utils import (
     log_metrics,
     make_collector,
@@ -152,7 +153,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         current_frames = tensordict.numel()
         collected_frames += current_frames
 
-        ep_reward = tensordict.get("episode_reward")[:, -1]
+        ep_reward = tensordict.get("episode_reward")[..., -1, 0]
         replay_buffer.extend(tensordict.cpu())
         t_preproc = time.time() - t_preproc_init
 
@@ -193,7 +194,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     scaler1.unscale_(world_model_opt)
                 else:
                     loss_world_model.backward()
-                clip_grad_norm_(world_model.parameters(), grad_clip)
+                world_model_grad = clip_grad_norm_(world_model.parameters(), grad_clip)
                 if use_autocast:
                     scaler1.step(world_model_opt)
                     scaler1.update()
@@ -212,7 +213,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     scaler2.unscale_(actor_opt)
                 else:
                     actor_loss_td["loss_actor"].backward()
-                clip_grad_norm_(actor_model.parameters(), grad_clip)
+                actor_model_grad = clip_grad_norm_(actor_model.parameters(), grad_clip)
                 if use_autocast:
                     scaler2.step(actor_opt)
                     scaler2.update()
@@ -231,7 +232,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     scaler3.unscale_(value_opt)
                 else:
                     value_loss_td["loss_value"].backward()
-                clip_grad_norm_(value_model.parameters(), grad_clip)
+                critic_model_grad = clip_grad_norm_(value_model.parameters(), grad_clip)
                 if use_autocast:
                     scaler3.step(value_opt)
                     scaler3.update()
@@ -245,12 +246,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "loss_model_reward": model_loss_td["loss_model_reward"].item(),
                 "loss_actor": actor_loss_td["loss_actor"].item(),
                 "loss_value": value_loss_td["loss_value"].item(),
+                "world_model_grad": world_model_grad,
+                "actor_model_grad": actor_model_grad,
+                "critic_model_grad": critic_model_grad,
                 "t_loss_actor": t_loss_actor,
                 "t_loss_critic": t_loss_critic,
                 "t_loss_model": t_loss_model,
                 "t_sample": t_sample,
                 "t_preproc": t_preproc,
                 "t_collect": t_collect,
+                **timeit.todict()
             }
             metrics_to_log.update(loss_metrics)
 

@@ -56,4 +56,4 @@ logger:
   mode: online
   # eval interval, in collection counts
   eval_iter: 10
-  eval_rollout_steps: 1000
+  eval_rollout_steps: 500
