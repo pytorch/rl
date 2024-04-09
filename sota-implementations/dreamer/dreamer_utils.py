@@ -221,12 +221,12 @@ def make_dreamer(
         rssm_hidden_dim=config.networks.rssm_hidden_dim,
     )
 
-    def detach_state_and_belief(data):
-        data.set("state", data.get("state").detach())
-        data.set("belief", data.get("belief").detach())
-        return data
-
-    model_based_env = model_based_env.append_transform(detach_state_and_belief)
+    # def detach_state_and_belief(data):
+    #     data.set("state", data.get("state").detach())
+    #     data.set("belief", data.get("belief").detach())
+    #     return data
+    #
+    # model_based_env = model_based_env.append_transform(detach_state_and_belief)
     check_env_specs(model_based_env)
 
     # Make actor
