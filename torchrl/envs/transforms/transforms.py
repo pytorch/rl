@@ -3494,10 +3494,12 @@ class DTypeCastTransform(Transform):
                     "this functionality is not covered. Consider passing the in_keys "
                     "or not passing any out_keys."
                 )
+
             def func(item):
                 if item.dtype == self.dtype_in:
                     item = self._apply_transform(item)
                 return item
+
             tensordict = tensordict._fast_apply(func)
         else:
             # we made sure that if in_keys is not None, out_keys is not None either
@@ -4432,7 +4434,7 @@ class TensorDictPrimer(Transform):
         random (bool, optional): if ``True``, the values will be drawn randomly from
             the TensorSpec domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
             Defaults to `False`.
-        default_value (float, optional): if non-random filling is chosen, this
+        default_value (float, Dict[NestedKey, float], Dict[NestedKey, Callable], optional): if non-random filling is chosen, this
             value will be used to populate the tensors. Defaults to `0.0`.
         reset_key (NestedKey, optional): the reset key to be used as partial
             reset indicator. Must be unique. If not provided, defaults to the
@@ -4490,8 +4492,8 @@ class TensorDictPrimer(Transform):
     def __init__(
         self,
         primers: dict | CompositeSpec = None,
-        random: bool = False,
-        default_value: float = 0.0,
+        random: bool | None = None,
+        default_value: float | Dict[NestedKey, float] | Dict[NestedKey, Callable] = 0.0,
         reset_key: NestedKey | None = None,
         **kwargs,
     ):
@@ -4506,8 +4508,17 @@ class TensorDictPrimer(Transform):
         if not isinstance(kwargs, CompositeSpec):
             kwargs = CompositeSpec(kwargs)
         self.primers = kwargs
+        if (
+            isinstance(default_value, dict)
+            and check_callable(...)
+            and random is not None
+        ):
+            raise ValueError
         self.random = random
+        if not isinstance(self.default_value, dict):
+            default_value = {key: default_value for key in primers.keys(True, True)}
         self.default_value = default_value
+        self._validated = False
         self.reset_key = reset_key
 
         # sanity check
@@ -4560,6 +4571,9 @@ class TensorDictPrimer(Transform):
             self.primers = self.primers.to(device)
         return super().to(*args, **kwargs)
 
+    def _maybe_expand_shape(self, spec):
+        return spec.expand((*self.parent.batch_size, *spec.shape))
+
     def transform_observation_spec(
         self, observation_spec: CompositeSpec
     ) -> CompositeSpec:
@@ -4569,10 +4583,13 @@ class TensorDictPrimer(Transform):
             )
         for key, spec in self.primers.items():
             if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
-                raise RuntimeError(
-                    f"The leading shape of the primer specs ({self.__class__}) should match the one of the parent env. "
-                    f"Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's shape is {spec.shape}."
-                )
+                try:
+                    spec = self._maybe_expand_shape(spec)
+                except Smth:
+                    raise RuntimeError(
+                        f"The leading shape of the primer specs ({self.__class__}) should match the one of the parent env. "
+                        f"Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's shape is {spec.shape}."
+                    )
             try:
                 device = observation_spec.device
             except RuntimeError:
@@ -4591,7 +4608,7 @@ class TensorDictPrimer(Transform):
         return self.parent.batch_size
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for key, spec in self.primers.items():
+        for key, spec in self.primers.items(True, True):
             if spec.shape[: len(tensordict.shape)] != tensordict.shape:
                 raise RuntimeError(
                     "The leading shape of the spec must match the tensordict's, "
@@ -4602,10 +4619,17 @@ class TensorDictPrimer(Transform):
             if self.random:
                 value = spec.rand()
             else:
-                value = torch.full_like(
-                    spec.zero(),
-                    self.default_value,
-                )
+                if callable(self.default_value[key]):
+                    value = self.default_value[key]()
+                    # validate the value
+                    if not self._validated:
+                        self.validate(value)
+                        self._validated = True
+                else:
+                    value = torch.full_like(
+                        spec.zero(),
+                        self.default_value[key],
+                    )
             tensordict.set(key, value)
         return tensordict
 
@@ -4635,13 +4659,13 @@ class TensorDictPrimer(Transform):
         )
         _reset = _get_reset(self.reset_key, tensordict)
         if _reset.any():
-            for key, spec in self.primers.items():
+            for key, spec in self.primers.items(True, True):
                 if self.random:
                     value = spec.rand(shape)
                 else:
                     value = torch.full_like(
                         spec.zero(shape),
-                        self.default_value,
+                        self.default_value[key],
                     )
                 prev_val = tensordict.get(key, 0.0)
                 value = torch.where(expand_as_right(_reset, value), value, prev_val)

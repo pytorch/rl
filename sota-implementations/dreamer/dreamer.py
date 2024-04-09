@@ -9,7 +9,6 @@ import hydra
 import torch
 import torch.cuda
 import tqdm
-from torchrl._utils import timeit
 from dreamer_utils import (
     log_metrics,
     make_collector,
@@ -21,7 +20,7 @@ from dreamer_utils import (
 # mixed precision training
 from torch.cuda.amp import GradScaler
 from torch.nn.utils import clip_grad_norm_
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.models.model_based import RSSMRollout
 
@@ -168,6 +167,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
                 t_sample = time.time() - t_sample_init
 
+                # print("sampled_tensordict", sampled_tensordict)
+                # print("steps", sampled_tensordict["next", "steps"])
+                # print("traj_ids", sampled_tensordict["collector", "traj_ids"])
+
                 t_loss_model_init = time.time()
                 # update world model
                 with torch.autocast(
@@ -198,6 +201,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if use_autocast:
                     scaler1.step(world_model_opt)
                     scaler1.update()
+                else:
+                    world_model_opt.step()
                 t_loss_model += time.time() - t_loss_model_init
 
                 # update actor network
@@ -217,6 +222,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if use_autocast:
                     scaler2.step(actor_opt)
                     scaler2.update()
+                else:
+                    actor_opt.step()
                 t_loss_actor += time.time() - t_loss_actor_init
 
                 # update value network
@@ -236,6 +243,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if use_autocast:
                     scaler3.step(value_opt)
                     scaler3.update()
+                else:
+                    value_opt.step()
                 t_loss_critic += time.time() - t_loss_critic_init
 
         metrics_to_log = {"reward": ep_reward.mean().item()}
@@ -255,7 +264,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "t_sample": t_sample,
                 "t_preproc": t_preproc,
                 "t_collect": t_collect,
-                **timeit.todict(percall=False)
+                **timeit.todict(percall=False),
             }
             timeit.erase()
             metrics_to_log.update(loss_metrics)
