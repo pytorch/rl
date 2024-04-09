@@ -136,22 +136,22 @@ class DreamerModelLoss(LossModule):
         )
 
         dist: IndependentNormal = self.decoder.get_dist(tensordict)
-        # reco_loss = -dist.log_prob(
-        #     tensordict.get(("next", self.tensor_keys.pixels))
-        # ).mean()
-        x = tensordict.get(("next", self.tensor_keys.pixels))
-        loc = dist.base_dist.loc
-        scale = dist.base_dist.scale
-        reco_loss = -self.normal_log_probability(x, loc, scale).mean()
+        reco_loss = -dist.log_prob(
+            tensordict.get(("next", self.tensor_keys.pixels))
+        ).mean()
+        # x = tensordict.get(("next", self.tensor_keys.pixels))
+        # loc = dist.base_dist.loc
+        # scale = dist.base_dist.scale
+        # reco_loss = -self.normal_log_probability(x, loc, scale).mean()
 
         dist: IndependentNormal = self.reward_model.get_dist(tensordict)
-        # reward_loss = -dist.log_prob(
-        #     tensordict.get(("next", self.tensor_keys.true_reward))
-        # ).mean()
-        x = tensordict.get(("next", self.tensor_keys.true_reward))
-        loc = dist.base_dist.loc
-        scale = dist.base_dist.scale
-        reward_loss = -self.normal_log_probability(x, loc, scale).mean()
+        reward_loss = -dist.log_prob(
+            tensordict.get(("next", self.tensor_keys.true_reward))
+        ).mean()
+        # x = tensordict.get(("next", self.tensor_keys.true_reward))
+        # loc = dist.base_dist.loc
+        # scale = dist.base_dist.scale
+        # reward_loss = -self.normal_log_probability(x, loc, scale).mean()
 
         return (
             TensorDict(
@@ -183,8 +183,8 @@ class DreamerModelLoss(LossModule):
             + (posterior_std**2 + (prior_mean - posterior_mean) ** 2)
             / (2 * prior_std**2)
             - 0.5
-        ).mean()
-        return kl.clamp_min(self.free_nats)
+        )
+        return kl.clamp_min(self.free_nats).sum(-1).mean()
 
 
 class DreamerActorLoss(LossModule):
