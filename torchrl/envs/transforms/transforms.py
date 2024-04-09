@@ -4513,7 +4513,7 @@ class TensorDictPrimer(Transform):
             kwargs = CompositeSpec(kwargs)
         self.primers = kwargs
         if (random is not None) and (
-            isinstance(default_value, (dict, float, Callable)) and default_value != 0.0
+            isinstance(default_value, (dict, float, Callable)) # and default_value != 0.0
         ):
             raise ValueError(
                 "Setting random to True and providing a default_value are incompatible."
