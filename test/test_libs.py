@@ -2,7 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import importlib
+import importlib.util
+_has_isaac = importlib.util.find_spec("isaacgym") is not None
+
+if _has_isaac:
+    # isaac gym asks to be imported before torch...
+    import isaacgym  # noqa
+    import isaacgymenvs  # noqa
+    from torchrl.envs.libs.isaacgym import IsaacGymEnv
 import os
 from contextlib import nullcontext
 from pathlib import Path
@@ -14,13 +21,6 @@ from torchrl.data.datasets.gen_dgrl import GenDGRLExperienceReplay
 from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.modules import MaskedCategorical
 
-_has_isaac = importlib.util.find_spec("isaacgym") is not None
-
-if _has_isaac:
-    # isaac gym asks to be imported before torch...
-    import isaacgym  # noqa
-    import isaacgymenvs  # noqa
-    from torchrl.envs.libs.isaacgym import IsaacGymEnv
 
 import argparse
 import importlib

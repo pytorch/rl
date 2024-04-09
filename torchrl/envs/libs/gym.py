@@ -943,6 +943,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             return rs
 
     def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
+        # If batch_size is provided, we se it to tell what batch size must be used
+        # instead of self.batch_size
+        cur_batch_size = self.batch_size if batch_size is None else torch.Size([])
         action_spec = _gym_to_torchrl_spec_transform(
             env.action_space,
             device=self.device,
@@ -953,17 +956,18 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
         )
+        print("-1", observation_spec)
         if not isinstance(observation_spec, CompositeSpec):
             if self.from_pixels:
                 observation_spec = CompositeSpec(
-                    pixels=observation_spec, shape=self.batch_size
+                    pixels=observation_spec, shape=cur_batch_size
                 )
             else:
                 observation_spec = CompositeSpec(
-                    observation=observation_spec, shape=self.batch_size
+                    observation=observation_spec, shape=cur_batch_size
                 )
-        elif observation_spec.shape[: len(self.batch_size)] != self.batch_size:
-            observation_spec.shape = self.batch_size
+        elif observation_spec.shape[: len(cur_batch_size)] != cur_batch_size:
+            observation_spec.shape = cur_batch_size
 
         reward_space = self._reward_space(env)
         if reward_space is not None:
@@ -978,15 +982,18 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 device=self.device,
             )
         if batch_size is not None:
+            print("0", observation_spec)
             action_spec = action_spec.expand(*batch_size, *action_spec.shape)
             reward_spec = reward_spec.expand(*batch_size, *reward_spec.shape)
             observation_spec = observation_spec.expand(
                 *batch_size, *observation_spec.shape
             )
+            print("1", observation_spec)
+
         self.done_spec = self._make_done_spec()
         self.action_spec = action_spec
-        if reward_spec.shape[: len(self.batch_size)] != self.batch_size:
-            self.reward_spec = reward_spec.expand(*self.batch_size, *reward_spec.shape)
+        if reward_spec.shape[: len(cur_batch_size)] != cur_batch_size:
+            self.reward_spec = reward_spec.expand(*cur_batch_size, *reward_spec.shape)
         else:
             self.reward_spec = reward_spec
         self.observation_spec = observation_spec

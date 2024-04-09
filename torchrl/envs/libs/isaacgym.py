@@ -16,7 +16,7 @@ import torch
 from tensordict import TensorDictBase
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs.utils import _classproperty, make_composite_from_td
-
+from torchrl.data import CompositeSpec
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
 
@@ -51,17 +51,20 @@ class IsaacGymWrapper(GymWrapper):
         )
         num_envs = env.num_envs
         super().__init__(
-            env, torch.device(env.device), batch_size=torch.Size([num_envs]), **kwargs
+            env, torch.device(env.device), batch_size=torch.Size([]), **kwargs
         )
         if not hasattr(self, "task"):
             # by convention in IsaacGymEnvs
             self.task = env.__name__
 
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
+        print("self.batch_size", self.batch_size)
         super()._make_specs(env, batch_size=self.batch_size)
-        self.full_done_spec = {
+        self.full_done_spec = CompositeSpec({
             key: spec.squeeze(-1) for key, spec in self.full_done_spec.items(True, True)
-        }
+        }, shape=self.batch_size)
+        print(self.output_spec)
+
         self.observation_spec["obs"] = self.observation_spec["observation"]
         del self.observation_spec["observation"]
 
@@ -78,7 +81,13 @@ class IsaacGymWrapper(GymWrapper):
         obs_spec.unlock_()
         obs_spec.update(specs)
         obs_spec.lock_()
-        self.__dict__["full_observation_spec"] = obs_spec
+
+    def _output_transform(self, output):
+        obs, reward, done, info = output
+        return obs, reward, done ^ done, done, done, info
+
+    def _reset_output_transform(self, reset_data):
+        return reset_data, {}
 
     @classmethod
     def _make_envs(cls, *, task, num_envs, device, seed=None, headless=True, **kwargs):
@@ -125,15 +134,8 @@ class IsaacGymWrapper(GymWrapper):
             done = done.bool()
         return terminated, truncated, done, done.any()
 
-    def read_reward(self, total_reward, step_reward):
-        """Reads a reward and the total reward so far (in the frame skip loop) and returns a sum of the two.
-
-        Args:
-            total_reward (torch.Tensor or TensorDict): total reward so far in the step
-            step_reward (reward in the format provided by the inner env): reward of this particular step
-
-        """
-        return total_reward + step_reward
+    def read_reward(self, total_reward):
+        return total_reward
 
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
