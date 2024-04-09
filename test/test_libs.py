@@ -3453,7 +3453,7 @@ class TestSmacv2:
 
 @pytest.mark.skipif(not _has_meltingpot, reason="Meltingpot not found")
 class TestMeltingpot:
-    @pytest.mark.parametrize("substrate", MeltingpotEnv.available_envs)
+    @pytest.mark.parametrize("substrate", MeltingpotWrapper.available_envs)
     def test_all_envs(self, substrate):
         env = MeltingpotEnv(substrate=substrate)
         check_env_specs(env)
@@ -3492,8 +3492,8 @@ class TestMeltingpot:
     def test_render(self, rollout_steps):
         env = MeltingpotEnv(substrate="commons_harvest__open")
         td = env.rollout(2)
-        rollout_penultimate_image = td[-1].get("WORLD.RGB")
-        rollout_last_image = td[-1].get(("next", "WORLD.RGB"))
+        rollout_penultimate_image = td[-1].get("RGB")
+        rollout_last_image = td[-1].get(("next", "RGB"))
         image_from_env = env.get_rgb_image()
         assert torch.equal(rollout_last_image, image_from_env)
         assert not torch.equal(rollout_penultimate_image, image_from_env)

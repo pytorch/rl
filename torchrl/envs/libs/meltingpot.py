@@ -26,9 +26,9 @@ _WORLD_PREFIX = "WORLD."
 def _get_envs():
     if not _has_meltingpot:
         raise ImportError("meltingpot is not installed in your virtual environment.")
-    from meltingpot.substrate import SUBSTRATES
+    import meltingpot
 
-    return list(SUBSTRATES)
+    return list(meltingpot.substrate.SUBSTRATES)
 
 
 def _filter_global_state_from_dict(obs_dict: Dict, world: bool) -> Dict:  # noqa
@@ -53,11 +53,15 @@ def _global_state_spec_from_obs_spec(
 ) -> Mapping[str, "dm_env.specs.Array"]:  # noqa
     # We only look at agent 0 since world entries are the same for all agents
     world_entries = _filter_global_state_from_dict(observation_spec[0], world=True)
-    if len(world_entries) != 1 and "WORLD.RGB" not in world_entries:
+    if len(world_entries) != 1 and _WORLD_PREFIX + "RGB" not in world_entries:
         raise ValueError(
-            f"Expected only one world entry named WORLD.RGB in observation_spec, but got {world_entries}"
+            f"Expected only one world entry named {_WORLD_PREFIX}RGB in observation_spec, but got {world_entries}"
         )
-    return world_entries
+    return _remove_world_prefix(world_entries)
+
+
+def _remove_world_prefix(world_entries: Dict) -> Dict:
+    return {key[len(_WORLD_PREFIX) :]: value for key, value in world_entries.items()}
 
 
 class MeltingpotWrapper(_EnvWrapper):
@@ -115,7 +119,7 @@ class MeltingpotWrapper(_EnvWrapper):
         >>> print(env_torchrl.rollout(max_steps=5))
         TensorDict(
             fields={
-                WORLD.RGB: Tensor(shape=torch.Size([5, 144, 192, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
+                RGB: Tensor(shape=torch.Size([5, 144, 192, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
                 agents: TensorDict(
                     fields={
                         action: Tensor(shape=torch.Size([5, 7]), device=cpu, dtype=torch.int64, is_shared=False),
@@ -133,7 +137,7 @@ class MeltingpotWrapper(_EnvWrapper):
                 done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                 next: TensorDict(
                     fields={
-                        WORLD.RGB: Tensor(shape=torch.Size([5, 144, 192, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        RGB: Tensor(shape=torch.Size([5, 144, 192, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
                         agents: TensorDict(
                             fields={
                                 observation: TensorDict(
@@ -375,7 +379,9 @@ class MeltingpotWrapper(_EnvWrapper):
             td.set(group, agent_tds)
 
         # Global state
-        td.update(_filter_global_state_from_dict(obs[0], world=True))
+        td.update(
+            _remove_world_prefix(_filter_global_state_from_dict(obs[0], world=True))
+        )
 
         tensordict_out = TensorDict(
             source=td,
@@ -415,7 +421,9 @@ class MeltingpotWrapper(_EnvWrapper):
             batch_size=self.batch_size,
         )
         # Global state
-        td.update(_filter_global_state_from_dict(obs[0], world=True))
+        td.update(
+            _remove_world_prefix(_filter_global_state_from_dict(obs[0], world=True))
+        )
 
         for group, agent_names in self.group_map.items():
             agent_tds = []
@@ -446,11 +454,10 @@ class MeltingpotWrapper(_EnvWrapper):
         """Returns an RGB image of the environment.
 
         Returns:
-            torch.Tensor: The  image
+            a ``torch.Tensor`` containing image in format WHC.
 
         """
-        rgb_arr = torch.from_numpy(self._env.observation()[0]["WORLD.RGB"])
-        return rgb_arr
+        return torch.from_numpy(self._env.observation()[0][_WORLD_PREFIX + "RGB"])
 
 
 class MeltingpotEnv(MeltingpotWrapper):
@@ -505,7 +512,7 @@ class MeltingpotEnv(MeltingpotWrapper):
         >>> print(env_torchrl.rollout(max_steps=5))
         TensorDict(
             fields={
-                WORLD.RGB: Tensor(shape=torch.Size([5, 144, 192, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
+                RGB: Tensor(shape=torch.Size([5, 144, 192, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
                 agents: TensorDict(
                     fields={
                         action: Tensor(shape=torch.Size([5, 7]), device=cpu, dtype=torch.int64, is_shared=False),
@@ -523,7 +530,7 @@ class MeltingpotEnv(MeltingpotWrapper):
                 done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                 next: TensorDict(
                     fields={
-                        WORLD.RGB: Tensor(shape=torch.Size([5, 144, 192, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        RGB: Tensor(shape=torch.Size([5, 144, 192, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
                         agents: TensorDict(
                             fields={
                                 observation: TensorDict(
