@@ -4646,9 +4646,12 @@ class TensorDictPrimer(Transform):
                             value,
                         )
                 else:
+                    value = self.default_value
+                    if callable(value):
+                        value = value()
                     value = torch.full_like(
                         spec.zero(),
-                        self.default_value,
+                        value,
                     )
                 self._validated = True
             tensordict.set(key, value)
@@ -4684,10 +4687,23 @@ class TensorDictPrimer(Transform):
                 if self.random:
                     value = spec.rand(shape)
                 else:
-                    value = torch.full_like(
-                        spec.zero(shape),
-                        self.default_value[key],
-                    )
+                    if isinstance(self.default_value, dict):
+                        value = self.default_value[key]
+                        if callable(value):
+                            value = value()
+                        else:
+                            value = torch.full_like(
+                                spec.zero(shape),
+                                value,
+                            )
+                    else:
+                        value = self.default_value
+                        if callable(value):
+                            value = value()
+                        value = torch.full_like(
+                            spec.zero(shape),
+                            value,
+                        )
                 prev_val = tensordict.get(key, 0.0)
                 value = torch.where(expand_as_right(_reset, value), value, prev_val)
                 tensordict_reset.set(key, value)
