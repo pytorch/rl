@@ -30,7 +30,7 @@ optimization:
   free_nats: 3.0
   optim_steps_per_batch: 80
   gamma: 0.99
-  lambda: 0.95
+  lmbda: 0.95
   imagination_horizon: 15
   compile: False
   use_autocast: True
