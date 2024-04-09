@@ -4617,7 +4617,7 @@ class TensorDictPrimer(Transform):
     def _batch_size(self):
         return self.parent.batch_size
 
-    def validate(self, value, spec):
+    def _validate_value_tensor(self, value, spec):
         # TODO: implement this
         return True
 
@@ -4638,7 +4638,7 @@ class TensorDictPrimer(Transform):
                     if callable(value):
                         value = value()
                         if not self._validated:
-                            self.validate(value, self.primers[key])
+                            self._validate_value_tensor(value, self.primers[key])
                     else:
                         value = torch.full_like(
                             spec.zero(),
@@ -4652,7 +4652,8 @@ class TensorDictPrimer(Transform):
                         spec.zero(),
                         value,
                     )
-                self._validated = True
+                if not self._validated:
+                    self._validated = True
             tensordict.set(key, value)
         return tensordict
 
@@ -4710,7 +4711,12 @@ class TensorDictPrimer(Transform):
 
     def __repr__(self) -> str:
         class_name = self.__class__.__name__
-        return f"{class_name}(primers={self.primers}, default_value={self.default_value}, random={self.random})"
+        default_value = (
+            self.default_value
+            if isinstance(self.default_value, float)
+            else self.default_value.__class__.__name__
+        )
+        return f"{class_name}(primers={self.primers}, default_value={default_value}, random={self.random})"
 
 
 class PinMemoryTransform(Transform):
