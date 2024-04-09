@@ -249,12 +249,12 @@ class RSSMRollout(TensorDictModuleBase):
         for t in range(time_steps):
             # samples according to p(s_{t+1} | s_t, a_t, b_t)
             # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
-            with timeit("rssm_rollout/rssm_prior"):
+            with timeit("rssm_rollout/time-rssm_prior"):
                 self.rssm_prior(_tensordict)
 
             # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
             # [("next", "belief"), ("next", "encoded_latents")] -> [("next", "posterior_mean"), ("next", "posterior_std"), ("next", "state")]
-            with timeit("rssm_rollout/rssm_posterior"):
+            with timeit("rssm_rollout/time-rssm_posterior"):
                 self.rssm_posterior(_tensordict)
 
             tensordict_out.append(_tensordict)
