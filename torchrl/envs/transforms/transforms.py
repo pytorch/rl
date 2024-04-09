@@ -4604,7 +4604,7 @@ class TensorDictPrimer(Transform):
                 device = observation_spec.device
             except RuntimeError:
                 device = self.device
-            observation_spec[key] = spec.to(device)
+            observation_spec[key] = self.primers[key] = spec.to(device)
         return observation_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
