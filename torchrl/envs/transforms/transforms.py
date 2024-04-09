@@ -4512,9 +4512,7 @@ class TensorDictPrimer(Transform):
         if not isinstance(kwargs, CompositeSpec):
             kwargs = CompositeSpec(kwargs)
         self.primers = kwargs
-        if (random is not None) and (
-            isinstance(default_value, (dict, Callable)) # and default_value != 0.0
-        ):
+        if (random is not None) and isinstance(default_value, (dict, Callable)):
             raise ValueError(
                 "Setting random to True and providing a default_value are incompatible."
             )
@@ -4594,7 +4592,8 @@ class TensorDictPrimer(Transform):
         for key, spec in self.primers.items():
             if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
                 try:
-                    expanded_spec = self._try_expand_shape(spec)
+                    # expanded_spec = self._try_expand_shape(spec)
+                    expanded_spec = spec
                 except AttributeError:
                     pass
                 if (

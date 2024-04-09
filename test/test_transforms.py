@@ -6406,17 +6406,11 @@ class TestTensorDictPrimer(TransformBase):
         finally:
             env.close()
 
-    def test_trans_serial_env_check(self):
-        with pytest.raises(RuntimeError, match="The leading shape of the primer specs"):
-            env = TransformedEnv(
-                SerialEnv(2, ContinuousActionVecMockEnv),
-                TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([4])),
-            )
-            _ = env.observation_spec
-
+    @pytest.mark.parametrize("spec_shape", [[4], [2, 4]])
+    def test_trans_serial_env_check(self, spec_shape):
         env = TransformedEnv(
             SerialEnv(2, ContinuousActionVecMockEnv),
-            TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([2, 4])),
+            TensorDictPrimer(mykey=UnboundedContinuousTensorSpec(spec_shape)),
         )
         check_env_specs(env)
         assert "mykey" in env.reset().keys()
