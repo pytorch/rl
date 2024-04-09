@@ -5,7 +5,6 @@ dependencies:
   - pip
   - pip:
     - cloudpickle
-    - numpy
     - torch
     - pytest
     - pytest-cov
@@ -14,4 +13,3 @@ dependencies:
     - pytest-rerunfailures
     - pytest-error-for-skips
     - expecttest
-    - pyyaml
