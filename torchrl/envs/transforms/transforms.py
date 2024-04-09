@@ -4592,14 +4592,8 @@ class TensorDictPrimer(Transform):
         for key, spec in self.primers.items():
             if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
                 try:
-                    # expanded_spec = self._try_expand_shape(spec)
-                    expanded_spec = spec
+                    expanded_spec = self._try_expand_shape(spec)
                 except AttributeError:
-                    pass
-                if (
-                    expanded_spec.shape[: len(observation_spec.shape)]
-                    != observation_spec.shape
-                ):
                     raise RuntimeError(
                         f"The leading shape of the primer specs ({self.__class__}) should match the one of the "
                         f"parent env. Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's "
