@@ -389,6 +389,7 @@ class DreamerValueLoss(LossModule):
         value: NestedKey = "state_value"
 
     default_keys = _AcceptedKeys()
+    default_value_estimator = TDLambdaEstimator
 
     def __init__(
         self,
