@@ -4581,7 +4581,7 @@ class TensorDictPrimer(Transform):
             self.primers = self.primers.to(device)
         return super().to(*args, **kwargs)
 
-    def _maybe_expand_shape(self, spec):
+    def _try_expand_shape(self, spec):
         return spec.expand((*self.parent.batch_size, *spec.shape))
 
     def transform_observation_spec(
@@ -4593,14 +4593,20 @@ class TensorDictPrimer(Transform):
             )
         for key, spec in self.primers.items():
             if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
-                import ipdb; ipdb.set_trace()
                 try:
-                    spec = self._maybe_expand_shape(spec)
+                    expanded_spec = self._try_expand_shape(spec)
                 except AttributeError:
+                    pass
+                if (
+                    expanded_spec.shape[: len(observation_spec.shape)]
+                    != observation_spec.shape
+                ):
                     raise RuntimeError(
-                        f"The leading shape of the primer specs ({self.__class__}) should match the one of the parent env. "
-                        f"Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's shape is {spec.shape}."
+                        f"The leading shape of the primer specs ({self.__class__}) should match the one of the "
+                        f"parent env. Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's "
+                        f"shape is {expanded_spec.shape}."
                     )
+                spec = expanded_spec
             try:
                 device = observation_spec.device
             except RuntimeError:
