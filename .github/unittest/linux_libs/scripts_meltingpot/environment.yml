@@ -13,3 +13,4 @@ dependencies:
     - pytest-rerunfailures
     - pytest-error-for-skips
     - expecttest
+    - dm-meltingpot
