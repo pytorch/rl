@@ -262,7 +262,8 @@ jobs:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
-      gpu-arch-version: "11.7"
+      gpu-arch-version: "12.1"
+      docker-image: pytorch/manylinux-cuda121
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
