@@ -4709,6 +4709,10 @@ class TensorDictPrimer(Transform):
                             spec.zero(shape),
                             value,
                         )
+                        prev_val = tensordict.get(key, 0.0)
+                        value = torch.where(
+                            expand_as_right(_reset, value), value, prev_val
+                        )
                 tensordict_reset.set(key, value)
             self._validated = True
         return tensordict_reset
