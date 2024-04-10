@@ -3077,22 +3077,24 @@ class TestOpenML:
 )
 @pytest.mark.parametrize("num_envs", [10, 20])
 @pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("from_pixels", [True, False])
 class TestIsaacGym:
     @classmethod
-    def _run_on_proc(cls, q, task, num_envs, device):
+    def _run_on_proc(cls, q, task, num_envs, device, from_pixels):
         try:
-            env = IsaacGymEnv(task=task, num_envs=num_envs, device=device)
+            env = IsaacGymEnv(task=task, num_envs=num_envs, device=device, from_pixels=from_pixels)
+            print(env.rollout(3))
             check_env_specs(env)
             q.put(("succeeded!", None))
         except Exception as err:
             q.put(("failed!", err))
             raise err
 
-    def test_env(self, task, num_envs, device):
+    def test_env(self, task, num_envs, device, from_pixels):
         from torch import multiprocessing as mp
-
         q = mp.Queue(1)
-        proc = mp.Process(target=self._run_on_proc, args=(q, task, num_envs, device))
+        self._run_on_proc(q, task, num_envs, device, from_pixels)
+        proc = mp.Process(target=self._run_on_proc, args=(q, task, num_envs, device, from_pixels))
         try:
             proc.start()
             msg, error = q.get()
