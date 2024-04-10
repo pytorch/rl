@@ -5,7 +5,7 @@
 #
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
-set -e
+set -e -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
@@ -14,9 +14,6 @@ root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
 
-echo $(rpm -qa | grep glibc)
-yum update -y
-yum install glibc.x86_64 -y
 
 cd "${root_dir}"
 

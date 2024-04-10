@@ -263,7 +263,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.1"
-      docker-image: pytorch/manylinux-cuda121
+      docker-image: cuda:12.4.1-runtime-ubuntu22.04
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
