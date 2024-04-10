@@ -3805,7 +3805,7 @@ class DeviceCastTransform(Transform):
             if torch.cuda.is_available():
                 self._sync_device = torch.cuda.synchronize
             elif torch.backends.mps.is_available():
-                self._sync_device = torch.cuda.synchronize
+                self._sync_device = torch.mps.synchronize
             elif device.type == "cpu":
                 self._sync_device = _do_nothing
         else:
@@ -3901,7 +3901,7 @@ class DeviceCastTransform(Transform):
                 if torch.cuda.is_available():
                     self._sync_orig_device_val = torch.cuda.synchronize
                 elif torch.backends.mps.is_available():
-                    self._sync_orig_device_val = torch.cuda.synchronize
+                    self._sync_orig_device_val = torch.mps.synchronize
                 elif device.type == "cpu":
                     self._sync_orig_device_val = _do_nothing
             else:
@@ -6676,7 +6676,7 @@ class ActionMask(Transform):
         ...         self.observation_spec = CompositeSpec(obs=UnboundedContinuousTensorSpec(3))
         ...         self.reward_spec = UnboundedContinuousTensorSpec(1)
         ...
-        ...     def _reset(self, data):
+        ...     def _reset(self, tensordict=None):
         ...         td = self.observation_spec.rand()
         ...         td.update(torch.ones_like(self.state_spec.rand()))
         ...         return td
