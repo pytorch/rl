@@ -4518,13 +4518,15 @@ class TensorDictPrimer(Transform):
             )
         self.random = random
         if isinstance(default_value, dict):
-            if len(default_value) != len(primers) and set(dict.keys()) != set(
-                primers.keys(True, True)
+            if len(default_value) != len(self.primers) and set(dict.keys()) != set(
+                self.primers.keys(True, True)
             ):
                 raise ValueError(
                     "If a default_value dictionary is provided, it must match the primers keys."
                 )
-            default_value = {key: default_value for key in primers.keys(True, True)}
+            default_value = {
+                key: default_value[key] for key in self.primers.keys(True, True)
+            }
         self.default_value = default_value
         self._validated = False
         self.reset_key = reset_key
@@ -4618,7 +4620,20 @@ class TensorDictPrimer(Transform):
         return self.parent.batch_size
 
     def _validate_value_tensor(self, value, spec):
-        # TODO: implement this
+        if value.shape != spec.shape:
+            raise RuntimeError(
+                f"Value shape ({value.shape}) does not match the spec shape ({spec.shape})."
+            )
+        if value.dtype != spec.dtype:
+            raise RuntimeError(
+                f"Value dtype ({value.dtype}) does not match the spec dtype ({spec.dtype})."
+            )
+        if value.device != spec.device:
+            raise RuntimeError(
+                f"Value device ({value.device}) does not match the spec device ({spec.device})."
+            )
+        if not spec.is_in(value):
+            raise RuntimeError(f"Value ({value}) is not in the spec domain ({spec}).")
         return True
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -4635,19 +4650,13 @@ class TensorDictPrimer(Transform):
             else:
                 if isinstance(self.default_value, dict):
                     value = self.default_value[key]
-                    if callable(value):
-                        value = value()
-                        if not self._validated:
-                            self._validate_value_tensor(value, self.primers[key])
-                    else:
-                        value = torch.full_like(
-                            spec.zero(),
-                            value,
-                        )
                 else:
                     value = self.default_value
-                    if callable(value):
-                        value = value()
+                if callable(value):
+                    value = value()
+                    if not self._validated:
+                        self._validate_value_tensor(value, spec)
+                else:
                     value = torch.full_like(
                         spec.zero(),
                         value,
@@ -4689,24 +4698,19 @@ class TensorDictPrimer(Transform):
                 else:
                     if isinstance(self.default_value, dict):
                         value = self.default_value[key]
-                        if callable(value):
-                            value = value()
-                        else:
-                            value = torch.full_like(
-                                spec.zero(shape),
-                                value,
-                            )
                     else:
                         value = self.default_value
-                        if callable(value):
-                            value = value()
+                    if callable(value):
+                        value = value()
+                        if not self._validated:
+                            self._validate_value_tensor(value, spec)
+                    else:
                         value = torch.full_like(
                             spec.zero(shape),
                             value,
                         )
-                prev_val = tensordict.get(key, 0.0)
-                value = torch.where(expand_as_right(_reset, value), value, prev_val)
                 tensordict_reset.set(key, value)
+            self._validated = True
         return tensordict_reset
 
     def __repr__(self) -> str:
