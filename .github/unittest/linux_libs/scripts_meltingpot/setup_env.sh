@@ -15,8 +15,8 @@ conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
 
 echo $(rpm -qa | grep glibc)
-yum update
-yum install glibc.x86_64
+yum update -y
+yum install glibc.x86_64 -y
 
 cd "${root_dir}"
 
