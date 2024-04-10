@@ -3141,6 +3141,60 @@ class TestPettingZoo:
 
         check_env_specs(env)
 
+    def test_dead_agents_done(self, seed=0):
+        scenario_args = {"n_walkers": 3, "terminate_on_fall": False}
+
+        env = PettingZooEnv(
+            task="multiwalker_v9",
+            parallel=True,
+            seed=seed,
+            use_mask=False,
+            done_on_any=False,
+            **scenario_args,
+        )
+        td_reset = env.reset(seed=seed)
+        with pytest.raises(
+            ValueError,
+            match="Dead agents found in the environment, "
+            "you need to set use_mask=True to allow this.",
+        ):
+            env.rollout(
+                max_steps=500,
+                break_when_any_done=True,  # This looks at root done set with done_on_any
+                auto_reset=False,
+                tensordict=td_reset,
+            )
+
+        for done_on_any in [True, False]:
+            env = PettingZooEnv(
+                task="multiwalker_v9",
+                parallel=True,
+                seed=seed,
+                use_mask=True,
+                done_on_any=done_on_any,
+                **scenario_args,
+            )
+            td_reset = env.reset(seed=seed)
+            td = env.rollout(
+                max_steps=500,
+                break_when_any_done=True,  # This looks at root done set with done_on_any
+                auto_reset=False,
+                tensordict=td_reset,
+            )
+            done = td.get(("next", "walker", "done"))
+            mask = td.get(("next", "walker", "mask"))
+
+            if done_on_any:
+                assert not done[-1].all()  # Done triggered on any
+            else:
+                assert done[-1].all()  # Done triggered on all
+            assert not done[
+                mask
+            ].any()  # When mask is true (alive agent), all agents are not done
+            assert done[
+                ~mask
+            ].all()  # When mask is false (dead agent), all agents are done
+
     @pytest.mark.parametrize(
         "wins_player_0",
         [True, False],

@@ -305,9 +305,9 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
         slice_len: int | None = None,
         pad: float | bool | None = None,
         replacement: bool = None,
-        streaming: bool = True,
+        streaming: bool | None = None,
         root: str | Path | None = None,
-        download: bool = False,
+        download: bool | None = None,
         sampler: Sampler | None = None,
         writer: Writer | None = None,
         collate_fn: Callable | None = None,
@@ -317,6 +317,13 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
         split_trajs: bool = False,
         strict_length: bool = True,
     ):
+        if download is None and streaming is None:
+            download = False
+            streaming = True
+        elif download is None:
+            download = not streaming
+        elif streaming is None:
+            streaming = not download
         self.download = download
         self.streaming = streaming
         self.dataset_id = dataset_id
