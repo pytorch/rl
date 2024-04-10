@@ -14,6 +14,10 @@ root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
 
+echo $(rpm -qa | grep glibc)
+yum update
+yum install glibc.x86_64
+
 cd "${root_dir}"
 
 case "$(uname -s)" in
