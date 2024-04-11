@@ -1518,9 +1518,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 self.shared_tensordicts[i].apply_(
                     tentative_update, tensordict_, default=None
                 )
-                out = ("reset", tdkeys, list_of_kwargs[i])
+                out = ("reset", (tdkeys, list_of_kwargs[i]))
             else:
-                out = ("reset", False, list_of_kwargs[i])
+                out = ("reset", (False, list_of_kwargs[i]))
             outs.append((i, out))
 
         self._sync_m2w()
