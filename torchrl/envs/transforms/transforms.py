@@ -4518,14 +4518,18 @@ class TensorDictPrimer(Transform):
             )
         self.random = random
         if isinstance(default_value, dict):
-            if len(default_value) != len(self.primers) and set(dict.keys()) != set(
-                self.primers.keys(True, True)
-            ):
+            primer_keys = {unravel_key(key) for key in self.primers.keys(True, True)}
+            default_value_keys = {unravel_key(key) for key in default_value.keys()}
+            if primer_keys != default_value_keys:
                 raise ValueError(
                     "If a default_value dictionary is provided, it must match the primers keys."
                 )
             default_value = {
                 key: default_value[key] for key in self.primers.keys(True, True)
+            }
+        else:
+            default_value = {
+                key: default_value for key in self.primers.keys(True, True)
             }
         self.default_value = default_value
         self._validated = False
@@ -4620,18 +4624,6 @@ class TensorDictPrimer(Transform):
         return self.parent.batch_size
 
     def _validate_value_tensor(self, value, spec):
-        if value.shape != spec.shape:
-            raise RuntimeError(
-                f"Value shape ({value.shape}) does not match the spec shape ({spec.shape})."
-            )
-        if value.dtype != spec.dtype:
-            raise RuntimeError(
-                f"Value dtype ({value.dtype}) does not match the spec dtype ({spec.dtype})."
-            )
-        if value.device != spec.device:
-            raise RuntimeError(
-                f"Value device ({value.device}) does not match the spec device ({spec.device})."
-            )
         if not spec.is_in(value):
             raise RuntimeError(f"Value ({value}) is not in the spec domain ({spec}).")
         return True
@@ -4648,19 +4640,17 @@ class TensorDictPrimer(Transform):
             if self.random:
                 value = spec.rand()
             else:
-                if isinstance(self.default_value, dict):
-                    value = self.default_value[key]
-                else:
-                    value = self.default_value
+                value = self.default_value[key]
                 if callable(value):
                     value = value()
                     if not self._validated:
                         self._validate_value_tensor(value, spec)
                 else:
-                    value = torch.full_like(
-                        spec.zero(),
+                    value = torch.full(
+                        spec.shape,
                         value,
                     )
+
             tensordict.set(key, value)
         if not self._validated:
             self._validated = True
@@ -4696,17 +4686,14 @@ class TensorDictPrimer(Transform):
                 if self.random:
                     value = spec.rand(shape)
                 else:
-                    if isinstance(self.default_value, dict):
-                        value = self.default_value[key]
-                    else:
-                        value = self.default_value
+                    value = self.default_value[key]
                     if callable(value):
                         value = value()
                         if not self._validated:
                             self._validate_value_tensor(value, spec)
                     else:
-                        value = torch.full_like(
-                            spec.zero(shape),
+                        value = torch.full(
+                            spec.shape,
                             value,
                         )
                         prev_val = tensordict.get(key, 0.0)
@@ -4719,11 +4706,10 @@ class TensorDictPrimer(Transform):
 
     def __repr__(self) -> str:
         class_name = self.__class__.__name__
-        default_value = (
-            self.default_value
-            if isinstance(self.default_value, float)
-            else self.default_value.__class__.__name__
-        )
+        default_value = {
+            key: value if isinstance(value, float) else "Callable"
+            for key, value in self.default_value.items()
+        }
         return f"{class_name}(primers={self.primers}, default_value={default_value}, random={self.random})"
 
 
