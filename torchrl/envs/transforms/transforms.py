@@ -4497,7 +4497,7 @@ class TensorDictPrimer(Transform):
         default_value: float
         | Callable
         | Dict[NestedKey, float]
-        | Dict[NestedKey, Callable] = 0.0,
+        | Dict[NestedKey, Callable] = None,
         reset_key: NestedKey | None = None,
         **kwargs,
     ):
@@ -4512,10 +4512,13 @@ class TensorDictPrimer(Transform):
         if not isinstance(kwargs, CompositeSpec):
             kwargs = CompositeSpec(kwargs)
         self.primers = kwargs
-        if (random is not None) and isinstance(default_value, (dict, Callable)):
+        if random and default_value:
             raise ValueError(
                 "Setting random to True and providing a default_value are incompatible."
             )
+        default_value = (
+            default_value or 0.0
+        )  # if not random and no default value, use 0.0
         self.random = random
         if isinstance(default_value, dict):
             primer_keys = {unravel_key(key) for key in self.primers.keys(True, True)}
@@ -4649,6 +4652,7 @@ class TensorDictPrimer(Transform):
                     value = torch.full(
                         spec.shape,
                         value,
+                        device=spec.device,
                     )
 
             tensordict.set(key, value)
@@ -4695,6 +4699,7 @@ class TensorDictPrimer(Transform):
                         value = torch.full(
                             spec.shape,
                             value,
+                            device=spec.device,
                         )
                         prev_val = tensordict.get(key, 0.0)
                         value = torch.where(
