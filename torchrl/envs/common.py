@@ -2872,6 +2872,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         they may change during the execution of the code (eg, when adding a transform).
 
         """
+        self.__dict__["_step_mdp_value"] = None
         self.__dict__["_reward_keys"] = None
         self.__dict__["_done_keys"] = None
         self.__dict__["_action_keys"] = None
@@ -2904,7 +2905,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @property
     def _filtered_reset_keys(self):
-        """Returns the only the effective reset keys, discarding nested resets if they're not being used."""
+        """Returns only the effective reset keys, discarding nested resets if they're not being used."""
         reset_keys = self.reset_keys
         result = []
 

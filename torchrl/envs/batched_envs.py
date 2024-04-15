@@ -180,6 +180,15 @@ class BatchedEnvBase(EnvBase):
             TorchRL if not initiated differently before first import).
             To be used only with :class:`~torchrl.envs.ParallelEnv` subclasses.
 
+    .. note::
+        One can pass keyword arguments to each sub-environments using the following
+        technique: every keyword argument in :meth:`~.reset` will be passed to each
+        environment except for the ``list_of_kwargs`` argument which, if present,
+        should contain a list of the same length as the number of workers with the
+        worker-specific keyword arguments stored in a dictionary.
+        If a partial reset is queried, the element of ``list_of_kwargs`` corresponding
+        to sub-environments that are not reset will be ignored.
+
     Examples:
         >>> from torchrl.envs import GymEnv, ParallelEnv, SerialEnv, EnvCreator
         >>> make_env = EnvCreator(lambda: GymEnv("Pendulum-v1")) # EnvCreator ensures that the env is sharable. Optional in most cases.
@@ -878,6 +887,11 @@ class SerialEnv(BatchedEnvBase):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        list_of_kwargs = kwargs.pop("list_of_kwargs", [kwargs] * self.num_workers)
+        if kwargs is not list_of_kwargs[0] and kwargs:
+            # this means that kwargs had more than one element and that a list was provided
+            for elt in list_of_kwargs:
+                elt.update(kwargs)
         if tensordict is not None:
             needs_resetting = _aggregate_end_of_traj(
                 tensordict, reset_keys=self.reset_keys
@@ -917,7 +931,7 @@ class SerialEnv(BatchedEnvBase):
 
         for i, tensordict_ in tds:
             _env = self._envs[i]
-            _td = _env.reset(tensordict=tensordict_, **kwargs)
+            _td = _env.reset(tensordict=tensordict_, **list_of_kwargs[i])
             try:
                 self.shared_tensordicts[i].update_(
                     _td,
@@ -1449,6 +1463,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     @torch.no_grad()
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        list_of_kwargs = kwargs.pop("list_of_kwargs", [kwargs] * self.num_workers)
+        if kwargs is not list_of_kwargs[0] and kwargs:
+            # this means that kwargs had more than one element and that a list was provided
+            for elt in list_of_kwargs:
+                elt.update(kwargs)
         if tensordict is not None:
             needs_resetting = _aggregate_end_of_traj(
                 tensordict, reset_keys=self.reset_keys
@@ -1509,9 +1528,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 self.shared_tensordicts[i].apply_(
                     tentative_update, tensordict_, default=None
                 )
-                out = ("reset", tdkeys)
+                out = ("reset", (tdkeys, list_of_kwargs[i]))
             else:
-                out = ("reset", False)
+                out = ("reset", (False, list_of_kwargs[i]))
             outs.append((i, out))
 
         self._sync_m2w()
@@ -1750,10 +1769,14 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before resetting")
             # we use 'data' to pass the keys that we need to pass to reset,
             # because passing the entire buffer may have unwanted consequences
+            selected_reset_keys, reset_kwargs = data
             cur_td = env.reset(
-                tensordict=root_shared_tensordict.select(*data, strict=False)
-                if data
-                else None
+                tensordict=root_shared_tensordict.select(
+                    *selected_reset_keys, strict=False
+                )
+                if selected_reset_keys
+                else None,
+                **reset_kwargs,
             )
             shared_tensordict.update_(
                 cur_td,
