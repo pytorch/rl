@@ -45,7 +45,12 @@ from _utils_internal import (
     rollout_consistency_assertion,
 )
 from packaging import version
-from tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
+from tensordict import (
+    assert_allclose_td,
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDict,
+)
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
     TensorDictModule,
@@ -3386,20 +3391,24 @@ class TestRoboHive:
     # The other option would be not to use parametrize but that also
     # means less informative error trace stacks.
     # In the CI, robohive should not coexist with other libs so that's fine.
-    # Locally these imports can be annoying, especially given the amount of
-    # stuff printed by robohive.
+    # Robohive logging behaviour can be controlled via ROBOHIVE_VERBOSITY=ALL/INFO/(WARN)/ERROR/ONCE/ALWAYS/SILENT
     @pytest.mark.parametrize("from_pixels", [False, True])
     @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs)
     def test_robohive(self, envname, from_pixels):
         with set_gym_backend("gymnasium"):
             torchrl_logger.info(f"{envname}-{from_pixels}")
-            if any(substr in envname for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")):
+            if any(
+                substr in envname for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")
+            ):
                 torchrl_logger.info("not testing envs with prebuilt rendering")
                 return
             if "Adroit" in envname:
                 torchrl_logger.info("tcdm are broken")
                 return
-            if from_pixels and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0:
+            if (
+                from_pixels
+                and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0
+            ):
                 torchrl_logger.info("no camera")
                 return
             try:
@@ -3410,7 +3419,10 @@ class TestRoboHive:
                     return
                 else:
                     raise err
-            torchrl_logger.info("rollout", env.rollout(4))
+            # Make sure that the stack is dense
+            for val in env.rollout(4).values(True):
+                if is_tensor_collection(val):
+                    assert not isinstance(val, LazyStackedTensorDict)
             check_env_specs(env)
 
 

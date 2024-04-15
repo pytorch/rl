@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from tensordict import make_tensordict, TensorDict
+from tensordict import TensorDict
 from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
 from torchrl.envs.libs.gym import (
     _AsyncMeta,
@@ -214,6 +214,15 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             self.set_info_dict_reader(self.read_info)
         return env
 
+    def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
+        out = super()._make_specs(env=env, batch_size=batch_size)
+        self.env.reset()
+        *_, info = self.env.step(self.env.action_space.sample())
+        info = self.read_info(info, TensorDict({}, []))
+        info = info.get("info")
+        self.observation_spec["observation"] = make_composite_from_td(info)
+        return out
+
     @classmethod
     def register_visual_env(cls, env_name, cams):
         with set_directory(cls.CURR_DIR):
@@ -221,9 +230,9 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
 
             if not len(cams):
                 raise RuntimeError("Cannot create a visual envs without cameras.")
-            cams = [i.replace("A:", "A_") for i in cams]
             cams = sorted(cams)
-            new_env_name = "-".join([cam[:-3] for cam in cams] + [env_name])
+            cams_rep = [i.replace("A:", "A_") for i in cams]
+            new_env_name = "-".join([cam[:-3] for cam in cams_rep] + [env_name])
             if new_env_name in cls.env_list:
                 return new_env_name
             visual_keys = [f"rgb:{c}:224x224:2d" for c in cams]
@@ -298,6 +307,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         rollout = rollout[..., 0]
         spec = make_composite_from_td(rollout)
         self.observation_spec.update(spec)
+        self.empty_cache()
 
     def set_from_pixels(self, from_pixels: bool) -> None:
         """Sets the from_pixels attribute to an existing environment.
@@ -344,18 +354,34 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
 
     def read_info(self, info, tensordict_out):
         out = {}
-        for key, value in info.items():
-            if key in ("obs_dict", "done", "reward", *self._env.obs_keys, "act"):
-                continue
-            if isinstance(value, dict):
-                value = {key: _val for key, _val in value.items() if _val is not None}
-                value = make_tensordict(value, batch_size=[])
-            if value is not None:
-                out[key] = value
-        tensordict_out.update(out)
-        tensordict_out.update(
-            tensordict_out.apply(lambda x: x.reshape((1,)) if not x.shape else x)
+        if not info:
+            info_spec = self.observation_spec.get("info", None)
+            if info_spec is None:
+                return tensordict_out
+            tensordict_out.set("info", info_spec.zero())
+            return tensordict_out
+        out = (
+            TensorDict(info, [])
+            .filter_non_tensor_data()
+            .exclude("obs_dict", "done", "reward", *self._env.obs_keys, "act")
         )
+        if "info" in self.observation_spec.keys():
+            info_spec = self.observation_spec["info"]
+
+            def func(name, x):
+                spec = info_spec.get(name, None)
+                if spec is None:
+                    return None
+                return x.reshape(info_spec[name].shape)
+
+            out.update(out.named_apply(func, nested_keys=True, filter_empty=True))
+        else:
+            out.update(
+                out.apply(
+                    lambda x: x.reshape((1,)) if not x.shape else x, filter_empty=True
+                )
+            )
+        tensordict_out.set("info", out)
         return tensordict_out
 
     def _init_env(self):
