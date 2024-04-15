@@ -3412,6 +3412,7 @@ class TestRoboHive:
                     return
                 else:
                     raise err
+            torchrl_logger.info("rollout", env.rollout(4))
             check_env_specs(env)
 
 
