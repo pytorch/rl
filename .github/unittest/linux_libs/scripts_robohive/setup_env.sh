@@ -80,5 +80,7 @@ conda install conda-forge::ffmpeg -y
 
 pip install robohive
 
+python3 -m robohive_init
+
 # make sure only gymnasium is available
 # pip uninstall gym -y
