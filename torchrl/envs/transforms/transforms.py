@@ -3494,10 +3494,12 @@ class DTypeCastTransform(Transform):
                     "this functionality is not covered. Consider passing the in_keys "
                     "or not passing any out_keys."
                 )
+
             def func(item):
                 if item.dtype == self.dtype_in:
                     item = self._apply_transform(item)
                 return item
+
             tensordict = tensordict._fast_apply(func)
         else:
             # we made sure that if in_keys is not None, out_keys is not None either

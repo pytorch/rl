@@ -15,11 +15,11 @@ from tensordict.utils import NestedKey
 from torchrl._utils import timeit
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
-from torchrl.modules import IndependentNormal
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
+    distance_loss,
     # distance_loss,
     hold_out_net,
     ValueEstimators,
@@ -120,8 +120,8 @@ class DreamerModelLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
 
-    def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
-        tensordict = tensordict.copy()
+    def forward(self, tensordict: TensorDict) -> torch.Tensor:
+        tensordict = tensordict.clone(recurse=False)
         tensordict.rename_key_(
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.true_reward),
@@ -133,25 +133,59 @@ class DreamerModelLoss(LossModule):
             tensordict.get(("next", self.tensor_keys.prior_std)),
             tensordict.get(("next", self.tensor_keys.posterior_mean)),
             tensordict.get(("next", self.tensor_keys.posterior_std)),
+        ).unsqueeze(-1)
+        reco_loss = distance_loss(
+            tensordict.get(("next", self.tensor_keys.pixels)),
+            tensordict.get(("next", self.tensor_keys.reco_pixels)),
+            self.reco_loss,
         )
+        if not self.global_average:
+            reco_loss = reco_loss.sum((-3, -2, -1))
+        reco_loss = reco_loss.mean().unsqueeze(-1)
 
-        dist: IndependentNormal = self.decoder.get_dist(tensordict)
-        reco_loss = -dist.log_prob(
-            tensordict.get(("next", self.tensor_keys.pixels))
-        ).mean()
-        # x = tensordict.get(("next", self.tensor_keys.pixels))
-        # loc = dist.base_dist.loc
-        # scale = dist.base_dist.scale
-        # reco_loss = -self.normal_log_probability(x, loc, scale).mean()
+        reward_loss = distance_loss(
+            tensordict.get(("next", self.tensor_keys.true_reward)),
+            tensordict.get(("next", self.tensor_keys.reward)),
+            self.reward_loss,
+        )
+        if not self.global_average:
+            reward_loss = reward_loss.squeeze(-1)
+        reward_loss = reward_loss.mean().unsqueeze(-1)
+        # import ipdb; ipdb.set_trace()
 
-        dist: IndependentNormal = self.reward_model.get_dist(tensordict)
-        reward_loss = -dist.log_prob(
-            tensordict.get(("next", self.tensor_keys.true_reward))
-        ).mean()
-        # x = tensordict.get(("next", self.tensor_keys.true_reward))
-        # loc = dist.base_dist.loc
-        # scale = dist.base_dist.scale
-        # reward_loss = -self.normal_log_probability(x, loc, scale).mean()
+        # Alternative:
+        # def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
+        #     tensordict = tensordict.copy()
+        #     tensordict.rename_key_(
+        #         ("next", self.tensor_keys.reward),
+        #         ("next", self.tensor_keys.true_reward),
+        #     )
+        #     tensordict = self.world_model(tensordict)
+        #     # compute model loss
+        #     kl_loss = self.kl_loss(
+        #         tensordict.get(("next", self.tensor_keys.prior_mean)),
+        #         tensordict.get(("next", self.tensor_keys.prior_std)),
+        #         tensordict.get(("next", self.tensor_keys.posterior_mean)),
+        #         tensordict.get(("next", self.tensor_keys.posterior_std)),
+        #     )
+        #
+        #     dist: IndependentNormal = self.decoder.get_dist(tensordict)
+        #     reco_loss = -dist.log_prob(
+        #         tensordict.get(("next", self.tensor_keys.pixels))
+        #     ).mean()
+        #     # x = tensordict.get(("next", self.tensor_keys.pixels))
+        #     # loc = dist.base_dist.loc
+        #     # scale = dist.base_dist.scale
+        #     # reco_loss = -self.normal_log_probability(x, loc, scale).mean()
+        #
+        #     dist: IndependentNormal = self.reward_model.get_dist(tensordict)
+        #     reward_loss = -dist.log_prob(
+        #         tensordict.get(("next", self.tensor_keys.true_reward))
+        #     ).mean()
+        #     # x = tensordict.get(("next", self.tensor_keys.true_reward))
+        #     # loc = dist.base_dist.loc
+        #     # scale = dist.base_dist.scale
+        #     # reward_loss = -self.normal_log_probability(x, loc, scale).mean()
 
         return (
             TensorDict(
@@ -184,7 +218,13 @@ class DreamerModelLoss(LossModule):
             / (2 * prior_std**2)
             - 0.5
         )
-        return kl.clamp_min(self.free_nats).sum(-1).mean()
+        if not self.global_average:
+            kl = kl.sum(-1)
+        if self.delayed_clamp:
+            kl = kl.mean().clamp_min(self.free_nats)
+        else:
+            kl = kl.clamp_min(self.free_nats).mean()
+        return kl
 
 
 class DreamerActorLoss(LossModule):
@@ -293,9 +333,9 @@ class DreamerActorLoss(LossModule):
             discount = gamma.expand(lambda_target.shape).clone()
             discount[..., 0, :] = 1
             discount = discount.cumprod(dim=-2)
-            actor_loss = -(lambda_target * discount).mean()
+            actor_loss = -(lambda_target * discount).sum((-2, -1)).mean()
         else:
-            actor_loss = -lambda_target.mean()
+            actor_loss = -lambda_target.sum((-2, -1)).mean()
         loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
         return loss_tensordict, fake_data.detach()
 
@@ -344,7 +384,7 @@ class DreamerActorLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
-                vectorized=False,  # TODO: vectorized version seems not to be similar to the non vectoried
+                vectorized=True,  # TODO: vectorized version seems not to be similar to the non vectorised
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
@@ -407,21 +447,52 @@ class DreamerValueLoss(LossModule):
         pass
 
     def forward(self, fake_data) -> torch.Tensor:
+        # lambda_target = fake_data.get("lambda_target")
+        # # TODO: I think this should be next state and belief
+        # td = fake_data.select(("next", "state"), ("next", "belief"))
+        # td = td.rename_key_(("next", "state"), "state")
+        # tensordict_select = td.rename_key_(("next", "belief"), "belief")
+        # # tensordict_select = fake_data.select(*self.value_model.in_keys, strict=False)
+        # dist = self.value_model.get_dist(tensordict_select)
+        # if self.discount_loss:
+        #     discount = self.gamma * torch.ones_like(
+        #         lambda_target, device=lambda_target.device
+        #     )
+        #     discount[..., 0, :] = 1
+        #     discount = discount.cumprod(dim=-2)
+        #     value_loss = -(discount * dist.log_prob(lambda_target).unsqueeze(-1)).mean()
+        # else:
+        #     value_loss = -dist.log_prob(lambda_target).mean()
         lambda_target = fake_data.get("lambda_target")
-        # TODO: I think this should be next state and belief
-        td = fake_data.select(("next", "state"), ("next", "belief"))
-        td = td.rename_key_(("next", "state"), "state")
-        tensordict_select = td.rename_key_(("next", "belief"), "belief")
-        # tensordict_select = fake_data.select(*self.value_model.in_keys, strict=False)
-        dist = self.value_model.get_dist(tensordict_select)
+        tensordict_select = fake_data.select(*self.value_model.in_keys, strict=False)
+        self.value_model(tensordict_select)
         if self.discount_loss:
             discount = self.gamma * torch.ones_like(
                 lambda_target, device=lambda_target.device
             )
             discount[..., 0, :] = 1
             discount = discount.cumprod(dim=-2)
-            value_loss = -(discount * dist.log_prob(lambda_target).unsqueeze(-1)).mean()
+            value_loss = (
+                (
+                    discount
+                    * distance_loss(
+                        tensordict_select.get(self.tensor_keys.value),
+                        lambda_target,
+                        self.value_loss,
+                    )
+                )
+                .sum((-1, -2))
+                .mean()
+            )
         else:
-            value_loss = -dist.log_prob(lambda_target).mean()
+            value_loss = (
+                distance_loss(
+                    tensordict_select.get(self.tensor_keys.value),
+                    lambda_target,
+                    self.value_loss,
+                )
+                .sum((-1, -2))
+                .mean()
+            )
         loss_tensordict = TensorDict({"loss_value": value_loss}, [])
         return loss_tensordict, fake_data
