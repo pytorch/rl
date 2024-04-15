@@ -12,7 +12,6 @@ from pathlib import Path
 import numpy as np
 import torch
 from tensordict import make_tensordict, TensorDict
-from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
 from torchrl.envs.libs.gym import (
     _AsyncMeta,
