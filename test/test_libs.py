@@ -45,7 +45,12 @@ from _utils_internal import (
     rollout_consistency_assertion,
 )
 from packaging import version
-from tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
+from tensordict import (
+    assert_allclose_td,
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDict,
+)
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
     TensorDictModule,
@@ -278,7 +283,6 @@ class TestGym:
 
     @pytest.mark.parametrize("categorical", [True, False])
     def test_gym_spec_cast(self, categorical):
-
         batch_size = [3, 4]
         cat = DiscreteTensorSpec if categorical else OneHotDiscreteTensorSpec
         cat_shape = batch_size if categorical else (*batch_size, 5)
@@ -543,7 +547,6 @@ class TestGym:
         ],
     )
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
-
         if env_name == PONG_VERSIONED() and not from_pixels:
             # raise pytest.skip("already pixel")
             # we don't skip because that would raise an exception
@@ -3126,7 +3129,6 @@ class TestPettingZoo:
     def test_pistonball(
         self, parallel, continuous_actions, use_mask, return_state, group_map
     ):
-
         kwargs = {"n_pistons": 21, "continuous": continuous_actions}
 
         env = PettingZooEnv(
@@ -3140,6 +3142,60 @@ class TestPettingZoo:
         )
 
         check_env_specs(env)
+
+    def test_dead_agents_done(self, seed=0):
+        scenario_args = {"n_walkers": 3, "terminate_on_fall": False}
+
+        env = PettingZooEnv(
+            task="multiwalker_v9",
+            parallel=True,
+            seed=seed,
+            use_mask=False,
+            done_on_any=False,
+            **scenario_args,
+        )
+        td_reset = env.reset(seed=seed)
+        with pytest.raises(
+            ValueError,
+            match="Dead agents found in the environment, "
+            "you need to set use_mask=True to allow this.",
+        ):
+            env.rollout(
+                max_steps=500,
+                break_when_any_done=True,  # This looks at root done set with done_on_any
+                auto_reset=False,
+                tensordict=td_reset,
+            )
+
+        for done_on_any in [True, False]:
+            env = PettingZooEnv(
+                task="multiwalker_v9",
+                parallel=True,
+                seed=seed,
+                use_mask=True,
+                done_on_any=done_on_any,
+                **scenario_args,
+            )
+            td_reset = env.reset(seed=seed)
+            td = env.rollout(
+                max_steps=500,
+                break_when_any_done=True,  # This looks at root done set with done_on_any
+                auto_reset=False,
+                tensordict=td_reset,
+            )
+            done = td.get(("next", "walker", "done"))
+            mask = td.get(("next", "walker", "mask"))
+
+            if done_on_any:
+                assert not done[-1].all()  # Done triggered on any
+            else:
+                assert done[-1].all()  # Done triggered on all
+            assert not done[
+                mask
+            ].any()  # When mask is true (alive agent), all agents are not done
+            assert done[
+                ~mask
+            ].all()  # When mask is false (dead agent), all agents are done
 
     @pytest.mark.parametrize(
         "wins_player_0",
@@ -3156,7 +3212,6 @@ class TestPettingZoo:
         )
 
         class Policy:
-
             action = 0
             t = 0
 
@@ -3329,46 +3384,46 @@ class TestPettingZoo:
             break
 
 
-@pytest.mark.skipif(not _has_robohive, reason="SMACv2 not found")
+@pytest.mark.skipif(not _has_robohive, reason="RoboHive not found")
 class TestRoboHive:
     # unfortunately we must import robohive to get the available envs
     # and this import will occur whenever pytest is run on this file.
     # The other option would be not to use parametrize but that also
     # means less informative error trace stacks.
     # In the CI, robohive should not coexist with other libs so that's fine.
-    # Locally these imports can be annoying, especially given the amount of
-    # stuff printed by robohive.
-    @pytest.mark.parametrize("from_pixels", [True, False])
-    @set_gym_backend("gym")
-    def test_robohive(self, from_pixels):
-        for envname in RoboHiveEnv.available_envs:
+    # Robohive logging behaviour can be controlled via ROBOHIVE_VERBOSITY=ALL/INFO/(WARN)/ERROR/ONCE/ALWAYS/SILENT
+    @pytest.mark.parametrize("from_pixels", [False, True])
+    @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs)
+    def test_robohive(self, envname, from_pixels):
+        with set_gym_backend("gymnasium"):
+            torchrl_logger.info(f"{envname}-{from_pixels}")
+            if any(
+                substr in envname for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")
+            ):
+                torchrl_logger.info("not testing envs with prebuilt rendering")
+                return
+            if "Adroit" in envname:
+                torchrl_logger.info("tcdm are broken")
+                return
+            if (
+                from_pixels
+                and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0
+            ):
+                torchrl_logger.info("no camera")
+                return
             try:
-                if any(
-                    substr in envname
-                    for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")
-                ):
-                    torchrl_logger.info("not testing envs with prebuilt rendering")
-                    return
-                if "Adroit" in envname:
+                env = RoboHiveEnv(envname, from_pixels=from_pixels)
+            except AttributeError as err:
+                if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
                     torchrl_logger.info("tcdm are broken")
                     return
-                try:
-                    env = RoboHiveEnv(envname)
-                except AttributeError as err:
-                    if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
-                        torchrl_logger.info("tcdm are broken")
-                        return
-                    else:
-                        raise err
-                if (
-                    from_pixels
-                    and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0
-                ):
-                    torchrl_logger.info("no camera")
-                    return
-                check_env_specs(env)
-            except Exception as err:
-                raise RuntimeError(f"Test with robohive end {envname} failed.") from err
+                else:
+                    raise err
+            # Make sure that the stack is dense
+            for val in env.rollout(4).values(True):
+                if is_tensor_collection(val):
+                    assert not isinstance(val, LazyStackedTensorDict)
+            check_env_specs(env)
 
 
 @pytest.mark.skipif(not _has_smacv2, reason="SMACv2 not found")
