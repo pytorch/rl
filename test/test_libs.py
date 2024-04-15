@@ -3423,6 +3423,7 @@ class TestRoboHive:
             for val in env.rollout(4).values(True):
                 if is_tensor_collection(val):
                     assert not isinstance(val, LazyStackedTensorDict)
+                    assert not val.is_empty()
             check_env_specs(env)
 
 
