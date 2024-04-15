@@ -220,7 +220,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         *_, info = self.env.step(self.env.action_space.sample())
         info = self.read_info(info, TensorDict({}, []))
         info = info.get("info")
-        self.observation_spec["observation"] = make_composite_from_td(info)
+        self.observation_spec["info"] = make_composite_from_td(info)
         return out
 
     @classmethod
@@ -353,7 +353,6 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         return super().read_obs(out)
 
     def read_info(self, info, tensordict_out):
-        out = {}
         if not info:
             info_spec = self.observation_spec.get("info", None)
             if info_spec is None:
@@ -364,6 +363,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             TensorDict(info, [])
             .filter_non_tensor_data()
             .exclude("obs_dict", "done", "reward", *self._env.obs_keys, "act")
+            .apply(lambda x: x, filter_empty=True)
         )
         if "info" in self.observation_spec.keys():
             info_spec = self.observation_spec["info"]

@@ -3092,9 +3092,11 @@ class TestRoboHive:
                 else:
                     raise err
             # Make sure that the stack is dense
-            for val in env.rollout(4).values(True):
+            r = env.rollout(4)
+            torchrl_logger.info(f"rollout {r}")
+            for val in r.values(True):
                 if is_tensor_collection(val):
-                    assert not isinstance(val, LazyStackedTensorDict)
+                    assert not isinstance(val, LazyStackedTensorDict), r
             check_env_specs(env)
 
 

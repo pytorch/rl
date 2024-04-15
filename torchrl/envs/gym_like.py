@@ -365,9 +365,11 @@ class GymLikeEnv(_EnvWrapper):
                     tensordict_out = out
         elif info is None and self.info_dict_reader:
             # populate the reset with the items we have not seen from info
-            for key, item in self.observation_spec.items(True, True):
-                if key not in tensordict_out.keys(True, True):
-                    tensordict_out[key] = item.zero()
+            missing_keys = set(self.observation_spec.keys(True, True)) - set(
+                tensordict_out.keys(True, True)
+            )
+            for key in missing_keys:
+                tensordict_out[key] = self.observation_spec[key].zero()
         if self.device is not None:
             tensordict_out = tensordict_out.to(self.device, non_blocking=True)
             self._sync_device()
