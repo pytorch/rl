@@ -3338,10 +3338,10 @@ class TestRoboHive:
     # In the CI, robohive should not coexist with other libs so that's fine.
     # Locally these imports can be annoying, especially given the amount of
     # stuff printed by robohive.
-    @pytest.mark.parametrize("from_pixels", [True, False])
+    @pytest.mark.parametrize("from_pixels", [False, True])
     @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs[:10])
-    @set_gym_backend("gym")
     def test_robohive(self, envname, from_pixels):
+        torchrl_logger.info(f"{envname}-{from_pixels}")
         if any(substr in envname for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")):
             torchrl_logger.info("not testing envs with prebuilt rendering")
             return

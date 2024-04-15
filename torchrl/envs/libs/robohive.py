@@ -14,10 +14,18 @@ import torch
 from tensordict import make_tensordict, TensorDict
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
-from torchrl.envs.libs.gym import _AsyncMeta, _gym_to_torchrl_spec_transform, GymEnv
+from torchrl.envs.libs.gym import (
+    _AsyncMeta,
+    _gym_to_torchrl_spec_transform,
+    gym_backend,
+    GymEnv,
+)
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
-_has_gym = importlib.util.find_spec("gym") is not None
+_has_gym = (
+    importlib.util.find_spec("gym") is not None
+    or importlib.util.find_spec("gymnasium") is not None
+)
 _has_robohive = importlib.util.find_spec("robohive") is not None and _has_gym
 
 if _has_robohive:
@@ -126,7 +134,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
     def available_envs(cls):
         if not _has_robohive:
             return []
-        RoboHiveEnv.register_envs()
+        cls.register_envs()
         return cls.env_list
 
     @classmethod
@@ -143,25 +151,6 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         if not len(robohive_envs):
             raise RuntimeError("did not load any environment.")
 
-    @implement_for(
-        "gymnasium",
-    )  # make sure gym 0.13 is installed, otherwise raise an exception
-    def _build_env(self, *args, **kwargs):  # noqa: F811
-        raise NotImplementedError(
-            "Your gym version is too recent, RoboHiveEnv is only compatible with gym==0.13."
-        )
-
-    @implement_for(
-        "gym", "0.14", None
-    )  # make sure gym 0.13 is installed, otherwise raise an exception
-    def _build_env(self, *args, **kwargs):  # noqa: F811
-        raise NotImplementedError(
-            "Your gym version is too recent, RoboHiveEnv is only compatible with gym 0.13."
-        )
-
-    @implement_for(
-        "gym", None, "0.14"
-    )  # make sure gym 0.13 is installed, otherwise raise an exception
     def _build_env(  # noqa: F811
         self,
         env_name: str,
@@ -382,8 +371,6 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
 
     @classmethod
     def get_available_cams(cls, env_name):
-        import gym
-
-        env = gym.make(env_name)
+        env = gym_backend().make(env_name)
         cams = [env.sim.model.id2name(ic, 7) for ic in range(env.sim.model.ncam)]
         return cams
