@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import contextlib
 import time
+from torch.profiler import profile, record_function, ProfilerActivity
 
 import hydra
 import torch
@@ -167,7 +168,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             t_loss_critic = 0.0
             t_loss_model = 0.0
 
-            for _ in range(optim_steps_per_batch):
+            for k in range(optim_steps_per_batch):
                 # sample from replay buffer
                 t_sample_init = time.time()
                 sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
@@ -178,7 +179,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 with torch.autocast(
                     device_type=device.type,
                     dtype=torch.bfloat16,
-                ) if use_autocast else contextlib.nullcontext():
+                ) if use_autocast else contextlib.nullcontext(), (profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) if (i == 1 and k == 1) else contextlib.nullcontext()) as prof:
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
@@ -192,6 +193,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                             torch.bfloat16,
                             torch.float16,
                         ), model_loss_td
+                if (i == 1 and k == 1):
+                    prof.export_chrome_trace("trace_world_model.json")
 
                 world_model_opt.zero_grad()
                 if use_autocast:
@@ -211,8 +214,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 t_loss_actor_init = time.time()
                 with torch.autocast(
                     device_type=device.type, dtype=torch.bfloat16
-                ) if use_autocast else contextlib.nullcontext():
+                ) if use_autocast else contextlib.nullcontext(), (profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) if (i == 1 and k == 1) else contextlib.nullcontext()) as prof:
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+
+                if (i == 1 and k == 1):
+                    prof.export_chrome_trace("trace_actor.json")
 
                 actor_opt.zero_grad()
                 if use_autocast:
@@ -232,8 +238,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 t_loss_critic_init = time.time()
                 with torch.autocast(
                     device_type=device.type, dtype=torch.bfloat16
-                ) if use_autocast else contextlib.nullcontext():
+                ) if use_autocast else contextlib.nullcontext(), (profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) if (i == 1 and k == 1) else contextlib.nullcontext()) as prof:
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+
+                if (i == 1 and k == 1):
+                    prof.export_chrome_trace("trace_critic.json")
 
                 value_opt.zero_grad()
                 if use_autocast:
