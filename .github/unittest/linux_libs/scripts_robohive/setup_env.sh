@@ -79,5 +79,6 @@ conda env update --file "${this_dir}/environment.yml" --prune
 conda install conda-forge::ffmpeg -y
 
 pip install robohive
+
 # make sure only gymnasium is available
-pip uninstall gym -y
+# pip uninstall gym -y
