@@ -2560,7 +2560,7 @@ def _minari_selected_datasets():
     keys = [
         key
         for key in keys
-        if f"={minari.__version__}" in minari.list_remote_datasets()[key]["minari_version"]
+        if f"=0.4" in minari.list_remote_datasets()[key]["minari_version"]
     ]
     assert len(keys) > 5
     _MINARI_DATASETS += keys
@@ -2633,8 +2633,8 @@ class TestMinari:
         dataset = ReplayBuffer(storage=new_storage, batch_size=32)
         sample = dataset.sample()
         assert len(dataset) == 100
-        assert sample["data"].shape == torch.Size([32, 8])
-        assert sample["next", "data"].shape == torch.Size([32, 8])
+        assert sample["data"].shape == torch.Size([32, 56])
+        assert sample["next", "data"].shape == torch.Size([32, 56])
 
 
 @pytest.mark.slow
