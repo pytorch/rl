@@ -2560,7 +2560,7 @@ def _minari_selected_datasets():
     keys = [
         key
         for key in keys
-        if "=0.4" in minari.list_remote_datasets()[key]["minari_version"]
+        if f"={minari.__version__}" in minari.list_remote_datasets()[key]["minari_version"]
     ]
     assert len(keys) > 5
     _MINARI_DATASETS += keys
