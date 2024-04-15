@@ -640,6 +640,10 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         self.__dict__["_output_spec"] = None
 
     @property
+    def auto_reset(self) -> bool:
+        return self.base_env.auto_reset
+
+    @property
     def batch_size(self) -> torch.Size:
         try:
             if self.transform is not None:
@@ -806,12 +810,24 @@ but got an object of type {type(transform)}."""
             tensordict = tensordict.select(
                 *self.reset_keys, *self.state_spec.keys(True, True), strict=False
             )
-        tensordict_reset = self.base_env._reset(tensordict=tensordict, **kwargs)
+        tensordict_reset = self.base_env._reset(tensordict, **kwargs)
         if tensordict is None:
             # make sure all transforms see a source tensordict
             tensordict = tensordict_reset.empty()
         self.base_env._complete_done(self.base_env.full_done_spec, tensordict_reset)
         tensordict_reset = self.transform._reset(tensordict, tensordict_reset)
+        return tensordict_reset
+
+    def _maybe_reset_or_replace_auto_reset_vals(self, tensordict, kwargs):
+        if self.auto_reset:
+            _saved_td_autorest = getattr(self, "_saved_td_autorest", None)
+            if _saved_td_autorest is not None:
+                tensordict_reset = self._replace_auto_reset_vals(tensordict_=tensordict, _saved_td_autorest=_saved_td_autorest, kwargs=kwargs)
+                self.base_env._complete_done(self.base_env.full_done_spec, tensordict_reset)
+            else:
+                tensordict_reset = self._reset(tensordict, **kwargs)
+        else:
+            tensordict_reset = self._reset(tensordict, **kwargs)
         return tensordict_reset
 
     def _reset_proc_data(self, tensordict, tensordict_reset):

@@ -494,6 +494,16 @@ class BatchedEnvBase(EnvBase):
             )
         return self._cache_in_keys
 
+    @property
+    def auto_reset(self) -> bool:
+        return False
+
+    @auto_reset.setter
+    def auto_reset(self, value) -> None:
+        if value not in (False, None):
+            raise ValueError("auto_reset must be None of False")
+
+
     def _set_properties(self):
 
         cls = type(self)

@@ -30,6 +30,7 @@ from _utils_internal import (
 )
 from mocking_classes import (
     ActionObsMergeLinear,
+    AutoResettingCountingEnv,
     ContinuousActionConvMockEnv,
     ContinuousActionConvMockEnvNumpy,
     ContinuousActionVecMockEnv,
@@ -2866,6 +2867,59 @@ def test_stackable():
     assert not _stackable(*stack)
     stack = [TensorDict({"a": "a string"}, []), TensorDict({"a": "another string"}, [])]
     assert _stackable(*stack)
+
+
+class TestAutoReset:
+    def test_auto_reset(self):
+        policy = lambda td: td.set("action", torch.ones((*td.shape, 1), dtype=torch.int64))
+
+        env = AutoResettingCountingEnv(4)
+        assert env.auto_reset
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([20])
+        assert r["next", "done"].sum() == 4
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all(), r["next", "observation"][r["next", "done"].squeeze()]
+        assert (r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0).all()
+        r = env.rollout(20, policy, break_when_any_done=True)
+        assert r["next", "done"].sum() == 1
+
+    def test_auto_reset_transform(self):
+        policy = lambda td: td.set("action", torch.ones((*td.shape, 1), dtype=torch.int64))
+        env = TransformedEnv(AutoResettingCountingEnv(4))
+        assert env.auto_reset
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([20])
+        assert r["next", "done"].sum() == 4
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0).all()
+        r = env.rollout(20, policy, break_when_any_done=True)
+        assert r["next", "done"].sum() == 1
+
+    def test_auto_reset_serial(self):
+        policy = lambda td: td.set("action", torch.ones((*td.shape, 1), dtype=torch.int64))
+        env = SerialEnv(2, functools.partial(AutoResettingCountingEnv, 4))
+        assert not env.auto_reset, env.auto_reset
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([2, 20])
+        assert r["next", "done"].sum() == 8
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0).all()
+        r = env.rollout(20, policy, break_when_any_done=True)
+        assert r["next", "done"].sum() == 2
+
+    def test_auto_reset_parallel(self):
+        policy = lambda td: td.set("action", torch.ones((*td.shape, 1), dtype=torch.int64))
+        env = ParallelEnv(
+            2, functools.partial(AutoResettingCountingEnv, 4), mp_start_method="fork"
+        )
+        assert not env.auto_reset
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([2, 20])
+        assert r["next", "done"].sum() == 8
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0).all()
+        r = env.rollout(20, policy, break_when_any_done=True)
+        assert r["next", "done"].sum() == 2
 
 
 if __name__ == "__main__":

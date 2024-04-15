@@ -14,9 +14,9 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict import LazyStackedTensorDict, TensorDictBase, unravel_key
+from tensordict import LazyStackedTensorDict, TensorDictBase, unravel_key, TensorDict
 from tensordict.base import NO_DEFAULT
-from tensordict.utils import NestedKey
+from tensordict.utils import NestedKey, expand_as_right
 from torchrl._utils import (
     _ends_with,
     _replace_last,
@@ -60,13 +60,14 @@ class EnvMetaData:
 
     def __init__(
         self,
+        *,
         tensordict: TensorDictBase,
         specs: CompositeSpec,
         batch_size: torch.Size,
         env_str: str,
         device: torch.device,
-        batch_locked: bool = True,
-        device_map: dict = None,
+        batch_locked: bool,
+        device_map: dict,
     ):
         self.device = device
         self.tensordict = tensordict
@@ -117,31 +118,37 @@ class EnvMetaData:
 
         tensordict.named_apply(fill_device_map, nested_keys=True, filter_empty=True)
         return EnvMetaData(
-            tensordict, specs, batch_size, env_str, device, batch_locked, device_map
+            tensordict=tensordict,
+            specs=specs,
+            batch_size=batch_size,
+            env_str=env_str,
+            device=device,
+            batch_locked=batch_locked,
+            device_map=device_map,
         )
 
     def expand(self, *size: int) -> EnvMetaData:
         tensordict = self.tensordict.expand(*size).clone()
         batch_size = torch.Size(list(size))
         return EnvMetaData(
-            tensordict,
-            self.specs.expand(*size),
-            batch_size,
-            self.env_str,
-            self.device,
-            self.batch_locked,
-            self.device_map,
+            tensordict=tensordict,
+            specs=self.specs.expand(*size),
+            batch_size=batch_size,
+            env_str=self.env_str,
+            device=self.device,
+            batch_locked=self.batch_locked,
+            device_map=self.device_map,
         )
 
     def clone(self):
         return EnvMetaData(
-            self.tensordict.clone(),
-            self.specs.clone(),
-            torch.Size([*self.batch_size]),
-            deepcopy(self.env_str),
-            self.device,
-            self.batch_locked,
-            self.device_map,
+            tensordict=self.tensordict.clone(),
+            specs=self.specs.clone(),
+            batch_size=torch.Size([*self.batch_size]),
+            env_str=deepcopy(self.env_str),
+            device=self.device,
+            batch_locked=self.batch_locked,
+            device_map=self.device_map,
         )
 
     def to(self, device: DEVICE_TYPING) -> EnvMetaData:
@@ -151,13 +158,13 @@ class EnvMetaData:
         tensordict = self.tensordict.contiguous().to(device)
         specs = self.specs.to(device)
         return EnvMetaData(
-            tensordict,
-            specs,
-            self.batch_size,
-            self.env_str,
-            device,
-            self.batch_locked,
-            device_map,
+            tensordict=tensordict,
+            specs=specs,
+            batch_size=self.batch_size,
+            env_str=self.env_str,
+            device=device,
+            batch_locked=self.batch_locked,
+            device_map=device_map,
         )
 
 
@@ -327,8 +334,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
         allow_done_after_reset: bool = False,
+        auto_reset: bool | None = None,
     ):
         self.__dict__.setdefault("_batch_size", None)
+        self.auto_reset = auto_reset
+
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
             output_spec = self.__dict__.get("_output_spec", None)
@@ -1453,6 +1463,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 next_preset.exclude(*next_tensordict.keys(True, True))
             )
         tensordict.set("next", next_tensordict)
+        if self.auto_reset:
+            self._correct_auto_reset_vals(tensordict)
         return tensordict
 
     @classmethod
@@ -2102,14 +2114,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if tensordict is not None:
             self._assert_tensordict_shape(tensordict)
 
-        tensordict_reset = self._reset(tensordict, **kwargs)
+        tensordict_reset = self._maybe_reset_or_replace_auto_reset_vals(tensordict, kwargs)
+
         #        We assume that this is done properly
         #        if reset.device != self.device:
         #            reset = reset.to(self.device, non_blocking=True)
         if tensordict_reset is tensordict:
             raise RuntimeError(
                 "EnvBase._reset should return outplace changes to the input "
-                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty())"
+                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty()) "
                 "inside _reset before writing new tensors onto this new instance."
             )
         if not isinstance(tensordict_reset, TensorDictBase):
@@ -2117,6 +2130,17 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
         return self._reset_proc_data(tensordict, tensordict_reset)
+
+    def _maybe_reset_or_replace_auto_reset_vals(self, tensordict, kwargs):
+        if self.auto_reset:
+            _saved_td_autorest = getattr(self, "_saved_td_autorest", None)
+            if _saved_td_autorest is not None:
+                tensordict_reset = self._replace_auto_reset_vals(tensordict_=tensordict, _saved_td_autorest=_saved_td_autorest, kwargs=kwargs)
+            else:
+                tensordict_reset = self._reset(tensordict, **kwargs)
+        else:
+            tensordict_reset = self._reset(tensordict, **kwargs)
+        return tensordict_reset
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
         self._complete_done(self.full_done_spec, tensordict_reset)
@@ -2617,7 +2641,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 else:
                     tensordict.clear_device_()
             tensordict = self.step(tensordict)
-            tensordicts.append(tensordict.clone(False))
+            td_append = tensordict.clone(False)
 
             if i == max_steps - 1:
                 # we don't truncate as one could potentially continue the run
@@ -2632,7 +2656,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 key=None,
             )
             if any_done:
+                if self.auto_reset:
+                    self._correct_auto_reset_vals(td_append)
+                tensordicts.append(td_append)
                 break
+            tensordicts.append(td_append)
 
             if callback is not None:
                 callback(self, tensordict)
@@ -2677,6 +2705,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 break
             if callback is not None:
                 callback(self, tensordict)
+
+        if self.auto_reset:
+            self._correct_auto_reset_vals(tensordicts[-1])
 
         return tensordicts
 
@@ -2729,6 +2760,47 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
 
+    def _correct_auto_reset_vals(self, tensordict):
+        # we need to move the data from tensordict to tensordict_
+        if self._simple_done:
+            if tensordict.get(("next", "done")).any():
+                mask = tensordict.get(("next", "done")).squeeze(-1)
+                self._saved_td_autorest = TensorDict({"__mask__": mask}, [])
+                for key in self.full_observation_spec.keys(True, True):
+                    val = tensordict.get(("next", key))
+                    self._saved_td_autorest.set(key, val)
+                    if val.dtype.is_floating_point:
+                        val_set_nan = torch.where(expand_as_right(mask, val), torch.full_like(val, float("nan")),
+                                                  val)
+                    elif val.dtype.is_signed:
+                        val_set_nan = torch.where(expand_as_right(mask, val), torch.full_like(val, -1), val)
+                    else:
+                        val_set_nan = torch.where(expand_as_right(mask, val), torch.full_like(val, 0), val)
+                    tensordict.set(("next", key), val_set_nan)
+        else:
+            raise NotImplementedError(
+                "auto_reset is currently not compatible with environments with complex reset keys.")
+
+    def _replace_auto_reset_vals(self, *, tensordict_=None, _saved_td_autorest, kwargs):
+        if self._simple_done:
+            if tensordict_ is None:
+                tensordict_ = TensorDict({}, batch_size=self.batch_size, device=self.device)
+            else:
+                tensordict_ = tensordict_.empty()
+            mask = _saved_td_autorest.pop("__mask__")
+            for key, val in _saved_td_autorest.items(True, True):
+                if _ends_with(key, "_reset"):
+                    continue
+                if not mask.all():
+                    val_not_reset = tensordict_.get(key)
+                    val_set_reg = torch.where(expand_as_right(mask, val), val, val_not_reset)
+                else:
+                    val_set_reg = val
+                tensordict_.set(key, val_set_reg)
+            delattr(self, "_saved_td_autorest")
+            return tensordict_
+        else:
+            raise NotImplementedError
     @property
     def _simple_done(self):
         _simple_done = self.__dict__.get("_simple_done_value", None)
@@ -2745,6 +2817,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Checks the done keys of the input tensordict and, if needed, resets the environment where it is done.
 
+        If the env is automatically resetting (`env.auto_reset = True`), this will be a no-op.
+
         Args:
             tensordict (TensorDictBase): a tensordict coming from the output of :func:`~torchrl.envs.utils.step_mdp`.
 
@@ -2753,8 +2827,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             not reset and contains the new reset data where the environment was reset.
 
         """
-        if self.auto_reset:
-            return tensordict
         if self._simple_done:
             done = tensordict._get_str("done", default=None)
             any_done = done.any()
@@ -2780,11 +2852,18 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def auto_reset(self) -> bool:
         """A property indicating if the environment resets automatically.
 
-        Default behaviour is to return ``False``.
+        Default behaviour is to return ``False``, but it can be overridden during construction
+        by passing an auto_reset arg to the env constructor.
 
         Using a property allows a fine-grained control over this feature.
         """
-        return False
+        return self.__dict__.get("_auto_reset", False)
+
+    @auto_reset.setter
+    def auto_reset(self, value: bool | None) -> None:
+        if value is None:
+            return
+        self.__dict__["_auto_reset"] = value
 
     def empty_cache(self):
         """Erases all the cached values.

@@ -1828,3 +1828,20 @@ class MultiKeyCountingEnv(EnvBase):
 
     def _set_seed(self, seed: Optional[int]):
         torch.manual_seed(seed)
+
+
+class AutoResettingCountingEnv(CountingEnv):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs, auto_reset=True)
+
+    def _step(self, tensordict):
+        tensordict = super()._step(tensordict)
+        if tensordict["done"].any():
+            td_reset = super().reset()
+            tensordict.update(td_reset.exclude(*self.done_keys))
+        return tensordict
+
+    def _reset(self, tensordict=None):
+        if tensordict is not None and "_reset" in tensordict:
+            raise RuntimeError
+        return super()._reset(tensordict)

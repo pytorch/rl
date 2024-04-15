@@ -471,7 +471,10 @@ single agent standards.
     MarlGroupMapType
     check_marl_grouping
 
+Auto-resetting Envs
+-------------------
 
+Auto
 
 Transforms
 ----------
