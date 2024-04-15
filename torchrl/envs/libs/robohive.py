@@ -222,6 +222,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
 
             if not len(cams):
                 raise RuntimeError("Cannot create a visual envs without cameras.")
+            cams = [i.replace("A:", "A_") for i in cams]
             cams = sorted(cams)
             new_env_name = "-".join([cam[:-3] for cam in cams] + [env_name])
             if new_env_name in cls.env_list:
