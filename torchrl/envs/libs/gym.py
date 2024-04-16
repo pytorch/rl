@@ -759,14 +759,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self._env, tuple_of_classes + (gym_backend("vector").VectorEnv,)
         )
 
-    @property
-    def auto_reset(self) -> bool:
-        return self._is_batched or self._auto_reset
-
-    @auto_reset.setter
-    def auto_reset(self, value: bool) -> None:
-        self._auto_reset = value
-
     @implement_for("gym")
     def _get_batch_size(self, env):
         if hasattr(env, "num_envs"):
