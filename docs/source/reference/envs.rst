@@ -583,6 +583,7 @@ to be able to create this other composition:
     Transform
     TransformedEnv
     ActionMask
+    AutoResetEnv
     AutoResetTransform
     BatchSizeTransform
     BinarizeReward

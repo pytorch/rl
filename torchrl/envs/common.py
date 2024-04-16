@@ -181,9 +181,12 @@ class _EnvPostInit(abc.ABCMeta):
         _ = instance.reward_spec
         _ = instance.state_spec
         if auto_reset:
-            from torchrl.envs.transforms.transforms import AutoResetTransform
+            from torchrl.envs.transforms.transforms import (
+                AutoResetEnv,
+                AutoResetTransform,
+            )
 
-            return instance.append_transform(AutoResetTransform())
+            return AutoResetEnv(instance, AutoResetTransform())
         return instance
 
 
@@ -2923,7 +2926,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         fake_state = state_spec.zero()
         fake_action = action_spec.zero()
-        fake_input = fake_state.update(fake_action)
+        if any(
+            isinstance(spec, LazyStackedTensorDict) for spec in fake_action.values(True)
+        ):
+            fake_input = fake_action.update(fake_state)
+        else:
+            fake_input = fake_state.update(fake_action)
 
         # the input and output key may match, but the output prevails
         # Hence we generate the input, and override using the output

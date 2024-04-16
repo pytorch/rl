@@ -23,6 +23,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import consolidate_spec
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
+from torchrl.envs.utils import _terminated_or_truncated
 
 spec_dict = {
     "bounded": BoundedTensorSpec,
@@ -1407,7 +1408,9 @@ class HeterogeneousCountingEnv(EnvBase):
         count[:] = self.start_val
 
         self.register_buffer("count", count)
+        self._make_specs()
 
+    def _make_specs(self):
         obs_specs = []
         action_specs = []
         for index in range(self.n_nested_dim):
@@ -1419,13 +1422,7 @@ class HeterogeneousCountingEnv(EnvBase):
 
         self.unbatched_observation_spec = CompositeSpec(
             lazy=obs_spec_unlazy,
-            state=UnboundedContinuousTensorSpec(
-                shape=(
-                    64,
-                    64,
-                    3,
-                )
-            ),
+            state=UnboundedContinuousTensorSpec(shape=(64, 64, 3)),
             device=self.device,
         )
 
@@ -1831,9 +1828,6 @@ class MultiKeyCountingEnv(EnvBase):
 
 
 class AutoResettingCountingEnv(CountingEnv):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     def _step(self, tensordict):
         tensordict = super()._step(tensordict)
         if tensordict["done"].any():
@@ -1843,5 +1837,64 @@ class AutoResettingCountingEnv(CountingEnv):
 
     def _reset(self, tensordict=None):
         if tensordict is not None and "_reset" in tensordict:
-            return tensordict.copy()
+            raise RuntimeError
         return super()._reset(tensordict)
+
+
+class AutoResetHeteroCountingEnv(HeterogeneousCountingEnv):
+    def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
+        super().__init__(**kwargs)
+        self.n_nested_dim = 3
+        self.max_steps = max_steps
+        self.start_val = start_val
+
+        count = torch.zeros(
+            (*self.batch_size, self.n_nested_dim, 1),
+            device=self.device,
+            dtype=torch.int,
+        )
+        count[:] = self.start_val
+
+        self.register_buffer("count", count)
+        self._make_specs()
+
+    def _step(self, tensordict):
+        for i in range(self.n_nested_dim):
+            action = tensordict["lazy"][..., i]["action"]
+            action = action[..., 0].to(torch.bool)
+            self.count[..., i, 0] += action
+
+        td = self.observation_spec.zero()
+        for done_key in self.done_keys:
+            td[done_key] = self.count > self.max_steps
+
+        any_done = _terminated_or_truncated(
+            td,
+            full_done_spec=self.output_spec["full_done_spec"],
+            key=None,
+        )
+        if any_done:
+            self.count[td["lazy", "done"]] = 0
+
+        for i in range(self.n_nested_dim):
+            lazy = tensordict["lazy"][..., i]
+            for obskey in self.observation_spec.keys(True, True):
+                if isinstance(obskey, tuple) and obskey[0] == "lazy":
+                    lazy[obskey[1:]] += expand_right(
+                        self.count[..., i, 0], lazy[obskey[1:]].shape
+                    ).clone()
+        td.update(self.output_spec["full_done_spec"].zero())
+        td.update(self.output_spec["full_reward_spec"].zero())
+
+        assert td.batch_size == self.batch_size
+        return td
+
+    def _reset(self, tensordict=None):
+        if tensordict is not None and self.reset_keys[0] in tensordict.keys(True):
+            raise RuntimeError
+        self.count[:] = self.start_val
+
+        reset_td = self.observation_spec.zero()
+        reset_td.update(self.full_done_spec.zero())
+        assert reset_td.batch_size == self.batch_size
+        return reset_td

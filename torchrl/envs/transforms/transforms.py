@@ -31,6 +31,7 @@ import torch
 
 from tensordict import (
     is_tensor_collection,
+    LazyStackedTensorDict,
     NonTensorData,
     set_lazy_legacy,
     TensorDict,
@@ -43,6 +44,7 @@ from tensordict.nn import dispatch, TensorDictModuleBase
 from tensordict.utils import expand_as_right, expand_right, NestedKey
 from torch import nn, Tensor
 from torch.utils._pytree import tree_map
+
 from torchrl._utils import _ends_with, _replace_last
 
 from torchrl.data.tensor_specs import (
@@ -601,7 +603,9 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             device = env.device
         super().__init__(device=None, allow_done_after_reset=None, **kwargs)
 
-        if isinstance(env, TransformedEnv):
+        # Type matching must be exact here, because subtyping could introduce differences in behaviour that must
+        # be contained within the subclass.
+        if type(env) is TransformedEnv and type(self) is TransformedEnv:
             self._set_env(env.base_env, device)
             if type(transform) is not Compose:
                 # we don't use isinstance as some transforms may be subclassed from
@@ -638,10 +642,6 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         self.cache_specs = cache_specs
         self.__dict__["_input_spec"] = None
         self.__dict__["_output_spec"] = None
-
-    @property
-    def auto_reset(self) -> bool:
-        return self.base_env.auto_reset
 
     @property
     def batch_size(self) -> torch.Size:
@@ -816,24 +816,6 @@ but got an object of type {type(transform)}."""
             tensordict = tensordict_reset.empty()
         self.base_env._complete_done(self.base_env.full_done_spec, tensordict_reset)
         tensordict_reset = self.transform._reset(tensordict, tensordict_reset)
-        return tensordict_reset
-
-    def _maybe_reset_or_replace_auto_reset_vals(self, tensordict, kwargs):
-        if self.auto_reset:
-            _saved_td_autorest = getattr(self, "_saved_td_autorest", None)
-            if _saved_td_autorest is not None:
-                tensordict_reset = self._replace_auto_reset_vals(
-                    tensordict_=tensordict,
-                    _saved_td_autorest=_saved_td_autorest,
-                    kwargs=kwargs,
-                )
-                self.base_env._complete_done(
-                    self.base_env.full_done_spec, tensordict_reset
-                )
-            else:
-                tensordict_reset = self._reset(tensordict, **kwargs)
-        else:
-            tensordict_reset = self._reset(tensordict, **kwargs)
         return tensordict_reset
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
@@ -7624,11 +7606,39 @@ class BatchSizeTransform(Transform):
         return self.reshape_fn(input_spec)
 
 
+class AutoResetEnv(TransformedEnv):
+    """A subclass for auto-resetting envs."""
+
+    def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
+        if tensordict is not None:
+            # We must avoid modifying the original tensordict so a shallow copy is necessary.
+            # We just select the input data and reset signal, which is all we need.
+            tensordict = tensordict.select(
+                *self.reset_keys, *self.state_spec.keys(True, True), strict=False
+            )
+        for reset_key in self.base_env.reset_keys:
+            if tensordict is not None and reset_key in tensordict.keys(True):
+                tensordict_reset = tensordict.exclude(*self.base_env.reset_keys)
+            else:
+                tensordict_reset = self.base_env._reset(tensordict, **kwargs)
+            break
+        if tensordict is None:
+            # make sure all transforms see a source tensordict
+            tensordict = tensordict_reset.empty()
+        self.base_env._complete_done(self.base_env.full_done_spec, tensordict_reset)
+        tensordict_reset = self.transform._reset(tensordict, tensordict_reset)
+        return tensordict_reset
+
+    def insert_transform(self, index: int, transform: Transform) -> None:
+        raise RuntimeError(f"Cannot insert a transform in {self.__class_.__name__}.")
+
+
 class AutoResetTransform(Transform):
     """A transform for auto-resetting environments.
 
     This transform can be appended to any auto-resetting environment, or automatically
-    appended using ``env = SomeEnvClass(..., auto_reset=True)``.
+    appended using ``env = SomeEnvClass(..., auto_reset=True)``. If the transform is explicitly
+    appended to an env, a :class:`~torchrl.envs.transforms.AutoResetEnv` must be used.
 
     An auto-reset environment must have the following properties (differences from this
     description should be accounted for by subclassing this class):
@@ -7719,10 +7729,21 @@ class AutoResetTransform(Transform):
         self.fill_float = fill_float
         self.fill_int = fill_int
         self.fill_bool = fill_bool
+        self._validated = False
+
+    def _validate_container(self):
+        if self._validated:
+            return
+        if type(self.container) is not AutoResetEnv:
+            raise RuntimeError(
+                f"The {self.__class__.__name__} container must be of type AutoResetEnv."
+            )
+        self._validated = True
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
+        self._validate_container()
         return self._replace_auto_reset_vals(tensordict_reset=tensordict_reset)
 
     def _step(
@@ -7739,6 +7760,28 @@ class AutoResetTransform(Transform):
 
     def _correct_auto_reset_vals(self, tensordict):
         # we need to move the data from tensordict to tensordict_
+        def replace_and_set(key, val, mask, saved_td_autoreset, agent=tensordict):
+            saved_td_autoreset.set(key, val)
+            if val.dtype.is_floating_point:
+                val_set_nan = torch.where(
+                    expand_as_right(mask, val),
+                    torch.full_like(val, self.fill_float),
+                    val,
+                )
+            elif val.dtype.is_signed:
+                val_set_nan = torch.where(
+                    expand_as_right(mask, val),
+                    torch.full_like(val, self.fill_int),
+                    val,
+                )
+            else:
+                val_set_nan = torch.where(
+                    expand_as_right(mask, val),
+                    torch.full_like(val, self.fill_bool),
+                    val,
+                )
+            agent.set(key, val_set_nan)
+
         if self._simple_done:
             done = tensordict.get("done")
             if done.any():
@@ -7746,30 +7789,66 @@ class AutoResetTransform(Transform):
                 self._saved_td_autorest = TensorDict({"__mask__": mask}, [])
                 for key in self.parent.full_observation_spec.keys(True, True):
                     val = tensordict.get(key)
-                    self._saved_td_autorest.set(key, val)
-                    if val.dtype.is_floating_point:
-                        val_set_nan = torch.where(
-                            expand_as_right(mask, val),
-                            torch.full_like(val, self.fill_float),
-                            val,
-                        )
-                    elif val.dtype.is_signed:
-                        val_set_nan = torch.where(
-                            expand_as_right(mask, val),
-                            torch.full_like(val, self.fill_int),
-                            val,
-                        )
-                    else:
-                        val_set_nan = torch.where(
-                            expand_as_right(mask, val),
-                            torch.full_like(val, self.fill_bool),
-                            val,
-                        )
-                    tensordict.set(key, val_set_nan)
+                    replace_and_set(
+                        key, val, mask, saved_td_autoreset=self._saved_td_autorest
+                    )
         else:
-            raise NotImplementedError(
-                "auto_reset is currently not compatible with environments with complex reset keys."
-            )
+            parents = []
+            # Go through each "done" key and get the corresponding agent.
+            _saved_td_autorest = None
+            obs_keys = list(self.parent.full_observation_spec.keys(True, True))
+            for done_key in self.parent.done_keys:
+                if _ends_with(done_key, "done"):
+                    if isinstance(done_key, str):
+                        raise TypeError(
+                            "A 'done' key was a string but a tuple was expected."
+                        )
+                    agent_key = done_key[:-1]
+                    done = tensordict.get(done_key)
+                    mask = done.squeeze(-1)
+                    if done.any():
+                        if _saved_td_autorest is None:
+                            _saved_td_autorest = TensorDict({}, batch_size=[])
+                        agent = tensordict.get(agent_key)
+                        if isinstance(agent, LazyStackedTensorDict):
+                            agents = agent.tensordicts
+                            masks = mask.unbind(agent.stack_dim)
+                            saved_td_autorest_agent = LazyStackedTensorDict(
+                                *[td.empty() for td in agents],
+                                stack_dim=agent.stack_dim,
+                            )
+                            saved_td_autorest_agents = (
+                                saved_td_autorest_agent.tensordicts
+                            )
+                        else:
+                            agents = [agent]
+                            masks = [mask]
+                            saved_td_autorest_agent = _saved_td_autorest.setdefault(
+                                agent_key, agent.empty()
+                            )
+                            saved_td_autorest_agents = [saved_td_autorest_agent]
+                        for key in obs_keys:
+                            if (
+                                isinstance(key, tuple)
+                                and key[: len(agent_key)] == agent_key
+                            ):
+                                for _agent, _mask, _saved_td_autorest_agent in zip(
+                                    agents, masks, saved_td_autorest_agents
+                                ):
+                                    val = _agent.get(key[len(agent_key) :])
+                                    replace_and_set(
+                                        key[len(agent_key) :],
+                                        val,
+                                        _mask,
+                                        saved_td_autoreset=_saved_td_autorest_agent,
+                                        agent=_agent,
+                                    )
+                        mask_key = _replace_last(done_key, "__mask__")
+                        _saved_td_autorest.set(mask_key, mask)
+                    parents.append(done_key[:-1])
+            if _saved_td_autorest is not None:
+                self.__dict__["_saved_td_autorest"] = _saved_td_autorest
+
         return tensordict
 
     def _replace_auto_reset_vals(self, *, tensordict_reset):
@@ -7789,7 +7868,43 @@ class AutoResetTransform(Transform):
                 else:
                     val_set_reg = val
                 tensordict_reset.set(key, val_set_reg)
-            delattr(self, "_saved_td_autorest")
-            return tensordict_reset
         else:
-            raise NotImplementedError
+            for done_key in self.parent.done_keys:
+                if _ends_with(done_key, "done"):
+                    agent_key = done_key[:-1]
+                    mask = self._saved_td_autorest.pop(
+                        _replace_last(done_key, "__mask__"), None
+                    )
+                    if mask is not None:
+                        agent = self._saved_td_autorest.get(agent_key)
+
+                        if isinstance(agent, LazyStackedTensorDict):
+                            agents = agent.tensordicts
+                            masks = mask.unbind(agent.stack_dim)
+                            dests = tensordict_reset.setdefault(
+                                agent_key,
+                                LazyStackedTensorDict(
+                                    *[td.empty() for td in agents],
+                                    stack_dim=agent.stack_dim,
+                                ),
+                            )
+                        else:
+                            agents = [agent]
+                            masks = [mask]
+                            dests = [
+                                tensordict_reset.setdefault(agent_key, agent.empty())
+                            ]
+                        for _agent, _mask, _dest in zip(agents, masks, dests):
+                            for key, val in _agent.items(True, True):
+                                if _ends_with(key, "_reset"):
+                                    continue
+                                if not _mask.all():
+                                    val_not_reset = _dest.get(key)
+                                    val_set_reg = torch.where(
+                                        expand_as_right(mask, val), val, val_not_reset
+                                    )
+                                else:
+                                    val_set_reg = val
+                                _dest.set(key, val_set_reg)
+        delattr(self, "_saved_td_autorest")
+        return tensordict_reset
