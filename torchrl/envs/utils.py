@@ -145,7 +145,7 @@ class _StepMDP:
 
         reset_keys = {_replace_last(key, "_reset") for key in self.done_keys}
         self.exclude_from_root += list(reset_keys)
-        self.exclude_from_root += list(self.reward_keys)
+        self.exclude_from_root += list(set(self.reward_keys) - set(self.state_keys))
 
         self.exclude_from_root = self._repr_key_list_as_tree(self.exclude_from_root)
         self.keys_from_root = self._repr_key_list_as_tree(self.keys_from_root)
