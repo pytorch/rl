@@ -7745,7 +7745,14 @@ class AutoResetTransform(Transform):
 
     """
 
-    def __init__(self, *, replace: bool|None=None, fill_float="nan", fill_int=-1, fill_bool=False):
+    def __init__(
+        self,
+        *,
+        replace: bool | None = None,
+        fill_float="nan",
+        fill_int=-1,
+        fill_bool=False,
+    ):
         super().__init__()
         if replace is False:
             fill_float = fill_int = fill_bool = None
@@ -7792,28 +7799,28 @@ class AutoResetTransform(Transform):
                     val_set_nan = val.clone()
                 else:
                     val_set_nan = torch.where(
-                    expand_as_right(mask, val),
-                    torch.full_like(val, self.fill_float),
-                    val,
-                )
+                        expand_as_right(mask, val),
+                        torch.full_like(val, self.fill_float),
+                        val,
+                    )
             elif val.dtype.is_signed:
                 if self.fill_int is None:
                     val_set_nan = val.clone()
                 else:
                     val_set_nan = torch.where(
-                    expand_as_right(mask, val),
-                    torch.full_like(val, self.fill_int),
-                    val,
-                )
+                        expand_as_right(mask, val),
+                        torch.full_like(val, self.fill_int),
+                        val,
+                    )
             else:
                 if self.fill_bool is None:
                     val_set_nan = val.clone()
                 else:
                     val_set_nan = torch.where(
-                    expand_as_right(mask, val),
-                    torch.full_like(val, self.fill_bool),
-                    val,
-                )
+                        expand_as_right(mask, val),
+                        torch.full_like(val, self.fill_bool),
+                        val,
+                    )
             agent.set(key, val_set_nan)
 
         if self._simple_done:

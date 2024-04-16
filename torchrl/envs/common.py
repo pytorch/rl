@@ -187,7 +187,9 @@ class _EnvPostInit(abc.ABCMeta):
                 AutoResetTransform,
             )
 
-            return AutoResetEnv(instance, AutoResetTransform(replace=auto_reset_replace))
+            return AutoResetEnv(
+                instance, AutoResetTransform(replace=auto_reset_replace)
+            )
         return instance
 
 
