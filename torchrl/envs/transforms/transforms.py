@@ -7860,13 +7860,13 @@ class AutoResetTransform(Transform):
             for key, val in self._saved_td_autorest.items(True, True):
                 if _ends_with(key, "_reset"):
                     continue
-                if not mask.all():
-                    val_not_reset = tensordict_reset.get(key)
-                    val_set_reg = torch.where(
-                        expand_as_right(mask, val), val, val_not_reset
-                    )
-                else:
-                    val_set_reg = val
+                #if not mask.all():
+                #    val_not_reset = tensordict_reset.get(key)
+                #    val_set_reg = torch.where(
+                #        expand_as_right(mask, val), val, val_not_reset
+                #    )
+                #else:
+                val_set_reg = val
                 tensordict_reset.set(key, val_set_reg)
         else:
             for done_key in self.parent.done_keys:
