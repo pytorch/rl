@@ -2928,7 +2928,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         fake_state = state_spec.zero()
         fake_action = action_spec.zero()
         if any(
-            isinstance(spec, LazyStackedTensorDict) for spec in fake_action.values(True)
+            isinstance(val, LazyStackedTensorDict) for val in fake_action.values(True)
         ):
             fake_input = fake_action.update(fake_state)
         else:
