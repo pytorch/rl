@@ -30,6 +30,8 @@ from _utils_internal import (
 )
 from mocking_classes import (
     ActionObsMergeLinear,
+    AutoResetHeteroCountingEnv,
+    AutoResettingCountingEnv,
     ContinuousActionConvMockEnv,
     ContinuousActionConvMockEnvNumpy,
     ContinuousActionVecMockEnv,
@@ -80,6 +82,7 @@ from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
+from torchrl.envs.transforms.transforms import AutoResetEnv, AutoResetTransform
 from torchrl.envs.utils import (
     _StepMDP,
     _terminated_or_truncated,
@@ -2866,6 +2869,162 @@ def test_stackable():
     assert not _stackable(*stack)
     stack = [TensorDict({"a": "a string"}, []), TensorDict({"a": "another string"}, [])]
     assert _stackable(*stack)
+
+
+class TestAutoReset:
+    def test_auto_reset(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+
+        env = AutoResettingCountingEnv(4, auto_reset=True)
+        assert isinstance(env, TransformedEnv) and isinstance(
+            env.transform, AutoResetTransform
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([20])
+        assert r["next", "done"].sum() == 4
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all(), r[
+            "next", "observation"
+        ][r["next", "done"].squeeze()]
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        r = env.rollout(20, policy, break_when_any_done=True)
+        assert r["next", "done"].sum() == 1
+        assert not r["done"].any()
+
+    def test_auto_reset_transform(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = TransformedEnv(
+            AutoResettingCountingEnv(4, auto_reset=True), StepCounter()
+        )
+        assert isinstance(env, TransformedEnv) and isinstance(
+            env.base_env.transform, AutoResetTransform
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([20])
+        assert r["next", "done"].sum() == 4
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        r = env.rollout(20, policy, break_when_any_done=True)
+        assert r["next", "done"].sum() == 1
+        assert not r["done"].any()
+
+    def test_auto_reset_serial(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = SerialEnv(
+            2, functools.partial(AutoResettingCountingEnv, 4, auto_reset=True)
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([2, 20])
+        assert r["next", "done"].sum() == 8
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        r = env.rollout(20, policy, break_when_any_done=True)
+        assert r["next", "done"].sum() == 2
+        assert not r["done"].any()
+
+    def test_auto_reset_serial_hetero(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = SerialEnv(
+            2,
+            [
+                functools.partial(AutoResettingCountingEnv, 4, auto_reset=True),
+                functools.partial(AutoResettingCountingEnv, 5, auto_reset=True),
+            ],
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([2, 20])
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        assert not r["done"].any()
+
+    def test_auto_reset_parallel(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = ParallelEnv(
+            2,
+            functools.partial(AutoResettingCountingEnv, 4, auto_reset=True),
+            mp_start_method="fork",
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([2, 20])
+        assert r["next", "done"].sum() == 8
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        r = env.rollout(20, policy, break_when_any_done=True)
+        assert r["next", "done"].sum() == 2
+        assert not r["done"].any()
+
+    def test_auto_reset_parallel_hetero(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = ParallelEnv(
+            2,
+            [
+                functools.partial(AutoResettingCountingEnv, 4, auto_reset=True),
+                functools.partial(AutoResettingCountingEnv, 5, auto_reset=True),
+            ],
+            mp_start_method="fork",
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([2, 20])
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        assert not r["done"].any()
+
+    def test_auto_reset_heterogeneous_env(self):
+        torch.manual_seed(0)
+        env = TransformedEnv(
+            AutoResetHeteroCountingEnv(4, auto_reset=True), StepCounter()
+        )
+
+        def policy(td):
+            return td.update(
+                env.full_action_spec.zero().apply(lambda x: x.bernoulli_(0.5))
+            )
+
+        assert isinstance(env.base_env, AutoResetEnv) and isinstance(
+            env.base_env.transform, AutoResetTransform
+        )
+        check_env_specs(env)
+        r = env.rollout(40, policy, break_when_any_done=False)
+        assert (r["next", "lazy", "step_count"] - 1 == r["lazy", "step_count"]).all()
+        done = r["next", "lazy", "done"].squeeze(-1)[:-1]
+        assert (
+            r["next", "lazy", "step_count"][1:][~done]
+            == r["next", "lazy", "step_count"][:-1][~done] + 1
+        ).all()
+        assert (
+            r["next", "lazy", "step_count"][1:][done]
+            != r["next", "lazy", "step_count"][:-1][done] + 1
+        ).all()
+        done_split = r["next", "lazy", "done"].unbind(1)
+        lazy_slit = r["next", "lazy"].unbind(1)
+        lazy_roots = r["lazy"].unbind(1)
+        for lazy, lazy_root, done in zip(lazy_slit, lazy_roots, done_split):
+            assert lazy["lidar"][done.squeeze()].isnan().all()
+            assert not lazy["lidar"][~done.squeeze()].isnan().any()
+            assert (lazy_root["lidar"][1:][done[:-1].squeeze()] == 0).all()
 
 
 if __name__ == "__main__":
