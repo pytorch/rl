@@ -4521,7 +4521,7 @@ class TensorDictPrimer(Transform):
         )  # if not random and no default value, use 0.0
         self.random = random
         if isinstance(default_value, dict):
-            primer_keys = {unravel_key(key) for key in self.primers.keys(True, True)}
+            primer_keys = self.primers.keys(True, True)
             default_value_keys = {unravel_key(key) for key in default_value.keys()}
             if primer_keys != default_value_keys:
                 raise ValueError(
@@ -4588,7 +4588,7 @@ class TensorDictPrimer(Transform):
             self.primers = self.primers.to(device)
         return super().to(*args, **kwargs)
 
-    def _try_expand_shape(self, spec):
+    def _expand_shape(self, spec):
         return spec.expand((*self.parent.batch_size, *spec.shape))
 
     def transform_observation_spec(
@@ -4600,14 +4600,7 @@ class TensorDictPrimer(Transform):
             )
         for key, spec in self.primers.items():
             if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
-                try:
-                    expanded_spec = self._try_expand_shape(spec)
-                except AttributeError:
-                    raise RuntimeError(
-                        f"The leading shape of the primer specs ({self.__class__}) should match the one of the "
-                        f"parent env. Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's "
-                        f"shape is {expanded_spec.shape}."
-                    )
+                expanded_spec = self._expand_shape(spec)
                 spec = expanded_spec
             try:
                 device = observation_spec.device
