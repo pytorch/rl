@@ -2634,6 +2634,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     tensordict.clear_device_()
             tensordict = self.step(tensordict)
             td_append = tensordict.copy()
+            tensordicts.append(td_append)
 
             if i == max_steps - 1:
                 # we don't truncate as one could potentially continue the run
@@ -2648,7 +2649,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 key=None,
             )
 
-            tensordicts.append(td_append)
             if any_done:
                 break
 
