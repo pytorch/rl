@@ -7666,13 +7666,21 @@ class AutoResetTransform(Transform):
         of the next episode (this transform will extract and cache this observation
         and fill the obs with some arbitrary value).
 
-    Args:
+    Keyword Args:
+        replace (bool, optional): if ``False``, values are just placed as they are in the
+            ``"next"`` entry even if they are not valid. Defaults to ``True``. A value of
+            ``False`` overrides any subsequent filling keyword argument.
+            This argumet can also be passed with the constructor method by passing a
+            ``auto_reset_replace`` argument: ``env = FooEnv(..., auto_reset=True, auto_reset_replace=False)``.
         fill_float (float or str, optional): The filling value for floating point tensors
-            that terminate an episode.
+            that terminate an episode. A value of ``None`` means no replacement (values are just
+            placed as they are in the ``"next"`` entry even if they are not valid).
         fill_int (int, optional): The filling value for signed integer tensors
-            that terminate an episode.
+            that terminate an episode.  A value of ``None`` means no replacement (values are just
+            placed as they are in the ``"next"`` entry even if they are not valid).
         fill_bool (bool, optional): The filling value for boolean tensors
-            that terminate an episode.
+            that terminate an episode.  A value of ``None`` means no replacement (values are just
+            placed as they are in the ``"next"`` entry even if they are not valid).
 
     Arguments are only available when the transform is explicitly instantiated (not through `EnvType(..., auto_reset=True)`).
 
@@ -7696,7 +7704,7 @@ class AutoResetTransform(Transform):
         ...         return super()._reset(tensordict)
         >>>
         >>> with set_gym_backend("gym"):
-        ...     env = AutoResettingGymEnv("CartPole-v1", auto_reset=True)
+        ...     env = AutoResettingGymEnv("CartPole-v1", auto_reset=True, auto_reset_replace=True)
         ...     env.set_seed(0)
         ...     r = env.rollout(30, break_when_any_done=False)
         >>> print(r["next", "done"].squeeze())
@@ -7737,8 +7745,10 @@ class AutoResetTransform(Transform):
 
     """
 
-    def __init__(self, fill_float="nan", fill_int=-1, fill_bool=False):
+    def __init__(self, *, replace: bool|None=None, fill_float="nan", fill_int=-1, fill_bool=False):
         super().__init__()
+        if replace is False:
+            fill_float = fill_int = fill_bool = None
         if fill_float == "nan":
             fill_float = float("nan")
         self.fill_float = fill_float
@@ -7778,19 +7788,28 @@ class AutoResetTransform(Transform):
         def replace_and_set(key, val, mask, saved_td_autoreset, agent=tensordict):
             saved_td_autoreset.set(key, val)
             if val.dtype.is_floating_point:
-                val_set_nan = torch.where(
+                if self.fill_float is None:
+                    val_set_nan = val.clone()
+                else:
+                    val_set_nan = torch.where(
                     expand_as_right(mask, val),
                     torch.full_like(val, self.fill_float),
                     val,
                 )
             elif val.dtype.is_signed:
-                val_set_nan = torch.where(
+                if self.fill_int is None:
+                    val_set_nan = val.clone()
+                else:
+                    val_set_nan = torch.where(
                     expand_as_right(mask, val),
                     torch.full_like(val, self.fill_int),
                     val,
                 )
             else:
-                val_set_nan = torch.where(
+                if self.fill_bool is None:
+                    val_set_nan = val.clone()
+                else:
+                    val_set_nan = torch.where(
                     expand_as_right(mask, val),
                     torch.full_like(val, self.fill_bool),
                     val,

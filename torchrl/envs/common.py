@@ -181,12 +181,13 @@ class _EnvPostInit(abc.ABCMeta):
         _ = instance.reward_spec
         _ = instance.state_spec
         if auto_reset:
+            auto_reset_replace = kwargs.pop("auto_reset_replace", True)
             from torchrl.envs.transforms.transforms import (
                 AutoResetEnv,
                 AutoResetTransform,
             )
 
-            return AutoResetEnv(instance, AutoResetTransform())
+            return AutoResetEnv(instance, AutoResetTransform(replace=auto_reset_replace))
         return instance
 
 

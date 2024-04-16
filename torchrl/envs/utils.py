@@ -395,6 +395,12 @@ def step_mdp(
             device=None,
             is_shared=False)
 
+    .. warning:: This function will not work properly if the reward key is also part of the input key when
+        the reward keys are excluded. This is why the :class:`~torchrl.envs.RewardSum` transform registers
+        the episode reward in the observation and not the reward spec by default.
+        When using the fast, cached version of this function (``_StepMDP``), this issue should not
+        be observed.
+
     """
     if isinstance(tensordict, LazyStackedTensorDict):
         if next_tensordict is not None:
