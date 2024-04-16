@@ -171,6 +171,7 @@ class EnvMetaData:
 class _EnvPostInit(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
         auto_reset = kwargs.pop("auto_reset", False)
+        auto_reset_replace = kwargs.pop("auto_reset_replace", True)
         instance: EnvBase = super().__call__(*args, **kwargs)
         # we create the done spec by adding a done/terminated entry if one is missing
         instance._create_done_specs()
@@ -181,7 +182,6 @@ class _EnvPostInit(abc.ABCMeta):
         _ = instance.reward_spec
         _ = instance.state_spec
         if auto_reset:
-            auto_reset_replace = kwargs.pop("auto_reset_replace", True)
             from torchrl.envs.transforms.transforms import (
                 AutoResetEnv,
                 AutoResetTransform,
