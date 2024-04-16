@@ -115,7 +115,8 @@ class _StepMDP:
 
         excluded = set()
         if exclude_reward:
-            excluded = excluded.union(self.reward_keys)
+            # If a reward is also a state, it must be in the input
+            excluded = excluded.union(set(self.reward_keys) - set(self.state_keys))
         if exclude_done:
             excluded = excluded.union(self.done_keys)
         if exclude_action:
