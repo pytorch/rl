@@ -4521,15 +4521,11 @@ class TensorDictPrimer(Transform):
         )  # if not random and no default value, use 0.0
         self.random = random
         if isinstance(default_value, dict):
-            primer_keys = self.primers.keys(True, True)
-            default_value_keys = {unravel_key(key) for key in default_value.keys()}
-            if primer_keys != default_value_keys:
+            default_value = TensorDict(default_value, []).to_dict()
+            if set(default_value.keys()) != set(self.primers.keys(True, True)):
                 raise ValueError(
                     "If a default_value dictionary is provided, it must match the primers keys."
                 )
-            default_value = {
-                key: default_value[key] for key in self.primers.keys(True, True)
-            }
         else:
             default_value = {
                 key: default_value for key in self.primers.keys(True, True)
