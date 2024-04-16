@@ -4521,8 +4521,13 @@ class TensorDictPrimer(Transform):
         )  # if not random and no default value, use 0.0
         self.random = random
         if isinstance(default_value, dict):
-            default_value = TensorDict(default_value, []).to_dict()
-            if set(default_value.keys()) != set(self.primers.keys(True, True)):
+            default_value = TensorDict(default_value, [])
+            default_value_keys = default_value.keys(
+                True,
+                True,
+                is_leaf=lambda x: issubclass(x, (NonTensorData, torch.Tensor)),
+            )
+            if set(default_value_keys) != set(self.primers.keys(True, True)):
                 raise ValueError(
                     "If a default_value dictionary is provided, it must match the primers keys."
                 )
