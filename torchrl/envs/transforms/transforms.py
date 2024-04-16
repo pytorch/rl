@@ -43,7 +43,7 @@ from tensordict.nn import dispatch, TensorDictModuleBase
 from tensordict.utils import expand_as_right, expand_right, NestedKey
 from torch import nn, Tensor
 from torch.utils._pytree import tree_map
-from torchrl._utils import _replace_last
+from torchrl._utils import _ends_with, _replace_last
 
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -822,8 +822,14 @@ but got an object of type {type(transform)}."""
         if self.auto_reset:
             _saved_td_autorest = getattr(self, "_saved_td_autorest", None)
             if _saved_td_autorest is not None:
-                tensordict_reset = self._replace_auto_reset_vals(tensordict_=tensordict, _saved_td_autorest=_saved_td_autorest, kwargs=kwargs)
-                self.base_env._complete_done(self.base_env.full_done_spec, tensordict_reset)
+                tensordict_reset = self._replace_auto_reset_vals(
+                    tensordict_=tensordict,
+                    _saved_td_autorest=_saved_td_autorest,
+                    kwargs=kwargs,
+                )
+                self.base_env._complete_done(
+                    self.base_env.full_done_spec, tensordict_reset
+                )
             else:
                 tensordict_reset = self._reset(tensordict, **kwargs)
         else:
@@ -7616,3 +7622,174 @@ class BatchSizeTransform(Transform):
         if self.batch_size is not None:
             return input_spec.expand(self.batch_size)
         return self.reshape_fn(input_spec)
+
+
+class AutoResetTransform(Transform):
+    """A transform for auto-resetting environments.
+
+    This transform can be appended to any auto-resetting environment, or automatically
+    appended using ``env = SomeEnvClass(..., auto_reset=True)``.
+
+    An auto-reset environment must have the following properties (differences from this
+    description should be accounted for by subclassing this class):
+
+      - the reset function can be called once at the beginning (after instantiation) with
+        or without effect. Whether calls to `reset` are allowed after that is up to the
+        environment itself.
+      - During a rollout, any ``done`` state will result in a reset and produce an observation
+        that isn't the last observation of the current episode, but the first observation
+        of the next episode (this transform will extract and cache this observation
+        and fill the obs with some arbitrary value).
+
+    Args:
+        fill_float (float or str, optional): The filling value for floating point tensors
+            that terminate an episode.
+        fill_int (int, optional): The filling value for signed integer tensors
+            that terminate an episode.
+        fill_bool (bool, optional): The filling value for boolean tensors
+            that terminate an episode.
+
+    Arguments are only available when the transform is explicitly instantiated (not through `EnvType(..., auto_reset=True)`).
+
+    Examples:
+        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs import set_gym_backend
+        >>> import torch
+        >>> torch.manual_seed(0)
+        >>>
+        >>> class AutoResettingGymEnv(GymEnv):
+        ...     def _step(self, tensordict):
+        ...         tensordict = super()._step(tensordict)
+        ...         if tensordict["done"].any():
+        ...             td_reset = super().reset()
+        ...             tensordict.update(td_reset.exclude(*self.done_keys))
+        ...         return tensordict
+        ...
+        ...     def _reset(self, tensordict=None):
+        ...         if tensordict is not None and "_reset" in tensordict:
+        ...             return tensordict.copy()
+        ...         return super()._reset(tensordict)
+        >>>
+        >>> with set_gym_backend("gym"):
+        ...     env = AutoResettingGymEnv("CartPole-v1", auto_reset=True)
+        ...     env.set_seed(0)
+        ...     r = env.rollout(30, break_when_any_done=False)
+        >>> print(r["next", "done"].squeeze())
+        tensor([False, False, False, False, False, False, False, False, False, False,
+                False, False, False,  True, False, False, False, False, False, False,
+                False, False, False, False, False,  True, False, False, False, False])
+        >>> print("observation after reset are set as nan", r["next", "observation"])
+        observation after reset are set as nan tensor([[-4.3633e-02, -1.4877e-01,  1.2849e-02,  2.7584e-01],
+                [-4.6609e-02,  4.6166e-02,  1.8366e-02, -1.2761e-02],
+                [-4.5685e-02,  2.4102e-01,  1.8111e-02, -2.9959e-01],
+                [-4.0865e-02,  4.5644e-02,  1.2119e-02, -1.2542e-03],
+                [-3.9952e-02,  2.4059e-01,  1.2094e-02, -2.9009e-01],
+                [-3.5140e-02,  4.3554e-01,  6.2920e-03, -5.7893e-01],
+                [-2.6429e-02,  6.3057e-01, -5.2867e-03, -8.6963e-01],
+                [-1.3818e-02,  8.2576e-01, -2.2679e-02, -1.1640e+00],
+                [ 2.6972e-03,  1.0212e+00, -4.5959e-02, -1.4637e+00],
+                [ 2.3121e-02,  1.2168e+00, -7.5232e-02, -1.7704e+00],
+                [ 4.7457e-02,  1.4127e+00, -1.1064e-01, -2.0854e+00],
+                [ 7.5712e-02,  1.2189e+00, -1.5235e-01, -1.8289e+00],
+                [ 1.0009e-01,  1.0257e+00, -1.8893e-01, -1.5872e+00],
+                [        nan,         nan,         nan,         nan],
+                [-3.9405e-02, -1.7766e-01, -1.0403e-02,  3.0626e-01],
+                [-4.2959e-02, -3.7263e-01, -4.2775e-03,  5.9564e-01],
+                [-5.0411e-02, -5.6769e-01,  7.6354e-03,  8.8698e-01],
+                [-6.1765e-02, -7.6292e-01,  2.5375e-02,  1.1820e+00],
+                [-7.7023e-02, -9.5836e-01,  4.9016e-02,  1.4826e+00],
+                [-9.6191e-02, -7.6387e-01,  7.8667e-02,  1.2056e+00],
+                [-1.1147e-01, -9.5991e-01,  1.0278e-01,  1.5219e+00],
+                [-1.3067e-01, -7.6617e-01,  1.3322e-01,  1.2629e+00],
+                [-1.4599e-01, -5.7298e-01,  1.5848e-01,  1.0148e+00],
+                [-1.5745e-01, -7.6982e-01,  1.7877e-01,  1.3527e+00],
+                [-1.7285e-01, -9.6668e-01,  2.0583e-01,  1.6956e+00],
+                [        nan,         nan,         nan,         nan],
+                [-4.3962e-02,  1.9845e-01, -4.5015e-02, -2.5903e-01],
+                [-3.9993e-02,  3.9418e-01, -5.0196e-02, -5.6557e-01],
+                [-3.2109e-02,  5.8997e-01, -6.1507e-02, -8.7363e-01],
+                [-2.0310e-02,  3.9574e-01, -7.8980e-02, -6.0090e-01]])
+
+    """
+
+    def __init__(self, fill_float="nan", fill_int=-1, fill_bool=False):
+        super().__init__()
+        if fill_float == "nan":
+            fill_float = float("nan")
+        self.fill_float = fill_float
+        self.fill_int = fill_int
+        self.fill_bool = fill_bool
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._replace_auto_reset_vals(tensordict_reset=tensordict_reset)
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        return self._correct_auto_reset_vals(next_tensordict)
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise RuntimeError
+
+    @property
+    def _simple_done(self):
+        return self.parent._simple_done
+
+    def _correct_auto_reset_vals(self, tensordict):
+        # we need to move the data from tensordict to tensordict_
+        if self._simple_done:
+            done = tensordict.get("done")
+            if done.any():
+                mask = done.squeeze(-1)
+                self._saved_td_autorest = TensorDict({"__mask__": mask}, [])
+                for key in self.parent.full_observation_spec.keys(True, True):
+                    val = tensordict.get(key)
+                    self._saved_td_autorest.set(key, val)
+                    if val.dtype.is_floating_point:
+                        val_set_nan = torch.where(
+                            expand_as_right(mask, val),
+                            torch.full_like(val, self.fill_float),
+                            val,
+                        )
+                    elif val.dtype.is_signed:
+                        val_set_nan = torch.where(
+                            expand_as_right(mask, val),
+                            torch.full_like(val, self.fill_int),
+                            val,
+                        )
+                    else:
+                        val_set_nan = torch.where(
+                            expand_as_right(mask, val),
+                            torch.full_like(val, self.fill_bool),
+                            val,
+                        )
+                    tensordict.set(key, val_set_nan)
+        else:
+            raise NotImplementedError(
+                "auto_reset is currently not compatible with environments with complex reset keys."
+            )
+        return tensordict
+
+    def _replace_auto_reset_vals(self, *, tensordict_reset):
+        _saved_td_autorest = self.__dict__.get("_saved_td_autorest", None)
+        if _saved_td_autorest is None:
+            return tensordict_reset
+        if self._simple_done:
+            mask = self._saved_td_autorest.pop("__mask__")
+            for key, val in self._saved_td_autorest.items(True, True):
+                if _ends_with(key, "_reset"):
+                    continue
+                if not mask.all():
+                    val_not_reset = tensordict_reset.get(key)
+                    val_set_reg = torch.where(
+                        expand_as_right(mask, val), val, val_not_reset
+                    )
+                else:
+                    val_set_reg = val
+                tensordict_reset.set(key, val_set_reg)
+            delattr(self, "_saved_td_autorest")
+            return tensordict_reset
+        else:
+            raise NotImplementedError

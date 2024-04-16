@@ -1832,7 +1832,7 @@ class MultiKeyCountingEnv(EnvBase):
 
 class AutoResettingCountingEnv(CountingEnv):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs, auto_reset=True)
+        super().__init__(*args, **kwargs)
 
     def _step(self, tensordict):
         tensordict = super()._step(tensordict)
@@ -1843,5 +1843,5 @@ class AutoResettingCountingEnv(CountingEnv):
 
     def _reset(self, tensordict=None):
         if tensordict is not None and "_reset" in tensordict:
-            raise RuntimeError
+            return tensordict.copy()
         return super()._reset(tensordict)

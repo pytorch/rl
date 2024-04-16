@@ -512,7 +512,6 @@ class BatchedEnvBase(EnvBase):
         if value not in (False, None):
             raise ValueError("auto_reset must be None of False")
 
-
     def _set_properties(self):
 
         cls = type(self)

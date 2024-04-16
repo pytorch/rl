@@ -81,6 +81,7 @@ from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
+from torchrl.envs.transforms.transforms import AutoResetTransform
 from torchrl.envs.utils import (
     _StepMDP,
     _terminated_or_truncated,
@@ -2871,55 +2872,126 @@ def test_stackable():
 
 class TestAutoReset:
     def test_auto_reset(self):
-        policy = lambda td: td.set("action", torch.ones((*td.shape, 1), dtype=torch.int64))
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
 
-        env = AutoResettingCountingEnv(4)
-        assert env.auto_reset
+        env = AutoResettingCountingEnv(4, auto_reset=True)
+        assert isinstance(env, TransformedEnv) and isinstance(
+            env.transform, AutoResetTransform
+        )
         r = env.rollout(20, policy, break_when_any_done=False)
         assert r.shape == torch.Size([20])
         assert r["next", "done"].sum() == 4
-        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all(), r["next", "observation"][r["next", "done"].squeeze()]
-        assert (r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0).all()
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all(), r[
+            "next", "observation"
+        ][r["next", "done"].squeeze()]
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
         r = env.rollout(20, policy, break_when_any_done=True)
         assert r["next", "done"].sum() == 1
+        assert not r["done"].any()
 
     def test_auto_reset_transform(self):
-        policy = lambda td: td.set("action", torch.ones((*td.shape, 1), dtype=torch.int64))
-        env = TransformedEnv(AutoResettingCountingEnv(4))
-        assert env.auto_reset
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = TransformedEnv(
+            AutoResettingCountingEnv(4, auto_reset=True), StepCounter()
+        )
+        assert (
+            isinstance(env, TransformedEnv)
+            and isinstance(env.transform, Compose)
+            and isinstance(env.transform[0], AutoResetTransform)
+        )
         r = env.rollout(20, policy, break_when_any_done=False)
         assert r.shape == torch.Size([20])
         assert r["next", "done"].sum() == 4
         assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
-        assert (r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
         r = env.rollout(20, policy, break_when_any_done=True)
         assert r["next", "done"].sum() == 1
+        assert not r["done"].any()
 
     def test_auto_reset_serial(self):
-        policy = lambda td: td.set("action", torch.ones((*td.shape, 1), dtype=torch.int64))
-        env = SerialEnv(2, functools.partial(AutoResettingCountingEnv, 4))
-        assert not env.auto_reset, env.auto_reset
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = SerialEnv(
+            2, functools.partial(AutoResettingCountingEnv, 4, auto_reset=True)
+        )
         r = env.rollout(20, policy, break_when_any_done=False)
         assert r.shape == torch.Size([2, 20])
         assert r["next", "done"].sum() == 8
         assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
-        assert (r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
         r = env.rollout(20, policy, break_when_any_done=True)
         assert r["next", "done"].sum() == 2
+        assert not r["done"].any()
+
+    def test_auto_reset_serial_hetero(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = SerialEnv(
+            2,
+            [
+                functools.partial(AutoResettingCountingEnv, 4, auto_reset=True),
+                functools.partial(AutoResettingCountingEnv, 5, auto_reset=True),
+            ],
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([2, 20])
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        assert not r["done"].any()
 
     def test_auto_reset_parallel(self):
-        policy = lambda td: td.set("action", torch.ones((*td.shape, 1), dtype=torch.int64))
-        env = ParallelEnv(
-            2, functools.partial(AutoResettingCountingEnv, 4), mp_start_method="fork"
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
         )
-        assert not env.auto_reset
+        env = ParallelEnv(
+            2,
+            functools.partial(AutoResettingCountingEnv, 4, auto_reset=True),
+            mp_start_method="fork",
+        )
         r = env.rollout(20, policy, break_when_any_done=False)
         assert r.shape == torch.Size([2, 20])
         assert r["next", "done"].sum() == 8
         assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
-        assert (r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
         r = env.rollout(20, policy, break_when_any_done=True)
         assert r["next", "done"].sum() == 2
+        assert not r["done"].any()
+
+    def test_auto_reset_parallel_hetero(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = ParallelEnv(
+            2,
+            [
+                functools.partial(AutoResettingCountingEnv, 4, auto_reset=True),
+                functools.partial(AutoResettingCountingEnv, 5, auto_reset=True),
+            ],
+            mp_start_method="fork",
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([2, 20])
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        assert not r["done"].any()
 
 
 if __name__ == "__main__":
