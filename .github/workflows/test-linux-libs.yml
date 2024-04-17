@@ -55,6 +55,7 @@ jobs:
       matrix:
         python_version: ["3.11"]
         cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
@@ -124,7 +125,7 @@ jobs:
       matrix:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
@@ -225,6 +226,7 @@ jobs:
       matrix:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
@@ -326,6 +328,7 @@ jobs:
         bash .github/unittest/linux_libs/scripts_openx/post_process.sh
 
   unittests-pettingzoo:
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
@@ -363,6 +366,7 @@ jobs:
       matrix:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
@@ -536,6 +540,7 @@ jobs:
       matrix:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
