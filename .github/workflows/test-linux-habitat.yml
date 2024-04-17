@@ -19,14 +19,14 @@ jobs:
   tests:
     strategy:
       matrix:
-        python_version: ["3.9"] # "3.8", "3.9", "3.10", "3.11"
-        cuda_arch_version: ["11.6"] # "11.6", "11.7"
+        python_version: ["3.10"] # "3.8", "3.9", "3.10", "3.11"
+        cuda_arch_version: ["12.1"] # "11.6", "11.7"
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.2.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cuda:12.1.1-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
