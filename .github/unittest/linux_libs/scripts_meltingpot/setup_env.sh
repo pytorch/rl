@@ -8,7 +8,7 @@
 set -e -v
 
 apt-get update && apt-get upgrade -y
-apt-get install -y git wget g++ gcc libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libglvnd0 libgl1 libglx0 libegl1 libgles2
+apt-get install -y git wget g++ gcc libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libglvnd0 libgl1 libglx0 libegl1 libgles2 curl
 apt-get upgrade -y libstdc++6
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
