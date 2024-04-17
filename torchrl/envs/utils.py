@@ -109,13 +109,15 @@ class _StepMDP:
         state_keys = env.full_state_spec.keys(True, True)
         self.action_keys = [unravel_key(key) for key in action_keys]
         self.done_keys = [unravel_key(key) for key in done_keys]
+        self.observation_keys = list(observation_keys)
+        self.state_keys = list(state_keys)
         self.reward_keys = [unravel_key(key) for key in reward_keys]
-        self.observation_keys = [unravel_key(key) for key in observation_keys]
-        self.state_keys = [unravel_key(key) for key in state_keys]
+        self.reward_keys_filt = list(set(self.reward_keys) - set(self.state_keys))
 
         excluded = set()
         if exclude_reward:
-            excluded = excluded.union(self.reward_keys)
+            # If a reward is also a state, it must be in the input
+            excluded = excluded.union(self.reward_keys_filt)
         if exclude_done:
             excluded = excluded.union(self.done_keys)
         if exclude_action:
@@ -130,6 +132,12 @@ class _StepMDP:
         self.keys_from_next = list(self.observation_keys)
         if not exclude_reward:
             self.keys_from_next += self.reward_keys
+        else:
+            self.keys_from_next += [
+                reward_key
+                for reward_key in self.reward_keys
+                if reward_key in self.state_keys
+            ]
         if not exclude_done:
             self.keys_from_next += self.done_keys
         self.keys_from_root = []
@@ -144,7 +152,7 @@ class _StepMDP:
 
         reset_keys = {_replace_last(key, "_reset") for key in self.done_keys}
         self.exclude_from_root += list(reset_keys)
-        self.exclude_from_root += list(self.reward_keys)
+        self.exclude_from_root += self.reward_keys_filt
 
         self.exclude_from_root = self._repr_key_list_as_tree(self.exclude_from_root)
         self.keys_from_root = self._repr_key_list_as_tree(self.keys_from_root)
@@ -422,6 +430,12 @@ def step_mdp(
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
+
+    .. warning:: This function will not work properly if the reward key is also part of the input key when
+        the reward keys are excluded. This is why the :class:`~torchrl.envs.RewardSum` transform registers
+        the episode reward in the observation and not the reward spec by default.
+        When using the fast, cached version of this function (``_StepMDP``), this issue should not
+        be observed.
 
     """
     if isinstance(tensordict, LazyStackedTensorDict):

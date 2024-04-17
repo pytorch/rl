@@ -60,13 +60,14 @@ class EnvMetaData:
 
     def __init__(
         self,
+        *,
         tensordict: TensorDictBase,
         specs: CompositeSpec,
         batch_size: torch.Size,
         env_str: str,
         device: torch.device,
-        batch_locked: bool = True,
-        device_map: dict = None,
+        batch_locked: bool,
+        device_map: dict,
     ):
         self.device = device
         self.tensordict = tensordict
@@ -117,31 +118,37 @@ class EnvMetaData:
 
         tensordict.named_apply(fill_device_map, nested_keys=True, filter_empty=True)
         return EnvMetaData(
-            tensordict, specs, batch_size, env_str, device, batch_locked, device_map
+            tensordict=tensordict,
+            specs=specs,
+            batch_size=batch_size,
+            env_str=env_str,
+            device=device,
+            batch_locked=batch_locked,
+            device_map=device_map,
         )
 
     def expand(self, *size: int) -> EnvMetaData:
         tensordict = self.tensordict.expand(*size).clone()
         batch_size = torch.Size(list(size))
         return EnvMetaData(
-            tensordict,
-            self.specs.expand(*size),
-            batch_size,
-            self.env_str,
-            self.device,
-            self.batch_locked,
-            self.device_map,
+            tensordict=tensordict,
+            specs=self.specs.expand(*size),
+            batch_size=batch_size,
+            env_str=self.env_str,
+            device=self.device,
+            batch_locked=self.batch_locked,
+            device_map=self.device_map,
         )
 
     def clone(self):
         return EnvMetaData(
-            self.tensordict.clone(),
-            self.specs.clone(),
-            torch.Size([*self.batch_size]),
-            deepcopy(self.env_str),
-            self.device,
-            self.batch_locked,
-            self.device_map,
+            tensordict=self.tensordict.clone(),
+            specs=self.specs.clone(),
+            batch_size=torch.Size([*self.batch_size]),
+            env_str=deepcopy(self.env_str),
+            device=self.device,
+            batch_locked=self.batch_locked,
+            device_map=self.device_map,
         )
 
     def to(self, device: DEVICE_TYPING) -> EnvMetaData:
@@ -151,18 +158,20 @@ class EnvMetaData:
         tensordict = self.tensordict.contiguous().to(device)
         specs = self.specs.to(device)
         return EnvMetaData(
-            tensordict,
-            specs,
-            self.batch_size,
-            self.env_str,
-            device,
-            self.batch_locked,
-            device_map,
+            tensordict=tensordict,
+            specs=specs,
+            batch_size=self.batch_size,
+            env_str=self.env_str,
+            device=device,
+            batch_locked=self.batch_locked,
+            device_map=device_map,
         )
 
 
 class _EnvPostInit(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
+        auto_reset = kwargs.pop("auto_reset", False)
+        auto_reset_replace = kwargs.pop("auto_reset_replace", True)
         instance: EnvBase = super().__call__(*args, **kwargs)
         # we create the done spec by adding a done/terminated entry if one is missing
         instance._create_done_specs()
@@ -172,6 +181,15 @@ class _EnvPostInit(abc.ABCMeta):
         _ = instance.done_spec
         _ = instance.reward_spec
         _ = instance.state_spec
+        if auto_reset:
+            from torchrl.envs.transforms.transforms import (
+                AutoResetEnv,
+                AutoResetTransform,
+            )
+
+            return AutoResetEnv(
+                instance, AutoResetTransform(replace=auto_reset_replace)
+            )
         return instance
 
 
@@ -2109,7 +2127,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if tensordict_reset is tensordict:
             raise RuntimeError(
                 "EnvBase._reset should return outplace changes to the input "
-                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty())"
+                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty()) "
                 "inside _reset before writing new tensors onto this new instance."
             )
         if not isinstance(tensordict_reset, TensorDictBase):
@@ -2618,7 +2636,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 else:
                     tensordict.clear_device_()
             tensordict = self.step(tensordict)
-            tensordicts.append(tensordict.clone(False))
+            td_append = tensordict.copy()
+            tensordicts.append(td_append)
 
             if i == max_steps - 1:
                 # we don't truncate as one could potentially continue the run
@@ -2632,6 +2651,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 full_done_spec=self.output_spec["full_done_spec"],
                 key=None,
             )
+
             if any_done:
                 break
 
@@ -2910,7 +2930,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         fake_state = state_spec.zero()
         fake_action = action_spec.zero()
-        fake_input = fake_state.update(fake_action)
+        if any(
+            isinstance(val, LazyStackedTensorDict) for val in fake_action.values(True)
+        ):
+            fake_input = fake_action.update(fake_state)
+        else:
+            fake_input = fake_state.update(fake_action)
 
         # the input and output key may match, but the output prevails
         # Hence we generate the input, and override using the output
