@@ -75,6 +75,13 @@ class DreamerEnv(ModelBasedEnvBase):
 
 
 class DreamerDecoder(Transform):
+    """A transform to record the decoded observations in Dreamer.
+
+    Examples:
+        >>> model_based_env = DreamerEnv(...)
+        >>> model_based_env_eval = model_based_env.append_transform(DreamerDecoder())
+    """
+
     def _call(self, tensordict):
         return self.parent.base_env.obs_decoder(tensordict)
 
