@@ -9,13 +9,17 @@ env:
   image_size : 64
   horizon: 500
   n_parallel_envs: 8
-  device: null
+  device:
+    _target_: dreamer_utils._default_device
+    device: null
 
 collector:
   total_frames: 5_000_000
   init_random_frames: 3000
   frames_per_batch: 1000
-  device: cuda:0
+  device:
+    _target_: dreamer_utils._default_device
+    device: null
 
 optimization:
   train_every: 1000
@@ -38,7 +42,9 @@ optimization:
 
 networks:
   exploration_noise: 0.3
-  device: cuda:0
+  device:
+    _target_: dreamer_utils._default_device
+    device: null
   state_dim: 30
   rssm_hidden_dim: 200
   hidden_dim: 400
@@ -58,3 +64,4 @@ logger:
   # eval interval, in collection counts
   eval_iter: 10
   eval_rollout_steps: 500
+  video: False

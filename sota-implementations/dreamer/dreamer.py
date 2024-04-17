@@ -4,26 +4,28 @@
 # LICENSE file in the root directory of this source tree.
 import contextlib
 import time
-from torch.profiler import profile, record_function, ProfilerActivity
 
 import hydra
 import torch
 import torch.cuda
 import tqdm
 from dreamer_utils import (
+    dump_video,
     log_metrics,
     make_collector,
     make_dreamer,
     make_environments,
     make_replay_buffer,
 )
+from hydra.utils import instantiate
 
 # mixed precision training
 from torch.cuda.amp import GradScaler
 from torch.nn.utils import clip_grad_norm_
+from torch.profiler import profile, ProfilerActivity, record_function
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules.models.model_based import RSSMRollout
+from torchrl.modules import RSSMRollout
 
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
@@ -37,12 +39,7 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 def main(cfg: "DictConfig"):  # noqa: F821
     # cfg = correct_for_frame_skip(cfg)
 
-    if torch.cuda.is_available() and cfg.networks.device in (None, ""):
-        device = torch.device("cuda:0")
-    elif cfg.networks.device:
-        device = torch.device(cfg.networks.device)
-    else:
-        device = torch.device("cpu")
+    device = torch.device(instantiate(cfg.networks.device))
 
     # Create logger
     exp_name = generate_exp_name("Dreamer", cfg.logger.exp_name)
@@ -56,7 +53,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     train_env, test_env = make_environments(
-        cfg=cfg, parallel_envs=cfg.env.n_parallel_envs
+        cfg=cfg,
+        parallel_envs=cfg.env.n_parallel_envs,
+        logger=logger,
     )
 
     # Make dreamer components
@@ -101,7 +100,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         batch_seq_len=batch_length,
         buffer_size=cfg.replay_buffer.buffer_size,
         buffer_scratch_dir=cfg.replay_buffer.scratch_dir,
-        device=cfg.networks.device,
+        device=device,
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.grayscale,
         image_size=cfg.env.image_size,
@@ -179,7 +178,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 with torch.autocast(
                     device_type=device.type,
                     dtype=torch.bfloat16,
-                ) if use_autocast else contextlib.nullcontext(), (profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) if (i == 1 and k == 1) else contextlib.nullcontext()) as prof:
+                ) if use_autocast else contextlib.nullcontext(), (
+                    profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA])
+                    if (i == 1 and k == 1)
+                    else contextlib.nullcontext()
+                ) as prof:
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
@@ -188,12 +191,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         + model_loss_td["loss_model_reco"]
                         + model_loss_td["loss_model_reward"]
                     )
-                    if use_autocast:
-                        assert loss_world_model.dtype in (
-                            torch.bfloat16,
-                            torch.float16,
-                        ), model_loss_td
-                if (i == 1 and k == 1):
+                if i == 1 and k == 1:
                     prof.export_chrome_trace("trace_world_model.json")
 
                 world_model_opt.zero_grad()
@@ -214,10 +212,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 t_loss_actor_init = time.time()
                 with torch.autocast(
                     device_type=device.type, dtype=torch.bfloat16
-                ) if use_autocast else contextlib.nullcontext(), (profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) if (i == 1 and k == 1) else contextlib.nullcontext()) as prof:
+                ) if use_autocast else contextlib.nullcontext(), (
+                    profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA])
+                    if (i == 1 and k == 1)
+                    else contextlib.nullcontext()
+                ) as prof:
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
 
-                if (i == 1 and k == 1):
+                if i == 1 and k == 1:
                     prof.export_chrome_trace("trace_actor.json")
 
                 actor_opt.zero_grad()
@@ -238,10 +240,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 t_loss_critic_init = time.time()
                 with torch.autocast(
                     device_type=device.type, dtype=torch.bfloat16
-                ) if use_autocast else contextlib.nullcontext(), (profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) if (i == 1 and k == 1) else contextlib.nullcontext()) as prof:
+                ) if use_autocast else contextlib.nullcontext(), (
+                    profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA])
+                    if (i == 1 and k == 1)
+                    else contextlib.nullcontext()
+                ) as prof:
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
-                if (i == 1 and k == 1):
+                if i == 1 and k == 1:
                     prof.export_chrome_trace("trace_critic.json")
 
                 value_opt.zero_grad()
@@ -287,17 +293,33 @@ def main(cfg: "DictConfig"):  # noqa: F821
         collector.update_policy_weights_()
         # Evaluation
         if (i % eval_iter) == 0:
+            # Real env
             with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 eval_rollout = test_env.rollout(
                     eval_rollout_steps,
                     policy,
-                    auto_cast_to_device=True,
+                    # auto_cast_to_device=True,
                     break_when_any_done=True,
                 )
+                test_env.apply(dump_video)
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 eval_metrics = {"eval/reward": eval_reward}
                 if logger is not None:
                     log_metrics(logger, eval_metrics, collected_frames)
+            # Simulated env
+            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+                eval_rollout = test_env.rollout(
+                    eval_rollout_steps,
+                    policy,
+                    # auto_cast_to_device=True,
+                    break_when_any_done=True,
+                )
+                test_env.apply(dump_video)
+                eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
+                eval_metrics = {"eval/simulated_reward": eval_reward}
+                if logger is not None:
+                    log_metrics(logger, eval_metrics, collected_frames)
+
         t_collect_init = time.time()
 
 

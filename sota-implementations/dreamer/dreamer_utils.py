@@ -9,6 +9,7 @@ from contextlib import nullcontext
 import torch
 
 import torch.nn as nn
+from hydra.utils import instantiate
 from tensordict.nn import (
     InteractionType,
     ProbabilisticTensorDictModule,
@@ -17,54 +18,52 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import SliceSampler, TensorDictReplayBuffer
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data import LazyMemmapStorage, SliceSampler, TensorDictReplayBuffer
 
 from torchrl.data.tensor_specs import CompositeSpec, UnboundedContinuousTensorSpec
-from torchrl.envs import ParallelEnv
 
-from torchrl.envs.env_creator import EnvCreator
-from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.envs.libs.gym import GymEnv, set_gym_backend
-from torchrl.envs.model_based.dreamer import DreamerEnv
-from torchrl.envs.transforms import (
+from torchrl.envs import (
     Compose,
+    DeviceCastTransform,
+    DMControlEnv,
     DoubleToFloat,
+    DreamerEnv,
+    DTypeCastTransform,
+    EnvCreator,
+    ExcludeTransform,
     # ExcludeTransform,
     FrameSkipTransform,
     GrayScale,
+    GymEnv,
+    ParallelEnv,
+    RenameTransform,
     Resize,
     RewardSum,
+    set_gym_backend,
+    StepCounter,
+    TensorDictPrimer,
     ToTensorImage,
     TransformedEnv,
 )
-from torchrl.envs.transforms.transforms import (
-    DeviceCastTransform,
-    DTypeCastTransform,
-    ExcludeTransform,
-    RenameTransform,
-    StepCounter,
-    TensorDictPrimer,
-)
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
 from torchrl.modules import (
-    MLP,
-    SafeModule,
-    SafeProbabilisticModule,
-    SafeProbabilisticTensorDictSequential,
-    SafeSequential,
-)
-from torchrl.modules.distributions import IndependentNormal, TanhNormal
-from torchrl.modules.models.model_based import (
+    AdditiveGaussianWrapper,
     DreamerActor,
+    IndependentNormal,
+    MLP,
     ObsDecoder,
     ObsEncoder,
     RSSMPosterior,
     RSSMPrior,
     RSSMRollout,
+    SafeModule,
+    SafeProbabilisticModule,
+    SafeProbabilisticTensorDictSequential,
+    SafeSequential,
+    TanhNormal,
+    WorldModelWrapper,
 )
-from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
-from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
+from torchrl.record import VideoRecorder
 
 
 def _make_env(cfg, device):
@@ -115,7 +114,7 @@ def transform_env(cfg, env):
     return env
 
 
-def make_environments(cfg, parallel_envs=1):
+def make_environments(cfg, parallel_envs=1, logger=None):
     """Make environments for training and evaluation."""
     func = functools.partial(_make_env, cfg=cfg, device=cfg.env.device)
     train_env = ParallelEnv(
@@ -125,6 +124,9 @@ def make_environments(cfg, parallel_envs=1):
     )
     train_env = transform_env(cfg, train_env)
     train_env.set_seed(cfg.env.seed)
+    func = functools.partial(
+        _make_env, cfg=cfg, device=cfg.env.device, from_pixels=cfg.logger.video
+    )
     eval_env = ParallelEnv(
         1,
         EnvCreator(func),
@@ -132,9 +134,16 @@ def make_environments(cfg, parallel_envs=1):
     )
     eval_env = transform_env(cfg, eval_env)
     eval_env.set_seed(cfg.env.seed + 1)
+    if cfg.logger.video:
+        eval_env.insert_transform(0, VideoRecorder(logger, tag="eval/video"))
     check_env_specs(train_env)
     check_env_specs(eval_env)
     return train_env, eval_env
+
+
+def dump_video(module):
+    if isinstance(module, VideoRecorder):
+        module.dump()
 
 
 def make_dreamer(
@@ -282,7 +291,7 @@ def make_collector(cfg, train_env, actor_model_explore):
         init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
-        policy_device=cfg.collector.device,
+        policy_device=instantiate(cfg.collector.device),
         env_device=train_env.device,
         storing_device="cpu",
     )
@@ -665,3 +674,11 @@ def get_activation(name):
         return nn.ELU
     else:
         raise NotImplementedError
+
+
+def _default_device(device=None):
+    if device in ("", None):
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        return torch.device("cpu")
+    return torch.device(device)
