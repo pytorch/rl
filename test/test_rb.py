@@ -2794,8 +2794,6 @@ class TestRBMultidim:
                 if transform is not None:
                     assert s.ndim == 2
         except Exception:
-            print(f"Failing at iter {i}")  # noqa: T201
-            print(f"rb {rb}")  # noqa: T201
             raise
 
     @pytest.mark.parametrize("strict_length", [True, False])

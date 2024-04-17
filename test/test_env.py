@@ -115,6 +115,10 @@ except FileNotFoundError:
 
 IS_OSX = platform == "darwin"
 IS_WIN = platform == "win32"
+if IS_WIN:
+    mp_ctx = "spawn"
+else:
+    mp_ctx = "fork"
 
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
 ## the serial and parallel batched envs
@@ -463,7 +467,7 @@ class TestParallel:
                 env.shared_tensordict_parent.device.type == torch.device(edevice).type
             )
 
-    @pytest.mark.parametrize("start_method", [None, "fork"])
+    @pytest.mark.parametrize("start_method", [None, mp_ctx])
     def test_serial_for_single(self, maybe_fork_ParallelEnv, start_method):
         env = ParallelEnv(
             1,
@@ -2959,7 +2963,7 @@ class TestAutoReset:
         env = ParallelEnv(
             2,
             functools.partial(AutoResettingCountingEnv, 4, auto_reset=True),
-            mp_start_method="fork",
+            mp_start_method=mp_ctx,
         )
         r = env.rollout(20, policy, break_when_any_done=False)
         assert r.shape == torch.Size([2, 20])
@@ -2982,7 +2986,7 @@ class TestAutoReset:
                 functools.partial(AutoResettingCountingEnv, 4, auto_reset=True),
                 functools.partial(AutoResettingCountingEnv, 5, auto_reset=True),
             ],
-            mp_start_method="fork",
+            mp_start_method=mp_ctx,
         )
         r = env.rollout(20, policy, break_when_any_done=False)
         assert r.shape == torch.Size([2, 20])
