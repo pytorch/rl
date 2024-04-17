@@ -53,7 +53,7 @@ jobs:
   unittests-brax:
     strategy:
       matrix:
-        python_version: ["3.9"]
+        python_version: ["3.11"]
         cuda_arch_version: ["12.1"]
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
@@ -74,7 +74,7 @@ jobs:
 
         set -euo pipefail
 
-        export PYTHON_VERSION="3.9"
+        export PYTHON_VERSION="3.11"
         export CU_VERSION="12.1"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
