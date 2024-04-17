@@ -13,6 +13,7 @@ import re
 import sys
 from copy import copy
 from functools import partial
+from sys import platform
 
 import numpy as np
 import pytest
@@ -124,6 +125,12 @@ from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal
+
+IS_WIN = platform == "win32"
+if IS_WIN:
+    mp_ctx = "spawn"
+else:
+    mp_ctx = "fork"
 
 TIMEOUT = 100.0
 
@@ -9404,7 +9411,7 @@ class TestDeviceCastTransformPart(TransformBase):
         env = ParallelEnv(
             2,
             make_env,
-            mp_start_method="fork" if not torch.cuda.is_available() else "spawn",
+            mp_start_method=mp_ctx if not torch.cuda.is_available() else "spawn",
         )
         assert env.device is None
         try:
@@ -9447,7 +9454,7 @@ class TestDeviceCastTransformPart(TransformBase):
             ParallelEnv(
                 2,
                 make_env,
-                mp_start_method="fork" if not torch.cuda.is_available() else "spawn",
+                mp_start_method=mp_ctx if not torch.cuda.is_available() else "spawn",
             ),
             DeviceCastTransform(
                 "cpu:1",
@@ -10696,7 +10703,7 @@ class TestBatchSizeTransform(TransformBase):
             assert env.batch_size == expected_batch_size
             return env
 
-        env = ParallelEnv(2, make_env, mp_start_method="fork")
+        env = ParallelEnv(2, make_env, mp_start_method=mp_ctx)
         assert env.batch_size == (2, *make_env().batch_size)
         check_env_specs(env)
 
@@ -10751,7 +10758,7 @@ class TestBatchSizeTransform(TransformBase):
         assert transform.batch_size is None
 
         env = TransformedEnv(
-            ParallelEnv(2, make_env, mp_start_method="fork"), transform
+            ParallelEnv(2, make_env, mp_start_method=mp_ctx), transform
         )
         assert env.batch_size == expected_batch_size
         check_env_specs(env)

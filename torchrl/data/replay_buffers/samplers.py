@@ -1572,10 +1572,6 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         )
 
     def __repr__(self):
-        if self._sample_list is not None:
-            perc = len(self._sample_list) / self.len_storage * 100
-        else:
-            perc = 0.0
         return (
             f"{self.__class__.__name__}("
             f"num_slices={self.num_slices}, "
@@ -1586,8 +1582,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             f"strict_length={self.strict_length},"
             f"alpha={self._alpha}, "
             f"beta={self._beta}, "
-            f"eps={self._eps},"
-            f"{perc: 4.4f}% filled)"
+            f"eps={self._eps}"
         )
 
     def __getstate__(self):
