@@ -20,6 +20,8 @@ from .libs import (
     IsaacGymWrapper,
     JumanjiEnv,
     JumanjiWrapper,
+    MeltingpotEnv,
+    MeltingpotWrapper,
     MOGymEnv,
     MOGymWrapper,
     MultiThreadedEnv,
