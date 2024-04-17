@@ -39,6 +39,8 @@ from .libs import (
 from .model_based import ModelBasedEnvBase
 from .transforms import (
     ActionMask,
+    AutoResetEnv,
+    AutoResetTransform,
     BatchSizeTransform,
     BinarizeReward,
     BurnInTransform,

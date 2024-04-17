@@ -1572,10 +1572,6 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         )
 
     def __repr__(self):
-        if self._sample_list is not None:
-            perc = len(self._sample_list) / self.len_storage * 100
-        else:
-            perc = 0.0
         return (
             f"{self.__class__.__name__}("
             f"num_slices={self.num_slices}, "
@@ -1586,8 +1582,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             f"strict_length={self.strict_length},"
             f"alpha={self._alpha}, "
             f"beta={self._beta}, "
-            f"eps={self._eps},"
-            f"{perc: 4.4f}% filled)"
+            f"eps={self._eps}"
         )
 
     def __getstate__(self):
@@ -1726,7 +1721,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             terminated = torch.zeros_like(truncated)
             if traj_terminated.any():
                 if isinstance(seq_length, int):
-                    terminated.view(num_slices, -1)[:, traj_terminated] = 1
+                    terminated.view(num_slices, -1)[traj_terminated, -1] = 1
                 else:
                     terminated[(seq_length.cumsum(0) - 1)[traj_terminated]] = 1
             truncated = truncated & ~terminated
