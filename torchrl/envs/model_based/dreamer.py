@@ -14,6 +14,7 @@ from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based import ModelBasedEnvBase
+from torchrl.envs.transforms.transforms import Transform
 
 
 class DreamerEnv(ModelBasedEnvBase):
@@ -71,3 +72,14 @@ class DreamerEnv(ModelBasedEnvBase):
         if compute_latents:
             tensordict = self.world_model(tensordict)
         return self.obs_decoder(tensordict)
+
+
+class DreamerDecoder(Transform):
+    def _call(self, tensordict):
+        return self.parent.base_env.obs_decoder(tensordict)
+
+    def _reset(self, tensordict, tensordict_reset):
+        return self._call(tensordict_reset)
+
+    def transform_observation_spec(self, observation_spec):
+        return observation_spec

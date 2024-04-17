@@ -24,8 +24,6 @@ collector:
 optimization:
   train_every: 1000
   grad_clip: 100
-  batch_size: 2500
-  batch_length: 50
 
   world_model_lr: 6e-4
   actor_lr: 8e-5
@@ -52,9 +50,10 @@ networks:
 
 
 replay_buffer: 
-  buffer_size: 20000
-  batch_size: 50
-  scratch_dir: ${logger.exp_name}_${env.seed}
+  batch_size: 2500
+  buffer_size: 1000000
+  batch_length: 50
+  scratch_dir: null
 
 logger:
   backend: wandb

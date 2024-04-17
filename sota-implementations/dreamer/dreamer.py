@@ -61,14 +61,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Make dreamer components
     action_key = "action"
     value_key = "state_value"
-    world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
-        config=cfg,
+    (
+        world_model,
+        model_based_env,
+        model_based_env_eval,
+        actor_model,
+        value_model,
+        policy,
+    ) = make_dreamer(
+        cfg=cfg,
         device=device,
         action_key=action_key,
         value_key=value_key,
-        use_decoder_in_env=False,
+        use_decoder_in_env=cfg.logger.video,
+        logger=logger,
     )
-
     # Losses
     world_model_loss = DreamerModelLoss(world_model)
     # Adapt loss keys to gym backend
@@ -82,6 +89,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         imagination_horizon=cfg.optimization.imagination_horizon,
         discount_loss=True,
     )
+
     actor_loss.make_value_estimator(
         gamma=cfg.optimization.gamma, lmbda=cfg.optimization.lmbda
     )
@@ -93,13 +101,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector = make_collector(cfg, train_env, policy)
 
     # Make replay buffer
-    batch_size = cfg.optimization.batch_size
-    batch_length = cfg.optimization.batch_length
+    batch_size = cfg.replay_buffer.batch_size
+    batch_length = cfg.replay_buffer.batch_length
+    buffer_size = cfg.replay_buffer.buffer_size
+    scratch_dir = cfg.replay_buffer.scratch_dir
     replay_buffer = make_replay_buffer(
         batch_size=batch_size,
         batch_seq_len=batch_length,
-        buffer_size=cfg.replay_buffer.buffer_size,
-        buffer_scratch_dir=cfg.replay_buffer.scratch_dir,
+        buffer_size=buffer_size,
+        buffer_scratch_dir=scratch_dir,
         device=device,
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.grayscale,
@@ -132,6 +142,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_rollout_steps = cfg.logger.eval_rollout_steps
 
     if cfg.optimization.compile:
+        torch._dynamo.config.capture_scalar_outputs = True
+
         torchrl_logger.info("Compiling")
         backend = cfg.optimization.compile_backend
 
@@ -166,7 +178,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
             t_loss_actor = 0.0
             t_loss_critic = 0.0
             t_loss_model = 0.0
-
             for k in range(optim_steps_per_batch):
                 # sample from replay buffer
                 t_sample_init = time.time()
@@ -307,18 +318,19 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if logger is not None:
                     log_metrics(logger, eval_metrics, collected_frames)
             # Simulated env
-            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
-                eval_rollout = test_env.rollout(
-                    eval_rollout_steps,
-                    policy,
-                    # auto_cast_to_device=True,
-                    break_when_any_done=True,
-                )
-                test_env.apply(dump_video)
-                eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-                eval_metrics = {"eval/simulated_reward": eval_reward}
-                if logger is not None:
-                    log_metrics(logger, eval_metrics, collected_frames)
+            if model_based_env_eval is not None:
+                with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+                    eval_rollout = model_based_env_eval.rollout(
+                        eval_rollout_steps,
+                        policy,
+                        # auto_cast_to_device=True,
+                        break_when_any_done=True,
+                    )
+                    model_based_env_eval.apply(dump_video)
+                    eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
+                    eval_metrics = {"eval/simulated_reward": eval_reward}
+                    if logger is not None:
+                        log_metrics(logger, eval_metrics, collected_frames)
 
         t_collect_init = time.time()
 

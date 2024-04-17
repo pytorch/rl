@@ -34,7 +34,7 @@ from .libs import (
     VmasEnv,
     VmasWrapper,
 )
-from .model_based import DreamerEnv, ModelBasedEnvBase
+from .model_based import DreamerDecoder, DreamerEnv, ModelBasedEnvBase
 from .transforms import (
     ActionMask,
     AutoResetEnv,

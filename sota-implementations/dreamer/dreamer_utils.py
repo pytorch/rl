@@ -18,15 +18,21 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import LazyMemmapStorage, SliceSampler, TensorDictReplayBuffer
 
-from torchrl.data.tensor_specs import CompositeSpec, UnboundedContinuousTensorSpec
+from torchrl.data import (
+    CompositeSpec,
+    LazyMemmapStorage,
+    SliceSampler,
+    TensorDictReplayBuffer,
+    UnboundedContinuousTensorSpec,
+)
 
 from torchrl.envs import (
     Compose,
     DeviceCastTransform,
     DMControlEnv,
     DoubleToFloat,
+    DreamerDecoder,
     DreamerEnv,
     DTypeCastTransform,
     EnvCreator,
@@ -66,16 +72,23 @@ from torchrl.modules import (
 from torchrl.record import VideoRecorder
 
 
-def _make_env(cfg, device):
+def _make_env(cfg, device, from_pixels=False):
     lib = cfg.env.backend
     if lib in ("gym", "gymnasium"):
         with set_gym_backend(lib):
             env = GymEnv(
                 cfg.env.name,
                 device=device,
+                from_pixels=cfg.env.from_pixels or from_pixels,
+                pixels_only=cfg.env.from_pixels,
             )
     elif lib == "dm_control":
-        env = DMControlEnv(cfg.env.name, cfg.env.task, from_pixels=cfg.env.from_pixels)
+        env = DMControlEnv(
+            cfg.env.name,
+            cfg.env.task,
+            from_pixels=cfg.env.from_pixels or from_pixels,
+            pixels_only=cfg.env.from_pixels,
+        )
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
     default_dict = {
@@ -147,17 +160,18 @@ def dump_video(module):
 
 
 def make_dreamer(
-    config,
+    cfg,
     device,
     action_key: str = "action",
     value_key: str = "state_value",
     use_decoder_in_env: bool = False,
     compile: bool = True,
+    logger=None,
 ):
-    test_env = _make_env(config, device="cpu")
-    test_env = transform_env(config, test_env)
+    test_env = _make_env(cfg, device="cpu")
+    test_env = transform_env(cfg, test_env)
     # Make encoder and decoder
-    if config.env.from_pixels:
+    if cfg.env.from_pixels:
         encoder = ObsEncoder()
         decoder = ObsDecoder()
         observation_in_key = "pixels"
@@ -166,34 +180,34 @@ def make_dreamer(
         encoder = MLP(
             out_features=1024,
             depth=2,
-            num_cells=config.networks.hidden_dim,
-            activation_class=get_activation(config.networks.activation),
+            num_cells=cfg.networks.hidden_dim,
+            activation_class=get_activation(cfg.networks.activation),
         )
         decoder = MLP(
             out_features=test_env.observation_spec["observation"].shape[-1],
             depth=2,
-            num_cells=config.networks.hidden_dim,
-            activation_class=get_activation(config.networks.activation),
+            num_cells=cfg.networks.hidden_dim,
+            activation_class=get_activation(cfg.networks.activation),
         )
         observation_in_key = "observation"
         obsevation_out_key = "reco_observation"
 
     # Make RSSM
     rssm_prior = RSSMPrior(
-        hidden_dim=config.networks.rssm_hidden_dim,
-        rnn_hidden_dim=config.networks.rssm_hidden_dim,
-        state_dim=config.networks.state_dim,
+        hidden_dim=cfg.networks.rssm_hidden_dim,
+        rnn_hidden_dim=cfg.networks.rssm_hidden_dim,
+        state_dim=cfg.networks.state_dim,
         action_spec=test_env.action_spec,
     )
     rssm_posterior = RSSMPosterior(
-        hidden_dim=config.networks.rssm_hidden_dim, state_dim=config.networks.state_dim
+        hidden_dim=cfg.networks.rssm_hidden_dim, state_dim=cfg.networks.state_dim
     )
     # Make reward module
     reward_module = MLP(
         out_features=1,
         depth=2,
-        num_cells=config.networks.hidden_dim,
-        activation_class=get_activation(config.networks.activation),
+        num_cells=cfg.networks.hidden_dim,
+        activation_class=get_activation(cfg.networks.activation),
     )
 
     # Make combined world model
@@ -226,8 +240,8 @@ def make_dreamer(
         observation_out_key=obsevation_out_key,
         test_env=test_env,
         use_decoder_in_env=use_decoder_in_env,
-        state_dim=config.networks.state_dim,
-        rssm_hidden_dim=config.networks.rssm_hidden_dim,
+        state_dim=cfg.networks.state_dim,
+        rssm_hidden_dim=cfg.networks.rssm_hidden_dim,
     )
 
     # def detach_state_and_belief(data):
@@ -244,8 +258,8 @@ def make_dreamer(
         observation_in_key=observation_in_key,
         rssm_prior=rssm_prior,
         rssm_posterior=rssm_posterior,
-        mlp_num_units=config.networks.hidden_dim,
-        activation=get_activation(config.networks.activation),
+        mlp_num_units=cfg.networks.hidden_dim,
+        activation=get_activation(cfg.networks.activation),
         action_key=action_key,
         test_env=test_env,
     )
@@ -256,13 +270,13 @@ def make_dreamer(
         sigma_end=1.0,
         annealing_num_steps=1,
         mean=0.0,
-        std=config.networks.exploration_noise,
+        std=cfg.networks.exploration_noise,
     )
 
     # Make Critic
     value_model = _dreamer_make_value_model(
-        hidden_dim=config.networks.hidden_dim,
-        activation=config.networks.activation,
+        hidden_dim=cfg.networks.hidden_dim,
+        activation=cfg.networks.activation,
         value_key=value_key,
     )
 
@@ -280,7 +294,32 @@ def make_dreamer(
         tensordict = actor_simulator(tensordict)
         value_model(tensordict)
 
-    return world_model, model_based_env, actor_simulator, value_model, actor_realworld
+    if cfg.logger.video:
+        model_based_env_eval = model_based_env.append_transform(DreamerDecoder())
+
+        def float_to_int(data):
+            reco_pixels = data.get("reco_pixels") * 255
+            # assert (reco_pixels < 256).all() and (reco_pixels > 0).all(), (reco_pixels.min(), reco_pixels.max())
+            reco_pixels = reco_pixels.to(torch.uint8)
+            return data.set("reco_pixels", reco_pixels)
+
+        model_based_env_eval.append_transform(float_to_int)
+        model_based_env_eval.append_transform(
+            VideoRecorder(
+                logger=logger, tag="eval/simulated_rendering", in_keys=["reco_pixels"]
+            )
+        )
+
+    else:
+        model_based_env_eval = None
+    return (
+        world_model,
+        model_based_env,
+        model_based_env_eval,
+        actor_simulator,
+        value_model,
+        actor_realworld,
+    )
 
 
 def make_collector(cfg, train_env, actor_model_explore):
@@ -534,8 +573,8 @@ def _dreamer_make_mbenv(
     if use_decoder_in_env:
         mb_env_obs_decoder = SafeModule(
             decoder,
-            in_keys=[("next", "state"), ("next", "belief")],
-            out_keys=[("next", observation_out_key)],
+            in_keys=["state", "belief"],
+            out_keys=[observation_out_key],
         )
     else:
         mb_env_obs_decoder = None
