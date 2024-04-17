@@ -61,6 +61,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -230,6 +231,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -330,6 +332,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -468,6 +471,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -538,6 +542,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
