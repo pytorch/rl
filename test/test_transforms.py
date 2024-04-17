@@ -13,6 +13,7 @@ import re
 import sys
 from copy import copy
 from functools import partial
+from sys import platform
 
 import numpy as np
 import pytest
@@ -118,6 +119,12 @@ from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal
+
+IS_WIN = platform == "win32"
+if IS_WIN:
+    mp_ctx = "spawn"
+else:
+    mp_ctx = "fork"
 
 TIMEOUT = 100.0
 

@@ -109,6 +109,10 @@ except FileNotFoundError:
 
 IS_OSX = platform == "darwin"
 IS_WIN = platform == "win32"
+if IS_WIN:
+    mp_ctx = "spawn"
+else:
+    mp_ctx = "fork"
 
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
 ## the serial and parallel batched envs

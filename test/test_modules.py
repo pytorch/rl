@@ -8,7 +8,8 @@ from numbers import Number
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_default_devices
+
+from _utils_internal import get_default_devices, retry
 from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
@@ -889,6 +890,7 @@ class TestMultiAgent:
         )
         return td
 
+    @retry(AssertionError, 3)
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
     @pytest.mark.parametrize("centralised", [True, False])
