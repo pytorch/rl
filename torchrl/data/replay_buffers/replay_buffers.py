@@ -629,8 +629,8 @@ class ReplayBuffer:
         return self
 
     def insert_transform(
-        self, index: int, transform: "Transform"
-    ) -> ReplayBuffer:  # noqa-F821
+        self, index: int, transform: "Transform"  # noqa-F821
+    ) -> ReplayBuffer:
         """Inserts transform.
 
         Transforms are executed in order when `sample` is called.
