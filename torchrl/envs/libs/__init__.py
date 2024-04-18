@@ -17,6 +17,7 @@ from .gym import (
 from .habitat import HabitatEnv
 from .isaacgym import IsaacGymEnv, IsaacGymWrapper
 from .jumanji import JumanjiEnv, JumanjiWrapper
+from .meltingpot import MeltingpotEnv, MeltingpotWrapper
 from .openml import OpenMLEnv
 from .pettingzoo import PettingZooEnv, PettingZooWrapper
 from .robohive import RoboHiveEnv
