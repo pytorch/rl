@@ -926,7 +926,12 @@ but got an object of type {type(transform)}."""
             return super().__getattr__(
                 attr
             )  # make sure that appropriate exceptions are raised
-        except Exception as err:
+        except AttributeError as err:
+            if attr.endswith("_spec"):
+                raise AttributeError(
+                    f"Could not get {attr} because an internal error was raised. To find what this error "
+                    f"is, call env.transform.transform_<placeholder>_spec(env.base_env.spec)."
+                )
             if attr.startswith("__"):
                 raise AttributeError(
                     "passing built-in private methods is "

@@ -56,6 +56,7 @@ from torchrl.data import (
     LazyTensorStorage,
     ReplayBuffer,
     TensorDictReplayBuffer,
+    TensorSpec,
     TensorStorage,
     UnboundedContinuousTensorSpec,
 )
@@ -120,6 +121,7 @@ from torchrl.envs.transforms.transforms import (
     _has_tv,
     BatchSizeTransform,
     FORWARD_NOT_IMPLEMENTED,
+    Transform,
 )
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
@@ -7952,6 +7954,28 @@ def test_added_transforms_are_in_eval_mode():
 
 
 class TestTransformedEnv:
+    def test_attr_error(self):
+        class BuggyTransform(Transform):
+            def transform_observation_spec(
+                self, observation_spec: TensorSpec
+            ) -> TensorSpec:
+                raise AttributeError
+
+            def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+                raise RuntimeError("reward!")
+
+        env = TransformedEnv(CountingEnv(), BuggyTransform())
+        with pytest.raises(
+            AttributeError, match="because an internal error was raised"
+        ):
+            env.observation_spec
+        with pytest.raises(
+            AttributeError, match="'CountingEnv' object has no attribute 'tralala'"
+        ):
+            env.tralala
+        with pytest.raises(RuntimeError, match="reward!"):
+            env.transform.transform_reward_spec(env.base_env.full_reward_spec)
+
     def test_independent_obs_specs_from_shared_env(self):
         obs_spec = CompositeSpec(
             observation=BoundedTensorSpec(low=0, high=10, shape=torch.Size((1,)))
