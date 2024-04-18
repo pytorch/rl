@@ -22,7 +22,7 @@ from hydra.utils import instantiate
 # mixed precision training
 from torch.cuda.amp import GradScaler
 from torch.nn.utils import clip_grad_norm_
-from torch.profiler import profile, ProfilerActivity, record_function
+from torch.profiler import profile, ProfilerActivity
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import RSSMRollout
