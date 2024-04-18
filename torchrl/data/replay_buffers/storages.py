@@ -1117,10 +1117,13 @@ class LazyMemmapStorage(LazyTensorStorage):
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
                 if VERBOSE:
-                    filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                    torchrl_logger.info(
-                        f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
-                    )
+                    try:
+                        filesize = os.path.getsize(tensor.filename) / 1024 / 1024
+                        torchrl_logger.info(
+                            f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
+                        )
+                    except RuntimeError:
+                        pass
         else:
             out = _init_pytree(self.scratch_dir, max_size_along_dim0, data)
         self._storage = out
@@ -1477,10 +1480,13 @@ def _init_pytree_common(tensor_path, scratch_dir, max_size_fn, tensor):
         dtype=tensor.dtype,
     )
     if VERBOSE:
-        filesize = os.path.getsize(out.filename) / 1024 / 1024
-        torchrl_logger.info(
-            f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
-        )
+        try:
+            filesize = os.path.getsize(out.filename) / 1024 / 1024
+            torchrl_logger.info(
+                f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
+            )
+        except RuntimeError:
+            pass
     return out
 
 
