@@ -137,6 +137,7 @@ from torchrl.objectives.value.advantages import (
 from torchrl.objectives.value.functional import (
     _transpose_time,
     generalized_advantage_estimate,
+    reward2go,
     td0_advantage_estimate,
     td1_advantage_estimate,
     td_lambda_advantage_estimate,
@@ -13245,6 +13246,18 @@ class TestUtils:
         reversed = _inv_pad_sequence(splitted, splits)
         reversed = reversed.reshape(td.shape)
         torch.testing.assert_close(td["observation"], reversed["observation"])
+
+    def test_reward2go(self):
+        reward = torch.zeros(4, 2)
+        reward[3, 0] = 1
+        reward[3, 1] = -1
+        done = torch.zeros(4, 2, dtype=bool)
+        done[3, :] = True
+        r = torch.ones(4)
+        r[1:] = 0.9
+        r = torch.cumprod(r, 0).flip(0)
+        r = torch.stack([r, -r], -1)
+        torch.testing.assert_close(reward2go(reward, done, 0.9), r)
 
     def test_timedimtranspose_single(self):
         @_transpose_time
