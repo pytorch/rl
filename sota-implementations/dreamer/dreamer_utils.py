@@ -175,7 +175,7 @@ def make_dreamer(
         encoder = ObsEncoder()
         decoder = ObsDecoder()
         observation_in_key = "pixels"
-        obsevation_out_key = "reco_pixels"
+        observation_out_key = "reco_pixels"
     else:
         encoder = MLP(
             out_features=1024,
@@ -190,7 +190,7 @@ def make_dreamer(
             activation_class=get_activation(cfg.networks.activation),
         )
         observation_in_key = "observation"
-        obsevation_out_key = "reco_observation"
+        observation_out_key = "reco_observation"
 
     # Make RSSM
     rssm_prior = RSSMPrior(
@@ -218,7 +218,7 @@ def make_dreamer(
         rssm_posterior,
         reward_module,
         observation_in_key=observation_in_key,
-        observation_out_key=obsevation_out_key,
+        observation_out_key=observation_out_key,
     )
     world_model.to(device)
 
@@ -237,7 +237,7 @@ def make_dreamer(
         reward_module=reward_module,
         rssm_prior=rssm_prior,
         decoder=decoder,
-        observation_out_key=obsevation_out_key,
+        observation_out_key=observation_out_key,
         test_env=test_env,
         use_decoder_in_env=use_decoder_in_env,
         state_dim=cfg.networks.state_dim,
@@ -298,9 +298,11 @@ def make_dreamer(
         model_based_env_eval = model_based_env.append_transform(DreamerDecoder())
 
         def float_to_int(data):
-            reco_pixels = data.get("reco_pixels") * 255
+            reco_pixels_float = data.get("reco_pixels")
+            reco_pixels = (reco_pixels_float * 255).floor()
             # assert (reco_pixels < 256).all() and (reco_pixels > 0).all(), (reco_pixels.min(), reco_pixels.max())
             reco_pixels = reco_pixels.to(torch.uint8)
+            data.set("reco_pixels_float", reco_pixels_float)
             return data.set("reco_pixels", reco_pixels)
 
         model_based_env_eval.append_transform(float_to_int)
@@ -378,10 +380,6 @@ def make_replay_buffer(
                 Resize(image_size, image_size, in_keys=["pixels", ("next", "pixels")])
             )
         transforms.append(DeviceCastTransform(device=device))
-        if use_autocast:
-            transforms.append(
-                DTypeCastTransform(dtype_in=torch.float32, dtype_out=torch.bfloat16)
-            )
 
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,

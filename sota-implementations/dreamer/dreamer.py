@@ -325,6 +325,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         policy,
                         auto_cast_to_device=True,
                         break_when_any_done=True,
+                        auto_reset=False,
+                        tensordict=test_env._step_mdp(eval_rollout[..., -1])
                     )
                     model_based_env_eval.apply(dump_video)
                     eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
