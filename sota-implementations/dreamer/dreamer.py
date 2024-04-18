@@ -309,7 +309,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 eval_rollout = test_env.rollout(
                     eval_rollout_steps,
                     policy,
-                    # auto_cast_to_device=True,
+                    auto_cast_to_device=True,
                     break_when_any_done=True,
                 )
                 test_env.apply(dump_video)
@@ -323,7 +323,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     eval_rollout = model_based_env_eval.rollout(
                         eval_rollout_steps,
                         policy,
-                        # auto_cast_to_device=True,
+                        auto_cast_to_device=True,
                         break_when_any_done=True,
                     )
                     model_based_env_eval.apply(dump_video)
