@@ -1376,7 +1376,11 @@ def reward2go(
     cumsum = _custom_conv1d(td0_flat.unsqueeze(1), gammas)
     cumsum = cumsum.squeeze(1)
     cumsum = _inv_pad_sequence(cumsum, num_per_traj)
-    cumsum = cumsum.view_as(reward)
+    cumsum = cumsum.reshape_as(reward)
+    cumsum = cumsum.transpose(-2, -1)
     if cumsum.shape != shape:
-        cumsum = cumsum.view(shape)
+        raise RuntimeError(
+            f"Wrong shape for output reward2go: {cumsum.shape} when {shape} was expected."
+        )
+    #     cumsum = cumsum.view(shape)
     return cumsum
