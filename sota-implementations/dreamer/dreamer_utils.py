@@ -10,6 +10,7 @@ import torch
 
 import torch.nn as nn
 from hydra.utils import instantiate
+from tensordict import NestedKey
 from tensordict.nn import (
     InteractionType,
     ProbabilisticTensorDictModule,
@@ -624,8 +625,8 @@ def _dreamer_make_world_model(
     rssm_prior,
     rssm_posterior,
     reward_module,
-    observation_in_key: str = "pixels",
-    observation_out_key: str = "reco_pixels",
+    observation_in_key: NestedKey = "pixels",
+    observation_out_key: NestedKey = "reco_pixels",
 ):
     # World Model and reward model
     rssm_rollout = RSSMRollout(
