@@ -877,7 +877,7 @@ but got an object of type {type(transform)}."""
 
     def append_transform(
         self, transform: Transform | Callable[[TensorDictBase], TensorDictBase]
-    ) -> None:
+    ) -> TransformedEnv:
         """Appends a transform to the env.
 
         :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
@@ -899,8 +899,9 @@ but got an object of type {type(transform)}."""
             self.transform.append(prev_transform)
 
         self.transform.append(transform)
+        return self
 
-    def insert_transform(self, index: int, transform: Transform) -> None:
+    def insert_transform(self, index: int, transform: Transform) -> TransformedEnv:
         """Inserts a transform to the env at the desired index.
 
         :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
@@ -920,13 +921,19 @@ but got an object of type {type(transform)}."""
             self.transform = compose  # parent set automatically
 
         self.transform.insert(index, transform)
+        return self
 
     def __getattr__(self, attr: str) -> Any:
         try:
             return super().__getattr__(
                 attr
             )  # make sure that appropriate exceptions are raised
-        except Exception as err:
+        except AttributeError as err:
+            if attr.endswith("_spec"):
+                raise AttributeError(
+                    f"Could not get {attr} because an internal error was raised. To find what this error "
+                    f"is, call env.transform.transform_<placeholder>_spec(env.base_env.spec)."
+                )
             if attr.startswith("__"):
                 raise AttributeError(
                     "passing built-in private methods is "
@@ -4435,8 +4442,12 @@ class TensorDictPrimer(Transform):
         random (bool, optional): if ``True``, the values will be drawn randomly from
             the TensorSpec domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
             Defaults to `False`.
-        default_value (float, optional): if non-random filling is chosen, this
-            value will be used to populate the tensors. Defaults to `0.0`.
+        default_value (float, Callable, Dict[NestedKey, float], Dict[NestedKey, Callable], optional): If non-random
+            filling is chosen, `default_value` will be used to populate the tensors. If `default_value` is a float,
+            all elements of the tensors will be set to that value. If it is a callable, this callable is expected to
+            return a tensor fitting the specs, and it will be used to generate the tensors. Finally, if `default_value`
+            is a dictionary of tensors or a dictionary of callables with keys matching those of the specs, these will
+            be used to generate the corresponding tensors. Defaults to `0.0`.
         reset_key (NestedKey, optional): the reset key to be used as partial
             reset indicator. Must be unique. If not provided, defaults to the
             only reset key of the parent environment (if it has only one)
@@ -4493,8 +4504,11 @@ class TensorDictPrimer(Transform):
     def __init__(
         self,
         primers: dict | CompositeSpec = None,
-        random: bool = False,
-        default_value: float = 0.0,
+        random: bool | None = None,
+        default_value: float
+        | Callable
+        | Dict[NestedKey, float]
+        | Dict[NestedKey, Callable] = None,
         reset_key: NestedKey | None = None,
         **kwargs,
     ):
@@ -4509,8 +4523,31 @@ class TensorDictPrimer(Transform):
         if not isinstance(kwargs, CompositeSpec):
             kwargs = CompositeSpec(kwargs)
         self.primers = kwargs
+        if random and default_value:
+            raise ValueError(
+                "Setting random to True and providing a default_value are incompatible."
+            )
+        default_value = (
+            default_value or 0.0
+        )  # if not random and no default value, use 0.0
         self.random = random
+        if isinstance(default_value, dict):
+            default_value = TensorDict(default_value, [])
+            default_value_keys = default_value.keys(
+                True,
+                True,
+                is_leaf=lambda x: issubclass(x, (NonTensorData, torch.Tensor)),
+            )
+            if set(default_value_keys) != set(self.primers.keys(True, True)):
+                raise ValueError(
+                    "If a default_value dictionary is provided, it must match the primers keys."
+                )
+        else:
+            default_value = {
+                key: default_value for key in self.primers.keys(True, True)
+            }
         self.default_value = default_value
+        self._validated = False
         self.reset_key = reset_key
 
         # sanity check
@@ -4563,6 +4600,9 @@ class TensorDictPrimer(Transform):
             self.primers = self.primers.to(device)
         return super().to(*args, **kwargs)
 
+    def _expand_shape(self, spec):
+        return spec.expand((*self.parent.batch_size, *spec.shape))
+
     def transform_observation_spec(
         self, observation_spec: CompositeSpec
     ) -> CompositeSpec:
@@ -4572,15 +4612,13 @@ class TensorDictPrimer(Transform):
             )
         for key, spec in self.primers.items():
             if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
-                raise RuntimeError(
-                    f"The leading shape of the primer specs ({self.__class__}) should match the one of the parent env. "
-                    f"Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's shape is {spec.shape}."
-                )
+                expanded_spec = self._expand_shape(spec)
+                spec = expanded_spec
             try:
                 device = observation_spec.device
             except RuntimeError:
                 device = self.device
-            observation_spec[key] = spec.to(device)
+            observation_spec[key] = self.primers[key] = spec.to(device)
         return observation_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
@@ -4593,8 +4631,13 @@ class TensorDictPrimer(Transform):
     def _batch_size(self):
         return self.parent.batch_size
 
+    def _validate_value_tensor(self, value, spec):
+        if not spec.is_in(value):
+            raise RuntimeError(f"Value ({value}) is not in the spec domain ({spec}).")
+        return True
+
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for key, spec in self.primers.items():
+        for key, spec in self.primers.items(True, True):
             if spec.shape[: len(tensordict.shape)] != tensordict.shape:
                 raise RuntimeError(
                     "The leading shape of the spec must match the tensordict's, "
@@ -4605,11 +4648,21 @@ class TensorDictPrimer(Transform):
             if self.random:
                 value = spec.rand()
             else:
-                value = torch.full_like(
-                    spec.zero(),
-                    self.default_value,
-                )
+                value = self.default_value[key]
+                if callable(value):
+                    value = value()
+                    if not self._validated:
+                        self._validate_value_tensor(value, spec)
+                else:
+                    value = torch.full(
+                        spec.shape,
+                        value,
+                        device=spec.device,
+                    )
+
             tensordict.set(key, value)
+        if not self._validated:
+            self._validated = True
         return tensordict
 
     def _step(
@@ -4638,22 +4691,36 @@ class TensorDictPrimer(Transform):
         )
         _reset = _get_reset(self.reset_key, tensordict)
         if _reset.any():
-            for key, spec in self.primers.items():
+            for key, spec in self.primers.items(True, True):
                 if self.random:
                     value = spec.rand(shape)
                 else:
-                    value = torch.full_like(
-                        spec.zero(shape),
-                        self.default_value,
-                    )
-                prev_val = tensordict.get(key, 0.0)
-                value = torch.where(expand_as_right(_reset, value), value, prev_val)
+                    value = self.default_value[key]
+                    if callable(value):
+                        value = value()
+                        if not self._validated:
+                            self._validate_value_tensor(value, spec)
+                    else:
+                        value = torch.full(
+                            spec.shape,
+                            value,
+                            device=spec.device,
+                        )
+                        prev_val = tensordict.get(key, 0.0)
+                        value = torch.where(
+                            expand_as_right(_reset, value), value, prev_val
+                        )
                 tensordict_reset.set(key, value)
+            self._validated = True
         return tensordict_reset
 
     def __repr__(self) -> str:
         class_name = self.__class__.__name__
-        return f"{class_name}(primers={self.primers}, default_value={self.default_value}, random={self.random})"
+        default_value = {
+            key: value if isinstance(value, float) else "Callable"
+            for key, value in self.default_value.items()
+        }
+        return f"{class_name}(primers={self.primers}, default_value={default_value}, random={self.random})"
 
 
 class PinMemoryTransform(Transform):

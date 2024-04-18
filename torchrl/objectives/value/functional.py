@@ -1362,13 +1362,19 @@ def reward2go(
         raise ValueError(
             f"reward and done must share the same shape, got {reward.shape} and {done.shape}"
         )
+    # flatten if needed
+    if reward.ndim > 2:
+        # we know time dim is at -2, let's put it at -3
+        rflip = reward.transpose(-2, -3)
+        rflip_shape = rflip.shape[-2:]
+        r2go = reward2go(
+            rflip.flatten(-2, -1), done.transpose(-2, -3).flatten(-2, -1), gamma=gamma
+        ).unflatten(-1, rflip_shape)
+        return r2go.transpose(-2, -3)
+
     # place time at dim -1
     reward = reward.transpose(-2, -1)
     done = done.transpose(-2, -1)
-    # flatten if needed
-    if reward.ndim > 2:
-        reward = reward.flatten(0, -2)
-        done = done.flatten(0, -2)
 
     num_per_traj = _get_num_per_traj(done)
     td0_flat = _split_and_pad_sequence(reward, num_per_traj)
@@ -1379,8 +1385,10 @@ def reward2go(
     cumsum = cumsum.reshape_as(reward)
     cumsum = cumsum.transpose(-2, -1)
     if cumsum.shape != shape:
-        raise RuntimeError(
-            f"Wrong shape for output reward2go: {cumsum.shape} when {shape} was expected."
-        )
-    #     cumsum = cumsum.view(shape)
+        try:
+            cumsum = cumsum.reshape(shape)
+        except RuntimeError:
+            raise RuntimeError(
+                f"Wrong shape for output reward2go: {cumsum.shape} when {shape} was expected."
+            )
     return cumsum
