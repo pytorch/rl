@@ -307,7 +307,6 @@ class DreamerActorLoss(LossModule):
         tensordict = tensordict.select("state", self.tensor_keys.belief).detach()
         tensordict = tensordict.reshape(-1)
 
-        # TODO: do we need exploration here?
         with timeit("actor_loss/time-rollout"), hold_out_net(
             self.model_based_env
         ), set_exploration_type(ExplorationType.RANDOM):
