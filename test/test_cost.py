@@ -13259,6 +13259,18 @@ class TestUtils:
         r = torch.stack([r, -r], -1)
         torch.testing.assert_close(reward2go(reward, done, 0.9), r)
 
+        reward = torch.zeros(4, 1)
+        reward[3, 0] = 1
+        done = torch.zeros(4, 1, dtype=bool)
+        done[3, :] = True
+        r = torch.ones(4)
+        r[1:] = 0.9
+        reward = reward.expand(2, 4, 1)
+        done = done.expand(2, 4, 1)
+        r = torch.cumprod(r, 0).flip(0).unsqueeze(-1).expand(2, 4, 1)
+        r2go = reward2go(reward, done, 0.9)
+        torch.testing.assert_close(r2go, r)
+
     def test_timedimtranspose_single(self):
         @_transpose_time
         def fun(a, b, time_dim=-2):
