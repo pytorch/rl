@@ -13,6 +13,7 @@ import re
 import sys
 from copy import copy
 from functools import partial
+from sys import platform
 
 import numpy as np
 import pytest
@@ -124,6 +125,12 @@ from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal
+
+IS_WIN = platform == "win32"
+if IS_WIN:
+    mp_ctx = "spawn"
+else:
+    mp_ctx = "fork"
 
 TIMEOUT = 100.0
 
@@ -4911,9 +4918,19 @@ class TestRewardSum(TransformBase):
 
     @pytest.mark.skipif(not _has_gym, reason="No Gym")
     @pytest.mark.parametrize("out_key", ["reward_sum", ("some", "nested")])
-    def test_transform_env(self, out_key):
-        t = Compose(RewardSum(in_keys=["reward"], out_keys=[out_key]))
+    @pytest.mark.parametrize("reward_spec", [False, True])
+    def test_transform_env(self, out_key, reward_spec):
+        t = Compose(
+            RewardSum(in_keys=["reward"], out_keys=[out_key], reward_spec=reward_spec)
+        )
         env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), t)
+        if reward_spec:
+            assert out_key in env.reward_keys
+            assert out_key not in env.observation_spec.keys(True)
+        else:
+            assert out_key not in env.reward_keys
+            assert out_key in env.observation_spec.keys(True)
+
         env.set_seed(0)
         torch.manual_seed(0)
         td = env.rollout(3)
@@ -9449,7 +9466,7 @@ class TestDeviceCastTransformPart(TransformBase):
         env = ParallelEnv(
             2,
             make_env,
-            mp_start_method="fork" if not torch.cuda.is_available() else "spawn",
+            mp_start_method=mp_ctx if not torch.cuda.is_available() else "spawn",
         )
         assert env.device is None
         try:
@@ -9492,7 +9509,7 @@ class TestDeviceCastTransformPart(TransformBase):
             ParallelEnv(
                 2,
                 make_env,
-                mp_start_method="fork" if not torch.cuda.is_available() else "spawn",
+                mp_start_method=mp_ctx if not torch.cuda.is_available() else "spawn",
             ),
             DeviceCastTransform(
                 "cpu:1",
@@ -10741,7 +10758,7 @@ class TestBatchSizeTransform(TransformBase):
             assert env.batch_size == expected_batch_size
             return env
 
-        env = ParallelEnv(2, make_env, mp_start_method="fork")
+        env = ParallelEnv(2, make_env, mp_start_method=mp_ctx)
         assert env.batch_size == (2, *make_env().batch_size)
         check_env_specs(env)
 
@@ -10796,7 +10813,7 @@ class TestBatchSizeTransform(TransformBase):
         assert transform.batch_size is None
 
         env = TransformedEnv(
-            ParallelEnv(2, make_env, mp_start_method="fork"), transform
+            ParallelEnv(2, make_env, mp_start_method=mp_ctx), transform
         )
         assert env.batch_size == expected_batch_size
         check_env_specs(env)

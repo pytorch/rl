@@ -45,7 +45,12 @@ from _utils_internal import (
     rollout_consistency_assertion,
 )
 from packaging import version
-from tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
+from tensordict import (
+    assert_allclose_td,
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDict,
+)
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
     TensorDictModule,
@@ -103,6 +108,7 @@ from torchrl.envs.libs.gym import (
 )
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
+from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
@@ -138,6 +144,8 @@ elif _has_gym:
     import gym
 
     assert gym_backend() is gym
+
+_has_meltingpot = importlib.util.find_spec("meltingpot") is not None
 
 
 def get_gym_pixel_wrapper():
@@ -3379,46 +3387,47 @@ class TestPettingZoo:
             break
 
 
-@pytest.mark.skipif(not _has_robohive, reason="SMACv2 not found")
+@pytest.mark.skipif(not _has_robohive, reason="RoboHive not found")
 class TestRoboHive:
     # unfortunately we must import robohive to get the available envs
     # and this import will occur whenever pytest is run on this file.
     # The other option would be not to use parametrize but that also
     # means less informative error trace stacks.
     # In the CI, robohive should not coexist with other libs so that's fine.
-    # Locally these imports can be annoying, especially given the amount of
-    # stuff printed by robohive.
-    @pytest.mark.parametrize("from_pixels", [True, False])
-    @set_gym_backend("gym")
-    def test_robohive(self, from_pixels):
-        for envname in RoboHiveEnv.available_envs:
+    # Robohive logging behaviour can be controlled via ROBOHIVE_VERBOSITY=ALL/INFO/(WARN)/ERROR/ONCE/ALWAYS/SILENT
+    @pytest.mark.parametrize("from_pixels", [False, True])
+    @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs)
+    def test_robohive(self, envname, from_pixels):
+        with set_gym_backend("gymnasium"):
+            torchrl_logger.info(f"{envname}-{from_pixels}")
+            if any(
+                substr in envname for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")
+            ):
+                torchrl_logger.info("not testing envs with prebuilt rendering")
+                return
+            if "Adroit" in envname:
+                torchrl_logger.info("tcdm are broken")
+                return
+            if (
+                from_pixels
+                and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0
+            ):
+                torchrl_logger.info("no camera")
+                return
             try:
-                if any(
-                    substr in envname
-                    for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")
-                ):
-                    torchrl_logger.info("not testing envs with prebuilt rendering")
-                    return
-                if "Adroit" in envname:
+                env = RoboHiveEnv(envname, from_pixels=from_pixels)
+            except AttributeError as err:
+                if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
                     torchrl_logger.info("tcdm are broken")
                     return
-                try:
-                    env = RoboHiveEnv(envname)
-                except AttributeError as err:
-                    if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
-                        torchrl_logger.info("tcdm are broken")
-                        return
-                    else:
-                        raise err
-                if (
-                    from_pixels
-                    and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0
-                ):
-                    torchrl_logger.info("no camera")
-                    return
-                check_env_specs(env)
-            except Exception as err:
-                raise RuntimeError(f"Test with robohive end {envname} failed.") from err
+                else:
+                    raise err
+            # Make sure that the stack is dense
+            for val in env.rollout(4).values(True):
+                if is_tensor_collection(val):
+                    assert not isinstance(val, LazyStackedTensorDict)
+                    assert not val.is_empty()
+            check_env_specs(env)
 
 
 @pytest.mark.skipif(not _has_smacv2, reason="SMACv2 not found")
@@ -3500,6 +3509,54 @@ class TestSmacv2:
         for _ in collector:
             break
         collector.shutdown()
+
+
+@pytest.mark.skipif(not _has_meltingpot, reason="Meltingpot not found")
+class TestMeltingpot:
+    @pytest.mark.parametrize("substrate", MeltingpotWrapper.available_envs)
+    def test_all_envs(self, substrate):
+        env = MeltingpotEnv(substrate=substrate)
+        check_env_specs(env)
+
+    def test_passing_config(self, substrate="commons_harvest__open"):
+        from meltingpot import substrate as mp_substrate
+
+        substrate_config = mp_substrate.get_config(substrate)
+        env_torchrl = MeltingpotEnv(substrate_config)
+        env_torchrl.rollout(max_steps=5)
+
+    def test_wrapper(self, substrate="commons_harvest__open"):
+        from meltingpot import substrate as mp_substrate
+
+        substrate_config = mp_substrate.get_config(substrate)
+        mp_env = mp_substrate.build_from_config(
+            substrate_config, roles=substrate_config.default_player_roles
+        )
+        env_torchrl = MeltingpotWrapper(env=mp_env)
+        env_torchrl.rollout(max_steps=5)
+
+    @pytest.mark.parametrize("max_steps", [1, 5])
+    def test_max_steps(self, max_steps):
+        env = MeltingpotEnv(substrate="commons_harvest__open", max_steps=max_steps)
+        td = env.rollout(max_steps=100, break_when_any_done=True)
+        assert td.batch_size[0] == max_steps
+
+    @pytest.mark.parametrize("categorical_actions", [True, False])
+    def test_categorical_actions(self, categorical_actions):
+        env = MeltingpotEnv(
+            substrate="commons_harvest__open", categorical_actions=categorical_actions
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("rollout_steps", [1, 3])
+    def test_render(self, rollout_steps):
+        env = MeltingpotEnv(substrate="commons_harvest__open")
+        td = env.rollout(2)
+        rollout_penultimate_image = td[-1].get("RGB")
+        rollout_last_image = td[-1].get(("next", "RGB"))
+        image_from_env = env.get_rgb_image()
+        assert torch.equal(rollout_last_image, image_from_env)
+        assert not torch.equal(rollout_penultimate_image, image_from_env)
 
 
 if __name__ == "__main__":
