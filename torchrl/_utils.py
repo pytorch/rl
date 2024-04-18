@@ -48,6 +48,9 @@ logger.addHandler(console_handler)
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
+if RL_WARNINGS:
+    warnings.simplefilter("once", DeprecationWarning)
+
 BATCHED_PIPE_TIMEOUT = float(os.environ.get("BATCHED_PIPE_TIMEOUT", "10000.0"))
 
 
