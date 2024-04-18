@@ -1378,6 +1378,9 @@ def reward2go(
     cumsum = _inv_pad_sequence(cumsum, num_per_traj)
     cumsum = cumsum.reshape_as(reward)
     cumsum = cumsum.transpose(-2, -1)
-    # if cumsum.shape != shape:
+    if cumsum.shape != shape:
+        raise RuntimeError(
+            f"Wrong shape for output reward2go: {cumsum.shape} when {shape} was expected."
+        )
     #     cumsum = cumsum.view(shape)
     return cumsum
