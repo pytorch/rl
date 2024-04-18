@@ -6423,17 +6423,11 @@ class TestTensorDictPrimer(TransformBase):
         finally:
             env.close()
 
-    def test_trans_serial_env_check(self):
-        with pytest.raises(RuntimeError, match="The leading shape of the primer specs"):
-            env = TransformedEnv(
-                SerialEnv(2, ContinuousActionVecMockEnv),
-                TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([4])),
-            )
-            _ = env.observation_spec
-
+    @pytest.mark.parametrize("spec_shape", [[4], [2, 4]])
+    def test_trans_serial_env_check(self, spec_shape):
         env = TransformedEnv(
             SerialEnv(2, ContinuousActionVecMockEnv),
-            TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([2, 4])),
+            TensorDictPrimer(mykey=UnboundedContinuousTensorSpec(spec_shape)),
         )
         check_env_specs(env)
         assert "mykey" in env.reset().keys()
@@ -6532,6 +6526,72 @@ class TestTensorDictPrimer(TransformBase):
         env.set_seed(0)
         r1 = env.rollout(100, break_when_any_done=break_when_any_done)
         tensordict.tensordict.assert_allclose_td(r0, r1)
+
+    def test_callable_default_value(self):
+        def create_tensor():
+            return torch.ones(3)
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            TensorDictPrimer(
+                mykey=UnboundedContinuousTensorSpec([3]), default_value=create_tensor
+            ),
+        )
+        check_env_specs(env)
+        assert "mykey" in env.reset().keys()
+        assert ("next", "mykey") in env.rollout(3).keys(True)
+
+    def test_dict_default_value(self):
+
+        # Test with a dict of float default values
+        key1_spec = UnboundedContinuousTensorSpec([3])
+        key2_spec = UnboundedContinuousTensorSpec([3])
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            TensorDictPrimer(
+                mykey1=key1_spec,
+                mykey2=key2_spec,
+                default_value={
+                    "mykey1": 1.0,
+                    "mykey2": 2.0,
+                },
+            ),
+        )
+        check_env_specs(env)
+        reset_td = env.reset()
+        assert "mykey1" in reset_td.keys()
+        assert "mykey2" in reset_td.keys()
+        rollout_td = env.rollout(3)
+        assert ("next", "mykey1") in rollout_td.keys(True)
+        assert ("next", "mykey2") in rollout_td.keys(True)
+        assert (rollout_td.get(("next", "mykey1")) == 1.0).all()
+        assert (rollout_td.get(("next", "mykey2")) == 2.0).all()
+
+        # Test with a dict of callable default values
+        key1_spec = UnboundedContinuousTensorSpec([3])
+        key2_spec = DiscreteTensorSpec(3, dtype=torch.int64)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            TensorDictPrimer(
+                mykey1=key1_spec,
+                mykey2=key2_spec,
+                default_value={
+                    "mykey1": lambda: torch.ones(3),
+                    "mykey2": lambda: torch.tensor(1, dtype=torch.int64),
+                },
+            ),
+        )
+        check_env_specs(env)
+        reset_td = env.reset()
+        assert "mykey1" in reset_td.keys()
+        assert "mykey2" in reset_td.keys()
+        rollout_td = env.rollout(3)
+        assert ("next", "mykey1") in rollout_td.keys(True)
+        assert ("next", "mykey2") in rollout_td.keys(True)
+        assert (rollout_td.get(("next", "mykey1")) == torch.ones(3)).all
+        assert (
+            rollout_td.get(("next", "mykey2")) == torch.tensor(1, dtype=torch.int64)
+        ).all
 
 
 class TestTimeMaxPool(TransformBase):
@@ -6813,18 +6873,13 @@ class TestgSDE(TransformBase):
         finally:
             env.close()
 
-    def test_trans_serial_env_check(self):
+    @pytest.mark.parametrize("shape", [(), (2,)])
+    def test_trans_serial_env_check(self, shape):
         state_dim = 7
         action_dim = 7
-        with pytest.raises(RuntimeError, match="The leading shape of the primer"):
-            env = TransformedEnv(
-                SerialEnv(2, ContinuousActionVecMockEnv),
-                gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=()),
-            )
-            check_env_specs(env)
         env = TransformedEnv(
             SerialEnv(2, ContinuousActionVecMockEnv),
-            gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=(2,)),
+            gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=shape),
         )
         try:
             check_env_specs(env)
