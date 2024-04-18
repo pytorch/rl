@@ -877,7 +877,7 @@ but got an object of type {type(transform)}."""
 
     def append_transform(
         self, transform: Transform | Callable[[TensorDictBase], TensorDictBase]
-    ) -> None:
+    ) -> TransformedEnv:
         """Appends a transform to the env.
 
         :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
@@ -899,8 +899,9 @@ but got an object of type {type(transform)}."""
             self.transform.append(prev_transform)
 
         self.transform.append(transform)
+        return self
 
-    def insert_transform(self, index: int, transform: Transform) -> None:
+    def insert_transform(self, index: int, transform: Transform) -> TransformedEnv:
         """Inserts a transform to the env at the desired index.
 
         :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
@@ -920,6 +921,7 @@ but got an object of type {type(transform)}."""
             self.transform = compose  # parent set automatically
 
         self.transform.insert(index, transform)
+        return self
 
     def __getattr__(self, attr: str) -> Any:
         try:

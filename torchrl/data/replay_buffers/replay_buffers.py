@@ -612,7 +612,7 @@ class ReplayBuffer:
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
         self._sampler.mark_update(index)
 
-    def append_transform(self, transform: "Transform") -> None:  # noqa-F821
+    def append_transform(self, transform: "Transform") -> ReplayBuffer:  # noqa-F821
         """Appends transform at the end.
 
         Transforms are applied in order when `sample` is called.
@@ -626,8 +626,11 @@ class ReplayBuffer:
             transform = _CallableTransform(transform)
         transform.eval()
         self._transform.append(transform)
+        return self
 
-    def insert_transform(self, index: int, transform: "Transform") -> None:  # noqa-F821
+    def insert_transform(
+        self, index: int, transform: "Transform"
+    ) -> ReplayBuffer:  # noqa-F821
         """Inserts transform.
 
         Transforms are executed in order when `sample` is called.
@@ -638,6 +641,7 @@ class ReplayBuffer:
         """
         transform.eval()
         self._transform.insert(index, transform)
+        return self
 
     def __iter__(self):
         if self._sampler.ran_out:
