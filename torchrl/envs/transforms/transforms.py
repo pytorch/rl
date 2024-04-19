@@ -45,7 +45,7 @@ from tensordict.utils import expand_as_right, expand_right, NestedKey
 from torch import nn, Tensor
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import _ends_with, _replace_last
+from torchrl._utils import _append_last, _ends_with, _replace_last
 
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -4854,9 +4854,9 @@ class VecNorm(Transform):
         if shared_td is not None:
             for key in in_keys:
                 if (
-                    (key + "_sum" not in shared_td.keys())
-                    or (key + "_ssq" not in shared_td.keys())
-                    or (key + "_count" not in shared_td.keys())
+                    (_append_last(key, "_sum") not in shared_td.keys())
+                    or (_append_last(key, "_ssq") not in shared_td.keys())
+                    or (_append_last(key, "_count") not in shared_td.keys())
                 ):
                     raise KeyError(
                         f"key {key} not present in the shared tensordict "
@@ -4868,16 +4868,12 @@ class VecNorm(Transform):
         self.shapes = shapes
         self.eps = eps
 
-    def _key_str(self, key):
-        if not isinstance(key, str):
-            key = "_".join(key)
-        return key
-
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
+        # TODO: remove this decorator when trackers are in data
         with _set_missing_tolerance(self, True):
-            tensordict_reset = self._call(tensordict_reset)
+            return self._call(tensordict_reset)
         return tensordict_reset
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -4886,6 +4882,9 @@ class VecNorm(Transform):
 
         for key in self.in_keys:
             if key not in tensordict.keys(include_nested=True):
+                # TODO: init missing rewards with this
+                # for key_suffix in [_append_last(key, suffix) for suffix in ("_sum", "_ssq", "_count")]:
+                #     tensordict.set(key_suffix, self.container.observation_spec[key_suffix].zero())
                 continue
             self._init(tensordict, key)
             # update and standardize
@@ -4903,18 +4902,17 @@ class VecNorm(Transform):
     forward = _call
 
     def _init(self, tensordict: TensorDictBase, key: str) -> None:
-        key_str = self._key_str(key)
-        if self._td is None or key_str + "_sum" not in self._td.keys():
-            if key is not key_str and key_str in tensordict.keys():
+        if self._td is None or _append_last(key, "_sum") not in self._td.keys(True):
+            if key is not key and key in tensordict.keys():
                 raise RuntimeError(
-                    f"Conflicting key names: {key_str} from VecNorm and input tensordict keys."
+                    f"Conflicting key names: {key} from VecNorm and input tensordict keys."
                 )
             if self.shapes is None:
                 td_view = tensordict.view(-1)
                 td_select = td_view[0]
                 item = td_select.get(key)
-                d = {key_str + "_sum": torch.zeros_like(item)}
-                d.update({key_str + "_ssq": torch.zeros_like(item)})
+                d = {_append_last(key, "_sum"): torch.zeros_like(item)}
+                d.update({_append_last(key, "_ssq"): torch.zeros_like(item)})
             else:
                 idx = 0
                 for in_key in self.in_keys:
@@ -4925,13 +4923,13 @@ class VecNorm(Transform):
                 shape = self.shapes[idx]
                 item = tensordict.get(key)
                 d = {
-                    key_str
-                    + "_sum": torch.zeros(shape, device=item.device, dtype=item.dtype)
+                    _append_last(key, "_sum"): torch.zeros(
+                        shape, device=item.device, dtype=item.dtype
+                    )
                 }
                 d.update(
                     {
-                        key_str
-                        + "_ssq": torch.zeros(
+                        _append_last(key, "_ssq"): torch.zeros(
                             shape, device=item.device, dtype=item.dtype
                         )
                     }
@@ -4939,8 +4937,9 @@ class VecNorm(Transform):
 
             d.update(
                 {
-                    key_str
-                    + "_count": torch.zeros(1, device=item.device, dtype=torch.float)
+                    _append_last(key, "_count"): torch.zeros(
+                        1, device=item.device, dtype=torch.float
+                    )
                 }
             )
             if self._td is None:
@@ -4951,34 +4950,32 @@ class VecNorm(Transform):
             pass
 
     def _update(self, key, value, N) -> torch.Tensor:
-        key = self._key_str(key)
-        _sum = self._td.get(key + "_sum")
-        _ssq = self._td.get(key + "_ssq")
-        _count = self._td.get(key + "_count")
+        _sum = self._td.get(_append_last(key, "_sum"))
+        _ssq = self._td.get(_append_last(key, "_ssq"))
+        _count = self._td.get(_append_last(key, "_count"))
 
-        _sum = self._td.get(key + "_sum")
         value_sum = _sum_left(value, _sum)
         _sum *= self.decay
         _sum += value_sum
         self._td.set_(
-            key + "_sum",
+            _append_last(key, "_sum"),
             _sum,
         )
 
-        _ssq = self._td.get(key + "_ssq")
+        _ssq = self._td.get(_append_last(key, "_ssq"))
         value_ssq = _sum_left(value.pow(2), _ssq)
         _ssq *= self.decay
         _ssq += value_ssq
         self._td.set_(
-            key + "_ssq",
+            _append_last(key, "_ssq"),
             _ssq,
         )
 
-        _count = self._td.get(key + "_count")
+        _count = self._td.get(_append_last(key, "_count"))
         _count *= self.decay
         _count += N
         self._td.set_(
-            key + "_count",
+            _append_last(key, "_count"),
             _count,
         )
 
@@ -4990,9 +4987,9 @@ class VecNorm(Transform):
         """Converts VecNorm into an ObservationNorm class that can be used at inference time."""
         out = []
         for key in self.in_keys:
-            _sum = self._td.get(key + "_sum")
-            _ssq = self._td.get(key + "_ssq")
-            _count = self._td.get(key + "_count")
+            _sum = self._td.get(_append_last(key, "_sum"))
+            _ssq = self._td.get(_append_last(key, "_ssq"))
+            _count = self._td.get(_append_last(key, "_count"))
             mean = _sum / _count
             std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
 
@@ -5056,9 +5053,9 @@ class VecNorm(Transform):
             )
         keys = list(td_select.keys())
         for key in keys:
-            td_select.set(key + "_ssq", td_select.get(key).clone())
+            td_select.set(_append_last(key, "_ssq"), td_select.get(key).clone())
             td_select.set(
-                key + "_count",
+                _append_last(key, "_count"),
                 torch.zeros(
                     *td.batch_size,
                     1,
@@ -5066,7 +5063,7 @@ class VecNorm(Transform):
                     dtype=torch.float,
                 ),
             )
-            td_select.rename_key_(key, key + "_sum")
+            td_select.rename_key_(key, _append_last(key, "_sum"))
         td_select.exclude(*keys).zero_()
         td_select = td_select.unflatten_keys(sep)
         if memmap:
@@ -5111,6 +5108,32 @@ class VecNorm(Transform):
             _lock = mp.Lock()
             state["lock"] = _lock
         self.__dict__.update(state)
+
+    @_apply_to_composite
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if isinstance(observation_spec, BoundedTensorSpec):
+            return UnboundedContinuousTensorSpec(
+                shape=observation_spec.shape,
+                dtype=observation_spec.dtype,
+                device=observation_spec.device,
+            )
+        return observation_spec
+
+    # TODO: incorporate this when trackers are part of the data
+    # def transform_output_spec(self, output_spec: TensorSpec) -> TensorSpec:
+    #     observation_spec = output_spec["full_observation_spec"]
+    #     reward_spec = output_spec["full_reward_spec"]
+    #     for key in list(observation_spec.keys(True, True)):
+    #         if key in self.in_keys:
+    #             observation_spec[_append_last(key, "_sum")] = observation_spec[key].clone()
+    #             observation_spec[_append_last(key, "_ssq")] = observation_spec[key].clone()
+    #             observation_spec[_append_last(key, "_count")] = observation_spec[key].clone()
+    #     for key in list(reward_spec.keys(True, True)):
+    #         if key in self.in_keys:
+    #             observation_spec[_append_last(key, "_sum")] = reward_spec[key].clone()
+    #             observation_spec[_append_last(key, "_ssq")] = reward_spec[key].clone()
+    #             observation_spec[_append_last(key, "_count")] = reward_spec[key].clone()
+    #     return output_spec
 
 
 class RewardSum(Transform):
