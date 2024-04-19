@@ -13,7 +13,7 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torch import nn
-
+from tensordict import LazyStackedTensorDict
 # from torchrl.modules.tensordict_module.rnn import GRUCell
 from torch.nn import GRUCell
 from torchrl._utils import timeit
@@ -259,12 +259,12 @@ class RSSMRollout(TensorDictModuleBase):
 
             tensordict_out.append(_tensordict)
             if t < time_steps - 1:
-                _tensordict = step_mdp(
-                    _tensordict.select(*self.out_keys, strict=False), keep_other=False
-                )
+                _tensordict = _tensordict.select(*self.in_keys, strict=False)
                 _tensordict = update_values[t + 1].update(_tensordict)
 
-        return torch.stack(tensordict_out, tensordict.ndim - 1)
+        out = torch.stack(tensordict_out, tensordict.ndim - 1)
+        assert not any(isinstance(val, LazyStackedTensorDict) for val in out.values(True)), out
+        return out
 
 
 class RSSMPrior(nn.Module):
