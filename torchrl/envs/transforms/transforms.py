@@ -5117,6 +5117,7 @@ class VecNorm(Transform):
                 dtype=observation_spec.dtype,
                 device=observation_spec.device,
             )
+        return observation_spec
 
     # TODO: incorporate this when trackers are part of the data
     # def transform_output_spec(self, output_spec: TensorSpec) -> TensorSpec:
