@@ -7637,10 +7637,10 @@ class TestVecNorm:
         queue_out.put(True)
         msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "all_done"
-        t = env.transform
-        obs_sum = t._td.get("observation_sum").clone()
-        obs_ssq = t._td.get("observation_ssq").clone()
-        obs_count = t._td.get("observation_count").clone()
+        t = env.transform[1]
+        obs_sum = t._td.get(("some", "obs_sum")).clone()
+        obs_ssq = t._td.get(("some", "obs_ssq")).clone()
+        obs_count = t._td.get(("some", "obs_count")).clone()
         reward_sum = t._td.get("reward_sum").clone()
         reward_ssq = t._td.get("reward_ssq").clone()
         reward_count = t._td.get("reward_count").clone()
@@ -7655,18 +7655,34 @@ class TestVecNorm:
         queue_in.close()
         del queue_in, queue_out
 
+    @property
+    def rename_t(self):
+        return RenameTransform(in_keys=["observation"], out_keys=[("some", "obs")])
+
     @pytest.mark.parametrize("nprc", [2, 5])
     def test_vecnorm_parallel_auto(self, nprc):
         queues = []
         prcs = []
         if _has_gym:
-            make_env = EnvCreator(
-                lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm(decay=1.0))
+            maker = lambda: TransformedEnv(
+                GymEnv(PENDULUM_VERSIONED()),
+                Compose(
+                    self.rename_t,
+                    VecNorm(decay=1.0, in_keys=[("some", "obs"), "reward"]),
+                ),
             )
+            check_env_specs(maker())
+            make_env = EnvCreator(maker)
         else:
-            make_env = EnvCreator(
-                lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm(decay=1.0))
+            maker = lambda: TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                Compose(
+                    self.rename_t,
+                    VecNorm(decay=1.0, in_keys=[("some", "obs"), "reward"]),
+                ),
             )
+            check_env_specs(maker())
+            make_env = EnvCreator(maker)
 
         for idx in range(nprc):
             prc_queue_in = mp.Queue(1)
@@ -7690,11 +7706,11 @@ class TestVecNorm:
         for idx in range(nprc):
             queues[idx][1].put(msg)
 
-        td = make_env.state_dict()["_extra_state"]["td"]
+        td = make_env.state_dict()["transforms.1._extra_state"]["td"]
 
-        obs_sum = td.get("observation_sum").clone()
-        obs_ssq = td.get("observation_ssq").clone()
-        obs_count = td.get("observation_count").clone()
+        obs_sum = td.get(("some", "obs_sum")).clone()
+        obs_ssq = td.get(("some", "obs_ssq")).clone()
+        obs_count = td.get(("some", "obs_count")).clone()
         reward_sum = td.get("reward_sum").clone()
         reward_ssq = td.get("reward_ssq").clone()
         reward_count = td.get("reward_count").clone()
@@ -7762,11 +7778,21 @@ class TestVecNorm:
     def test_parallelenv_vecnorm(self):
         if _has_gym:
             make_env = EnvCreator(
-                lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm())
+                lambda: TransformedEnv(
+                    GymEnv(PENDULUM_VERSIONED()),
+                    Compose(
+                        self.rename_t, VecNorm(in_keys=[("some", "obs"), "reward"])
+                    ),
+                )
             )
         else:
             make_env = EnvCreator(
-                lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
+                lambda: TransformedEnv(
+                    ContinuousActionVecMockEnv(),
+                    Compose(
+                        self.rename_t, VecNorm(in_keys=[("some", "obs"), "reward"])
+                    ),
+                )
             )
         parallel_env = ParallelEnv(
             2,
