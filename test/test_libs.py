@@ -3396,10 +3396,11 @@ class TestRoboHive:
     # In the CI, robohive should not coexist with other libs so that's fine.
     # Robohive logging behaviour can be controlled via ROBOHIVE_VERBOSITY=ALL/INFO/(WARN)/ERROR/ONCE/ALWAYS/SILENT
     @pytest.mark.parametrize("from_pixels", [False, True])
+    @pytest.mark.parametrize("from_depths", [False, True])
     @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs)
-    def test_robohive(self, envname, from_pixels):
+    def test_robohive(self, envname, from_pixels, from_depths):
         with set_gym_backend("gymnasium"):
-            torchrl_logger.info(f"{envname}-{from_pixels}")
+            torchrl_logger.info(f"{envname}-{from_pixels}-{from_depths}")
             if any(
                 substr in envname for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")
             ):
@@ -3415,7 +3416,7 @@ class TestRoboHive:
                 torchrl_logger.info("no camera")
                 return
             try:
-                env = RoboHiveEnv(envname, from_pixels=from_pixels)
+                env = RoboHiveEnv(envname, from_pixels=from_pixels, from_depths=from_depths)
             except AttributeError as err:
                 if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
                     torchrl_logger.info("tcdm are broken")

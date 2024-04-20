@@ -237,8 +237,6 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             cams = sorted(cams)
             cams_rep = [i.replace("A:", "A_") for i in cams]
             new_env_name = "-".join([cam[:-3] for cam in cams_rep] + [env_name])
-            if new_env_name in cls.env_list:
-                return new_env_name
             visual_keys = [f"rgb:{c}:224x224:2d" for c in cams]
             if from_depths:
                 visual_keys.extend([f"d:{c}:224x224:2d" for c in cams])
