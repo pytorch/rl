@@ -11,11 +11,9 @@ Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
    `BenchMARL <https://github.com/facebookresearch/BenchMARL>`__: a benchmarking library where you
    can train and compare MARL sota-implementations, tasks, and models using TorchRL!
 
-This tutorial demonstrates how to use PyTorch and :py:mod:`torchrl` to
+This tutorial demonstrates how to use PyTorch and TorchRL to
 solve a Competitive Multi-Agent Reinforcement Learning (MARL) problem.
 
-A code-only version of this tutorial is available in the
-`TorchRL tutorials <https://github.com/pytorch/rl/tree/main/torchrl/tutorials/sphinx-tutorials/multiagent_competitive_ddpg.py>`__.
 
 For ease of use, this tutorial will follow the general structure of the already available
 `multi-agent PPO tutorial <https://pytorch.org/rl/tutorials/multiagent_ppo.html>`__.
@@ -30,7 +28,7 @@ In this tutorial we show how to train this environment in TorchRL using either:
 
 - `PettingZoo <https://pettingzoo.farama.org/>`__, in the traditional CPU version of the environment;
 - `VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__, which provides a vectorized implementation in PyTorch,
-  able to simulate multiple environments in a GPU batch to speed up computation.
+  able to simulate multiple environments on a GPU to speed up computation.
 
 In the *simple_tag* environment,
 there are two teams of agents: the chasers (or "adversaries") and the evaders (or "agents").
@@ -49,7 +47,7 @@ Key learnings:
 - How to use competitive multi-agent environments in TorchRL, how their specs work, and how they integrate with the library;
 - How to use Parallel PettingZoo and VMAS environments with multiple agent groups in TorchRL;
 - How to create different multi-agent network architectures in TorchRL (e.g., using parameter sharing, centralised critic)
-- How we can use :class:`tensordict.TensorDict` to carry multi-agent multi-group data;
+- How we can use :class:`~tensordict.TensorDict` to carry multi-agent multi-group data;
 - How we can tie all the library components (collectors, modules, replay buffers, and losses) in an off-policy multi-agent MADDPG/IDDPG training loop.
 
 """
@@ -109,22 +107,22 @@ Key learnings:
 # In this tutorial, we will be able to train both formulations, and we will also discuss how
 # parameter-sharing (the practice of sharing the network parameters across the agents) impacts each.
 #
-# This tutorial is structured as follows:
+# The structure of this tutorial is as follows:
 #
-# 1. First, we will define a set of hyperparameters we will be using.
+# 1. Initially, we will establish a set of hyperparameters for use.
 #
-# 2. Next, we will create a multi-agent environment, using TorchRL's
-#    wrapper for PettingZoo or VMAS.
+# 2. Subsequently, we will construct a multi-agent environment, utilizing TorchRL's
+wrapper for either PettingZoo or VMAS.
 #
-# 3. Next, we will design the policy and the critic networks, discussing the impact of the various choices on
-#    parameter sharing and critic centralisation.
+# 3. Following that, we will formulate the policy and critic networks, discussing the effects of various choices on
+parameter sharing and critic centralisation.
 #
-# 4. Next, we will create the sampling collector and the replay buffer.
+# 4. Afterwards, we will create the sampling collector and the replay buffer.
 #
-# 5. Finally, we will run our training loop and analyse the results.
+# 5. In the end, we will execute our training loop and examine the outcomes.
 #
-# If you are running this in Colab or in a machine with a GUI, you will also have the option
-# to render and visualise your own trained policy prior and after training.
+# If you are operating this in Colab or on a machine with a GUI, you will also have the opportunity
+# to render and visualize your own trained policy before and after the training process.
 #
 # Let's import our dependencies
 #
@@ -226,7 +224,7 @@ polyak_tau = 0.005  # Tau for the soft-update of the target network
 # tensordict. The data of agents within a group is stacked together. Therefore, by choosing how to group your agents,
 # you can decide which data is stacked/kept as separate entries.
 # The grouping strategy can be specified at construction in environments like VMAS and PettingZoo.
-# For more info on grouping, see :class:`torchrl.envs.utils.MarlGroupMapType` ,
+# For more info on grouping, see :class:`~torchrl.envs.utils.MarlGroupMapType`.
 #
 # In the *simple_tag* environment
 # there are two teams of agents: the chasers (or "adversaries") (red circles) and the evaders (or "agents") (green circles).
@@ -327,13 +325,13 @@ print("observation_spec:", env.observation_spec)
 ######################################################################
 # Using the commands just shown we can access the domain of each value.
 #
-# We can see that all specs are a dictionary where at the root we can always find the group names.
+# We can see that all specs are structured as a dictionary, with the root always containing the group names.
 # This structure will be followed in all tensordict data coming and going to the environment.
 # Furthermore, the specs of each group have leading shape ``(n_agents_in_that_group)`` (1 for agents, 2 for adversaries),
 # meaning that the tensor data of that group will always have that leading shape (agents within a group have the data stacked).
 #
 # Looking at the ``done_spec``, we can see that there are some keys that are outside of agent groups
-# (``"done","terminated","truncated"``), which do not have a leading multi-agent dimension.
+# (``"done", "terminated", "truncated"``), which do not have a leading multi-agent dimension.
 # These keys are shared by all agents and represent the environment global done state used for resetting.
 # By default, like in this case, parallel PettingZoo environments are done when any agent is done, but this behavior
 # can be overridden by setting ``done_on_any`` at PettingZoo environment construction.
@@ -394,6 +392,7 @@ n_rollout_steps = 5
 rollout = env.rollout(n_rollout_steps)
 print(f"rollout of {n_rollout_steps} steps:", rollout)
 print("Shape of the rollout TensorDict:", rollout.batch_size)
+
 ######################################################################
 # We can see that our rollout has ``batch_size`` of ``(n_rollout_steps)``.
 # This means that all the tensors in it will have this leading dimension.
@@ -406,8 +405,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 #   in the ``rollout[group_name]`` tensordicts, which will have batch size ``(n_rollout_steps, n_agents_in_group)``
 #   signifying that it is storing the additional agent dimension. The ones outside the group tensordicts
 #   will be the shared ones.
-# - *In the next* (accessible by running ``rollout.get("next")`` ). We will find the same structure as the root,
-#   but for keys that are available only after a step.
+# - *In the next* (accessible by running ``rollout.get("next")`` ). We will find the same structure as the root with some minor differences highlighted below.
 #
 # In TorchRL the convention is that done and observations will be present in both root and next (as these are
 # available both at reset time and after a step). Action will only be available in root (as there is no action
@@ -474,7 +472,7 @@ for group, agents in env.group_map.items():
         activation_class=torch.nn.Tanh,
     )
 
-    # Wrap the neural network in a :class:`TensorDictModule`.
+    # Wrap the neural network in a :class:`~tensordict.nn.TensorDictModule`.
     # This is simply a module that will read the ``in_keys`` from a tensordict, feed them to the
     # neural networks, and write the
     # outputs in-place at the ``out_keys``.
@@ -488,17 +486,17 @@ for group, agents in env.group_map.items():
 
 
 ######################################################################
-# **Second**: wrap the :class:`TensorDictModule` in a :class:`ProbabilisticActor`
+# **Second**: wrap the :class:`~tensodrdict.nn.TensorDictModule` in a :class:`~torchrl.modules.ProbabilisticActor`
 #
 # We now need to build the TanhDelta distribution.
-# We instruct the :class:`ProbabilisticActor`
-# class to build a :class:`TanhDelta` out of the policy action
+# We instruct the :class:`~torchrl.modules.ProbabilisticActor`
+# class to build a :class:`~torchrl.modules.TanhDelta` out of the policy action
 # parameters. We also provide the minimum and maximum values of this
 # distribution, which we gather from the environment specs.
 #
 # The name of the ``in_keys`` (and hence the name of the ``out_keys`` from
 # the :class:`TensorDictModule` above) has to end with the
-# :class:`TanhDelta` distribution constructor keyword arguments (param).
+# :class:`~torchrl.modules.TanhDelta` distribution constructor keyword arguments (param).
 #
 
 policies = {}
@@ -623,7 +621,7 @@ for group, agents in env.group_map.items():
 
 ######################################################################
 # Let us try our policy and critic modules. As pointed earlier, the usage of
-# :class:`TensorDictModule` makes it possible to directly read the output
+# :class:`~tensordict.nn.TensorDictModule` makes it possible to directly read the output
 # of the environment to run these modules, as they know what information to read
 # and where to write it.
 #
