@@ -412,22 +412,6 @@ class DreamerValueLoss(LossModule):
         pass
 
     def forward(self, fake_data) -> torch.Tensor:
-        # lambda_target = fake_data.get("lambda_target")
-        # # TODO: I think this should be next state and belief
-        # td = fake_data.select(("next", "state"), ("next", "belief"))
-        # td = td.rename_key_(("next", "state"), "state")
-        # tensordict_select = td.rename_key_(("next", "belief"), "belief")
-        # # tensordict_select = fake_data.select(*self.value_model.in_keys, strict=False)
-        # dist = self.value_model.get_dist(tensordict_select)
-        # if self.discount_loss:
-        #     discount = self.gamma * torch.ones_like(
-        #         lambda_target, device=lambda_target.device
-        #     )
-        #     discount[..., 0, :] = 1
-        #     discount = discount.cumprod(dim=-2)
-        #     value_loss = -(discount * dist.log_prob(lambda_target).unsqueeze(-1)).mean()
-        # else:
-        #     value_loss = -dist.log_prob(lambda_target).mean()
         lambda_target = fake_data.get("lambda_target")
         tensordict_select = fake_data.select(*self.value_model.in_keys, strict=False)
         self.value_model(tensordict_select)
