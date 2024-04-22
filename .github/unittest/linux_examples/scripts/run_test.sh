@@ -167,19 +167,17 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/di
 #  logger.record_video=True \
 #  logger.record_frames=4 \
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dreamer/dreamer.py \
-  total_frames=200 \
-  init_random_frames=10 \
-  batch_size=10 \
-  frames_per_batch=200 \
-  num_workers=4 \
-  env_per_collector=2 \
-  collector_device=cuda:0 \
-  model_device=cuda:0 \
-  optim_steps_per_batch=1 \
-  record_video=True \
-  record_frames=4 \
-  buffer_size=120 \
-  rssm_hidden_dim=17
+  collector.total_frames=200 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=200 \
+  replay_buffer.batch_size=10 \
+  env.n_parallel_envs=4 \
+#  env_per_collector=2 \
+  optimization.optim_steps_per_batch=1 \
+  logger.video=True \
+#  record_frames=4 \
+  replay_buffer.buffer_size=120 \
+  networks.rssm_hidden_dim=17
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -223,19 +221,17 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iq
 
 # With single envs
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dreamer/dreamer.py \
-  total_frames=200 \
-  init_random_frames=10 \
-  batch_size=10 \
-  frames_per_batch=200 \
-  num_workers=2 \
-  env_per_collector=1 \
-  collector_device=cuda:0 \
-  model_device=cuda:0 \
-  optim_steps_per_batch=1 \
-  record_video=True \
-  record_frames=4 \
-  buffer_size=120 \
-  rssm_hidden_dim=17
+  collector.total_frames=200 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=200 \
+  replay_buffer.batch_size=10 \
+  env.n_parallel_envs=1 \
+#  env_per_collector=2 \
+  optimization.optim_steps_per_batch=1 \
+  logger.video=True \
+#  record_frames=4 \
+  replay_buffer.buffer_size=120 \
+  networks.rssm_hidden_dim=17
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \

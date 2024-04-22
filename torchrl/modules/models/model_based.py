@@ -6,6 +6,7 @@ import warnings
 
 import torch
 from packaging import version
+from tensordict import LazyStackedTensorDict
 from tensordict.nn import (
     NormalParamExtractor,
     TensorDictModule,
@@ -13,7 +14,7 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torch import nn
-from tensordict import LazyStackedTensorDict
+
 # from torchrl.modules.tensordict_module.rnn import GRUCell
 from torch.nn import GRUCell
 from torchrl._utils import timeit
@@ -263,7 +264,9 @@ class RSSMRollout(TensorDictModuleBase):
                 _tensordict = update_values[t + 1].update(_tensordict)
 
         out = torch.stack(tensordict_out, tensordict.ndim - 1)
-        assert not any(isinstance(val, LazyStackedTensorDict) for val in out.values(True)), out
+        assert not any(
+            isinstance(val, LazyStackedTensorDict) for val in out.values(True)
+        ), out
         return out
 
 
