@@ -15,6 +15,7 @@ logger:
   exp_name: Mujoco_Schulman17
   test_interval: 1_000_000
   num_test_episodes: 5
+  video: False
 
 # Optim
 optim:

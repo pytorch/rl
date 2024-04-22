@@ -18,6 +18,7 @@ from torchrl.envs import (
     GymEnv,
     NoopResetEnv,
     ParallelEnv,
+    RenameTransform,
     Resize,
     RewardSum,
     SignTransform,
@@ -35,6 +36,8 @@ from torchrl.modules import (
     TanhNormal,
     ValueOperator,
 )
+from torchrl.record import VideoRecorder
+
 
 # ====================================================================
 # Environment utils
@@ -64,7 +67,8 @@ def make_parallel_env(env_name, num_envs, device, is_test=False):
         device=device,
     )
     env = TransformedEnv(env)
-    env.append_transform(ToTensorImage())
+    env.append_transform(RenameTransform(in_keys=["pixels"], out_keys=["pixels_int"]))
+    env.append_transform(ToTensorImage(in_keys=["pixels_int"], out_keys=["pixels"]))
     env.append_transform(GrayScale())
     env.append_transform(Resize(84, 84))
     env.append_transform(CatFrames(N=4, dim=-3))
@@ -198,6 +202,11 @@ def make_ppo_models(env_name):
 # --------------------------------------------------------------------
 
 
+def dump_video(module):
+    if isinstance(module, VideoRecorder):
+        dump_video.dump()
+
+
 def eval_model(actor, test_env, num_episodes=3):
     test_rewards = []
     for _ in range(num_episodes):
@@ -208,6 +217,7 @@ def eval_model(actor, test_env, num_episodes=3):
             break_when_any_done=True,
             max_steps=10_000_000,
         )
+        test_env.apply(dump_video)
         reward = td_test["next", "episode_reward"][td_test["next", "done"]]
         test_rewards.append(reward.cpu())
     del td_test
