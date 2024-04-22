@@ -170,12 +170,12 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dr
   collector.total_frames=200 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=200 \
-  replay_buffer.batch_size=10 \
   env.n_parallel_envs=4 \
   optimization.optim_steps_per_batch=1 \
   logger.video=True \
   logger.backend=csv \
   replay_buffer.buffer_size=120 \
+  replay_buffer.batch_length=12 \
   networks.rssm_hidden_dim=17
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td3/td3.py \
   collector.total_frames=48 \
@@ -223,12 +223,12 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dr
   collector.total_frames=200 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=200 \
-  replay_buffer.batch_size=10 \
   env.n_parallel_envs=1 \
   optimization.optim_steps_per_batch=1 \
   logger.backend=csv \
   logger.video=True \
   replay_buffer.buffer_size=120 \
+  replay_buffer.batch_length=12 \
   networks.rssm_hidden_dim=17
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/ddpg/ddpg.py \
   collector.total_frames=48 \
