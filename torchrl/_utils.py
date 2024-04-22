@@ -27,6 +27,7 @@ from typing import Any, Callable, cast, Dict, TypeVar, Union
 import numpy as np
 import torch
 from packaging.version import parse
+from tensordict import unravel_key
 
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
@@ -48,6 +49,9 @@ logger.addHandler(console_handler)
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
+if RL_WARNINGS:
+    warnings.simplefilter("once", DeprecationWarning)
+
 BATCHED_PIPE_TIMEOUT = float(os.environ.get("BATCHED_PIPE_TIMEOUT", "10000.0"))
 
 
@@ -714,6 +718,14 @@ def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
         return new_ending
     else:
         return key[:-1] + (new_ending,)
+
+
+def _append_last(key: NestedKey, new_suffix: str) -> NestedKey:
+    key = unravel_key(key)
+    if isinstance(key, str):
+        return key + new_suffix
+    else:
+        return key[:-1] + (key[-1] + new_suffix,)
 
 
 class _rng_decorator(_DecoratorContextManager):
