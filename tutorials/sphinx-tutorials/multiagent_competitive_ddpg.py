@@ -59,7 +59,7 @@ Key learnings:
 # This kind of algorithm is typicall trained off-policy. For more info on off-policy learning see
 # *Sutton, Richard S., and Andrew G. Barto. Reinforcement learning: An introduction. MIT press, 2018*.
 #
-# .. figure:: https://hackmd.io/_uploads/HJX9ch7b0.png
+# .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/off-policy-vmas-loop.png?raw=true
 #    :alt: Off-policy learning
 #
 #    Off-policy learning
