@@ -175,6 +175,7 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dr
 #  env_per_collector=2 \
   optimization.optim_steps_per_batch=1 \
   logger.video=True \
+  logger.backend=csv \
 #  record_frames=4 \
   replay_buffer.buffer_size=120 \
   networks.rssm_hidden_dim=17
