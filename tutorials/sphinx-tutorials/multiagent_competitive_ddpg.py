@@ -718,20 +718,6 @@ optimisers = {
 #
 
 
-def get_excluded_keys(group: str):
-    """
-    Return all keys that should be excluded from the tensordict of group `group`.
-    This removes all keys from other groups and info keys so that we do not store those
-    in the buffer of group `group`.
-    """
-    excluded_keys = []
-    for other_group in env.group_map.keys():
-        if other_group != group:
-            excluded_keys += [other_group, ("next", other_group)]
-    excluded_keys += ["info", (group, "info"), ("next", group, "info")]
-    return excluded_keys
-
-
 def process_batch(batch: TensorDictBase) -> TensorDictBase:
     """
     If the `(group, "terminated")` and `(group, "done")` keys are not present, create them by expanding
@@ -794,7 +780,12 @@ for iteration, batch in enumerate(collector):
     # Loop over groups
     for group in train_group_map.keys():
         group_batch = batch.exclude(
-            *get_excluded_keys(group)
+            *[
+                key
+                for _group in env.group_map.keys()
+                if _group != group
+                for key in [_group, ("next", _group)]
+            ]
         )  # Exclude data from other groups
         group_batch = group_batch.reshape(
             -1
