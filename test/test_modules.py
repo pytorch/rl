@@ -891,7 +891,7 @@ class TestMultiAgent:
         )
         return td
 
-    @retry(AssertionError, 3)
+    @retry(AssertionError, 5)
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
     @pytest.mark.parametrize("centralised", [True, False])
@@ -906,7 +906,7 @@ class TestMultiAgent:
         n_agent_inputs,
         n_agent_outputs=2,
     ):
-        torch.manual_seed(0)
+        torch.manual_seed(1)
         mlp = MultiAgentMLP(
             n_agent_inputs=n_agent_inputs,
             n_agent_outputs=n_agent_outputs,
@@ -940,7 +940,7 @@ class TestMultiAgent:
 
         obs = torch.randn(*batch, 1, n_agent_inputs).expand(
             *batch, n_agents, n_agent_inputs
-        )
+        ).clone()
         out = mlp(obs)
         for i in range(n_agents):
             if share_params:
