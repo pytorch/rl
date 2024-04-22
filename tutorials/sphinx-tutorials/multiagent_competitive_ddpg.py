@@ -59,7 +59,7 @@ Key learnings:
 # This kind of algorithm is typicall trained off-policy. For more info on off-policy learning see
 # *Sutton, Richard S., and Andrew G. Barto. Reinforcement learning: An introduction. MIT press, 2018*.
 #
-# .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/off-policy-vmas-loop.png?raw=true
+# .. figure:: https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/off-policy-vmas-loop-min.png
 #    :alt: Off-policy learning
 #
 #    Off-policy learning
@@ -232,7 +232,7 @@ n_chasers = 2
 n_evaders = 1
 n_obstacles = 2
 
-use_vmas = False  # Set this to True for a great performance speedup
+use_vmas = True  # Set this to True for a great performance speedup
 
 if not use_vmas:
     env = PettingZooEnv(
@@ -775,6 +775,7 @@ train_group_map = copy.deepcopy(env.group_map)
 
 # Training/collection iterations
 for iteration, batch in enumerate(collector):
+    break
     current_frames = batch.numel()
     batch = process_batch(batch)  # Util to expand done keys if needed
     # Loop over groups
