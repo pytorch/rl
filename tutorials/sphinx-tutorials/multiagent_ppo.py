@@ -802,7 +802,7 @@ plt.show()
 # to become a MARL master.
 # Here are a few videos of some possible scenarios you can try in VMAS.
 #
-# .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/vmas_scenarios_more.gif.gif?raw=true
+# .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/vmas_scenarios_more.gif?raw=true
 #    :alt: VMAS scenarios
 #
 #    Scenarios available in `VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__
