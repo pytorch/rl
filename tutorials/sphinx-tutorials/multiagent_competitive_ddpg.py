@@ -14,9 +14,7 @@ Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
 This tutorial demonstrates how to use PyTorch and TorchRL to
 solve a Competitive Multi-Agent Reinforcement Learning (MARL) problem.
 
-
-For ease of use, this tutorial will follow the general structure of the already available
-`multi-agent PPO tutorial <https://pytorch.org/rl/tutorials/multiagent_ppo.html>`__.
+For ease of use, this tutorial will follow the general structure of the already available :doc:`/tutorials/multiagent_ppo`.
 
 In this tutorial, we will use the *simple_tag* environment from the
 `MADDPG paper <https://arxiv.org/abs/1706.02275>`__. This environment is part
@@ -30,14 +28,7 @@ In this tutorial we show how to train this environment in TorchRL using either:
 - `VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__, which provides a vectorized implementation in PyTorch,
   able to simulate multiple environments on a GPU to speed up computation.
 
-In the *simple_tag* environment,
-there are two teams of agents: the chasers (or "adversaries") and the evaders (or "agents").
-Chasers are rewarded for touching evaders. Upon a contact the team of chasers is collectively rewarded and the
-evader touched is penalized with the same value. Evaders have higher speed and acceleration than chasers.
-
-
-
-.. figure:: https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/simple_tag.gif
+.. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/scenarios/simple_tag.gif?raw=true
    :alt: Simple tag
 
    Multi-agent *simple_tag* scenario
@@ -63,28 +54,15 @@ Key learnings:
 #    !pip3 install tqdm
 #
 # Deep Deterministic Policy Gradient (DDPG) is an off-policy actor-critic algorithm
-# where a deterministic policy is optimized using the gradients from the critic network.
+# where a deterministic policy is optimised using the gradients from the critic network.
 # For more information, see the `Deep Deterministic Policy Gradients <https://arxiv.org/abs/1509.02971>`_ paper.
+# This kind of algorithm is typicall trained off-policy. For more info on off-policy learning see
+# *Sutton, Richard S., and Andrew G. Barto. Reinforcement learning: An introduction. MIT press, 2018*.
 #
-# This type of algorithm is usually trained *off-policy*. At every learning iteration, we have a
-# **sampling** and a **training** phase. In the **sampling** phase of iteration :math:`t`, rollouts are collected
-# form agents' interactions in the environment using the policies :math:`\mathbf{\pi}_t` and stored in the replay buffer.
-# In the **training** phase, rollouts from any time prior and including :math:`t` are randomly sampled from the replay buffer and fed
-# to the training process to perform backpropagation. This leads to updated policies which are then used again for sampling.
-# It is important to note that, unlike on-policy methods, any policy can be used to collect the data fed to the training phase
-# as these methods learn the optimal value function. In fact many users like to prefill their buffer with data from a random policy.
-# The execution of this process in a loop constitutes *off-policy learning*.
-#
-# .. figure:: https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/off_policy_training_pettingzoo_vmas.png
+# .. figure:: https://hackmd.io/_uploads/HJX9ch7b0.png
 #    :alt: Off-policy learning
 #
 #    Off-policy learning
-#
-# In the training phase of the DDPG algorithm, a *critic*, which takes as input the action and state, is used to estimate
-# the Q value. This critic is trained using the TD(0) bootstrapping error.
-# To train the *actor* (policy), the DDPG loss feeds a state to the actor network, gathers the output action, and feeds
-# both state and action to the critic (preserving gradients). Then the loss simply maximizes the critic output,
-# backpropagating through both actor and critic.
 #
 # This approach has been extended to multi-agent learning in `Multi-Agent Actor-Critic for Mixed Cooperative-Competitive Environments <https://arxiv.org/abs/1706.02275>`__,
 # which introduces the Multi Agent DDPG (MADDPG) algorithm.
@@ -112,10 +90,10 @@ Key learnings:
 # 1. Initially, we will establish a set of hyperparameters for use.
 #
 # 2. Subsequently, we will construct a multi-agent environment, utilizing TorchRL's
-wrapper for either PettingZoo or VMAS.
+#    wrapper for either PettingZoo or VMAS.
 #
 # 3. Following that, we will formulate the policy and critic networks, discussing the effects of various choices on
-parameter sharing and critic centralisation.
+#    parameter sharing and critic centralisation.
 #
 # 4. Afterwards, we will create the sampling collector and the replay buffer.
 #
@@ -127,7 +105,6 @@ parameter sharing and critic centralisation.
 # Let's import our dependencies
 #
 import copy
-from typing import Dict, List
 
 # Torch
 import torch
@@ -144,7 +121,7 @@ from torch import multiprocessing
 from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
-from torchrl.data.replay_buffers.storages import LazyTensorStorage
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 
 # Env
 from torchrl.envs import PettingZooEnv, RewardSum, TransformedEnv
@@ -202,8 +179,8 @@ iteration_when_stop_training_evaders = n_iters // 2
 memory_size = 1_000_000  # The replay buffer of each group can store this many frames
 
 # Training
-n_optimizer_steps = 100  # Number of optimization steps per training iteration
-train_batch_size = 128  # Number of frames trained in each optimizer step
+n_optimiser_steps = 100  # Number of optimisation steps per training iteration
+train_batch_size = 128  # Number of frames trained in each optimiser step
 lr = 3e-4  # Learning rate
 max_grad_norm = 1.0  # Maximum norm for the gradients
 
@@ -333,7 +310,7 @@ print("observation_spec:", env.observation_spec)
 # Looking at the ``done_spec``, we can see that there are some keys that are outside of agent groups
 # (``"done", "terminated", "truncated"``), which do not have a leading multi-agent dimension.
 # These keys are shared by all agents and represent the environment global done state used for resetting.
-# By default, like in this case, parallel PettingZoo environments are done when any agent is done, but this behavior
+# By default, like in this case, parallel PettingZoo environments are done when any agent is done, but this behaviour
 # can be overridden by setting ``done_on_any`` at PettingZoo environment construction.
 #
 # To quickly access the keys for each of these values in tensordicts, we can simply ask the environment for the
@@ -437,7 +414,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # Another important decision we need to make is whether we want the agents within a team to **share the policy parameters**.
 # On the one hand, sharing parameters means that they will all share the same policy, which will allow them to benefit from
 # each other's experiences. This will also result in faster training.
-# On the other hand, it will make them behaviorally *homogenous*, as they will in fact share the same model.
+# On the other hand, it will make them behaviourally *homogenous*, as they will in fact share the same model.
 # For this example, we will enable sharing as we do not mind the homogeneity and can benefit from the computational
 # speed, but it is important to always think about this decision in your own problems!
 #
@@ -678,7 +655,7 @@ collector = SyncDataCollector(
 replay_buffers = {}
 for group, _agents in env.group_map.items():
     replay_buffer = ReplayBuffer(
-        storage=LazyTensorStorage(
+        storage=LazyMemmapStorage(
             memory_size, device=device
         ),  # We will store up to memory_size multi-agent transitions
         sampler=RandomSampler(),
@@ -719,7 +696,7 @@ target_updaters = {
     group: SoftUpdate(loss, tau=polyak_tau) for group, loss in losses.items()
 }
 
-optimizers = {
+optimisers = {
     group: {
         "loss_actor": torch.optim.Adam(
             loss.actor_network_params.flatten_keys().values(), lr=lr
@@ -755,15 +732,13 @@ def get_excluded_keys(group: str):
     return excluded_keys
 
 
-def process_batch(
-    batch: TensorDictBase, group_map: Dict[str, List[str]]
-) -> TensorDictBase:
+def process_batch(batch: TensorDictBase) -> TensorDictBase:
     """
     If the `(group, "terminated")` and `(group, "done")` keys are not present, create them by expanding
     `"terminated"` and `"done"`.
     This is needed to present them with the same shape as the reward to the loss.
     """
-    for group in group_map.keys():
+    for group in env.group_map.keys():
         keys = list(batch.keys(True, True))
         group_shape = batch.get_item_shape(group)
         nested_done_key = ("next", group, "done")
@@ -815,7 +790,7 @@ train_group_map = copy.deepcopy(env.group_map)
 # Training/collection iterations
 for iteration, batch in enumerate(collector):
     current_frames = batch.numel()
-    batch = process_batch(batch, env.group_map)  # Util to expand done keys if needed
+    batch = process_batch(batch)  # Util to expand done keys if needed
     # Loop over groups
     for group in train_group_map.keys():
         group_batch = batch.exclude(
@@ -826,22 +801,22 @@ for iteration, batch in enumerate(collector):
         )  # This just affects the leading dimensions in batch_size of the tensordict
         replay_buffers[group].extend(group_batch)
 
-        for _ in range(n_optimizer_steps):
+        for _ in range(n_optimiser_steps):
             subdata = replay_buffers[group].sample()
             loss_vals = losses[group](subdata)
 
             for loss_name in ["loss_actor", "loss_value"]:
                 loss = loss_vals[loss_name]
-                optimizer = optimizers[group][loss_name]
+                optimiser = optimisers[group][loss_name]
 
                 loss.backward()
 
                 # Optional
-                params = optimizer.param_groups[0]["params"]
+                params = optimiser.param_groups[0]["params"]
                 torch.nn.utils.clip_grad_norm_(params, max_grad_norm)
 
-                optimizer.step()
-                optimizer.zero_grad()
+                optimiser.step()
+                optimiser.zero_grad()
 
             # Soft-update the target network
             target_updaters[group].step()
@@ -974,8 +949,7 @@ plt.show()
 # These are code-only scripts of many popular MARL sota-implementations such as the ones seen in this tutorial,
 # QMIX, MADDPG, IQL, and many more!
 #
-# Also do remember to check out our
-# `multi-agent PPO tutorial <https://pytorch.org/rl/tutorials/multiagent_ppo.html>`__ in VMAS.
+# Also do remember to check out our tutorial: :doc:`/tutorials/multiagent_ppo`.
 #
 # Finally, you can modify the parameters of this tutorial to try many other configurations and scenarios
 # to become a MARL master.
