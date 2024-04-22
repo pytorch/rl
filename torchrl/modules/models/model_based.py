@@ -19,7 +19,6 @@ from torch import nn
 from torch.nn import GRUCell
 from torchrl._utils import timeit
 
-from torchrl.envs.utils import step_mdp
 from torchrl.modules.models.models import MLP
 
 UNSQUEEZE_RNN_INPUT = version.parse(torch.__version__) < version.parse("1.11")

@@ -177,7 +177,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             t_loss_actor = 0.0
             t_loss_critic = 0.0
             t_loss_model = 0.0
-            for k in range(optim_steps_per_batch):
+            for _ in range(optim_steps_per_batch):
                 # sample from replay buffer
                 t_sample_init = time.time()
                 sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
