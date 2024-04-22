@@ -153,40 +153,6 @@ class DreamerModelLoss(LossModule):
         reward_loss = reward_loss.mean().unsqueeze(-1)
         # import ipdb; ipdb.set_trace()
 
-        # Alternative:
-        # def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
-        #     tensordict = tensordict.copy()
-        #     tensordict.rename_key_(
-        #         ("next", self.tensor_keys.reward),
-        #         ("next", self.tensor_keys.true_reward),
-        #     )
-        #     tensordict = self.world_model(tensordict)
-        #     # compute model loss
-        #     kl_loss = self.kl_loss(
-        #         tensordict.get(("next", self.tensor_keys.prior_mean)),
-        #         tensordict.get(("next", self.tensor_keys.prior_std)),
-        #         tensordict.get(("next", self.tensor_keys.posterior_mean)),
-        #         tensordict.get(("next", self.tensor_keys.posterior_std)),
-        #     )
-        #
-        #     dist: IndependentNormal = self.decoder.get_dist(tensordict)
-        #     reco_loss = -dist.log_prob(
-        #         tensordict.get(("next", self.tensor_keys.pixels))
-        #     ).mean()
-        #     # x = tensordict.get(("next", self.tensor_keys.pixels))
-        #     # loc = dist.base_dist.loc
-        #     # scale = dist.base_dist.scale
-        #     # reco_loss = -self.normal_log_probability(x, loc, scale).mean()
-        #
-        #     dist: IndependentNormal = self.reward_model.get_dist(tensordict)
-        #     reward_loss = -dist.log_prob(
-        #         tensordict.get(("next", self.tensor_keys.true_reward))
-        #     ).mean()
-        #     # x = tensordict.get(("next", self.tensor_keys.true_reward))
-        #     # loc = dist.base_dist.loc
-        #     # scale = dist.base_dist.scale
-        #     # reward_loss = -self.normal_log_probability(x, loc, scale).mean()
-
         return (
             TensorDict(
                 {
