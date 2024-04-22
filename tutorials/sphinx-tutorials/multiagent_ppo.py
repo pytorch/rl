@@ -792,7 +792,7 @@ plt.show()
 # QMIX, MADDPG, IQL, and many more!
 #
 # You can also check out our other multi-agent tutorial on how to train competitive
-# MADDPG/IDDPG in PettingZoo/VMAS with multiple agent groups `here <https://pytorch.org/rl/tutorials/multiagent_competitive_ddpg.html`>__.
+# MADDPG/IDDPG in PettingZoo/VMAS with multiple agent groups: :doc:`/tutorials/multiagent_competitive_ddpg`.
 #
 # If you are interested in creating or wrapping your own multi-agent environments in TorchRL,
 # you can check out the dedicated
