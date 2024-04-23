@@ -164,7 +164,7 @@ class TokenizedDatasetLoader:
         from datasets import load_dataset, load_from_disk
 
         if self.from_disk:
-            dataset = load_from_disk(self.dataset_name)[self.split]
+            dataset = load_from_disk(str(self.dataset_name))[self.split]
         else:
             dataset = load_dataset(self.dataset_name, split=self.split)
         if self.split.startswith("valid"):

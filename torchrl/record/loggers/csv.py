@@ -40,6 +40,8 @@ class CSVExperiment:
         value = float(value)
         self.scalars[name].append((global_step, value))
         filepath = os.path.join(self.log_dir, "scalars", "".join([name, ".csv"]))
+        if not os.path.isfile(filepath):
+            os.makedirs(Path(filepath).parent, exist_ok=True)
         if filepath not in self.files:
             os.makedirs(Path(filepath).parent, exist_ok=True)
             self.files[filepath] = open(filepath, "a+")
@@ -96,6 +98,8 @@ class CSVExperiment:
         filepath = os.path.join(
             self.log_dir, "texts", "".join([tag, str(global_step)]) + ".txt"
         )
+        if not os.path.isfile(filepath):
+            os.makedirs(Path(filepath).parent, exist_ok=True)
         if filepath not in self.files:
             self.files[filepath] = open(filepath, "w+")
         fd = self.files[filepath]

@@ -7881,7 +7881,7 @@ class TestVecNorm:
         parallel_sd = parallel_env.state_dict()
         assert "worker0" in parallel_sd
         worker_sd = parallel_sd["worker0"]
-        td = worker_sd["_extra_state"]["td"]
+        td = worker_sd["transforms.1._extra_state"]["td"]
         queue_out.put("start")
         msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "first round"
