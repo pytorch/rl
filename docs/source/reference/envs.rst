@@ -839,6 +839,7 @@ Domain-specific
 
     ModelBasedEnvBase
     model_based.dreamer.DreamerEnv
+    model_based.dreamer.DreamerDecoder
 
 
 Libraries

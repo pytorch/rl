@@ -2627,6 +2627,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     sync_func()
                 else:
                     tensordict.clear_device_()
+
             tensordict = policy(tensordict)
             if auto_cast_to_device:
                 if env_device is not None:
