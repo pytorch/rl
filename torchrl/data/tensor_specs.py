@@ -721,8 +721,9 @@ class TensorSpec:
         shape = torch.zeros(self.shape, device="meta").flatten(start_dim, end_dim).shape
         return self._reshape(shape)
 
+    @abc.abstractmethod
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
+        raise NotImplementedError(type(self))
 
     @abc.abstractmethod
     def is_in(self, val: torch.Tensor) -> bool:
@@ -1968,9 +1969,10 @@ class NonTensorSpec(TensorSpec):
         return NonTensorData(data=None, shape=self.shape, device=self.device)
 
     def is_in(self, val: torch.Tensor) -> bool:
+        shape = torch.broadcast_shapes(self.shape, val.shape)
         return (
             isinstance(val, NonTensorData)
-            and val.shape == self.shape
+            and val.shape == shape
             and val.device == self.device
             and val.dtype == self.dtype
         )
@@ -1979,7 +1981,10 @@ class NonTensorSpec(TensorSpec):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         shape = torch.Size(shape)
-        if not shape[-len(self.shape)] == self.shape:
+        if not all(
+            (old == 1) or (old == new)
+            for old, new in zip(self.shape, shape[-len(self.shape) :])
+        ):
             raise ValueError(
                 f"The last elements of the expanded shape must match the current one. Got shape={shape} while self.shape={self.shape}."
             )
@@ -2084,7 +2089,11 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         return torch.empty(shape, device=self.device, dtype=self.dtype).random_()
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return val.shape == self.shape and val.dtype == self.dtype
+        shape = torch.broadcast_shapes(self.shape, val.shape)
+        return val.shape == shape and val.dtype == self.dtype
+
+    def _project(self, val: torch.Tensor) -> torch.Tensor:
+        return torch.as_tensor(val, dtype=self.dtype).reshape(self.shape)
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
@@ -2235,7 +2244,8 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         return r.to(self.device)
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return True
+        shape = torch.broadcast_shapes(self.shape, val.shape)
+        return val.shape == shape and val.dtype == self.dtype
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
