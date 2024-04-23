@@ -798,8 +798,35 @@ In some cases, creating a testing environment where images can be collected is t
 (some libraries only allow one environment instance per workspace).
 In these cases, assuming that a `render` method is available in the environment, the :class:`~torchrl.record.PixelRenderTransform`
 can be used to call `render` on the parent environment and save the images in the rollout data stream.
-This class should only be used within the same process as the environment that is being rendered (remote calls to `render`
-are not allowed).
+This class works over single and batched environments alike:
+
+    >>> from torchrl.envs import GymEnv, check_env_specs, ParallelEnv, EnvCreator
+    >>> from torchrl.record.loggers import CSVLogger
+    >>> from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
+    >>>
+    >>> def make_env():
+    >>>     env = GymEnv("CartPole-v1", render_mode="rgb_array")
+    >>>     # Uncomment this line to execute per-env
+    >>>     # env = env.append_transform(PixelRenderTransform())
+    >>>     return env
+    >>>
+    >>> if __name__ == "__main__":
+    ...     logger = CSVLogger("dummy", video_format="mp4")
+    ...
+    ...     env = ParallelEnv(16, EnvCreator(make_env))
+    ...     env.start()
+    ...     # Comment this line to execute per-env
+    ...     env = env.append_transform(PixelRenderTransform())
+    ...
+    ...     env = env.append_transform(VideoRecorder(logger=logger, tag="pixels_record"))
+    ...     env.rollout(3)
+    ...
+    ...     check_env_specs(env)
+    ...
+    ...     r = env.rollout(30)
+    ...     env.transform.dump()
+    ...     env.close()
+
 
 .. currentmodule:: torchrl.record
 

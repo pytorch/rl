@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 from copy import copy
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, List, Optional, Sequence, Union
 
 import numpy as np
 import torch
@@ -19,6 +19,7 @@ from torchrl._utils import _can_be_pickled
 from torchrl.data import TensorSpec
 from torchrl.data.tensor_specs import NonTensorSpec, UnboundedContinuousTensorSpec
 from torchrl.data.utils import CloudpickleWrapper
+from torchrl.envs import EnvBase
 from torchrl.envs.transforms import ObservationTransform, Transform
 from torchrl.record.loggers import Logger
 
@@ -335,6 +336,7 @@ class PixelRenderTransform(Transform):
 
     This transform offers an alternative to the ``from_pixels`` syntatic sugar when instantiating an environment
     that offers rendering is expensive, or when ``from_pixels`` is not implemented.
+    It can be used within a single environment or over batched environments alike.
 
     Args:
         out_keys (List[NestedKey] or Nested): List of keys where to register the pixel observations.
@@ -400,6 +402,15 @@ class PixelRenderTransform(Transform):
         >>> r = env.rollout(30)
         >>> env.transform[-1].dump()
 
+    The transform can be disabled using the :meth:`~.switch` method, which will turn the rendering on if it's off
+    or off if it's on (an argument can also be passed to control this behaviour). Since transforms are
+    :class:`~torch.nn.Module` instances, :meth:`~torch.nn.Module.apply` can be used to control this behaviour:
+
+        >>> def switch(module):
+        ...     if isinstance(module, PixelRenderTransform):
+        ...         module.switch()
+        >>> env.apply(switch)
+
     """
 
     def __init__(
@@ -426,6 +437,7 @@ class PixelRenderTransform(Transform):
         self.as_non_tensor = as_non_tensor
         self.kwargs = kwargs
         self.render_method = render_method
+        self._enabled = True
         super().__init__(in_keys=[], out_keys=out_keys)
 
     def _reset(
@@ -434,10 +446,18 @@ class PixelRenderTransform(Transform):
         return self._call(tensordict_reset)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if not self._enabled:
+            return tensordict
+
         array = getattr(self.parent, self.render_method)(**self.kwargs)
         if self.preproc:
             array = self.preproc(array)
         if self.as_non_tensor is None:
+            if isinstance(array, list):
+                if isinstance(array[0], np.ndarray):
+                    array = np.asarray(array)
+                else:
+                    array = torch.as_tensor(array)
             if (
                 array.ndim == 3
                 and array.shape[-1] == 3
@@ -475,3 +495,24 @@ class PixelRenderTransform(Transform):
             )
         observation_spec[self.out_keys[0]] = spec
         return observation_spec
+
+    def switch(self, mode: str | bool = None):
+        """Sets the transform on or off."""
+        if mode is None:
+            mode = not self._enabled
+        if not isinstance(mode, bool):
+            if mode not in ("on", "off"):
+                raise ValueError("mode must be either 'on' or 'off', or a boolean.")
+            mode = mode == "on"
+        self._enabled = mode
+
+    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+        out = super().set_container(container)
+        if isinstance(self.parent, EnvBase):
+            # Start the env if needed
+            method = getattr(self.parent, self.render_method, None)
+            if method is None or not callable(method):
+                raise ValueError(
+                    f"The render method must exist and be a callable. Got render={method}."
+                )
+        return out
