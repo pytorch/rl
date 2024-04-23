@@ -18,7 +18,12 @@ from typing import Any, Dict, List, Sequence, Union
 import numpy as np
 import tensordict
 import torch
-from tensordict import is_tensor_collection, TensorDict, TensorDictBase
+from tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.memmap import MemmapTensor, MemoryMappedTensor
 from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
@@ -1318,7 +1323,7 @@ def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
 
 
 def _collate_list_tensordict(x):
-    out = torch.stack(x, 0)
+    out = LazyStackedTensorDict.maybe_dense_stack(x, 0)
     return out
 
 

@@ -1542,7 +1542,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
         **kwargs,
     ):
         if collate_fn is None:
-            collate_fn = torch.stack
+            collate_fn = LazyStackedTensorDict.maybe_dense_stack
         if rbs:
             if storages is not None or samplers is not None or writers is not None:
                 raise RuntimeError

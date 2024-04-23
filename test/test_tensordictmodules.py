@@ -8,7 +8,7 @@ import argparse
 import pytest
 import torch
 from mocking_classes import CountingEnv, DiscreteActionVecMockEnv
-from tensordict import pad, TensorDict, unravel_key_list
+from tensordict import LazyStackedTensorDict, pad, TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
 from torch import nn
 from torchrl.data.tensor_specs import (
@@ -515,7 +515,7 @@ class TestTDSequence:
         )
 
         if stack:
-            td = torch.stack(
+            td = LazyStackedTensorDict.maybe_dense_stack(
                 [
                     TensorDict({"a": torch.randn(3), "b": torch.randn(4)}, []),
                     TensorDict({"a": torch.randn(3), "c": torch.randn(4)}, []),
