@@ -3416,7 +3416,9 @@ class TestRoboHive:
                 torchrl_logger.info("no camera")
                 return
             try:
-                env = RoboHiveEnv(envname, from_pixels=from_pixels, from_depths=from_depths)
+                env = RoboHiveEnv(
+                    envname, from_pixels=from_pixels, from_depths=from_depths
+                )
             except AttributeError as err:
                 if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
                     torchrl_logger.info("tcdm are broken")

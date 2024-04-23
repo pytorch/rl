@@ -938,9 +938,11 @@ class TestMultiAgent:
             elif i > 0:
                 assert torch.allclose(out[..., i, :], out2[..., i, :])
 
-        obs = torch.randn(*batch, 1, n_agent_inputs).expand(
-            *batch, n_agents, n_agent_inputs
-        ).clone()
+        obs = (
+            torch.randn(*batch, 1, n_agent_inputs)
+            .expand(*batch, n_agents, n_agent_inputs)
+            .clone()
+        )
         out = mlp(obs)
         for i in range(n_agents):
             if share_params:
