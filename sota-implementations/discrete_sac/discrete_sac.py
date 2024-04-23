@@ -23,6 +23,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
+    dump_video,
     log_metrics,
     make_collector,
     make_environment,
@@ -35,7 +36,13 @@ from utils import (
 
 @hydra.main(version_base="1.1", config_path="", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
-    device = torch.device(cfg.network.device)
+    device = cfg.network.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = "cuda:0"
+        else:
+            device = "cpu"
+    device = torch.device(device)
 
     # Create logger
     exp_name = generate_exp_name("DiscreteSAC", cfg.logger.exp_name)
@@ -58,7 +65,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     np.random.seed(cfg.env.seed)
 
     # Create environments
-    train_env, eval_env = make_environment(cfg)
+    train_env, eval_env = make_environment(cfg, logger=logger)
 
     # Create agent
     model = make_sac_agent(cfg, train_env, eval_env, device)
@@ -100,7 +107,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     frames_per_batch = cfg.collector.frames_per_batch
 
     sampling_start = time.time()
-    for tensordict in collector:
+    for i, tensordict in enumerate(collector):
         sampling_time = time.time() - sampling_start
 
         # Update weights of the inference policy
@@ -193,7 +200,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/training_time"] = training_time
 
         # Evaluation
-        if abs(collected_frames % eval_iter) < frames_per_batch:
+        prev_test_frame = ((i - 1) * frames_per_batch) // eval_iter
+        cur_test_frame = (i * frames_per_batch) // eval_iter
+        final = current_frames >= collector.total_frames
+        if (i >= 1 and (prev_test_frame < cur_test_frame)) or final:
             with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 eval_start = time.time()
                 eval_rollout = eval_env.rollout(
@@ -202,6 +212,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     auto_cast_to_device=True,
                     break_when_any_done=True,
                 )
+                eval_env.apply(dump_video)
                 eval_time = time.time() - eval_start
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 metrics_to_log["eval/reward"] = eval_reward

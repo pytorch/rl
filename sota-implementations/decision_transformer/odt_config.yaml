@@ -25,8 +25,9 @@ logger:
   exp_name: oDT-HalfCheetah-medium-v2
   model_name: oDT
   pretrain_log_interval: 500 # record interval in frames
-  fintune_log_interval: 1
+  finetune_log_interval: 1
   eval_steps: 1000
+  video: False
 
 # replay buffer
 replay_buffer:
@@ -37,12 +38,11 @@ replay_buffer:
   buffer_prefetch: 64
   capacity: 1_000_000
   scratch_dir:
-  device: cuda:0
   prefetch: 3
 
 # optimizer
 optim:
-  device: cuda:0
+  device: null
   lr: 1.0e-4
   weight_decay: 5.0e-4
   batch_size: 256

@@ -43,7 +43,8 @@ class CSVExperiment:
         if not os.path.isfile(filepath):
             os.makedirs(Path(filepath).parent, exist_ok=True)
         if filepath not in self.files:
-            self.files[filepath] = open(filepath, "a")
+            os.makedirs(Path(filepath).parent, exist_ok=True)
+            self.files[filepath] = open(filepath, "a+")
         fd = self.files[filepath]
         fd.write(",".join([str(global_step), str(value)]) + "\n")
         fd.flush()
