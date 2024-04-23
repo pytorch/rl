@@ -16,6 +16,7 @@ import warnings
 from enum import Enum
 from typing import Any, Dict, List, Union
 
+import tensordict
 import torch
 
 from tensordict import (
@@ -25,6 +26,7 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
+from tensordict.base import _is_leaf_nontensor
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
@@ -179,10 +181,15 @@ class _StepMDP:
                     return key == "_reset"
                 return key[-1] == "_reset"
 
-            actual = {key for key in tensordict.keys(True, True) if not _is_reset(key)}
+            actual = {
+                key
+                for key in tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
+                if not _is_reset(key)
+            }
             expected = set(expected)
             self.validated = expected.intersection(actual) == expected
             if not self.validated:
+                raise RuntimeError
                 warnings.warn(
                     "The expected key set and actual key set differ. "
                     "This will work but with a slower throughput than "
@@ -243,7 +250,7 @@ class _StepMDP:
                 cls._exclude(nested_key_dict, td, td_out)
             return out
         has_set = False
-        for key, value in data_in.items():
+        for key, value in data_in.items(is_leaf=tensordict.base._is_leaf_nontensor):
             subdict = nested_key_dict.get(key, NO_DEFAULT)
             if subdict is NO_DEFAULT:
                 value = value.copy() if is_tensor_collection(value) else value

@@ -8,16 +8,21 @@ import os
 import os.path
 import pathlib
 import tempfile
+from sys import platform
 from time import sleep
 
 import pytest
+import tensordict.utils
 import torch
-
+import importlib.util
 from tensordict import MemoryMappedTensor
+
+from torchrl.envs import GymEnv, ParallelEnv, check_env_specs
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, _has_tv, MLFlowLogger
 from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
 from torchrl.record.loggers.wandb import _has_wandb, WandbLogger
+from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
 
 if _has_tv:
     import torchvision
@@ -28,6 +33,7 @@ if _has_tb:
 if _has_mlflow:
     import mlflow
 
+_has_gym = importlib.util.find_spec("gym", None) is not None or importlib.util.find_spec("gymnasium", None) is not None
 
 @pytest.fixture
 def tb_logger(tmp_path_factory):
@@ -396,6 +402,29 @@ class TestMLFlowLogger:
         logger, client = mlflow_fixture
         logger.log_hparams(config)
 
+@pytest.mark.skipif(not _has_gym, reason="gym required to test rendering")
+class TestPixelRenderTransform:
+    @pytest.mark.parametrize("parallel", [False, True])
+    @pytest.mark.parametrize("in_key", ["pixels", ("nested", "pix")])
+    def test_pixel_render(self, parallel, in_key, tmpdir):
+        def make_env():
+            env = GymEnv("CartPole-v1", render_mode="rgb_array", device=None)
+            env = env.append_transform(PixelRenderTransform(out_keys=in_key))
+            return env
+        if parallel:
+            env = ParallelEnv(2, make_env, mp_start_method="spawn")
+        else:
+            env = make_env()
+        logger = CSVLogger("dummy", log_dir=tmpdir)
+        try:
+            env = env.append_transform(VideoRecorder(logger=logger, in_keys=[in_key], tag="pixels_record"))
+            check_env_specs(env)
+            env.rollout(10)
+            env.transform.dump()
+            assert os.path.isfile(os.path.join(tmpdir, "dummy", "videos", "pixels_record_0.pt"))
+        finally:
+            if not env.is_closed:
+                env.close()
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
