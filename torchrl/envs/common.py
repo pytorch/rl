@@ -2567,6 +2567,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordicts = self._rollout_nonstop(**kwargs)
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
         if return_contiguous:
+            print(tensordicts[0])
+            print(tensordicts[1])
             out_td = torch.stack(tensordicts, len(batch_size), out=out)
         else:
             out_td = LazyStackedTensorDict.lazy_stack(
