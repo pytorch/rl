@@ -815,6 +815,7 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
     DiscreteTensorSpec
     MultiDiscreteTensorSpec
     MultiOneHotDiscreteTensorSpec
+    NonTensorSpec
     OneHotDiscreteTensorSpec
     UnboundedContinuousTensorSpec
     UnboundedDiscreteTensorSpec

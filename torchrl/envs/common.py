@@ -2298,7 +2298,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self,
         max_steps: int,
         policy: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        callback: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
+        callback: Optional[Callable[[TensorDictBase, ...], Any]] = None,
         auto_reset: bool = True,
         auto_cast_to_device: bool = False,
         break_when_any_done: bool = True,
@@ -2320,7 +2320,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 The policy can be any callable that reads either a tensordict or
                 the entire sequence of observation entries __sorted as__ the ``env.observation_spec.keys()``.
                 Defaults to `None`.
-            callback (callable, optional): function to be called at each iteration with the given TensorDict.
+            callback (Callable[[TensorDict], Any], optional): function to be called at each iteration with the given
+                TensorDict. Defaults to ``None``. The output of ``callback`` will not be collected, it is the user
+                responsibility to save any result within the callback call if data needs to be carried over beyond
+                the call to ``rollout``.
             auto_reset (bool, optional): if ``True``, resets automatically the environment
                 if it is in a done state when the rollout is initiated.
                 Default is ``True``.
