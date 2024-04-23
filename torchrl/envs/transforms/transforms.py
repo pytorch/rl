@@ -929,7 +929,20 @@ but got an object of type {type(transform)}."""
                 attr
             )  # make sure that appropriate exceptions are raised
         except AttributeError as err:
-            if attr.endswith("_spec"):
+            if attr in (
+                "action_spec",
+                "done_spec",
+                "full_action_spec",
+                "full_done_spec",
+                "full_observation_spec",
+                "full_reward_spec",
+                "full_state_spec",
+                "input_spec",
+                "observation_spec",
+                "output_spec",
+                "reward_spec",
+                "state_spec",
+            ):
                 raise AttributeError(
                     f"Could not get {attr} because an internal error was raised. To find what this error "
                     f"is, call env.transform.transform_<placeholder>_spec(env.base_env.spec)."
