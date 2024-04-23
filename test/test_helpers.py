@@ -50,7 +50,6 @@ from torchrl.trainers.helpers.models import (
     DiscreteModelConfig,
     DreamerConfig,
     make_dqn_actor,
-    make_dreamer,
     make_redq_model,
     REDQModelConfig,
 )
