@@ -86,8 +86,6 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dd
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
-#  record_video=True \
-#  record_frames=4 \
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/a2c/a2c_mujoco.py \
   env.env_name=HalfCheetah-v4 \
   collector.total_frames=40 \
@@ -125,7 +123,7 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/re
   collector.env_per_collector=2 \
   buffer.batch_size=10 \
   optim.steps_per_batch=1 \
-  logger.record_video=True \
+  logger.video=True \
   logger.record_frames=4 \
   buffer.size=120 \
   logger.backend=
@@ -151,8 +149,6 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/di
   replay_buffer.size=120 \
   env.name=CartPole-v1 \
   logger.backend=
-#  logger.record_video=True \
-#  logger.record_frames=4 \
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dreamer/dreamer.py \
   collector.total_frames=200 \
   collector.init_random_frames=10 \
@@ -220,8 +216,6 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dd
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
-#  record_video=True \
-#  record_frames=4 \
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dqn/dqn_atari.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -238,7 +232,7 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/re
   collector.env_per_collector=1 \
   buffer.batch_size=10 \
   optim.steps_per_batch=1 \
-  logger.record_video=True \
+  logger.video=True \
   logger.record_frames=4 \
   buffer.size=120 \
   logger.backend=
