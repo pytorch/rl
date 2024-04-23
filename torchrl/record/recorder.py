@@ -484,6 +484,10 @@ class PixelRenderTransform(Transform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         # Adds the pixel observation spec by calling render on the parent env
+        switch = False
+        if not self.enabled:
+            switch = True
+            self.switch()
         parent = self.parent
         td_in = TensorDict({}, batch_size=parent.batch_size, device=parent.device)
         self._call(td_in)
@@ -495,6 +499,8 @@ class PixelRenderTransform(Transform):
                 device=obs.device, dtype=obs.dtype, shape=obs.shape
             )
         observation_spec[self.out_keys[0]] = spec
+        if switch:
+            self.switch()
         return observation_spec
 
     def switch(self, mode: str | bool = None):
