@@ -32,7 +32,7 @@ from tensordict import unravel_key
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
 
-LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "DEBUG")
+LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "INFO")
 logger = logging.getLogger("torchrl")
 logger.setLevel(getattr(logging, LOGGING_LEVEL))
 # Disable propagation to the root logger
@@ -97,6 +97,12 @@ class timeit:
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
             logger.info(" -- ".join(strings))
+
+    @classmethod
+    def todict(cls, percall=True):
+        if percall:
+            return {key: val[0] for key, val in cls._REG.items()}
+        return {key: val[1] for key, val in cls._REG.items()}
 
     @staticmethod
     def erase():

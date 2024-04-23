@@ -14,6 +14,7 @@ from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based import ModelBasedEnvBase
+from torchrl.envs.transforms.transforms import Transform
 
 
 class DreamerEnv(ModelBasedEnvBase):
@@ -39,14 +40,6 @@ class DreamerEnv(ModelBasedEnvBase):
     def set_specs_from_env(self, env: EnvBase):
         """Sets the specs of the environment from the specs of the given environment."""
         super().set_specs_from_env(env)
-        # self.observation_spec = CompositeSpec(
-        #     next_state=UnboundedContinuousTensorSpec(
-        #         shape=self.prior_shape, device=self.device
-        #     ),
-        #     next_belief=UnboundedContinuousTensorSpec(
-        #         shape=self.belief_shape, device=self.device
-        #     ),
-        # )
         self.action_spec = self.action_spec.to(self.device)
         self.state_spec = CompositeSpec(
             state=self.observation_spec["state"],
@@ -57,10 +50,20 @@ class DreamerEnv(ModelBasedEnvBase):
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
         batch_size = tensordict.batch_size if tensordict is not None else []
         device = tensordict.device if tensordict is not None else self.device
-        td = self.state_spec.rand(shape=batch_size).to(device)
-        td.set("action", self.action_spec.rand(shape=batch_size).to(device))
-        td[("next", "reward")] = self.reward_spec.rand(shape=batch_size).to(device)
-        td.update(self.observation_spec.rand(shape=batch_size).to(device))
+        if tensordict is None:
+            td = self.state_spec.rand(shape=batch_size)
+            # why don't we reuse actions taken at those steps?
+            td.set("action", self.action_spec.rand(shape=batch_size))
+            td[("next", "reward")] = self.reward_spec.rand(shape=batch_size)
+            td.update(self.observation_spec.rand(shape=batch_size))
+            if device is not None:
+                td = td.to(device, non_blocking=True)
+                if torch.cuda.is_available() and device.type == "cpu":
+                    torch.cuda.synchronize()
+                elif torch.backends.mps.is_available():
+                    torch.mps.synchronize()
+        else:
+            td = tensordict.clone()
         return td
 
     def decode_obs(self, tensordict: TensorDict, compute_latents=False) -> TensorDict:
@@ -69,3 +72,21 @@ class DreamerEnv(ModelBasedEnvBase):
         if compute_latents:
             tensordict = self.world_model(tensordict)
         return self.obs_decoder(tensordict)
+
+
+class DreamerDecoder(Transform):
+    """A transform to record the decoded observations in Dreamer.
+
+    Examples:
+        >>> model_based_env = DreamerEnv(...)
+        >>> model_based_env_eval = model_based_env.append_transform(DreamerDecoder())
+    """
+
+    def _call(self, tensordict):
+        return self.parent.base_env.obs_decoder(tensordict)
+
+    def _reset(self, tensordict, tensordict_reset):
+        return self._call(tensordict_reset)
+
+    def transform_observation_spec(self, observation_spec):
+        return observation_spec
