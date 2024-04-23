@@ -1624,6 +1624,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             try:
                 # _ = getattr(self._dummy_env, attr)
                 if self.is_closed:
+                    self.start()
                     raise RuntimeError(
                         "Trying to access attributes of closed/non started "
                         "environments. Check that the batched environment "

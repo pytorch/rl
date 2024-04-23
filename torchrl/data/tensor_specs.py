@@ -31,7 +31,13 @@ from typing import (
 
 import numpy as np
 import torch
-from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase, unravel_key
+from tensordict import (
+    LazyStackedTensorDict,
+    NonTensorData,
+    TensorDict,
+    TensorDictBase,
+    unravel_key,
+)
 from tensordict.utils import _getitem_batch_size, NestedKey
 
 from torchrl._utils import get_binary_env_var
@@ -715,8 +721,9 @@ class TensorSpec:
         shape = torch.zeros(self.shape, device="meta").flatten(start_dim, end_dim).shape
         return self._reshape(shape)
 
+    @abc.abstractmethod
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
+        raise NotImplementedError(type(self))
 
     @abc.abstractmethod
     def is_in(self, val: torch.Tensor) -> bool:
@@ -1917,6 +1924,107 @@ def _is_nested_list(index, notuple=False):
     return False
 
 
+class NonTensorSpec(TensorSpec):
+    """A spec for non-tensor data."""
+
+    def __init__(
+        self,
+        shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
+        device: Optional[DEVICE_TYPING] = None,
+        dtype: torch.dtype | None = None,
+        **kwargs,
+    ):
+        if isinstance(shape, int):
+            shape = torch.Size([shape])
+
+        _, device = _default_dtype_and_device(None, device)
+        domain = None
+        super().__init__(
+            shape=shape, space=None, device=device, dtype=dtype, domain=domain, **kwargs
+        )
+
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> NonTensorSpec:
+        if isinstance(dest, torch.dtype):
+            dest_dtype = dest
+            dest_device = self.device
+        elif dest is None:
+            return self
+        else:
+            dest_dtype = self.dtype
+            dest_device = torch.device(dest)
+        if dest_device == self.device and dest_dtype == self.dtype:
+            return self
+        return self.__class__(shape=self.shape, device=dest_device, dtype=None)
+
+    def clone(self) -> NonTensorSpec:
+        return self.__class__(shape=self.shape, device=self.device, dtype=self.dtype)
+
+    def rand(self, shape):
+        return NonTensorData(data=None, shape=self.shape, device=self.device)
+
+    def zero(self, shape):
+        return NonTensorData(data=None, shape=self.shape, device=self.device)
+
+    def one(self, shape):
+        return NonTensorData(data=None, shape=self.shape, device=self.device)
+
+    def is_in(self, val: torch.Tensor) -> bool:
+        shape = torch.broadcast_shapes(self.shape, val.shape)
+        return (
+            isinstance(val, NonTensorData)
+            and val.shape == shape
+            and val.device == self.device
+            and val.dtype == self.dtype
+        )
+
+    def expand(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
+            shape = shape[0]
+        shape = torch.Size(shape)
+        if not all(
+            (old == 1) or (old == new)
+            for old, new in zip(self.shape, shape[-len(self.shape) :])
+        ):
+            raise ValueError(
+                f"The last elements of the expanded shape must match the current one. Got shape={shape} while self.shape={self.shape}."
+            )
+        return self.__class__(shape=shape, device=self.device, dtype=None)
+
+    def _reshape(self, shape):
+        return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
+
+    def _unflatten(self, dim, sizes):
+        shape = torch.zeros(self.shape, device="meta").unflatten(dim, sizes).shape
+        return self.__class__(
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+        )
+
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index."""
+        indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
+        return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
+
+    def unbind(self, dim: int):
+        orig_dim = dim
+        if dim < 0:
+            dim = len(self.shape) + dim
+        if dim < 0:
+            raise ValueError(
+                f"Cannot unbind along dim {orig_dim} with shape {self.shape}."
+            )
+        shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
+        return tuple(
+            self.__class__(
+                shape=shape,
+                device=self.device,
+                dtype=self.dtype,
+            )
+            for i in range(self.shape[dim])
+        )
+
+
 @dataclass(repr=False)
 class UnboundedContinuousTensorSpec(TensorSpec):
     """An unbounded continuous tensor spec.
@@ -1954,7 +2062,9 @@ class UnboundedContinuousTensorSpec(TensorSpec):
             shape=shape, space=box, device=device, dtype=dtype, domain=domain, **kwargs
         )
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+    def to(
+        self, dest: Union[torch.dtype, DEVICE_TYPING]
+    ) -> UnboundedContinuousTensorSpec:
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
@@ -1979,7 +2089,11 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         return torch.empty(shape, device=self.device, dtype=self.dtype).random_()
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return True
+        shape = torch.broadcast_shapes(self.shape, val.shape)
+        return val.shape == shape and val.dtype == self.dtype
+
+    def _project(self, val: torch.Tensor) -> torch.Tensor:
+        return torch.as_tensor(val, dtype=self.dtype).reshape(self.shape)
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
@@ -2130,7 +2244,8 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         return r.to(self.device)
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return True
+        shape = torch.broadcast_shapes(self.shape, val.shape)
+        return val.shape == shape and val.dtype == self.dtype
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
