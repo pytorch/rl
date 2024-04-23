@@ -26,9 +26,9 @@ logger:
   group_name: null
   exp_name: cql_${env.name}
   log_interval: 5000 # record interval in frames
-  eval_steps: 1000
   mode: online
-  eval_iter: 1000
+  eval_steps: 1000
+  video: False
 
 # Buffer
 replay_buffer:
@@ -39,7 +39,7 @@ replay_buffer:
 # Optimization
 optim:
   utd_ratio: 1
-  device: cuda:0
+  device: null
   actor_lr: 3e-4
   critic_lr: 3e-4
   weight_decay: 0.0

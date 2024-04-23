@@ -9,6 +9,7 @@ results from Schulman et al. 2017 for the on MuJoCo Environments.
 """
 import hydra
 from torchrl._utils import logger as torchrl_logger
+from torchrl.record import VideoRecorder
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
@@ -96,9 +97,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "group": cfg.logger.group_name,
             },
         )
+        logger_video = cfg.logger.video
+    else:
+        logger_video = False
 
     # Create test environment
-    test_env = make_env(cfg.env.env_name, device)
+    test_env = make_env(cfg.env.env_name, device, from_pixels=logger_video)
+    if logger_video:
+        test_env = test_env.append_transform(
+            VideoRecorder(logger, tag="rendering/test", in_keys=["pixels"])
+        )
     test_env.eval()
 
     # Main loop

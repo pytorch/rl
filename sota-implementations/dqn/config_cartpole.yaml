@@ -1,4 +1,4 @@
-device: cuda:0
+device: null
 
 # Environment
 env:
@@ -26,6 +26,7 @@ logger:
   exp_name: DQN
   test_interval: 50_000
   num_test_episodes: 5
+  video: False
 
 # Optim
 optim:

@@ -43,11 +43,11 @@ logger:
   project_name: torchrl_example_redq
   group_name: null
   exp_name: cheetah
-  record_video: 0
   record_interval: 10
   record_frames: 10000
   mode: online
   recorder_log_keys:
+  video: False
 
 optim:
   optimizer: adam

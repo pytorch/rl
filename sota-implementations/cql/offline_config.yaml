@@ -13,10 +13,12 @@ logger:
   project_name: torchrl_example_cql
   group_name: null
   exp_name: cql_${replay_buffer.dataset}
+  # eval iter in gradient steps
   eval_iter: 5000
   eval_steps: 1000
   mode: online
   eval_envs: 5
+  video: False
 
 # replay buffer
 replay_buffer:
@@ -25,7 +27,7 @@ replay_buffer:
 
 # optimization
 optim:
-  device: cuda:0
+  device: null
   actor_lr: 3e-4
   critic_lr: 3e-4
   weight_decay: 0.0

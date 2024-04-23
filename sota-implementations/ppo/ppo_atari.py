@@ -9,6 +9,7 @@ results from Schulman et al. 2017 for the on Atari Environments.
 """
 import hydra
 from torchrl._utils import logger as torchrl_logger
+from torchrl.record import VideoRecorder
 
 
 @hydra.main(config_path="", config_name="config_atari", version_base="1.1")
@@ -104,9 +105,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "group": cfg.logger.group_name,
             },
         )
+        logger_video = cfg.logger.video
+    else:
+        logger_video = False
 
     # Create test environment
     test_env = make_parallel_env(cfg.env.env_name, 1, device, is_test=True)
+    if logger_video:
+        test_env = test_env.append_transform(
+            VideoRecorder(logger, tag="rendering/test", in_keys=["pixels_int"])
+        )
     test_env.eval()
 
     # Main loop

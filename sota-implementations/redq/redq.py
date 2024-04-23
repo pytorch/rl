@@ -63,18 +63,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
         ]
     )
 
-    logger = get_logger(
-        logger_type=cfg.logger.backend,
-        logger_name="redq_logging",
-        experiment_name=exp_name,
-        wandb_kwargs={
-            "mode": cfg.logger.mode,
-            "config": dict(cfg),
-            "project": cfg.logger.project_name,
-            "group": cfg.logger.group_name,
-        },
-    )
-    video_tag = exp_name if cfg.logger.record_video else ""
+    if cfg.logger.backend:
+        logger = get_logger(
+            logger_type=cfg.logger.backend,
+            logger_name="redq_logging",
+            experiment_name=exp_name,
+            wandb_kwargs={
+                "mode": cfg.logger.mode,
+                "config": dict(cfg),
+                "project": cfg.logger.project_name,
+                "group": cfg.logger.group_name,
+            },
+        )
+    else:
+        logger = ""
 
     key, init_env_steps, stats = None, None, None
     if not cfg.env.vecnorm and cfg.env.norm_stats:
@@ -146,7 +148,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     recorder = transformed_env_constructor(
         cfg,
-        video_tag=video_tag,
+        video_tag="rendering/test",
         norm_obs_only=True,
         obs_norm_state_dict=obs_norm_state_dict,
         logger=logger,
@@ -162,8 +164,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         recorder.transform = create_env_fn.transform.clone()
     else:
         raise NotImplementedError(f"Unsupported env type {type(create_env_fn)}")
-    if logger is not None and video_tag:
-        recorder.insert_transform(0, VideoRecorder(logger=logger, tag=video_tag))
+    if logger is not None and cfg.logger.video:
+        recorder.insert_transform(0, VideoRecorder(logger=logger, tag="rendering/test"))
 
     # reset reward scaling
     for t in recorder.transform:

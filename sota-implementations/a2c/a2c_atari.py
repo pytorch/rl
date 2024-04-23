@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import hydra
 from torchrl._utils import logger as torchrl_logger
+from torchrl.record import VideoRecorder
 
 
 @hydra.main(config_path="", config_name="config_atari", version_base="1.1")
@@ -104,6 +105,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create test environment
     test_env = make_parallel_env(cfg.env.env_name, 1, device, is_test=True)
+    test_env.set_seed(0)
+    if cfg.logger.video:
+        test_env = test_env.insert_transform(
+            0,
+            VideoRecorder(
+                logger, tag=f"rendered/{cfg.env.env_name}", in_keys=["pixels"]
+            ),
+        )
     test_env.eval()
 
     # Main loop
