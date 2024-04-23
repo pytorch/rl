@@ -3506,18 +3506,20 @@ class DTypeCastTransform(Transform):
                     "or not passing any out_keys."
                 )
 
-            def func(item):
+            def func(name, item):
                 if item.dtype == self.dtype_in:
                     item = self._apply_transform(item)
-                return item
+                    tensordict.set(name, item)
 
-            tensordict = tensordict._fast_apply(func)
+            return tensordict._fast_apply(
+                func, named=True, nested_keys=True, filter_empty=True
+            )
         else:
             # we made sure that if in_keys is not None, out_keys is not None either
             for in_key, out_key in zip(in_keys, out_keys):
                 item = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(out_key, item)
-        return tensordict
+            return tensordict
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         in_keys_inv = self.in_keys_inv
@@ -5837,7 +5839,7 @@ class ExcludeTransform(Transform):
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         if not self.inverse:
-            return tensordict.exclude(*self.excluded_keys)
+            return tensordict_reset.exclude(*self.excluded_keys)
         return tensordict
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
