@@ -175,6 +175,7 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dr
   logger.video=True \
   logger.backend=csv \
   replay_buffer.buffer_size=120 \
+  replay_buffer.batch_size=24 \
   replay_buffer.batch_length=12 \
   networks.rssm_hidden_dim=17
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td3/td3.py \
@@ -228,6 +229,7 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dr
   logger.backend=csv \
   logger.video=True \
   replay_buffer.buffer_size=120 \
+  replay_buffer.batch_size=24 \
   replay_buffer.batch_length=12 \
   networks.rssm_hidden_dim=17
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/ddpg/ddpg.py \
