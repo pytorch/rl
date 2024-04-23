@@ -759,6 +759,8 @@ to always know what the latest available actions are. You can do this like so:
 Recorders
 ---------
 
+.. _Environment-Recorders:
+
 Recording data during environment rollout execution is crucial to keep an eye on the algorithm performance as well as
 reporting results after training.
 
@@ -809,6 +811,7 @@ Recorders are transforms that register data as they come in, for logging purpose
 
     TensorDictRecorder
     VideoRecorder
+    PixelRenderTransform
 
 
 Helpers
