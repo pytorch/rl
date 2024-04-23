@@ -1925,6 +1925,7 @@ def _is_nested_list(index, notuple=False):
 
 class NonTensorSpec(TensorSpec):
     """A spec for non-tensor data."""
+
     def __init__(
         self,
         shape: Union[torch.Size, int] = _DEFAULT_SHAPE,

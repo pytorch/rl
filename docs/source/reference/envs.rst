@@ -759,6 +759,46 @@ to always know what the latest available actions are. You can do this like so:
 Recorders
 ---------
 
+Recording data during environment rollout execution is crucial to keep an eye on the algorithm performance as well as
+reporting results after training.
+
+TorchRL offers several tools to interact with the environment output: first and foremost, a ``callback`` callable
+can be passed to the :meth:`~torchrl.envs.EnvBase.rollout` method. This function will be called upon the collected
+tensordict at each iteration of the rollout (if some iterations have to be skipped, an internal variable should be added
+to keep track of the call count within ``callback``).
+
+To save collected tensordicts on disk, the :class:`~torchrl.record.TensorDictRecorder` can be used.
+
+Recording videos
+~~~~~~~~~~~~~~~~
+
+Several backends offer the possibility of recording rendered images from the environment.
+If the pixels are already part of the environment output (e.g. Atari or other game simulators), a
+:class:`~torchrl.record.VideoRecorder` can be appended to the environment. This environment transform takes as input
+a logger capable of recording videos (e.g. :class:`~torchrl.record.loggers.CSVLogger`, :class:`~torchrl.record.loggers.WandbLogger`
+or :class:`~torchrl.record.loggers.TensorBoardLogger`) as well as a tag indicating where the video should be saved.
+For instance, to save mp4 videos on disk, one can use :class:`~torchrl.record.loggers.CSVLogger` with a `video_format="mp4"`
+argument.
+
+The :class:`~torchrl.record.VideoRecorder` transform can handle batched images and automatically detects numpy or PyTorch
+formatted images (WHC or CWH).
+
+    >>> logger = CSVLogger("dummy-exp", video_format="mp4")
+    >>> env = GymEnv("ALE/Pong-v5")
+    >>> env = env.append_transform(VideoRecorder(logger, tag="rendered", in_keys=["pixels"]))
+    >>> env.rollout(10)
+    >>> env.transform.dump()  # Save the video and clear cache
+
+Note that the cache of the transform will keep on growing until dump is called. It is the user responsibility to
+take care of calling dumpy when needed to avoid OOM issues.
+
+In some cases, creating a testing environment where images can be collected is tedious or expensive, or simply impossible
+(some libraries only allow one environment instance per workspace).
+In these cases, assuming that a `render` method is available in the environment, the :class:`~torchrl.record.PixelRenderTransform`
+can be used to call `render` on the parent environment and save the images in the rollout data stream.
+This class should only be used within the same process as the environment that is being rendered (remote calls to `render`
+are not allowed).
+
 .. currentmodule:: torchrl.record
 
 Recorders are transforms that register data as they come in, for logging purposes.

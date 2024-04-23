@@ -4,20 +4,18 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import importlib.util
 import os
 import os.path
 import pathlib
 import tempfile
-from sys import platform
 from time import sleep
 
 import pytest
-import tensordict.utils
 import torch
-import importlib.util
 from tensordict import MemoryMappedTensor
 
-from torchrl.envs import GymEnv, ParallelEnv, check_env_specs
+from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, _has_tv, MLFlowLogger
 from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
@@ -33,7 +31,11 @@ if _has_tb:
 if _has_mlflow:
     import mlflow
 
-_has_gym = importlib.util.find_spec("gym", None) is not None or importlib.util.find_spec("gymnasium", None) is not None
+_has_gym = (
+    importlib.util.find_spec("gym", None) is not None
+    or importlib.util.find_spec("gymnasium", None) is not None
+)
+
 
 @pytest.fixture
 def tb_logger(tmp_path_factory):
@@ -402,6 +404,7 @@ class TestMLFlowLogger:
         logger, client = mlflow_fixture
         logger.log_hparams(config)
 
+
 @pytest.mark.skipif(not _has_gym, reason="gym required to test rendering")
 class TestPixelRenderTransform:
     @pytest.mark.parametrize("parallel", [False, True])
@@ -411,20 +414,26 @@ class TestPixelRenderTransform:
             env = GymEnv("CartPole-v1", render_mode="rgb_array", device=None)
             env = env.append_transform(PixelRenderTransform(out_keys=in_key))
             return env
+
         if parallel:
             env = ParallelEnv(2, make_env, mp_start_method="spawn")
         else:
             env = make_env()
         logger = CSVLogger("dummy", log_dir=tmpdir)
         try:
-            env = env.append_transform(VideoRecorder(logger=logger, in_keys=[in_key], tag="pixels_record"))
+            env = env.append_transform(
+                VideoRecorder(logger=logger, in_keys=[in_key], tag="pixels_record")
+            )
             check_env_specs(env)
             env.rollout(10)
             env.transform.dump()
-            assert os.path.isfile(os.path.join(tmpdir, "dummy", "videos", "pixels_record_0.pt"))
+            assert os.path.isfile(
+                os.path.join(tmpdir, "dummy", "videos", "pixels_record_0.pt")
+            )
         finally:
             if not env.is_closed:
                 env.close()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
