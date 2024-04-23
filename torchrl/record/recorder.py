@@ -402,9 +402,10 @@ class PixelRenderTransform(Transform):
         >>> r = env.rollout(30)
         >>> env.transform[-1].dump()
 
-    The transform can be disabled using the :meth:`~.switch` method, which will turn the rendering on if it's off
-    or off if it's on (an argument can also be passed to control this behaviour). Since transforms are
-    :class:`~torch.nn.Module` instances, :meth:`~torch.nn.Module.apply` can be used to control this behaviour:
+    The transform can be disabled using the :meth:`~torchrl.record.PixelRenderTransform.switch` method, which will
+    turn the rendering on if it's off or off if it's on (an argument can also be passed to control this behaviour).
+    Since transforms are :class:`~torch.nn.Module` instances, :meth:`~torch.nn.Module.apply` can be used to control
+    this behaviour:
 
         >>> def switch(module):
         ...     if isinstance(module, PixelRenderTransform):
@@ -497,7 +498,14 @@ class PixelRenderTransform(Transform):
         return observation_spec
 
     def switch(self, mode: str | bool = None):
-        """Sets the transform on or off."""
+        """Sets the transform on or off.
+
+        Args:
+            mode (str or bool, optional): if provided, sets the switch to the desired mode.
+                ``"on"``, ``"off"``, ``True`` and ``False`` are accepted values.
+                By default, ``switch`` sets the mode to the opposite of the current one.
+
+        """
         if mode is None:
             mode = not self._enabled
         if not isinstance(mode, bool):
@@ -505,6 +513,11 @@ class PixelRenderTransform(Transform):
                 raise ValueError("mode must be either 'on' or 'off', or a boolean.")
             mode = mode == "on"
         self._enabled = mode
+
+    @property
+    def enabled(self) -> bool:
+        """Whether the recorder is enabled."""
+        return self._enabled
 
     def set_container(self, container: Union[Transform, EnvBase]) -> None:
         out = super().set_container(container)
