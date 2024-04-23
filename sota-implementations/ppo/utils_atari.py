@@ -204,7 +204,7 @@ def make_ppo_models(env_name):
 
 def dump_video(module):
     if isinstance(module, VideoRecorder):
-        dump_video.dump()
+        module.dump()
 
 
 def eval_model(actor, test_env, num_episodes=3):
