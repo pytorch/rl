@@ -3511,9 +3511,10 @@ class DTypeCastTransform(Transform):
                     item = self._apply_transform(item)
                     tensordict.set(name, item)
 
-            return tensordict._fast_apply(
+            tensordict._fast_apply(
                 func, named=True, nested_keys=True, filter_empty=True
             )
+            return tensordict
         else:
             # we made sure that if in_keys is not None, out_keys is not None either
             for in_key, out_key in zip(in_keys, out_keys):
