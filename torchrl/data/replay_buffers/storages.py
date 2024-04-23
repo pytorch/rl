@@ -1323,8 +1323,14 @@ def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
 
 
 def _collate_list_tensordict(x):
-    out = LazyStackedTensorDict.maybe_dense_stack(x, 0)
+    out = torch.stack(x, 0)
     return out
+
+
+def _stack_anything(x):
+    if is_tensor_collection(x[0]):
+        return LazyStackedTensorDict.maybe_dense_stack(x)
+    return torch.stack(x)
 
 
 def _collate_id(x):

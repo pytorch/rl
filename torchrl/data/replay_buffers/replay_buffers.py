@@ -39,6 +39,7 @@ from torchrl.data.replay_buffers.samplers import (
 )
 from torchrl.data.replay_buffers.storages import (
     _get_default_collate,
+    _stack_anything,
     ListStorage,
     Storage,
     StorageEnsemble,
@@ -1541,8 +1542,10 @@ class ReplayBufferEnsemble(ReplayBuffer):
         num_buffer_sampled: int | None = None,
         **kwargs,
     ):
+
         if collate_fn is None:
-            collate_fn = LazyStackedTensorDict.maybe_dense_stack
+            collate_fn = _stack_anything
+
         if rbs:
             if storages is not None or samplers is not None or writers is not None:
                 raise RuntimeError
