@@ -974,14 +974,18 @@ class _LazyStackedMixin(Generic[T]):
             dim = self.dim + len(shape)
         else:
             dim = self.dim
-        return LazyStackedTensorDict.maybe_dense_stack([spec.zero(shape) for spec in self._specs], dim)
+        return LazyStackedTensorDict.maybe_dense_stack(
+            [spec.zero(shape) for spec in self._specs], dim
+        )
 
     def rand(self, shape=None) -> TensorDictBase:
         if shape is not None:
             dim = self.dim + len(shape)
         else:
             dim = self.dim
-        return LazyStackedTensorDict.maybe_dense_stack([spec.rand(shape) for spec in self._specs], dim)
+        return LazyStackedTensorDict.maybe_dense_stack(
+            [spec.rand(shape) for spec in self._specs], dim
+        )
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> T:
         if dest is None:
