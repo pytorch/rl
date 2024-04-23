@@ -23,6 +23,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
+    dump_video,
     log_metrics,
     make_collector,
     make_environment,
@@ -58,7 +59,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     np.random.seed(cfg.env.seed)
 
     # Create environments
-    train_env, eval_env = make_environment(cfg)
+    train_env, eval_env = make_environment(cfg, logger=logger)
 
     # Create agent
     model, exploration_policy = make_td3_agent(cfg, train_env, eval_env, device)
@@ -196,6 +197,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     auto_cast_to_device=True,
                     break_when_any_done=True,
                 )
+                eval_env.apply(dump_video)
                 eval_time = time.time() - eval_start
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 metrics_to_log["eval/reward"] = eval_reward
