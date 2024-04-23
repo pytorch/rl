@@ -76,7 +76,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             },
         )
     else:
-        logger = ""
+        logger = None
 
     key, init_env_steps, stats = None, None, None
     if not cfg.env.vecnorm and cfg.env.norm_stats:
@@ -174,14 +174,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
             t.loc.fill_(0.0)
 
     trainer = make_trainer(
-        collector,
-        loss_module,
-        recorder,
-        target_net_updater,
-        actor_model_explore,
-        replay_buffer,
-        logger,
-        cfg,
+        collector=collector,
+        loss_module=loss_module,
+        recorder=recorder,
+        target_net_updater=target_net_updater,
+        policy_exploration=actor_model_explore,
+        replay_buffer=replay_buffer,
+        logger=logger,
+        cfg=cfg,
     )
 
     trainer.train()

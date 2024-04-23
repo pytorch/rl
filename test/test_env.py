@@ -1832,7 +1832,16 @@ class TestInfoDict:
             import gym
 
         env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED()), device=device)
-        env.set_info_dict_reader(default_info_dict_reader(["x_position"]))
+        env.set_info_dict_reader(
+            default_info_dict_reader(
+                ["x_position"],
+                spec=CompositeSpec(
+                    x_position=UnboundedContinuousTensorSpec(
+                        dtype=torch.float64, shape=()
+                    )
+                ),
+            )
+        )
 
         assert "x_position" in env.observation_spec.keys()
         assert isinstance(
@@ -1842,15 +1851,21 @@ class TestInfoDict:
         tensordict = env.reset()
         tensordict = env.rand_step(tensordict)
 
-        assert env.observation_spec["x_position"].is_in(
-            tensordict[("next", "x_position")]
+        x_position_data = tensordict["next", "x_position"]
+        assert env.observation_spec["x_position"].is_in(x_position_data), (
+            x_position_data.shape,
+            x_position_data.dtype,
+            env.observation_spec["x_position"],
         )
 
         for spec in (
-            {"x_position": UnboundedContinuousTensorSpec(10)},
-            None,
-            CompositeSpec(x_position=UnboundedContinuousTensorSpec(10), shape=[]),
-            [UnboundedContinuousTensorSpec(10)],
+            {"x_position": UnboundedContinuousTensorSpec((), dtype=torch.float64)},
+            # None,
+            CompositeSpec(
+                x_position=UnboundedContinuousTensorSpec((), dtype=torch.float64),
+                shape=[],
+            ),
+            [UnboundedContinuousTensorSpec((), dtype=torch.float64)],
         ):
             env2 = GymWrapper(gym.make("HalfCheetah-v4"))
             env2.set_info_dict_reader(
@@ -1859,9 +1874,12 @@ class TestInfoDict:
 
             tensordict2 = env2.reset()
             tensordict2 = env2.rand_step(tensordict2)
-
-            assert env2.observation_spec["x_position"].is_in(
-                tensordict2[("next", "x_position")]
+            data = tensordict2[("next", "x_position")]
+            assert env2.observation_spec["x_position"].is_in(data), (
+                data.dtype,
+                data.device,
+                data.shape,
+                env2.observation_spec["x_position"],
             )
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")

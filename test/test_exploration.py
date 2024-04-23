@@ -254,7 +254,11 @@ class TestOrnsteinUhlenbeckProcessWrapper:
         out_noexp = []
         out = []
         for i in range(n_steps):
-            tensordict_noexp = policy(tensordict.clone())
+            tensordict_noexp = policy(
+                tensordict.clone().exclude(
+                    *(key for key in tensordict.keys() if key.startswith("_"))
+                )
+            )
             tensordict = exploratory_policy(tensordict.clone())
             if i == 0:
                 assert (tensordict[exploratory_policy.ou.steps_key] == 1).all()

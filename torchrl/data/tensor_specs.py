@@ -974,14 +974,18 @@ class _LazyStackedMixin(Generic[T]):
             dim = self.dim + len(shape)
         else:
             dim = self.dim
-        return torch.stack([spec.zero(shape) for spec in self._specs], dim)
+        return LazyStackedTensorDict.maybe_dense_stack(
+            [spec.zero(shape) for spec in self._specs], dim
+        )
 
     def rand(self, shape=None) -> TensorDictBase:
         if shape is not None:
             dim = self.dim + len(shape)
         else:
             dim = self.dim
-        return torch.stack([spec.rand(shape) for spec in self._specs], dim)
+        return LazyStackedTensorDict.maybe_dense_stack(
+            [spec.rand(shape) for spec in self._specs], dim
+        )
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> T:
         if dest is None:
@@ -4344,7 +4348,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
                 vals.append(spec.project(subval))
             else:
                 vals.append(subval)
-        res = torch.stack(vals, dim=self.dim)
+        res = LazyStackedTensorDict.maybe_dense_stack(vals, dim=self.dim)
         if not isinstance(val, LazyStackedTensorDict):
             res = res.to_tensordict()
         return res

@@ -193,7 +193,6 @@ class _StepMDP:
             expected = set(expected)
             self.validated = expected.intersection(actual) == expected
             if not self.validated:
-                raise RuntimeError
                 warnings.warn(
                     "The expected key set and actual key set differ. "
                     "This will work but with a slower throughput than "
