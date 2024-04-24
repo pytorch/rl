@@ -86,9 +86,14 @@ class IsaacGymWrapper(GymWrapper):
 
     def _output_transform(self, output):
         obs, reward, done, info = output
+        if self.from_pixels:
+            obs["pixels"] = self._env.render(mode='rgb_array')
         return obs, reward, done ^ done, done, done, info
 
     def _reset_output_transform(self, reset_data):
+        reset_data.pop("reward", None)
+        if self.from_pixels:
+            reset_data["pixels"] = self._env.render(mode='rgb_array')
         return reset_data, {}
 
     @classmethod
@@ -187,6 +192,7 @@ class IsaacGymEnv(IsaacGymWrapper):
             raise RuntimeError("Cannot provide both `task` and `env` arguments.")
         elif env is not None:
             task = env
-        envs = self._make_envs(task=task, num_envs=num_envs, device=device, **kwargs)
+        from_pixels = kwargs.pop("from_pixels", False)
+        envs = self._make_envs(task=task, num_envs=num_envs, device=device, virtual_screen_capture=True, **kwargs)
         self.task = task
-        super().__init__(envs, **kwargs)
+        super().__init__(envs, from_pixels=from_pixels, **kwargs)
