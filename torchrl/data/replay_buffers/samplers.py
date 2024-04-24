@@ -900,13 +900,17 @@ class SliceSampler(Sampler):
         # to another). We roll this one step along the time dimension and these two
         # masks provide us with the indices of the permutation matrix we need
         # to apply to start_idx.
-        start_idx_mask = (start_idx[1:, 1:] == start_idx[:-1, 1:]).all(-1)
-        m1 = torch.cat([torch.zeros_like(start_idx_mask[:1]), start_idx_mask])
-        m2 = torch.cat([start_idx_mask, torch.zeros_like(start_idx_mask[:1])])
-        start_idx_replace = torch.empty_like(start_idx)
-        start_idx_replace[m1] = start_idx[m2]
-        start_idx_replace[~m1] = start_idx[~m2]
-        start_idx = start_idx_replace
+        if start_idx.shape[0] > 1:
+            start_idx_mask = (start_idx[1:, 1:] == start_idx[:-1, 1:]).all(-1)
+            m1 = torch.cat([torch.zeros_like(start_idx_mask[:1]), start_idx_mask])
+            m2 = torch.cat([start_idx_mask, torch.zeros_like(start_idx_mask[:1])])
+            start_idx_replace = torch.empty_like(start_idx)
+            start_idx_replace[m1] = start_idx[m2]
+            start_idx_replace[~m1] = start_idx[~m2]
+            start_idx = start_idx_replace
+        else:
+            # In this case we have only one start and stop has already been set
+            pass
         lengths = stop_idx[:, 0] - start_idx[:, 0] + 1
         lengths[lengths < 0] = lengths[lengths < 0] + length
         return start_idx, stop_idx, lengths

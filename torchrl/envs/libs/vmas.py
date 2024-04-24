@@ -9,7 +9,7 @@ import importlib.util
 from typing import Dict, List, Optional, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
@@ -506,7 +506,7 @@ class VmasWrapper(_EnvWrapper):
                     agent_td.set("info", agent_info)
                 agent_tds.append(agent_td)
 
-            agent_tds = torch.stack(agent_tds, dim=1)
+            agent_tds = LazyStackedTensorDict.maybe_dense_stack(agent_tds, dim=1)
             if not self.het_specs_map[group]:
                 agent_tds = agent_tds.to_tensordict()
             source.update({group: agent_tds})
@@ -564,7 +564,7 @@ class VmasWrapper(_EnvWrapper):
                     agent_td.set("info", agent_info)
                 agent_tds.append(agent_td)
 
-            agent_tds = torch.stack(agent_tds, dim=1)
+            agent_tds = LazyStackedTensorDict.maybe_dense_stack(agent_tds, dim=1)
             if not self.het_specs_map[group]:
                 agent_tds = agent_tds.to_tensordict()
             source.update({group: agent_tds})
