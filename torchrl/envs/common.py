@@ -2980,7 +2980,6 @@ class _EnvWrapper(EnvBase):
     def __init__(
         self,
         *args,
-        dtype: Optional[np.dtype] = None,
         device: DEVICE_TYPING = NO_DEFAULT,
         batch_size: Optional[torch.Size] = None,
         allow_done_after_reset: bool = False,
@@ -2998,7 +2997,6 @@ class _EnvWrapper(EnvBase):
             device = torch.device("cpu")
         super().__init__(
             device=device,
-            dtype=dtype,
             batch_size=batch_size,
             allow_done_after_reset=allow_done_after_reset,
         )
