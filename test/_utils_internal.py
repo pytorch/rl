@@ -18,6 +18,7 @@ import torch
 import torch.cuda
 
 from tensordict import tensorclass, TensorDict
+from torch import nn
 from torchrl._utils import implement_for, logger as torchrl_logger, seed_generator
 from torchrl.data.utils import CloudpickleWrapper
 
@@ -34,6 +35,8 @@ from torchrl.envs.transforms import (
 
 # Specified for test_utils.py
 __version__ = "0.3"
+
+from torchrl.modules import MLP
 
 
 def CARTPOLE_VERSIONED():
@@ -498,3 +501,155 @@ def decorate_thread_sub_func(func, num_threads):
         return func(*args, **kwargs)
 
     return CloudpickleWrapper(new_func)
+
+
+class LSTMNet(nn.Module):
+    """An embedder for an LSTM preceded by an MLP.
+
+    The forward method returns the hidden states of the current state
+    (input hidden states) and the output, as
+    the environment returns the 'observation' and 'next_observation'.
+
+    Because the LSTM kernel only returns the last hidden state, hidden states
+    are padded with zeros such that they have the right size to be stored in a
+    TensorDict of size [batch x time_steps].
+
+    If a 2D tensor is provided as input, it is assumed that it is a batch of data
+    with only one time step. This means that we explicitely assume that users will
+    unsqueeze inputs of a single batch with multiple time steps.
+
+    Args:
+        out_features (int): number of output features.
+        lstm_kwargs (dict): the keyword arguments for the
+            :class:`~torch.nn.LSTM` layer.
+        mlp_kwargs (dict): the keyword arguments for the
+            :class:`~torchrl.modules.MLP` layer.
+        device (torch.device, optional): the device where the module should
+            be instantiated.
+
+    Keyword Args:
+        lstm_backend (str, optional): one of ``"torchrl"`` or ``"torch"`` that
+            indeicates where the LSTM class is to be retrieved. The ``"torchrl"``
+            backend (:class:`~torchrl.modules.LSTM`) is slower but works with
+            :func:`~torch.vmap` and should work with :func:`~torch.compile`.
+            Defaults to ``"torch"``.
+
+    Examples:
+        >>> batch = 7
+        >>> time_steps = 6
+        >>> in_features = 4
+        >>> out_features = 10
+        >>> hidden_size = 5
+        >>> net = LSTMNet(
+        ...     out_features,
+        ...     {"input_size": hidden_size, "hidden_size": hidden_size},
+        ...     {"out_features": hidden_size},
+        ... )
+        >>> # test single step vs multi-step
+        >>> x = torch.randn(batch, time_steps, in_features)  # >3 dims = multi-step
+        >>> y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(x)
+        >>> x = torch.randn(batch, in_features)  # 2 dims = single step
+        >>> y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(x)
+
+    """
+
+    def __init__(
+        self,
+        out_features: int,
+        lstm_kwargs,
+        mlp_kwargs,
+        device=None,
+        *,
+        lstm_backend: str | None = None,
+    ) -> None:
+        super().__init__()
+        lstm_kwargs.update({"batch_first": True})
+        self.mlp = MLP(device=device, **mlp_kwargs)
+        if lstm_backend is None:
+            lstm_backend = "torch"
+        self.lstm_backend = lstm_backend
+        if self.lstm_backend == "torch":
+            LSTM = nn.LSTM
+        else:
+            from torchrl.modules.tensordict_module.rnn import LSTM
+        self.lstm = LSTM(device=device, **lstm_kwargs)
+        self.linear = nn.LazyLinear(out_features, device=device)
+
+    def _lstm(
+        self,
+        input: torch.Tensor,
+        hidden0_in: torch.Tensor | None = None,
+        hidden1_in: torch.Tensor | None = None,
+    ):
+        squeeze0 = False
+        squeeze1 = False
+        if input.ndimension() == 1:
+            squeeze0 = True
+            input = input.unsqueeze(0).contiguous()
+
+        if input.ndimension() == 2:
+            squeeze1 = True
+            input = input.unsqueeze(1).contiguous()
+        batch, steps = input.shape[:2]
+
+        if hidden1_in is None and hidden0_in is None:
+            shape = (batch, steps) if not squeeze1 else (batch,)
+            hidden0_in, hidden1_in = [
+                torch.zeros(
+                    *shape,
+                    self.lstm.num_layers,
+                    self.lstm.hidden_size,
+                    device=input.device,
+                    dtype=input.dtype,
+                )
+                for _ in range(2)
+            ]
+        elif hidden1_in is None or hidden0_in is None:
+            raise RuntimeError(
+                f"got type(hidden0)={type(hidden0_in)} and type(hidden1)={type(hidden1_in)}"
+            )
+        elif squeeze0:
+            hidden0_in = hidden0_in.unsqueeze(0)
+            hidden1_in = hidden1_in.unsqueeze(0)
+
+        # we only need the first hidden state
+        if not squeeze1:
+            _hidden0_in = hidden0_in[:, 0]
+            _hidden1_in = hidden1_in[:, 0]
+        else:
+            _hidden0_in = hidden0_in
+            _hidden1_in = hidden1_in
+        hidden = (
+            _hidden0_in.transpose(-3, -2).contiguous(),
+            _hidden1_in.transpose(-3, -2).contiguous(),
+        )
+
+        y0, hidden = self.lstm(input, hidden)
+        # dim 0 in hidden is num_layers, but that will conflict with tensordict
+        hidden = tuple(_h.transpose(0, 1) for _h in hidden)
+        y = self.linear(y0)
+
+        out = [y, hidden0_in, hidden1_in, *hidden]
+        if squeeze1:
+            # squeezes time
+            out[0] = out[0].squeeze(1)
+        if not squeeze1:
+            # we pad the hidden states with zero to make tensordict happy
+            for i in range(3, 5):
+                out[i] = torch.stack(
+                    [torch.zeros_like(out[i]) for _ in range(input.shape[1] - 1)]
+                    + [out[i]],
+                    1,
+                )
+        if squeeze0:
+            out = [_out.squeeze(0) for _out in out]
+        return tuple(out)
+
+    def forward(
+        self,
+        input: torch.Tensor,
+        hidden0_in: torch.Tensor | None = None,
+        hidden1_in: torch.Tensor | None = None,
+    ):
+        input = self.mlp(input)
+        return self._lstm(input, hidden0_in, hidden1_in)

@@ -24,21 +24,13 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.memmap import MemmapTensor, MemoryMappedTensor
+from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
-
 from torch.utils._pytree import LeafSpec, tree_flatten, tree_map, tree_unflatten
 
-from torchrl._utils import _CKPT_BACKEND, implement_for, logger as torchrl_logger
+from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.utils import _is_int, INT_CLASSES
-
-try:
-    from torchsnapshot.serialization import tensor_from_memoryview
-
-    _has_ts = True
-except ImportError:
-    _has_ts = False
 
 SINGLE_TENSOR_BUFFER_NAME = os.environ.get(
     "SINGLE_TENSOR_BUFFER_NAME", "_-single-tensor-_"
@@ -1093,11 +1085,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         if self.device == "auto":
             self.device = data.device
         if self.device.type != "cpu":
-            warnings.warn(
-                "Support for Memmap device other than CPU will be deprecated in v0.4.0. "
-                "Using a 'cuda' device may be suboptimal.",
-                category=DeprecationWarning,
-            )
+            raise RuntimeError("Support for Memmap device other than CPU is deprecated")
 
         def max_size_along_dim0(data_shape):
             if self.ndim > 1:
@@ -1128,17 +1116,7 @@ class LazyMemmapStorage(LazyTensorStorage):
 
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         result = super().get(index)
-
-        # to be deprecated in v0.4
-        def map_device(tensor):
-            if tensor.device != self.device:
-                return tensor.to(self.device, non_blocking=False)
-            return tensor
-
-        if is_tensor_collection(result):
-            return map_device(result)
-        else:
-            return tree_map(map_device, result)
+        return result
 
 
 class StorageEnsemble(Storage):
@@ -1301,25 +1279,10 @@ class StorageEnsemble(Storage):
 
 
 # Utils
-def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
-    if _CKPT_BACKEND == "torchsnapshot" and not _has_ts:
-        raise ImportError(
-            "the checkpointing backend is set to torchsnapshot but the library is not installed. Consider installing the library or switch to another backend. "
-            f"Supported backends are {_CKPT_BACKEND.backends}"
-        )
+def _mem_map_tensor_as_tensor(mem_map_tensor) -> torch.Tensor:
     if isinstance(mem_map_tensor, torch.Tensor):
         # This will account for MemoryMappedTensors
         return mem_map_tensor
-    if _CKPT_BACKEND == "torchsnapshot":
-        # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor
-        # as a Tensor for saving and loading purposes. This doesn't incur any copy.
-        return tensor_from_memoryview(
-            dtype=mem_map_tensor.dtype,
-            shape=list(mem_map_tensor.shape),
-            mv=memoryview(mem_map_tensor._memmap_array),
-        )
-    elif _CKPT_BACKEND == "torch":
-        return mem_map_tensor._tensor
 
 
 def _collate_list_tensordict(x):

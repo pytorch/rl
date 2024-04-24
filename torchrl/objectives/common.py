@@ -217,12 +217,6 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 will carry gradients as expected.
 
         """
-        if kwargs.pop("funs_to_decorate", None) is not None:
-            warnings.warn(
-                "funs_to_decorate is without effect with the new objective API. This "
-                "warning will be replaced by an error in v0.4.0.",
-                category=DeprecationWarning,
-            )
         if kwargs:
             raise TypeError(f"Unrecognised keyword arguments {list(kwargs.keys())}")
         # To make it robust to device casting, we must register list of

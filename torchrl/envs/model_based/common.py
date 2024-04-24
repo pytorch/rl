@@ -5,9 +5,8 @@
 
 import abc
 import warnings
-from typing import List, Optional, Union
+from typing import List, Optional
 
-import numpy as np
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
@@ -117,13 +116,11 @@ class ModelBasedEnvBase(EnvBase):
         params: Optional[List[torch.Tensor]] = None,
         buffers: Optional[List[torch.Tensor]] = None,
         device: DEVICE_TYPING = "cpu",
-        dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
     ):
         super(ModelBasedEnvBase, self).__init__(
             device=device,
-            dtype=dtype,
             batch_size=batch_size,
             run_type_checks=run_type_checks,
         )

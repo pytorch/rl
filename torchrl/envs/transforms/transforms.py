@@ -236,10 +236,6 @@ class Transform(nn.Module):
             value = [unravel_key(val) for val in value]
         self._out_keys_inv = value
 
-    def reset(self, tensordict):
-        warnings.warn("Transform.reset public method will be derpecated in v0.4.0.")
-        return self._reset(tensordict, tensordict_reset=tensordict)
-
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
@@ -2836,13 +2832,7 @@ class CatFrames(ObservationTransform):
         if padding not in self.ACCEPTED_PADDING:
             raise ValueError(f"padding must be one of {self.ACCEPTED_PADDING}")
         if padding == "zeros":
-            warnings.warn(
-                "Padding option 'zeros' will be deprecated in v0.4.0. "
-                "Please use 'constant' padding with padding_value 0 instead.",
-                category=DeprecationWarning,
-            )
-            padding = "constant"
-            padding_value = 0
+            raise RuntimeError("Padding option 'zeros' will is deprecated")
         self.padding = padding
         self.padding_value = padding_value
         for in_key in self.in_keys:

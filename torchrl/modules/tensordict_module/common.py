@@ -9,7 +9,6 @@ import importlib.util
 import inspect
 import re
 import warnings
-from numbers import Number
 from typing import Iterable, List, Optional, Type, Union
 
 import torch
@@ -503,19 +502,8 @@ class DistributionalDQNnet(TensorDictModuleBase):
         "instead."
     )
 
-    def __init__(self, *, in_keys=None, out_keys=None, DQNet: nn.Module = None):
+    def __init__(self, *, in_keys=None, out_keys=None):
         super().__init__()
-        if DQNet is not None:
-            warnings.warn(
-                f"Passing a network to {type(self)} is going to be deprecated in v0.4.0.",
-                category=DeprecationWarning,
-            )
-            if not (
-                not isinstance(DQNet.out_features, Number)
-                and len(DQNet.out_features) > 1
-            ):
-                raise RuntimeError(self._wrong_out_feature_dims_error)
-        self.dqn = DQNet
         if in_keys is None:
             in_keys = ["action_value"]
         if out_keys is None:
@@ -527,8 +515,6 @@ class DistributionalDQNnet(TensorDictModuleBase):
     def forward(self, tensordict):
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             q_values = tensordict.get(in_key)
-            if self.dqn is not None:
-                q_values = self.dqn(q_values)
             if q_values.ndimension() < 2:
                 raise RuntimeError(
                     self._wrong_out_feature_dims_error.format(q_values.shape)

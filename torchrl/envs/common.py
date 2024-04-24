@@ -9,7 +9,7 @@ import abc
 import functools
 import warnings
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -202,7 +202,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             on that device and it is expected that all inputs and outputs will
             live on that device.
             Defaults to ``None``.
-        dtype (deprecated): dtype of the observations. Will be deprecated in v0.4.
         batch_size (torch.Size or equivalent, optional): batch-size of the environment.
             Corresponds to the leading dimension of all the input and output
             tensordicts the environment reads and writes. Defaults to an empty batch-size.
@@ -341,7 +340,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self,
         *,
         device: DEVICE_TYPING = None,
-        dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
         allow_done_after_reset: bool = False,
@@ -365,7 +363,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 )
 
         super().__init__()
-        self.dtype = dtype_map.get(dtype, dtype)
         if "is_closed" not in self.__dir__():
             self.is_closed = True
         if batch_size is not None:
@@ -2983,7 +2980,6 @@ class _EnvWrapper(EnvBase):
     def __init__(
         self,
         *args,
-        dtype: Optional[np.dtype] = None,
         device: DEVICE_TYPING = NO_DEFAULT,
         batch_size: Optional[torch.Size] = None,
         allow_done_after_reset: bool = False,
@@ -3001,7 +2997,6 @@ class _EnvWrapper(EnvBase):
             device = torch.device("cpu")
         super().__init__(
             device=device,
-            dtype=dtype,
             batch_size=batch_size,
             allow_done_after_reset=allow_done_after_reset,
         )
