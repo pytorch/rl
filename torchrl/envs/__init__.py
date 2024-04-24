@@ -20,6 +20,8 @@ from .libs import (
     IsaacGymWrapper,
     JumanjiEnv,
     JumanjiWrapper,
+    MeltingpotEnv,
+    MeltingpotWrapper,
     MOGymEnv,
     MOGymWrapper,
     MultiThreadedEnv,
@@ -34,7 +36,7 @@ from .libs import (
     VmasEnv,
     VmasWrapper,
 )
-from .model_based import ModelBasedEnvBase
+from .model_based import DreamerDecoder, DreamerEnv, ModelBasedEnvBase
 from .transforms import (
     ActionMask,
     AutoResetEnv,

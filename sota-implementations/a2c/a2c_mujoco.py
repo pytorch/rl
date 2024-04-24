@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import hydra
 from torchrl._utils import logger as torchrl_logger
+from torchrl.record import VideoRecorder
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
@@ -89,7 +90,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     # Create test environment
-    test_env = make_env(cfg.env.env_name, device)
+    test_env = make_env(cfg.env.env_name, device, from_pixels=cfg.logger.video)
+    test_env.set_seed(0)
+    if cfg.logger.video:
+        test_env = test_env.insert_transform(
+            0,
+            VideoRecorder(
+                logger, tag=f"rendered/{cfg.env.env_name}", in_keys=["pixels"]
+            ),
+        )
     test_env.eval()
 
     # Main loop
@@ -178,9 +187,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Get test rewards
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if ((i - 1) * frames_in_batch) // cfg.logger.test_interval < (
-                i * frames_in_batch
-            ) // cfg.logger.test_interval:
+            prev_test_frame = ((i - 1) * frames_in_batch) // cfg.logger.test_interval
+            cur_test_frame = (i * frames_in_batch) // cfg.logger.test_interval
+            final = collected_frames >= collector.total_frames
+            if prev_test_frame < cur_test_frame or final:
                 actor.eval()
                 eval_start = time.time()
                 test_rewards = eval_model(

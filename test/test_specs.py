@@ -23,6 +23,7 @@ from torchrl.data.tensor_specs import (
     LazyStackedCompositeSpec,
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
+    NonTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
@@ -1462,6 +1463,14 @@ class TestExpand:
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
 
+    def test_non_tensor(self):
+        spec = NonTensorSpec((3, 4), device="cpu")
+        assert (
+            spec.expand(2, 3, 4)
+            == spec.expand((2, 3, 4))
+            == NonTensorSpec((2, 3, 4), device="cpu")
+        )
+
     @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_onehot(self, shape1, shape2):
@@ -1675,6 +1684,11 @@ class TestClone:
         assert spec == spec.clone()
         assert spec is not spec.clone()
 
+    def test_non_tensor(self):
+        spec = NonTensorSpec(shape=(3, 4), device="cpu")
+        assert spec.clone() == spec
+        assert spec.clone() is not spec
+
     @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_onehot(
         self,
@@ -1839,6 +1853,11 @@ class TestUnbind:
         assert spec == torch.stack(spec.unbind(0), 0)
         with pytest.raises(ValueError):
             spec.unbind(-1)
+
+    def test_non_tensor(self):
+        spec = NonTensorSpec(shape=(3, 4), device="cpu")
+        assert spec.unbind(1)[0] == spec[:, 0]
+        assert spec.unbind(1)[0] is not spec[:, 0]
 
     @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_onehot(
@@ -2113,6 +2132,15 @@ class TestStack:
         c = torch.stack([c1, c2], 0)
         r = c.zero()
         assert r.shape == c.shape
+
+    def test_stack_non_tensor(self, shape, stack_dim):
+        spec0 = NonTensorSpec(shape=shape, device="cpu")
+        spec1 = NonTensorSpec(shape=shape, device="cpu")
+        new_spec = torch.stack([spec0, spec1], stack_dim)
+        shape_insert = list(shape)
+        shape_insert.insert(stack_dim, 2)
+        assert new_spec.shape == torch.Size(shape_insert)
+        assert new_spec.device == torch.device("cpu")
 
     def test_stack_onehot(self, shape, stack_dim):
         n = 5

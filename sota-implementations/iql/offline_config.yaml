@@ -17,6 +17,7 @@ logger:
   eval_steps: 1000
   mode: online
   eval_envs: 5
+  video: False
 
 # replay buffer
 replay_buffer:
@@ -25,7 +26,7 @@ replay_buffer:
 
 # optimization
 optim:
-  device: cuda:0
+  device: null
   lr: 3e-4
   weight_decay: 0.0
   gradient_steps: 50000

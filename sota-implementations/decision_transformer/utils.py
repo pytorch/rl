@@ -48,6 +48,7 @@ from torchrl.modules import (
 )
 
 from torchrl.objectives import DTLoss, OnlineDTLoss
+from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.envs import LIBS
 
@@ -56,7 +57,7 @@ from torchrl.trainers.helpers.envs import LIBS
 # -----------------
 
 
-def make_base_env(env_cfg):
+def make_base_env(env_cfg, from_pixels=False):
     set_gym_backend(env_cfg.backend).set()
 
     env_library = LIBS[env_cfg.library]
@@ -66,6 +67,8 @@ def make_base_env(env_cfg):
     env_kwargs = {
         "env_name": env_name,
         "frame_skip": frame_skip,
+        "from_pixels": from_pixels,
+        "pixels_only": False,
     }
     if env_library is DMControlEnv:
         env_task = env_cfg.task
@@ -131,7 +134,7 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
     return transformed_env
 
 
-def make_parallel_env(env_cfg, obs_loc, obs_std, train=False):
+def make_parallel_env(env_cfg, obs_loc, obs_std, train=False, from_pixels=False):
     if train:
         num_envs = env_cfg.num_train_envs
     else:
@@ -139,7 +142,7 @@ def make_parallel_env(env_cfg, obs_loc, obs_std, train=False):
 
     def make_env():
         with set_gym_backend(env_cfg.backend):
-            return make_base_env(env_cfg)
+            return make_base_env(env_cfg, from_pixels=from_pixels)
 
     env = make_transformed_env(
         ParallelEnv(num_envs, EnvCreator(make_env), serial_for_single=True),
@@ -151,8 +154,10 @@ def make_parallel_env(env_cfg, obs_loc, obs_std, train=False):
     return env
 
 
-def make_env(env_cfg, obs_loc, obs_std, train=False):
-    env = make_parallel_env(env_cfg, obs_loc, obs_std, train=train)
+def make_env(env_cfg, obs_loc, obs_std, train=False, from_pixels=False):
+    env = make_parallel_env(
+        env_cfg, obs_loc, obs_std, train=train, from_pixels=from_pixels
+    )
     return env
 
 
@@ -517,3 +522,8 @@ def make_logger(cfg):
 def log_metrics(logger, metrics, step):
     for metric_name, metric_value in metrics.items():
         logger.log_scalar(metric_name, metric_value, step)
+
+
+def dump_video(module):
+    if isinstance(module, VideoRecorder):
+        module.dump()

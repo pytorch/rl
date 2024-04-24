@@ -6,14 +6,20 @@ from __future__ import annotations
 
 import importlib.util
 from copy import copy
-from typing import Optional, Sequence
+from typing import Callable, List, Optional, Sequence, Union
 
+import numpy as np
 import torch
 
-from tensordict import TensorDictBase
+from tensordict import NonTensorData, TensorDict, TensorDictBase
 
 from tensordict.utils import NestedKey
 
+from torchrl._utils import _can_be_pickled
+from torchrl.data import TensorSpec
+from torchrl.data.tensor_specs import NonTensorSpec, UnboundedContinuousTensorSpec
+from torchrl.data.utils import CloudpickleWrapper
+from torchrl.envs import EnvBase
 from torchrl.envs.transforms import ObservationTransform, Transform
 from torchrl.record.loggers import Logger
 
@@ -155,20 +161,22 @@ class VideoRecorder(ObservationTransform):
         self._skip = value
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        if isinstance(observation, NonTensorData):
+            observation_trsf = torch.tensor(observation.data)
+        else:
+            observation_trsf = observation
         self.count += 1
         if self.count % self.skip == 0:
             if (
-                observation.ndim >= 3
-                and observation.shape[-3] == 3
-                and observation.shape[-2] > 3
-                and observation.shape[-1] > 3
+                observation_trsf.ndim >= 3
+                and observation_trsf.shape[-3] == 3
+                and observation_trsf.shape[-2] > 3
+                and observation_trsf.shape[-1] > 3
             ):
                 # permute the channels to the last dim
-                observation_trsf = observation.permute(
-                    *range(observation.ndim - 3), -2, -1, -3
+                observation_trsf = observation_trsf.permute(
+                    *range(observation_trsf.ndim - 3), -2, -1, -3
                 )
-            else:
-                observation_trsf = observation
             if not (
                 observation_trsf.shape[-1] == 3 or observation_trsf.ndimension() == 2
             ):
@@ -321,3 +329,209 @@ class TensorDictRecorder(Transform):
     ) -> TensorDictBase:
         self._call(tensordict_reset)
         return tensordict_reset
+
+
+class PixelRenderTransform(Transform):
+    """A transform to call render on the parent environment and register the pixel observation in the tensordict.
+
+    This transform offers an alternative to the ``from_pixels`` syntatic sugar when instantiating an environment
+    that offers rendering is expensive, or when ``from_pixels`` is not implemented.
+    It can be used within a single environment or over batched environments alike.
+
+    Args:
+        out_keys (List[NestedKey] or Nested): List of keys where to register the pixel observations.
+        preproc (Callable, optional): a preproc function. Can be used to reshape the observation, or apply
+            any other transformation that makes it possible to register it in the output data.
+        as_non_tensor (bool, optional): if ``True``, the data will be written as a :class:`~tensordict.NonTensorData`
+            thereby relaxing the shape requirements. If not provided, it will be inferred automatically from the
+            input data type and shape.
+        render_method (str, optional): the name of the render method. Defaults to ``"render"``.
+        **kwargs: additional keyword arguments to pass to the render function (e.g. ``mode="rgb_array"``).
+
+    Examples:
+        >>> from torchrl.envs import GymEnv, check_env_specs, ParallelEnv, EnvCreator
+        >>> from torchrl.record.loggers import CSVLogger
+        >>> from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
+        >>>
+        >>> def make_env():
+        >>>     env = GymEnv("CartPole-v1", render_mode="rgb_array")
+        >>>     env = env.append_transform(PixelRenderTransform())
+        >>>     return env
+        >>>
+        >>> if __name__ == "__main__":
+        ...     logger = CSVLogger("dummy", video_format="mp4")
+        ...
+        ...     env = ParallelEnv(4, EnvCreator(make_env))
+        ...
+        ...     env = env.append_transform(VideoRecorder(logger=logger, tag="pixels_record"))
+        ...     env.rollout(3)
+        ...
+        ...     check_env_specs(env)
+        ...
+        ...     r = env.rollout(30)
+        ...     print(env)
+        ...     env.transform.dump()
+        ...     env.close()
+
+    This transform can also be used whenever a batched environment ``render()`` returns a single image:
+
+    Examples:
+        >>> from torchrl.envs import check_env_specs
+        >>> from torchrl.envs.libs.vmas import VmasEnv
+        >>> from torchrl.record.loggers import CSVLogger
+        >>> from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
+        >>>
+        >>> env = VmasEnv(
+        ...     scenario="flocking",
+        ...     num_envs=32,
+        ...     continuous_actions=True,
+        ...     max_steps=200,
+        ...     device="cpu",
+        ...     seed=None,
+        ...     # Scenario kwargs
+        ...     n_agents=5,
+        ... )
+        >>>
+        >>> logger = CSVLogger("dummy", video_format="mp4")
+        >>>
+        >>> env = env.append_transform(PixelRenderTransform(mode="rgb_array", preproc=lambda x: x.copy()))
+        >>> env = env.append_transform(VideoRecorder(logger=logger, tag="pixels_record"))
+        >>>
+        >>> check_env_specs(env)
+        >>>
+        >>> r = env.rollout(30)
+        >>> env.transform[-1].dump()
+
+    The transform can be disabled using the :meth:`~torchrl.record.PixelRenderTransform.switch` method, which will
+    turn the rendering on if it's off or off if it's on (an argument can also be passed to control this behaviour).
+    Since transforms are :class:`~torch.nn.Module` instances, :meth:`~torch.nn.Module.apply` can be used to control
+    this behaviour:
+
+        >>> def switch(module):
+        ...     if isinstance(module, PixelRenderTransform):
+        ...         module.switch()
+        >>> env.apply(switch)
+
+    """
+
+    def __init__(
+        self,
+        out_keys: List[NestedKey] = None,
+        preproc: Callable[
+            [np.ndarray | torch.Tensor], np.ndarray | torch.Tensor
+        ] = None,
+        as_non_tensor: bool = None,
+        render_method: str = "render",
+        **kwargs,
+    ) -> None:
+        if out_keys is None:
+            out_keys = ["pixels"]
+        elif isinstance(out_keys, (str, tuple)):
+            out_keys = [out_keys]
+        if len(out_keys) != 1:
+            raise RuntimeError(
+                f"Expected one and only one out_key, got out_keys={out_keys}"
+            )
+        if preproc is not None and not _can_be_pickled(preproc):
+            preproc = CloudpickleWrapper(preproc)
+        self.preproc = preproc
+        self.as_non_tensor = as_non_tensor
+        self.kwargs = kwargs
+        self.render_method = render_method
+        self._enabled = True
+        super().__init__(in_keys=[], out_keys=out_keys)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._call(tensordict_reset)
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if not self._enabled:
+            return tensordict
+
+        array = getattr(self.parent, self.render_method)(**self.kwargs)
+        if self.preproc:
+            array = self.preproc(array)
+        if self.as_non_tensor is None:
+            if isinstance(array, list):
+                if isinstance(array[0], np.ndarray):
+                    array = np.asarray(array)
+                else:
+                    array = torch.as_tensor(array)
+            if (
+                array.ndim == 3
+                and array.shape[-1] == 3
+                and self.parent.batch_size != ()
+            ):
+                self.as_non_tensor = True
+            else:
+                self.as_non_tensor = False
+        if not self.as_non_tensor:
+            try:
+                tensordict.set(self.out_keys[0], array)
+            except Exception:
+                raise RuntimeError(
+                    f"An exception was raised while writing the rendered array "
+                    f"(shape={getattr(array, 'shape', None)}, dtype={getattr(array, 'dtype', None)}) in the tensordict with shape {tensordict.shape}. "
+                    f"Consider adapting your preproc function in {type(self).__name__}. You can also "
+                    f"pass keyword arguments to the render function of the parent environment, or save "
+                    f"this observation as a non-tensor data with as_non_tensor=True."
+                )
+        else:
+            tensordict.set_non_tensor(self.out_keys[0], array)
+        return tensordict
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        # Adds the pixel observation spec by calling render on the parent env
+        switch = False
+        if not self.enabled:
+            switch = True
+            self.switch()
+        parent = self.parent
+        td_in = TensorDict({}, batch_size=parent.batch_size, device=parent.device)
+        self._call(td_in)
+        obs = td_in.get(self.out_keys[0])
+        if isinstance(obs, NonTensorData):
+            spec = NonTensorSpec(device=obs.device, dtype=obs.dtype, shape=obs.shape)
+        else:
+            spec = UnboundedContinuousTensorSpec(
+                device=obs.device, dtype=obs.dtype, shape=obs.shape
+            )
+        observation_spec[self.out_keys[0]] = spec
+        if switch:
+            self.switch()
+        return observation_spec
+
+    def switch(self, mode: str | bool = None):
+        """Sets the transform on or off.
+
+        Args:
+            mode (str or bool, optional): if provided, sets the switch to the desired mode.
+                ``"on"``, ``"off"``, ``True`` and ``False`` are accepted values.
+                By default, ``switch`` sets the mode to the opposite of the current one.
+
+        """
+        if mode is None:
+            mode = not self._enabled
+        if not isinstance(mode, bool):
+            if mode not in ("on", "off"):
+                raise ValueError("mode must be either 'on' or 'off', or a boolean.")
+            mode = mode == "on"
+        self._enabled = mode
+
+    @property
+    def enabled(self) -> bool:
+        """Whether the recorder is enabled."""
+        return self._enabled
+
+    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+        out = super().set_container(container)
+        if isinstance(self.parent, EnvBase):
+            # Start the env if needed
+            method = getattr(self.parent, self.render_method, None)
+            if method is None or not callable(method):
+                raise ValueError(
+                    f"The render method must exist and be a callable. Got render={method}."
+                )
+        return out

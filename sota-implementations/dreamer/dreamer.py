@@ -1,267 +1,194 @@
-import dataclasses
-from pathlib import Path
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+import contextlib
+import time
 
 import hydra
 import torch
 import torch.cuda
 import tqdm
 from dreamer_utils import (
-    call_record,
-    EnvConfig,
-    grad_norm,
-    make_recorder_env,
-    parallel_env_constructor,
-    transformed_env_constructor,
+    dump_video,
+    log_metrics,
+    make_collector,
+    make_dreamer,
+    make_environments,
+    make_replay_buffer,
 )
-from hydra.core.config_store import ConfigStore
+from hydra.utils import instantiate
 
-# float16
-from torch.cuda.amp import autocast, GradScaler
+# mixed precision training
+from torch.cuda.amp import GradScaler
 from torch.nn.utils import clip_grad_norm_
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger, timeit
+from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.modules import RSSMRollout
 
-from torchrl.envs import EnvBase
-from torchrl.modules.tensordict_module.exploration import (
-    AdditiveGaussianWrapper,
-    OrnsteinUhlenbeckProcessWrapper,
-)
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
     DreamerModelLoss,
     DreamerValueLoss,
 )
 from torchrl.record.loggers import generate_exp_name, get_logger
-from torchrl.trainers.helpers.collectors import (
-    make_collector_offpolicy,
-    OffPolicyCollectorConfig,
-)
-from torchrl.trainers.helpers.envs import (
-    correct_for_frame_skip,
-    initialize_observation_norm_transforms,
-    retrieve_observation_norms_state_dict,
-)
-from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.models import DreamerConfig, make_dreamer
-from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
-from torchrl.trainers.helpers.trainers import TrainerConfig
-from torchrl.trainers.trainers import Recorder, RewardNormalizer
-
-config_fields = [
-    (config_field.name, config_field.type, config_field)
-    for config_cls in (
-        OffPolicyCollectorConfig,
-        EnvConfig,
-        LoggerConfig,
-        ReplayArgsConfig,
-        DreamerConfig,
-        TrainerConfig,
-    )
-    for config_field in dataclasses.fields(config_cls)
-]
-Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
-cs = ConfigStore.instance()
-cs.store(name="config", node=Config)
-
-
-def retrieve_stats_from_state_dict(obs_norm_state_dict):
-    return {
-        "loc": obs_norm_state_dict["loc"],
-        "scale": obs_norm_state_dict["scale"],
-    }
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
+    # cfg = correct_for_frame_skip(cfg)
 
-    cfg = correct_for_frame_skip(cfg)
+    device = torch.device(instantiate(cfg.networks.device))
 
-    if not isinstance(cfg.reward_scaling, float):
-        cfg.reward_scaling = 1.0
+    # Create logger
+    exp_name = generate_exp_name("Dreamer", cfg.logger.exp_name)
+    logger = None
+    if cfg.logger.backend:
+        logger = get_logger(
+            logger_type=cfg.logger.backend,
+            logger_name="dreamer_logging",
+            experiment_name=exp_name,
+            wandb_kwargs={"mode": cfg.logger.mode},  # "config": cfg},
+        )
 
-    if torch.cuda.is_available() and cfg.model_device == "":
-        device = torch.device("cuda:0")
-    elif cfg.model_device:
-        device = torch.device(cfg.model_device)
-    else:
-        device = torch.device("cpu")
-    torchrl_logger.info(f"Using device {device}")
-
-    exp_name = generate_exp_name("Dreamer", cfg.exp_name)
-    logger = get_logger(
-        logger_type=cfg.logger,
-        logger_name="dreamer",
-        experiment_name=exp_name,
-        wandb_kwargs={
-            "project": cfg.project_name,
-            "group": f"Dreamer_{cfg.env_name}",
-            "offline": cfg.offline_logging,
-        },
+    train_env, test_env = make_environments(
+        cfg=cfg,
+        parallel_envs=cfg.env.n_parallel_envs,
+        logger=logger,
     )
-    video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
-    key, init_env_steps, stats = None, None, None
-    if not cfg.vecnorm and cfg.norm_stats:
-        if not hasattr(cfg, "init_env_steps"):
-            raise AttributeError("init_env_steps missing from arguments.")
-        key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
-        init_env_steps = cfg.init_env_steps
-        stats = {"loc": None, "scale": None}
-    elif cfg.from_pixels:
-        stats = {"loc": 0.5, "scale": 0.5}
-    proof_env = transformed_env_constructor(
-        cfg=cfg, use_env_creator=False, stats=stats
-    )()
-    initialize_observation_norm_transforms(
-        proof_environment=proof_env, num_iter=init_env_steps, key=key
-    )
-    _, obs_norm_state_dict = retrieve_observation_norms_state_dict(proof_env)[0]
-    proof_env.close()
-
-    # Create the different components of dreamer
-    world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
-        obs_norm_state_dict=obs_norm_state_dict,
+    # Make dreamer components
+    action_key = "action"
+    value_key = "state_value"
+    (
+        world_model,
+        model_based_env,
+        model_based_env_eval,
+        actor_model,
+        value_model,
+        policy,
+    ) = make_dreamer(
         cfg=cfg,
         device=device,
-        use_decoder_in_env=True,
-        action_key="action",
-        value_key="state_value",
-        proof_environment=transformed_env_constructor(
-            cfg, stats={"loc": 0.0, "scale": 1.0}
-        )(),
+        action_key=action_key,
+        value_key=value_key,
+        use_decoder_in_env=cfg.logger.video,
+        logger=logger,
     )
-
-    # reward normalization
-    if cfg.normalize_rewards_online:
-        # if used the running statistics of the rewards are computed and the
-        # rewards used for training will be normalized based on these.
-        reward_normalizer = RewardNormalizer(
-            scale=cfg.normalize_rewards_online_scale,
-            decay=cfg.normalize_rewards_online_decay,
-        )
-    else:
-        reward_normalizer = None
-
     # Losses
     world_model_loss = DreamerModelLoss(world_model)
+    # Adapt loss keys to gym backend
+    if cfg.env.backend == "gym":
+        world_model_loss.set_keys(pixels="observation", reco_pixels="reco_observation")
+
     actor_loss = DreamerActorLoss(
         actor_model,
         value_model,
         model_based_env,
-        imagination_horizon=cfg.imagination_horizon,
-    )
-    value_loss = DreamerValueLoss(value_model)
-
-    # Exploration noise to be added to the actions
-    if cfg.exploration == "additive_gaussian":
-        exploration_policy = AdditiveGaussianWrapper(
-            policy,
-            sigma_init=0.3,
-            sigma_end=0.3,
-        ).to(device)
-    elif cfg.exploration == "ou_exploration":
-        exploration_policy = OrnsteinUhlenbeckProcessWrapper(
-            policy,
-            annealing_num_steps=cfg.total_frames,
-        ).to(device)
-    elif cfg.exploration == "":
-        exploration_policy = policy.to(device)
-
-    action_dim_gsde, state_dim_gsde = None, None
-    create_env_fn = parallel_env_constructor(
-        cfg=cfg,
-        obs_norm_state_dict=obs_norm_state_dict,
-        action_dim_gsde=action_dim_gsde,
-        state_dim_gsde=state_dim_gsde,
-    )
-    if isinstance(create_env_fn, EnvBase):
-        create_env_fn.rollout(2)
-    else:
-        create_env_fn().rollout(2)
-
-    # Create the replay buffer
-
-    collector = make_collector_offpolicy(
-        make_env=create_env_fn,
-        actor_model_explore=exploration_policy,
-        cfg=cfg,
-    )
-    torchrl_logger.info(f"collector: {collector}")
-
-    replay_buffer = make_replay_buffer("cpu", cfg)
-
-    record = Recorder(
-        record_frames=cfg.record_frames,
-        frame_skip=cfg.frame_skip,
-        policy_exploration=policy,
-        environment=make_recorder_env(
-            cfg=cfg,
-            video_tag=video_tag,
-            obs_norm_state_dict=obs_norm_state_dict,
-            logger=logger,
-            create_env_fn=create_env_fn,
-        ),
-        record_interval=cfg.record_interval,
-        log_keys=cfg.recorder_log_keys,
+        imagination_horizon=cfg.optimization.imagination_horizon,
+        discount_loss=True,
     )
 
-    final_seed = collector.set_seed(cfg.seed)
-    torchrl_logger.info(f"init seed: {cfg.seed}, final seed: {final_seed}")
+    actor_loss.make_value_estimator(
+        gamma=cfg.optimization.gamma, lmbda=cfg.optimization.lmbda
+    )
+    value_loss = DreamerValueLoss(
+        value_model, discount_loss=True, gamma=cfg.optimization.gamma
+    )
+
+    # Make collector
+    collector = make_collector(cfg, train_env, policy)
+
+    # Make replay buffer
+    batch_size = cfg.replay_buffer.batch_size
+    batch_length = cfg.replay_buffer.batch_length
+    buffer_size = cfg.replay_buffer.buffer_size
+    scratch_dir = cfg.replay_buffer.scratch_dir
+    replay_buffer = make_replay_buffer(
+        batch_size=batch_size,
+        batch_seq_len=batch_length,
+        buffer_size=buffer_size,
+        buffer_scratch_dir=scratch_dir,
+        device=device,
+        pixel_obs=cfg.env.from_pixels,
+        grayscale=cfg.env.grayscale,
+        image_size=cfg.env.image_size,
+        use_autocast=cfg.optimization.use_autocast,
+    )
+
     # Training loop
     collected_frames = 0
-    pbar = tqdm.tqdm(total=cfg.total_frames)
-    path = Path("./log")
-    path.mkdir(exist_ok=True)
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
-    # optimizers
-    world_model_opt = torch.optim.Adam(world_model.parameters(), lr=cfg.world_model_lr)
-    actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
-    value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
+    # Make optimizer
+    world_model_opt = torch.optim.Adam(
+        world_model.parameters(), lr=cfg.optimization.world_model_lr
+    )
+    actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.optimization.actor_lr)
+    value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.optimization.value_lr)
 
-    scaler1 = GradScaler()
-    scaler2 = GradScaler()
-    scaler3 = GradScaler()
+    # Grad scaler for mixed precision training https://pytorch.org/docs/stable/amp.html
+    use_autocast = cfg.optimization.use_autocast
+    if use_autocast:
+        scaler1 = GradScaler()
+        scaler2 = GradScaler()
+        scaler3 = GradScaler()
 
+    init_random_frames = cfg.collector.init_random_frames
+    optim_steps_per_batch = cfg.optimization.optim_steps_per_batch
+    grad_clip = cfg.optimization.grad_clip
+    eval_iter = cfg.logger.eval_iter
+    eval_rollout_steps = cfg.logger.eval_rollout_steps
+
+    if cfg.optimization.compile:
+        torch._dynamo.config.capture_scalar_outputs = True
+
+        torchrl_logger.info("Compiling")
+        backend = cfg.optimization.compile_backend
+
+        def compile_rssms(module):
+            if isinstance(module, RSSMRollout) and not getattr(
+                module, "_compiled", False
+            ):
+                module._compiled = True
+                module.rssm_prior.module = torch.compile(
+                    module.rssm_prior.module, backend=backend
+                )
+                module.rssm_posterior.module = torch.compile(
+                    module.rssm_posterior.module, backend=backend
+                )
+
+        world_model_loss.apply(compile_rssms)
+
+    t_collect_init = time.time()
     for i, tensordict in enumerate(collector):
-        cmpt = 0
-        if reward_normalizer is not None:
-            reward_normalizer.update_reward_stats(tensordict)
+        t_collect = time.time() - t_collect_init
+
+        t_preproc_init = time.time()
         pbar.update(tensordict.numel())
         current_frames = tensordict.numel()
         collected_frames += current_frames
 
-        # Compared to the original paper, the replay buffer is not temporally
-        # sampled. We fill it with trajectories of length batch_length.
-        # To be closer to the paper, we would need to fill it with trajectories
-        # of length 1000 and then sample subsequences of length batch_length.
-
-        tensordict = tensordict.reshape(-1, cfg.batch_length)
+        ep_reward = tensordict.get("episode_reward")[..., -1, 0]
         replay_buffer.extend(tensordict.cpu())
-        logger.log_scalar(
-            "r_training",
-            tensordict["next", "reward"].mean().detach().item(),
-            step=collected_frames,
-        )
+        t_preproc = time.time() - t_preproc_init
 
-        if (i % cfg.record_interval) == 0:
-            do_log = True
-        else:
-            do_log = False
-
-        if collected_frames >= cfg.init_random_frames:
-            if i % cfg.record_interval == 0:
-                logger.log_scalar("cmpt", cmpt)
-            for j in range(cfg.optim_steps_per_batch):
-                cmpt += 1
+        if collected_frames >= init_random_frames:
+            t_loss_actor = 0.0
+            t_loss_critic = 0.0
+            t_loss_model = 0.0
+            for _ in range(optim_steps_per_batch):
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(
-                    device, non_blocking=True
-                )
-                if reward_normalizer is not None:
-                    sampled_tensordict = reward_normalizer.normalize_reward(
-                        sampled_tensordict
-                    )
+                t_sample_init = time.time()
+                sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
+                t_sample = time.time() - t_sample_init
+
+                t_loss_model_init = time.time()
                 # update world model
-                with autocast(dtype=torch.float16):
+                with torch.autocast(
+                    device_type=device.type,
+                    dtype=torch.bfloat16,
+                ) if use_autocast else contextlib.nullcontext():
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
@@ -270,113 +197,125 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         + model_loss_td["loss_model_reco"]
                         + model_loss_td["loss_model_reward"]
                     )
-                    # If we are logging videos, we keep some frames.
-                    if (
-                        cfg.record_video
-                        and (record._count + 1) % cfg.record_interval == 0
-                    ):
-                        sampled_tensordict_save = (
-                            sampled_tensordict.select(
-                                "next" "state",
-                                "belief",
-                            )[:4]
-                            .detach()
-                            .to_tensordict()
-                        )
-                    else:
-                        sampled_tensordict_save = None
 
+                world_model_opt.zero_grad()
+                if use_autocast:
                     scaler1.scale(loss_world_model).backward()
                     scaler1.unscale_(world_model_opt)
-                    clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
+                else:
+                    loss_world_model.backward()
+                world_model_grad = clip_grad_norm_(world_model.parameters(), grad_clip)
+                if use_autocast:
                     scaler1.step(world_model_opt)
-                    if j == cfg.optim_steps_per_batch - 1 and do_log:
-                        logger.log_scalar(
-                            "loss_world_model",
-                            loss_world_model.detach().item(),
-                            step=collected_frames,
-                        )
-                        logger.log_scalar(
-                            "grad_world_model",
-                            grad_norm(world_model_opt),
-                            step=collected_frames,
-                        )
-                        logger.log_scalar(
-                            "loss_model_kl",
-                            model_loss_td["loss_model_kl"].detach().item(),
-                            step=collected_frames,
-                        )
-                        logger.log_scalar(
-                            "loss_model_reco",
-                            model_loss_td["loss_model_reco"].detach().item(),
-                            step=collected_frames,
-                        )
-                        logger.log_scalar(
-                            "loss_model_reward",
-                            model_loss_td["loss_model_reward"].detach().item(),
-                            step=collected_frames,
-                        )
-                    world_model_opt.zero_grad()
                     scaler1.update()
+                else:
+                    world_model_opt.step()
+                t_loss_model += time.time() - t_loss_model_init
 
                 # update actor network
-                with autocast(dtype=torch.float16):
+                t_loss_actor_init = time.time()
+                with torch.autocast(
+                    device_type=device.type, dtype=torch.bfloat16
+                ) if use_autocast else contextlib.nullcontext():
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
-                scaler2.scale(actor_loss_td["loss_actor"]).backward()
-                scaler2.unscale_(actor_opt)
-                clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
-                scaler2.step(actor_opt)
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
-                    logger.log_scalar(
-                        "loss_actor",
-                        actor_loss_td["loss_actor"].detach().item(),
-                        step=collected_frames,
-                    )
-                    logger.log_scalar(
-                        "grad_actor",
-                        grad_norm(actor_opt),
-                        step=collected_frames,
-                    )
+
                 actor_opt.zero_grad()
-                scaler2.update()
+                if use_autocast:
+                    scaler2.scale(actor_loss_td["loss_actor"]).backward()
+                    scaler2.unscale_(actor_opt)
+                else:
+                    actor_loss_td["loss_actor"].backward()
+                actor_model_grad = clip_grad_norm_(actor_model.parameters(), grad_clip)
+                if use_autocast:
+                    scaler2.step(actor_opt)
+                    scaler2.update()
+                else:
+                    actor_opt.step()
+                t_loss_actor += time.time() - t_loss_actor_init
 
                 # update value network
-                with autocast(dtype=torch.float16):
+                t_loss_critic_init = time.time()
+                with torch.autocast(
+                    device_type=device.type, dtype=torch.bfloat16
+                ) if use_autocast else contextlib.nullcontext():
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
-                scaler3.scale(value_loss_td["loss_value"]).backward()
-                scaler3.unscale_(value_opt)
-                clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
-                scaler3.step(value_opt)
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
-                    logger.log_scalar(
-                        "loss_value",
-                        value_loss_td["loss_value"].detach().item(),
-                        step=collected_frames,
-                    )
-                    logger.log_scalar(
-                        "grad_value",
-                        grad_norm(value_opt),
-                        step=collected_frames,
-                    )
-                value_opt.zero_grad()
-                scaler3.update()
-                if j == cfg.optim_steps_per_batch - 1:
-                    do_log = False
 
-            stats = retrieve_stats_from_state_dict(obs_norm_state_dict)
-            call_record(
-                logger,
-                record,
-                collected_frames,
-                sampled_tensordict_save,
-                stats,
-                model_based_env,
-                actor_model,
-                cfg,
-            )
-        if cfg.exploration != "":
-            exploration_policy.step(current_frames)
+                value_opt.zero_grad()
+                if use_autocast:
+                    scaler3.scale(value_loss_td["loss_value"]).backward()
+                    scaler3.unscale_(value_opt)
+                else:
+                    value_loss_td["loss_value"].backward()
+                critic_model_grad = clip_grad_norm_(value_model.parameters(), grad_clip)
+                if use_autocast:
+                    scaler3.step(value_opt)
+                    scaler3.update()
+                else:
+                    value_opt.step()
+                t_loss_critic += time.time() - t_loss_critic_init
+
+        metrics_to_log = {"reward": ep_reward.mean().item()}
+        if collected_frames >= init_random_frames:
+            loss_metrics = {
+                "loss_model_kl": model_loss_td["loss_model_kl"].item(),
+                "loss_model_reco": model_loss_td["loss_model_reco"].item(),
+                "loss_model_reward": model_loss_td["loss_model_reward"].item(),
+                "loss_actor": actor_loss_td["loss_actor"].item(),
+                "loss_value": value_loss_td["loss_value"].item(),
+                "world_model_grad": world_model_grad,
+                "actor_model_grad": actor_model_grad,
+                "critic_model_grad": critic_model_grad,
+                "t_loss_actor": t_loss_actor,
+                "t_loss_critic": t_loss_critic,
+                "t_loss_model": t_loss_model,
+                "t_sample": t_sample,
+                "t_preproc": t_preproc,
+                "t_collect": t_collect,
+                **timeit.todict(percall=False),
+            }
+            timeit.erase()
+            metrics_to_log.update(loss_metrics)
+
+        if logger is not None:
+            log_metrics(logger, metrics_to_log, collected_frames)
+
+        policy.step(current_frames)
         collector.update_policy_weights_()
+        # Evaluation
+        if (i % eval_iter) == 0:
+            # Real env
+            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+                eval_rollout = test_env.rollout(
+                    eval_rollout_steps,
+                    policy,
+                    auto_cast_to_device=True,
+                    break_when_any_done=True,
+                )
+                test_env.apply(dump_video)
+                eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
+                eval_metrics = {"eval/reward": eval_reward}
+                if logger is not None:
+                    log_metrics(logger, eval_metrics, collected_frames)
+            # Simulated env
+            if model_based_env_eval is not None:
+                with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+                    eval_rollout = model_based_env_eval.rollout(
+                        eval_rollout_steps,
+                        policy,
+                        auto_cast_to_device=True,
+                        break_when_any_done=True,
+                        auto_reset=False,
+                        tensordict=eval_rollout[..., 0]
+                        .exclude("next", "action")
+                        .to(device),
+                    )
+                    model_based_env_eval.apply(dump_video)
+                    eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
+                    eval_metrics = {"eval/simulated_reward": eval_reward}
+                    if logger is not None:
+                        log_metrics(logger, eval_metrics, collected_frames)
+
+        t_collect_init = time.time()
 
 
 if __name__ == "__main__":

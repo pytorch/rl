@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import re
 import warnings
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
@@ -506,13 +507,18 @@ class GymLikeEnv(_EnvWrapper):
         try:
             check_env_specs(self)
             return self
-        except AssertionError as err:
-            if "The keys of the specs and data do not match" in str(err):
-                result = TransformedEnv(
-                    self, TensorDictPrimer(self.info_dict_reader[0].info_spec)
-                )
-                check_env_specs(result)
-                return result
+        except (AssertionError, RuntimeError) as err:
+            patterns = [
+                "The keys of the specs and data do not match",
+                "The sets of keys in the tensordicts to stack are exclusive",
+            ]
+            for pattern in patterns:
+                if re.search(pattern, str(err)):
+                    result = TransformedEnv(
+                        self, TensorDictPrimer(self.info_dict_reader[0].info_spec)
+                    )
+                    check_env_specs(result)
+                    return result
             raise err
 
     def __repr__(self) -> str:

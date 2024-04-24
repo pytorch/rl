@@ -139,11 +139,15 @@ class ModelBasedEnvBase(EnvBase):
 
     def set_specs_from_env(self, env: EnvBase):
         """Sets the specs of the environment from the specs of the given environment."""
-        self.observation_spec = env.observation_spec.clone().to(self.device)
-        self.reward_spec = env.reward_spec.clone().to(self.device)
-        self.action_spec = env.action_spec.clone().to(self.device)
-        self.done_spec = env.done_spec.clone().to(self.device)
-        self.state_spec = env.state_spec.clone().to(self.device)
+        device = self.device
+        output_spec = env.output_spec.clone()
+        input_spec = env.input_spec.clone()
+        if device is not None:
+            output_spec = output_spec.to(device)
+            input_spec = input_spec.to(device)
+        self.__dict__["_output_spec"] = output_spec
+        self.__dict__["_input_spec"] = input_spec
+        self.empty_cache()
 
     def _step(
         self,
@@ -161,12 +165,13 @@ class ModelBasedEnvBase(EnvBase):
         else:
             tensordict_out = self.world_model(tensordict_out)
         # done can be missing, it will be filled by `step`
-        return tensordict_out.select(
+        tensordict_out = tensordict_out.select(
             *self.observation_spec.keys(),
             *self.full_done_spec.keys(),
             *self.full_reward_spec.keys(),
             strict=False,
         )
+        return tensordict_out
 
     @abc.abstractmethod
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:

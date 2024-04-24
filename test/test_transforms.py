@@ -56,6 +56,7 @@ from torchrl.data import (
     LazyTensorStorage,
     ReplayBuffer,
     TensorDictReplayBuffer,
+    TensorSpec,
     TensorStorage,
     UnboundedContinuousTensorSpec,
 )
@@ -120,6 +121,7 @@ from torchrl.envs.transforms.transforms import (
     _has_tv,
     BatchSizeTransform,
     FORWARD_NOT_IMPLEMENTED,
+    Transform,
 )
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
@@ -6423,17 +6425,11 @@ class TestTensorDictPrimer(TransformBase):
         finally:
             env.close()
 
-    def test_trans_serial_env_check(self):
-        with pytest.raises(RuntimeError, match="The leading shape of the primer specs"):
-            env = TransformedEnv(
-                SerialEnv(2, ContinuousActionVecMockEnv),
-                TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([4])),
-            )
-            _ = env.observation_spec
-
+    @pytest.mark.parametrize("spec_shape", [[4], [2, 4]])
+    def test_trans_serial_env_check(self, spec_shape):
         env = TransformedEnv(
             SerialEnv(2, ContinuousActionVecMockEnv),
-            TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([2, 4])),
+            TensorDictPrimer(mykey=UnboundedContinuousTensorSpec(spec_shape)),
         )
         check_env_specs(env)
         assert "mykey" in env.reset().keys()
@@ -6532,6 +6528,72 @@ class TestTensorDictPrimer(TransformBase):
         env.set_seed(0)
         r1 = env.rollout(100, break_when_any_done=break_when_any_done)
         tensordict.tensordict.assert_allclose_td(r0, r1)
+
+    def test_callable_default_value(self):
+        def create_tensor():
+            return torch.ones(3)
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            TensorDictPrimer(
+                mykey=UnboundedContinuousTensorSpec([3]), default_value=create_tensor
+            ),
+        )
+        check_env_specs(env)
+        assert "mykey" in env.reset().keys()
+        assert ("next", "mykey") in env.rollout(3).keys(True)
+
+    def test_dict_default_value(self):
+
+        # Test with a dict of float default values
+        key1_spec = UnboundedContinuousTensorSpec([3])
+        key2_spec = UnboundedContinuousTensorSpec([3])
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            TensorDictPrimer(
+                mykey1=key1_spec,
+                mykey2=key2_spec,
+                default_value={
+                    "mykey1": 1.0,
+                    "mykey2": 2.0,
+                },
+            ),
+        )
+        check_env_specs(env)
+        reset_td = env.reset()
+        assert "mykey1" in reset_td.keys()
+        assert "mykey2" in reset_td.keys()
+        rollout_td = env.rollout(3)
+        assert ("next", "mykey1") in rollout_td.keys(True)
+        assert ("next", "mykey2") in rollout_td.keys(True)
+        assert (rollout_td.get(("next", "mykey1")) == 1.0).all()
+        assert (rollout_td.get(("next", "mykey2")) == 2.0).all()
+
+        # Test with a dict of callable default values
+        key1_spec = UnboundedContinuousTensorSpec([3])
+        key2_spec = DiscreteTensorSpec(3, dtype=torch.int64)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            TensorDictPrimer(
+                mykey1=key1_spec,
+                mykey2=key2_spec,
+                default_value={
+                    "mykey1": lambda: torch.ones(3),
+                    "mykey2": lambda: torch.tensor(1, dtype=torch.int64),
+                },
+            ),
+        )
+        check_env_specs(env)
+        reset_td = env.reset()
+        assert "mykey1" in reset_td.keys()
+        assert "mykey2" in reset_td.keys()
+        rollout_td = env.rollout(3)
+        assert ("next", "mykey1") in rollout_td.keys(True)
+        assert ("next", "mykey2") in rollout_td.keys(True)
+        assert (rollout_td.get(("next", "mykey1")) == torch.ones(3)).all
+        assert (
+            rollout_td.get(("next", "mykey2")) == torch.tensor(1, dtype=torch.int64)
+        ).all
 
 
 class TestTimeMaxPool(TransformBase):
@@ -6813,18 +6875,13 @@ class TestgSDE(TransformBase):
         finally:
             env.close()
 
-    def test_trans_serial_env_check(self):
+    @pytest.mark.parametrize("shape", [(), (2,)])
+    def test_trans_serial_env_check(self, shape):
         state_dim = 7
         action_dim = 7
-        with pytest.raises(RuntimeError, match="The leading shape of the primer"):
-            env = TransformedEnv(
-                SerialEnv(2, ContinuousActionVecMockEnv),
-                gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=()),
-            )
-            check_env_specs(env)
         env = TransformedEnv(
             SerialEnv(2, ContinuousActionVecMockEnv),
-            gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=(2,)),
+            gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=shape),
         )
         try:
             check_env_specs(env)
@@ -7654,10 +7711,10 @@ class TestVecNorm:
         queue_out.put(True)
         msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "all_done"
-        t = env.transform
-        obs_sum = t._td.get("observation_sum").clone()
-        obs_ssq = t._td.get("observation_ssq").clone()
-        obs_count = t._td.get("observation_count").clone()
+        t = env.transform[1]
+        obs_sum = t._td.get(("some", "obs_sum")).clone()
+        obs_ssq = t._td.get(("some", "obs_ssq")).clone()
+        obs_count = t._td.get(("some", "obs_count")).clone()
         reward_sum = t._td.get("reward_sum").clone()
         reward_ssq = t._td.get("reward_ssq").clone()
         reward_count = t._td.get("reward_count").clone()
@@ -7672,18 +7729,34 @@ class TestVecNorm:
         queue_in.close()
         del queue_in, queue_out
 
+    @property
+    def rename_t(self):
+        return RenameTransform(in_keys=["observation"], out_keys=[("some", "obs")])
+
     @pytest.mark.parametrize("nprc", [2, 5])
     def test_vecnorm_parallel_auto(self, nprc):
         queues = []
         prcs = []
         if _has_gym:
-            make_env = EnvCreator(
-                lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm(decay=1.0))
+            maker = lambda: TransformedEnv(
+                GymEnv(PENDULUM_VERSIONED()),
+                Compose(
+                    self.rename_t,
+                    VecNorm(decay=1.0, in_keys=[("some", "obs"), "reward"]),
+                ),
             )
+            check_env_specs(maker())
+            make_env = EnvCreator(maker)
         else:
-            make_env = EnvCreator(
-                lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm(decay=1.0))
+            maker = lambda: TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                Compose(
+                    self.rename_t,
+                    VecNorm(decay=1.0, in_keys=[("some", "obs"), "reward"]),
+                ),
             )
+            check_env_specs(maker())
+            make_env = EnvCreator(maker)
 
         for idx in range(nprc):
             prc_queue_in = mp.Queue(1)
@@ -7707,11 +7780,11 @@ class TestVecNorm:
         for idx in range(nprc):
             queues[idx][1].put(msg)
 
-        td = make_env.state_dict()["_extra_state"]["td"]
+        td = make_env.state_dict()["transforms.1._extra_state"]["td"]
 
-        obs_sum = td.get("observation_sum").clone()
-        obs_ssq = td.get("observation_ssq").clone()
-        obs_count = td.get("observation_count").clone()
+        obs_sum = td.get(("some", "obs_sum")).clone()
+        obs_ssq = td.get(("some", "obs_ssq")).clone()
+        obs_count = td.get(("some", "obs_count")).clone()
         reward_sum = td.get("reward_sum").clone()
         reward_ssq = td.get("reward_ssq").clone()
         reward_count = td.get("reward_count").clone()
@@ -7779,11 +7852,21 @@ class TestVecNorm:
     def test_parallelenv_vecnorm(self):
         if _has_gym:
             make_env = EnvCreator(
-                lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm())
+                lambda: TransformedEnv(
+                    GymEnv(PENDULUM_VERSIONED()),
+                    Compose(
+                        self.rename_t, VecNorm(in_keys=[("some", "obs"), "reward"])
+                    ),
+                )
             )
         else:
             make_env = EnvCreator(
-                lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
+                lambda: TransformedEnv(
+                    ContinuousActionVecMockEnv(),
+                    Compose(
+                        self.rename_t, VecNorm(in_keys=[("some", "obs"), "reward"])
+                    ),
+                )
             )
         parallel_env = ParallelEnv(
             2,
@@ -7798,7 +7881,7 @@ class TestVecNorm:
         parallel_sd = parallel_env.state_dict()
         assert "worker0" in parallel_sd
         worker_sd = parallel_sd["worker0"]
-        td = worker_sd["_extra_state"]["td"]
+        td = worker_sd["transforms.1._extra_state"]["td"]
         queue_out.put("start")
         msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "first round"
@@ -7897,6 +7980,28 @@ def test_added_transforms_are_in_eval_mode():
 
 
 class TestTransformedEnv:
+    def test_attr_error(self):
+        class BuggyTransform(Transform):
+            def transform_observation_spec(
+                self, observation_spec: TensorSpec
+            ) -> TensorSpec:
+                raise AttributeError
+
+            def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+                raise RuntimeError("reward!")
+
+        env = TransformedEnv(CountingEnv(), BuggyTransform())
+        with pytest.raises(
+            AttributeError, match="because an internal error was raised"
+        ):
+            env.observation_spec
+        with pytest.raises(
+            AttributeError, match="'CountingEnv' object has no attribute 'tralala'"
+        ):
+            env.tralala
+        with pytest.raises(RuntimeError, match="reward!"):
+            env.transform.transform_reward_spec(env.base_env.full_reward_spec)
+
     def test_independent_obs_specs_from_shared_env(self):
         obs_spec = CompositeSpec(
             observation=BoundedTensorSpec(low=0, high=10, shape=torch.Size((1,)))
@@ -10478,6 +10583,7 @@ class TestMultiStepTransform:
 
         outs_2 = []
         td = env.reset().contiguous()
+        assert "reward" not in td
         for _ in range(1):
             rollout = env.rollout(
                 250, auto_reset=False, tensordict=td, break_when_any_done=False
@@ -10521,7 +10627,7 @@ class TestMultiStepTransform:
             ).contiguous()
             assert "reward" not in rollout.keys()
             out = t._inv_call(rollout)
-            td = rollout[..., -1]["next"]
+            td = rollout[..., -1]["next"].exclude("reward")
             if out is not None:
                 outs_3.append(out)
 

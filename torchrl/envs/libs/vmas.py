@@ -141,7 +141,7 @@ class VmasWrapper(_EnvWrapper):
         group_map (Dict[str, List[str]]): how to group agents in tensordicts for
             input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
         agent_names (list of str): names of the agent in the environment
-        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the enviornment
+        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the environment
         unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension
         unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension
         unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension

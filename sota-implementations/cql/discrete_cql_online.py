@@ -35,7 +35,13 @@ from utils import (
 
 @hydra.main(version_base="1.1", config_path="", config_name="discrete_cql_config")
 def main(cfg: "DictConfig"):  # noqa: F821
-    device = torch.device(cfg.optim.device)
+    device = cfg.optim.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = "cuda:0"
+        else:
+            device = "cpu"
+    device = torch.device(device)
 
     # Create logger
     exp_name = generate_exp_name("DiscreteCQL", cfg.logger.exp_name)
