@@ -560,10 +560,6 @@ class LSTMNet(nn.Module):
         *,
         lstm_backend: str | None = None,
     ) -> None:
-        warnings.warn(
-            "LSTMNet is being deprecated in favour of torchrl.modules.LSTMModule, and will be removed in v0.4.0.",
-            category=DeprecationWarning,
-        )
         super().__init__()
         lstm_kwargs.update({"batch_first": True})
         self.mlp = MLP(device=device, **mlp_kwargs)

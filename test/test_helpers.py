@@ -50,8 +50,6 @@ from torchrl.trainers.helpers.models import (
     DiscreteModelConfig,
     DreamerConfig,
     make_dqn_actor,
-    make_redq_model,
-    REDQModelConfig,
 )
 
 TORCH_VERSION = version.parse(torch.__version__)
@@ -160,123 +158,6 @@ def test_dqn_maker(
             proof_environment.close()
             raise
         proof_environment.close()
-
-
-@pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
-@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
-@pytest.mark.skipif(not _has_gym, reason="No gym library found")
-@pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
-@pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
-@pytest.mark.parametrize("exploration", [ExplorationType.MODE, ExplorationType.RANDOM])
-def test_redq_make(device, from_pixels, gsde, exploration):
-    if not gsde and exploration != ExplorationType.RANDOM:
-        pytest.skip("no need to test this setting")
-    flags = list(from_pixels + gsde)
-    if gsde and from_pixels:
-        pytest.skip("gsde and from_pixels are incompatible")
-
-    config_fields = [
-        (config_field.name, config_field.type, config_field)
-        for config_cls in (
-            EnvConfig,
-            REDQModelConfig,
-        )
-        for config_field in dataclasses.fields(config_cls)
-    ]
-
-    Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
-    cs = ConfigStore.instance()
-    cs.store(name="config", node=Config)
-    with initialize(version_base="1.1", config_path=None):
-        cfg = compose(config_name="config", overrides=flags)
-
-        env_maker = (
-            ContinuousActionConvMockEnvNumpy
-            if from_pixels
-            else ContinuousActionVecMockEnv
-        )
-        env_maker = transformed_env_constructor(
-            cfg,
-            use_env_creator=False,
-            custom_env_maker=env_maker,
-            stats={"loc": 0.0, "scale": 1.0},
-        )
-        proof_environment = env_maker()
-
-        model = make_redq_model(
-            proof_environment,
-            device=device,
-            cfg=cfg,
-        )
-        actor, qvalue = model
-        td = proof_environment.reset().to(device)
-        with set_exploration_type(exploration):
-            actor(td)
-        expected_keys = [
-            "done",
-            "terminated",
-            "action",
-            "sample_log_prob",
-            "loc",
-            "scale",
-            "step_count",
-            "is_init",
-        ]
-        if len(gsde):
-            expected_keys += ["_eps_gSDE"]
-        if from_pixels:
-            expected_keys += [
-                "hidden",
-                "pixels",
-                "pixels_orig",
-            ]
-        else:
-            expected_keys += ["observation_vector", "observation_orig"]
-
-        try:
-            assert set(td.keys()) == set(expected_keys)
-        except AssertionError:
-            proof_environment.close()
-            raise
-
-        if cfg.gSDE:
-            tsf_loc = actor.module[0].module[-1].module.transform(td.get("loc"))
-            if exploration == ExplorationType.RANDOM:
-                with pytest.raises(AssertionError):
-                    torch.testing.assert_close(td.get("action"), tsf_loc)
-            else:
-                torch.testing.assert_close(td.get("action"), tsf_loc)
-
-        qvalue(td)
-        expected_keys = [
-            "done",
-            "terminated",
-            "action",
-            "sample_log_prob",
-            "state_action_value",
-            "loc",
-            "scale",
-            "step_count",
-            "is_init",
-        ]
-        if len(gsde):
-            expected_keys += ["_eps_gSDE"]
-        if from_pixels:
-            expected_keys += [
-                "hidden",
-                "pixels",
-                "pixels_orig",
-            ]
-        else:
-            expected_keys += ["observation_vector", "observation_orig"]
-        try:
-            assert set(td.keys()) == set(expected_keys)
-        except AssertionError:
-            proof_environment.close()
-            raise
-        proof_environment.close()
-        del proof_environment
 
 
 @pytest.mark.parametrize("initial_seed", range(5))

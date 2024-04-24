@@ -925,7 +925,6 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
         super().__init__(
             world_model,
             device=device,
-            dtype=dtype,
             batch_size=batch_size,
         )
         self.observation_spec = CompositeSpec(

@@ -27,11 +27,10 @@ class DreamerEnv(ModelBasedEnvBase):
         belief_shape: Tuple[int, ...],
         obs_decoder: TensorDictModule = None,
         device: DEVICE_TYPING = "cpu",
-        dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
     ):
         super(DreamerEnv, self).__init__(
-            world_model, device=device, dtype=dtype, batch_size=batch_size
+            world_model, device=device, batch_size=batch_size
         )
         self.obs_decoder = obs_decoder
         self.prior_shape = prior_shape
