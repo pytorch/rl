@@ -674,6 +674,13 @@ class SliceSampler(Sampler):
             the :meth:`~sample` method will be compiled with :func:`~torch.compile`.
             Keyword arguments can also be passed to torch.compile with this arg.
             Defaults to ``False``.
+        span (bool, int, Tuple[bool | int, bool | int], optional): if provided, the sampled
+            trajectory will span across the left and/or the right. This means that possibly
+            fewer elements will be provided than what was required. A boolean value means
+            that at least one element will be sampled per trajectory. An integer `i` means
+            that at least `slice_len - i` samples will be gathered for each sampled trajectory.
+            Using tuples allows a fine grained control over the span on the left (beginning
+            of the stored trajectory) and on the right (end of the stored trajectory).
 
     .. note:: To recover the trajectory splits in the storage,
         :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` will first

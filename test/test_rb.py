@@ -2175,6 +2175,59 @@ class TestSamplers:
         done_recon = info[("next", "truncated")] | info[("next", "terminated")]
         assert done_recon.view(num_slices, -1)[:, -1].all()
 
+    def test_slice_sampler_left_right(self):
+        torch.manual_seed(0)
+        data = TensorDict(
+            {"obs": torch.arange(1, 11).repeat(10), "eps": torch.arange(100) // 10 + 1},
+            [100],
+        )
+
+        for N in (2, 4):
+            rb = TensorDictReplayBuffer(
+                sampler=SliceSampler(num_slices=10, traj_key="eps", span=(N, N)),
+                batch_size=50,
+                storage=LazyMemmapStorage(100),
+            )
+            rb.extend(data)
+
+            for _ in range(10):
+                sample = rb.sample()
+                sample = split_trajectories(sample)
+                assert (sample["next", "truncated"].squeeze(-1).sum(-1) == 1).all()
+                assert ((sample["obs"] == 0).sum(-1) <= N).all(), sample["obs"]
+                assert ((sample["eps"] == 0).sum(-1) <= N).all()
+                for i in range(sample.shape[0]):
+                    curr_eps = sample[i]["eps"]
+                    curr_eps = curr_eps[curr_eps != 0]
+                    assert curr_eps.unique().numel() == 1
+
+    def test_slice_sampler_left_right_ndim(self):
+        torch.manual_seed(0)
+        data = TensorDict(
+            {"obs": torch.arange(1, 11).repeat(12), "eps": torch.arange(120) // 10 + 1},
+            [120],
+        )
+        data = data.reshape(4, 30)
+
+        for N in (2, 4):
+            rb = TensorDictReplayBuffer(
+                sampler=SliceSampler(num_slices=10, traj_key="eps", span=(N, N)),
+                batch_size=50,
+                storage=LazyMemmapStorage(100, ndim=2),
+            )
+            rb.extend(data)
+
+            for _ in range(10):
+                sample = rb.sample()
+                sample = split_trajectories(sample)
+                assert (sample["next", "truncated"].squeeze(-1).sum(-1) <= 1).all()
+                assert ((sample["obs"] == 0).sum(-1) <= N).all(), sample["obs"]
+                assert ((sample["eps"] == 0).sum(-1) <= N).all()
+                for i in range(sample.shape[0]):
+                    curr_eps = sample[i]["eps"]
+                    curr_eps = curr_eps[curr_eps != 0]
+                    assert curr_eps.unique().numel() == 1
+
     def test_slicesampler_strictlength(self):
 
         torch.manual_seed(0)
