@@ -1280,11 +1280,6 @@ class StorageEnsemble(Storage):
 
 # Utils
 def _mem_map_tensor_as_tensor(mem_map_tensor) -> torch.Tensor:
-    if _CKPT_BACKEND == "torchsnapshot" and not _has_ts:
-        raise ImportError(
-            "the checkpointing backend is set to torchsnapshot but the library is not installed. Consider installing the library or switch to another backend. "
-            f"Supported backends are {_CKPT_BACKEND.backends}"
-        )
     if isinstance(mem_map_tensor, torch.Tensor):
         # This will account for MemoryMappedTensors
         return mem_map_tensor

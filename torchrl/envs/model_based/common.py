@@ -5,9 +5,8 @@
 
 import abc
 import warnings
-from typing import List, Optional, Union
+from typing import List, Optional
 
-import numpy as np
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
