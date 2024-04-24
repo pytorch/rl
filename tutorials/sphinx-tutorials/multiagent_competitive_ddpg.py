@@ -126,9 +126,10 @@ Key learnings:
 # If you are running this in Colab or in a machine with a GUI, you will also have the option
 # to render and visualise your own trained policy prior and after training.
 #
-# Let's import our dependencies
+# Import our dependencies:
 #
 import copy
+import tempfile
 from typing import Dict, List
 
 # Torch
@@ -144,14 +145,18 @@ from torch import multiprocessing
 
 # Data collection
 from torchrl.collectors import SyncDataCollector
-from torchrl.data.replay_buffers import ReplayBuffer
-from torchrl.data.replay_buffers.samplers import RandomSampler
-from torchrl.data.replay_buffers.storages import LazyTensorStorage
+from torchrl.data import LazyTensorStorage, RandomSampler, ReplayBuffer
 
 # Env
-from torchrl.envs import PettingZooEnv, RewardSum, TransformedEnv
-from torchrl.envs.libs.vmas import VmasEnv
-from torchrl.envs.utils import check_env_specs
+from torchrl.envs import (
+    check_env_specs,
+    ExplorationType,
+    PettingZooEnv,
+    RewardSum,
+    set_exploration_type,
+    TransformedEnv,
+    VmasEnv,
+)
 
 # Multi-agent network
 from torchrl.modules import (
@@ -164,9 +169,10 @@ from torchrl.modules import (
 # Loss
 from torchrl.objectives import DDPGLoss, SoftUpdate, ValueEstimators
 
+from torchrl.record import CSVLogger, PixelRenderTransform, VideoRecorder
+
 # Utils
 from tqdm import tqdm
-
 
 ######################################################################
 # Define Hyperparameters
@@ -257,10 +263,10 @@ n_chasers = 2
 n_evaders = 1
 n_obstacles = 2
 
-use_vmas = False  # Set this to True for a great performance speedup
+use_vmas = True  # Set this to True for a great performance speedup
 
 if not use_vmas:
-    env = PettingZooEnv(
+    base_env = PettingZooEnv(
         task="simple_tag_v3",
         parallel=True,  # Use the Parallel version
         seed=seed,
@@ -275,7 +281,7 @@ else:
     num_vmas_envs = (
         frames_per_batch // max_steps
     )  # Number of vectorized environments. frames_per_batch collection will be divided among these environments
-    env = VmasEnv(
+    base_env = VmasEnv(
         scenario="simple_tag",
         num_envs=num_vmas_envs,
         continuous_actions=True,
@@ -296,7 +302,7 @@ else:
 # We can access the group map, mapping each group to the agents in it, as follows:
 #
 
-print(f"group_map: {env.group_map}")
+print(f"group_map: {base_env.group_map}")
 
 ######################################################################
 # as we can see it contains 2 groups: "agents" (evaders) and "adversaries" (chasers).
@@ -307,7 +313,7 @@ print(f"group_map: {env.group_map}")
 # For efficiency purposes, TorchRL is quite stringent when it comes to
 # environment specs, but you can easily check that your environment specs are
 # adequate.
-# In our example, the simulator wrapper takes care of setting the proper specs for your env, so
+# In our example, the simulator wrapper takes care of setting the proper specs for your base_env, so
 # you should not have to care about this.
 #
 # There are four specs to look at:
@@ -319,10 +325,10 @@ print(f"group_map: {env.group_map}")
 #
 #
 
-print("action_spec:", env.full_action_spec)
-print("reward_spec:", env.full_reward_spec)
-print("done_spec:", env.full_done_spec)
-print("observation_spec:", env.observation_spec)
+print("action_spec:", base_env.full_action_spec)
+print("reward_spec:", base_env.full_reward_spec)
+print("done_spec:", base_env.full_done_spec)
+print("observation_spec:", base_env.observation_spec)
 
 ######################################################################
 # Using the commands just shown we can access the domain of each value.
@@ -344,9 +350,9 @@ print("observation_spec:", env.observation_spec)
 # This info will be useful in order to tell all other TorchRL components where to find each value
 #
 
-print("action_keys:", env.action_keys)
-print("reward_keys:", env.reward_keys)
-print("done_keys:", env.done_keys)
+print("action_keys:", base_env.action_keys)
+print("reward_keys:", base_env.reward_keys)
+print("done_keys:", base_env.done_keys)
 
 
 ######################################################################
@@ -368,9 +374,10 @@ print("done_keys:", env.done_keys)
 #
 
 env = TransformedEnv(
-    env,
+    base_env,
     RewardSum(
-        in_keys=env.reward_keys, reset_keys=["_reset"] * len(env.group_map.keys())
+        in_keys=base_env.reward_keys,
+        reset_keys=["_reset"] * len(base_env.group_map.keys()),
     ),
 )
 
@@ -385,7 +392,7 @@ check_env_specs(env)
 # Rollout
 # ~~~~~~~
 #
-# For fun, let's see what a simple random rollout looks like. You can
+# For fun, let us see what a simple random rollout looks like. You can
 # call `env.rollout(n_steps)` and get an overview of what the environment inputs
 # and outputs look like. Actions will automatically be drawn at random from the action spec
 # domain.
@@ -881,9 +888,12 @@ for iteration, batch in enumerate(collector):
 # Results
 # -------
 #
-# Let's plot the mean reward obtained per episode
+# We can plot the mean reward obtained per episode.
 #
 # To make training last longer, increase the ``n_iters`` hyperparameter.
+#
+# (when running this script locally, you may need to close the opened window to
+# proceed with the rest of the screen).
 #
 
 fig, axs = plt.subplots(2, 1)
@@ -905,59 +915,40 @@ plt.show()
 #
 # *Rendering instruction are for VMAS*, aka when running with ``use_vmas=True``.
 #
-# If you are running this in a machine with GUI, you can render the trained policy by running:
+# TorchRL offers some utils to record and save rendered videos. You can learn more about these tools
+# :ref:`here <Environment-Recorders>`.
 #
-# .. code-block:: python
+# In the following code-block, we append a transform that will call the :meth:`render` method from the VMAS
+# wrapped environment and save the stack of frames to a `mp4` file which location is determined by the custom
+# logger `video_logger`. Note that this code may require some external dependencies such as torchvision.
 #
-#    from torchrl.envs.utils import ExplorationType, set_exploration_type
-#    with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-#       env.rollout(
-#           max_steps=max_steps,
-#           policy=agents_exploration_policy,
-#           callback=lambda env, _: env.render(),
-#           auto_cast_to_device=True,
-#           break_when_any_done=False,
-#       )
-#
-# If you are running this in Google Colab, you can render the trained policy by running:
-#
-# .. code-block:: bash
-#
-#    !sudo apt-get update
-#    !sudo apt-get install python3-opengl xvfb
-#    !pip install pyvirtualdisplay
-#
-# .. code-block:: python
-#
-#    import pyvirtualdisplay
-#    display = pyvirtualdisplay.Display(visible=False, size=(1400, 900))
-#    display.start()
-#    from PIL import Image
-#    from torchrl.envs.utils import ExplorationType, set_exploration_type
-#
-#    def rendering_callback(env, td):
-#        env.frames.append(Image.fromarray(env.render(mode="rgb_array")))
-#    env.frames = []
-#    scenario_name = "simple_tag"
-#    with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-#       env.rollout(
-#           max_steps=max_steps,
-#           policy=agents_exploration_policy,
-#           callback=rendering_callback,
-#           auto_cast_to_device=True,
-#           break_when_any_done=False,
-#       )
-#    env.frames[0].save(
-#        f"{scenario_name}.gif",
-#        save_all=True,
-#        append_images=env.frames[1:],
-#       duration=3,
-#       loop=0,
-#    )
-#
-#    from IPython.display import Image
-#    Image(open(f"{scenario_name}.gif", "rb").read())
-#
+
+if use_vmas:
+    # Replace tmpdir with any desired path where the video should be saved
+    with tempfile.TemporaryDirectory() as tmpdir:
+        video_logger = CSVLogger("vmas_logs", tmpdir, video_format="mp4")
+        print("Creating rendering env")
+        env_with_render = TransformedEnv(env.base_env, env.transform.clone())
+        env_with_render = env_with_render.append_transform(
+            PixelRenderTransform(
+                out_keys=["pixels"],
+                # the np.ndarray has a negative stride and needs to be copied before being cast to a tensor
+                preproc=lambda x: x.copy(),
+                as_non_tensor=True,
+                # asking for array rather than on-screen rendering
+                mode="rgb_array",
+            )
+        )
+        env_with_render = env_with_render.append_transform(
+            VideoRecorder(logger=video_logger, tag="vmas_rendered")
+        )
+        with set_exploration_type(ExplorationType.MODE):
+            print("Rendering rollout...")
+            env_with_render.rollout(100, policy=agents_exploration_policy)
+        print("Saving the video...")
+        env_with_render.transform.dump()
+        print("Saved! Saved directory tree:")
+        video_logger.print_log_dir()
 
 
 ######################################################################
@@ -973,7 +964,7 @@ plt.show()
 #
 # Now that you are proficient with multi-agent DDPG, you can check out all
 # `TorchRL multi-agent examples <https://github.com/pytorch/rl/tree/main/sota-implementations/multiagent>`__.
-# These are code-only scripts of many popular MARL sota-implementations such as the ones seen in this tutorial,
+# These are code-only scripts of many MARL sota-implementations such as the ones seen in this tutorial,
 # QMIX, MADDPG, IQL, and many more!
 #
 # Also do remember to check out our
