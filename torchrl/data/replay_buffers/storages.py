@@ -1093,11 +1093,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         if self.device == "auto":
             self.device = data.device
         if self.device.type != "cpu":
-            warnings.warn(
-                "Support for Memmap device other than CPU will be deprecated in v0.4.0. "
-                "Using a 'cuda' device may be suboptimal.",
-                category=DeprecationWarning,
-            )
+            raise RuntimeError("Support for Memmap device other than CPU is deprecated")
 
         def max_size_along_dim0(data_shape):
             if self.ndim > 1:
@@ -1128,17 +1124,7 @@ class LazyMemmapStorage(LazyTensorStorage):
 
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         result = super().get(index)
-
-        # to be deprecated in v0.4
-        def map_device(tensor):
-            if tensor.device != self.device:
-                return tensor.to(self.device, non_blocking=False)
-            return tensor
-
-        if is_tensor_collection(result):
-            return map_device(result)
-        else:
-            return tree_map(map_device, result)
+        return result
 
 
 class StorageEnsemble(Storage):

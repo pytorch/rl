@@ -3,14 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import warnings
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
-from torchrl.modules import ActorCriticOperator, ActorValueOperator
 from torchrl.objectives import DistributionalDQNLoss, DQNLoss, HardUpdate, SoftUpdate
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.deprecated import REDQLoss_deprecated
 from torchrl.objectives.utils import TargetNetUpdater
 
 
@@ -36,46 +33,6 @@ def make_target_updater(
             )
         target_net_updater = None
     return target_net_updater
-
-
-def make_redq_loss(
-    model, cfg
-) -> Tuple[REDQLoss_deprecated, Optional[TargetNetUpdater]]:
-    """Builds the REDQ loss module."""
-    warnings.warn(
-        "This helper function will be deprecated in v0.4. Consider using the local helper in the REDQ example.",
-        category=DeprecationWarning,
-    )
-    loss_kwargs = {}
-    if hasattr(cfg, "distributional") and cfg.distributional:
-        raise NotImplementedError
-    else:
-        loss_kwargs.update({"loss_function": cfg.loss_function})
-        loss_kwargs.update({"delay_qvalue": cfg.loss == "double"})
-        loss_class = REDQLoss_deprecated
-    if isinstance(model, ActorValueOperator):
-        actor_model = model.get_policy_operator()
-        qvalue_model = model.get_value_operator()
-    elif isinstance(model, ActorCriticOperator):
-        raise RuntimeError(
-            "Although REDQ Q-value depends upon selected actions, using the"
-            "ActorCriticOperator will lead to resampling of the actions when"
-            "computing the Q-value loss, which we don't want. Please use the"
-            "ActorValueOperator instead."
-        )
-    else:
-        actor_model, qvalue_model = model
-
-    loss_module = loss_class(
-        actor_network=actor_model,
-        qvalue_network=qvalue_model,
-        num_qvalue_nets=cfg.num_q_values,
-        gSDE=cfg.gSDE,
-        **loss_kwargs,
-    )
-    loss_module.make_value_estimator(gamma=cfg.gamma)
-    target_net_updater = make_target_updater(cfg, loss_module)
-    return loss_module, target_net_updater
 
 
 def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[TargetNetUpdater]]:
