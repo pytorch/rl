@@ -302,7 +302,7 @@ class VmasWrapper(_EnvWrapper):
             group_map = MarlGroupMapType.ALL_IN_ONE_GROUP.get_group_map(agent_names)
 
         # For BC-compatibility rename the "agent" group to "agents"
-        if "agent" in group_map:
+        if "agent" in group_map and len(group_map) == 1:
             agent_group = group_map["agent"]
             group_map["agents"] = agent_group
             del group_map["agent"]
