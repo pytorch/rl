@@ -145,9 +145,7 @@ print("reset data", reset_data)
 # we can just generate a random action:
 
 
-policy = TensorDictModule(
-    functools.partial(env.action_spec.rand, env=env), in_keys=[], out_keys=["action"]
-)
+policy = TensorDictModule(env.action_spec.rand, in_keys=[], out_keys=["action"])
 
 
 policy(reset_data)
