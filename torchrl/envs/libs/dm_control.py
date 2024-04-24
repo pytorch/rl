@@ -80,8 +80,8 @@ def _dmcontrol_to_torchrl_spec_transform(
             shape = torch.Size([1])
         return BoundedTensorSpec(
             shape=shape,
-            low=spec.low,
-            high=spec.high,
+            low=spec.minimum,
+            high=spec.maximum,
             dtype=dtype,
             device=device,
         )
