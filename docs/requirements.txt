@@ -26,4 +26,3 @@ memory_profiler
 pyrender
 pytest
 vmas
-pyglet==1.2.4

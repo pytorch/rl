@@ -4,13 +4,6 @@ Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
 ===========================================================================
 **Author**: `Matteo Bettini <https://github.com/matteobettini>`_
 
-.. note::
-
-   If you are interested in Multi-Agent Reinforcement Learning (MARL) in
-   TorchRL, check out
-   `BenchMARL <https://github.com/facebookresearch/BenchMARL>`__: a benchmarking library where you
-   can train and compare MARL sota-implementations, tasks, and models using TorchRL!
-
 This tutorial demonstrates how to use PyTorch and TorchRL to
 solve a Competitive Multi-Agent Reinforcement Learning (MARL) problem.
 
@@ -140,6 +133,12 @@ from torchrl.objectives import DDPGLoss, SoftUpdate, ValueEstimators
 from torchrl.record import CSVLogger, PixelRenderTransform, VideoRecorder
 
 from tqdm import tqdm
+
+# Check if we're building the doc, in which case disable video rendering
+try:
+    is_sphinx = __sphinx_build__
+except NameError:
+    is_sphinx = False
 
 ######################################################################
 # Define Hyperparameters
@@ -879,7 +878,7 @@ plt.show()
 # logger `video_logger`. Note that this code may require some external dependencies such as torchvision.
 #
 
-if use_vmas:
+if use_vmas and not is_sphinx:
     # Replace tmpdir with any desired path where the video should be saved
     with tempfile.TemporaryDirectory() as tmpdir:
         video_logger = CSVLogger("vmas_logs", tmpdir, video_format="mp4")
