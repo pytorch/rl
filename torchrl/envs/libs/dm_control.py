@@ -19,6 +19,7 @@ from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
+    OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
@@ -43,15 +44,34 @@ def _dmcontrol_to_torchrl_spec_transform(
     spec,
     dtype: Optional[torch.dtype] = None,
     device: DEVICE_TYPING = None,
+    categorical_discrete_encoding: bool = False,
 ) -> TensorSpec:
     import dm_env
 
-    if isinstance(spec, collections.OrderedDict):
+    if isinstance(spec, collections.OrderedDict) or isinstance(spec, Dict):
         spec = {
-            k: _dmcontrol_to_torchrl_spec_transform(item, device=device)
+            k: _dmcontrol_to_torchrl_spec_transform(
+                item,
+                device=device,
+                categorical_discrete_encoding=categorical_discrete_encoding,
+            )
             for k, item in spec.items()
         }
         return CompositeSpec(**spec)
+    elif isinstance(spec, dm_env.specs.DiscreteArray):
+        # DiscreteArray is a type of BoundedArray so this block needs to go first
+        action_space_cls = (
+            DiscreteTensorSpec
+            if categorical_discrete_encoding
+            else OneHotDiscreteTensorSpec
+        )
+        if dtype is None:
+            dtype = (
+                numpy_to_torch_dtype_dict[spec.dtype]
+                if categorical_discrete_encoding
+                else torch.long
+            )
+        return action_space_cls(spec.num_values, device=device, dtype=dtype)
     elif isinstance(spec, dm_env.specs.BoundedArray):
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
@@ -77,7 +97,6 @@ def _dmcontrol_to_torchrl_spec_transform(
             )
         else:
             return UnboundedDiscreteTensorSpec(shape=shape, dtype=dtype, device=device)
-
     else:
         raise NotImplementedError(type(spec))
 

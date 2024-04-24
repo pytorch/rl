@@ -42,6 +42,7 @@ from .models import (
     reset_noise,
     RSSMPosterior,
     RSSMPrior,
+    RSSMRollout,
     Squeeze2dLayer,
     SqueezeLayer,
     VDNMixer,

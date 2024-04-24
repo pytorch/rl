@@ -17,8 +17,10 @@ from torchrl.envs.libs.gym import set_gym_backend
 
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module import DecisionTransformerInferenceWrapper
+from torchrl.record import VideoRecorder
 
 from utils import (
+    dump_video,
     log_metrics,
     make_dt_loss,
     make_dt_model,
@@ -34,6 +36,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     set_gym_backend(cfg.env.backend).set()
 
     model_device = cfg.optim.device
+    if model_device in ("", None):
+        if torch.cuda.is_available():
+            model_device = "cuda:0"
+        else:
+            model_device = "cpu"
+    model_device = torch.device(model_device)
 
     # Set seeds
     torch.manual_seed(cfg.env.seed)
@@ -48,7 +56,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create test environment
-    test_env = make_env(cfg.env, obs_loc, obs_std)
+    test_env = make_env(cfg.env, obs_loc, obs_std, from_pixels=cfg.logger.video)
+    if cfg.logger.video:
+        test_env = test_env.append_transform(
+            VideoRecorder(logger, tag="rendered", in_keys=["pixels"])
+        )
 
     # Create policy model
     actor = make_dt_model(cfg)
@@ -109,6 +121,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     policy=inference_policy,
                     auto_cast_to_device=True,
                 )
+                test_env.apply(dump_video)
             to_log["eval/reward"] = (
                 eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
             )

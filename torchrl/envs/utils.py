@@ -16,6 +16,7 @@ import warnings
 from enum import Enum
 from typing import Any, Dict, List, Union
 
+import tensordict
 import torch
 
 from tensordict import (
@@ -25,6 +26,7 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
+from tensordict.base import _is_leaf_nontensor
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
@@ -109,13 +111,15 @@ class _StepMDP:
         state_keys = env.full_state_spec.keys(True, True)
         self.action_keys = [unravel_key(key) for key in action_keys]
         self.done_keys = [unravel_key(key) for key in done_keys]
+        self.observation_keys = list(observation_keys)
+        self.state_keys = list(state_keys)
         self.reward_keys = [unravel_key(key) for key in reward_keys]
-        self.observation_keys = [unravel_key(key) for key in observation_keys]
-        self.state_keys = [unravel_key(key) for key in state_keys]
+        self.reward_keys_filt = list(set(self.reward_keys) - set(self.state_keys))
 
         excluded = set()
         if exclude_reward:
-            excluded = excluded.union(self.reward_keys)
+            # If a reward is also a state, it must be in the input
+            excluded = excluded.union(self.reward_keys_filt)
         if exclude_done:
             excluded = excluded.union(self.done_keys)
         if exclude_action:
@@ -130,6 +134,12 @@ class _StepMDP:
         self.keys_from_next = list(self.observation_keys)
         if not exclude_reward:
             self.keys_from_next += self.reward_keys
+        else:
+            self.keys_from_next += [
+                reward_key
+                for reward_key in self.reward_keys
+                if reward_key in self.state_keys
+            ]
         if not exclude_done:
             self.keys_from_next += self.done_keys
         self.keys_from_root = []
@@ -144,12 +154,16 @@ class _StepMDP:
 
         reset_keys = {_replace_last(key, "_reset") for key in self.done_keys}
         self.exclude_from_root += list(reset_keys)
-        self.exclude_from_root += list(self.reward_keys)
+        self.exclude_from_root += self.reward_keys_filt
 
         self.exclude_from_root = self._repr_key_list_as_tree(self.exclude_from_root)
         self.keys_from_root = self._repr_key_list_as_tree(self.keys_from_root)
         self.keys_from_next = self._repr_key_list_as_tree(self.keys_from_next)
         self.validated = None
+
+        # Model based envs can have missing keys
+        # TODO: do we want to always allow this? check_env_specs should catch these or downstream ops
+        self._allow_absent_keys = True
 
     def validate(self, tensordict):
         if self.validated:
@@ -171,7 +185,11 @@ class _StepMDP:
                     return key == "_reset"
                 return key[-1] == "_reset"
 
-            actual = {key for key in tensordict.keys(True, True) if not _is_reset(key)}
+            actual = {
+                key
+                for key in tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
+                if not _is_reset(key)
+            }
             expected = set(expected)
             self.validated = expected.intersection(actual) == expected
             if not self.validated:
@@ -196,7 +214,11 @@ class _StepMDP:
 
     @classmethod
     def _grab_and_place(
-        cls, nested_key_dict: dict, data_in: TensorDictBase, data_out: TensorDictBase
+        cls,
+        nested_key_dict: dict,
+        data_in: TensorDictBase,
+        data_out: TensorDictBase,
+        _allow_absent_keys: bool,
     ):
         for key, subdict in nested_key_dict.items():
             val = data_in._get_str(key, NO_DEFAULT)
@@ -208,7 +230,12 @@ class _StepMDP:
 
                     val = LazyStackedTensorDict(
                         *(
-                            cls._grab_and_place(subdict, _val, _val_out)
+                            cls._grab_and_place(
+                                subdict,
+                                _val,
+                                _val_out,
+                                _allow_absent_keys=_allow_absent_keys,
+                            )
                             for (_val, _val_out) in zip(
                                 val.unbind(val.stack_dim),
                                 val_out.unbind(val_out.stack_dim),
@@ -217,10 +244,16 @@ class _StepMDP:
                         stack_dim=val.stack_dim,
                     )
                 else:
-                    val = cls._grab_and_place(subdict, val, val_out)
-            data_out._set_str(
-                key, val, validated=True, inplace=False, non_blocking=False
-            )
+                    val = cls._grab_and_place(
+                        subdict, val, val_out, _allow_absent_keys=_allow_absent_keys
+                    )
+            if val is NO_DEFAULT:
+                if not _allow_absent_keys:
+                    raise KeyError(f"key {key} not found.")
+            else:
+                data_out._set_str(
+                    key, val, validated=True, inplace=False, non_blocking=False
+                )
         return data_out
 
     @classmethod
@@ -235,7 +268,7 @@ class _StepMDP:
                 cls._exclude(nested_key_dict, td, td_out)
             return out
         has_set = False
-        for key, value in data_in.items():
+        for key, value in data_in.items(is_leaf=tensordict.base._is_leaf_nontensor):
             subdict = nested_key_dict.get(key, NO_DEFAULT)
             if subdict is NO_DEFAULT:
                 value = value.copy() if is_tensor_collection(value) else value
@@ -267,8 +300,18 @@ class _StepMDP:
                 out = self._exclude(self.exclude_from_root, tensordict, out=None)
             else:
                 out = next_td.empty()
-                self._grab_and_place(self.keys_from_root, tensordict, out)
-            self._grab_and_place(self.keys_from_next, next_td, out)
+                self._grab_and_place(
+                    self.keys_from_root,
+                    tensordict,
+                    out,
+                    _allow_absent_keys=self._allow_absent_keys,
+                )
+            self._grab_and_place(
+                self.keys_from_next,
+                next_td,
+                out,
+                _allow_absent_keys=self._allow_absent_keys,
+            )
             return out
         else:
             out = next_td.empty()
@@ -393,6 +436,12 @@ def step_mdp(
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
+
+    .. warning:: This function will not work properly if the reward key is also part of the input key when
+        the reward keys are excluded. This is why the :class:`~torchrl.envs.RewardSum` transform registers
+        the episode reward in the observation and not the reward spec by default.
+        When using the fast, cached version of this function (``_StepMDP``), this issue should not
+        be observed.
 
     """
     if isinstance(tensordict, LazyStackedTensorDict):

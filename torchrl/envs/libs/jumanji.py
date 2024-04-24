@@ -3,11 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib.util
-
 from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from packaging import version
 from tensordict import TensorDict, TensorDictBase
 from torchrl.envs.utils import _classproperty
 
@@ -307,6 +307,9 @@ class JumanjiWrapper(GymLikeEnv):
     def lib(self):
         import jumanji
 
+        if version.parse(jumanji.__version__) < version.parse("1.0.0"):
+            raise ImportError("jumanji version must be >= 1.0.0")
+
         return jumanji
 
     def __init__(self, env: "jumanji.env.Environment" = None, **kwargs):  # noqa: F821
@@ -356,7 +359,7 @@ class JumanjiWrapper(GymLikeEnv):
 
     def _make_action_spec(self, env) -> TensorSpec:
         action_spec = _jumanji_to_torchrl_spec_transform(
-            env.action_spec(), device=self.device
+            env.action_spec, device=self.device
         )
         action_spec = action_spec.expand(*self.batch_size, *action_spec.shape)
         return action_spec
@@ -364,7 +367,7 @@ class JumanjiWrapper(GymLikeEnv):
     def _make_observation_spec(self, env) -> TensorSpec:
         jumanji = self.lib
 
-        spec = env.observation_spec()
+        spec = env.observation_spec
         new_spec = _jumanji_to_torchrl_spec_transform(spec, device=self.device)
         if isinstance(spec, jumanji.specs.Array):
             return CompositeSpec(observation=new_spec).expand(self.batch_size)
@@ -377,7 +380,7 @@ class JumanjiWrapper(GymLikeEnv):
 
     def _make_reward_spec(self, env) -> TensorSpec:
         reward_spec = _jumanji_to_torchrl_spec_transform(
-            env.reward_spec(), device=self.device
+            env.reward_spec, device=self.device
         )
         if not len(reward_spec.shape):
             reward_spec.shape = torch.Size([1])

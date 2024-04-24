@@ -40,7 +40,7 @@ network:
   activation: relu
   default_policy_scale: 1.0
   scale_lb: 0.1
-  device: "cuda:0"
+  device:
 
 # logging
 logger:
@@ -50,3 +50,4 @@ logger:
   exp_name: ${env.name}_SAC
   mode: online
   eval_iter: 25000
+  video: False
