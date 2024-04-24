@@ -24,7 +24,7 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.memmap import MemmapTensor, MemoryMappedTensor
+from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
 
@@ -1287,7 +1287,7 @@ class StorageEnsemble(Storage):
 
 
 # Utils
-def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
+def _mem_map_tensor_as_tensor(mem_map_tensor) -> torch.Tensor:
     if _CKPT_BACKEND == "torchsnapshot" and not _has_ts:
         raise ImportError(
             "the checkpointing backend is set to torchsnapshot but the library is not installed. Consider installing the library or switch to another backend. "
@@ -1296,16 +1296,6 @@ def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
     if isinstance(mem_map_tensor, torch.Tensor):
         # This will account for MemoryMappedTensors
         return mem_map_tensor
-    if _CKPT_BACKEND == "torchsnapshot":
-        # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor
-        # as a Tensor for saving and loading purposes. This doesn't incur any copy.
-        return tensor_from_memoryview(
-            dtype=mem_map_tensor.dtype,
-            shape=list(mem_map_tensor.shape),
-            mv=memoryview(mem_map_tensor._memmap_array),
-        )
-    elif _CKPT_BACKEND == "torch":
-        return mem_map_tensor._tensor
 
 
 def _collate_list_tensordict(x):
