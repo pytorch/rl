@@ -3088,8 +3088,9 @@ class TestIsaacGym:
     @classmethod
     def _run_on_proc(cls, q, task, num_envs, device, from_pixels):
         try:
-            env = IsaacGymEnv(task=task, num_envs=num_envs, device=device, from_pixels=from_pixels)
-            print(env.rollout(3))
+            env = IsaacGymEnv(
+                task=task, num_envs=num_envs, device=device, from_pixels=from_pixels
+            )
             check_env_specs(env)
             q.put(("succeeded!", None))
         except Exception as err:
@@ -3098,9 +3099,12 @@ class TestIsaacGym:
 
     def test_env(self, task, num_envs, device, from_pixels):
         from torch import multiprocessing as mp
+
         q = mp.Queue(1)
         self._run_on_proc(q, task, num_envs, device, from_pixels)
-        proc = mp.Process(target=self._run_on_proc, args=(q, task, num_envs, device, from_pixels))
+        proc = mp.Process(
+            target=self._run_on_proc, args=(q, task, num_envs, device, from_pixels)
+        )
         try:
             proc.start()
             msg, error = q.get()
