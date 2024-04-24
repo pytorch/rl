@@ -2574,15 +2574,16 @@ def _minari_selected_datasets():
     _MINARI_DATASETS += keys
 
 
-_minari_selected_datasets()
-
-
 @pytest.mark.skipif(not _has_minari or not _has_gymnasium, reason="Minari not found")
 @pytest.mark.slow
 class TestMinari:
     @pytest.mark.parametrize("split", [False, True])
     @pytest.mark.parametrize("selected_dataset", _MINARI_DATASETS)
     def test_load(self, selected_dataset, split):
+        global _MINARI_DATASETS
+        if not _MINARI_DATASETS:
+            _minari_selected_datasets()
+
         torchrl_logger.info(f"dataset {selected_dataset}")
         data = MinariExperienceReplay(
             selected_dataset, batch_size=32, split_trajs=split
@@ -2598,6 +2599,9 @@ class TestMinari:
                 break
 
     def test_minari_preproc(self, tmpdir):
+        global _MINARI_DATASETS
+        if not _MINARI_DATASETS:
+            _minari_selected_datasets()
         selected_dataset = _MINARI_DATASETS[0]
         dataset = MinariExperienceReplay(
             selected_dataset,
