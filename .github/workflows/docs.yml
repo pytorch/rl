@@ -92,8 +92,6 @@ jobs:
 
   upload:
     needs: build-docs
-    if: github.repository == 'pytorch/rl' && github.event_name == 'push' && 
-        ((github.ref_type == 'branch' && github.ref_name == 'main') || (github.ref_type == 'branch' && github.ref_name == 'release-doc') || github.ref_type == 'tag')
     permissions:
       contents: write
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
