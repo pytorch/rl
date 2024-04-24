@@ -7,11 +7,11 @@ import argparse
 import dataclasses
 import pathlib
 import sys
-
 from time import sleep
 
 import pytest
 import torch
+
 from _utils_internal import generate_seeds, get_default_devices
 from torchrl._utils import timeit
 
@@ -38,8 +38,6 @@ from torchrl.envs.transforms.transforms import (
     FlattenObservation,
     TransformedEnv,
 )
-from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules.tensordict_module.common import _has_functorch
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import (
     EnvConfig,

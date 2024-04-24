@@ -27,18 +27,10 @@ from tensordict import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
-
 from torch.utils._pytree import LeafSpec, tree_flatten, tree_map, tree_unflatten
 
 from torchrl._utils import _CKPT_BACKEND, implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.utils import _is_int, INT_CLASSES
-
-try:
-    from torchsnapshot.serialization import tensor_from_memoryview
-
-    _has_ts = True
-except ImportError:
-    _has_ts = False
 
 SINGLE_TENSOR_BUFFER_NAME = os.environ.get(
     "SINGLE_TENSOR_BUFFER_NAME", "_-single-tensor-_"

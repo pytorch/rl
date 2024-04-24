@@ -36,6 +36,8 @@ from torchrl.envs.transforms import (
 # Specified for test_utils.py
 __version__ = "0.3"
 
+from torchrl.modules import MLP
+
 
 def CARTPOLE_VERSIONED():
     # load gym
