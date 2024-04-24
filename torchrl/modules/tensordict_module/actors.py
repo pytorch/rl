@@ -443,7 +443,7 @@ class QValueModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        action_space: Optional[str],
+        action_space: Optional[str] = None,
         action_value_key: Optional[NestedKey] = None,
         action_mask_key: Optional[NestedKey] = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
