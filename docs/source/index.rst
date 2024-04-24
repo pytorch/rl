@@ -70,51 +70,17 @@ library. If you're in a hurry, you can start by
 :ref:`the last item of the series <gs_first_training>`
 and navigate to the previous ones whenever you want to learn more!
 
-.. toctree::
-   :maxdepth: 1
-
-   tutorials/getting-started-0
-   tutorials/getting-started-1
-   tutorials/getting-started-2
-   tutorials/getting-started-3
-   tutorials/getting-started-4
-   tutorials/getting-started-5
-
 Tutorials
 =========
 
 Basics
 ------
 
-.. toctree::
-   :maxdepth: 1
-
-   tutorials/coding_ppo
-   tutorials/pendulum
-   tutorials/torchrl_demo
-
 Intermediate
 ------------
 
-.. toctree::
-   :maxdepth: 1
-
-   tutorials/multiagent_ppo
-   tutorials/torchrl_envs
-   tutorials/pretrained_models
-   tutorials/dqn_with_rnn
-   tutorials/rb_tutorial
-
 Advanced
 --------
-
-.. toctree::
-   :maxdepth: 1
-
-   tutorials/multiagent_competitive_ddpg
-   tutorials/multi_task
-   tutorials/coding_ddpg
-   tutorials/coding_dqn
 
 References
 ==========
