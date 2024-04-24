@@ -128,8 +128,9 @@ jobs:
 
         echo "Target Folder: ${TARGET_FOLDER}"
 
-        # mkdir -p "${TARGET_FOLDER}"
-        # rm -rf "${TARGET_FOLDER}"/*
+        mkdir -p "${TARGET_FOLDER}"
+        rm -rf "${TARGET_FOLDER}"/*
+
         echo $(ls "${RUNNER_ARTIFACT_DIR}")
         rsync -a "${RUNNER_ARTIFACT_DIR}"/ "${TARGET_FOLDER}"
         git add "${TARGET_FOLDER}" || true
