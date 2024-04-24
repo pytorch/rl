@@ -107,7 +107,11 @@ jobs:
         REF_NAME=${{ github.ref_name }}
 
         if [[ "${REF_TYPE}" == branch ]]; then
-          TARGET_FOLDER="${REF_NAME}"
+          if [[ "${REF_NAME}" == main ]]; then
+            TARGET_FOLDER="${REF_NAME}"
+          else
+            TARGET_FOLDER="release-doc"
+          fi
         elif [[ "${REF_TYPE}" == tag ]]; then
           case "${REF_NAME}" in
             *-rc*)
