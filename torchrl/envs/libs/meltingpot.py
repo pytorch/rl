@@ -186,6 +186,7 @@ class MeltingpotWrapper(_EnvWrapper):
         group_map: MarlGroupMapType
         | Dict[str, List[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
         max_steps: int = None,
+        disable_shooting: bool = False,
         **kwargs,
     ):
         if env is not None:
@@ -194,6 +195,7 @@ class MeltingpotWrapper(_EnvWrapper):
         self.categorical_actions = categorical_actions
         self.max_steps = max_steps
         self.num_cycles = 0
+        self.disable_shooting = disable_shooting
         super().__init__(**kwargs)
 
     def _build_env(
@@ -226,7 +228,10 @@ class MeltingpotWrapper(_EnvWrapper):
         ]
         torchrl_agent_act_specs = [
             _dmcontrol_to_torchrl_spec_transform(
-                agent_act_spec, categorical_discrete_encoding=self.categorical_actions
+                agent_act_spec.replace(num_values=agent_act_spec.num_values - 1)
+                if self.disable_shooting
+                else agent_act_spec,
+                categorical_discrete_encoding=self.categorical_actions,
             )
             for agent_act_spec in mp_act_spec
         ]
@@ -566,6 +571,7 @@ class MeltingpotEnv(MeltingpotWrapper):
         categorical_actions: bool = True,
         group_map: MarlGroupMapType
         | Dict[str, List[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        disable_shooting: bool = False,
         **kwargs,
     ):
         if not _has_meltingpot:
@@ -578,6 +584,7 @@ class MeltingpotEnv(MeltingpotWrapper):
             max_steps=max_steps,
             categorical_actions=categorical_actions,
             group_map=group_map,
+            disable_shooting=disable_shooting,
             **kwargs,
         )
 
