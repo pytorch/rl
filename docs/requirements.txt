@@ -26,4 +26,3 @@ memory_profiler
 pyrender
 pytest
 vmas
-pettingzoo[mpe]==1.24.3
