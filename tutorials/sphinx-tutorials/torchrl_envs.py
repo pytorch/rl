@@ -146,7 +146,7 @@ print("reset data", reset_data)
 
 
 policy = TensorDictModule(
-    functools.partial(env.action_spec.rand(), env=env), in_keys=[], out_keys=["action"]
+    functools.partial(env.action_spec.rand, env=env), in_keys=[], out_keys=["action"]
 )
 
 

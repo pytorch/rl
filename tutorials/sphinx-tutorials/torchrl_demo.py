@@ -741,7 +741,7 @@ from torchrl.envs.libs.gym import GymEnv
 # We use a SerialEnv for simplicity, but for larger jobs a ParallelEnv would be better suited.
 
 parallel_env = SerialEnv(
-    3, EnvCreator(lambda: GymEnv("Pendulum-v1")), mp_start_method="fork"
+    3, EnvCreator(lambda: GymEnv("Pendulum-v1")),
 )
 create_env_fn = [parallel_env, parallel_env]
 
