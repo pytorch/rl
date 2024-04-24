@@ -8,6 +8,7 @@ TorchRL envs
 .. _envs_tuto:
 
 """
+import functools
 ##############################################################################
 #
 # Environments play a crucial role in RL settings, often somewhat similar to
@@ -37,6 +38,8 @@ TorchRL envs
 
 # sphinx_gallery_start_ignore
 import warnings
+
+from tensordict.nn import TensorDictModule
 
 warnings.filterwarnings("ignore")
 
@@ -133,31 +136,31 @@ print(env.done_spec)
 
 torch.manual_seed(0)  # make sure that all torch code is also reproductible
 env.set_seed(0)
-tensordict = env.reset()
-print(tensordict)
+reset_data = env.reset()
+print("reset data", reset_data)
 
 ###############################################################################
 # We can now execute a step in the environment. Since we don't have a policy,
 # we can just generate a random action:
 
 
-def policy(tensordict, env=env):
-    tensordict.set("action", env.action_spec.rand())
-    return tensordict
+policy = TensorDictModule(
+    functools.partial(env.action_spec.rand(), env=env), in_keys=[], out_keys=["action"]
+)
 
 
-policy(tensordict)
-tensordict_out = env.step(tensordict)
+policy(reset_data)
+tensordict_out = env.step(reset_data)
 
 ###############################################################################
 # By default, the tensordict returned by ``step`` is the same as the input...
 
-assert tensordict_out is tensordict
+assert tensordict_out is reset_data
 
 ###############################################################################
 # ... but with new keys
 
-tensordict
+tensordict_out
 
 ###############################################################################
 # What we just did (a random step using ``action_spec.rand()``) can also be
@@ -175,13 +178,14 @@ env.rand_step()
 
 from torchrl.envs.utils import step_mdp
 
-tensordict.set("some other key", torch.randn(1))
-tensordict_tprime = step_mdp(tensordict)
+tensordict_out.set("some other key", torch.randn(1))
+tensordict_tprime = step_mdp(tensordict_out)
 
 print(tensordict_tprime)
 print(
     (
-        tensordict_tprime.get("observation") == tensordict.get(("next", "observation"))
+        tensordict_tprime.get("observation")
+        == tensordict_out.get(("next", "observation"))
     ).all()
 )
 
@@ -548,7 +552,8 @@ except RuntimeError:
 
 ###############################################################################
 
-parallel_env.start()
+if parallel_env.is_closed:
+    parallel_env.start()
 foo_list = parallel_env.foo
 foo_list  # needs to be instantiated, for instance using list
 

@@ -412,7 +412,7 @@ rb = TensorDictReplayBuffer(
 #
 
 utd = 16
-pbar = tqdm.tqdm(total=1_000_000)
+pbar = tqdm.tqdm(total=collector.total_frames)
 longest = 0
 
 traj_lens = []
