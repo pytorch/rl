@@ -226,9 +226,10 @@ jobs:
       matrix:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
-      docker-image: "nvcr.io/nvidia/isaac-sim:2023.1.1"
+      docker-image: "nvidia/isaac-sim:2023.1.1"
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
