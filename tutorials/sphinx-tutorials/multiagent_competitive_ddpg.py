@@ -116,8 +116,7 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import multiprocessing
 
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import LazyMemmapStorage
-from torchrl.data import RandomSampler, ReplayBuffer
+from torchrl.data import LazyMemmapStorage, RandomSampler, ReplayBuffer
 
 from torchrl.envs import (
     check_env_specs,
@@ -849,8 +848,8 @@ for iteration, batch in enumerate(collector):
 #
 # To make training last longer, increase the ``n_iters`` hyperparameter.
 #
-# (when running this script locally, you may need to close the opened window to
-# proceed with the rest of the screen).
+# When running this script locally, you may need to close the opened window to
+# proceed with the rest of the screen.
 #
 
 fig, axs = plt.subplots(2, 1)
