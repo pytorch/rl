@@ -219,6 +219,22 @@ jobs:
         ./.github/unittest/linux_libs/scripts_gym/batch_scripts.sh
         ./.github/unittest/linux_libs/scripts_gym/post_process.sh
 
+  unittests-isaac:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      docker-image: "nvcr.io/nvidia/isaac-sim:2023.1.1"
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "11.7"
+      timeout: 120
+      script: |
+        echo "Hello world"
+
   unittests-jumanji:
     strategy:
       matrix:
