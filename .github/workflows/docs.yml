@@ -93,7 +93,7 @@ jobs:
   upload:
     needs: build-docs
     if: github.repository == 'pytorch/rl' && github.event_name == 'push' && 
-        ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
+        ((github.ref_type == 'branch' && github.ref_name == 'main') || (github.ref_type == 'branch' && github.ref_name == 'release-doc') || github.ref_type == 'tag')
     permissions:
       contents: write
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
@@ -108,23 +108,22 @@ jobs:
         REF_TYPE=${{ github.ref_type }}
         REF_NAME=${{ github.ref_name }}
 
-        # TODO: adopt this behaviour
-        # if [[ "${REF_TYPE}" == branch ]]; then
-        #   TARGET_FOLDER="${REF_NAME}"
-        # elif [[ "${REF_TYPE}" == tag ]]; then
-        #   case "${REF_NAME}" in
-        #     *-rc*)
-        #       echo "Aborting upload since this is an RC tag: ${REF_NAME}"
-        #       exit 0
-        #       ;;
-        #     *)
-        #       # Strip the leading "v" as well as the trailing patch version. For example:
-        #       # 'v0.15.2' -> '0.15'
-        #       TARGET_FOLDER=$(echo "${REF_NAME}" | sed 's/v\([0-9]\+\)\.\([0-9]\+\)\.[0-9]\+/\1.\2/')
-        #       ;;
-        #   esac
-        # fi
-        TARGET_FOLDER="./"
+        if [[ "${REF_TYPE}" == branch ]]; then
+          TARGET_FOLDER="${REF_NAME}"
+        elif [[ "${REF_TYPE}" == tag ]]; then
+          case "${REF_NAME}" in
+            *-rc*)
+              echo "Aborting upload since this is an RC tag: ${REF_NAME}"
+              exit 0
+              ;;
+            *)
+              # Strip the leading "v" as well as the trailing patch version. For example:
+              # 'v0.15.2' -> '0.15'
+              TARGET_FOLDER=$(echo "${REF_NAME}" | sed 's/v\([0-9]\+\)\.\([0-9]\+\)\.[0-9]\+/\1.\2/')
+              ;;
+          esac
+        fi
+
         echo "Target Folder: ${TARGET_FOLDER}"
 
         # mkdir -p "${TARGET_FOLDER}"
@@ -133,12 +132,12 @@ jobs:
         rsync -a "${RUNNER_ARTIFACT_DIR}"/ "${TARGET_FOLDER}"
         git add "${TARGET_FOLDER}" || true
 
-        # if [[ "${TARGET_FOLDER}" == main ]]; then
-        #   mkdir -p _static
-        #   rm -rf _static/*
-        #   cp -r "${TARGET_FOLDER}"/_static/* _static
-        #   git add _static || true
-        # fi
+        if [[ "${TARGET_FOLDER}" == main ]]; then
+          mkdir -p _static
+          rm -rf _static/*
+          cp -r "${TARGET_FOLDER}"/_static/* _static
+          git add _static || true
+        fi
 
         git config user.name 'pytorchbot'
         git config user.email 'soumith+bot@pytorch.org'
