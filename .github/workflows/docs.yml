@@ -135,7 +135,7 @@ jobs:
         rsync -a "${RUNNER_ARTIFACT_DIR}"/ "${TARGET_FOLDER}"
         git add "${TARGET_FOLDER}" || true
 
-        if [[ "${TARGET_FOLDER}" == main ]]; then
+        if [[ "${TARGET_FOLDER}" == "main" ]] || [[ "${TARGET_FOLDER}" == "release-doc" ]]; then
           mkdir -p _static
           rm -rf _static/*
           cp -r "${TARGET_FOLDER}"/_static/* _static
