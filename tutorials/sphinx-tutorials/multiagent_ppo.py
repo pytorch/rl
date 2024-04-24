@@ -14,12 +14,8 @@ Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
 This tutorial demonstrates how to use PyTorch and :py:mod:`torchrl` to
 solve a Multi-Agent Reinforcement Learning (MARL) problem.
 
-A code-only version of this tutorial is available in the
-`TorchRL examples <https://github.com/pytorch/rl/tree/main/sota-implementations/multiagent/mappo_ippo.py>`__,
-alongside other simple scripts for many MARL sota-implementations (QMIX, MADDPG, IQL).
-
-For ease of use, this tutorial will follow the general structure of the already available
-`single agent PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>`__.
+For ease of use, this tutorial will follow the general structure of the already available in:
+:doc:`/tutorials/coding_ppo`.
 It is suggested but not mandatory to get familiar with that prior to starting this tutorial.
 
 In this tutorial, we will use the *Navigation* environment from
@@ -786,13 +782,13 @@ plt.show()
 # - How we can use :class:`tensordict.TensorDict` to carry multi-agent data;
 # - How we can tie all the library components (collectors, modules, replay buffers, and losses) in a multi-agent MAPPO/IPPO training loop.
 #
-# Now that you are proficient with multi-agent PPO, you can check out all
-# `TorchRL multi-agent examples <https://github.com/pytorch/rl/tree/main/sota-implementations/multiagent>`__.
+# Now that you are proficient with multi-agent DDPG, you can check out all the TorchRL multi-agent implementations in the
+# GitHub repository.
 # These are code-only scripts of many popular MARL sota-implementations such as the ones seen in this tutorial,
 # QMIX, MADDPG, IQL, and many more!
 #
 # You can also check out our other multi-agent tutorial on how to train competitive
-# MADDPG/IDDPG in PettingZoo/VMAS with multiple agent groups `here <https://pytorch.org/rl/tutorials/multiagent_competitive_ddpg.html`>__.
+# MADDPG/IDDPG in PettingZoo/VMAS with multiple agent groups: :doc:`/tutorials/multiagent_competitive_ddpg`.
 #
 # If you are interested in creating or wrapping your own multi-agent environments in TorchRL,
 # you can check out the dedicated
@@ -802,7 +798,7 @@ plt.show()
 # to become a MARL master.
 # Here are a few videos of some possible scenarios you can try in VMAS.
 #
-# .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/vmas_scenarios_more.gif.gif?raw=true
+# .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/vmas_scenarios_more.gif?raw=true
 #    :alt: VMAS scenarios
 #
 #    Scenarios available in `VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__

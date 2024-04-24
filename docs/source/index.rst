@@ -100,7 +100,6 @@ Intermediate
    :maxdepth: 1
 
    tutorials/multiagent_ppo
-   tutorials/multiagent_competitive_ddpg
    tutorials/torchrl_envs
    tutorials/pretrained_models
    tutorials/dqn_with_rnn
@@ -112,6 +111,7 @@ Advanced
 .. toctree::
    :maxdepth: 1
 
+   tutorials/multiagent_competitive_ddpg
    tutorials/multi_task
    tutorials/coding_ddpg
    tutorials/coding_dqn
