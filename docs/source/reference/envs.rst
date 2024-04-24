@@ -471,6 +471,82 @@ single agent standards.
     MarlGroupMapType
     check_marl_grouping
 
+Auto-resetting Envs
+-------------------
+
+Auto-resetting environments are environments where calls to :meth:`~torchrl.envs.EnvBase.reset` are not expected when
+the environment reaches a ``"done"`` state during a rollout, as the reset happens automatically.
+Usually, in such cases the observations delivered with the done and reward (which effectively result from performing the
+action in the environment) are actually the first observations of a new episode, and not the last observations of the
+current episode.
+
+To handle these cases, torchrl provides a :class:`~torchrl.envs.AutoResetTransform` that will copy the observations
+that result from the call to `step` to the next `reset` and skip the calls to `reset` during rollouts (in both
+:meth:`~torchrl.envs.EnvBase.rollout` and :class:`~torchrl.collectors.SyncDataCollector` iterations).
+This transform class also provides a fine-grained control over the behaviour to be adopted for the invalid observations,
+which can be masked with `"nan"` or any other values, or not masked at all.
+
+To tell torchrl that an environment is auto-resetting, it is sufficient to provide an ``auto_reset`` argument
+during construction. If provided, an ``auto_reset_replace`` argument can also control whether the values of the last
+observation of an episode should be replaced with some placeholder or not.
+
+  >>> from torchrl.envs import GymEnv
+  >>> from torchrl.envs import set_gym_backend
+  >>> import torch
+  >>> torch.manual_seed(0)
+  >>>
+  >>> class AutoResettingGymEnv(GymEnv):
+  ...     def _step(self, tensordict):
+  ...         tensordict = super()._step(tensordict)
+  ...         if tensordict["done"].any():
+  ...             td_reset = super().reset()
+  ...             tensordict.update(td_reset.exclude(*self.done_keys))
+  ...         return tensordict
+  ...
+  ...     def _reset(self, tensordict=None):
+  ...         if tensordict is not None and "_reset" in tensordict:
+  ...             return tensordict.copy()
+  ...         return super()._reset(tensordict)
+  >>>
+  >>> with set_gym_backend("gym"):
+  ...     env = AutoResettingGymEnv("CartPole-v1", auto_reset=True, auto_reset_replace=True)
+  ...     env.set_seed(0)
+  ...     r = env.rollout(30, break_when_any_done=False)
+  >>> print(r["next", "done"].squeeze())
+  tensor([False, False, False, False, False, False, False, False, False, False,
+          False, False, False,  True, False, False, False, False, False, False,
+          False, False, False, False, False,  True, False, False, False, False])
+  >>> print("observation after reset are set as nan", r["next", "observation"])
+  observation after reset are set as nan tensor([[-4.3633e-02, -1.4877e-01,  1.2849e-02,  2.7584e-01],
+          [-4.6609e-02,  4.6166e-02,  1.8366e-02, -1.2761e-02],
+          [-4.5685e-02,  2.4102e-01,  1.8111e-02, -2.9959e-01],
+          [-4.0865e-02,  4.5644e-02,  1.2119e-02, -1.2542e-03],
+          [-3.9952e-02,  2.4059e-01,  1.2094e-02, -2.9009e-01],
+          [-3.5140e-02,  4.3554e-01,  6.2920e-03, -5.7893e-01],
+          [-2.6429e-02,  6.3057e-01, -5.2867e-03, -8.6963e-01],
+          [-1.3818e-02,  8.2576e-01, -2.2679e-02, -1.1640e+00],
+          [ 2.6972e-03,  1.0212e+00, -4.5959e-02, -1.4637e+00],
+          [ 2.3121e-02,  1.2168e+00, -7.5232e-02, -1.7704e+00],
+          [ 4.7457e-02,  1.4127e+00, -1.1064e-01, -2.0854e+00],
+          [ 7.5712e-02,  1.2189e+00, -1.5235e-01, -1.8289e+00],
+          [ 1.0009e-01,  1.0257e+00, -1.8893e-01, -1.5872e+00],
+          [        nan,         nan,         nan,         nan],
+          [-3.9405e-02, -1.7766e-01, -1.0403e-02,  3.0626e-01],
+          [-4.2959e-02, -3.7263e-01, -4.2775e-03,  5.9564e-01],
+          [-5.0411e-02, -5.6769e-01,  7.6354e-03,  8.8698e-01],
+          [-6.1765e-02, -7.6292e-01,  2.5375e-02,  1.1820e+00],
+          [-7.7023e-02, -9.5836e-01,  4.9016e-02,  1.4826e+00],
+          [-9.6191e-02, -7.6387e-01,  7.8667e-02,  1.2056e+00],
+          [-1.1147e-01, -9.5991e-01,  1.0278e-01,  1.5219e+00],
+          [-1.3067e-01, -7.6617e-01,  1.3322e-01,  1.2629e+00],
+          [-1.4599e-01, -5.7298e-01,  1.5848e-01,  1.0148e+00],
+          [-1.5745e-01, -7.6982e-01,  1.7877e-01,  1.3527e+00],
+          [-1.7285e-01, -9.6668e-01,  2.0583e-01,  1.6956e+00],
+          [        nan,         nan,         nan,         nan],
+          [-4.3962e-02,  1.9845e-01, -4.5015e-02, -2.5903e-01],
+          [-3.9993e-02,  3.9418e-01, -5.0196e-02, -5.6557e-01],
+          [-3.2109e-02,  5.8997e-01, -6.1507e-02, -8.7363e-01],
+          [-2.0310e-02,  3.9574e-01, -7.8980e-02, -6.0090e-01]])
 
 
 Transforms
@@ -580,6 +656,9 @@ to be able to create this other composition:
     Transform
     TransformedEnv
     ActionMask
+    AutoResetEnv
+    AutoResetTransform
+    BatchSizeTransform
     BinarizeReward
     BurnInTransform
     CatFrames
@@ -680,6 +759,75 @@ to always know what the latest available actions are. You can do this like so:
 Recorders
 ---------
 
+.. _Environment-Recorders:
+
+Recording data during environment rollout execution is crucial to keep an eye on the algorithm performance as well as
+reporting results after training.
+
+TorchRL offers several tools to interact with the environment output: first and foremost, a ``callback`` callable
+can be passed to the :meth:`~torchrl.envs.EnvBase.rollout` method. This function will be called upon the collected
+tensordict at each iteration of the rollout (if some iterations have to be skipped, an internal variable should be added
+to keep track of the call count within ``callback``).
+
+To save collected tensordicts on disk, the :class:`~torchrl.record.TensorDictRecorder` can be used.
+
+Recording videos
+~~~~~~~~~~~~~~~~
+
+Several backends offer the possibility of recording rendered images from the environment.
+If the pixels are already part of the environment output (e.g. Atari or other game simulators), a
+:class:`~torchrl.record.VideoRecorder` can be appended to the environment. This environment transform takes as input
+a logger capable of recording videos (e.g. :class:`~torchrl.record.loggers.CSVLogger`, :class:`~torchrl.record.loggers.WandbLogger`
+or :class:`~torchrl.record.loggers.TensorBoardLogger`) as well as a tag indicating where the video should be saved.
+For instance, to save mp4 videos on disk, one can use :class:`~torchrl.record.loggers.CSVLogger` with a `video_format="mp4"`
+argument.
+
+The :class:`~torchrl.record.VideoRecorder` transform can handle batched images and automatically detects numpy or PyTorch
+formatted images (WHC or CWH).
+
+    >>> logger = CSVLogger("dummy-exp", video_format="mp4")
+    >>> env = GymEnv("ALE/Pong-v5")
+    >>> env = env.append_transform(VideoRecorder(logger, tag="rendered", in_keys=["pixels"]))
+    >>> env.rollout(10)
+    >>> env.transform.dump()  # Save the video and clear cache
+
+Note that the cache of the transform will keep on growing until dump is called. It is the user responsibility to
+take care of calling dumpy when needed to avoid OOM issues.
+
+In some cases, creating a testing environment where images can be collected is tedious or expensive, or simply impossible
+(some libraries only allow one environment instance per workspace).
+In these cases, assuming that a `render` method is available in the environment, the :class:`~torchrl.record.PixelRenderTransform`
+can be used to call `render` on the parent environment and save the images in the rollout data stream.
+This class works over single and batched environments alike:
+
+    >>> from torchrl.envs import GymEnv, check_env_specs, ParallelEnv, EnvCreator
+    >>> from torchrl.record.loggers import CSVLogger
+    >>> from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
+    >>>
+    >>> def make_env():
+    >>>     env = GymEnv("CartPole-v1", render_mode="rgb_array")
+    >>>     # Uncomment this line to execute per-env
+    >>>     # env = env.append_transform(PixelRenderTransform())
+    >>>     return env
+    >>>
+    >>> if __name__ == "__main__":
+    ...     logger = CSVLogger("dummy", video_format="mp4")
+    ...
+    ...     env = ParallelEnv(16, EnvCreator(make_env))
+    ...     env.start()
+    ...     # Comment this line to execute per-env
+    ...     env = env.append_transform(PixelRenderTransform())
+    ...
+    ...     env = env.append_transform(VideoRecorder(logger=logger, tag="pixels_record"))
+    ...     env.rollout(3)
+    ...
+    ...     check_env_specs(env)
+    ...
+    ...     r = env.rollout(30)
+    ...     env.transform.dump()
+    ...     env.close()
+
+
 .. currentmodule:: torchrl.record
 
 Recorders are transforms that register data as they come in, for logging purposes.
@@ -690,6 +838,7 @@ Recorders are transforms that register data as they come in, for logging purpose
 
     TensorDictRecorder
     VideoRecorder
+    PixelRenderTransform
 
 
 Helpers
@@ -720,6 +869,7 @@ Domain-specific
 
     ModelBasedEnvBase
     model_based.dreamer.DreamerEnv
+    model_based.dreamer.DreamerDecoder
 
 
 Libraries
@@ -812,6 +962,8 @@ the following function will return ``1`` when queried:
     IsaacGymWrapper
     JumanjiEnv
     JumanjiWrapper
+    MeltingpotEnv
+    MeltingpotWrapper
     MOGymEnv
     MOGymWrapper
     MultiThreadedEnv

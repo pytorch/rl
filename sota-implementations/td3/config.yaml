@@ -41,7 +41,7 @@ optim:
 network:
   hidden_sizes: [256, 256]
   activation: relu
-  device: "cuda:0"
+  device: null
 
 # logging
 logger:
@@ -51,3 +51,4 @@ logger:
   exp_name: ${env.name}_TD3
   mode: online
   eval_iter: 25000
+  video: False

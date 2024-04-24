@@ -30,6 +30,8 @@ from _utils_internal import (
 )
 from mocking_classes import (
     ActionObsMergeLinear,
+    AutoResetHeteroCountingEnv,
+    AutoResettingCountingEnv,
     ContinuousActionConvMockEnv,
     ContinuousActionConvMockEnvNumpy,
     ContinuousActionVecMockEnv,
@@ -80,6 +82,7 @@ from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
+from torchrl.envs.transforms.transforms import AutoResetEnv, AutoResetTransform
 from torchrl.envs.utils import (
     _StepMDP,
     _terminated_or_truncated,
@@ -112,6 +115,10 @@ except FileNotFoundError:
 
 IS_OSX = platform == "darwin"
 IS_WIN = platform == "win32"
+if IS_WIN:
+    mp_ctx = "spawn"
+else:
+    mp_ctx = "fork"
 
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
 ## the serial and parallel batched envs
@@ -221,6 +228,17 @@ def test_rollout(env_name, frame_skip, seed=0):
     with pytest.raises(AssertionError):
         assert_allclose_td(rollout1, rollout3)
     env.close()
+
+
+def test_rollout_set_truncated():
+    env = ContinuousActionVecMockEnv()
+    with pytest.raises(RuntimeError, match="set_truncated was set to True"):
+        env.rollout(max_steps=10, set_truncated=True, break_when_any_done=False)
+    env.add_truncated_keys()
+    r = env.rollout(max_steps=10, set_truncated=True, break_when_any_done=False)
+    assert r.shape == torch.Size([10])
+    assert r[..., -1]["next", "truncated"].all()
+    assert r[..., -1]["next", "done"].all()
 
 
 @pytest.mark.parametrize("max_steps", [1, 5])
@@ -449,7 +467,7 @@ class TestParallel:
                 env.shared_tensordict_parent.device.type == torch.device(edevice).type
             )
 
-    @pytest.mark.parametrize("start_method", [None, "fork"])
+    @pytest.mark.parametrize("start_method", [None, mp_ctx])
     def test_serial_for_single(self, maybe_fork_ParallelEnv, start_method):
         env = ParallelEnv(
             1,
@@ -1216,6 +1234,7 @@ def test_seed():
     torch.testing.assert_close(rollout1["observation"], rollout2["observation"])
 
 
+@pytest.mark.filterwarnings("error")
 class TestStepMdp:
     @pytest.mark.parametrize("keep_other", [True, False])
     @pytest.mark.parametrize("exclude_reward", [True, False])
@@ -1339,7 +1358,7 @@ class TestStepMdp:
         env = envcls()
 
         tensordict = env.rand_step(env.reset())
-        out = step_mdp(
+        out_func = step_mdp(
             tensordict.lock_(),
             keep_other=keep_other,
             exclude_reward=exclude_reward,
@@ -1356,8 +1375,8 @@ class TestStepMdp:
             exclude_done=exclude_done,
             exclude_action=exclude_action,
         )
-        out2 = step_func(tensordict)
-        assert (out == out2).all()
+        out_cls = step_func(tensordict)
+        assert (out_func == out_cls).all()
 
     @pytest.mark.parametrize("nested_obs", [True, False])
     @pytest.mark.parametrize("nested_action", [True, False])
@@ -1718,6 +1737,36 @@ class TestStepMdp:
                     assert td[..., i][nested_other_key].shape == (td_batch_size, 1)
                 assert (td[..., i][nested_other_key] == 0).all()
 
+    @pytest.mark.parametrize("serial", [False, True])
+    def test_multi_purpose_env(self, serial):
+        # Tests that even if it's validated, the same env can be used within a collector
+        # and independently of it.
+        if serial:
+            env = SerialEnv(2, ContinuousActionVecMockEnv)
+        else:
+            env = ContinuousActionVecMockEnv()
+        env.rollout(10)
+        assert env._step_mdp.validate(None)
+        c = SyncDataCollector(
+            env, env.rand_action, frames_per_batch=10, total_frames=20
+        )
+        for data in c:  # noqa: B007
+            pass
+        assert ("collector", "traj_ids") in data.keys(True)
+        assert env._step_mdp.validate(None)
+        env.rollout(10)
+
+        # An exception will be raised when the collector sees extra keys
+        if serial:
+            env = SerialEnv(2, ContinuousActionVecMockEnv)
+        else:
+            env = ContinuousActionVecMockEnv()
+        c = SyncDataCollector(
+            env, env.rand_action, frames_per_batch=10, total_frames=20
+        )
+        for data in c:  # noqa: B007
+            pass
+
 
 @pytest.mark.parametrize("device", get_default_devices())
 def test_batch_locked(device):
@@ -1783,7 +1832,16 @@ class TestInfoDict:
             import gym
 
         env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED()), device=device)
-        env.set_info_dict_reader(default_info_dict_reader(["x_position"]))
+        env.set_info_dict_reader(
+            default_info_dict_reader(
+                ["x_position"],
+                spec=CompositeSpec(
+                    x_position=UnboundedContinuousTensorSpec(
+                        dtype=torch.float64, shape=()
+                    )
+                ),
+            )
+        )
 
         assert "x_position" in env.observation_spec.keys()
         assert isinstance(
@@ -1793,15 +1851,21 @@ class TestInfoDict:
         tensordict = env.reset()
         tensordict = env.rand_step(tensordict)
 
-        assert env.observation_spec["x_position"].is_in(
-            tensordict[("next", "x_position")]
+        x_position_data = tensordict["next", "x_position"]
+        assert env.observation_spec["x_position"].is_in(x_position_data), (
+            x_position_data.shape,
+            x_position_data.dtype,
+            env.observation_spec["x_position"],
         )
 
         for spec in (
-            {"x_position": UnboundedContinuousTensorSpec(10)},
-            None,
-            CompositeSpec(x_position=UnboundedContinuousTensorSpec(10), shape=[]),
-            [UnboundedContinuousTensorSpec(10)],
+            {"x_position": UnboundedContinuousTensorSpec((), dtype=torch.float64)},
+            # None,
+            CompositeSpec(
+                x_position=UnboundedContinuousTensorSpec((), dtype=torch.float64),
+                shape=[],
+            ),
+            [UnboundedContinuousTensorSpec((), dtype=torch.float64)],
         ):
             env2 = GymWrapper(gym.make("HalfCheetah-v4"))
             env2.set_info_dict_reader(
@@ -1810,9 +1874,12 @@ class TestInfoDict:
 
             tensordict2 = env2.reset()
             tensordict2 = env2.rand_step(tensordict2)
-
-            assert env2.observation_spec["x_position"].is_in(
-                tensordict2[("next", "x_position")]
+            data = tensordict2[("next", "x_position")]
+            assert env2.observation_spec["x_position"].is_in(data), (
+                data.dtype,
+                data.device,
+                data.shape,
+                env2.observation_spec["x_position"],
             )
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
@@ -2644,7 +2711,8 @@ def test_backprop(device, maybe_fork_ParallelEnv, share_individual_td):
                     "reward": action.sum().unsqueeze(0),
                     **self.full_done_spec.zero(),
                     "observation": obs,
-                }
+                },
+                batch_size=[],
             )
 
     torch.manual_seed(0)
@@ -2809,20 +2877,176 @@ def test_single_task_share_individual_td():
 
 def test_stackable():
     # Tests the _stackable util
-    stack = [TensorDict({"a": 0}), TensorDict({"b": 1})]
+    stack = [TensorDict({"a": 0}, []), TensorDict({"b": 1}, [])]
     assert not _stackable(*stack), torch.stack(stack)
-    stack = [TensorDict({"a": [0]}), TensorDict({"a": 1})]
+    stack = [TensorDict({"a": [0]}, []), TensorDict({"a": 1}, [])]
     assert not _stackable(*stack)
-    stack = [TensorDict({"a": [0]}), TensorDict({"a": [1]})]
+    stack = [TensorDict({"a": [0]}, []), TensorDict({"a": [1]}, [])]
     assert _stackable(*stack)
-    stack = [TensorDict({"a": [0]}), TensorDict({"a": [1], "b": {}})]
+    stack = [TensorDict({"a": [0]}, []), TensorDict({"a": [1], "b": {}}, [])]
     assert _stackable(*stack)
-    stack = [TensorDict({"a": {"b": [0]}}), TensorDict({"a": {"b": [1]}})]
+    stack = [TensorDict({"a": {"b": [0]}}, []), TensorDict({"a": {"b": [1]}}, [])]
     assert _stackable(*stack)
-    stack = [TensorDict({"a": {"b": [0]}}), TensorDict({"a": {"b": 1}})]
+    stack = [TensorDict({"a": {"b": [0]}}, []), TensorDict({"a": {"b": 1}}, [])]
     assert not _stackable(*stack)
-    stack = [TensorDict({"a": "a string"}), TensorDict({"a": "another string"})]
+    stack = [TensorDict({"a": "a string"}, []), TensorDict({"a": "another string"}, [])]
     assert _stackable(*stack)
+
+
+class TestAutoReset:
+    def test_auto_reset(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+
+        env = AutoResettingCountingEnv(4, auto_reset=True)
+        assert isinstance(env, TransformedEnv) and isinstance(
+            env.transform, AutoResetTransform
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([20])
+        assert r["next", "done"].sum() == 4
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all(), r[
+            "next", "observation"
+        ][r["next", "done"].squeeze()]
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        r = env.rollout(20, policy, break_when_any_done=True)
+        assert r["next", "done"].sum() == 1
+        assert not r["done"].any()
+
+    def test_auto_reset_transform(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = TransformedEnv(
+            AutoResettingCountingEnv(4, auto_reset=True), StepCounter()
+        )
+        assert isinstance(env, TransformedEnv) and isinstance(
+            env.base_env.transform, AutoResetTransform
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([20])
+        assert r["next", "done"].sum() == 4
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        r = env.rollout(20, policy, break_when_any_done=True)
+        assert r["next", "done"].sum() == 1
+        assert not r["done"].any()
+
+    def test_auto_reset_serial(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = SerialEnv(
+            2, functools.partial(AutoResettingCountingEnv, 4, auto_reset=True)
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([2, 20])
+        assert r["next", "done"].sum() == 8
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        r = env.rollout(20, policy, break_when_any_done=True)
+        assert r["next", "done"].sum() == 2
+        assert not r["done"].any()
+
+    def test_auto_reset_serial_hetero(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = SerialEnv(
+            2,
+            [
+                functools.partial(AutoResettingCountingEnv, 4, auto_reset=True),
+                functools.partial(AutoResettingCountingEnv, 5, auto_reset=True),
+            ],
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([2, 20])
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        assert not r["done"].any()
+
+    def test_auto_reset_parallel(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = ParallelEnv(
+            2,
+            functools.partial(AutoResettingCountingEnv, 4, auto_reset=True),
+            mp_start_method=mp_ctx,
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([2, 20])
+        assert r["next", "done"].sum() == 8
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        r = env.rollout(20, policy, break_when_any_done=True)
+        assert r["next", "done"].sum() == 2
+        assert not r["done"].any()
+
+    def test_auto_reset_parallel_hetero(self):
+        policy = lambda td: td.set(
+            "action", torch.ones((*td.shape, 1), dtype=torch.int64)
+        )
+        env = ParallelEnv(
+            2,
+            [
+                functools.partial(AutoResettingCountingEnv, 4, auto_reset=True),
+                functools.partial(AutoResettingCountingEnv, 5, auto_reset=True),
+            ],
+            mp_start_method=mp_ctx,
+        )
+        r = env.rollout(20, policy, break_when_any_done=False)
+        assert r.shape == torch.Size([2, 20])
+        assert (r["next", "observation"][r["next", "done"].squeeze()] == -1).all()
+        assert (
+            r[..., 1:]["observation"][r[..., :-1]["next", "done"].squeeze()] == 0
+        ).all()
+        assert not r["done"].any()
+
+    def test_auto_reset_heterogeneous_env(self):
+        torch.manual_seed(0)
+        env = TransformedEnv(
+            AutoResetHeteroCountingEnv(4, auto_reset=True), StepCounter()
+        )
+
+        def policy(td):
+            return td.update(
+                env.full_action_spec.zero().apply(lambda x: x.bernoulli_(0.5))
+            )
+
+        assert isinstance(env.base_env, AutoResetEnv) and isinstance(
+            env.base_env.transform, AutoResetTransform
+        )
+        check_env_specs(env)
+        r = env.rollout(40, policy, break_when_any_done=False)
+        assert (r["next", "lazy", "step_count"] - 1 == r["lazy", "step_count"]).all()
+        done = r["next", "lazy", "done"].squeeze(-1)[:-1]
+        assert (
+            r["next", "lazy", "step_count"][1:][~done]
+            == r["next", "lazy", "step_count"][:-1][~done] + 1
+        ).all()
+        assert (
+            r["next", "lazy", "step_count"][1:][done]
+            != r["next", "lazy", "step_count"][:-1][done] + 1
+        ).all()
+        done_split = r["next", "lazy", "done"].unbind(1)
+        lazy_slit = r["next", "lazy"].unbind(1)
+        lazy_roots = r["lazy"].unbind(1)
+        for lazy, lazy_root, done in zip(lazy_slit, lazy_roots, done_split):
+            assert lazy["lidar"][done.squeeze()].isnan().all()
+            assert not lazy["lidar"][~done.squeeze()].isnan().any()
+            assert (lazy_root["lidar"][1:][done[:-1].squeeze()] == 0).all()
 
 
 if __name__ == "__main__":

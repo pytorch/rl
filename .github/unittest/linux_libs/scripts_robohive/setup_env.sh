@@ -76,4 +76,11 @@ pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
-pip install git+https://github.com/vikashplus/robohive@main
+conda install conda-forge::ffmpeg -y
+
+pip install robohive
+
+python3 -m robohive_init
+
+# make sure only gymnasium is available
+# pip uninstall gym -y

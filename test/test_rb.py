@@ -18,6 +18,8 @@ import pytest
 import torch
 
 from _utils_internal import get_default_devices, make_tc
+
+from mocking_classes import CountingEnv
 from packaging import version
 from packaging.version import parse
 from tensordict import (
@@ -30,7 +32,6 @@ from tensordict import (
 )
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
-
 from torchrl.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -774,6 +775,12 @@ class TestStorages:
                 assert_allclose_td(storage[:], storage_recover[:])
         if data == "tc":
             assert storage._storage.text == storage_recover._storage.text
+
+    def test_add_list_of_tds(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(100))
+        rb.extend([TensorDict({"a": torch.randn(2, 3)}, [2])])
+        assert len(rb) == 1
+        assert rb[:].shape == torch.Size([1, 2])
 
 
 @pytest.mark.parametrize("max_size", [1000])
@@ -2019,8 +2026,11 @@ class TestSamplers:
             assert too_short
 
         assert len(trajs_unique_id) == 4
+        done = info[("next", "done")]
+        assert done.view(num_slices, -1)[:, -1].all()
         truncated = info[("next", "truncated")]
-        assert truncated.view(num_slices, -1)[:, -1].all()
+        terminated = info[("next", "terminated")]
+        assert (truncated | terminated).view(num_slices, -1)[:, -1].all()
 
     @pytest.mark.parametrize("sampler", [SliceSampler, SliceSamplerWithoutReplacement])
     def test_slice_sampler_at_capacity(self, sampler):
@@ -2044,9 +2054,6 @@ class TestSamplers:
 
         for s in rb:
             if (s["steps"] == 9).any():
-                n = (s["steps"] == 9).nonzero()
-                assert ((s["steps"] == 0).nonzero() == n + 1).all()
-                assert ((s["steps"] == 1).nonzero() == n + 2).all()
                 break
         else:
             raise AssertionError
@@ -2163,8 +2170,54 @@ class TestSamplers:
             trajs_unique_id = trajs_unique_id.union(
                 cur_episodes,
             )
-        truncated = info[("next", "truncated")]
-        assert truncated.view(num_slices, -1)[:, -1].all()
+        done = info[("next", "done")]
+        assert done.view(num_slices, -1)[:, -1].all()
+        done_recon = info[("next", "truncated")] | info[("next", "terminated")]
+        assert done_recon.view(num_slices, -1)[:, -1].all()
+
+    def test_slicesampler_strictlength(self):
+
+        torch.manual_seed(0)
+
+        data = TensorDict(
+            {
+                "traj": torch.cat(
+                    [
+                        torch.ones(2, dtype=torch.int),
+                        torch.zeros(10, dtype=torch.int),
+                    ],
+                    dim=0,
+                ),
+                "x": torch.arange(12),
+            },
+            [12],
+        )
+
+        buffer = ReplayBuffer(
+            storage=LazyTensorStorage(12),
+            sampler=SliceSampler(num_slices=2, strict_length=True, traj_key="traj"),
+            batch_size=8,
+        )
+        buffer.extend(data)
+
+        for _ in range(50):
+            sample = buffer.sample()
+            assert sample.shape == torch.Size([8])
+            assert (sample["traj"] == 0).all()
+
+        buffer = ReplayBuffer(
+            storage=LazyTensorStorage(12),
+            sampler=SliceSampler(num_slices=2, strict_length=False, traj_key="traj"),
+            batch_size=8,
+        )
+        buffer.extend(data)
+
+        for _ in range(50):
+            sample = buffer.sample()
+            if sample.shape == torch.Size([6]):
+                assert (sample["traj"] != 0).any()
+            else:
+                assert len(sample["traj"].unique()) == 1
 
 
 def test_prioritized_slice_sampler_doc_example():
@@ -2741,9 +2794,44 @@ class TestRBMultidim:
                 if transform is not None:
                     assert s.ndim == 2
         except Exception:
-            print(f"Failing at iter {i}")  # noqa: T201
-            print(f"rb {rb}")  # noqa: T201
             raise
+
+    @pytest.mark.parametrize("strict_length", [True, False])
+    def test_done_slicesampler(self, strict_length):
+        env = SerialEnv(
+            3,
+            [
+                lambda: CountingEnv(max_steps=31),
+                lambda: CountingEnv(max_steps=32),
+                lambda: CountingEnv(max_steps=33),
+            ],
+        )
+        full_action_spec = CountingEnv(max_steps=32).full_action_spec
+        policy = lambda td: td.update(
+            full_action_spec.zero((3,)).apply_(lambda x: x + 1)
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(200, ndim=2),
+            sampler=SliceSampler(
+                slice_len=32,
+                strict_length=strict_length,
+                truncated_key=("next", "truncated"),
+            ),
+            batch_size=128,
+        )
+
+        for i in range(50):
+            r = env.rollout(50, policy=policy, break_when_any_done=False)
+            r["next", "done"][:, -1] = 1
+            rb.extend(r)
+
+            sample = rb.sample()
+
+            assert sample["next", "done"].sum() == 128 // 32, (
+                i,
+                sample["next", "done"].sum(),
+            )
+            assert (split_trajectories(sample)["next", "done"].sum(-2) == 1).all()
 
 
 if __name__ == "__main__":

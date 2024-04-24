@@ -33,13 +33,7 @@ from torch import multiprocessing as mp
 
 from torch.utils._pytree import LeafSpec, tree_flatten, tree_map, tree_unflatten
 
-from torchrl._utils import (
-    _CKPT_BACKEND,
-    implement_for,
-    logger as torchrl_logger,
-    VERBOSE,
-)
-
+from torchrl._utils import _CKPT_BACKEND, implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.utils import _is_int, INT_CLASSES
 
 try:
@@ -591,16 +585,16 @@ class TensorStorage(Storage):
     def __getstate__(self):
         state = copy(self.__dict__)
         if get_spawning_popen() is None:
-            len = self._len
+            length = self._len
             del state["_len_value"]
-            state["len__context"] = len
+            state["len__context"] = length
         elif not self.initialized:
             # check that the storage is initialized
             raise RuntimeError(
-                f"Cannot share a storage of type {type(self)} between processed if "
+                f"Cannot share a storage of type {type(self)} between processes if "
                 f"it has not been initialized yet. Populate the buffer with "
                 f"some data in the main process before passing it to the other "
-                f"subprocesses (or create the buffer explicitely with a TensorStorage)."
+                f"subprocesses (or create the buffer explicitly with a TensorStorage)."
             )
         else:
             # check that the content is shared, otherwise tell the user we can't help
@@ -924,8 +918,7 @@ class LazyTensorStorage(TensorStorage):
         self,
         data: Union[TensorDictBase, torch.Tensor, "PyTree"],  # noqa: F821
     ) -> None:
-        if VERBOSE:
-            torchrl_logger.info("Creating a TensorStorage...")
+        torchrl_logger.debug("Creating a TensorStorage...")
         if self.device == "auto":
             self.device = data.device
 
@@ -938,19 +931,10 @@ class LazyTensorStorage(TensorStorage):
             return (self.max_size, *data_shape)
 
         if is_tensor_collection(data):
-            out = (
-                data.expand(max_size_along_dim0(data.shape))
-                .clone()
-                .zero_()
-                .to(self.device)
-            )
-        elif is_tensor_collection(data):
-            out = (
-                data.expand(max_size_along_dim0(data.shape))
-                .clone()
-                .zero_()
-                .to(self.device)
-            )
+            out = data.expand(max_size_along_dim0(data.shape))
+            out = out.clone()
+            out = out.zero_()
+            out = out.to(self.device)
         else:
             # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
             out = tree_map(
@@ -1110,8 +1094,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         self._len = state_dict["_len"]
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
-        if VERBOSE:
-            torchrl_logger.info("Creating a MemmapStorage...")
+        torchrl_logger.debug("Creating a MemmapStorage...")
         if self.device == "auto":
             self.device = data.device
         if self.device.type != "cpu":
@@ -1136,11 +1119,13 @@ class LazyMemmapStorage(LazyTensorStorage):
             for key, tensor in sorted(
                 out.items(include_nested=True, leaves_only=True), key=str
             ):
-                if VERBOSE:
+                try:
                     filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                    torchrl_logger.info(
+                    torchrl_logger.debug(
                         f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
                     )
+                except (AttributeError, RuntimeError):
+                    pass
         else:
             out = _init_pytree(self.scratch_dir, max_size_along_dim0, data)
         self._storage = out
@@ -1152,7 +1137,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         # to be deprecated in v0.4
         def map_device(tensor):
             if tensor.device != self.device:
-                return tensor.to(self.device, non_blocking=True)
+                return tensor.to(self.device, non_blocking=False)
             return tensor
 
         if is_tensor_collection(result):
@@ -1469,6 +1454,12 @@ def _collate_list_tensordict(x):
     return out
 
 
+def _stack_anything(x):
+    if is_tensor_collection(x[0]):
+        return LazyStackedTensorDict.maybe_dense_stack(x)
+    return torch.stack(x)
+
+
 def _collate_id(x):
     return x
 
@@ -1618,11 +1609,13 @@ def _init_pytree_common(tensor_path, scratch_dir, max_size_fn, tensor):
         filename=total_tensor_path,
         dtype=tensor.dtype,
     )
-    if VERBOSE:
-        filesize = os.path.getsize(out.filename) / 1024 / 1024
-        torchrl_logger.info(
+    try:
+        filesize = os.path.getsize(tensor.filename) / 1024 / 1024
+        torchrl_logger.debug(
             f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
         )
+    except (RuntimeError, AttributeError):
+        pass
     return out
 
 
@@ -1660,6 +1653,8 @@ def _init_pytree(scratch_dir, max_size, data):  # noqa: F811
 
 
 def _flip_list(data):
+    if all(is_tensor_collection(_data) for _data in data):
+        return torch.stack(data)
     flat_data, flat_specs = zip(*[tree_flatten(item) for item in data])
     flat_data = zip(*flat_data)
     stacks = [torch.stack(item) for item in flat_data]

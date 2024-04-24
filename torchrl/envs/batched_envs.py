@@ -12,7 +12,7 @@ import gc
 import os
 import weakref
 from collections import OrderedDict
-from copy import deepcopy
+from copy import copy, deepcopy
 from functools import wraps
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
@@ -32,7 +32,7 @@ from torchrl._utils import (
 )
 from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
-from torchrl.envs.common import _EnvPostInit, EnvBase
+from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
 # legacy
@@ -174,12 +174,20 @@ class BatchedEnvBase(EnvBase):
             with a single worker will return a :class:`~SerialEnv` instead.
             This option has no effect with :class:`~SerialEnv`. Defaults to ``False``.
         non_blocking (bool, optional): if ``True``, device moves will be done using the
-            ``non_blocking=True`` option. Defaults to ``True`` for batched environments
-            on cuda devices, and ``False`` otherwise.
+            ``non_blocking=True`` option. Defaults to ``True``.
         mp_start_method (str, optional): the multiprocessing start method.
             Uses the default start method if not indicated ('spawn' by default in
             TorchRL if not initiated differently before first import).
             To be used only with :class:`~torchrl.envs.ParallelEnv` subclasses.
+
+    .. note::
+        One can pass keyword arguments to each sub-environments using the following
+        technique: every keyword argument in :meth:`~.reset` will be passed to each
+        environment except for the ``list_of_kwargs`` argument which, if present,
+        should contain a list of the same length as the number of workers with the
+        worker-specific keyword arguments stored in a dictionary.
+        If a partial reset is queried, the element of ``list_of_kwargs`` corresponding
+        to sub-environments that are not reset will be ignored.
 
     Examples:
         >>> from torchrl.envs import GymEnv, ParallelEnv, SerialEnv, EnvCreator
@@ -345,9 +353,102 @@ class BatchedEnvBase(EnvBase):
     def non_blocking(self):
         nb = self._non_blocking
         if nb is None:
-            nb = self.device is not None and self.device.type == "cuda"
+            nb = True
             self._non_blocking = nb
         return nb
+
+    @property
+    def _sync_m2w(self) -> Callable:
+        sync_func = self.__dict__.get("_sync_m2w_value", None)
+        if sync_func is None:
+            sync_m2w, sync_w2m = self._find_sync_values()
+            self.__dict__["_sync_m2w_value"] = sync_m2w
+            self.__dict__["_sync_w2m_value"] = sync_w2m
+            return sync_m2w
+        return sync_func
+
+    @property
+    def _sync_w2m(self) -> Callable:
+        sync_func = self.__dict__.get("_sync_w2m_value", None)
+        if sync_func is None:
+            sync_m2w, sync_w2m = self._find_sync_values()
+            self.__dict__["_sync_m2w_value"] = sync_m2w
+            self.__dict__["_sync_w2m_value"] = sync_w2m
+            return sync_w2m
+        return sync_func
+
+    def _find_sync_values(self):
+        """Returns the m2w and w2m sync values, in that order."""
+        # Simplest case: everything is on the same device
+        worker_device = self.shared_tensordict_parent.device
+        self_device = self.device
+        if not self.non_blocking or (
+            worker_device == self_device or self_device is None
+        ):
+            # even if they're both None, there is no device-to-device movement
+            return _do_nothing, _do_nothing
+
+        if worker_device is None:
+            worker_not_main = [False]
+
+            def find_all_worker_devices(item, worker_not_main=worker_not_main):
+                if hasattr(item, "device"):
+                    worker_not_main[0] = worker_not_main[0] or (
+                        item.device != self_device
+                    )
+
+            for td in self.shared_tensordicts:
+                td.apply(find_all_worker_devices, filter_empty=True)
+            if worker_not_main[0]:
+                if torch.cuda.is_available():
+                    worker_device = (
+                        torch.device("cuda")
+                        if self_device.type != "cuda"
+                        else torch.device("cpu")
+                    )
+                elif torch.backends.mps.is_available():
+                    worker_device = (
+                        torch.device("mps")
+                        if self_device.type != "mps"
+                        else torch.device("cpu")
+                    )
+                else:
+                    raise RuntimeError("Did not find a valid worker device")
+
+        if (
+            worker_device is not None
+            and worker_device.type == "cuda"
+            and self_device is not None
+            and self_device.type == "cpu"
+        ):
+            return _do_nothing, _cuda_sync(worker_device)
+        if (
+            worker_device is not None
+            and worker_device.type == "mps"
+            and self_device is not None
+            and self_device.type == "cpu"
+        ):
+            return _mps_sync(worker_device), _mps_sync(worker_device)
+        if (
+            worker_device is not None
+            and worker_device.type == "cpu"
+            and self_device is not None
+            and self_device.type == "cuda"
+        ):
+            return _cuda_sync(self_device), _do_nothing
+        if (
+            worker_device is not None
+            and worker_device.type == "cpu"
+            and self_device is not None
+            and self_device.type == "mps"
+        ):
+            return _mps_sync(self_device), _mps_sync(self_device)
+
+    def __getstate__(self):
+        out = copy(self.__dict__)
+        out["_sync_m2w_value"] = None
+        out["_sync_w2m_value"] = None
+        return out
 
     def _get_metadata(
         self, create_env_fn: List[Callable], create_env_kwargs: List[Dict]
@@ -634,6 +735,9 @@ class BatchedEnvBase(EnvBase):
                 if not self.shared_tensordict_parent.is_memmap():
                     raise RuntimeError("memmap_() failed")
             self.shared_tensordicts = self.shared_tensordict_parent.unbind(0)
+            for td in self.shared_tensordicts:
+                td.lock_()
+
         # we cache all the keys of the shared parent td for future use. This is
         # safe since the td is locked.
         self._cache_shared_keys = set(self.shared_tensordict_parent.keys(True, True))
@@ -695,20 +799,12 @@ class BatchedEnvBase(EnvBase):
         if device == self.device:
             return self
         self._device = device
-        if not self.is_closed:
-            warn(
-                "Casting an open environment to another device requires closing and re-opening it. "
-                "This may have unexpected and unwanted effects (e.g. on seeding etc.)"
-            )
-            # the tensordicts must be re-created on device
-            super().to(device)
-            self.close()
-            self.start()
-        else:
-            if self.__dict__["_input_spec"] is not None:
-                self.__dict__["_input_spec"] = self.__dict__["_input_spec"].to(device)
-            if self.__dict__["_output_spec"] is not None:
-                self.__dict__["_output_spec"] = self.__dict__["_output_spec"].to(device)
+        self.__dict__["_sync_m2w_value"] = None
+        self.__dict__["_sync_w2m_value"] = None
+        if self.__dict__["_input_spec"] is not None:
+            self.__dict__["_input_spec"] = self.__dict__["_input_spec"].to(device)
+        if self.__dict__["_output_spec"] is not None:
+            self.__dict__["_output_spec"] = self.__dict__["_output_spec"].to(device)
         return self
 
 
@@ -781,6 +877,11 @@ class SerialEnv(BatchedEnvBase):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        list_of_kwargs = kwargs.pop("list_of_kwargs", [kwargs] * self.num_workers)
+        if kwargs is not list_of_kwargs[0] and kwargs:
+            # this means that kwargs had more than one element and that a list was provided
+            for elt in list_of_kwargs:
+                elt.update(kwargs)
         if tensordict is not None:
             needs_resetting = _aggregate_end_of_traj(
                 tensordict, reset_keys=self.reset_keys
@@ -796,6 +897,7 @@ class SerialEnv(BatchedEnvBase):
                 (self.num_workers,), device=self.device, dtype=torch.bool
             )
 
+        tds = []
         for i, _env in enumerate(self._envs):
             if not needs_resetting[i]:
                 continue
@@ -813,12 +915,18 @@ class SerialEnv(BatchedEnvBase):
                         tensordict_ = tensordict_.clone(False)
             else:
                 tensordict_ = None
+            tds.append((i, tensordict_))
 
-            _td = _env.reset(tensordict=tensordict_, **kwargs)
+        self._sync_m2w()
+
+        for i, tensordict_ in tds:
+            _env = self._envs[i]
+            _td = _env.reset(tensordict=tensordict_, **list_of_kwargs[i])
             try:
                 self.shared_tensordicts[i].update_(
                     _td,
                     keys_to_update=list(self._selected_reset_keys_filt),
+                    non_blocking=self.non_blocking,
                 )
             except RuntimeError as err:
                 if "no_grad mode" in str(err):
@@ -828,6 +936,7 @@ class SerialEnv(BatchedEnvBase):
                         "share_individual_td argument to True."
                     )
                 raise
+
         selected_output_keys = self._selected_reset_keys_filt
         device = self.device
 
@@ -847,6 +956,7 @@ class SerialEnv(BatchedEnvBase):
                 out = out.clear_device_()
             else:
                 out = out.to(device, non_blocking=self.non_blocking)
+                self._sync_w2m()
         return out
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
@@ -862,18 +972,27 @@ class SerialEnv(BatchedEnvBase):
     ) -> TensorDict:
         tensordict_in = tensordict.clone(False)
         next_td = self.shared_tensordict_parent.get("next")
+        data_in = []
         for i in range(self.num_workers):
             # shared_tensordicts are locked, and we need to select the keys since we update in-place.
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
             env_device = self._envs[i].device
             if env_device != self.device and env_device is not None:
-                data_in = tensordict_in[i].to(
-                    env_device, non_blocking=self.non_blocking
+                data_in.append(
+                    tensordict_in[i].to(env_device, non_blocking=self.non_blocking)
                 )
             else:
-                data_in = tensordict_in[i]
-            out_td = self._envs[i]._step(data_in)
-            next_td[i].update_(out_td, keys_to_update=list(self._env_output_keys))
+                data_in.append(tensordict_in[i])
+
+        self._sync_m2w()
+
+        for i, _data_in in enumerate(data_in):
+            out_td = self._envs[i]._step(_data_in)
+            next_td[i].update_(
+                out_td,
+                keys_to_update=list(self._env_output_keys),
+                non_blocking=self.non_blocking,
+            )
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -890,6 +1009,7 @@ class SerialEnv(BatchedEnvBase):
                 out = out.clear_device_()
             elif out.device != device:
                 out = out.to(device, non_blocking=self.non_blocking)
+                self._sync_w2m()
         return out
 
     def __getattr__(self, attr: str) -> Any:
@@ -1147,6 +1267,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "_selected_step_keys": self._selected_step_keys,
                         "has_lazy_inputs": self.has_lazy_inputs,
                         "num_threads": num_sub_threads,
+                        "non_blocking": self.non_blocking,
                     }
                 )
                 process = proc_fun(target=func, kwargs=kwargs[idx])
@@ -1203,8 +1324,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         #   and this transform overrides an observation key (eg, CatFrames)
         #   the shape, dtype or device may not necessarily match and writing
         #   the value in-place will fail.
+
         self.shared_tensordict_parent.update_(
-            tensordict, keys_to_update=self._env_input_keys
+            tensordict,
+            keys_to_update=self._env_input_keys,
+            non_blocking=self.non_blocking,
         )
         next_td_passthrough = tensordict.get("next", None)
         if next_td_passthrough is not None:
@@ -1213,9 +1337,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             # We keep track of which keys are present to let the worker know what
             # should be passd to the env (we don't want to pass done states for instance)
             next_td_keys = list(next_td_passthrough.keys(True, True))
-            self.shared_tensordict_parent.get("next").update_(next_td_passthrough)
+            self.shared_tensordict_parent.get("next").update_(
+                next_td_passthrough, non_blocking=self.non_blocking
+            )
         else:
             next_td_keys = None
+        self._sync_m2w()
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step_and_maybe_reset", next_td_keys))
 
@@ -1247,6 +1374,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 device=device,
                 filter_empty=True,
             )
+            self._sync_w2m()
         else:
             next_td = next_td.clone().clear_device_()
             tensordict_ = tensordict_.clone().clear_device_()
@@ -1264,8 +1392,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         #   and this transform overrides an observation key (eg, CatFrames)
         #   the shape, dtype or device may not necessarily match and writing
         #   the value in-place will fail.
+
         self.shared_tensordict_parent.update_(
-            tensordict, keys_to_update=list(self._env_input_keys)
+            tensordict,
+            keys_to_update=list(self._env_input_keys),
+            non_blocking=self.non_blocking,
         )
         next_td_passthrough = tensordict.get("next", None)
         if next_td_passthrough is not None:
@@ -1274,9 +1405,13 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             # We keep track of which keys are present to let the worker know what
             # should be passd to the env (we don't want to pass done states for instance)
             next_td_keys = list(next_td_passthrough.keys(True, True))
-            self.shared_tensordict_parent.get("next").update_(next_td_passthrough)
+            self.shared_tensordict_parent.get("next").update_(
+                next_td_passthrough, non_blocking=self.non_blocking
+            )
         else:
             next_td_keys = None
+
+        self._sync_m2w()
 
         if self.event is not None:
             self.event.record()
@@ -1294,25 +1429,35 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         next_td = self.shared_tensordict_parent.get("next")
         device = self.device
 
-        def select_and_clone(name, tensor):
-            if name in self._selected_step_keys:
-                return tensor.clone()
+        if next_td.device != device and device is not None:
+
+            def select_and_clone(name, tensor):
+                if name in self._selected_step_keys:
+                    return tensor.to(device, non_blocking=self.non_blocking)
+
+        else:
+
+            def select_and_clone(name, tensor):
+                if name in self._selected_step_keys:
+                    return tensor.clone()
 
         out = next_td.named_apply(
             select_and_clone,
             nested_keys=True,
             filter_empty=True,
+            device=device,
         )
-        if out.device != device:
-            if device is None:
-                out.clear_device_()
-            else:
-                out = out.to(device, non_blocking=self.non_blocking)
+        self._sync_w2m()
         return out
 
     @torch.no_grad()
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        list_of_kwargs = kwargs.pop("list_of_kwargs", [kwargs] * self.num_workers)
+        if kwargs is not list_of_kwargs[0] and kwargs:
+            # this means that kwargs had more than one element and that a list was provided
+            for elt in list_of_kwargs:
+                elt.update(kwargs)
         if tensordict is not None:
             needs_resetting = _aggregate_end_of_traj(
                 tensordict, reset_keys=self.reset_keys
@@ -1328,13 +1473,18 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 (self.num_workers,), device=self.device, dtype=torch.bool
             )
 
-        workers = []
-
-        for i, channel in enumerate(self.parent_channels):
+        outs = []
+        for i in range(self.num_workers):
             if tensordict is not None:
                 tensordict_ = tensordict[i]
                 if tensordict_.is_empty():
                     tensordict_ = None
+                elif self.device is not None and self.device.type == "mps":
+                    # copy_ fails when moving mps->cpu using copy_
+                    # in some cases when a view of an mps tensor is used.
+                    # We know the shared tensors are not MPS, so we can
+                    # safely assume that the shared tensors are on cpu
+                    tensordict_ = tensordict_.to("cpu")
             else:
                 tensordict_ = None
             if not needs_resetting[i]:
@@ -1347,10 +1497,13 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 self.shared_tensordicts[i].update_(
                     self.shared_tensordicts[i].get("next"),
                     keys_to_update=list(self._selected_reset_keys),
+                    non_blocking=self.non_blocking,
                 )
                 if tensordict_ is not None:
                     self.shared_tensordicts[i].update_(
-                        tensordict_, keys_to_update=list(self._selected_reset_keys)
+                        tensordict_,
+                        keys_to_update=list(self._selected_reset_keys),
+                        non_blocking=self.non_blocking,
                     )
                 continue
             if tensordict_ is not None:
@@ -1359,20 +1512,23 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 # This way we can avoid calling select over all the keys in the shared tensordict
                 def tentative_update(val, other):
                     if other is not None:
-                        val.copy_(other)
+                        val.copy_(other, non_blocking=self.non_blocking)
                     return val
 
                 self.shared_tensordicts[i].apply_(
                     tentative_update, tensordict_, default=None
                 )
-                out = ("reset", tdkeys)
+                out = ("reset", (tdkeys, list_of_kwargs[i]))
             else:
-                out = ("reset", False)
+                out = ("reset", (False, list_of_kwargs[i]))
+            outs.append((i, out))
 
-            channel.send(out)
-            workers.append(i)
+        self._sync_m2w()
 
-        for i in workers:
+        for i, out in outs:
+            self.parent_channels[i].send(out)
+
+        for i, _ in outs:
             event = self._events[i]
             event.wait(self._timeout)
             event.clear()
@@ -1380,21 +1536,25 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         selected_output_keys = self._selected_reset_keys_filt
         device = self.device
 
-        def select_and_clone(name, tensor):
-            if name in selected_output_keys:
-                return tensor.clone()
+        if self.shared_tensordict_parent.device != device and device is not None:
+
+            def select_and_clone(name, tensor):
+                if name in selected_output_keys:
+                    return tensor.to(device, non_blocking=self.non_blocking)
+
+        else:
+
+            def select_and_clone(name, tensor):
+                if name in selected_output_keys:
+                    return tensor.clone()
 
         out = self.shared_tensordict_parent.named_apply(
             select_and_clone,
             nested_keys=True,
             filter_empty=True,
+            device=device,
         )
-
-        if out.device != device:
-            if device is None:
-                out.clear_device_()
-            else:
-                out = out.to(device, non_blocking=self.non_blocking)
+        self._sync_w2m()
         return out
 
     @_check_start
@@ -1464,6 +1624,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             try:
                 # _ = getattr(self._dummy_env, attr)
                 if self.is_closed:
+                    self.start()
                     raise RuntimeError(
                         "Trying to access attributes of closed/non started "
                         "environments. Check that the batched environment "
@@ -1513,6 +1674,7 @@ def _run_worker_pipe_shared_mem(
     _selected_input_keys=None,
     _selected_reset_keys=None,
     _selected_step_keys=None,
+    non_blocking: bool = False,
     has_lazy_inputs: bool = False,
     verbose: bool = False,
     num_threads: int | None = None,  # for fork start method
@@ -1598,14 +1760,19 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before resetting")
             # we use 'data' to pass the keys that we need to pass to reset,
             # because passing the entire buffer may have unwanted consequences
+            selected_reset_keys, reset_kwargs = data
             cur_td = env.reset(
-                tensordict=root_shared_tensordict.select(*data, strict=False)
-                if data
-                else None
+                tensordict=root_shared_tensordict.select(
+                    *selected_reset_keys, strict=False
+                )
+                if selected_reset_keys
+                else None,
+                **reset_kwargs,
             )
             shared_tensordict.update_(
                 cur_td,
                 keys_to_update=list(_selected_reset_keys),
+                non_blocking=non_blocking,
             )
             if event is not None:
                 event.record()
@@ -1626,7 +1793,7 @@ def _run_worker_pipe_shared_mem(
             else:
                 input = root_shared_tensordict
             next_td = env._step(input)
-            next_shared_tensordict.update_(next_td)
+            next_shared_tensordict.update_(next_td, non_blocking=non_blocking)
             if event is not None:
                 event.record()
                 event.synchronize()
@@ -1653,8 +1820,8 @@ def _run_worker_pipe_shared_mem(
             else:
                 input = root_shared_tensordict
             td, root_next_td = env.step_and_maybe_reset(input)
-            next_shared_tensordict.update_(td.pop("next"))
-            root_shared_tensordict.update_(root_next_td)
+            next_shared_tensordict.update_(td.pop("next"), non_blocking=non_blocking)
+            root_shared_tensordict.update_(root_next_td, non_blocking=non_blocking)
 
             if event is not None:
                 event.record()
@@ -1727,6 +1894,14 @@ def _stackable(*tensordicts):
         return not ls._has_exclusive_keys
     except RuntimeError:
         return False
+
+
+def _cuda_sync(device):
+    return functools.partial(torch.cuda.synchronize, device=device)
+
+
+def _mps_sync(device):
+    return torch.mps.synchronize
 
 
 # Create an alias for possible imports

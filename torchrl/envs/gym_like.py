@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import re
 import warnings
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
@@ -329,6 +330,7 @@ class GymLikeEnv(_EnvWrapper):
             )
         if self.device is not None:
             tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+            self._sync_device()
 
         if self.info_dict_reader and (info_dict is not None):
             if not isinstance(info_dict, dict):
@@ -372,7 +374,9 @@ class GymLikeEnv(_EnvWrapper):
             for key, item in self.observation_spec.items(True, True):
                 if key not in tensordict_out.keys(True, True):
                     tensordict_out[key] = item.zero()
-        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+        if self.device is not None:
+            tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+            self._sync_device()
         return tensordict_out
 
     @abc.abstractmethod
@@ -503,13 +507,18 @@ class GymLikeEnv(_EnvWrapper):
         try:
             check_env_specs(self)
             return self
-        except AssertionError as err:
-            if "The keys of the specs and data do not match" in str(err):
-                result = TransformedEnv(
-                    self, TensorDictPrimer(self.info_dict_reader[0].info_spec)
-                )
-                check_env_specs(result)
-                return result
+        except (AssertionError, RuntimeError) as err:
+            patterns = [
+                "The keys of the specs and data do not match",
+                "The sets of keys in the tensordicts to stack are exclusive",
+            ]
+            for pattern in patterns:
+                if re.search(pattern, str(err)):
+                    result = TransformedEnv(
+                        self, TensorDictPrimer(self.info_dict_reader[0].info_spec)
+                    )
+                    check_env_specs(result)
+                    return result
             raise err
 
     def __repr__(self) -> str:

@@ -9,6 +9,9 @@ from .rb_transforms import MultiStepTransform
 from .rlhf import KLRewardTransform
 from .transforms import (
     ActionMask,
+    AutoResetEnv,
+    AutoResetTransform,
+    BatchSizeTransform,
     BinarizeReward,
     BurnInTransform,
     CatFrames,

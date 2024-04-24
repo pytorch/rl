@@ -282,7 +282,7 @@ def make_trainer(
         rb_trainer = ReplayBufferTrainer(
             replay_buffer,
             cfg.buffer.batch_size,
-            flatten_tensordicts=False,
+            flatten_tensordicts=True,
             memmap=False,
             device=device,
         )
@@ -1044,7 +1044,6 @@ def make_replay_buffer(
         storage=LazyMemmapStorage(
             cfg.buffer.size,
             scratch_dir=cfg.buffer.scratch_dir,
-            # device=device,  # when using prefetch, this can overload the GPU memory
         ),
         sampler=sampler,
         pin_memory=device != torch.device("cpu"),

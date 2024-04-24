@@ -1776,6 +1776,37 @@ def test_policy_with_mask():
     collector.shutdown()
 
 
+@pytest.mark.parametrize(
+    "collector_cls",
+    [SyncDataCollector, MultiSyncDataCollector, MultiaSyncDataCollector],
+)
+def test_set_truncated(collector_cls):
+    env_fn = lambda: TransformedEnv(
+        NestedCountingEnv(), InitTracker()
+    ).add_truncated_keys()
+    env = env_fn()
+    policy = env.rand_action
+    if collector_cls == SyncDataCollector:
+        collector = collector_cls(
+            env, policy=policy, frames_per_batch=20, total_frames=-1, set_truncated=True
+        )
+    else:
+        collector = collector_cls(
+            [env_fn, env_fn],
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=-1,
+            cat_results="stack",
+            set_truncated=True,
+        )
+    try:
+        for data in collector:
+            assert data[..., -1]["next", "data", "truncated"].all()
+            break
+    finally:
+        collector.shutdown()
+
+
 class TestNestedEnvsCollector:
     def test_multi_collector_nested_env_consistency(self, seed=1):
         torch.manual_seed(seed)

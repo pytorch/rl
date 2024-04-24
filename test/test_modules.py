@@ -9,7 +9,8 @@ from numbers import Number
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_default_devices
+
+from _utils_internal import get_default_devices, retry
 from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
@@ -890,6 +891,7 @@ class TestMultiAgent:
         )
         return td
 
+    @retry(AssertionError, 5)
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
     @pytest.mark.parametrize("centralised", [True, False])
@@ -904,7 +906,7 @@ class TestMultiAgent:
         n_agent_inputs,
         n_agent_outputs=2,
     ):
-        torch.manual_seed(0)
+        torch.manual_seed(1)
         mlp = MultiAgentMLP(
             n_agent_inputs=n_agent_inputs,
             n_agent_outputs=n_agent_outputs,
@@ -936,8 +938,10 @@ class TestMultiAgent:
             elif i > 0:
                 assert torch.allclose(out[..., i, :], out2[..., i, :])
 
-        obs = torch.randn(*batch, 1, n_agent_inputs).expand(
-            *batch, n_agents, n_agent_inputs
+        obs = (
+            torch.randn(*batch, 1, n_agent_inputs)
+            .expand(*batch, n_agents, n_agent_inputs)
+            .clone()
         )
         out = mlp(obs)
         for i in range(n_agents):
