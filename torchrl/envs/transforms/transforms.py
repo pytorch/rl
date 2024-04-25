@@ -7509,6 +7509,80 @@ class RemoveEmptySpecs(Transform):
     forward = _call
 
 
+class _InvertTransform(Transform):
+    _MISSING_TRANSFORM_ERROR = (
+        "There is not generic rule to invert a spec transform. "
+        "Please file an issue on github to get help."
+    )
+
+    def __init__(self, transform: Transform):
+        super().__init__()
+        self.transform = transform
+
+    @property
+    def in_keys(self):
+        return self.transform.in_keys_inv
+
+    @in_keys.setter
+    def in_keys(self, value):
+        if value is not None:
+            raise RuntimeError("Cannot set non-null value in in_keys.")
+
+    @property
+    def in_keys_inv(self):
+        return self.transform.in_keys
+
+    @in_keys_inv.setter
+    def in_keys_inv(self, value):
+        if value is not None:
+            raise RuntimeError("Cannot set non-null value in in_keys_inv.")
+
+    @property
+    def out_keys(self):
+        return self.transform.out_keys_inv
+
+    @out_keys.setter
+    def out_keys(self, value):
+        if value is not None:
+            raise RuntimeError("Cannot set non-null value in out_keys.")
+
+    @property
+    def out_keys_inv(self):
+        return self.transform.out_keys
+
+    @out_keys_inv.setter
+    def out_keys_inv(self, value):
+        if value is not None:
+            raise RuntimeError("Cannot set non-null value in out_keys_inv.")
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self.transform.inv(tensordict)
+
+    def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self.transform.forward(tensordict)
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self.transform._inv_call(tensordict)
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self.transform._call(tensordict)
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        raise RuntimeError(self._MISSING_TRANSFORM_ERROR)
+
+    def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
+        raise RuntimeError(self._MISSING_TRANSFORM_ERROR)
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        raise RuntimeError(self._MISSING_TRANSFORM_ERROR)
+
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        raise RuntimeError(self._MISSING_TRANSFORM_ERROR)
+
+    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
+        raise RuntimeError(self._MISSING_TRANSFORM_ERROR)
+
+
 class _CallableTransform(Transform):
     # A wrapper around a custom callable to make it possible to transform any data type
     def __init__(self, func):
