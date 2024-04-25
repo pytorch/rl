@@ -613,18 +613,13 @@ class TestStorages:
             )
         else:
             raise NotImplementedError
+
+        if storage_type is LazyMemmapStorage and device_storage.type != "cpu":
+            with pytest.raises(ValueError, match="Memory map device other than CPU"):
+                storage_type(max_size=10, device=device_storage)
+            return
         storage = storage_type(max_size=10, device=device_storage)
-        if device_storage == "auto":
-            device_storage = device_data
-        if storage_type is LazyMemmapStorage and device_storage.type == "cuda":
-            with pytest.warns(
-                DeprecationWarning, match="Support for Memmap device other than CPU"
-            ):
-                # this is rather brittle and will fail with some indices
-                # when both device (storage and data) don't match (eg, range())
-                storage.set(0, data)
-        else:
-            storage.set(0, data)
+        storage.set(0, data)
         assert storage.get(0).device.type == device_storage.type
 
     @pytest.mark.parametrize("storage_in", ["tensor", "memmap"])

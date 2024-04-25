@@ -459,8 +459,8 @@ class TensorStorage(Storage):
             _storage = TensorDict.load_memmap(path)
             if not self.initialized:
                 # this should not be reached if is_pytree=True
-                self._storage = _storage
-                self.initialized = True
+                self._init(_storage[0])
+                self._storage.update_(_storage)
             else:
                 self._storage.copy_(_storage)
         self._len = _len
@@ -1018,7 +1018,12 @@ class LazyMemmapStorage(LazyTensorStorage):
             self.scratch_dir = str(scratch_dir)
             if self.scratch_dir[-1] != "/":
                 self.scratch_dir += "/"
-        self.device = torch.device(device) if device != "auto" else device
+        self.device = torch.device(device) if device != "auto" else torch.device("cpu")
+        if self.device.type != "cpu":
+            raise ValueError(
+                "Memory map device other than CPU isn't supported. To cast your data to the desired device, "
+                "use `buffer.append_transform(lambda x: x.to(device)` or a similar transform."
+            )
         self._len = 0
 
     def state_dict(self) -> Dict[str, Any]:
