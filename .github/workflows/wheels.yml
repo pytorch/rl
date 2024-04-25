@@ -86,7 +86,7 @@ jobs:
 
 
   test-wheel:
-    needs: [build-wheel-linux, build-wheel-mac]
+    needs: [build-wheel-linux]
     strategy:
       matrix:
         os: [["linux", "ubuntu-20.04"]]
