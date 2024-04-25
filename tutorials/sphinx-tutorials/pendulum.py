@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 """
 Pendulum: Writing your environment and transforms with TorchRL
 ==============================================================

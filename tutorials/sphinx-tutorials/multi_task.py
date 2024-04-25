@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Task-specific policy in multi-task environments
 ================================================

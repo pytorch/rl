@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 TorchRL objectives: Coding a DDPG loss
 ======================================

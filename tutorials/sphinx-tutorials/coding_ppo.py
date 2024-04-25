@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Reinforcement Learning (PPO) with TorchRL Tutorial
 ==================================================

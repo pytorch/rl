@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 """
 Recurrent DQN: Training recurrent policies
 ==========================================
