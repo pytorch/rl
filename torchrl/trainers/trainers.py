@@ -662,23 +662,13 @@ class ReplayBufferTrainer(TrainerHookBase):
         batch_size: Optional[int] = None,
         memmap: bool = False,
         device: DEVICE_TYPING = "cpu",
-        flatten_tensordicts: bool = None,
+        flatten_tensordicts: bool = False,
         max_dims: Optional[Sequence[int]] = None,
     ) -> None:
         self.replay_buffer = replay_buffer
         self.batch_size = batch_size
         self.memmap = memmap
         self.device = device
-        if flatten_tensordicts is None:
-            warnings.warn(
-                "flatten_tensordicts default value has now changed "
-                "to False for a faster execution. Make sure your "
-                "code is robust to this change. To silence this warning, "
-                "pass flatten_tensordicts=<value> in your code. "
-                "This warning will be removed in v0.4.",
-                category=DeprecationWarning,
-            )
-            flatten_tensordicts = True
         self.flatten_tensordicts = flatten_tensordicts
         self.max_dims = max_dims
 
