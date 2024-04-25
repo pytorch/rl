@@ -3,7 +3,6 @@ name: Generate documentation
 on:
   push:
     branches:
-      - nightly
       - main
       - release/*
   pull_request:
