@@ -615,8 +615,8 @@ class ReplayBuffer:
         self._sampler.mark_update(index)
 
     def append_transform(
-        self, transform: "Transform", *, invert: bool = False
-    ) -> ReplayBuffer:  # noqa-F821
+        self, transform: "Transform", *, invert: bool = False  # noqa-F821
+    ) -> ReplayBuffer:  # noqa: D417
         """Appends transform at the end.
 
         Transforms are applied in order when `sample` is called.
@@ -655,7 +655,7 @@ class ReplayBuffer:
         transform: "Transform",  # noqa-F821
         *,
         invert: bool = False,
-    ) -> ReplayBuffer:
+    ) -> ReplayBuffer:  # noqa: D417
         """Inserts transform.
 
         Transforms are executed in order when `sample` is called.
