@@ -14,7 +14,6 @@ import numpy as np
 import torch
 
 from tensordict import TensorDictBase
-from torchrl.data import CompositeSpec
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
@@ -50,8 +49,9 @@ class IsaacGymWrapper(GymWrapper):
         warnings.warn(
             "IsaacGym environment support is an experimental feature that may change in the future."
         )
+        num_envs = env.num_envs
         super().__init__(
-            env, torch.device(env.device), batch_size=torch.Size([]), **kwargs
+            env, torch.device(env.device), batch_size=torch.Size([num_envs]), **kwargs
         )
         if not hasattr(self, "task"):
             # by convention in IsaacGymEnvs
@@ -59,14 +59,9 @@ class IsaacGymWrapper(GymWrapper):
 
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         super()._make_specs(env, batch_size=self.batch_size)
-        self.full_done_spec = CompositeSpec(
-            {
-                key: spec.squeeze(-1)
-                for key, spec in self.full_done_spec.items(True, True)
-            },
-            shape=self.batch_size,
-        )
-
+        self.full_done_spec = {
+            key: spec.squeeze(-1) for key, spec in self.full_done_spec.items(True, True)
+        }
         self.observation_spec["obs"] = self.observation_spec["observation"]
         del self.observation_spec["observation"]
 
@@ -83,18 +78,7 @@ class IsaacGymWrapper(GymWrapper):
         obs_spec.unlock_()
         obs_spec.update(specs)
         obs_spec.lock_()
-
-    def _output_transform(self, output):
-        obs, reward, done, info = output
-        if self.from_pixels:
-            obs["pixels"] = self._env.render(mode="rgb_array")
-        return obs, reward, done ^ done, done, done, info
-
-    def _reset_output_transform(self, reset_data):
-        reset_data.pop("reward", None)
-        if self.from_pixels:
-            reset_data["pixels"] = self._env.render(mode="rgb_array")
-        return reset_data, {}
+        self.__dict__["full_observation_spec"] = obs_spec
 
     @classmethod
     def _make_envs(cls, *, task, num_envs, device, seed=None, headless=True, **kwargs):
@@ -141,8 +125,15 @@ class IsaacGymWrapper(GymWrapper):
             done = done.bool()
         return terminated, truncated, done, done.any()
 
-    def read_reward(self, total_reward):
-        return total_reward
+    def read_reward(self, total_reward, step_reward):
+        """Reads a reward and the total reward so far (in the frame skip loop) and returns a sum of the two.
+
+        Args:
+            total_reward (torch.Tensor or TensorDict): total reward so far in the step
+            step_reward (reward in the format provided by the inner env): reward of this particular step
+
+        """
+        return total_reward + step_reward
 
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
@@ -192,13 +183,6 @@ class IsaacGymEnv(IsaacGymWrapper):
             raise RuntimeError("Cannot provide both `task` and `env` arguments.")
         elif env is not None:
             task = env
-        from_pixels = kwargs.pop("from_pixels", False)
-        envs = self._make_envs(
-            task=task,
-            num_envs=num_envs,
-            device=device,
-            virtual_screen_capture=True,
-            **kwargs,
-        )
+        envs = self._make_envs(task=task, num_envs=num_envs, device=device, **kwargs)
         self.task = task
-        super().__init__(envs, from_pixels=from_pixels, **kwargs)
+        super().__init__(envs, **kwargs)
