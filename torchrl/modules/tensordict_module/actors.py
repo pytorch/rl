@@ -443,7 +443,7 @@ class QValueModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        action_space: Optional[str],
+        action_space: Optional[str] = None,
         action_value_key: Optional[NestedKey] = None,
         action_mask_key: Optional[NestedKey] = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
@@ -452,11 +452,7 @@ class QValueModule(TensorDictModuleBase):
         safe: bool = False,
     ):
         if isinstance(action_space, TensorSpec):
-            warnings.warn(
-                "Using specs in action_space will be deprecated in v0.4.0,"
-                " please use the 'spec' argument if you want to provide an action spec",
-                category=DeprecationWarning,
-            )
+            raise TypeError("Using specs in action_space is deprecated")
         action_space, spec = _process_action_space_spec(action_space, spec)
         self.action_space = action_space
         self.var_nums = var_nums
@@ -929,11 +925,7 @@ class DistributionalQValueHook(QValueHook):
         out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if isinstance(action_space, TensorSpec):
-            warnings.warn(
-                "Using specs in action_space will be deprecated in v0.4.0,"
-                " please use the 'spec' argument if you want to provide an action spec",
-                category=DeprecationWarning,
-            )
+            raise RuntimeError("Using specs in action_space is deprecated")
         action_space, _ = _process_action_space_spec(action_space, None)
         self.qvalue_model = DistributionalQValueModule(
             action_space=action_space,
@@ -1196,11 +1188,7 @@ class DistributionalQValueActor(QValueActor):
         make_log_softmax: bool = True,
     ):
         if isinstance(action_space, TensorSpec):
-            warnings.warn(
-                "Using specs in action_space will be deprecated in v0.4.0,"
-                " please use the 'spec' argument if you want to provide an action spec",
-                category=DeprecationWarning,
-            )
+            raise RuntimeError("Using specs in action_space is deprecated")
         action_space, spec = _process_action_space_spec(action_space, spec)
         self.action_space = action_space
         self.action_value_key = action_value_key

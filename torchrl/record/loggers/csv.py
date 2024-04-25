@@ -9,6 +9,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Optional, Sequence, Union
 
+import tensordict.utils
 import torch
 
 from tensordict import MemoryMappedTensor
@@ -196,3 +197,7 @@ class CSVLogger(Logger):
 
     def log_histogram(self, name: str, data: Sequence, **kwargs):
         raise NotImplementedError("Logging histograms in cvs is not permitted.")
+
+    def print_log_dir(self):
+        """Prints the log directory content."""
+        tensordict.utils.print_directory_tree(self.log_dir)

@@ -27,7 +27,6 @@ from .models import (
     DTActor,
     DuelingCnnDQNet,
     DuelingMlpDQNet,
-    LSTMNet,
     MLP,
     OnlineDTActor,
 )

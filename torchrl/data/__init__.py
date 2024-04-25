@@ -31,6 +31,8 @@ from .replay_buffers import (
     WriterEnsemble,
 )
 from .rlhf import (
+    AdaptiveKLController,
+    ConstantKLController,
     create_infinite_iterator,
     get_dataloader,
     PairwiseDataset,

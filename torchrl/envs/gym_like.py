@@ -529,13 +529,3 @@ class GymLikeEnv(_EnvWrapper):
     @property
     def info_dict_reader(self):
         return self._info_dict_reader
-
-    @info_dict_reader.setter
-    def info_dict_reader(self, value: callable):
-        warnings.warn(
-            f"Please use {type(self)}.set_info_dict_reader method to set a new info reader. "
-            f"This method will append a reader to the list of existing readers (if any). "
-            f"Setting info_dict_reader directly will be deprecated in v0.4.0.",
-            category=DeprecationWarning,
-        )
-        self._info_dict_reader.append(value)

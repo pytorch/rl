@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Get started with data collection and storage
 ============================================

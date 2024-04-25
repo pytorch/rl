@@ -9,7 +9,7 @@ import importlib.util
 from typing import Dict, List, Optional, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
@@ -302,7 +302,7 @@ class VmasWrapper(_EnvWrapper):
             group_map = MarlGroupMapType.ALL_IN_ONE_GROUP.get_group_map(agent_names)
 
         # For BC-compatibility rename the "agent" group to "agents"
-        if "agent" in group_map:
+        if "agent" in group_map and len(group_map) == 1:
             agent_group = group_map["agent"]
             group_map["agents"] = agent_group
             del group_map["agent"]
@@ -506,7 +506,7 @@ class VmasWrapper(_EnvWrapper):
                     agent_td.set("info", agent_info)
                 agent_tds.append(agent_td)
 
-            agent_tds = torch.stack(agent_tds, dim=1)
+            agent_tds = LazyStackedTensorDict.maybe_dense_stack(agent_tds, dim=1)
             if not self.het_specs_map[group]:
                 agent_tds = agent_tds.to_tensordict()
             source.update({group: agent_tds})
@@ -564,7 +564,7 @@ class VmasWrapper(_EnvWrapper):
                     agent_td.set("info", agent_info)
                 agent_tds.append(agent_td)
 
-            agent_tds = torch.stack(agent_tds, dim=1)
+            agent_tds = LazyStackedTensorDict.maybe_dense_stack(agent_tds, dim=1)
             if not self.het_specs_map[group]:
                 agent_tds = agent_tds.to_tensordict()
             source.update({group: agent_tds})

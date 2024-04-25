@@ -415,6 +415,13 @@ class TestPixelRenderTransform:
             env = env.append_transform(PixelRenderTransform(out_keys=in_key))
             return env
 
+        try:
+            # Try to render an image
+            dummy_env = make_env()
+            dummy_env.reset()
+            dummy_env.base_env._env.render()
+        except Exception:
+            pytest.skip("Skipping as an exception was raised during rendering.")
         if parallel:
             env = ParallelEnv(2, make_env, mp_start_method="spawn")
         else:

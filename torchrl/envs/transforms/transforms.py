@@ -236,10 +236,6 @@ class Transform(nn.Module):
             value = [unravel_key(val) for val in value]
         self._out_keys_inv = value
 
-    def reset(self, tensordict):
-        warnings.warn("Transform.reset public method will be derpecated in v0.4.0.")
-        return self._reset(tensordict, tensordict_reset=tensordict)
-
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
@@ -2836,13 +2832,7 @@ class CatFrames(ObservationTransform):
         if padding not in self.ACCEPTED_PADDING:
             raise ValueError(f"padding must be one of {self.ACCEPTED_PADDING}")
         if padding == "zeros":
-            warnings.warn(
-                "Padding option 'zeros' will be deprecated in v0.4.0. "
-                "Please use 'constant' padding with padding_value 0 instead.",
-                category=DeprecationWarning,
-            )
-            padding = "constant"
-            padding_value = 0
+            raise RuntimeError("Padding option 'zeros' will is deprecated")
         self.padding = padding
         self.padding_value = padding_value
         for in_key in self.in_keys:
@@ -3130,8 +3120,11 @@ class CatFrames(ObservationTransform):
                         reset_vals = reset_vals[1:]
                     reps.extend([reset_vals[0]] * int(j))
                     j_ = j
-                reps = torch.stack(reps)
-                data = torch.masked_scatter(data, done_mask_expand, reps.reshape(-1))
+                if reps:
+                    reps = torch.stack(reps)
+                    data = torch.masked_scatter(
+                        data, done_mask_expand, reps.reshape(-1)
+                    )
 
             if first_val is not None:
                 # Aggregate reset along last dim
@@ -7514,6 +7507,80 @@ class RemoveEmptySpecs(Transform):
         return self._call(tensordict_reset)
 
     forward = _call
+
+
+class _InvertTransform(Transform):
+    _MISSING_TRANSFORM_ERROR = (
+        "There is not generic rule to invert a spec transform. "
+        "Please file an issue on github to get help."
+    )
+
+    def __init__(self, transform: Transform):
+        super().__init__()
+        self.transform = transform
+
+    @property
+    def in_keys(self):
+        return self.transform.in_keys_inv
+
+    @in_keys.setter
+    def in_keys(self, value):
+        if value is not None:
+            raise RuntimeError("Cannot set non-null value in in_keys.")
+
+    @property
+    def in_keys_inv(self):
+        return self.transform.in_keys
+
+    @in_keys_inv.setter
+    def in_keys_inv(self, value):
+        if value is not None:
+            raise RuntimeError("Cannot set non-null value in in_keys_inv.")
+
+    @property
+    def out_keys(self):
+        return self.transform.out_keys_inv
+
+    @out_keys.setter
+    def out_keys(self, value):
+        if value is not None:
+            raise RuntimeError("Cannot set non-null value in out_keys.")
+
+    @property
+    def out_keys_inv(self):
+        return self.transform.out_keys
+
+    @out_keys_inv.setter
+    def out_keys_inv(self, value):
+        if value is not None:
+            raise RuntimeError("Cannot set non-null value in out_keys_inv.")
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self.transform.inv(tensordict)
+
+    def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self.transform.forward(tensordict)
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self.transform._inv_call(tensordict)
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self.transform._call(tensordict)
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        raise RuntimeError(self._MISSING_TRANSFORM_ERROR)
+
+    def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
+        raise RuntimeError(self._MISSING_TRANSFORM_ERROR)
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        raise RuntimeError(self._MISSING_TRANSFORM_ERROR)
+
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        raise RuntimeError(self._MISSING_TRANSFORM_ERROR)
+
+    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
+        raise RuntimeError(self._MISSING_TRANSFORM_ERROR)
 
 
 class _CallableTransform(Transform):
