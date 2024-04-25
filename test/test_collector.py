@@ -20,6 +20,7 @@ from _utils_internal import (
     generate_seeds,
     get_available_devices,
     get_default_devices,
+    LSTMNet,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
     retry,
@@ -74,7 +75,7 @@ from torchrl.envs.utils import (
     PARTIAL_MISSING_ERR,
     RandomPolicy,
 )
-from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
+from torchrl.modules import Actor, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
 # torch.set_default_dtype(torch.double)
 IS_WINDOWS = sys.platform == "win32"

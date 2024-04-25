@@ -785,7 +785,7 @@ class TestCatFrames(TransformBase):
 
     @pytest.mark.parametrize("dim", [-1])
     @pytest.mark.parametrize("N", [3, 4])
-    @pytest.mark.parametrize("padding", ["zeros", "constant", "same"])
+    @pytest.mark.parametrize("padding", ["constant", "same"])
     def test_transform_model(self, dim, N, padding):
         # test equivalence between transforms within an env and within a rb
         key1 = "observation"
@@ -838,7 +838,7 @@ class TestCatFrames(TransformBase):
 
     @pytest.mark.parametrize("dim", [-1])
     @pytest.mark.parametrize("N", [3, 4])
-    @pytest.mark.parametrize("padding", ["same", "zeros", "constant"])
+    @pytest.mark.parametrize("padding", ["same", "constant"])
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(self, dim, N, padding, rbclass):
         # test equivalence between transforms within an env and within a rb
@@ -870,7 +870,7 @@ class TestCatFrames(TransformBase):
 
     @pytest.mark.parametrize("dim", [-1])
     @pytest.mark.parametrize("N", [3, 4])
-    @pytest.mark.parametrize("padding", ["same", "zeros", "constant"])
+    @pytest.mark.parametrize("padding", ["same", "constant"])
     def test_transform_as_inverse(self, dim, N, padding):
         # test equivalence between transforms within an env and within a rb
         in_keys = ["observation", ("next", "observation")]
@@ -987,7 +987,7 @@ class TestCatFrames(TransformBase):
         assert v1 is not v2
 
     @pytest.mark.skipif(not _has_gym, reason="gym required for this test")
-    @pytest.mark.parametrize("padding", ["zeros", "constant", "same"])
+    @pytest.mark.parametrize("padding", ["constant", "same"])
     @pytest.mark.parametrize("envtype", ["gym", "conv"])
     def test_tranform_offline_against_online(self, padding, envtype):
         torch.manual_seed(0)
@@ -1027,10 +1027,7 @@ class TestCatFrames(TransformBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("batch_size", [(), (1,), (1, 2)])
     @pytest.mark.parametrize("d", range(2, 3))
-    @pytest.mark.parametrize(
-        "dim",
-        [-3],
-    )
+    @pytest.mark.parametrize("dim", [-3])
     @pytest.mark.parametrize("N", [2, 4])
     def test_transform_compose(self, device, d, batch_size, dim, N):
         key1 = "first key"
@@ -4177,11 +4174,11 @@ class TestObservationNorm(TransformBase):
             )
             observation_spec = on.transform_observation_spec(observation_spec)
             if standard_normal:
-                assert (observation_spec.space.minimum == -loc / scale).all()
-                assert (observation_spec.space.maximum == (1 - loc) / scale).all()
+                assert (observation_spec.space.low == -loc / scale).all()
+                assert (observation_spec.space.high == (1 - loc) / scale).all()
             else:
-                assert (observation_spec.space.minimum == loc).all()
-                assert (observation_spec.space.maximum == scale + loc).all()
+                assert (observation_spec.space.low == loc).all()
+                assert (observation_spec.space.high == scale + loc).all()
 
         else:
             observation_spec = CompositeSpec(
@@ -5097,9 +5094,9 @@ class TestRewardSum(TransformBase):
                         f"Could not match the env reset_keys {reset_keys} with the in_keys {in_keys}"
                     ),
                 ):
-                    t.reset(td)
+                    t._reset(td, td.empty())
             else:
-                t.reset(td)
+                t._reset(td, td.empty())
 
 
 class TestReward2Go(TransformBase):
@@ -6149,8 +6146,8 @@ class TestToTensorImage(TransformBase):
                 observation_spec
             )
             assert observation_spec.shape == torch.Size([3, 16, 16])
-            assert (observation_spec.space.minimum == 0).all()
-            assert (observation_spec.space.maximum == 1).all()
+            assert (observation_spec.space.low == 0).all()
+            assert (observation_spec.space.high == 1).all()
         else:
             observation_spec = CompositeSpec(
                 {
@@ -6198,8 +6195,8 @@ class TestToTensorImage(TransformBase):
                 observation_spec
             )
             assert observation_spec.shape == torch.Size([3, 16, 16])
-            assert (observation_spec.space.minimum == 0).all()
-            assert (observation_spec.space.maximum == 1).all()
+            assert (observation_spec.space.low == 0).all()
+            assert (observation_spec.space.high == 1).all()
         else:
             observation_spec = CompositeSpec(
                 {
@@ -8039,14 +8036,14 @@ class TestTransformedEnv:
         t1_reward_spec = t1.reward_spec
         t2_reward_spec = t2.reward_spec
 
-        assert t1_reward_spec.space.minimum == 0
-        assert t1_reward_spec.space.maximum == 4
+        assert t1_reward_spec.space.low == 0
+        assert t1_reward_spec.space.high == 4
 
-        assert t2_reward_spec.space.minimum == -2
-        assert t2_reward_spec.space.maximum == 2
+        assert t2_reward_spec.space.low == -2
+        assert t2_reward_spec.space.high == 2
 
-        assert base_env.reward_spec.space.minimum == -np.inf
-        assert base_env.reward_spec.space.maximum == np.inf
+        assert base_env.reward_spec.space.low == -np.inf
+        assert base_env.reward_spec.space.high == np.inf
 
     def test_allow_done_after_reset(self):
         base_env = ContinuousActionVecMockEnv(allow_done_after_reset=True)

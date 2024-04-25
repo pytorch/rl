@@ -382,22 +382,6 @@ class ContinuousBox(Box):
         self.device = value.device
         self._high = value.cpu()
 
-    @property
-    def minimum(self):
-        warnings.warn(
-            f"{type(self)}.minimum is going to be deprecated in favour of {type(self)}.low in v0.4.0",
-            category=DeprecationWarning,
-        )
-        return self._low.to(self.device)
-
-    @property
-    def maximum(self):
-        warnings.warn(
-            f"{type(self)}.maximum is going to be deprecated in favour of {type(self)}.high in v0.4.0",
-            category=DeprecationWarning,
-        )
-        return self._high.to(self.device)
-
     @low.setter
     def low(self, value):
         self.device = value.device
@@ -1596,10 +1580,6 @@ class BoundedTensorSpec(TensorSpec):
     """
 
     # SPEC_HANDLED_FUNCTIONS = {}
-    DEPRECATED_KWARGS = (
-        "The `minimum` and `maximum` keyword arguments are now "
-        "deprecated in favour of `low` and `high` in v0.4.0."
-    )
     CONFLICTING_KWARGS = (
         "The keyword arguments {} and {} conflict. Only one of these can be passed."
     )

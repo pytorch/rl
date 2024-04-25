@@ -64,7 +64,7 @@ class TestShared:
                 batch_size=[],
             ).share_memory_()
         elif indexing_method == 1:
-            subtd = td.get_sub_tensordict(0)
+            subtd = td._get_sub_tensordict(0)
         elif indexing_method == 2:
             subtd = td[0]
         else:
@@ -182,14 +182,14 @@ def test_memmap(idx, dtype, large_scale=False):
     torchrl_logger.info("\nTesting writing to TD")
     for i in range(2):
         t0 = time.time()
-        sub_td_sm = td_sm.get_sub_tensordict(idx)
+        sub_td_sm = td_sm._get_sub_tensordict(idx)
         sub_td_sm.update_(td_to_copy)
         if i == 1:
             torchrl_logger.info(f"sm td: {time.time() - t0:4.4f} sec")
         torch.testing.assert_close(sub_td_sm.get("a"), td_to_copy.get("a"))
 
         t0 = time.time()
-        sub_td_sm = td_memmap.get_sub_tensordict(idx)
+        sub_td_sm = td_memmap._get_sub_tensordict(idx)
         sub_td_sm.update_(td_to_copy)
         if i == 1:
             torchrl_logger.info(f"memmap td: {time.time() - t0:4.4f} sec")
