@@ -92,6 +92,8 @@ jobs:
 
   upload:
     needs: build-docs
+    if: github.repository == 'pytorch/rl' && github.event_name == 'push' && 
+        ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
@@ -109,8 +111,9 @@ jobs:
         if [[ "${REF_TYPE}" == branch ]]; then
           if [[ "${REF_NAME}" == main ]]; then
             TARGET_FOLDER="${REF_NAME}"
-          else
-            TARGET_FOLDER="release-doc"
+          # Bebug:
+          # else
+          #   TARGET_FOLDER="release-doc"
           fi
         elif [[ "${REF_TYPE}" == tag ]]; then
           case "${REF_NAME}" in
@@ -135,7 +138,9 @@ jobs:
         rsync -a "${RUNNER_ARTIFACT_DIR}"/ "${TARGET_FOLDER}"
         git add "${TARGET_FOLDER}" || true
 
-        if [[ "${TARGET_FOLDER}" == "main" ]] || [[ "${TARGET_FOLDER}" == "release-doc" ]]; then
+        # Debug
+        # if [[ "${TARGET_FOLDER}" == "main" ]] || [[ "${TARGET_FOLDER}" == "release-doc" ]]; then
+        if [[ "${TARGET_FOLDER}" == "main" ]] ; then
           mkdir -p _static
           rm -rf _static/*
           cp -r "${TARGET_FOLDER}"/_static/* _static
