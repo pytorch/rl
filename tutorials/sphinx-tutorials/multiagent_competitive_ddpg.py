@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
 ===========================================================================

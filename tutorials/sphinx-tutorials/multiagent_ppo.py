@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
 ===============================================================

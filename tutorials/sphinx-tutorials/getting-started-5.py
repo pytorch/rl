@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Get started with your own first training loop
 =============================================
