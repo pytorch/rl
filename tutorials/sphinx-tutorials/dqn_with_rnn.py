@@ -307,7 +307,7 @@ mlp = Mod(mlp, in_keys=["embed"], out_keys=["action_value"])
 # either by passing a string or an action-spec. This allows us to use
 # Categorical (sometimes called "sparse") encoding or the one-hot version of it.
 #
-qval = QValueModule(action_space=env.action_spec)
+qval = QValueModule(action_space=None, spec=env.action_spec)
 
 ######################################################################
 # .. note::
@@ -412,7 +412,7 @@ rb = TensorDictReplayBuffer(
 #
 
 utd = 16
-pbar = tqdm.tqdm(total=1_000_000)
+pbar = tqdm.tqdm(total=collector.total_frames)
 longest = 0
 
 traj_lens = []

@@ -12,6 +12,8 @@ This tutorial details how multi-task policies and batched environments can be us
 # sphinx_gallery_start_ignore
 import warnings
 
+from tensordict import LazyStackedTensorDict
+
 warnings.filterwarnings("ignore")
 
 from torch import multiprocessing
@@ -31,7 +33,6 @@ except RuntimeError:
 
 # sphinx_gallery_end_ignore
 
-import torch
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 
@@ -77,9 +78,9 @@ env2 = TransformedEnv(
 tdreset1 = env1.reset()
 tdreset2 = env2.reset()
 
-# In TorchRL, stacking is done in a lazy manner: the original tensordicts
+# With LazyStackedTensorDict, stacking is done in a lazy manner: the original tensordicts
 # can still be recovered by indexing the main tensordict
-tdreset = torch.stack([tdreset1, tdreset2], 0)
+tdreset = LazyStackedTensorDict.lazy_stack([tdreset1, tdreset2], 0)
 assert tdreset[0] is tdreset1
 
 ###############################################################################
