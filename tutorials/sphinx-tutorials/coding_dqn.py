@@ -104,9 +104,12 @@ except NameError:
 
 try:
     multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
+    mp_context = "fork"
 except RuntimeError:
+    # If we can't set the method globally we can still run the parallel env with "fork"
+    # This will fail on windows! Use "spawn" and put the script within `if __name__ == "__main__"`
+    mp_context = "fork"
     pass
-
 
 # sphinx_gallery_end_ignore
 import os
@@ -114,7 +117,7 @@ import uuid
 
 import torch
 from torch import nn
-from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector
 from torchrl.data import LazyMemmapStorage, MultiStep, TensorDictReplayBuffer
 from torchrl.envs import (
     EnvCreator,
@@ -217,20 +220,26 @@ def is_notebook() -> bool:
 def make_env(
     parallel=False,
     obs_norm_sd=None,
+    num_workers=1,
 ):
     if obs_norm_sd is None:
         obs_norm_sd = {"standard_normal": True}
     if parallel:
+
+        def maker():
+            return GymEnv(
+                "CartPole-v1",
+                from_pixels=True,
+                pixels_only=True,
+                device=device,
+            )
+
         base_env = ParallelEnv(
             num_workers,
-            EnvCreator(
-                lambda: GymEnv(
-                    "CartPole-v1",
-                    from_pixels=True,
-                    pixels_only=True,
-                    device=device,
-                )
-            ),
+            EnvCreator(maker),
+            # Don't create a sub-process if we have only one worker
+            serial_for_single=True,
+            mp_start_method=mp_context,
         )
     else:
         base_env = GymEnv(
@@ -279,6 +288,7 @@ def get_norm_stats():
     # ``C=4`` (because of :class:`~torchrl.envs.CatFrames`).
     print("state dict of the observation norm:", obs_norm_sd)
     test_env.close()
+    del test_env
     return obs_norm_sd
 
 
@@ -426,8 +436,15 @@ def get_collector(
     total_frames,
     device,
 ):
-    cls = MultiaSyncDataCollector
-    env_arg = [make_env(parallel=True, obs_norm_sd=stats)] * num_collectors
+    # We can't use nested child processes with mp_start_method="fork"
+    if is_fork:
+        cls = SyncDataCollector
+        env_arg = make_env(parallel=True, obs_norm_sd=stats, num_workers=num_workers)
+    else:
+        cls = MultiaSyncDataCollector
+        env_arg = [
+            make_env(parallel=True, obs_norm_sd=stats, num_workers=num_workers)
+        ] * num_collectors
     data_collector = cls(
         env_arg,
         policy=actor_explore,

@@ -3120,8 +3120,11 @@ class CatFrames(ObservationTransform):
                         reset_vals = reset_vals[1:]
                     reps.extend([reset_vals[0]] * int(j))
                     j_ = j
-                reps = torch.stack(reps)
-                data = torch.masked_scatter(data, done_mask_expand, reps.reshape(-1))
+                if reps:
+                    reps = torch.stack(reps)
+                    data = torch.masked_scatter(
+                        data, done_mask_expand, reps.reshape(-1)
+                    )
 
             if first_val is not None:
                 # Aggregate reset along last dim

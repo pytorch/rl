@@ -779,6 +779,7 @@ t = Compose(
     ),
     Resize(in_keys=["pixels_trsf", ("next", "pixels_trsf")], w=64, h=64),
     GrayScale(in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
+    UnsqueezeTransform(-4, in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
     CatFrames(dim=-4, N=4, in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
 )
 rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(size), transform=t, batch_size=16)
@@ -787,7 +788,7 @@ rb.add(data_exclude)
 
 
 ######################################################################
-# Let us sample one element from the buffer. The shape of the transformed
+# Let us sample one batch from the buffer. The shape of the transformed
 # pixel keys should have a length of 4 along the 4th dimension starting from
 # the end:
 #

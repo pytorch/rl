@@ -339,7 +339,7 @@ def _loss_value(
         batch_size=self.target_actor_network_params.batch_size,
         device=self.target_actor_network_params.device,
     )
-    with target_params.to_module(self.value_estimator):
+    with target_params.to_module(self.actor_critic):
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
 
     # Computes the value loss: L2, L1 or smooth L1 depending on `self.loss_function`
