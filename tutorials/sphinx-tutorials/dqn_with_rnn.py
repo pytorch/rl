@@ -1,4 +1,3 @@
-
 """
 Recurrent DQN: Training recurrent policies
 ==========================================

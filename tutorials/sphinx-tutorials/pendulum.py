@@ -1,4 +1,3 @@
-
 """
 Pendulum: Writing your environment and transforms with TorchRL
 ==============================================================
