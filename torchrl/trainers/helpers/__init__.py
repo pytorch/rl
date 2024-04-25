@@ -16,7 +16,7 @@ from .envs import (
     transformed_env_constructor,
 )
 from .logger import LoggerConfig
-from .losses import make_dqn_loss, make_redq_loss, make_target_updater
-from .models import make_dqn_actor, make_dreamer, make_redq_model
+from .losses import make_dqn_loss, make_target_updater
+from .models import make_dqn_actor, make_dreamer
 from .replay_buffer import make_replay_buffer
 from .trainers import make_trainer

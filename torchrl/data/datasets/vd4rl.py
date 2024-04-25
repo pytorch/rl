@@ -368,7 +368,7 @@ class VD4RLExperienceReplay(BaseDatasetExperienceReplay):
             td.set("truncated", torch.zeros_like(td.get(("next", "truncated"))))
 
         pixels = td.get("pixels")
-        subtd = td.get_sub_tensordict(slice(0, -1))
+        subtd = td._get_sub_tensordict(slice(0, -1))
         subtd.set(("next", "pixels"), pixels[1:], inplace=True)
         state = td.get("state", None)
         if state is not None:

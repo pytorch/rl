@@ -12,7 +12,6 @@ from typing import Optional, Tuple, Union
 
 import torch
 
-from tensordict import MemmapTensor
 
 __all__ = [
     "generalized_advantage_estimate",
@@ -59,10 +58,7 @@ def _transpose_time(fun):
         time_dim = kwargs.pop("time_dim", -2)
 
         def transpose_tensor(tensor):
-            if (
-                not isinstance(tensor, (torch.Tensor, MemmapTensor))
-                or tensor.numel() <= 1
-            ):
+            if not isinstance(tensor, torch.Tensor) or tensor.numel() <= 1:
                 return tensor, False
             if time_dim >= 0:
                 timedim = time_dim - tensor.ndim
