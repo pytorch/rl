@@ -2,17 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import importlib
-import os
-from contextlib import nullcontext
-from pathlib import Path
-
-from torchrl._utils import logger as torchrl_logger
-
-from torchrl.data.datasets.gen_dgrl import GenDGRLExperienceReplay
-
-from torchrl.envs.transforms import ActionMask, TransformedEnv
-from torchrl.modules import MaskedCategorical
+import importlib.util
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -21,11 +11,13 @@ if _has_isaac:
     import isaacgym  # noqa
     import isaacgymenvs  # noqa
     from torchrl.envs.libs.isaacgym import IsaacGymEnv
-
 import argparse
 import importlib
+import os
 
 import time
+from contextlib import nullcontext
+from pathlib import Path
 from sys import platform
 from typing import Optional, Union
 
@@ -57,7 +49,8 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torch import nn
-from torchrl._utils import implement_for
+
+from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.collectors.collectors import SyncDataCollector
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
@@ -74,6 +67,8 @@ from torchrl.data import (
 )
 from torchrl.data.datasets.atari_dqn import AtariDQNExperienceReplay
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
+
+from torchrl.data.datasets.gen_dgrl import GenDGRLExperienceReplay
 from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.datasets.openx import OpenXExperienceReplay
@@ -114,13 +109,21 @@ from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
 from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
+
+from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.envs.utils import (
     check_env_specs,
     ExplorationType,
     MarlGroupMapType,
     RandomPolicy,
 )
-from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
+from torchrl.modules import (
+    ActorCriticOperator,
+    MaskedCategorical,
+    MLP,
+    SafeModule,
+    ValueOperator,
+)
 
 _has_d4rl = importlib.util.find_spec("d4rl") is not None
 
@@ -3084,22 +3087,28 @@ class TestOpenML:
 )
 @pytest.mark.parametrize("num_envs", [10, 20])
 @pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("from_pixels", [True, False])
 class TestIsaacGym:
     @classmethod
-    def _run_on_proc(cls, q, task, num_envs, device):
+    def _run_on_proc(cls, q, task, num_envs, device, from_pixels):
         try:
-            env = IsaacGymEnv(task=task, num_envs=num_envs, device=device)
+            env = IsaacGymEnv(
+                task=task, num_envs=num_envs, device=device, from_pixels=from_pixels
+            )
             check_env_specs(env)
             q.put(("succeeded!", None))
         except Exception as err:
             q.put(("failed!", err))
             raise err
 
-    def test_env(self, task, num_envs, device):
+    def test_env(self, task, num_envs, device, from_pixels):
         from torch import multiprocessing as mp
 
         q = mp.Queue(1)
-        proc = mp.Process(target=self._run_on_proc, args=(q, task, num_envs, device))
+        self._run_on_proc(q, task, num_envs, device, from_pixels)
+        proc = mp.Process(
+            target=self._run_on_proc, args=(q, task, num_envs, device, from_pixels)
+        )
         try:
             proc.start()
             msg, error = q.get()
