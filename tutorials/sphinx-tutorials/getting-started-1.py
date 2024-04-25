@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Get started with TorchRL's modules
 ==================================
@@ -273,9 +272,7 @@ from torchrl.modules import QValueModule
 
 policy = TensorDictSequential(
     value_net,  # writes action values in our tensordict
-    QValueModule(
-        action_space=env.action_spec
-    ),  # Reads the "action_value" entry by default
+    QValueModule(spec=env.action_spec),  # Reads the "action_value" entry by default
 )
 
 ###################################

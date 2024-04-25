@@ -59,6 +59,7 @@ from torchrl.data.replay_buffers.writers import (
     WriterEnsemble,
 )
 from torchrl.data.utils import DEVICE_TYPING
+from torchrl.envs.transforms.transforms import _InvertTransform
 
 
 class ReplayBuffer:
@@ -613,25 +614,48 @@ class ReplayBuffer:
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
         self._sampler.mark_update(index)
 
-    def append_transform(self, transform: "Transform") -> ReplayBuffer:  # noqa-F821
+    def append_transform(
+        self, transform: "Transform", *, invert: bool = False  # noqa-F821
+    ) -> ReplayBuffer:  # noqa: D417
         """Appends transform at the end.
 
         Transforms are applied in order when `sample` is called.
 
         Args:
             transform (Transform): The transform to be appended
+
+        Keyword Args:
+            invert (bool, optional): if ``True``, the transform will be inverted (forward calls will be called
+                during writing and inverse calls during reading). Defaults to ``False``.
+
+        Example:
+            >>> rb = ReplayBuffer(storage=LazyMemmapStorage(10), batch_size=4)
+            >>> data = TensorDict({"a": torch.zeros(10)}, [10])
+            >>> def t(data):
+            ...     data += 1
+            ...     return data
+            >>> rb.append_transform(t, invert=True)
+            >>> rb.extend(data)
+            >>> assert (data == 1).all()
+
         """
         from torchrl.envs.transforms.transforms import _CallableTransform, Transform
 
         if not isinstance(transform, Transform) and callable(transform):
             transform = _CallableTransform(transform)
+        if invert:
+            transform = _InvertTransform(transform)
         transform.eval()
         self._transform.append(transform)
         return self
 
     def insert_transform(
-        self, index: int, transform: "Transform"  # noqa-F821
-    ) -> ReplayBuffer:
+        self,
+        index: int,
+        transform: "Transform",  # noqa-F821
+        *,
+        invert: bool = False,
+    ) -> ReplayBuffer:  # noqa: D417
         """Inserts transform.
 
         Transforms are executed in order when `sample` is called.
@@ -639,8 +663,15 @@ class ReplayBuffer:
         Args:
             index (int): Position to insert the transform.
             transform (Transform): The transform to be appended
+
+        Keyword Args:
+            invert (bool, optional): if ``True``, the transform will be inverted (forward calls will be called
+                during writing and inverse calls during reading). Defaults to ``False``.
+
         """
         transform.eval()
+        if invert:
+            transform = _InvertTransform(transform)
         self._transform.insert(index, transform)
         return self
 

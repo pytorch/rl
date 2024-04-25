@@ -195,8 +195,6 @@ Builders
     make_collector_offpolicy
     make_collector_onpolicy
     make_dqn_loss
-    make_redq_loss
-    make_redq_model
     make_replay_buffer
     make_target_updater
     make_trainer

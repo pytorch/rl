@@ -1568,6 +1568,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 if self._verbose:
                     torchrl_logger.info(f"closing {i}")
                 channel.send(("close", None))
+            for i in range(self.num_workers):
                 self._events[i].wait(self._timeout)
                 self._events[i].clear()
 

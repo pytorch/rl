@@ -189,21 +189,11 @@ class QMixerLoss(LossModule):
         mixer_network: Union[TensorDictModule, nn.Module],
         *,
         loss_function: Optional[str] = "l2",
-        delay_value: bool = None,
+        delay_value: bool = True,
         gamma: float = None,
         action_space: Union[str, TensorSpec] = None,
         priority_key: str = None,
     ) -> None:
-        if delay_value is None:
-            warnings.warn(
-                f"You did not provide a delay_value argument for {type(self)}. "
-                "Currently (v0.3) the default for delay_value is `False` but as of "
-                "v0.4 it will be `True`. Make sure to adapt your code depending "
-                "on your preferred configuration. "
-                "To remove this warning, indicate the value of delay_value in your "
-                "script."
-            )
-            delay_value = False
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)

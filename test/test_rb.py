@@ -613,19 +613,21 @@ class TestStorages:
             )
         else:
             raise NotImplementedError
+
+        if (
+            storage_type is LazyMemmapStorage
+            and device_storage != "auto"
+            and device_storage.type != "cpu"
+        ):
+            with pytest.raises(ValueError, match="Memory map device other than CPU"):
+                storage_type(max_size=10, device=device_storage)
+            return
         storage = storage_type(max_size=10, device=device_storage)
-        if device_storage == "auto":
-            device_storage = device_data
-        if storage_type is LazyMemmapStorage and device_storage.type == "cuda":
-            with pytest.warns(
-                DeprecationWarning, match="Support for Memmap device other than CPU"
-            ):
-                # this is rather brittle and will fail with some indices
-                # when both device (storage and data) don't match (eg, range())
-                storage.set(0, data)
+        storage.set(0, data)
+        if device_storage != "auto":
+            assert storage.get(0).device.type == device_storage.type
         else:
-            storage.set(0, data)
-        assert storage.get(0).device.type == device_storage.type
+            assert storage.get(0).device.type == storage.device.type
 
     @pytest.mark.parametrize("storage_in", ["tensor", "memmap"])
     @pytest.mark.parametrize("storage_out", ["tensor", "memmap"])
@@ -1571,6 +1573,18 @@ class TestTransforms:
         s = rb.sample(10)
         tree_map(assert0, s)
 
+    def test_transform_inv(self):
+        rb = ReplayBuffer(storage=LazyMemmapStorage(10), batch_size=4)
+        data = TensorDict({"a": torch.zeros(10)}, [10])
+
+        def t(data):
+            data += 1
+            return data
+
+        rb.append_transform(t, invert=True)
+        rb.extend(data)
+        assert (data == 1).all()
+
 
 @pytest.mark.parametrize("size", [10, 15, 20])
 @pytest.mark.parametrize("samples", [5, 9, 11, 14, 16])
@@ -2174,6 +2188,59 @@ class TestSamplers:
         assert done.view(num_slices, -1)[:, -1].all()
         done_recon = info[("next", "truncated")] | info[("next", "terminated")]
         assert done_recon.view(num_slices, -1)[:, -1].all()
+
+    def test_slice_sampler_left_right(self):
+        torch.manual_seed(0)
+        data = TensorDict(
+            {"obs": torch.arange(1, 11).repeat(10), "eps": torch.arange(100) // 10 + 1},
+            [100],
+        )
+
+        for N in (2, 4):
+            rb = TensorDictReplayBuffer(
+                sampler=SliceSampler(num_slices=10, traj_key="eps", span=(N, N)),
+                batch_size=50,
+                storage=LazyMemmapStorage(100),
+            )
+            rb.extend(data)
+
+            for _ in range(10):
+                sample = rb.sample()
+                sample = split_trajectories(sample)
+                assert (sample["next", "truncated"].squeeze(-1).sum(-1) == 1).all()
+                assert ((sample["obs"] == 0).sum(-1) <= N).all(), sample["obs"]
+                assert ((sample["eps"] == 0).sum(-1) <= N).all()
+                for i in range(sample.shape[0]):
+                    curr_eps = sample[i]["eps"]
+                    curr_eps = curr_eps[curr_eps != 0]
+                    assert curr_eps.unique().numel() == 1
+
+    def test_slice_sampler_left_right_ndim(self):
+        torch.manual_seed(0)
+        data = TensorDict(
+            {"obs": torch.arange(1, 11).repeat(12), "eps": torch.arange(120) // 10 + 1},
+            [120],
+        )
+        data = data.reshape(4, 30)
+
+        for N in (2, 4):
+            rb = TensorDictReplayBuffer(
+                sampler=SliceSampler(num_slices=10, traj_key="eps", span=(N, N)),
+                batch_size=50,
+                storage=LazyMemmapStorage(100, ndim=2),
+            )
+            rb.extend(data)
+
+            for _ in range(10):
+                sample = rb.sample()
+                sample = split_trajectories(sample)
+                assert (sample["next", "truncated"].squeeze(-1).sum(-1) <= 1).all()
+                assert ((sample["obs"] == 0).sum(-1) <= N).all(), sample["obs"]
+                assert ((sample["eps"] == 0).sum(-1) <= N).all()
+                for i in range(sample.shape[0]):
+                    curr_eps = sample[i]["eps"]
+                    curr_eps = curr_eps[curr_eps != 0]
+                    assert curr_eps.unique().numel() == 1
 
     def test_slicesampler_strictlength(self):
 

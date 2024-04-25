@@ -82,7 +82,7 @@ In each of these cases, the last dimension (``T`` for ``time``) is adapted such
 that the batch size equals the ``frames_per_batch`` argument passed to the
 collector.
 
-.. warning:: :class:`~torchrl.collectors.collectors.MultiSyncDataCollector` should not be
+.. warning:: :class:`~torchrl.collectors.MultiSyncDataCollector` should not be
   used with ``cat_results=0``, as the data will be stacked along the batch
   dimension with batched environment, or the time dimension for single environments,
   which can introduce some confusion when swapping one with the other.
@@ -91,12 +91,12 @@ collector.
   better interchangeability between configurations, collector classes and other
   components.
 
-Whereas :class:`~torchrl.collectors.collectors.MultiSyncDataCollector`
+Whereas :class:`~torchrl.collectors.MultiSyncDataCollector`
 has a dimension corresponding to the number of sub-collectors being run (``B``),
-:class:`~torchrl.collectors.collectors.MultiaSyncDataCollector` doesn't. This
-is easily understood when considering that :class:`~torchrl.collectors.collectors.MultiaSyncDataCollector`
+:class:`~torchrl.collectors.MultiaSyncDataCollector` doesn't. This
+is easily understood when considering that :class:`~torchrl.collectors.MultiaSyncDataCollector`
 delivers batches of data on a first-come, first-serve basis, whereas
-:class:`~torchrl.collectors.collectors.MultiSyncDataCollector` gathers data from
+:class:`~torchrl.collectors.MultiSyncDataCollector` gathers data from
 each sub-collector before delivering it.
 
 Collectors and replay buffers interoperability
@@ -168,7 +168,7 @@ batches written in the buffer won't come from the same source (thereby interrupt
 
 Single node data collectors
 ---------------------------
-.. currentmodule:: torchrl.collectors.collectors
+.. currentmodule:: torchrl.collectors
 
 .. autosummary::
     :toctree: generated/
@@ -178,7 +178,6 @@ Single node data collectors
     SyncDataCollector
     MultiSyncDataCollector
     MultiaSyncDataCollector
-    RandomPolicy
     aSyncDataCollector
 
 

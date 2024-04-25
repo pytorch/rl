@@ -29,7 +29,6 @@ from .models import (
     DreamerActor,
     DTActor,
     DuelingCnnDQNet,
-    LSTMNet,
     MLP,
     MultiAgentConvNet,
     MultiAgentMLP,
