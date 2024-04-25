@@ -94,6 +94,7 @@ class MeltingpotWrapper(_EnvWrapper):
             in one group named ``"agents"``.
             Otherwise, a group map can be specified or selected from some premade options.
             See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
+        disable_shooting: (bool, optional): Optionally disable the agents' shooting action. Default is ``False``.
 
     Attributes:
         group_map (Dict[str, List[str]]): how to group agents in tensordicts for
@@ -496,6 +497,7 @@ class MeltingpotEnv(MeltingpotWrapper):
             in one group named ``"agents"``.
             Otherwise, a group map can be specified or selected from some premade options.
             See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
+        disable_shooting: (bool, optional): Optionally disable the agents' shooting action. Default is ``False``.
 
 
     Attributes:

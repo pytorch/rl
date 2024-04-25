@@ -3532,6 +3532,19 @@ class TestMeltingpot:
         env_torchrl = MeltingpotEnv(substrate_config)
         env_torchrl.rollout(max_steps=5)
 
+    @pytest.mark.parametrize("categorical_actions", [True, False])
+    def test_disable_shooting(
+        self, categorical_actions, substrate="commons_harvest__open"
+    ):
+        env = MeltingpotEnv(substrate, disable_shooting=False)
+        env_no_shoot = MeltingpotEnv(substrate, disable_shooting=True)
+        check_env_specs(env_no_shoot)
+
+        assert (
+            env_no_shoot.full_action_spec["agents", "action"].n
+            == env.full_action_spec["agents", "action"].n - 1
+        )
+
     def test_wrapper(self, substrate="commons_harvest__open"):
         from meltingpot import substrate as mp_substrate
 
