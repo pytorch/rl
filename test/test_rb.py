@@ -614,13 +614,20 @@ class TestStorages:
         else:
             raise NotImplementedError
 
-        if storage_type is LazyMemmapStorage and device_storage.type != "cpu":
+        if (
+            storage_type is LazyMemmapStorage
+            and device_storage != "auto"
+            and device_storage.type != "cpu"
+        ):
             with pytest.raises(ValueError, match="Memory map device other than CPU"):
                 storage_type(max_size=10, device=device_storage)
             return
         storage = storage_type(max_size=10, device=device_storage)
         storage.set(0, data)
-        assert storage.get(0).device.type == device_storage.type
+        if device_storage != "auto":
+            assert storage.get(0).device.type == device_storage.type
+        else:
+            assert storage.get(0).device.type == storage.device.type
 
     @pytest.mark.parametrize("storage_in", ["tensor", "memmap"])
     @pytest.mark.parametrize("storage_out", ["tensor", "memmap"])
