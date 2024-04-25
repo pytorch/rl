@@ -1571,6 +1571,18 @@ class TestTransforms:
         s = rb.sample(10)
         tree_map(assert0, s)
 
+    def test_transform_inv(self):
+        rb = ReplayBuffer(storage=LazyMemmapStorage(10), batch_size=4)
+        data = TensorDict({"a": torch.zeros(10)}, [10])
+
+        def t(data):
+            data += 1
+            return data
+
+        rb.append_transform(t, invert=True)
+        rb.extend(data)
+        assert (data == 1).all()
+
 
 @pytest.mark.parametrize("size", [10, 15, 20])
 @pytest.mark.parametrize("samples", [5, 9, 11, 14, 16])
