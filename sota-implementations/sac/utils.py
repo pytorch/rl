@@ -53,6 +53,7 @@ def env_maker(cfg, device="cpu", from_pixels=False):
             env = env.append_transform(
                 CatTensors(in_keys=list(set(env.observation_spec.keys())-{"pixels"}), out_key=["observation"])
             )
+            return env
     elif lib == "dm_control":
         env = DMControlEnv(
             cfg.env.name, cfg.env.task, from_pixels=from_pixels, pixels_only=False
