@@ -8,7 +8,7 @@ This is a simple self-contained example of a discrete SAC training script.
 
 It supports gym state environments like CartPole.
 
-The helper functions are coded in the utils.py associated with this script.
+The helper functions are coded in the utils_discrete.py associated with this script.
 """
 import time
 
@@ -22,7 +22,7 @@ from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.record.loggers import generate_exp_name, get_logger
-from utils import (
+from utils_discrete import (
     dump_video,
     log_metrics,
     make_collector,
@@ -34,7 +34,7 @@ from utils import (
 )
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="config")
+@hydra.main(version_base="1.1", config_path="", config_name="config_discrete")
 def main(cfg: "DictConfig"):  # noqa: F821
     device = cfg.network.device
     if device in ("", None):

@@ -17,9 +17,10 @@ from torchrl.envs import (
     DMControlEnv,
     DoubleToFloat,
     EnvCreator,
+    JumanjiEnv,
     ParallelEnv,
     RoboHiveEnv,
-    TransformedEnv, JumanjiEnv,
+    TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.transforms import InitTracker, RewardSum, StepCounter

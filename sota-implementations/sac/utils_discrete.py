@@ -27,7 +27,7 @@ from torchrl.envs import (
     ParallelEnv,
     RewardSum,
     StepCounter,
-    TransformedEnv,
+    TransformedEnv, JumanjiEnv,
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -52,6 +52,8 @@ def env_maker(cfg, device="cpu", from_pixels=False):
             return GymEnv(
                 cfg.env.name, device=device, from_pixels=from_pixels, pixels_only=False
             )
+    if lib.lower() == "jumanji":
+        return JumanjiEnv(cfg.env.name, device=device, from_pixels=from_pixels)
     elif lib == "dm_control":
         env = DMControlEnv(
             cfg.env.name, cfg.env.task, from_pixels=from_pixels, pixels_only=False

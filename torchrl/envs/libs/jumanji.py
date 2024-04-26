@@ -11,6 +11,8 @@ import torch
 import torchvision.transforms.v2.functional
 from packaging import version
 from tensordict import TensorDict, TensorDictBase
+
+from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.utils import _classproperty
 
 _has_jumanji = importlib.util.find_spec("jumanji") is not None
@@ -100,7 +102,14 @@ def _jumanji_to_torchrl_spec_transform(
         raise TypeError(f"Unsupported spec type {type(spec)}")
 
 
-class JumanjiWrapper(GymLikeEnv):
+class _JumanjiMakeRender(_EnvPostInit):
+    def __call__(self, *args, **kwargs):
+        instance = super().__call__(*args, **kwargs)
+        if instance.from_pixels:
+            return instance.make_render()
+        return instance
+
+class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
     """Jumanji environment wrapper.
 
     Jumanji offers a vectorized simulation framework based on Jax.
@@ -303,7 +312,7 @@ class JumanjiWrapper(GymLikeEnv):
     def available_envs(cls):
         if not _has_jumanji:
             return []
-        return list(_get_envs())
+        return sorted(_get_envs())
 
     @property
     def lib(self):
@@ -336,9 +345,30 @@ class JumanjiWrapper(GymLikeEnv):
         self.from_pixels = from_pixels
         self.pixels_only = pixels_only
 
-        if from_pixels:
-            raise NotImplementedError("TODO")
         return env
+
+    def make_render(self):
+        """Returns a transformed environment that can be rendered.
+
+        Examples:
+            >>> from torchrl.envs import JumanjiEnv
+            >>> from torchrl.record import CSVLogger, VideoRecorder
+            >>>
+            >>> envname = JumanjiEnv.available_envs[-1]
+            >>> logger = CSVLogger("jumanji", video_format="mp4", video_fps=2)
+            >>> env = JumanjiEnv(envname, from_pixels=True)
+            >>>
+            >>> env = env.append_transform(
+            ...     VideoRecorder(logger=logger, in_keys=["pixels"], tag=envname)
+            ... )
+            >>> env.set_seed(0)
+            >>> r = env.rollout(100)
+            >>> env.transform.dump()
+
+        """
+        from torchrl.record import PixelRenderTransform
+
+        return self.append_transform(PixelRenderTransform(out_keys=["pixels"], pass_tensordict=True))
 
     def _make_state_example(self, env):
         import jax
@@ -448,21 +478,29 @@ class JumanjiWrapper(GymLikeEnv):
         return super().read_obs(obs_dict)
 
     def render(self, tensordict, **kwargs):
-        import matplotlib.pyplot as plt
         import io
+
+        # state = _tensordict_to_object(tensordict.get("state"), self._state_example)
+        # return self._env.render(state)[..., :3]
+
+        import matplotlib.pyplot as plt
         import PIL
 
-        plt.ioff()
+        isinteractive = plt.isinteractive()
+        plt.ion()
+        # plt.ioff()
         buf = io.BytesIO()
         state = _tensordict_to_object(tensordict.get("state"), self._state_example)
         self._env.render(state, **kwargs)
-        plt.savefig(buf, format='png')
+        plt.savefig(buf, format="png")
         buf.seek(0)
         # Load the image into a PIL object.
         img = PIL.Image.open(buf)
         # Convert the PIL image into a np.ndarray.
-        img_array = torchvision.transforms.v2.functional.pil_to_tensor(img)[-3:]
-        return img_array
+        img_array = torchvision.transforms.v2.functional.pil_to_tensor(img)
+        if not isinteractive:
+            plt.ioff()
+        return img_array[:3]
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         import jax

@@ -216,8 +216,11 @@ class VideoRecorder(ObservationTransform):
                         "Make sure torchvision is installed in your environment."
                     )
                 from torchvision.utils import make_grid
+
                 obs_flat = observation_trsf.flatten(0, -4)
-                observation_trsf = make_grid(obs_flat, nrow=int(math.ceil(math.sqrt(obs_flat.shape[0]))))
+                observation_trsf = make_grid(
+                    obs_flat, nrow=int(math.ceil(math.sqrt(obs_flat.shape[0])))
+                )
                 self.obs.append(observation_trsf.to(torch.uint8))
             elif observation_trsf.ndimension() >= 4:
                 self.obs.extend(observation_trsf.to(torch.uint8).flatten(0, -4))

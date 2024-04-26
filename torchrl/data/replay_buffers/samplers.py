@@ -1184,12 +1184,9 @@ class SliceSampler(Sampler):
             out_of_traj = relative_starts + seq_length > lengths[traj_idx]
             if out_of_traj.any():
                 # a negative start means sampling fewer elements
-                # print('seq_length before', seq_length)
-                # print('relative_starts', relative_starts)
                 seq_length = torch.minimum(
                     seq_length, lengths[traj_idx] - relative_starts
                 )
-                # print('seq_length after', seq_length)
 
         starts = torch.cat(
             [
