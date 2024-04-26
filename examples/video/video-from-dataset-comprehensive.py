@@ -53,10 +53,6 @@ if args.source == "OpenX":
         strict_length=False,
         transform=t,
     )
-    for i, data in enumerate(dataset):  # data does not have a consistent shape
-        t.dump()
-        if i == 4:
-            break
 elif args.source == "Atari":
     num_slices = 1
     t = VideoRecorder(logger, tag=args.dataset, in_keys=[("observation")])
@@ -66,23 +62,16 @@ elif args.source == "Atari":
         batch_size=128,
         num_slices=num_slices,
         transform=Compose(
-            UnsqueezeTransform(in_keys=["observation"], unsqueeze_dim=-3), t
+            lambda data: data.set("pixels", data.get("observation").unsqueeze(-3).repeat_interleave(3, dim=3)),
+            t
         ),
     )
-    for i, data in enumerate(dataset):  # data does not have a consistent shape
-        t.dump()
-        if i == 4:
-            break
 elif args.source == "VD4RL":
     num_slices = 1
     t = VideoRecorder(logger, tag=args.dataset, in_keys=[("pixels")])
     dataset = VD4RLExperienceReplay(
         args.dataset, batch_size=128, num_slices=num_slices, transform=t
     )
-    for i, data in enumerate(dataset):  # data does not have a consistent shape
-        t.dump()
-        if i == 4:
-            break
 elif args.source == "GenDGRL":
     num_slices = 1
     t = VideoRecorder(logger, tag=args.dataset, in_keys=[("observation")])
@@ -92,10 +81,6 @@ elif args.source == "GenDGRL":
         sampler=SliceSampler(num_slices=num_slices, end_key=("next", "done")),
         transform=t,
     )
-    for i, data in enumerate(dataset):  # data does not have a consistent shape
-        t.dump()
-        if i == 4:
-            break
 elif args.source == "Roboset":
     num_slices = 1
     t = VideoRecorder(
@@ -109,10 +94,6 @@ elif args.source == "Roboset":
         sampler=SliceSampler(num_slices=num_slices, end_key=("next", "done")),
         transform=t,
     )
-    for i, data in enumerate(dataset):  # data does not have a consistent shape
-        t.dump()
-        if i == 4:
-            break
 elif args.source == "Minari":
     num_slices = 1
     t = VideoRecorder(logger, tag=args.dataset, in_keys=[("pixels")])
@@ -122,7 +103,7 @@ elif args.source == "Minari":
         sampler=SliceSampler(num_slices=num_slices, end_key=("next", "done")),
         transform=t,
     )
-    for i, data in enumerate(dataset):  # data does not have a consistent shape
-        t.dump()
-        if i == 4:
-            break
+for i, data in enumerate(dataset):  # data does not have a consistent shape
+    t.dump()
+    if i == 4:
+        break
