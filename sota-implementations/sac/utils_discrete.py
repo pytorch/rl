@@ -55,7 +55,7 @@ def env_maker(cfg, device="cpu", from_pixels=False):
     if lib.lower() == "jumanji":
         env = JumanjiEnv(cfg.env.name, device=device, from_pixels=from_pixels)
         env.set_seed(0)
-        keys = set(env.observation_spec.keys(include_nested=True, leaves_only=True)-{"pixels"})
+        keys = set(env.observation_spec.keys(include_nested=True, leaves_only=True))-{"pixels"}
         env = env.append_transform(CatTensors(in_keys=keys, out_key="observation"))
         return env
     elif lib == "dm_control":
