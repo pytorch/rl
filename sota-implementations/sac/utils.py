@@ -49,7 +49,10 @@ def env_maker(cfg, device="cpu", from_pixels=False):
         with set_gym_backend("gymnasium"):
             # torchrl_logger.info("env:", "myoHandReorientID-v0")
             RoboHiveEnv.available_envs
-            return RoboHiveEnv(cfg.env.name, from_pixels=from_pixels, pixels_only=False)
+            env = RoboHiveEnv(cfg.env.name, from_pixels=from_pixels, pixels_only=False)
+            env = env.append_transform(
+                CatTensors(in_keys=list(set(env.observation_spec.keys())-{"pixels"}), out_key=["observation"])
+            )
     elif lib == "dm_control":
         env = DMControlEnv(
             cfg.env.name, cfg.env.task, from_pixels=from_pixels, pixels_only=False
