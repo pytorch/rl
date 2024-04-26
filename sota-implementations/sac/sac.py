@@ -196,7 +196,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/training_time"] = training_time
 
         # Evaluation
-        if abs(collected_frames % eval_iter) < frames_per_batch:
+        if abs(collected_frames % eval_iter) < frames_per_batch or i==0:
             with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 eval_start = time.time()
                 eval_rollout = eval_env.rollout(

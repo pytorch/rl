@@ -18,7 +18,8 @@ from torchrl.envs import (
     DoubleToFloat,
     EnvCreator,
     ParallelEnv,
-    TransformedEnv, RoboHiveEnv,
+    RoboHiveEnv,
+    TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.transforms import InitTracker, RewardSum, StepCounter
@@ -51,7 +52,12 @@ def env_maker(cfg, device="cpu", from_pixels=False):
             RoboHiveEnv.available_envs
             env = RoboHiveEnv(cfg.env.name, from_pixels=from_pixels, pixels_only=False)
             env = env.append_transform(
-                CatTensors(in_keys=list(set(env.observation_spec.keys(leaves_only=True))-{"pixels"}), out_key="observation")
+                CatTensors(
+                    in_keys=list(
+                        set(env.observation_spec.keys(leaves_only=True)) - {"pixels"}
+                    ),
+                    out_key="observation",
+                )
             )
             return env
     elif lib == "dm_control":

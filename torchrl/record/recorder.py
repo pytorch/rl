@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib.util
+import math
 from copy import copy
 from typing import Callable, List, Optional, Sequence, Union
 
@@ -215,8 +216,8 @@ class VideoRecorder(ObservationTransform):
                         "Make sure torchvision is installed in your environment."
                     )
                 from torchvision.utils import make_grid
-
-                observation_trsf = make_grid(observation_trsf.flatten(0, -4))
+                obs_flat = observation_trsf.flatten(0, -4)
+                observation_trsf = make_grid(obs_flat, nrow=int(math.ceil(math.sqrt(obs_flat.shape[0]))))
                 self.obs.append(observation_trsf.to(torch.uint8))
             elif observation_trsf.ndimension() >= 4:
                 self.obs.extend(observation_trsf.to(torch.uint8).flatten(0, -4))
