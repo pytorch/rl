@@ -104,7 +104,7 @@ def make_environment(cfg, logger=None):
         )
     eval_env = TransformedEnv(
         ParallelEnv(
-            cfg.collector.env_per_collector,
+            1,
             EnvCreator(partial),
             serial_for_single=True,
         ),
