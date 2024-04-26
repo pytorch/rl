@@ -53,7 +53,9 @@ def env_maker(cfg, device="cpu", from_pixels=False):
                 cfg.env.name, device=device, from_pixels=from_pixels, pixels_only=False
             )
     if lib.lower() == "jumanji":
-        return JumanjiEnv(cfg.env.name, device=device, from_pixels=from_pixels)
+        env = JumanjiEnv(cfg.env.name, device=device, from_pixels=from_pixels)
+        env.set_seed(0)
+        return env
     elif lib == "dm_control":
         env = DMControlEnv(
             cfg.env.name, cfg.env.task, from_pixels=from_pixels, pixels_only=False
