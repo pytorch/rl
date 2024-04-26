@@ -1888,7 +1888,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
     This class can be safely used with online RL sota-implementations.
 
     note:: Python requires multiprocessed code to be instantiated within a
-    ```if __name__ == "__main__":``` block. See https://docs.python.org/3/library/multiprocessing.html
+    `if __name__ == "__main__":` block. See https://docs.python.org/3/library/multiprocessing.html
     for more info.
 
 
@@ -2242,7 +2242,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     This class can be safely used with offline RL sota-implementations.
 
     note:: Python requires multiprocessed code to be instantiated within a
-        ```if __name__ == "__main__":``` block. See https://docs.python.org/3/library/multiprocessing.html
+        `if __name__ == "__main__":` block. See https://docs.python.org/3/library/multiprocessing.html
         for more info.
 
     Examples:
