@@ -55,7 +55,7 @@ if args.source == "OpenX":
     )
 elif args.source == "Atari":
     num_slices = 1
-    t = VideoRecorder(logger, tag=args.dataset, in_keys=[("observation")])
+    t = VideoRecorder(logger, tag=args.dataset, in_keys=[("pixels")])
     # We need to unsqueeze the B&W image
     dataset = AtariDQNExperienceReplay(
         args.dataset,
