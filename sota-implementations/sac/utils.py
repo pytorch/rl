@@ -48,6 +48,7 @@ def env_maker(cfg, device="cpu", from_pixels=False):
     elif lib == "robohive":
         with set_gym_backend("gym"):
             # torchrl_logger.info("env:", "myoHandReorientID-v0")
+            RoboHiveEnv.available_envs
             return RoboHiveEnv(cfg.env.name, from_pixels=from_pixels, pixels_only=False)
     elif lib == "dm_control":
         env = DMControlEnv(
