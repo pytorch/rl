@@ -322,11 +322,12 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
 
         return jumanji
 
-    def __init__(self, env: "jumanji.env.Environment" = None, **kwargs):  # noqa: F821
+    def __init__(self, env: "jumanji.env.Environment" = None, categorical_action_encoding=True, **kwargs):  # noqa: F821
         if not _has_jumanji:
             raise ImportError(
                 "jumanji is not installed or importing it failed. Consider checking your installation."
             )
+        self.categorical_action_encoding = categorical_action_encoding
         if env is not None:
             kwargs["env"] = env
         super().__init__(**kwargs)
@@ -390,7 +391,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
 
     def _make_action_spec(self, env) -> TensorSpec:
         action_spec = _jumanji_to_torchrl_spec_transform(
-            env.action_spec, device=self.device
+            env.action_spec, device=self.device, categorical_action_encoding=self.categorical_action_encoding
         )
         action_spec = action_spec.expand(*self.batch_size, *action_spec.shape)
         return action_spec

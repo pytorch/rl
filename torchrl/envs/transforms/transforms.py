@@ -3636,7 +3636,7 @@ class DTypeCastTransform(Transform):
                 if observation_key == in_key:
                     if observation_spec.dtype != self.dtype_in:
                         raise TypeError(
-                            f"observation_spec.dtype is not {self.dtype_in}"
+                            f"observation_spec.dtype is not {self.dtype_in} but {observation_spec.dtype}"
                         )
                     full_observation_spec[out_key] = self._transform_spec(
                         observation_spec
