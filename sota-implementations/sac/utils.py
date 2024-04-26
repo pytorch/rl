@@ -51,7 +51,7 @@ def env_maker(cfg, device="cpu", from_pixels=False):
             RoboHiveEnv.available_envs
             env = RoboHiveEnv(cfg.env.name, from_pixels=from_pixels, pixels_only=False)
             env = env.append_transform(
-                CatTensors(in_keys=list(set(env.observation_spec.keys(leaves_only=True))-{"pixels"}), out_key=["observation"])
+                CatTensors(in_keys=list(set(env.observation_spec.keys(leaves_only=True))-{"pixels"}), out_key="observation")
             )
             return env
     elif lib == "dm_control":
