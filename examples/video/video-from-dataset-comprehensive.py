@@ -62,8 +62,11 @@ elif args.source == "Atari":
         batch_size=128,
         num_slices=num_slices,
         transform=Compose(
-            lambda data: data.set("pixels", data.get("observation").unsqueeze(-3).repeat_interleave(3, dim=-3)),
-            t
+            lambda data: data.set(
+                "pixels",
+                data.get("observation").unsqueeze(-3).repeat_interleave(3, dim=-3),
+            ),
+            t,
         ),
     )
 elif args.source == "VD4RL":

@@ -18,7 +18,7 @@ from torchrl.envs import (
     DoubleToFloat,
     EnvCreator,
     ParallelEnv,
-    TransformedEnv,
+    TransformedEnv, RoboHiveEnv,
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.transforms import InitTracker, RewardSum, StepCounter
@@ -45,6 +45,10 @@ def env_maker(cfg, device="cpu", from_pixels=False):
                 from_pixels=from_pixels,
                 pixels_only=False,
             )
+    elif lib == "robohive":
+        with set_gym_backend("gymnasium"):
+            # torchrl_logger.info("env:", "myoHandReorientID-v0")
+            return RoboHiveEnv(cfg.env.name, from_pixels=from_pixels, pixels_only=False)
     elif lib == "dm_control":
         env = DMControlEnv(
             cfg.env.name, cfg.env.task, from_pixels=from_pixels, pixels_only=False
