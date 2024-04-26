@@ -535,7 +535,10 @@ class SyncDataCollector(DataCollectorBase):
         self.reset_when_done = reset_when_done
         self.n_env = self.env.batch_size.numel()
 
-        (self.policy, self.get_weights_fn,) = self._get_policy_and_device(
+        (
+            self.policy,
+            self.get_weights_fn,
+        ) = self._get_policy_and_device(
             policy=policy,
             observation_spec=self.env.observation_spec,
         )
@@ -2238,27 +2241,34 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     the batch of rollouts is collected and the next call to the iterator.
     This class can be safely used with offline RL sota-implementations.
 
+    note:: Python requires multiprocessed code to be instantiated within a
+        ```if __name__ == "__main__":``` block. See https://docs.python.org/3/library/multiprocessing.html
+        for more info.
+
     Examples:
-        >>> from torchrl.envs.libs.gym import GymEnv
+           >>> from torchrl.envs.libs.gym import GymEnv
         >>> from tensordict.nn import TensorDictModule
         >>> from torch import nn
-        >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
-        >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
-        >>> collector = MultiaSyncDataCollector(
-        ...     create_env_fn=[env_maker, env_maker],
-        ...     policy=policy,
-        ...     total_frames=2000,
-        ...     max_frames_per_traj=50,
-        ...     frames_per_batch=200,
-        ...     init_random_frames=-1,
-        ...     reset_at_each_iter=False,
-        ...     devices="cpu",
-        ...     storing_devices="cpu",
-        ... )
-        >>> for i, data in enumerate(collector):
-        ...     if i == 2:
-        ...         print(data)
-        ...         break
+        >>> from torchrl.collectors import MultiaSyncDataCollector
+        >>> if __name__ == "__main__":
+        >>>     env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        >>>     policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+        >>>     collector = MultiaSyncDataCollector(
+            ...     create_env_fn=[env_maker, env_maker],
+            ...     policy=policy,
+            ...     total_frames=2000,
+            ...     max_frames_per_traj=50,
+            ...     frames_per_batch=200,
+            ...     init_random_frames=-1,
+            ...     reset_at_each_iter=False,
+            ...     device="cpu",
+            ...     storing_device="cpu",
+            ...     cat_results="stack",
+            ... )
+        >>>     for i, data in enumerate(collector):
+        ...         if i == 2:
+        ...             print(data)
+        ...             break
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
