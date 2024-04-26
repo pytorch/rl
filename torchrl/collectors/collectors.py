@@ -1884,28 +1884,35 @@ class MultiSyncDataCollector(_MultiDataCollector):
     trajectory and the start of the next collection.
     This class can be safely used with online RL sota-implementations.
 
+    note:: Python requires multiprocessed code to be instantiated within a
+    ```if __name__ == "__main__":``` block. See https://docs.python.org/3/library/multiprocessing.html
+    for more info.
+
+
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
-        >>> from torchrl.envs import StepCounter
         >>> from tensordict.nn import TensorDictModule
         >>> from torch import nn
-        >>> env_maker = lambda: TransformedEnv(GymEnv("Pendulum-v1", device="cpu"), StepCounter(max_steps=50))
-        >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
-        >>> collector = MultiSyncDataCollector(
-        ...     create_env_fn=[env_maker, env_maker],
-        ...     policy=policy,
-        ...     total_frames=2000,
-        ...     max_frames_per_traj=50,
-        ...     frames_per_batch=200,
-        ...     init_random_frames=-1,
-        ...     reset_at_each_iter=False,
-        ...     devices="cpu",
-        ...     storing_devices="cpu",
-        ... )
-        >>> for i, data in enumerate(collector):
-        ...     if i == 2:
-        ...         print(data)
-        ...         break
+        >>> from torchrl.collectors import MultiSyncDataCollector
+        >>> if __name__ == "__main__":
+        >>>     env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        >>>     policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+        >>>     collector = MultiSyncDataCollector(
+            ...     create_env_fn=[env_maker, env_maker],
+            ...     policy=policy,
+            ...     total_frames=2000,
+            ...     max_frames_per_traj=50,
+            ...     frames_per_batch=200,
+            ...     init_random_frames=-1,
+            ...     reset_at_each_iter=False,
+            ...     device="cpu",
+            ...     storing_device="cpu",
+            ...     cat_results="stack",
+            ... )
+        >>>     for i, data in enumerate(collector):
+        ...         if i == 2:
+        ...             print(data)
+        ...             break
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -1987,7 +1994,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
         return self.num_workers
 
     def iterator(self) -> Iterator[TensorDictBase]:
-
         cat_results = self.cat_results
         if cat_results is None:
             cat_results = 0
