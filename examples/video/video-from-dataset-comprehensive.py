@@ -17,7 +17,7 @@ from torchrl.data.datasets import (
     RobosetExperienceReplay,
     VD4RLExperienceReplay,
 )
-from torchrl.envs import Compose, UnsqueezeTransform
+from torchrl.envs import Compose
 from torchrl.record import CSVLogger, VideoRecorder
 
 parser = argparse.ArgumentParser()
@@ -106,7 +106,7 @@ elif args.source == "Minari":
         sampler=SliceSampler(num_slices=num_slices, end_key=("next", "done")),
         transform=t,
     )
-for i, data in enumerate(dataset):  # data does not have a consistent shape
+for i, _ in enumerate(dataset):  # data does not have a consistent shape
     t.dump()
     if i == 4:
         break

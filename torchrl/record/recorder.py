@@ -12,7 +12,7 @@ from typing import Callable, List, Optional, Sequence, Union
 import numpy as np
 import torch
 
-from tensordict import NonTensorData, TensorDict, TensorDictBase
+from tensordict import NonTensorData, TensorDictBase
 
 from tensordict.utils import NestedKey
 

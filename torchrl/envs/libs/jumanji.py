@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib.util
-import tempfile
 from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
