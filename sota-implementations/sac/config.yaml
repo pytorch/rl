@@ -32,7 +32,7 @@ optim:
   batch_size: 256
   target_update_polyak: 0.995
   alpha_init: 1.0
-  adam_eps: 1.0e-8
+  adam_eps: 1.0e-4
 
 # network
 network:

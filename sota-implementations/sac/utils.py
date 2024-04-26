@@ -19,7 +19,7 @@ from torchrl.envs import (
     EnvCreator,
     ParallelEnv,
     RoboHiveEnv,
-    TransformedEnv,
+    TransformedEnv, JumanjiEnv,
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.transforms import InitTracker, RewardSum, StepCounter
@@ -60,6 +60,10 @@ def env_maker(cfg, device="cpu", from_pixels=False):
                 )
             )
             return env
+    elif lib == "jumanji":
+        # torchrl_logger.info("env:", "myoHandReorientID-v0")
+        env = JumanjiEnv(cfg.env.name, from_pixels=from_pixels, pixels_only=False)
+        return env
     elif lib == "dm_control":
         env = DMControlEnv(
             cfg.env.name, cfg.env.task, from_pixels=from_pixels, pixels_only=False

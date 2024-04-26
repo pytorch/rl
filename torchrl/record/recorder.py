@@ -347,6 +347,8 @@ class PixelRenderTransform(Transform):
             thereby relaxing the shape requirements. If not provided, it will be inferred automatically from the
             input data type and shape.
         render_method (str, optional): the name of the render method. Defaults to ``"render"``.
+        pass_tensordict (bool, optional): if ``True``, the input tensordict will be passed to the
+            render method. This enables rendering for stateless environments. Defaults to ``False``.
         **kwargs: additional keyword arguments to pass to the render function (e.g. ``mode="rgb_array"``).
 
     Examples:
@@ -423,6 +425,7 @@ class PixelRenderTransform(Transform):
         ] = None,
         as_non_tensor: bool = None,
         render_method: str = "render",
+        pass_tensordict: bool = False,
         **kwargs,
     ) -> None:
         if out_keys is None:
@@ -440,6 +443,7 @@ class PixelRenderTransform(Transform):
         self.kwargs = kwargs
         self.render_method = render_method
         self._enabled = True
+        self.pass_tensordict = pass_tensordict
         super().__init__(in_keys=[], out_keys=out_keys)
 
     def _reset(
@@ -451,7 +455,12 @@ class PixelRenderTransform(Transform):
         if not self._enabled:
             return tensordict
 
-        array = getattr(self.parent, self.render_method)(**self.kwargs)
+        method = getattr(self.parent, self.render_method)
+        if not self.pass_tensordict:
+            array = method(**self.kwargs)
+        else:
+            array = method(tensordict, **self.kwargs)
+
         if self.preproc:
             array = self.preproc(array)
         if self.as_non_tensor is None:
@@ -490,7 +499,7 @@ class PixelRenderTransform(Transform):
             switch = True
             self.switch()
         parent = self.parent
-        td_in = TensorDict({}, batch_size=parent.batch_size, device=parent.device)
+        td_in = parent.reset()
         self._call(td_in)
         obs = td_in.get(self.out_keys[0])
         if isinstance(obs, NonTensorData):

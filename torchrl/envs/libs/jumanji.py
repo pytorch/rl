@@ -3,10 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib.util
+import tempfile
 from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
+import torchvision.transforms.v2.functional
 from packaging import version
 from tensordict import TensorDict, TensorDictBase
 from torchrl.envs.utils import _classproperty
@@ -444,6 +446,23 @@ class JumanjiWrapper(GymLikeEnv):
         else:
             obs_dict = _object_to_tensordict(obs, self.device, self.batch_size)
         return super().read_obs(obs_dict)
+
+    def render(self, tensordict, **kwargs):
+        import matplotlib.pyplot as plt
+        import io
+        import PIL
+
+        plt.ioff()
+        buf = io.BytesIO()
+        state = _tensordict_to_object(tensordict.get("state"), self._state_example)
+        self._env.render(state, **kwargs)
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        # Load the image into a PIL object.
+        img = PIL.Image.open(buf)
+        # Convert the PIL image into a np.ndarray.
+        img_array = torchvision.transforms.v2.functional.pil_to_tensor(img)[-3:]
+        return img_array
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         import jax
