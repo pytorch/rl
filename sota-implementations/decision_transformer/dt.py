@@ -33,7 +33,8 @@ from utils import (
 
 @hydra.main(config_path="", config_name="dt_config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
-    set_gym_backend(cfg.env.backend).set()
+    if cfg.env.backend.startswith("gym"):
+        set_gym_backend(cfg.env.backend).set()
 
     model_device = cfg.optim.device
     if model_device in ("", None):

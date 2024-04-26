@@ -60,7 +60,7 @@ def env_maker(cfg, device="cpu", from_pixels=False):
             cfg.env.name, cfg.env.task, from_pixels=from_pixels, pixels_only=False
         )
         return TransformedEnv(
-            env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
+            env, CatTensors(in_keys=set(env.observation_spec.keys())-{"pixels"}, out_key="observation")
         )
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")

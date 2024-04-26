@@ -500,6 +500,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         img_array = torchvision.transforms.v2.functional.pil_to_tensor(img)
         if not isinteractive:
             plt.ioff()
+        plt.close()
         return img_array[:3]
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
