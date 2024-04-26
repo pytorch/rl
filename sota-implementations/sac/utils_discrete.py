@@ -57,7 +57,7 @@ def env_maker(cfg, device="cpu", from_pixels=False):
         env.set_seed(0)
         keys = set(env.observation_spec.keys(include_nested=True, leaves_only=True))-{"pixels"}
         def flatten_all(data):
-            return data.apply(lambda key, val: val.reshape(-1) if key in keys else val)
+            return data.named_apply(lambda key, val: val.reshape(-1) if key in keys else val)
         env = env.append_transform(flatten_all)
         env = env.append_transform(CatTensors(in_keys=keys, out_key="observation"))
         return env
