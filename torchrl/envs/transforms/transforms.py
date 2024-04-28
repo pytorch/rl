@@ -4696,15 +4696,18 @@ class TensorDictPrimer(Transform):
         spec shape is assumed to match the tensordict's.
 
         """
-        shape = (
-            ()
-            if (not self.parent or self.parent.batch_locked)
-            else tensordict.batch_size
-        )
         _reset = _get_reset(self.reset_key, tensordict)
         if _reset.any():
             for key, spec in self.primers.items(True, True):
+                if spec.shape[: len(tensordict.batch_size)] != tensordict.batch_size:
+                    expanded_spec = self._expand_shape(spec)
+                    self.primers[key] = spec = expanded_spec
                 if self.random:
+                    shape = (
+                        ()
+                        if (not self.parent or self.parent.batch_locked)
+                        else tensordict.batch_size
+                    )
                     value = spec.rand(shape)
                 else:
                     value = self.default_value[key]
