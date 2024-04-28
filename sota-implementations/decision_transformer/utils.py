@@ -58,7 +58,7 @@ from torchrl.trainers.helpers.envs import LIBS
 
 
 def make_base_env(env_cfg, from_pixels=False):
-    if cfg.env.backend.startswith("gym"):
+    if env_cfg.backend.startswith("gym"):
         set_gym_backend(env_cfg.backend).set()
 
     env_library = LIBS[env_cfg.library]

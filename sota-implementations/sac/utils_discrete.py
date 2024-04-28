@@ -65,8 +65,6 @@ def env_maker(cfg, device="cpu", from_pixels=False):
             batch_size=[],
             categorical_action_encoding=False,
         )
-        print(env._env.action_spec)
-        print(env.action_spec)
         env.set_seed(0)
         keys = set(env.observation_spec.keys(include_nested=True, leaves_only=True)) - {
             "pixels"

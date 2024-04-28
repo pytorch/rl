@@ -340,10 +340,10 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
 
     def __init__(
         self,
-        env: "jumanji.env.Environment" = None,
+        env: "jumanji.env.Environment" = None,  # noqa: F821
         categorical_action_encoding=True,
         **kwargs,
-    ):  # noqa: F821
+    ):
         if not _has_jumanji:
             raise ImportError(
                 "jumanji is not installed or importing it failed. Consider checking your installation."
