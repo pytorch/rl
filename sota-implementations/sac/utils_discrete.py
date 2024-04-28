@@ -10,6 +10,7 @@ import torch
 from tensordict.nn import InteractionType, TensorDictModule
 
 from torch import nn, optim
+from torchrl._utils import _append_last
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
     CompositeSpec,
@@ -22,14 +23,17 @@ from torchrl.envs import (
     Compose,
     DMControlEnv,
     DoubleToFloat,
-    EnvCreator,FlattenObservation,UnsqueezeTransform,
+    DTypeCastTransform,
+    EnvCreator,
+    FlattenObservation,
     InitTracker,
-    ParallelEnv,DTypeCastTransform,
+    JumanjiEnv,
+    ParallelEnv,
     RewardSum,
     StepCounter,
-    TransformedEnv, JumanjiEnv,
+    TransformedEnv,
+    UnsqueezeTransform,
 )
-from torchrl._utils import _append_last
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, SafeModule
@@ -54,30 +58,75 @@ def env_maker(cfg, device="cpu", from_pixels=False):
                 cfg.env.name, device=device, from_pixels=from_pixels, pixels_only=False
             )
     if lib.lower() == "jumanji":
-        env = JumanjiEnv(cfg.env.name, device=device, from_pixels=from_pixels, batch_size=[], categorical_action_encoding=False)
+        env = JumanjiEnv(
+            cfg.env.name,
+            device=device,
+            from_pixels=from_pixels,
+            batch_size=[],
+            categorical_action_encoding=False,
+        )
         print(env._env.action_spec)
         print(env.action_spec)
         env.set_seed(0)
-        keys = set(env.observation_spec.keys(include_nested=True, leaves_only=True))-{"pixels"}
-        keys = [key for key in keys if not (isinstance(key, tuple) and key[0] == "state")]
+        keys = set(env.observation_spec.keys(include_nested=True, leaves_only=True)) - {
+            "pixels"
+        }
+        keys = [
+            key for key in keys if not (isinstance(key, tuple) and key[0] == "state")
+        ]
         ndim = env.ndim
 
-        entries_to_flatten, dims = zip(*[(key, env.observation_spec[key].ndim) for key in keys if env.observation_spec[key].ndim >= ndim+2])
-        entries_to_flatten_suffix = {key: _append_last(key, "_flat") for key in entries_to_flatten}
+        entries_to_flatten, dims = zip(
+            *[
+                (key, env.observation_spec[key].ndim)
+                for key in keys
+                if env.observation_spec[key].ndim >= ndim + 2
+            ]
+        )
+        entries_to_flatten_suffix = {
+            key: _append_last(key, "_flat") for key in entries_to_flatten
+        }
         for dim, (key0, key1) in zip(dims, entries_to_flatten_suffix.items()):
             # 2 -> -2
             # 3 -> -3
             env = env.append_transform(
-                FlattenObservation(first_dim=-dim, last_dim=-1, in_keys=[key0], out_keys=[key1]))
-        keys = {key if key not in entries_to_flatten else entries_to_flatten_suffix[key] for key in keys}
+                FlattenObservation(
+                    first_dim=-dim, last_dim=-1, in_keys=[key0], out_keys=[key1]
+                )
+            )
+        keys = {
+            key if key not in entries_to_flatten else entries_to_flatten_suffix[key]
+            for key in keys
+        }
 
-        entries_to_unsqueeze = [key for key in keys if env.observation_spec[key].ndim == ndim]
-        entries_to_unsqueeze_suffix = {key: _append_last(key, "_unsq") for key in entries_to_unsqueeze}
-        env = env.append_transform(UnsqueezeTransform(unsqueeze_dim=-1, in_keys=entries_to_unsqueeze, out_keys=list(entries_to_unsqueeze_suffix.values())))
-        keys = {key if key not in entries_to_unsqueeze else entries_to_unsqueeze_suffix[key] for key in keys}
+        entries_to_unsqueeze = [
+            key for key in keys if env.observation_spec[key].ndim == ndim
+        ]
+        entries_to_unsqueeze_suffix = {
+            key: _append_last(key, "_unsq") for key in entries_to_unsqueeze
+        }
+        env = env.append_transform(
+            UnsqueezeTransform(
+                unsqueeze_dim=-1,
+                in_keys=entries_to_unsqueeze,
+                out_keys=list(entries_to_unsqueeze_suffix.values()),
+            )
+        )
+        keys = {
+            key if key not in entries_to_unsqueeze else entries_to_unsqueeze_suffix[key]
+            for key in keys
+        }
 
-        env = env.append_transform(CatTensors(in_keys=list(keys), out_key="observation"))
-        env = env.append_transform(DTypeCastTransform(env.observation_spec["observation"].dtype, torch.float32, in_keys=["observation"]))
+        env = env.append_transform(
+            CatTensors(in_keys=list(keys), out_key="observation")
+        )
+        env = env.append_transform(
+            DTypeCastTransform(
+                env.observation_spec["observation"].dtype,
+                torch.float32,
+                in_keys=["observation"],
+            )
+        )
         return env
     elif lib == "dm_control":
         env = DMControlEnv(
