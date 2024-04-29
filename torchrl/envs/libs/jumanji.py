@@ -9,7 +9,6 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torchvision.transforms.v2.functional
 from packaging import version
 from tensordict import TensorDict, TensorDictBase
 
@@ -542,9 +541,13 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         import jax
         import jax.numpy as jnp
         import jumanji
-        import matplotlib
-        import matplotlib.pyplot as plt
-        import PIL
+        try:
+            import matplotlib
+            import matplotlib.pyplot as plt
+            import PIL
+            import torchvision.transforms.v2.functional
+        except ImportError as err:
+            raise ImportError("Rendering with Jumanji requires torchvision, matplotlib and PIL to be installed.") from err
 
         if matplotlib_backend is not None:
             matplotlib.use(matplotlib_backend)
