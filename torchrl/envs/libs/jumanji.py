@@ -541,13 +541,16 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         import jax
         import jax.numpy as jnp
         import jumanji
+
         try:
             import matplotlib
             import matplotlib.pyplot as plt
             import PIL
             import torchvision.transforms.v2.functional
         except ImportError as err:
-            raise ImportError("Rendering with Jumanji requires torchvision, matplotlib and PIL to be installed.") from err
+            raise ImportError(
+                "Rendering with Jumanji requires torchvision, matplotlib and PIL to be installed."
+            ) from err
 
         if matplotlib_backend is not None:
             matplotlib.use(matplotlib_backend)
