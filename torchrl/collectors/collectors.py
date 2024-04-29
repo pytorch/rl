@@ -1946,8 +1946,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
             batch_size=torch.Size([200]),
             device=cpu,
             is_shared=False)
-        >>> collector.shutdown()
-        >>> del collector
+        ... collector.shutdown()
+        ... del collector
 
     """
 
@@ -2249,27 +2249,27 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         `if __name__ == "__main__":` block. See https://docs.python.org/3/library/multiprocessing.html
         for more info.
 
-    Examples:
-           >>> from torchrl.envs.libs.gym import GymEnv
+     Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from tensordict.nn import TensorDictModule
         >>> from torch import nn
         >>> from torchrl.collectors import MultiaSyncDataCollector
         >>> if __name__ == "__main__":
-        >>>     env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
-        >>>     policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
-        >>>     collector = MultiaSyncDataCollector(
-            ...     create_env_fn=[env_maker, env_maker],
-            ...     policy=policy,
-            ...     total_frames=2000,
-            ...     max_frames_per_traj=50,
-            ...     frames_per_batch=200,
-            ...     init_random_frames=-1,
-            ...     reset_at_each_iter=False,
-            ...     device="cpu",
-            ...     storing_device="cpu",
-            ...     cat_results="stack",
-            ... )
-        >>>     for i, data in enumerate(collector):
+        ...     env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        ...     policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+        ...     collector = MultiaSyncDataCollector(
+        ...         create_env_fn=[env_maker, env_maker],
+        ...         policy=policy,
+        ...         total_frames=2000,
+        ...         max_frames_per_traj=50,
+        ...         frames_per_batch=200,
+        ...         init_random_frames=-1,
+        ...         reset_at_each_iter=False,
+        ...         device="cpu",
+        ...         storing_device="cpu",
+        ...         cat_results="stack",
+        ...     )
+        ...     for i, data in enumerate(collector):
         ...         if i == 2:
         ...             print(data)
         ...             break
@@ -2299,8 +2299,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             batch_size=torch.Size([200]),
             device=cpu,
             is_shared=False)
-        >>> collector.shutdown()
-        >>> del collector
+        ... collector.shutdown()
+        ... del collector
 
     """
 
