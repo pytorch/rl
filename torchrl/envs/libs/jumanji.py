@@ -390,7 +390,12 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         from torchrl.record import PixelRenderTransform
 
         return self.append_transform(
-            PixelRenderTransform(out_keys=["pixels"], pass_tensordict=True)
+            PixelRenderTransform(
+                out_keys=["pixels"],
+                pass_tensordict=True,
+                as_non_tensor=bool(self.batch_size),
+                as_numpy=bool(self.batch_size),
+            )
         )
 
     def _make_state_example(self, env):
@@ -502,7 +507,13 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
             obs_dict = _object_to_tensordict(obs, self.device, self.batch_size)
         return super().read_obs(obs_dict)
 
-    def render(self, tensordict, matplotlib_backend: str | None = None, **kwargs):
+    def render(
+        self,
+        tensordict,
+        matplotlib_backend: str | None = None,
+        as_numpy: bool = False,
+        **kwargs,
+    ):
         """Renders the environment output given an input tensordict.
 
         This method is intended to be called by the :class:`~torchrl.record.PixelRenderTransform`
@@ -517,9 +528,17 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
 
         This pipeline will write a `"pixels"` entry in your output tensordict.
 
+        Args:
+            tensordict (TensorDictBase): a tensordict containing a state to represent
+            matplotlib_backend (str, optional): the matplotlib backend
+            as_numpy (bool, optional): if ``False``, the np.ndarray will be converted to a torch.Tensor.
+                Defaults to ``False``.
+
         """
         import io
 
+        import jax
+        import jax.numpy as jnp
         import jumanji
         import matplotlib
         import matplotlib.pyplot as plt
@@ -529,8 +548,12 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
             matplotlib.use(matplotlib_backend)
 
         # Get only one env
+        _state_example = self._state_example
         while tensordict.ndim:
             tensordict = tensordict[0]
+            _state_example = jax.tree_util.tree_map(
+                lambda x: jnp.take(x, 0, axis=0), _state_example
+            )
         # Patch jumanji is_notebook
         is_notebook = jumanji.environments.is_notebook
         try:
@@ -539,18 +562,19 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
             isinteractive = plt.isinteractive()
             plt.ion()
             buf = io.BytesIO()
-            state = _tensordict_to_object(tensordict.get("state"), self._state_example)
+            state = _tensordict_to_object(tensordict.get("state"), _state_example)
             self._env.render(state, **kwargs)
             plt.savefig(buf, format="png")
             buf.seek(0)
             # Load the image into a PIL object.
             img = PIL.Image.open(buf)
-            # Convert the PIL image into a np.ndarray.
             img_array = torchvision.transforms.v2.functional.pil_to_tensor(img)
             if not isinteractive:
                 plt.ioff()
             plt.close()
-            return img_array[:3]
+            if not as_numpy:
+                return img_array[:3]
+            return img_array[:3].numpy()
         finally:
             jumanji.environments.is_notebook = is_notebook
 

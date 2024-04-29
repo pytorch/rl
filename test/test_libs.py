@@ -1414,14 +1414,20 @@ class TestJumanji:
                 t2 = torch.tensor(onp.asarray(t2)).view_as(t1)
                 torch.testing.assert_close(t1, t2)
 
-    def test_jumanji_rendering(self, envname):
+    @pytest.mark.parametrize("batch_size", [[3], []])
+    def test_jumanji_rendering(self, envname, batch_size):
         # check that this works with a batch-size
-        env = JumanjiEnv(envname, from_pixels=True, batch_size=[3])
+        env = JumanjiEnv(envname, from_pixels=True, batch_size=batch_size)
         env.set_seed(0)
+        env.transform.transform_observation_spec(env.base_env.observation_spec)
         check_env_specs(env)
         r = env.rollout(10)
-        assert r["pixels"].unique().numel() > 1
-        assert r["pixels"].dtype == torch.uint8
+        print(r)
+        pixels = r["pixels"]
+        if not isinstance(pixels, torch.Tensor):
+            pixels = torch.as_tensor(np.asarray(pixels))
+        assert pixels.unique().numel() > 1
+        assert pixels.dtype == torch.uint8
 
 
 ENVPOOL_CLASSIC_CONTROL_ENVS = [
