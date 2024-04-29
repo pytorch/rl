@@ -1887,9 +1887,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
     trajectory and the start of the next collection.
     This class can be safely used with online RL sota-implementations.
 
-    note:: Python requires multiprocessed code to be instantiated within a
-    `if __name__ == "__main__":` block. See https://docs.python.org/3/library/multiprocessing.html
-    for more info.
+    .. note:: Python requires multiprocessed code to be instantiated within a main guard:
+
+            >>> if __name__ == "__main__":
+            ...     # Create your collector here
+
+        See https://docs.python.org/3/library/multiprocessing.html for more info.
+
 
 
     Examples:
