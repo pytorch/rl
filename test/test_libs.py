@@ -1327,14 +1327,15 @@ class TestHabitat:
             assert "pixels" in rollout.keys()
 
 
+def _jumanji_envs():
+    if not _has_jumanji:
+        return ()
+    return JumanjiEnv.available_envs[-10:-5]
+
+
 @pytest.mark.skipif(not _has_jumanji, reason="jumanji not installed")
-@pytest.mark.parametrize(
-    "envname",
-    [
-        "TSP-v1",
-        "Snake-v1",
-    ],
-)
+@pytest.mark.slow
+@pytest.mark.parametrize("envname", _jumanji_envs())
 class TestJumanji:
     def test_jumanji_seeding(self, envname):
         final_seed = []
@@ -1412,6 +1413,15 @@ class TestJumanji:
                     t2 = getattr(t2, _key)
                 t2 = torch.tensor(onp.asarray(t2)).view_as(t1)
                 torch.testing.assert_close(t1, t2)
+
+    def test_jumanji_rendering(self, envname):
+        # check that this works with a batch-size
+        env = JumanjiEnv(envname, from_pixels=True, batch_size=[3])
+        env.set_seed(0)
+        check_env_specs(env)
+        r = env.rollout(10)
+        assert r["pixels"].unique().numel() > 1
+        assert r["pixels"].dtype == torch.uint8
 
 
 ENVPOOL_CLASSIC_CONTROL_ENVS = [
