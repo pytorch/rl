@@ -535,10 +535,7 @@ class SyncDataCollector(DataCollectorBase):
         self.reset_when_done = reset_when_done
         self.n_env = self.env.batch_size.numel()
 
-        (
-            self.policy,
-            self.get_weights_fn,
-        ) = self._get_policy_and_device(
+        (self.policy, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,
             observation_spec=self.env.observation_spec,
         )
@@ -1889,12 +1886,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     .. note:: Python requires multiprocessed code to be instantiated within a main guard:
 
+            >>> from torchrl.collectors import MultiSyncDataCollector
             >>> if __name__ == "__main__":
             ...     # Create your collector here
 
         See https://docs.python.org/3/library/multiprocessing.html for more info.
-
-
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -1920,6 +1916,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
         ...         if i == 2:
         ...             print(data)
         ...             break
+        ... collector.shutdown()
+        ... del collector
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -1946,8 +1944,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
             batch_size=torch.Size([200]),
             device=cpu,
             is_shared=False)
-        ... collector.shutdown()
-        ... del collector
 
     """
 
@@ -2245,11 +2241,15 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     the batch of rollouts is collected and the next call to the iterator.
     This class can be safely used with offline RL sota-implementations.
 
-    note:: Python requires multiprocessed code to be instantiated within a
-        `if __name__ == "__main__":` block. See https://docs.python.org/3/library/multiprocessing.html
-        for more info.
+    .. note:: Python requires multiprocessed code to be instantiated within a main guard:
 
-     Examples:
+            >>> from torchrl.collectors import MultiaSyncDataCollector
+            >>> if __name__ == "__main__":
+            ...     # Create your collector here
+
+        See https://docs.python.org/3/library/multiprocessing.html for more info.
+
+        Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from tensordict.nn import TensorDictModule
         >>> from torch import nn
@@ -2273,6 +2273,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         ...         if i == 2:
         ...             print(data)
         ...             break
+        ... collector.shutdown()
+        ... del collector
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -2299,8 +2301,6 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             batch_size=torch.Size([200]),
             device=cpu,
             is_shared=False)
-        ... collector.shutdown()
-        ... del collector
 
     """
 
