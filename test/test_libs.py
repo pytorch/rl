@@ -1420,14 +1420,15 @@ class TestJumanji:
         env = JumanjiEnv(envname, from_pixels=True, batch_size=batch_size)
         env.set_seed(0)
         env.transform.transform_observation_spec(env.base_env.observation_spec)
-        check_env_specs(env)
+
         r = env.rollout(10)
-        print(r)
         pixels = r["pixels"]
         if not isinstance(pixels, torch.Tensor):
             pixels = torch.as_tensor(np.asarray(pixels))
         assert pixels.unique().numel() > 1
         assert pixels.dtype == torch.uint8
+
+        check_env_specs(env)
 
 
 ENVPOOL_CLASSIC_CONTROL_ENVS = [
