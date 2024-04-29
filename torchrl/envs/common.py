@@ -2566,7 +2566,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if return_contiguous:
             out_td = torch.stack(tensordicts, len(batch_size), out=out)
         else:
-            out_td = LazyStackedTensorDict.lazy_stack(
+            out_td = LazyStackedTensorDict.maybe_dense_stack(
                 tensordicts, len(batch_size), out=out
             )
         if set_truncated:
