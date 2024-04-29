@@ -528,6 +528,9 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         if matplotlib_backend is not None:
             matplotlib.use(matplotlib_backend)
 
+        # Get only one env
+        while tensordict.ndim:
+            tensordict = tensordict[0]
         # Patch jumanji is_notebook
         is_notebook = jumanji.environments.is_notebook
         try:
