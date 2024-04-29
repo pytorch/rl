@@ -151,6 +151,8 @@ using the following components:
     RoundRobinWriter
     TensorDictRoundRobinWriter
     TensorDictMaxValueWriter
+    TED2Flat
+    Flat2TED
 
 Storage choice is very influential on replay buffer sampling latency, especially
 in distributed reinforcement learning settings with larger data volumes.
@@ -517,6 +519,19 @@ should have a considerably lower memory footprint than observations, for instanc
 
 This format eliminates any ambiguity regarding the matching of an observation with
 its action, info, or done state.
+
+Flattening TED to reduce memory consumption
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+TED copies the observations twice in memory, which can impact the feasibility of using this format
+in practice. Since it is being used mostly for ease of representation, one can store the data
+in a flat manner but represent it as TED during training.
+
+This is particularly useful when serializing replay buffers:
+For instance, the :class:`~torchrl.data.TED2Flat` class ensures that a TED-formatted data
+structure is flattened before being written to disk, whereas the :class:`~torchrl.data.Flat2TED`
+load hook will unflatten this structure during deserialization.
+
 
 Dimensionality of the Tensordict
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
