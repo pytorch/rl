@@ -13,7 +13,7 @@ from collections import OrderedDict
 from copy import copy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Union
+from typing import Any, Callable, Dict, List, Sequence, Union
 
 import numpy as np
 import tensordict
@@ -53,6 +53,8 @@ class Storage:
 
     def __init__(self, max_size: int) -> None:
         self.max_size = int(max_size)
+        self._save_hooks = []
+        self._load_hooks = []
 
     @property
     def _is_full(self):
@@ -159,6 +161,35 @@ class Storage:
             f"storage.flatten is not supported for storages of type {type(self)} when ndim > 1."
             f"Please report this exception as well as the use case (incl. buffer construction) on github."
         )
+
+    def register_save_hook(self, hook: Callable[[Any], Any]):
+        """Registers a save hook for the storage.
+
+        .. note:: Hooks are currently not serialized when saving a replay buffer: they must
+            be manually re-initialized every time the buffer is created.
+        """
+        self._save_hooks.append(hook)
+
+    def register_load_hook(self, hook: Callable[[Any], Any]):
+        """Registers a load hook for the storage.
+
+        .. note:: Hooks are currently not serialized when saving a replay buffer: they must
+            be manually re-initialized every time the buffer is created.
+
+        """
+        self._load_hooks.append(hook)
+
+    def save(self, *args, **kwargs):
+        """Alias for :meth:`~.dumps`."""
+        return self.dumps(*args, **kwargs)
+
+    def dump(self, *args, **kwargs):
+        """Alias for :meth:`~.dumps`."""
+        return self.dumps(*args, **kwargs)
+
+    def load(self, *args, **kwargs):
+        """Alias for :meth:`~.loads`."""
+        return self.loads(*args, **kwargs)
 
 
 class ListStorage(Storage):
@@ -396,9 +427,13 @@ class TensorStorage(Storage):
         if not self.initialized:
             raise RuntimeError("Cannot save a non-initialized storage.")
         metadata = {}
+        storage = self._storage
+        for hook in self._save_hooks:
+            storage = hook(self._storage)
+
         if is_tensor_collection(self._storage):
             # try to load the path and overwrite.
-            self._storage.memmap(
+            storage.memmap(
                 path, copy_existing=True, num_threads=torch.get_num_threads()
             )
             is_pytree = False
@@ -422,6 +457,11 @@ class TensorStorage(Storage):
         is_pytree = metadata["is_pytree"]
         _len = metadata["len"]
         if is_pytree:
+            if self._load_hooks:
+                raise RuntimeError(
+                    "Cannot use load-hooks for pytree-based storages. "
+                    "If this feature is required, please file an issue on github!"
+                )
             path = Path(path)
             for local_path, md in metadata["metadata"].items():
                 # load tensor
@@ -457,6 +497,8 @@ class TensorStorage(Storage):
                     )
         else:
             _storage = TensorDict.load_memmap(path)
+            for hook in self._load_hooks:
+                _storage = hook(_storage)
             if not self.initialized:
                 # this should not be reached if is_pytree=True
                 self._init(_storage[0])
@@ -1196,7 +1238,10 @@ class StorageEnsemble(Storage):
 
     def dumps(self, path: Path):
         path = Path(path).absolute()
-        for i, storage in enumerate(self._storages):
+        storages = self._storages
+        for hook in self._save_hooks:
+            storages = hook(storages)
+        for i, storage in enumerate(storages):
             storage.dumps(path / str(i))
         if self._transforms is not None:
             for i, transform in enumerate(self._transforms):
@@ -1209,6 +1254,14 @@ class StorageEnsemble(Storage):
         if self._transforms is not None:
             for i, transform in enumerate(self._transforms):
                 transform.load_state_dict(torch.load(path / f"{i}_transform.pt"))
+
+    def register_load_hook(self, hook: Callable[[Any], Any]):
+        raise RuntimeError(
+            f"load hooks are not supported in {type(self)} because "
+            f"each storage may be loaded in-place independently. "
+            f"If possible, register hooks in each separate storage. "
+            f"If you need cross-storage transformations, please file an issue on github."
+        )
 
     def state_dict(self) -> Dict[str, Any]:
         raise NotImplementedError

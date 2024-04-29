@@ -29,6 +29,7 @@ from .storages import (
     StorageEnsemble,
     TensorStorage,
 )
+from .utils import Flat2TED, TED2Flat
 from .writers import (
     ImmutableDatasetWriter,
     RoundRobinWriter,

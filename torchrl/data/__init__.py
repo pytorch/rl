@@ -5,6 +5,7 @@
 
 from .postprocs import MultiStep
 from .replay_buffers import (
+    Flat2TED,
     ImmutableDatasetWriter,
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -22,6 +23,7 @@ from .replay_buffers import (
     SliceSamplerWithoutReplacement,
     Storage,
     StorageEnsemble,
+    TED2Flat,
     TensorDictMaxValueWriter,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,

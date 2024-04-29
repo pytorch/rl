@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 import torch
 
-from _utils_internal import get_default_devices, make_tc
+from _utils_internal import CARTPOLE_VERSIONED, get_default_devices, make_tc
 
 from mocking_classes import CountingEnv
 from packaging import version
@@ -35,11 +35,13 @@ from torch.utils._pytree import tree_flatten, tree_map
 from torchrl.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
+    Flat2TED,
     MultiStep,
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
     ReplayBufferEnsemble,
+    TED2Flat,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
@@ -2899,6 +2901,29 @@ class TestRBMultidim:
                 sample["next", "done"].sum(),
             )
             assert (split_trajectories(sample)["next", "done"].sum(-2) == 1).all()
+
+
+@pytest.mark.skipif(not _has_gym, reason="gym required")
+class TestSaveHooks:
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    def test_simple_env(self, storage_type, tmpdir):
+        env = GymEnv(CARTPOLE_VERSIONED())
+        env.set_seed(0)
+        torch.manual_seed(0)
+        collector = SyncDataCollector(
+            env, policy=env.rand_step, total_frames=2000, frames_per_batch=20
+        )
+        rb = ReplayBuffer(storage=storage_type(1000))
+        rb_test = ReplayBuffer(storage=storage_type(1000))
+        rb.register_save_hook(TED2Flat())
+        rb_test.register_load_hook(Flat2TED())
+        for i, data in enumerate(collector):
+            rb.extend(data)
+            if i == 0:
+                rb_test.extend(data)
+            rb.dumps(tmpdir)
+            rb_test.loads(tmpdir)
+            assert_allclose_td(rb_test[:-1], rb[:-1])
 
 
 if __name__ == "__main__":

@@ -468,6 +468,35 @@ class ReplayBuffer:
             metadata = json.load(file)
         self._batch_size = metadata["batch_size"]
 
+    def save(self, *args, **kwargs):
+        """Alias for :meth:`~.dumps`."""
+        return self.dumps(*args, **kwargs)
+
+    def dump(self, *args, **kwargs):
+        """Alias for :meth:`~.dumps`."""
+        return self.dumps(*args, **kwargs)
+
+    def load(self, *args, **kwargs):
+        """Alias for :meth:`~.loads`."""
+        return self.loads(*args, **kwargs)
+
+    def register_save_hook(self, hook: Callable[[Any], Any]):
+        """Registers a save hook for the storage.
+
+        .. note:: Hooks are currently not serialized when saving a replay buffer: they must
+            be manually re-initialized every time the buffer is created.
+        """
+        self._storage.register_save_hook(hook)
+
+    def register_load_hook(self, hook: Callable[[Any], Any]):
+        """Registers a load hook for the storage.
+
+        .. note:: Hooks are currently not serialized when saving a replay buffer: they must
+            be manually re-initialized every time the buffer is created.
+
+        """
+        self._storage.register_load_hook(hook)
+
     def add(self, data: Any) -> int:
         """Add a single element to the replay buffer.
 
