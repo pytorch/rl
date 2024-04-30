@@ -71,6 +71,7 @@ if __name__ == "__main__":
     # Create an info reader: this object will read the info and write its content to the tensordict
     def reader(info, tensordict):
         return tensordict.set("field1", np.stack(info["field1"]))
+
     env.set_info_dict_reader(info_dict_reader=reader)
 
     # Print the info readers (there should be 2: one to read the terminal states and another to read the 'field1')
