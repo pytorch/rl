@@ -1,6 +1,9 @@
-import warnings
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
-from torchrl.envs import Compose
+import warnings
 
 
 def get_primers_from_module(module):
@@ -17,4 +20,6 @@ def get_primers_from_module(module):
     elif len(primers) == 1:
         return primers[0]
     else:
+        from torchrl.envs.transforms import Compose
+
         return Compose(primers)
