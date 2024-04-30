@@ -59,7 +59,7 @@ if __name__ == "__main__":
         env = gym.vector.AsyncVectorEnv([lambda: CustomEnv() for _ in range(num_envs)])
         env = GymWrapper(env, device="cpu")
     else:
-        # Option 2: using GymEnv directly
+        # Option 2: using GymEnv directly, no need to call AsyncVectorEnv
         gym.register("Custom-v0", CustomEnv)
         env = GymEnv("Custom-v0", num_envs=num_envs)
 
@@ -68,8 +68,12 @@ if __name__ == "__main__":
         UnboundedContinuousTensorSpec(shape=(num_envs, 3), dtype=torch.float64),
     ]
 
+    # Create an info reader: this object will read the info and write its content to the tensordict
     reader = lambda info, tensordict: tensordict.set("field1", np.stack(info["field1"]))
     env.set_info_dict_reader(info_dict_reader=reader)
+
+    # Print the info readers (there should be 2: one to read the terminal states and another to read the 'field1')
+    print("readers", env.info_dict_reader)
 
     # We need to unlock the specs to make them writable
     env.observation_spec.unlock_()
@@ -80,5 +84,5 @@ if __name__ == "__main__":
     check_env_specs(env)
 
     td = env.reset()
-    print(td)
-    print(td["field1"])
+    print("reset data", td)
+    print("content of field1 (should be a 10x3 tensor)", td["field1"])
