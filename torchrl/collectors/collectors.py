@@ -2249,7 +2249,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
         See https://docs.python.org/3/library/multiprocessing.html for more info.
 
-        Examples:
+    Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from tensordict.nn import TensorDictModule
         >>> from torch import nn
