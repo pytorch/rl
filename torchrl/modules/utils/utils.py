@@ -22,8 +22,7 @@ def get_primers_from_module(module):
         >>> from torchrl.modules.utils import get_primers_from_module
         >>> from torchrl.modules import GRUModule, MLP
         >>> from tensordict.nn import TensorDictModule, TensorDictSequential
-
-        # Define a GRU module
+        >>> # Define a GRU module
         >>> gru_module = GRUModule(
         ...     input_size=10,
         ...     hidden_size=10,
@@ -31,8 +30,7 @@ def get_primers_from_module(module):
         ...     in_keys=["input", "recurrent_state", "is_init"],
         ...     out_keys=["features", ("next", "recurrent_state")],
         ... )
-
-        # Define a head module
+        >>> # Define a head module
         >>> head = TensorDictModule(
         ...     MLP(
         ...         in_features=10,
@@ -42,11 +40,9 @@ def get_primers_from_module(module):
         ...     in_keys=["features"],
         ...     out_keys=["output"],
         ... )
-
-        # Create a sequential model
+        >>> # Create a sequential model
         >>> model = TensorDictSequential(gru_module, head)
-
-        # Retrieve primers from the model
+        >>> # Retrieve primers from the model
         >>> primers = get_primers_from_module(model)
     """
     primers = []
@@ -57,7 +53,7 @@ def get_primers_from_module(module):
 
     module.apply(make_primers)
     if not primers:
-        raise warnings.warn("No primers found in the module.")
+        warnings.warn("No primers found in the module.")
     elif len(primers) == 1:
         return primers[0]
     else:

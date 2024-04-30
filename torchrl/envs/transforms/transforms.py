@@ -4511,8 +4511,7 @@ class TensorDictPrimer(Transform):
         tensor([[1., 1., 1.],
                 [1., 1., 1.]])
 
-    Note:
-        Some TorchRL modules rely on specific keys being present in the environment TensorDicts,
+    .. note:: Some TorchRL modules rely on specific keys being present in the environment TensorDicts,
         like :class:`~torchrl.modules.models.LSTM` or :class:`~torchrl.modules.models.GRU`.
         To facilitate this process, the method :func:`~torchrl.models.utils.get_primers_from_module`
         automatically checks for required primer transforms in a module and its submodules and
