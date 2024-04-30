@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 from typing import Dict, Optional, Tuple, Union
 
@@ -9,6 +11,8 @@ import numpy as np
 import torch
 from packaging import version
 from tensordict import TensorDict, TensorDictBase
+
+from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.utils import _classproperty
 
 _has_jumanji = importlib.util.find_spec("jumanji") is not None
@@ -18,6 +22,8 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     DEVICE_TYPING,
     DiscreteTensorSpec,
+    MultiDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
@@ -61,6 +67,17 @@ def _jumanji_to_torchrl_spec_transform(
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return action_space_cls(spec.num_values, dtype=dtype, device=device)
+    if isinstance(spec, jumanji.specs.MultiDiscreteArray):
+        action_space_cls = (
+            MultiDiscreteTensorSpec
+            if categorical_action_encoding
+            else MultiOneHotDiscreteTensorSpec
+        )
+        if dtype is None:
+            dtype = numpy_to_torch_dtype_dict[spec.dtype]
+        return action_space_cls(
+            torch.as_tensor(np.asarray(spec.num_values)), dtype=dtype, device=device
+        )
     elif isinstance(spec, jumanji.specs.BoundedArray):
         shape = spec.shape
         if dtype is None:
@@ -98,7 +115,15 @@ def _jumanji_to_torchrl_spec_transform(
         raise TypeError(f"Unsupported spec type {type(spec)}")
 
 
-class JumanjiWrapper(GymLikeEnv):
+class _JumanjiMakeRender(_EnvPostInit):
+    def __call__(self, *args, **kwargs):
+        instance = super().__call__(*args, **kwargs)
+        if instance.from_pixels:
+            return instance.make_render()
+        return instance
+
+
+class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
     """Jumanji environment wrapper.
 
     Jumanji offers a vectorized simulation framework based on Jax.
@@ -120,7 +145,10 @@ class JumanjiWrapper(GymLikeEnv):
             Defaults to ``False``.
 
     Keyword Args:
-        from_pixels (bool, optional): Not yet supported.
+        from_pixels (bool, optional): Whether the environment should render its output.
+            This will drastically impact the environment throughput. Only the first environment
+            will be rendered. See :meth:`~torchrl.envs.JumanjiWrapper.render` for more information.
+            Defaults to `False`.
         frame_skip (int, optional): if provided, indicates for how many steps the
             same action is to be repeated. The observation returned will be the
             last observation of the sequence, whereas the reward will be the sum
@@ -301,7 +329,7 @@ class JumanjiWrapper(GymLikeEnv):
     def available_envs(cls):
         if not _has_jumanji:
             return []
-        return list(_get_envs())
+        return sorted(_get_envs())
 
     @property
     def lib(self):
@@ -309,14 +337,19 @@ class JumanjiWrapper(GymLikeEnv):
 
         if version.parse(jumanji.__version__) < version.parse("1.0.0"):
             raise ImportError("jumanji version must be >= 1.0.0")
-
         return jumanji
 
-    def __init__(self, env: "jumanji.env.Environment" = None, **kwargs):  # noqa: F821
+    def __init__(
+        self,
+        env: "jumanji.env.Environment" = None,  # noqa: F821
+        categorical_action_encoding=True,
+        **kwargs,
+    ):
         if not _has_jumanji:
             raise ImportError(
                 "jumanji is not installed or importing it failed. Consider checking your installation."
             )
+        self.categorical_action_encoding = categorical_action_encoding
         if env is not None:
             kwargs["env"] = env
         super().__init__(**kwargs)
@@ -334,9 +367,37 @@ class JumanjiWrapper(GymLikeEnv):
         self.from_pixels = from_pixels
         self.pixels_only = pixels_only
 
-        if from_pixels:
-            raise NotImplementedError("TODO")
         return env
+
+    def make_render(self):
+        """Returns a transformed environment that can be rendered.
+
+        Examples:
+            >>> from torchrl.envs import JumanjiEnv
+            >>> from torchrl.record import CSVLogger, VideoRecorder
+            >>>
+            >>> envname = JumanjiEnv.available_envs[-1]
+            >>> logger = CSVLogger("jumanji", video_format="mp4", video_fps=2)
+            >>> env = JumanjiEnv(envname, from_pixels=True)
+            >>>
+            >>> env = env.append_transform(
+            ...     VideoRecorder(logger=logger, in_keys=["pixels"], tag=envname)
+            ... )
+            >>> env.set_seed(0)
+            >>> r = env.rollout(100)
+            >>> env.transform.dump()
+
+        """
+        from torchrl.record import PixelRenderTransform
+
+        return self.append_transform(
+            PixelRenderTransform(
+                out_keys=["pixels"],
+                pass_tensordict=True,
+                as_non_tensor=bool(self.batch_size),
+                as_numpy=bool(self.batch_size),
+            )
+        )
 
     def _make_state_example(self, env):
         import jax
@@ -359,7 +420,9 @@ class JumanjiWrapper(GymLikeEnv):
 
     def _make_action_spec(self, env) -> TensorSpec:
         action_spec = _jumanji_to_torchrl_spec_transform(
-            env.action_spec, device=self.device
+            env.action_spec,
+            device=self.device,
+            categorical_action_encoding=self.categorical_action_encoding,
         )
         action_spec = action_spec.expand(*self.batch_size, *action_spec.shape)
         return action_spec
@@ -444,6 +507,84 @@ class JumanjiWrapper(GymLikeEnv):
         else:
             obs_dict = _object_to_tensordict(obs, self.device, self.batch_size)
         return super().read_obs(obs_dict)
+
+    def render(
+        self,
+        tensordict,
+        matplotlib_backend: str | None = None,
+        as_numpy: bool = False,
+        **kwargs,
+    ):
+        """Renders the environment output given an input tensordict.
+
+        This method is intended to be called by the :class:`~torchrl.record.PixelRenderTransform`
+        created whenever `from_pixels=True` is selected.
+        To create an appropriate rendering transform, use a similar call as bellow:
+
+            >>> from torchrl.record import PixelRenderTransform
+            >>> matplotlib_backend = None # Change this value if a specific matplotlib backend has to be used.
+            >>> env = env.append_transform(
+            ...     PixelRenderTransform(out_keys=["pixels"], pass_tensordict=True, matplotlib_backend=matplotlib_backend)
+            ... )
+
+        This pipeline will write a `"pixels"` entry in your output tensordict.
+
+        Args:
+            tensordict (TensorDictBase): a tensordict containing a state to represent
+            matplotlib_backend (str, optional): the matplotlib backend
+            as_numpy (bool, optional): if ``False``, the np.ndarray will be converted to a torch.Tensor.
+                Defaults to ``False``.
+
+        """
+        import io
+
+        import jax
+        import jax.numpy as jnp
+        import jumanji
+
+        try:
+            import matplotlib
+            import matplotlib.pyplot as plt
+            import PIL
+            import torchvision.transforms.v2.functional
+        except ImportError as err:
+            raise ImportError(
+                "Rendering with Jumanji requires torchvision, matplotlib and PIL to be installed."
+            ) from err
+
+        if matplotlib_backend is not None:
+            matplotlib.use(matplotlib_backend)
+
+        # Get only one env
+        _state_example = self._state_example
+        while tensordict.ndim:
+            tensordict = tensordict[0]
+            _state_example = jax.tree_util.tree_map(
+                lambda x: jnp.take(x, 0, axis=0), _state_example
+            )
+        # Patch jumanji is_notebook
+        is_notebook = jumanji.environments.is_notebook
+        try:
+            jumanji.environments.is_notebook = lambda: False
+
+            isinteractive = plt.isinteractive()
+            plt.ion()
+            buf = io.BytesIO()
+            state = _tensordict_to_object(tensordict.get("state"), _state_example)
+            self._env.render(state, **kwargs)
+            plt.savefig(buf, format="png")
+            buf.seek(0)
+            # Load the image into a PIL object.
+            img = PIL.Image.open(buf)
+            img_array = torchvision.transforms.v2.functional.pil_to_tensor(img)
+            if not isinteractive:
+                plt.ioff()
+            plt.close()
+            if not as_numpy:
+                return img_array[:3]
+            return img_array[:3].numpy()
+        finally:
+            jumanji.environments.is_notebook = is_notebook
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         import jax
