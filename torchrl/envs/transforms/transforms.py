@@ -6996,7 +6996,7 @@ class VecGymEnvTransform(Transform):
             )
         # if not reset.any(), we don't need to do anything.
         # if reset.all(), we don't either (bc GymWrapper will call a plain reset).
-        if reset is not None and reset.any() and not reset.all():
+        if reset is not None and reset.any():
             saved_next = self._memo["saved_next"]
             # reset = reset.view(tensordict.shape)
             # we have a data container from the previous call to step
