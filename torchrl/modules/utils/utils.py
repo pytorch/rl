@@ -44,6 +44,16 @@ def get_primers_from_module(module):
         >>> model = TensorDictSequential(gru_module, head)
         >>> # Retrieve primers from the model
         >>> primers = get_primers_from_module(model)
+        >>> print(primers)
+
+        TensorDictPrimer(primers=CompositeSpec(
+            recurrent_state: UnboundedContinuousTensorSpec(
+                shape=torch.Size([1, 10]),
+                space=None,
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous), device=None, shape=torch.Size([])), default_value={'recurrent_state': 0.0}, random=None)
+
     """
     primers = []
 
@@ -54,9 +64,10 @@ def get_primers_from_module(module):
     module.apply(make_primers)
     if not primers:
         warnings.warn("No primers found in the module.")
+        return
     elif len(primers) == 1:
         return primers[0]
     else:
         from torchrl.envs.transforms import Compose
 
-        return Compose(primers)
+        return Compose(*primers)
