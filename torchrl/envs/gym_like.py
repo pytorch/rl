@@ -162,8 +162,9 @@ class GymLikeEnv(_EnvWrapper):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._info_dict_reader = []
-        return super().__new__(cls, *args, _batch_locked=True, **kwargs)
+        self = super().__new__(cls, *args, _batch_locked=True, **kwargs)
+        self._info_dict_reader = []
+        return self
 
     def read_action(self, action):
         """Reads the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.

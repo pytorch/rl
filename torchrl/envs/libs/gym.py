@@ -576,6 +576,7 @@ class _AsyncMeta(_EnvPostInit):
                     )
                     add_info_dict = False
             if add_info_dict:
+                print("adding info dict reader", instance.observation_spec)
                 instance.set_info_dict_reader(
                     terminal_obs_reader(instance.observation_spec, backend=backend)
                 )
@@ -1538,6 +1539,9 @@ class terminal_obs_reader(BaseInfoDictReader):
                 for i, obs in enumerate(terminal_obs):
                     # writes final_obs inplace with terminal_obs content
                     self._read_obs(obs, key[-1], final_obs_buffer, index=i)
+            print("self.batch_size", tensordict.shape)
+            print("final_obs_buffer", final_obs_buffer)
+            print("spec", item)
             tensordict.set(key, final_obs_buffer)
         return tensordict
 
