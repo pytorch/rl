@@ -32,8 +32,8 @@ def get_version():
     version_txt = os.path.join(cwd, "version.txt")
     with open(version_txt, "r") as f:
         version = f.readline().strip()
-    if os.getenv("BUILD_VERSION"):
-        version = os.getenv("BUILD_VERSION")
+    if os.getenv("TORCHRL_BUILD_VERSION"):
+        version = os.getenv("TORCHRL_BUILD_VERSION")
     elif sha != "Unknown":
         version += "+" + sha[:7]
     return version
@@ -68,11 +68,13 @@ def write_version_file(version):
         f.write("git_version = {}\n".format(repr(sha)))
 
 
-def _get_pytorch_version(is_nightly):
+def _get_pytorch_version(is_nightly, is_local):
     # if "PYTORCH_VERSION" in os.environ:
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
     if is_nightly:
         return "torch>=2.4.0.dev"
+    elif is_local:
+        return "torch"
     return "torch>=2.3.0"
 
 
@@ -178,10 +180,12 @@ def _main(argv):
     else:
         version = get_version()
         write_version_file(version)
+    TORCHRL_BUILD_VERSION = os.getenv("TORCHRL_BUILD_VERSION")
     logging.info("Building wheel {}-{}".format(package_name, version))
-    logging.info(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
+    logging.info(f"TORCHRL_BUILD_VERSION is {TORCHRL_BUILD_VERSION}")
 
-    pytorch_package_dep = _get_pytorch_version(is_nightly)
+    is_local = TORCHRL_BUILD_VERSION is None
+    pytorch_package_dep = _get_pytorch_version(is_nightly, is_local)
     logging.info("-- PyTorch dependency:", pytorch_package_dep)
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])

@@ -1597,12 +1597,18 @@ class BoundedTensorSpec(TensorSpec):
             if high is not None:
                 raise TypeError(self.CONFLICTING_KWARGS.format("high", "maximum"))
             high = kwargs.pop("maximum")
-            warnings.warn(self.DEPRECATED_KWARGS, category=DeprecationWarning)
+            warnings.warn(
+                "Maximum is deprecated since v0.4.0, using high instead.",
+                category=DeprecationWarning,
+            )
         if "minimum" in kwargs:
             if low is not None:
                 raise TypeError(self.CONFLICTING_KWARGS.format("low", "minimum"))
             low = kwargs.pop("minimum")
-            warnings.warn(self.DEPRECATED_KWARGS, category=DeprecationWarning)
+            warnings.warn(
+                "Minimum is deprecated since v0.4.0, using low instead.",
+                category=DeprecationWarning,
+            )
         domain = kwargs.pop("domain", "continuous")
         if len(kwargs):
             raise TypeError(f"Got unrecognised kwargs {tuple(kwargs.keys())}.")

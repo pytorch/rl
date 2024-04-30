@@ -2827,7 +2827,7 @@ class TestAtariDQN:
             preproc,
             num_workers=max(1, os.cpu_count() - 4),
             num_chunks=1000,
-            mp_start_method="fork",
+            # mp_start_method="fork",
             pbar=True,
             dest=tmpdir,
             num_frames=100,
@@ -3003,7 +3003,7 @@ class TestOpenX:
             CloudpickleWrapper(fn),
             num_workers=max(1, os.cpu_count() - 2),
             num_chunks=500,
-            mp_start_method="fork",
+            # mp_start_method="fork",
             dest=tmpdir,
         )
         dataset = ReplayBuffer(storage=new_storage)
