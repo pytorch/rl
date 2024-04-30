@@ -1512,6 +1512,13 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
     def is_in(self, val: torch.Tensor) -> bool:
         if self.mask is None:
+            shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val.shape)
+            shape_match = val.shape == shape
+            if not shape_match:
+                return False
+            dtype_match = val.dtype == self.dtype
+            if not dtype_match:
+                return False
             return (val.sum(-1) == 1).all()
         shape = self.mask.shape
         shape = torch.broadcast_shapes(shape, val.shape)
@@ -1641,39 +1648,44 @@ class BoundedTensorSpec(TensorSpec):
                 shape = torch.Size([shape])
             else:
                 shape = torch.Size(list(shape))
-
+        if shape is not None:
+            shape_corr = _remove_neg_shapes(shape)
+        else:
+            shape_corr = None
         if high.ndimension():
-            if shape is not None and shape != high.shape:
+            if shape_corr is not None and shape_corr != high.shape_corr:
                 raise RuntimeError(err_msg)
-            shape = high.shape
-            low = low.expand(shape).clone()
+            shape = high.shape_corr
+            low = low.expand(shape_corr).clone()
         elif low.ndimension():
-            if shape is not None and shape != low.shape:
+            if shape_corr is not None and shape_corr != low.shape_corr:
                 raise RuntimeError(err_msg)
-            shape = low.shape
-            high = high.expand(shape).clone()
-        elif shape is None:
+            shape = low.shape_corr
+            high = high.expand(shape_corr).clone()
+        elif shape_corr is None:
             raise RuntimeError(err_msg)
         else:
-            low = low.expand(shape).clone()
-            high = high.expand(shape).clone()
+            low = low.expand(shape_corr).clone()
+            high = high.expand(shape_corr).clone()
 
         if low.numel() > high.numel():
             high = high.expand_as(low).clone()
         elif high.numel() > low.numel():
             low = low.expand_as(high).clone()
-        if shape is None:
-            shape = low.shape
+        if shape_corr is None:
+            shape = low.shape_corr
         else:
-            if isinstance(shape, float):
-                shape = torch.Size([shape])
-            elif not isinstance(shape, torch.Size):
-                shape = torch.Size(shape)
-            shape_err_msg = f"low and shape mismatch, got {low.shape} and {shape}"
-            if len(low.shape) != len(shape):
-                raise RuntimeError(shape_err_msg)
-            if not all(_s == _sa for _s, _sa in zip(shape, low.shape)):
-                raise RuntimeError(shape_err_msg)
+            if isinstance(shape_corr, float):
+                shape_corr = torch.Size([shape_corr])
+            elif not isinstance(shape_corr, torch.Size):
+                shape_corr = torch.Size(shape_corr)
+            shape_corr_err_msg = (
+                f"low and shape_corr mismatch, got {low.shape} and {shape_corr}"
+            )
+            if len(low.shape) != len(shape_corr):
+                raise RuntimeError(shape_corr_err_msg)
+            if not all(_s == _sa for _s, _sa in zip(shape_corr, low.shape)):
+                raise RuntimeError(shape_corr_err_msg)
         self.shape = shape
 
         super().__init__(
@@ -1844,10 +1856,18 @@ class BoundedTensorSpec(TensorSpec):
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
+        shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val.shape)
+        shape_match = val.shape == shape
+        if not shape_match:
+            return False
+        dtype_match = val.dtype == self.dtype
+        if not dtype_match:
+            return False
         try:
-            return (val >= self.space.low.to(val.device)).all() and (
+            within_bounds = (val >= self.space.low.to(val.device)).all() and (
                 val <= self.space.high.to(val.device)
             ).all()
+            return within_bounds
         except RuntimeError as err:
             if "The size of tensor a" in str(err):
                 warnings.warn(f"Got a shape mismatch: {str(err)}")
@@ -1959,7 +1979,7 @@ class NonTensorSpec(TensorSpec):
         return NonTensorData(data=None, batch_size=self.shape, device=self.device)
 
     def is_in(self, val: torch.Tensor) -> bool:
-        shape = torch.broadcast_shapes(self.shape, val.shape)
+        shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val.shape)
         return (
             isinstance(val, NonTensorData)
             and val.shape == shape
@@ -2079,7 +2099,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         return torch.empty(shape, device=self.device, dtype=self.dtype).random_()
 
     def is_in(self, val: torch.Tensor) -> bool:
-        shape = torch.broadcast_shapes(self.shape, val.shape)
+        shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val.shape)
         return val.shape == shape and val.dtype == self.dtype
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
@@ -2178,7 +2198,7 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         self,
         shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
         device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = None,
+        dtype: Optional[Union[str, torch.dtype]] = torch.int64,
     ):
         if isinstance(shape, int):
             shape = torch.Size([shape])
@@ -2195,8 +2215,8 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
                 min_value = torch.iinfo(dtype).min
                 max_value = torch.iinfo(dtype).max
         space = ContinuousBox(
-            torch.full(shape, min_value, device=device),
-            torch.full(shape, max_value, device=device),
+            torch.full(_remove_neg_shapes(shape), min_value, device=device),
+            torch.full(_remove_neg_shapes(shape), max_value, device=device),
         )
 
         super().__init__(
@@ -2234,7 +2254,7 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         return r.to(self.device)
 
     def is_in(self, val: torch.Tensor) -> bool:
-        shape = torch.broadcast_shapes(self.shape, val.shape)
+        shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val.shape)
         return val.shape == shape and val.dtype == self.dtype
 
     def expand(self, *shape):
@@ -2819,6 +2839,13 @@ class DiscreteTensorSpec(TensorSpec):
 
     def is_in(self, val: torch.Tensor) -> bool:
         if self.mask is None:
+            shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val.shape)
+            shape_match = val.shape == shape
+            if not shape_match:
+                return False
+            dtype_match = val.dtype == self.dtype
+            if not dtype_match:
+                return False
             return (0 <= val).all() and (val < self.space.n).all()
         shape = self.mask.shape
         shape = torch.Size([*torch.broadcast_shapes(shape[:-1], val.shape), shape[-1]])
@@ -3166,7 +3193,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         nvec: Union[Sequence[int], torch.Tensor, int],
         shape: Optional[torch.Size] = None,
         device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = torch.long,
+        dtype: Optional[Union[str, torch.dtype]] = torch.int64,
         mask: torch.Tensor | None = None,
     ):
         if not isinstance(nvec, torch.Tensor):
@@ -3185,7 +3212,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                     f"Got nvec.shape[-1]={sum(nvec)} and shape={shape}."
                 )
 
-        self.nvec = self.nvec.expand(shape)
+        self.nvec = self.nvec.expand(_remove_neg_shapes(shape))
 
         space = BoxList.from_nvec(self.nvec)
         super(DiscreteTensorSpec, self).__init__(
@@ -3333,18 +3360,19 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
 
     def is_in(self, val: torch.Tensor) -> bool:
         if self.mask is not None:
-            return all(
-                spec.is_in(_val)
-                for (_val, spec) in zip(val.unbind(-1), self._split_self())
-            )
+            vals = val.unbind(-1)
+            splits = self._split_self()
+            if not len(vals) == len(splits):
+                return False
+            return all(spec.is_in(val) for (val, spec) in zip(vals, splits))
 
         if val.ndim < 1:
             val = val.unsqueeze(0)
-        val_have_wrong_dim = (
-            self.shape != torch.Size([1])
-            and val.shape[-len(self.shape) :] != self.shape
-        )
-        if self.dtype != val.dtype or len(self.shape) > val.ndim or val_have_wrong_dim:
+        shape = _remove_neg_shapes(self.shape)
+        shape = torch.broadcast_shapes(shape, val.shape)
+        if shape != val.shape:
+            return False
+        if self.dtype != val.dtype:
             return False
         val_device = val.device
         return (
@@ -4732,3 +4760,7 @@ def _minmax_dtype(dtype):
     else:
         info = torch.iinfo(dtype)
     return info.min, info.max
+
+
+def _remove_neg_shapes(shape):
+    return torch.Size([d if d >= 0 else 1 for d in shape])
