@@ -1100,11 +1100,8 @@ class TestGym:
         with set_gym_backend(backend):
 
             class CustomEnv(gym_backend().Env):
-                def __init__(
-                    self, dim=3, random=False, use_termination=True, max_steps=4
-                ):
+                def __init__(self, dim=3, use_termination=True, max_steps=4):
                     self.dim = dim
-                    self.random = random
                     self.use_termination = use_termination
                     self.observation_space = gym_backend("spaces").Box(
                         low=-np.inf, high=np.inf, shape=(self.dim,)
@@ -1120,14 +1117,8 @@ class TestGym:
                 def _get_obs(self):
                     return self.state.copy()
 
-                def reset(self, seed=None, options=None):
-                    # We need the following line to seed self.np_random
-                    super().reset(seed=seed)
+                def reset(self, seed=0, options=None):
                     self.state = np.zeros(self.observation_space.shape)
-                    if self.random:
-                        self.state += self.np_random.random(
-                            self.observation_space.shape
-                        )
                     observation = self._get_obs()
                     info = self._get_info()
                     assert (observation < self.max_steps).all()
@@ -1153,6 +1144,8 @@ class TestGym:
         else:
             backend = "gym"
         with set_gym_backend(backend):
+            if version.parse(gym_backend().__version__) < version.parse("0.26"):
+                pytest.skip("Running into unrelated errors with older versions of gym.")
             steps = 5
             if not heterogeneous:
                 env = GymWrapper(

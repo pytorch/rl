@@ -915,7 +915,10 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 f"Calling env.seed from now on."
             )
             self._seed_calls_reset = False
-            self._env.seed(seed=seed)
+            try:
+                self._env.seed(seed=seed)
+            except AttributeError as err2:
+                raise err from err2
 
     @implement_for("gymnasium")
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
