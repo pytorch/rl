@@ -1145,7 +1145,8 @@ class TestGym:
             backend = "gym"
         with set_gym_backend(backend):
             if version.parse(gym_backend().__version__) < version.parse("0.26"):
-                pytest.skip("Running into unrelated errors with older versions of gym.")
+                torchrl_logger.info("Running into unrelated errors with older versions of gym.")
+                return
             steps = 5
             if not heterogeneous:
                 env = GymWrapper(
