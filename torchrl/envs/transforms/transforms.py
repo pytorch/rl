@@ -6988,16 +6988,25 @@ class VecGymEnvTransform(Transform):
         if (
             reset is not done
             and (reset != done).any()
-            and (not reset.all() or not reset.any())
+            # and (not reset.all() or not reset.any())
         ):
             raise RuntimeError(
-                "Cannot partially reset a gym(nasium) async env with a reset mask that does not match the done mask. "
+                "Cannot partially reset a gym(nasium) async env with a "
+                "reset mask that does not match the done mask. "
                 f"Got reset={reset}\nand done={done}"
             )
         # if not reset.any(), we don't need to do anything.
         # if reset.all(), we don't either (bc GymWrapper will call a plain reset).
         if reset is not None and reset.any():
             saved_next = self._memo["saved_next"]
+            if saved_next is None:
+                if reset.all():
+                    # We're fine: this means that a full reset was passed and the
+                    # env will be manually reset
+                    tensordict_reset.pop(self.final_name, None)
+                    return tensordict_reset
+                raise RuntimeError("Did not find a saved tensordict while the reset mask was "
+                                   f"not empty: reset={reset}. Done was {done}.")
             # reset = reset.view(tensordict.shape)
             # we have a data container from the previous call to step
             # that contains part of the observation we need.

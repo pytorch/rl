@@ -1157,11 +1157,11 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             # is present. If it is not, we just reset. Otherwise we just skip.
             if tensordict is None:
                 return super()._reset(tensordict)
-            reset = tensordict.get("_reset", None)
+            reset = tensordict.pop("_reset", None)
             if reset is None:
                 return super()._reset(tensordict)
-            elif reset is not None:
-                return tensordict.exclude("_reset")
+            elif reset is not None and not reset.all():
+                return tensordict
         return super()._reset(tensordict, **kwargs)
 
 
