@@ -1096,98 +1096,116 @@ class TestGym:
         del c
         return
 
-    def _get_dummy_gym_env(self, **kwargs):
-        class CustomEnv(gym_backend().Env):
-            def __init__(self, dim=3, random=False, use_termination=True, max_steps=4):
-                self.dim = dim
-                self.random = random
-                self.use_termination = use_termination
-                self.observation_space = gym_backend("spaces").Box(
-                    low=-np.inf, high=np.inf, shape=(self.dim,)
-                )
-                self.action_space = gym_backend("spaces").Box(
-                    low=-np.inf, high=np.inf, shape=(1,)
-                )
-                self.max_steps = max_steps
+    def _get_dummy_gym_env(self, backend, **kwargs):
+        with set_gym_backend(backend):
 
-            def _get_info(self):
-                return {"field1": self.state**2}
+            class CustomEnv(gym_backend().Env):
+                def __init__(
+                    self, dim=3, random=False, use_termination=True, max_steps=4
+                ):
+                    self.dim = dim
+                    self.random = random
+                    self.use_termination = use_termination
+                    self.observation_space = gym_backend("spaces").Box(
+                        low=-np.inf, high=np.inf, shape=(self.dim,)
+                    )
+                    self.action_space = gym_backend("spaces").Box(
+                        low=-np.inf, high=np.inf, shape=(1,)
+                    )
+                    self.max_steps = max_steps
 
-            def _get_obs(self):
-                return self.state.copy()
+                def _get_info(self):
+                    return {"field1": self.state**2}
 
-            def reset(self, seed=None, options=None):
-                # We need the following line to seed self.np_random
-                super().reset(seed=seed)
-                self.state = np.zeros(self.observation_space.shape)
-                if self.random:
-                    self.state += self.np_random.random(self.observation_space.shape)
-                observation = self._get_obs()
-                info = self._get_info()
-                assert (observation < self.max_steps).all()
-                return observation, info
+                def _get_obs(self):
+                    return self.state.copy()
 
-            def step(self, action):
-                # self.state += action.item()
-                self.state += 1
-                truncated, terminated = False, False
-                if self.use_termination:
-                    terminated = self.state[0] == 4
-                reward = 1 if terminated else 0  # Binary sparse rewards
-                observation = self._get_obs()
-                info = self._get_info()
-                return observation, reward, terminated, truncated, info
+                def reset(self, seed=None, options=None):
+                    # We need the following line to seed self.np_random
+                    super().reset(seed=seed)
+                    self.state = np.zeros(self.observation_space.shape)
+                    if self.random:
+                        self.state += self.np_random.random(
+                            self.observation_space.shape
+                        )
+                    observation = self._get_obs()
+                    info = self._get_info()
+                    assert (observation < self.max_steps).all()
+                    return observation, info
 
-        return CustomEnv(**kwargs)
+                def step(self, action):
+                    # self.state += action.item()
+                    self.state += 1
+                    truncated, terminated = False, False
+                    if self.use_termination:
+                        terminated = self.state[0] == 4
+                    reward = 1 if terminated else 0  # Binary sparse rewards
+                    observation = self._get_obs()
+                    info = self._get_info()
+                    return observation, reward, terminated, truncated, info
+
+            return CustomEnv(**kwargs)
 
     @pytest.mark.parametrize("heterogeneous", [False, True])
     def test_resetting_strategies(self, heterogeneous):
-        steps = 5
-        if not heterogeneous:
-            env = GymWrapper(
-                gym_backend().vector.AsyncVectorEnv([self._get_dummy_gym_env] * 4)
-            )
+        if _has_gymnasium:
+            backend = "gymnasium"
         else:
-            env = GymWrapper(
-                gym_backend().vector.AsyncVectorEnv(
-                    [
-                        functools.partial(self._get_dummy_gym_env, max_steps=i + 4)
-                        for i in range(4)
-                    ]
-                )
-            )
-        try:
-            check_env_specs(env)
-            td = env.rollout(steps, break_when_any_done=False)
+            backend = "gym"
+        with set_gym_backend(backend):
+            steps = 5
             if not heterogeneous:
-                assert not (td["observation"] == 4).any()
-                assert (td["next", "observation"] == 4).sum() == 3 * 4
+                env = GymWrapper(
+                    gym_backend().vector.AsyncVectorEnv(
+                        [functools.partial(self._get_dummy_gym_env, backend=backend)]
+                        * 4
+                    )
+                )
+            else:
+                env = GymWrapper(
+                    gym_backend().vector.AsyncVectorEnv(
+                        [
+                            functools.partial(
+                                self._get_dummy_gym_env,
+                                max_steps=i + 4,
+                                backend=backend,
+                            )
+                            for i in range(4)
+                        ]
+                    )
+                )
+            try:
+                check_env_specs(env)
+                td = env.rollout(steps, break_when_any_done=False)
+                if not heterogeneous:
+                    assert not (td["observation"] == 4).any()
+                    assert (td["next", "observation"] == 4).sum() == 3 * 4
 
-            # check with manual reset
-            torch.manual_seed(0)
-            env.set_seed(0)
-            reset = env.reset(
-                TensorDict({"_reset": torch.ones(4, 1, dtype=torch.bool)}, [4])
-            )
-            r0 = env.rollout(
-                10, break_when_any_done=False, auto_reset=False, tensordict=reset
-            )
-            torch.manual_seed(0)
-            env.set_seed(0)
-            reset = env.reset()
-            r1 = env.rollout(
-                10, break_when_any_done=False, auto_reset=False, tensordict=reset
-            )
-            torch.manual_seed(0)
-            env.set_seed(0)
-            r2 = env.rollout(10, break_when_any_done=False)
-            assert_allclose_td(r0, r1)
-            assert_allclose_td(r1, r2)
-        finally:
-            if not env.is_closed:
-                env.close()
-            del env
-            gc.collect()
+                # check with manual reset
+                torch.manual_seed(0)
+                env.set_seed(0)
+                reset = env.reset(
+                    TensorDict({"_reset": torch.ones(4, 1, dtype=torch.bool)}, [4])
+                )
+                r0 = env.rollout(
+                    10, break_when_any_done=False, auto_reset=False, tensordict=reset
+                )
+                torch.manual_seed(0)
+                env.set_seed(0)
+                reset = env.reset()
+                r1 = env.rollout(
+                    10, break_when_any_done=False, auto_reset=False, tensordict=reset
+                )
+                torch.manual_seed(0)
+                env.set_seed(0)
+                r2 = env.rollout(10, break_when_any_done=False)
+                assert_allclose_td(r0, r1)
+                assert_allclose_td(r1, r2)
+            finally:
+                if not env.is_closed:
+                    env.close()
+                del env
+                gc.collect()
 
 
 @implement_for("gym", None, "0.26")
