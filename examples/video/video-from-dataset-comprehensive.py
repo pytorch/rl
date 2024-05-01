@@ -23,18 +23,26 @@ from torchrl.record import CSVLogger, VideoRecorder
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--source",
-    default="Minari",
+    default="GenDGRL",
     choices=["OpenX", "Atari", "VD4RL", "GenDGRL", "Roboset", "Minari"],
 )
 parser.add_argument(
     "--dataset",
-    default="kitchen-complete-v1",
+    default="ninja-1M_E",
     choices=[
+        # OpenX
         "cmu_stretch",
+        "stanford_robocook_converted_externally_to_rlds",
+        # Atari
         "Pong/5",
-        "main/walker_walk/random/64px",
+        # VD4RL
+        "main/walker_walk/expert/64px",
+        # GenDGRL
         "bigfish-1M_E",
+        "ninja-1M_E",
+        # Roboset
         "DAPG(human)/door_v2d-v1",
+        # Minari
         "kitchen-complete-v1",
     ],
 )
@@ -51,6 +59,7 @@ if args.source == "OpenX":
         num_slices=num_slices,
         batch_size=128,
         strict_length=False,
+        pad=0,
         transform=t,
     )
 elif args.source == "Atari":
