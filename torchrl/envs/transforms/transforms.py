@@ -6988,7 +6988,9 @@ class VecGymEnvTransform(Transform):
         if (
             reset is not done
             and (reset != done).any()
-            # and (not reset.all() or not reset.any())
+            # it can happen that all are reset, in which case
+            # it's fine (doesn't need to match done)
+            and not reset.all()
         ):
             raise RuntimeError(
                 "Cannot partially reset a gym(nasium) async env with a "
@@ -7002,11 +7004,13 @@ class VecGymEnvTransform(Transform):
             if saved_next is None:
                 if reset.all():
                     # We're fine: this means that a full reset was passed and the
-                    # env will be manually reset
+                    # env was manually reset
                     tensordict_reset.pop(self.final_name, None)
                     return tensordict_reset
-                raise RuntimeError("Did not find a saved tensordict while the reset mask was "
-                                   f"not empty: reset={reset}. Done was {done}.")
+                raise RuntimeError(
+                    "Did not find a saved tensordict while the reset mask was "
+                    f"not empty: reset={reset}. Done was {done}."
+                )
             # reset = reset.view(tensordict.shape)
             # we have a data container from the previous call to step
             # that contains part of the observation we need.

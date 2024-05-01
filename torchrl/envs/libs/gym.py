@@ -1154,13 +1154,18 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         if self._is_batched:
             # batched (aka 'vectorized') env reset is a bit special: envs are
             # automatically reset. What we do here is just to check if _reset
-            # is present. If it is not, we just reset. Otherwise we just skip.
+            # is present. If it is not, we just reset. Otherwise, we just skip.
             if tensordict is None:
-                return super()._reset(tensordict)
-            reset = tensordict.pop("_reset", None)
-            if reset is None:
-                return super()._reset(tensordict)
-            elif reset is not None and not reset.all():
+                return super()._reset(tensordict, **kwargs)
+            reset = tensordict.get("_reset", None)
+            if reset is not None:
+                # we must copy the tensordict because the transform
+                # expects a tuple (tensordict, tensordict_reset) where the
+                # first still carries a _reset
+                tensordict = tensordict.exclude("_reset")
+            if reset is None or reset.all():
+                return super()._reset(tensordict, **kwargs)
+            else:
                 return tensordict
         return super()._reset(tensordict, **kwargs)
 
