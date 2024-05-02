@@ -13,7 +13,7 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
@@ -266,6 +266,16 @@ class SACLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
+
+    actor_network: TensorDictModule
+    qvalue_network: TensorDictModule
+    value_network: TensorDictModule | None
+    actor_network_params: TensorDictParams
+    qvalue_network_params: TensorDictParams
+    value_network_params: TensorDictParams | None
+    target_actor_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
+    target_value_network_params: TensorDictParams | None
 
     def __init__(
         self,
@@ -973,6 +983,16 @@ class DiscreteSACLoss(LossModule):
         "alpha",
         "entropy",
     ]
+
+    actor_network: TensorDictModule
+    qvalue_network: TensorDictModule
+    value_network: TensorDictModule | None
+    actor_network_params: TensorDictParams
+    qvalue_network_params: TensorDictParams
+    value_network_params: TensorDictParams | None
+    target_actor_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
+    target_value_network_params: TensorDictParams | None
 
     def __init__(
         self,

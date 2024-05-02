@@ -215,6 +215,13 @@ class ReinforceLoss(LossModule):
     default_value_estimator = ValueEstimators.GAE
     out_keys = ["loss_actor", "loss_value"]
 
+    actor_network: TensorDictModule
+    critic_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    critic_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_critic_network_params: TensorDictParams
+
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._tensor_keys = cls._AcceptedKeys()

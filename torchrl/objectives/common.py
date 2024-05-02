@@ -217,6 +217,16 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 will carry gradients as expected.
 
         """
+        for name in (
+            module_name,
+            module_name + "_params",
+            "target_" + module_name + "_params",
+        ):
+            if name not in self.__class__.__annotations__.keys():
+                warnings.warn(
+                    f"The name {name} wasn't part of the annotations ({self.__class__.__annotations__.keys()}). Make sure it is present in the definition class."
+                )
+
         if kwargs:
             raise TypeError(f"Unrecognised keyword arguments {list(kwargs.keys())}")
         # To make it robust to device casting, we must register list of
@@ -289,13 +299,9 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
         setattr(self, param_name, params)
 
-        # set the functional module: we need to convert the params to non-differentiable params
-        # otherwise they will appear twice in parameters
-        with params.apply(
-            self._make_meta_params, device=torch.device("meta"), filter_empty=False
-        ).to_module(module):
-            # avoid buffers and params being exposed
-            self.__dict__[module_name] = deepcopy(module)
+        # Set the module in the __dict__ directly to avoid listing its params
+        # A deepcopy with meta device could be used but that assumes that the model is copyable!
+        self.__dict__[module_name] = module
 
         name_params_target = "target_" + module_name
         if create_target_params:
