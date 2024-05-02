@@ -1546,10 +1546,19 @@ class terminal_obs_reader(BaseInfoDictReader):
     def __call__(self, info_dict, tensordict):
         terminal_obs = info_dict.get(self.backend_key[self.backend], None)
         terminal_info = info_dict.get(self.backend_info_key[self.backend], None)
-        if terminal_obs is not None:
+        if terminal_info is not None:
+            # terminal_info is a list of items that can be None or not
+            # If they're not None, they are a dict of values that we want to put in a root dict
+            keys = set()
+            for info in terminal_info:
+                if info is None:
+                    continue
+                keys = keys.union(info.keys())
+            else:
+                terminal_info = {}
             terminal_info = {
-                key: np.stack([info[key] for info in terminal_info])
-                for key in terminal_info[0].keys()
+                key: [info[key] if info is not None else info for info in terminal_info]
+                for key in keys
             }
         else:
             terminal_info = {}
