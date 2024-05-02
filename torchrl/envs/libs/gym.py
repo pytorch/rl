@@ -1554,8 +1554,6 @@ class terminal_obs_reader(BaseInfoDictReader):
                 if info is None:
                     continue
                 keys = keys.union(info.keys())
-            else:
-                terminal_info = {}
             terminal_info = {
                 key: [info[key] if info is not None else info for info in terminal_info]
                 for key in keys
