@@ -311,8 +311,8 @@ class DQNLoss(LossModule):
 
         """
         td_copy = tensordict.clone(False)
-        with self.value_network_params.to_module(self.value_network):
-            self.value_network(td_copy)
+        # with self.value_network_params.to_module(self.value_network):
+        self.value_network(td_copy)
 
         action = tensordict.get(self.tensor_keys.action)
         pred_val = td_copy.get(self.tensor_keys.action_value)
