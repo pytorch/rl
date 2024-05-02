@@ -183,7 +183,7 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 # TorchRL API allows integrating various types of multi-agent environment flavours.
 # Some examples include environments with shared or individual agent rewards, done flags, and observations.
 # For more information on how the multi-agent environments API works in TorchRL, you can check out the dedicated
-# `doc section <https://pytorch.org/rl/reference/envs.html#multi-agent-environments>`_.
+# :ref:`doc section <MARL-environment-API>`_.
 #
 # The VMAS simulator, in particular, models agents with individual rewards, info, observations, and actions, but
 # with a collective done flag.
@@ -784,7 +784,7 @@ plt.show()
 #
 # If you are interested in creating or wrapping your own multi-agent environments in TorchRL,
 # you can check out the dedicated
-# `doc section <https://pytorch.org/rl/reference/envs.html#multi-agent-environments>`_.
+# :ref:`doc section <MARL-environment-API>`.
 #
 # Finally, you can modify the parameters of this tutorial to try many other configurations and scenarios
 # to become a MARL master.
