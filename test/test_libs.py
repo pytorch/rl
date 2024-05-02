@@ -1104,10 +1104,10 @@ class TestGym:
                     self.dim = dim
                     self.use_termination = use_termination
                     self.observation_space = gym_backend("spaces").Box(
-                        low=-np.inf, high=np.inf, shape=(self.dim,)
+                        low=-np.inf, high=np.inf, shape=(self.dim,), dtype=np.float32
                     )
                     self.action_space = gym_backend("spaces").Box(
-                        low=-np.inf, high=np.inf, shape=(1,)
+                        low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32
                     )
                     self.max_steps = max_steps
 
@@ -1118,7 +1118,9 @@ class TestGym:
                     return self.state.copy()
 
                 def reset(self, seed=0, options=None):
-                    self.state = np.zeros(self.observation_space.shape)
+                    self.state = np.zeros(
+                        self.observation_space.shape, dtype=np.float32
+                    )
                     observation = self._get_obs()
                     info = self._get_info()
                     assert (observation < self.max_steps).all()
@@ -1197,6 +1199,12 @@ class TestGym:
                 r2 = env.rollout(10, break_when_any_done=False)
                 assert_allclose_td(r0, r1)
                 assert_allclose_td(r1, r2)
+                for r in (r0, r1, r2):
+                    torch.testing.assert_close(r["field1"], r["observation"].pow(2))
+                    torch.testing.assert_close(
+                        r["next", "field1"], r["next", "observation"].pow(2)
+                    )
+
             finally:
                 if not env.is_closed:
                     env.close()

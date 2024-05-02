@@ -49,6 +49,8 @@ class default_info_dict_reader(BaseInfoDictReader):
             correspondent key to form a :class:`torchrl.data.CompositeSpec`.
             If not provided, a composite spec with :class:`~torchrl.data.UnboundedContinuousTensorSpec`
             specs will lazyly be created.
+        ignore_private (bool, optional): If ``True``, private infos (starting with
+            an underscore) will be ignored. Defaults to ``True``.
 
     In cases where keys can be directly written to a tensordict (mostly if they abide to the
     tensordict shape), one simply needs to indicate the keys to be registered during
@@ -74,7 +76,9 @@ class default_info_dict_reader(BaseInfoDictReader):
         | Dict[str, TensorSpec]
         | CompositeSpec
         | None = None,
+        ignore_private: bool = True,
     ):
+        self.ignore_private = ignore_private
         self._lazy = False
         if keys is None:
             self._lazy = True
@@ -113,11 +117,17 @@ class default_info_dict_reader(BaseInfoDictReader):
         keys = self.keys
         if keys is None:
             keys = info_dict.keys()
+            if self.ignore_private:
+                keys = [key for key in keys if not key.startswith("_")]
             self.keys = keys
         info_spec = None if self.info_spec is not None else CompositeSpec()
         for key in keys:
             if key in info_dict:
-                tensordict.set(key, info_dict[key])
+                if info_dict[key].dtype == np.dtype("O"):
+                    val = np.stack(info_dict[key])
+                else:
+                    val = info_dict[key]
+                tensordict.set(key, val)
                 if info_spec is not None:
                     val = tensordict.get(key)
                     info_spec[key] = UnboundedContinuousTensorSpec(
@@ -422,7 +432,9 @@ class GymLikeEnv(_EnvWrapper):
         ...
 
     def set_info_dict_reader(
-        self, info_dict_reader: BaseInfoDictReader | None = None
+        self,
+        info_dict_reader: BaseInfoDictReader | None = None,
+        ignore_private: bool = True,
     ) -> GymLikeEnv:
         """Sets an info_dict_reader function.
 
@@ -436,6 +448,8 @@ class GymLikeEnv(_EnvWrapper):
                 This function should modify the tensordict in-place. If none is
                 provided, :class:`~torchrl.envs.gym_like.default_info_dict_reader`
                 will be used.
+            ignore_private (bool, optional): If ``True``, private infos (starting with
+                an underscore) will be ignored. Defaults to ``True``.
 
         Returns: the same environment with the dict_reader registered.
 
@@ -456,7 +470,7 @@ class GymLikeEnv(_EnvWrapper):
 
         """
         if info_dict_reader is None:
-            info_dict_reader = default_info_dict_reader()
+            info_dict_reader = default_info_dict_reader(ignore_private=ignore_private)
         self.info_dict_reader.append(info_dict_reader)
         if isinstance(info_dict_reader, BaseInfoDictReader):
             # if we have a BaseInfoDictReader, we know what the specs will be
@@ -481,7 +495,7 @@ class GymLikeEnv(_EnvWrapper):
 
         return self
 
-    def auto_register_info_dict(self):
+    def auto_register_info_dict(self, ignore_private: bool = True):
         """Automatically registers the info dict.
 
         It is assumed that all the information contained in the info dict can be registered as numerical values
@@ -494,6 +508,10 @@ class GymLikeEnv(_EnvWrapper):
         This method requires running a few iterations in the environment to
         manually check that the behaviour matches expectations.
 
+        Args:
+            ignore_private (bool, optional): If ``True``, private infos (starting with
+                an underscore) will be ignored. Defaults to ``True``.
+
         Examples:
             >>> from torchrl.envs import GymEnv
             >>> env = GymEnv("HalfCheetah-v4")
@@ -504,7 +522,7 @@ class GymLikeEnv(_EnvWrapper):
 
         if self.info_dict_reader:
             raise RuntimeError("The environment already has an info-dict reader.")
-        self.set_info_dict_reader()
+        self.set_info_dict_reader(ignore_private=ignore_private)
         try:
             check_env_specs(self)
             return self
