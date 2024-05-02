@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from typing import Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import dispatch
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 
 from torch import distributions as d
@@ -71,6 +71,10 @@ class OnlineDTLoss(LossModule):
         action_pred: NestedKey = "action"
 
     default_keys = _AcceptedKeys()
+
+    actor_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
 
     def __init__(
         self,
@@ -277,6 +281,10 @@ class DTLoss(LossModule):
         action_pred: NestedKey = "action"
 
     default_keys = _AcceptedKeys()
+
+    actor_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
 
     def __init__(
         self,
