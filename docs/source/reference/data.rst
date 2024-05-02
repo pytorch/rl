@@ -24,6 +24,8 @@ widely used replay buffers:
 Composable Replay Buffers
 -------------------------
 
+.. _ref_buffers:
+
 We also give users the ability to compose a replay buffer.
 We provide a wide panel of solutions for replay buffer usage, including support for
 almost any data type; storage in memory, on device or on physical memory;
@@ -795,6 +797,8 @@ such that they can be stacked together during sampling.
 
 TensorSpec
 ----------
+
+.. _ref_specs:
 
 The `TensorSpec` parent class and subclasses define the basic properties of observations and actions in TorchRL, such
 as shape, device, dtype and domain.

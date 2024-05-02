@@ -35,7 +35,7 @@ TorchRL trainer: A DQN example
 # - how to build an environment in TorchRL, including transforms (e.g. data
 #   normalization, frame concatenation, resizing and turning to grayscale)
 #   and parallel execution. Unlike what we did in the
-#   `DDPG tutorial <https://pytorch.org/rl/tutorials/coding_ddpg.html>`_, we
+#   :ref:`DDPG tutorial <coding_ddpg>`, we
 #   will normalize the pixels and not the state vector.
 # - how to design a :class:`~torchrl.modules.QValueActor` object, i.e. an actor
 #   that estimates the action values and picks up the action with the highest
@@ -46,7 +46,7 @@ TorchRL trainer: A DQN example
 # - and finally how to evaluate your model.
 #
 # **Prerequisites**: We encourage you to get familiar with torchrl through the
-# `PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>`_ first.
+# :ref:`PPO tutorial <coding_ppo>` first.
 #
 # DQN
 # ---
@@ -393,8 +393,8 @@ def get_replay_buffer(buffer_size, n_optim, batch_size):
 # Data collector
 # ~~~~~~~~~~~~~~
 #
-# As in `PPO <https://pytorch.org/rl/tutorials/coding_ppo.html>`_ and
-# `DDPG <https://pytorch.org/rl/tutorials/coding_ddpg.html>`_, we will be using
+# As in :ref:`PPO <coding_ppo>` and
+# :ref:`DDPG <coding_ddpg>`, we will be using
 # a data collector as a dataloader in the outer loop.
 #
 # We choose the following configuration: we will be running a series of
@@ -691,7 +691,7 @@ trainer.register_op("post_steps", actor_explore[1].step, frames=frames_per_batch
 #   In this case, a location must be explicitly passed (). This method gives
 #   more control over the location of the hook but it also requires more
 #   understanding of the Trainer mechanism.
-#   Check the `trainer documentation <https://pytorch.org/rl/reference/trainers.html>`_
+#   Check the :ref:`trainer documentation <ref_trainers>`
 #   for a detailed description of the trainer hooks.
 #
 trainer.register_op("post_optim", target_net_updater.step)
@@ -768,7 +768,7 @@ print_csv_files_in_folder(logger.experiment.log_dir)
 # - A prioritized replay buffer could also be used. This will give a
 #   higher priority to samples that have the worst value accuracy.
 #   Learn more on the
-#   `replay buffer section <https://pytorch.org/rl/reference/data.html#composable-replay-buffers>`_
+#   :ref:`replay buffer section <ref_buffers>`
 #   of the documentation.
 # - A distributional loss (see :class:`~torchrl.objectives.DistributionalDQNLoss`
 #   for more information).
