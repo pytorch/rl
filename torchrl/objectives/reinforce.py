@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
