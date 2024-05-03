@@ -4511,6 +4511,11 @@ class TensorDictPrimer(Transform):
         tensor([[1., 1., 1.],
                 [1., 1., 1.]])
 
+    .. note:: Some TorchRL modules rely on specific keys being present in the environment TensorDicts,
+        like :class:`~torchrl.modules.models.LSTM` or :class:`~torchrl.modules.models.GRU`.
+        To facilitate this process, the method :func:`~torchrl.models.utils.get_primers_from_module`
+        automatically checks for required primer transforms in a module and its submodules and
+        generates them.
     """
 
     def __init__(
@@ -4696,15 +4701,18 @@ class TensorDictPrimer(Transform):
         spec shape is assumed to match the tensordict's.
 
         """
-        shape = (
-            ()
-            if (not self.parent or self.parent.batch_locked)
-            else tensordict.batch_size
-        )
         _reset = _get_reset(self.reset_key, tensordict)
         if _reset.any():
             for key, spec in self.primers.items(True, True):
+                if spec.shape[: len(tensordict.batch_size)] != tensordict.batch_size:
+                    expanded_spec = self._expand_shape(spec)
+                    self.primers[key] = spec = expanded_spec
                 if self.random:
+                    shape = (
+                        ()
+                        if (not self.parent or self.parent.batch_locked)
+                        else tensordict.batch_size
+                    )
                     value = spec.rand(shape)
                 else:
                     value = self.default_value[key]
