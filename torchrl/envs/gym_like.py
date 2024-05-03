@@ -120,6 +120,7 @@ class default_info_dict_reader(BaseInfoDictReader):
             if self.ignore_private:
                 keys = [key for key in keys if not key.startswith("_")]
             self.keys = keys
+        # create an info_spec only if there is none
         info_spec = None if self.info_spec is not None else CompositeSpec()
         for key in keys:
             if key in info_dict:
@@ -133,6 +134,12 @@ class default_info_dict_reader(BaseInfoDictReader):
                     info_spec[key] = UnboundedContinuousTensorSpec(
                         val.shape, device=val.device, dtype=val.dtype
                     )
+            elif self.info_spec is not None:
+                # Fill missing with 0s
+                tensordict.set(key, self.info_spec[key].zero())
+            else:
+                raise KeyError(f"The key {key} could not be found or inferred.")
+        # set the info spec if there wasn't any - this should occur only once in this class
         if info_spec is not None:
             if tensordict.device is not None:
                 info_spec = info_spec.to(tensordict.device)
