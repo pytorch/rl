@@ -576,6 +576,9 @@ class _AsyncMeta(_EnvPostInit):
                     )
                     add_info_dict = False
             if add_info_dict:
+                # First register the basic info dict reader
+                instance.auto_register_info_dict()
+                # Make it so that infos are properly cast where they should at done time
                 instance.set_info_dict_reader(
                     terminal_obs_reader(instance.observation_spec, backend=backend)
                 )
@@ -915,7 +918,10 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 f"Calling env.seed from now on."
             )
             self._seed_calls_reset = False
-            self._env.seed(seed=seed)
+            try:
+                self._env.seed(seed=seed)
+            except AttributeError as err2:
+                raise err from err2
 
     @implement_for("gymnasium")
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
@@ -1154,14 +1160,19 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         if self._is_batched:
             # batched (aka 'vectorized') env reset is a bit special: envs are
             # automatically reset. What we do here is just to check if _reset
-            # is present. If it is not, we just reset. Otherwise we just skip.
+            # is present. If it is not, we just reset. Otherwise, we just skip.
             if tensordict is None:
-                return super()._reset(tensordict)
+                return super()._reset(tensordict, **kwargs)
             reset = tensordict.get("_reset", None)
-            if reset is None:
-                return super()._reset(tensordict)
-            elif reset is not None:
-                return tensordict.exclude("_reset")
+            if reset is not None:
+                # we must copy the tensordict because the transform
+                # expects a tuple (tensordict, tensordict_reset) where the
+                # first still carries a _reset
+                tensordict = tensordict.exclude("_reset")
+            if reset is None or reset.all():
+                return super()._reset(tensordict, **kwargs)
+            else:
+                return tensordict
         return super()._reset(tensordict, **kwargs)
 
 
@@ -1486,12 +1497,15 @@ class terminal_obs_reader(BaseInfoDictReader):
         "sb3": "terminal_observation",
         "gym": "final_observation",
     }
+    backend_info_key = {
+        "sb3": "terminal_info",
+        "gym": "final_info",
+    }
 
     def __init__(self, observation_spec: CompositeSpec, backend, name="final"):
         self.name = name
         self._info_spec = CompositeSpec(
-            {(self.name, key): item.clone() for key, item in observation_spec.items()},
-            shape=observation_spec.shape,
+            {name: observation_spec.clone()}, shape=observation_spec.shape
         )
         self.backend = backend
 
@@ -1531,14 +1545,34 @@ class terminal_obs_reader(BaseInfoDictReader):
 
     def __call__(self, info_dict, tensordict):
         terminal_obs = info_dict.get(self.backend_key[self.backend], None)
-        for key, item in self.info_spec.items(True, True):
-            key = (key,) if isinstance(key, str) else key
-            final_obs_buffer = item.zero()
+        terminal_info = info_dict.get(self.backend_info_key[self.backend], None)
+        if terminal_info is not None:
+            # terminal_info is a list of items that can be None or not
+            # If they're not None, they are a dict of values that we want to put in a root dict
+            keys = set()
+            for info in terminal_info:
+                if info is None:
+                    continue
+                keys = keys.union(info.keys())
+            terminal_info = {
+                key: [info[key] if info is not None else info for info in terminal_info]
+                for key in keys
+            }
+        else:
+            terminal_info = {}
+        obs_dict = terminal_info.copy()
+        if terminal_obs is not None:
+            obs_dict["observation"] = terminal_obs
+        for key, terminal_obs in obs_dict.items():
+            spec = self.info_spec[self.name, key]
+            # for key, item in self.info_spec.items(True, True):
+            #     key = (key,) if isinstance(key, str) else key
+            final_obs_buffer = spec.zero()
             if terminal_obs is not None:
                 for i, obs in enumerate(terminal_obs):
                     # writes final_obs inplace with terminal_obs content
-                    self._read_obs(obs, key[-1], final_obs_buffer, index=i)
-            tensordict.set(key, final_obs_buffer)
+                    self._read_obs(obs, key, final_obs_buffer, index=i)
+            tensordict.set((self.name, key), final_obs_buffer)
         return tensordict
 
 
