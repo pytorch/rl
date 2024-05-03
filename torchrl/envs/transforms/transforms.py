@@ -7000,13 +7000,13 @@ class VecGymEnvTransform(Transform):
         # if not reset.any(), we don't need to do anything.
         # if reset.all(), we don't either (bc GymWrapper will call a plain reset).
         if reset is not None and reset.any():
+            if reset.all():
+                # We're fine: this means that a full reset was passed and the
+                # env was manually reset
+                tensordict_reset.pop(self.final_name, None)
+                return tensordict_reset
             saved_next = self._memo["saved_next"]
             if saved_next is None:
-                if reset.all():
-                    # We're fine: this means that a full reset was passed and the
-                    # env was manually reset
-                    tensordict_reset.pop(self.final_name, None)
-                    return tensordict_reset
                 raise RuntimeError(
                     "Did not find a saved tensordict while the reset mask was "
                     f"not empty: reset={reset}. Done was {done}."
