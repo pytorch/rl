@@ -498,8 +498,8 @@ If you would like to contribute to new features, check our [call for contributio
 A series of [examples](examples/) are provided with an illustrative purpose:
 - [DQN](sota-implementations/dqn)
 - [DDPG](sota-implementations/ddpg/ddpg.py)
-- [IQL](sota-implementations/iql/iql.py)
-- [CQL](sota-implementations/iql/cql.py)
+- [IQL](sota-implementations/iql/iql_offline.py)
+- [CQL](sota-implementations/cql/cql_offline.py)
 - [TD3](sota-implementations/td3/td3.py)
 - [A2C](examples/a2c_old/a2c.py)
 - [PPO](sota-implementations/ppo/ppo.py)
