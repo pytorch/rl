@@ -511,7 +511,7 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 
 and many more to come!
 
-Check the [examples markdown](sota-implementations/SOTA-IMPLEMENTATIONS.md) directory for more details 
+Check the [examples](sota-implementations/) directory for more details 
 about handling the various configuration settings.
 
 We also provide [tutorials and demos](https://pytorch.org/rl/#tutorials) that give a sense of
