@@ -29,13 +29,13 @@ The code is aimed at supporting research in RL. Most of it is written in python 
 This repo attempts to align with the existing pytorch ecosystem libraries in that it has a dataset pillar ([torchrl/envs](https://github.com/pytorch/rl/blob/main/torchrl/envs)), [transforms](https://github.com/pytorch/rl/blob/main/torchrl/envs/transforms), [models](https://github.com/pytorch/rl/blob/main/torchrl/modules), data utilities (e.g. collectors and containers), etc.
 TorchRL aims at having as few dependencies as possible (python standard library, numpy and pytorch). Common environment libraries (e.g. OpenAI gym) are only optional.
 
-On the low-level end, torchrl comes with a set of highly re-usable functionals for [cost functions](https://github.com/pytorch/rl/blob/main/torchrl/objectives/costs), [returns](https://github.com/pytorch/rl/blob/main/torchrl/objectives/returns) and data processing.
+On the low-level end, torchrl comes with a set of highly re-usable functionals for cost functions, returns and data processing.
 
 TorchRL aims at (1) a high modularity and (2) good runtime performance. Read the [full paper](https://arxiv.org/abs/2306.00577) for a more curated description of the library.
 
 ## Getting started
 
-Check our [Getting Started tutorials](https://pytorch.org/rl/index.html#getting-started) for quickly ramp up with the basic 
+Check our [Getting Started tutorials](https://pytorch.org/rl/stable/index.html#getting-started) for quickly ramp up with the basic 
 features of the library!
 
 ## Documentation and knowledge base
@@ -44,7 +44,7 @@ The TorchRL documentation can be found [here](https://pytorch.org/rl).
 It contains tutorials and the API reference.
 
 TorchRL also provides a RL knowledge base to help you debug your code, or simply
-learn the basics of RL. Check it out [here](https://pytorch.org/rl/reference/knowledge_base.html).
+learn the basics of RL. Check it out [here](https://pytorch.org/rl/stable/reference/knowledge_base.html).
 
 We have some introductory videos for you to get to know the library better, check them out:
 
@@ -138,7 +138,7 @@ lines of code*!
   ```
   </details>
 
-Here is an example of how the [environment API](https://pytorch.org/rl/reference/envs.html)
+Here is an example of how the [environment API](https://pytorch.org/rl/stable/reference/envs.html)
 relies on tensordict to carry data from one function to another during a rollout
 execution:
 ![Alt Text](https://github.com/pytorch/rl/blob/main/docs/source/_static/img/rollout.gif)
@@ -274,8 +274,8 @@ And it is `functorch` and `torch.compile` compatible!
   The [batched environments](https://github.com/pytorch/rl/blob/main/torchrl/envs/batched_envs.py) containers allow parallel execution<sup>(2)</sup>.
   A common PyTorch-first class of [tensor-specification class](https://github.com/pytorch/rl/blob/main/torchrl/data/tensor_specs.py) is also provided.
   TorchRL's environments API is simple but stringent and specific. Check the 
-  [documentation](https://pytorch.org/rl/reference/envs.html)
-  and [tutorial](https://pytorch.org/rl/tutorials/pendulum.html) to learn more!
+  [documentation](https://pytorch.org/rl/stable/reference/envs.html)
+  and [tutorial](https://pytorch.org/rl/stable/tutorials/pendulum.html) to learn more!
   <details>
     <summary>Code</summary>
 
@@ -498,8 +498,8 @@ If you would like to contribute to new features, check our [call for contributio
 A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are provided with an illustrative purpose:
 - [DQN](https://github.com/pytorch/rl/blob/main/sota-implementations/dqn)
 - [DDPG](https://github.com/pytorch/rl/blob/main/sota-implementations/ddpg/ddpg.py)
-- [IQL](https://github.com/pytorch/rl/blob/main/sota-implementations/iql/iql.py)
-- [CQL](https://github.com/pytorch/rl/blob/main/sota-implementations/iql/cql.py)
+- [IQL](https://github.com/pytorch/rl/blob/main/sota-implementations/iql/iql_offline.py)
+- [CQL](https://github.com/pytorch/rl/blob/main/sota-implementations/cql/cql_offline.py)
 - [TD3](https://github.com/pytorch/rl/blob/main/sota-implementations/td3/td3.py)
 - [A2C](https://github.com/pytorch/rl/blob/main/examples/a2c_old/a2c.py)
 - [PPO](https://github.com/pytorch/rl/blob/main/sota-implementations/ppo/ppo.py)
@@ -511,10 +511,10 @@ A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are pr
 
 and many more to come!
 
-Check the [examples markdown](https://github.com/pytorch/rl/blob/main/sota-implementations/SOTA-IMPLEMENTATIONS.md) directory for more details 
+Check the [examples](https://github.com/pytorch/rl/blob/main/sota-implementations/) directory for more details 
 about handling the various configuration settings.
 
-We also provide [tutorials and demos](https://pytorch.org/rl/#tutorials) that give a sense of
+We also provide [tutorials and demos](https://pytorch.org/rl/stable#tutorials) that give a sense of
 what the library can do.
 
 ## Citation
