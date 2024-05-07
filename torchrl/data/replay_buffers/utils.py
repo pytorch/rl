@@ -155,19 +155,40 @@ class TED2Flat:
 
     """
 
-    def __init__(self, done_key=("next", "done")):
+    def __init__(self, done_key=("next", "done"), shift_key="shift", is_full_key="is_full"):
         self.done_key = done_key
+        self.shift_key = shift_key
+        self.is_full_key = is_full_key
+    @property
+    def shift(self):
+        return self._shift
+    @shift.setter
+    def shift(self, value: int):
+        self._shift = value
+    @property
+    def is_full(self):
+        return self._is_full
+    @is_full.setter
+    def is_full(self, value: int):
+        self._is_full = value
 
     def __call__(self, data: TensorDictBase):
         # Get the done state
-        done = data.get(self.done_key).clone()
+        shift = getattr(self, "shift", 0)
+        is_full = getattr(self, "is_full", False)
+        done = data.get(self.done_key)
         done = done.squeeze(-1)
-        done[..., -1] = True
+        if not is_full:
+            # shift is the cursor place
+            done[..., shift-1] = True
+        else:
+            done = done.roll(shift, dims=0)
+            done[..., -1] = True
+
         # capture for each item in data where the observation should be written
         idx = torch.arange(data.shape[0])
         idx_done = (idx + done.cumsum(0))[done]
         idx += torch.nn.functional.pad(done, [1, 0])[:-1].cumsum(0)
-        # data["custom", "idx_obs"] = idx
 
         # Get the keys that require extra storage
         keys_to_expand = set(data.get("next").keys(True, True)) - {
@@ -186,22 +207,141 @@ class TED2Flat:
                 entry = data.get(("next", key))
             else:
                 entry = data.get(key)
+            if is_full:
+                entry = entry.roll(shift, dims=0)
 
             if key in keys_to_expand:
                 shape = torch.Size([idx.max() + 2, *entry.shape[1:]])
                 dtype = entry.dtype
                 empty = MemoryMappedTensor.empty(shape=shape, dtype=dtype)
                 empty[idx] = entry
-                empty[idx_done] = data.get(("next", key))[done]
+                shifted_next = data.get(("next", key))
+                if is_full:
+                    shifted_next = shifted_next.roll(shift, dims=0)
+                empty[idx_done] = shifted_next[done]
                 entry = empty
             output.set(key, entry)
+        output.set_non_tensor(self.is_full_key, is_full)
+        output.set_non_tensor(self.shift_key, shift)
         return output
+
+
+
+class Flat2TED:
+    """A storage loading hook to deserialize flattened TED data to TED format.
+
+    Examples:
+        >>> import tempfile
+        >>>
+        >>> from tensordict import TensorDict
+        >>>
+        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.data import ReplayBuffer, TED2Flat, LazyMemmapStorage, Flat2TED
+        >>> from torchrl.envs import GymEnv
+        >>> import torch
+        >>>
+        >>> env = GymEnv("CartPole-v1")
+        >>> env.set_seed(0)
+        >>> torch.manual_seed(0)
+        >>> collector = SyncDataCollector(env, policy=env.rand_step, total_frames=200, frames_per_batch=200)
+        >>> rb = ReplayBuffer(storage=LazyMemmapStorage(200))
+        >>> rb.register_save_hook(TED2Flat())
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     for i, data in enumerate(collector):
+        ...         rb.extend(data)
+        ...         rb.dumps(tmpdir)
+        ...     # load the data to represent it
+        ...     td = TensorDict.load(tmpdir + "/storage/")
+        ...
+        ...     rb_load = ReplayBuffer(storage=LazyMemmapStorage(200))
+        ...     rb_load.register_load_hook(Flat2TED())
+        ...     rb_load.load(tmpdir)
+        ...     print("storage after loading", rb_load[:])
+        ...     assert (rb[:] == rb_load[:]).all()
+        storage after loading TensorDict(
+            fields={
+                action: MemoryMappedTensor(shape=torch.Size([200, 2]), device=cpu, dtype=torch.int64, is_shared=False),
+                collector: TensorDict(
+                    fields={
+                        traj_ids: MemoryMappedTensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([200]),
+                    device=cpu,
+                    is_shared=False),
+                done: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: MemoryMappedTensor(shape=torch.Size([200, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([200]),
+                    device=cpu,
+                    is_shared=False),
+                observation: MemoryMappedTensor(shape=torch.Size([200, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([200]),
+            device=cpu,
+            is_shared=False)
+
+
+    """
+
+    def __init__(self, done_key="done", shift_key="shift", is_full_key="is_full"):
+        self.done_key = done_key
+        self.shift_key = shift_key
+        self.is_full_key = is_full_key
+
+    def __call__(self, data):
+        done = data.get(self.done_key)
+        done = done.clone()
+        shift = data.get_non_tensor(self.shift_key, default=None)
+        is_full = data.get_non_tensor(self.is_full_key, default=None)
+
+        nsteps = done.shape[0]
+
+        # capture for each item in data where the observation should be written
+        idx = torch.arange(done.shape[0])
+        root_idx = idx + torch.nn.functional.pad(done.squeeze(-1), [1, 0])[:-1].cumsum(
+            0
+        )
+        next_idx = root_idx + 1
+        print('next_idx[-10:]', next_idx[-10:])
+
+        out = TensorDict({}, [nsteps])
+        def maybe_roll(entry):
+            if is_full and shift is not None:
+                return entry.roll(-shift, dims=0)
+            return entry
+
+        root_idx = maybe_roll(root_idx)
+        next_idx = maybe_roll(next_idx)
+
+        for key, entry in data.items(True, True):
+            if entry.shape[0] == nsteps:
+                if key in ("done", "terminated", "truncated", "reward"):
+                    out["next", key] = entry
+                    if key != "reward":
+                        out[key] = torch.zeros_like(entry)
+                else:
+                    # action and similar
+                    out[key] = maybe_roll(entry)
+            else:
+                root_entry = entry[root_idx]
+                next_entry = entry[next_idx]
+                out["next", key] = next_entry
+                out[key] = root_entry
+        return out
 
 
 class TED2Nested(TED2Flat):
     def __call__(self, data: TensorDictBase):
+        shift = data.get_non_tensor(self.shift_key, default=None)
+
         # Get the done state
         done = data.get(self.done_key).clone()
+
         assert done.ndim == 2
         done = done.squeeze(-1)
         done[..., -1] = True
@@ -266,100 +406,6 @@ class TED2Nested(TED2Flat):
             entry = empty
             output.set(key, entry)
         return output
-
-
-class Flat2TED:
-    """A storage loading hook to deserialize flattened TED data to TED format.
-
-    Examples:
-        >>> import tempfile
-        >>>
-        >>> from tensordict import TensorDict
-        >>>
-        >>> from torchrl.collectors import SyncDataCollector
-        >>> from torchrl.data import ReplayBuffer, TED2Flat, LazyMemmapStorage, Flat2TED
-        >>> from torchrl.envs import GymEnv
-        >>> import torch
-        >>>
-        >>> env = GymEnv("CartPole-v1")
-        >>> env.set_seed(0)
-        >>> torch.manual_seed(0)
-        >>> collector = SyncDataCollector(env, policy=env.rand_step, total_frames=200, frames_per_batch=200)
-        >>> rb = ReplayBuffer(storage=LazyMemmapStorage(200))
-        >>> rb.register_save_hook(TED2Flat())
-        >>> with tempfile.TemporaryDirectory() as tmpdir:
-        ...     for i, data in enumerate(collector):
-        ...         rb.extend(data)
-        ...         rb.dumps(tmpdir)
-        ...     # load the data to represent it
-        ...     td = TensorDict.load(tmpdir + "/storage/")
-        ...
-        ...     rb_load = ReplayBuffer(storage=LazyMemmapStorage(200))
-        ...     rb_load.register_load_hook(Flat2TED())
-        ...     rb_load.load(tmpdir)
-        ...     print("storage after loading", rb_load[:])
-        ...     assert (rb[:] == rb_load[:]).all()
-        storage after loading TensorDict(
-            fields={
-                action: MemoryMappedTensor(shape=torch.Size([200, 2]), device=cpu, dtype=torch.int64, is_shared=False),
-                collector: TensorDict(
-                    fields={
-                        traj_ids: MemoryMappedTensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},
-                    batch_size=torch.Size([200]),
-                    device=cpu,
-                    is_shared=False),
-                done: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                next: TensorDict(
-                    fields={
-                        done: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                        observation: MemoryMappedTensor(shape=torch.Size([200, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                        reward: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-                        terminated: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                        truncated: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
-                    batch_size=torch.Size([200]),
-                    device=cpu,
-                    is_shared=False),
-                observation: MemoryMappedTensor(shape=torch.Size([200, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                terminated: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                truncated: MemoryMappedTensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
-            batch_size=torch.Size([200]),
-            device=cpu,
-            is_shared=False)
-
-
-    """
-
-    def __init__(self, done_key="done"):
-        self.done_key = done_key
-
-    def __call__(self, data):
-        done = data.get(self.done_key)
-        nsteps = done.shape[0]
-
-        # capture for each item in data where the observation should be written
-        idx = torch.arange(done.shape[0])
-        root_idx = idx + torch.nn.functional.pad(done.squeeze(-1), [1, 0])[:-1].cumsum(
-            0
-        )
-        next_idx = root_idx + 1
-
-        out = TensorDict({}, [nsteps])
-        for key, entry in data.items(True, True):
-            if entry.shape[0] == nsteps:
-                if key in ("done", "terminated", "truncated", "reward"):
-                    out["next", key] = entry
-                    if key != "reward":
-                        out[key] = torch.zeros_like(entry)
-                else:
-                    # action and similar
-                    out[key] = entry
-            else:
-                root_entry = entry[root_idx]
-                next_entry = entry[next_idx]
-                out["next", key] = next_entry
-                out[key] = root_entry
-        return out
-
 
 class Nested2TED(Flat2TED):
     def __call__(self, data):

@@ -61,7 +61,7 @@ class Storage:
 
     ndim = 1
     max_size: int
-    _default_checpointer: StorageCheckpointerBase
+    _default_checkpointer: StorageCheckpointerBase
 
     def __init__(
         self, max_size: int, checkpointer: StorageCheckpointerBase | None = None
@@ -76,7 +76,7 @@ class Storage:
     @checkpointer.setter
     def checkpointer(self, value: StorageCheckpointerBase | None) -> None:
         if value is None:
-            value = self._default_checpointer()
+            value = self._default_checkpointer()
         self._checkpointer = value
 
     @property
@@ -208,7 +208,7 @@ class ListStorage(Storage):
 
     """
 
-    _default_checpointer = ListStorageCheckpointer
+    _default_checkpointer = ListStorageCheckpointer
 
     def __init__(self, max_size: int):
         super().__init__(max_size)
@@ -378,7 +378,7 @@ class TensorStorage(Storage):
     """
 
     _storage = None
-    _default_checpointer = TensorStorageCheckpointer
+    _default_checkpointer = TensorStorageCheckpointer
 
     def __init__(
         self,
@@ -416,6 +416,7 @@ class TensorStorage(Storage):
             else "auto"
         )
         self._storage = storage
+        self._last_cursor = None
 
     @property
     def _len(self):
@@ -641,6 +642,8 @@ class TensorStorage(Storage):
         data: Union[TensorDictBase, torch.Tensor],
     ):
 
+        self._last_cursor = cursor
+
         if isinstance(data, list):
             # flip list
             try:
@@ -677,6 +680,8 @@ class TensorStorage(Storage):
         cursor: Union[int, Sequence[int], slice],
         data: Union[TensorDictBase, torch.Tensor],
     ):
+
+        self._last_cursor = cursor
 
         if isinstance(data, list):
             # flip list
@@ -844,7 +849,7 @@ class LazyTensorStorage(TensorStorage):
 
     """
 
-    _default_checpointer = TensorStorageCheckpointer
+    _default_checkpointer = TensorStorageCheckpointer
 
     def __init__(
         self,
@@ -957,7 +962,7 @@ class LazyMemmapStorage(LazyTensorStorage):
 
     """
 
-    _default_checpointer = TensorStorageCheckpointer
+    _default_checkpointer = TensorStorageCheckpointer
 
     def __init__(
         self,
@@ -1103,7 +1108,7 @@ class StorageEnsemble(Storage):
 
     """
 
-    _default_checpointer = StorageEnsembleCheckpointer
+    _default_checkpointer = StorageEnsembleCheckpointer
 
     def __init__(
         self,

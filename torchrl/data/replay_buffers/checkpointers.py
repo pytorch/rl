@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import abc
 import json
+import warnings
 from pathlib import Path
 
+import numpy as np
 import torch
 from tensordict import is_tensor_collection, PersistentTensorDict, TensorDict
 from tensordict.memmap import MemoryMappedTensor
@@ -177,6 +179,29 @@ class FlatStorageCheckpointer(TensorStorageCheckpointer):
         self._save_hooks = [TED2Flat()]
         self._load_hooks = [Flat2TED()]
 
+    def dumps(self, storage, path):
+
+        is_full = storage._is_full
+        last_cursor = storage._last_cursor
+        self._save_hooks[0].is_full = is_full
+        if last_cursor is None:
+            warnings.warn("las_cursor is None. The replay buffer "
+                              "may not be saved properly in this setting. To solve this issue, make "
+                              "sure the storage updates the _las_cursor value during calls to `set`.")
+        shift = self._get_shift_from_last_cursor(last_cursor)
+        self._save_hooks[0].shift = shift
+        return super().dumps(storage, path)
+
+    def _get_shift_from_last_cursor(self, last_cursor):
+        if isinstance(last_cursor, slice):
+            return last_cursor.stop + 1
+        if isinstance(last_cursor, int):
+            return last_cursor + 1
+        if isinstance(last_cursor, torch.Tensor):
+            return last_cursor.reshape(-1)[-1].item()+1
+        if isinstance(last_cursor, np.ndarray):
+            return last_cursor.reshape(-1)[-1].item()+1
+        raise ValueError(f"Unrecognised last_cursor type {type(last_cursor)}.")
 
 class NestedStorageCheckpointer(TensorStorageCheckpointer):
     """Saves the storage in a compact form, saving space on the TED format and using memory-mapped nested tensors.
