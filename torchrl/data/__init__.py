@@ -62,3 +62,4 @@ from .tensor_specs import (
     UnboundedDiscreteTensorSpec,
 )
 from .utils import check_no_exclusive_keys, consolidate_spec, contains_lazy_spec
+from .replay_buffers import FlatStorageCheckpointer, NestedStorageCheckpointer, StorageCheckpointerBase, StorageEnsembleCheckpointer, TensorStorageCheckpointer, ListStorageCheckpointer

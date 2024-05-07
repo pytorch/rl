@@ -5,7 +5,10 @@
 # import tree
 from __future__ import annotations
 
+import os
+import math
 import typing
+from pathlib import Path
 from typing import Any, Callable, Union
 
 import numpy as np
@@ -13,6 +16,12 @@ import torch
 from tensordict import MemoryMappedTensor, TensorDict, TensorDictBase
 
 from torch import Tensor
+from torchrl._utils import implement_for
+
+SINGLE_TENSOR_BUFFER_NAME = os.environ.get(
+    "SINGLE_TENSOR_BUFFER_NAME", "_-single-tensor-_"
+)
+
 
 INT_CLASSES_TYPING = Union[int, np.integer]
 if hasattr(typing, "get_args"):
@@ -187,6 +196,64 @@ class TED2Flat:
             output.set(key, entry)
         return output
 
+class TED2Nested(TED2Flat):
+    def __call__(self, data: TensorDictBase):
+        # Get the done state
+        done = data.get(self.done_key).clone()
+        assert done.ndim==2
+        done = done.squeeze(-1)
+        done[..., -1] = True
+        # Get the shapes
+        nz = done.nonzero()[:, 0]
+        traj_lengths = torch.cat([nz[:1]+1, nz.diff()])
+        assert traj_lengths.sum() == done.numel(), traj_lengths.sum()
+
+        # capture for each item in data where the observation should be written
+        idx = torch.arange(data.shape[0])
+        idx_done = (idx + done.cumsum(0))[done]
+        idx += torch.nn.functional.pad(done, [1, 0])[:-1].cumsum(0)
+        # data["custom", "idx_obs"] = idx
+
+        # Get the keys that require extra storage
+        keys_to_expand = set(data.get("next").keys(True, True)) - {
+            "terminated",
+            "done",
+            "truncated",
+            "reward",
+        }
+
+        # Create an output storage
+        output = TensorDict({}, batch_size=traj_lengths.shape[:1])
+        total_keys = data.exclude("next").keys(True, True)
+        total_keys = set(total_keys).union(set(data.get("next").keys(True, True)))
+        for key in total_keys:
+            if key in ("done", "truncated", "terminated", "reward"):
+                entry = data.get(("next", key))
+            else:
+                entry = data.get(key)
+
+            if key in keys_to_expand:
+                shape = torch.cat(
+                    [traj_lengths.unsqueeze(-1) + 1, torch.tensor(entry.shape[1:]).repeat(traj_lengths.numel(), 1)], -1)
+                non_nt_shape = torch.Size([idx.max() + 2, *entry.shape[1:]])
+            else:
+                shape = torch.cat([traj_lengths.unsqueeze(-1), torch.tensor(entry.shape[1:]).repeat(traj_lengths.numel(), 1)], -1)
+                non_nt_shape = entry.shape
+            dtype = entry.dtype
+            empty = MemoryMappedTensor.empty(shape=non_nt_shape, dtype=dtype)
+            if key in keys_to_expand:
+                empty[idx] = entry
+                empty[idx_done] = data.get(("next", key))[done]
+            else:
+                empty.untyped_storage().copy_(entry.untyped_storage())
+            # Get the storage of this data
+            storage = empty.untyped_storage()
+            # Make a MemoryMappedTensor out of the storage with the appropriate shape
+            empty = MemoryMappedTensor.from_storage(storage, shape=shape, dtype=dtype)
+            entry = empty
+            output.set(key, entry)
+        return output
+
 
 class Flat2TED:
     """A storage loading hook to deserialize flattened TED data to TED format.
@@ -279,3 +346,192 @@ class Flat2TED:
                 out["next", key] = next_entry
                 out[key] = root_entry
         return out
+
+class Nested2TED(Flat2TED):
+    def __call__(self, data):
+        # Get a flat representation of data
+        def flatten_het_dim(tensor):
+            shape = [tensor.size(i) for i in range(2, tensor.ndim)]
+            tensor = torch.tensor(tensor.untyped_storage(), dtype=tensor.dtype).view(-1, *shape)
+            return tensor
+        data = data.apply(flatten_het_dim, batch_size=[])
+        data.auto_batch_size_()
+        return super().__call__(data)
+
+class H5Split:
+    def __call__(self, data):
+        nzeros = int(math.ceil(math.log10(data.shape[0])))
+        return TensorDict({f"traj_{str(i).zfill(nzeros)}": _data for i, _data in enumerate(data.unbind(0))})
+
+class H5Combine:
+    def __call__(self, data):
+        values = [val for key, val in data.items() if key.startswith("traj")]
+        result = values[0].apply(lambda *x: torch.nested.nested_tensor(list(x)), *values[1:])
+        result.auto_batch_size_()
+        print('result', result)
+        return result
+
+@implement_for("torch", "2.3", None)
+def _path2str(path, default_name=None):
+    # Uses the Keys defined in pytree to build a path
+    from torch.utils._pytree import MappingKey, SequenceKey
+
+    if default_name is None:
+        default_name = SINGLE_TENSOR_BUFFER_NAME
+    if not path:
+        return default_name
+    if isinstance(path, tuple):
+        return "/".join([_path2str(_sub, default_name=default_name) for _sub in path])
+    if isinstance(path, MappingKey):
+        if not isinstance(path.key, (int, str, bytes)):
+            raise ValueError("Values must be of type int, str or bytes in PyTree maps.")
+        result = str(path.key)
+        if result == default_name:
+            raise RuntimeError(
+                "A tensor had the same identifier as the default name used when the buffer contains "
+                f"a single tensor (name={default_name}). This behaviour is not allowed. Please rename your "
+                f"tensor in the map/dict or set a new default name with the environment variable SINGLE_TENSOR_BUFFER_NAME."
+            )
+        return result
+    if isinstance(path, SequenceKey):
+        return str(path.idx)
+
+
+@implement_for("torch", None, "2.3")
+def _path2str(path, default_name=None):  # noqa: F811
+    raise RuntimeError
+
+
+def _save_pytree_common(tensor_path, path, tensor, metadata):
+    if "." in tensor_path:
+        tensor_path.replace(".", "_<dot>_")
+    total_tensor_path = path / (tensor_path + ".memmap")
+    if os.path.exists(total_tensor_path):
+        MemoryMappedTensor.from_filename(
+            shape=tensor.shape,
+            filename=total_tensor_path,
+            dtype=tensor.dtype,
+        ).copy_(tensor)
+    else:
+        os.makedirs(total_tensor_path.parent, exist_ok=True)
+        MemoryMappedTensor.from_tensor(
+            tensor,
+            filename=total_tensor_path,
+            copy_existing=True,
+            copy_data=True,
+        )
+    key = tensor_path.replace("/", ".")
+    if key in metadata:
+        raise KeyError(
+            "At least two values have conflicting representations in "
+            f"the data structure to be serialized: {key}."
+        )
+    metadata[key] = {
+        "dtype": str(tensor.dtype),
+        "shape": list(tensor.shape),
+    }
+
+
+@implement_for("torch", "2.3", None)
+def _save_pytree(_storage, metadata, path):
+    from torch.utils._pytree import tree_map_with_path
+
+    def save_tensor(
+        tensor_path: tuple, tensor: torch.Tensor, metadata=metadata, path=path
+    ):
+        tensor_path = _path2str(tensor_path)
+        _save_pytree_common(tensor_path, path, tensor, metadata)
+
+    tree_map_with_path(save_tensor, _storage)
+
+
+@implement_for("torch", None, "2.3")
+def _save_pytree(_storage, metadata, path):  # noqa: F811
+
+    flat_storage, storage_specs = tree_flatten(_storage)
+    storage_paths = _get_paths(storage_specs)
+
+    def save_tensor(
+        tensor_path: str, tensor: torch.Tensor, metadata=metadata, path=path
+    ):
+        _save_pytree_common(tensor_path, path, tensor, metadata)
+
+    for tensor, tensor_path in zip(flat_storage, storage_paths):
+        save_tensor(tensor_path, tensor)
+
+
+def _get_paths(spec, cumulpath=""):
+    # alternative way to build a path without the keys
+    if isinstance(spec, LeafSpec):
+        yield cumulpath if cumulpath else SINGLE_TENSOR_BUFFER_NAME
+
+    contexts = spec.context
+    children_specs = spec.children_specs
+    if contexts is None:
+        contexts = range(len(children_specs))
+
+    for context, spec in zip(contexts, children_specs):
+        cpath = "/".join((cumulpath, str(context))) if cumulpath else str(context)
+        yield from _get_paths(spec, cpath)
+
+
+def _init_pytree_common(tensor_path, scratch_dir, max_size_fn, tensor):
+    if "." in tensor_path:
+        tensor_path.replace(".", "_<dot>_")
+    if scratch_dir is not None:
+        total_tensor_path = Path(scratch_dir) / (tensor_path + ".memmap")
+        if os.path.exists(total_tensor_path):
+            raise RuntimeError(
+                f"The storage of tensor {total_tensor_path} already exists. "
+                f"To load an existing replay buffer, use storage.loads. "
+                f"Choose a different path to store your buffer or delete the existing files."
+            )
+        os.makedirs(total_tensor_path.parent, exist_ok=True)
+    else:
+        total_tensor_path = None
+    out = MemoryMappedTensor.empty(
+        shape=max_size_fn(tensor.shape),
+        filename=total_tensor_path,
+        dtype=tensor.dtype,
+    )
+    try:
+        filesize = os.path.getsize(tensor.filename) / 1024 / 1024
+        torchrl_logger.debug(
+            f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
+        )
+    except (RuntimeError, AttributeError):
+        pass
+    return out
+
+
+@implement_for("torch", "2.3", None)
+def _init_pytree(scratch_dir, max_size_fn, data):
+    from torch.utils._pytree import tree_map_with_path
+
+    # If not a tensorclass/tensordict, it must be a tensor(-like) or a PyTree
+    # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
+    def save_tensor(tensor_path: tuple, tensor: torch.Tensor):
+        tensor_path = _path2str(tensor_path)
+        return _init_pytree_common(tensor_path, scratch_dir, max_size_fn, tensor)
+
+    out = tree_map_with_path(save_tensor, data)
+    return out
+
+
+@implement_for("torch", None, "2.3")
+def _init_pytree(scratch_dir, max_size, data):  # noqa: F811
+
+    flat_data, data_specs = tree_flatten(data)
+    data_paths = _get_paths(data_specs)
+    data_paths = list(data_paths)
+
+    # If not a tensorclass/tensordict, it must be a tensor(-like) or a PyTree
+    # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
+    def save_tensor(tensor_path: str, tensor: torch.Tensor):
+        return _init_pytree_common(tensor_path, scratch_dir, max_size, tensor)
+
+    out = []
+    for tensor, tensor_path in zip(flat_data, data_paths):
+        out.append(save_tensor(tensor_path, tensor))
+
+    return tree_unflatten(out, data_specs)

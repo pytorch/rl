@@ -203,6 +203,7 @@ class ReplayBuffer:
         transform: "Transform" | None = None,  # noqa-F821
         batch_size: int | None = None,
         dim_extend: int | None = None,
+            checkpointer: StorageCheckpointerBase | None = None,
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
         self._storage.attach(self)
@@ -260,6 +261,7 @@ class ReplayBuffer:
         if dim_extend is not None and dim_extend < 0:
             raise ValueError("dim_extend must be a positive value.")
         self.dim_extend = dim_extend
+        self._storage.checkpointer = checkpointer
 
     @property
     def dim_extend(self):
@@ -1021,12 +1023,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
     """
 
-    def __init__(self, *, priority_key: str = "td_error", **kw) -> None:
-        writer = kw.get("writer", None)
+    def __init__(self, *, priority_key: str = "td_error", **kwargs) -> None:
+        writer = kwargs.get("writer", None)
         if writer is None:
-            kw["writer"] = TensorDictRoundRobinWriter()
+            kwargs["writer"] = TensorDictRoundRobinWriter()
 
-        super().__init__(**kw)
+        super().__init__(**kwargs)
         self.priority_key = priority_key
 
     def _get_priority_item(self, tensordict: TensorDictBase) -> float:

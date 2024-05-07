@@ -93,7 +93,7 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
     VecNorm,
 )
-
+from torchrl.data import FlatStorageCheckpointer, NestedStorageCheckpointer, StorageCheckpointerBase, StorageEnsembleCheckpointer, TensorStorageCheckpointer, ListStorageCheckpointer
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
 _has_gym = importlib.util.find_spec("gym") is not None
@@ -2904,7 +2904,7 @@ class TestRBMultidim:
 
 
 @pytest.mark.skipif(not _has_gym, reason="gym required")
-class TestSaveHooks:
+class TestCheckpointers:
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     def test_simple_env(self, storage_type, tmpdir):
         env = GymEnv(CARTPOLE_VERSIONED())
@@ -2915,8 +2915,10 @@ class TestSaveHooks:
         )
         rb = ReplayBuffer(storage=storage_type(1000))
         rb_test = ReplayBuffer(storage=storage_type(1000))
-        rb.register_save_hook(TED2Flat())
-        rb_test.register_load_hook(Flat2TED())
+        # rb.storage.checkpointer = FlatStorageCheckpointer()
+        # rb_test.storage.checkpointer = FlatStorageCheckpointer()
+        rb.storage.checkpointer = NestedStorageCheckpointer()
+        rb_test.storage.checkpointer = NestedStorageCheckpointer()
         for i, data in enumerate(collector):
             rb.extend(data)
             if i == 0:
