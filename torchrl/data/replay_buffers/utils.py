@@ -5,8 +5,9 @@
 # import tree
 from __future__ import annotations
 
-import os
 import math
+
+import os
 import typing
 from pathlib import Path
 from typing import Any, Callable, Union
@@ -196,16 +197,17 @@ class TED2Flat:
             output.set(key, entry)
         return output
 
+
 class TED2Nested(TED2Flat):
     def __call__(self, data: TensorDictBase):
         # Get the done state
         done = data.get(self.done_key).clone()
-        assert done.ndim==2
+        assert done.ndim == 2
         done = done.squeeze(-1)
         done[..., -1] = True
         # Get the shapes
         nz = done.nonzero()[:, 0]
-        traj_lengths = torch.cat([nz[:1]+1, nz.diff()])
+        traj_lengths = torch.cat([nz[:1] + 1, nz.diff()])
         assert traj_lengths.sum() == done.numel(), traj_lengths.sum()
 
         # capture for each item in data where the observation should be written
@@ -234,10 +236,21 @@ class TED2Nested(TED2Flat):
 
             if key in keys_to_expand:
                 shape = torch.cat(
-                    [traj_lengths.unsqueeze(-1) + 1, torch.tensor(entry.shape[1:]).repeat(traj_lengths.numel(), 1)], -1)
+                    [
+                        traj_lengths.unsqueeze(-1) + 1,
+                        torch.tensor(entry.shape[1:]).repeat(traj_lengths.numel(), 1),
+                    ],
+                    -1,
+                )
                 non_nt_shape = torch.Size([idx.max() + 2, *entry.shape[1:]])
             else:
-                shape = torch.cat([traj_lengths.unsqueeze(-1), torch.tensor(entry.shape[1:]).repeat(traj_lengths.numel(), 1)], -1)
+                shape = torch.cat(
+                    [
+                        traj_lengths.unsqueeze(-1),
+                        torch.tensor(entry.shape[1:]).repeat(traj_lengths.numel(), 1),
+                    ],
+                    -1,
+                )
                 non_nt_shape = entry.shape
             dtype = entry.dtype
             empty = MemoryMappedTensor.empty(shape=non_nt_shape, dtype=dtype)
@@ -347,29 +360,43 @@ class Flat2TED:
                 out[key] = root_entry
         return out
 
+
 class Nested2TED(Flat2TED):
     def __call__(self, data):
         # Get a flat representation of data
         def flatten_het_dim(tensor):
             shape = [tensor.size(i) for i in range(2, tensor.ndim)]
-            tensor = torch.tensor(tensor.untyped_storage(), dtype=tensor.dtype).view(-1, *shape)
+            tensor = torch.tensor(tensor.untyped_storage(), dtype=tensor.dtype).view(
+                -1, *shape
+            )
             return tensor
+
         data = data.apply(flatten_het_dim, batch_size=[])
         data.auto_batch_size_()
         return super().__call__(data)
 
+
 class H5Split:
     def __call__(self, data):
         nzeros = int(math.ceil(math.log10(data.shape[0])))
-        return TensorDict({f"traj_{str(i).zfill(nzeros)}": _data for i, _data in enumerate(data.unbind(0))})
+        return TensorDict(
+            {
+                f"traj_{str(i).zfill(nzeros)}": _data
+                for i, _data in enumerate(data.unbind(0))
+            }
+        )
+
 
 class H5Combine:
     def __call__(self, data):
         values = [val for key, val in data.items() if key.startswith("traj")]
-        result = values[0].apply(lambda *x: torch.nested.nested_tensor(list(x)), *values[1:])
+        result = values[0].apply(
+            lambda *x: torch.nested.nested_tensor(list(x)), *values[1:]
+        )
         result.auto_batch_size_()
-        print('result', result)
+        print("result", result)
         return result
+
 
 @implement_for("torch", "2.3", None)
 def _path2str(path, default_name=None):

@@ -3,6 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from .checkpointers import (
+    FlatStorageCheckpointer,
+    ListStorageCheckpointer,
+    NestedStorageCheckpointer,
+    StorageCheckpointerBase,
+    StorageEnsembleCheckpointer,
+    TensorStorageCheckpointer,
+)
 from .replay_buffers import (
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
@@ -38,4 +46,3 @@ from .writers import (
     Writer,
     WriterEnsemble,
 )
-from .checkpointers import FlatStorageCheckpointer, NestedStorageCheckpointer, StorageCheckpointerBase, StorageEnsembleCheckpointer, TensorStorageCheckpointer, ListStorageCheckpointer

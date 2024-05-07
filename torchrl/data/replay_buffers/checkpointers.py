@@ -9,20 +9,23 @@ import json
 from pathlib import Path
 
 import torch
-from tensordict import is_tensor_collection, TensorDict, PersistentTensorDict
+from tensordict import is_tensor_collection, PersistentTensorDict, TensorDict
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _STRDTYPE2DTYPE
 from torchrl._utils import implement_for
 from torchrl.data.replay_buffers.utils import (
-    _get_paths,Nested2TED,
+    _get_paths,
     _init_pytree,
     _init_pytree_common,
     _path2str,
     _save_pytree,
     _save_pytree_common,
     Flat2TED,
+    H5Combine,
+    H5Split,
+    Nested2TED,
     TED2Flat,
-TED2Nested,H5Split,H5Combine,
+    TED2Nested,
 )
 
 
@@ -190,6 +193,7 @@ class NestedStorageCheckpointer(TensorStorageCheckpointer):
         self._save_hooks = [TED2Nested()]
         self._load_hooks = [Nested2TED()]
 
+
 class H5StorageCheckpointer(TensorStorageCheckpointer):
     """Saves the storage in a compact form, saving space on the TED format and using H5 format to save the data.
 
@@ -205,7 +209,7 @@ class H5StorageCheckpointer(TensorStorageCheckpointer):
 
     """
 
-    def __init__(self, checkpoint_file: str="checkpoint.h5", **kwargs):
+    def __init__(self, checkpoint_file: str = "checkpoint.h5", **kwargs):
         self._save_hooks = [TED2Nested(), H5Split()]
         self._load_hooks = [H5Combine(), Nested2TED()]
         self.kwargs = kwargs

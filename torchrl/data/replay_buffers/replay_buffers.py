@@ -203,7 +203,7 @@ class ReplayBuffer:
         transform: "Transform" | None = None,  # noqa-F821
         batch_size: int | None = None,
         dim_extend: int | None = None,
-            checkpointer: StorageCheckpointerBase | None = None,
+        checkpointer: StorageCheckpointerBase | None = None,
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
         self._storage.attach(self)

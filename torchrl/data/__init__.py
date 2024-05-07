@@ -6,10 +6,13 @@
 from .postprocs import MultiStep
 from .replay_buffers import (
     Flat2TED,
+    FlatStorageCheckpointer,
     ImmutableDatasetWriter,
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
+    ListStorageCheckpointer,
+    NestedStorageCheckpointer,
     PrioritizedReplayBuffer,
     PrioritizedSampler,
     RandomSampler,
@@ -22,13 +25,16 @@ from .replay_buffers import (
     SliceSampler,
     SliceSamplerWithoutReplacement,
     Storage,
+    StorageCheckpointerBase,
     StorageEnsemble,
+    StorageEnsembleCheckpointer,
     TED2Flat,
     TensorDictMaxValueWriter,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
     TensorDictRoundRobinWriter,
     TensorStorage,
+    TensorStorageCheckpointer,
     Writer,
     WriterEnsemble,
 )
@@ -62,4 +68,3 @@ from .tensor_specs import (
     UnboundedDiscreteTensorSpec,
 )
 from .utils import check_no_exclusive_keys, consolidate_spec, contains_lazy_spec
-from .replay_buffers import FlatStorageCheckpointer, NestedStorageCheckpointer, StorageCheckpointerBase, StorageEnsembleCheckpointer, TensorStorageCheckpointer, ListStorageCheckpointer

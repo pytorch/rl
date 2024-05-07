@@ -36,14 +36,20 @@ from torchrl.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     Flat2TED,
+    FlatStorageCheckpointer,
+    ListStorageCheckpointer,
     MultiStep,
+    NestedStorageCheckpointer,
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
     ReplayBufferEnsemble,
+    StorageCheckpointerBase,
+    StorageEnsembleCheckpointer,
     TED2Flat,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
+    TensorStorageCheckpointer,
 )
 from torchrl.data.replay_buffers import samplers, writers
 from torchrl.data.replay_buffers.samplers import (
@@ -93,7 +99,7 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
     VecNorm,
 )
-from torchrl.data import FlatStorageCheckpointer, NestedStorageCheckpointer, StorageCheckpointerBase, StorageEnsembleCheckpointer, TensorStorageCheckpointer, ListStorageCheckpointer
+
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
 _has_gym = importlib.util.find_spec("gym") is not None
