@@ -114,7 +114,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
         is_pytree = metadata["is_pytree"]
         _len = metadata["len"]
         if is_pytree:
-            for hook in self._load_hooks:
+            if self._load_hooks:
                 raise RuntimeError(
                     "Loading hooks are not compatible with PyTree storages."
                 )
@@ -302,8 +302,8 @@ class StorageEnsembleCheckpointer(StorageCheckpointerBase):
     @staticmethod
     def loads(storage, path: Path):
         path = Path(path).absolute()
-        for i, storage in enumerate(storage._storages):
-            storage.loads(path / str(i))
+        for i, _storage in enumerate(storage._storages):
+            _storage.loads(path / str(i))
         if storage._transforms is not None:
             for i, transform in enumerate(storage._transforms):
                 transform.load_state_dict(torch.load(path / f"{i}_transform.pt"))

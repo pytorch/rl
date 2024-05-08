@@ -345,6 +345,8 @@ class Flat2TED:
 
 
 class TED2Nested(TED2Flat):
+    """Converts a TED-formatted dataset into a tensordict populated with nested tensors where each row is a trajectory."""
+
     _shift: int = None
     _is_full: bool = None
 
@@ -423,6 +425,8 @@ class TED2Nested(TED2Flat):
 
 
 class Nested2TED(Flat2TED):
+    """Converts a nested tensordict where each row is a trajectory into the TED format."""
+
     def __call__(self, data):
         # Get a flat representation of data
         def flatten_het_dim(tensor):
@@ -438,6 +442,8 @@ class Nested2TED(Flat2TED):
 
 
 class H5Split(TED2Flat):
+    """Splits a dataset prepared with TED2Nested into a TensorDict where each trajectory is stored as views on their parent nested tensors."""
+
     _shift: int = None
     _is_full: bool = None
 
@@ -456,6 +462,8 @@ class H5Split(TED2Flat):
 
 
 class H5Combine:
+    """Combines trajectories in a persistent tensordict into a single standing tensordict stored in filesystem."""
+
     def __call__(self, data):
         values = [val for key, val in data.items() if key.startswith("traj")]
         metadata_keys = [key for key in data.keys() if not key.startswith("traj")]

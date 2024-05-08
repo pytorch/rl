@@ -16,7 +16,6 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
-import tqdm
 
 from _utils_internal import CARTPOLE_VERSIONED, get_default_devices, make_tc
 

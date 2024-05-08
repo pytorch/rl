@@ -23,9 +23,8 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.memmap import MemoryMappedTensor
-from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
-from torch.utils._pytree import LeafSpec, tree_flatten, tree_map, tree_unflatten
+from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
 
 from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.checkpointers import (
