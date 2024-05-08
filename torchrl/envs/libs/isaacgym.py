@@ -197,7 +197,7 @@ class IsaacGymEnv(IsaacGymWrapper):
             task=task,
             num_envs=num_envs,
             device=device,
-            virtual_screen_capture=True,
+            virtual_screen_capture=False,
             **kwargs,
         )
         self.task = task
