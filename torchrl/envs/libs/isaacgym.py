@@ -97,7 +97,7 @@ class IsaacGymWrapper(GymWrapper):
         return reset_data, {}
 
     @classmethod
-    def _make_envs(cls, *, task, num_envs, device, seed=None, headless=True, **kwargs):
+    def _make_envs(cls, *, task, num_envs, device, seed=None, headless=False, **kwargs):
         import isaacgym  # noqa
         import isaacgymenvs  # noqa
         _ = kwargs.pop("from_pixels", None)
