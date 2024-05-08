@@ -12,7 +12,7 @@ from typing import Tuple, Union
 import numpy as np
 import torch
 
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
@@ -123,6 +123,13 @@ class REDQLoss_deprecated(LossModule):
     default_keys = _AcceptedKeys()
     delay_actor: bool = False
     default_value_estimator = ValueEstimators.TD0
+
+    actor_network: TensorDictModule
+    qvalue_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    qvalue_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
 
     def __init__(
         self,
@@ -452,3 +459,10 @@ class DoubleREDQLoss_deprecated(REDQLoss_deprecated):
     """[Deprecated] Class for delayed target-REDQ (which should be the default behaviour)."""
 
     delay_qvalue: bool = True
+
+    actor_network: TensorDictModule
+    qvalue_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    qvalue_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams

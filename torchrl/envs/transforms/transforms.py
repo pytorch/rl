@@ -4511,6 +4511,11 @@ class TensorDictPrimer(Transform):
         tensor([[1., 1., 1.],
                 [1., 1., 1.]])
 
+    .. note:: Some TorchRL modules rely on specific keys being present in the environment TensorDicts,
+        like :class:`~torchrl.modules.models.LSTM` or :class:`~torchrl.modules.models.GRU`.
+        To facilitate this process, the method :func:`~torchrl.models.utils.get_primers_from_module`
+        automatically checks for required primer transforms in a module and its submodules and
+        generates them.
     """
 
     def __init__(
@@ -4696,15 +4701,18 @@ class TensorDictPrimer(Transform):
         spec shape is assumed to match the tensordict's.
 
         """
-        shape = (
-            ()
-            if (not self.parent or self.parent.batch_locked)
-            else tensordict.batch_size
-        )
         _reset = _get_reset(self.reset_key, tensordict)
         if _reset.any():
             for key, spec in self.primers.items(True, True):
+                if spec.shape[: len(tensordict.batch_size)] != tensordict.batch_size:
+                    expanded_spec = self._expand_shape(spec)
+                    self.primers[key] = spec = expanded_spec
                 if self.random:
+                    shape = (
+                        ()
+                        if (not self.parent or self.parent.batch_locked)
+                        else tensordict.batch_size
+                    )
                     value = spec.rand(shape)
                 else:
                     value = self.default_value[key]
@@ -6988,16 +6996,29 @@ class VecGymEnvTransform(Transform):
         if (
             reset is not done
             and (reset != done).any()
-            and (not reset.all() or not reset.any())
+            # it can happen that all are reset, in which case
+            # it's fine (doesn't need to match done)
+            and not reset.all()
         ):
             raise RuntimeError(
-                "Cannot partially reset a gym(nasium) async env with a reset mask that does not match the done mask. "
+                "Cannot partially reset a gym(nasium) async env with a "
+                "reset mask that does not match the done mask. "
                 f"Got reset={reset}\nand done={done}"
             )
         # if not reset.any(), we don't need to do anything.
         # if reset.all(), we don't either (bc GymWrapper will call a plain reset).
-        if reset is not None and reset.any() and not reset.all():
+        if reset is not None and reset.any():
+            if reset.all():
+                # We're fine: this means that a full reset was passed and the
+                # env was manually reset
+                tensordict_reset.pop(self.final_name, None)
+                return tensordict_reset
             saved_next = self._memo["saved_next"]
+            if saved_next is None:
+                raise RuntimeError(
+                    "Did not find a saved tensordict while the reset mask was "
+                    f"not empty: reset={reset}. Done was {done}."
+                )
             # reset = reset.view(tensordict.shape)
             # we have a data container from the previous call to step
             # that contains part of the observation we need.

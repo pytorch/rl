@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import functools
+import gc
 import importlib.util
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
@@ -1097,6 +1099,121 @@ class TestGym:
         del c
         return
 
+    def _get_dummy_gym_env(self, backend, **kwargs):
+        with set_gym_backend(backend):
+
+            class CustomEnv(gym_backend().Env):
+                def __init__(self, dim=3, use_termination=True, max_steps=4):
+                    self.dim = dim
+                    self.use_termination = use_termination
+                    self.observation_space = gym_backend("spaces").Box(
+                        low=-np.inf, high=np.inf, shape=(self.dim,), dtype=np.float32
+                    )
+                    self.action_space = gym_backend("spaces").Box(
+                        low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32
+                    )
+                    self.max_steps = max_steps
+
+                def _get_info(self):
+                    return {"field1": self.state**2}
+
+                def _get_obs(self):
+                    return self.state.copy()
+
+                def reset(self, seed=0, options=None):
+                    self.state = np.zeros(
+                        self.observation_space.shape, dtype=np.float32
+                    )
+                    observation = self._get_obs()
+                    info = self._get_info()
+                    assert (observation < self.max_steps).all()
+                    return observation, info
+
+                def step(self, action):
+                    # self.state += action.item()
+                    self.state += 1
+                    truncated, terminated = False, False
+                    if self.use_termination:
+                        terminated = self.state[0] == 4
+                    reward = 1 if terminated else 0  # Binary sparse rewards
+                    observation = self._get_obs()
+                    info = self._get_info()
+                    return observation, reward, terminated, truncated, info
+
+            return CustomEnv(**kwargs)
+
+    @pytest.mark.parametrize("heterogeneous", [False, True])
+    def test_resetting_strategies(self, heterogeneous):
+        if _has_gymnasium:
+            backend = "gymnasium"
+        else:
+            backend = "gym"
+        with set_gym_backend(backend):
+            if version.parse(gym_backend().__version__) < version.parse("0.26"):
+                torchrl_logger.info(
+                    "Running into unrelated errors with older versions of gym."
+                )
+                return
+            steps = 5
+            if not heterogeneous:
+                env = GymWrapper(
+                    gym_backend().vector.AsyncVectorEnv(
+                        [functools.partial(self._get_dummy_gym_env, backend=backend)]
+                        * 4
+                    )
+                )
+            else:
+                env = GymWrapper(
+                    gym_backend().vector.AsyncVectorEnv(
+                        [
+                            functools.partial(
+                                self._get_dummy_gym_env,
+                                max_steps=i + 4,
+                                backend=backend,
+                            )
+                            for i in range(4)
+                        ]
+                    )
+                )
+            try:
+                check_env_specs(env)
+                td = env.rollout(steps, break_when_any_done=False)
+                if not heterogeneous:
+                    assert not (td["observation"] == 4).any()
+                    assert (td["next", "observation"] == 4).sum() == 3 * 4
+
+                # check with manual reset
+                torch.manual_seed(0)
+                env.set_seed(0)
+                reset = env.reset(
+                    TensorDict({"_reset": torch.ones(4, 1, dtype=torch.bool)}, [4])
+                )
+                r0 = env.rollout(
+                    10, break_when_any_done=False, auto_reset=False, tensordict=reset
+                )
+                torch.manual_seed(0)
+                env.set_seed(0)
+                reset = env.reset()
+                r1 = env.rollout(
+                    10, break_when_any_done=False, auto_reset=False, tensordict=reset
+                )
+                torch.manual_seed(0)
+                env.set_seed(0)
+                r2 = env.rollout(10, break_when_any_done=False)
+                assert_allclose_td(r0, r1)
+                assert_allclose_td(r1, r2)
+                for r in (r0, r1, r2):
+                    torch.testing.assert_close(r["field1"], r["observation"].pow(2))
+                    torch.testing.assert_close(
+                        r["next", "field1"], r["next", "observation"].pow(2)
+                    )
+
+            finally:
+                if not env.is_closed:
+                    env.close()
+                del env
+                gc.collect()
+
 
 @implement_for("gym", None, "0.26")
 def _make_gym_environment(env_name):  # noqa: F811
@@ -1330,14 +1447,15 @@ class TestHabitat:
             assert "pixels" in rollout.keys()
 
 
+def _jumanji_envs():
+    if not _has_jumanji:
+        return ()
+    return JumanjiEnv.available_envs[-10:-5]
+
+
 @pytest.mark.skipif(not _has_jumanji, reason="jumanji not installed")
-@pytest.mark.parametrize(
-    "envname",
-    [
-        "TSP-v1",
-        "Snake-v1",
-    ],
-)
+@pytest.mark.slow
+@pytest.mark.parametrize("envname", _jumanji_envs())
 class TestJumanji:
     def test_jumanji_seeding(self, envname):
         final_seed = []
@@ -1415,6 +1533,22 @@ class TestJumanji:
                     t2 = getattr(t2, _key)
                 t2 = torch.tensor(onp.asarray(t2)).view_as(t1)
                 torch.testing.assert_close(t1, t2)
+
+    @pytest.mark.parametrize("batch_size", [[3], []])
+    def test_jumanji_rendering(self, envname, batch_size):
+        # check that this works with a batch-size
+        env = JumanjiEnv(envname, from_pixels=True, batch_size=batch_size)
+        env.set_seed(0)
+        env.transform.transform_observation_spec(env.base_env.observation_spec)
+
+        r = env.rollout(10)
+        pixels = r["pixels"]
+        if not isinstance(pixels, torch.Tensor):
+            pixels = torch.as_tensor(np.asarray(pixels))
+        assert pixels.unique().numel() > 1
+        assert pixels.dtype == torch.uint8
+
+        check_env_specs(env)
 
 
 ENVPOOL_CLASSIC_CONTROL_ENVS = [

@@ -133,7 +133,7 @@ function.
   transform.
 
 
-Our environment `tutorial <https://pytorch.org/rl/tutorials/pendulum.html>`_
+Our environment :ref:`tutorial <pendulum_tuto>`
 provides more information on how to design a custom environment from scratch.
 
 .. autosummary::
@@ -559,7 +559,7 @@ Transforms
 In most cases, the raw output of an environment must be treated before being passed to another object (such as a
 policy or a value operator). To do this, TorchRL provides a set of transforms that aim at reproducing the transform
 logic of `torch.distributions.Transform` and `torchvision.transforms`.
-Our environment `tutorial <https://pytorch.org/rl/tutorials/pendulum.html>`_
+Our environment :ref:`tutorial <pendulum_tuto>`
 provides more information on how to design a custom transform.
 
 Transformed environments are build using the :class:`TransformedEnv` primitive.

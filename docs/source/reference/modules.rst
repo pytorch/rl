@@ -427,6 +427,7 @@ Utils
     mappings
     inv_softplus
     biased_softplus
+    get_primers_from_module
 
 .. currentmodule:: torchrl.modules
 
