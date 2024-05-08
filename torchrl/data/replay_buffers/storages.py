@@ -5,15 +5,13 @@
 from __future__ import annotations
 
 import abc
-import json
 import os
 import textwrap
 import warnings
 from collections import OrderedDict
 from copy import copy
 from multiprocessing.context import get_spawning_popen
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Sequence, Union
+from typing import Any, Dict, List, Sequence, Union
 
 import numpy as np
 import tensordict
@@ -36,16 +34,7 @@ from torchrl.data.replay_buffers.checkpointers import (
     StorageEnsembleCheckpointer,
     TensorStorageCheckpointer,
 )
-from torchrl.data.replay_buffers.utils import (
-    _get_paths,
-    _init_pytree,
-    _init_pytree_common,
-    _is_int,
-    _path2str,
-    _save_pytree,
-    _save_pytree_common,
-    INT_CLASSES,
-)
+from torchrl.data.replay_buffers.utils import _init_pytree, _is_int, INT_CLASSES
 
 
 class Storage:

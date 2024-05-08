@@ -16,6 +16,7 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
+import tqdm
 
 from _utils_internal import CARTPOLE_VERSIONED, get_default_devices, make_tc
 
@@ -35,23 +36,18 @@ from torch.utils._pytree import tree_flatten, tree_map
 from torchrl.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
-    Flat2TED,
     FlatStorageCheckpointer,
-    ListStorageCheckpointer,
     MultiStep,
     NestedStorageCheckpointer,
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
     ReplayBufferEnsemble,
-    StorageCheckpointerBase,
-    StorageEnsembleCheckpointer,
-    TED2Flat,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
-    TensorStorageCheckpointer,
 )
 from torchrl.data.replay_buffers import samplers, writers
+from torchrl.data.replay_buffers.checkpointers import H5StorageCheckpointer
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     PrioritizedSliceSampler,
@@ -2912,26 +2908,28 @@ class TestRBMultidim:
 @pytest.mark.skipif(not _has_gym, reason="gym required")
 class TestCheckpointers:
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
-    def test_simple_env(self, storage_type, tmpdir):
+    @pytest.mark.parametrize(
+        "checkpointer",
+        [H5StorageCheckpointer, NestedStorageCheckpointer, FlatStorageCheckpointer],
+    )
+    def test_simple_env(self, storage_type, checkpointer, tmpdir):
         env = GymEnv(CARTPOLE_VERSIONED())
         env.set_seed(0)
         torch.manual_seed(0)
         collector = SyncDataCollector(
-            env, policy=env.rand_step, total_frames=2000, frames_per_batch=20
+            env, policy=env.rand_step, total_frames=200, frames_per_batch=22
         )
-        rb = ReplayBuffer(storage=storage_type(1000))
-        rb_test = ReplayBuffer(storage=storage_type(1000))
-        # rb.storage.checkpointer = FlatStorageCheckpointer()
-        # rb_test.storage.checkpointer = FlatStorageCheckpointer()
-        rb.storage.checkpointer = NestedStorageCheckpointer()
-        rb_test.storage.checkpointer = NestedStorageCheckpointer()
+        rb = ReplayBuffer(storage=storage_type(100))
+        rb_test = ReplayBuffer(storage=storage_type(100))
+        rb.storage.checkpointer = checkpointer()
+        rb_test.storage.checkpointer = checkpointer()
         for i, data in enumerate(collector):
             rb.extend(data)
             if i == 0:
                 rb_test.extend(data)
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
-            assert_allclose_td(rb_test[:-1], rb[:-1])
+            assert_allclose_td(rb_test[:], rb[:])
 
 
 if __name__ == "__main__":

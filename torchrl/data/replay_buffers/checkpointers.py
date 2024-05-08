@@ -11,17 +11,16 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from tensordict import is_tensor_collection, PersistentTensorDict, TensorDict
+from tensordict import (
+    is_tensor_collection,
+    NonTensorData,
+    PersistentTensorDict,
+    TensorDict,
+)
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _STRDTYPE2DTYPE
-from torchrl._utils import implement_for
 from torchrl.data.replay_buffers.utils import (
-    _get_paths,
-    _init_pytree,
-    _init_pytree_common,
-    _path2str,
     _save_pytree,
-    _save_pytree_common,
     Flat2TED,
     H5Combine,
     H5Split,
@@ -91,7 +90,8 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
         if is_tensor_collection(_storage):
             # try to load the path and overwrite.
             _storage.memmap(
-                path, copy_existing=True, num_threads=torch.get_num_threads()
+                path,
+                copy_existing=True,  # num_threads=torch.get_num_threads()
             )
             is_pytree = False
         else:
@@ -179,17 +179,25 @@ class FlatStorageCheckpointer(TensorStorageCheckpointer):
         self._save_hooks = [TED2Flat()]
         self._load_hooks = [Flat2TED()]
 
-    def dumps(self, storage, path):
-
+    def _save_shift_is_full(self, storage):
         is_full = storage._is_full
         last_cursor = storage._last_cursor
-        self._save_hooks[0].is_full = is_full
+        for hook in self._save_hooks:
+            if hasattr(hook, "is_full"):
+                hook.is_full = is_full
         if last_cursor is None:
-            warnings.warn("las_cursor is None. The replay buffer "
-                              "may not be saved properly in this setting. To solve this issue, make "
-                              "sure the storage updates the _las_cursor value during calls to `set`.")
+            warnings.warn(
+                "las_cursor is None. The replay buffer "
+                "may not be saved properly in this setting. To solve this issue, make "
+                "sure the storage updates the _las_cursor value during calls to `set`."
+            )
         shift = self._get_shift_from_last_cursor(last_cursor)
-        self._save_hooks[0].shift = shift
+        for hook in self._save_hooks:
+            if hasattr(hook, "shift"):
+                hook.shift = shift
+
+    def dumps(self, storage, path):
+        self._save_shift_is_full(storage)
         return super().dumps(storage, path)
 
     def _get_shift_from_last_cursor(self, last_cursor):
@@ -198,12 +206,13 @@ class FlatStorageCheckpointer(TensorStorageCheckpointer):
         if isinstance(last_cursor, int):
             return last_cursor + 1
         if isinstance(last_cursor, torch.Tensor):
-            return last_cursor.reshape(-1)[-1].item()+1
+            return last_cursor.reshape(-1)[-1].item() + 1
         if isinstance(last_cursor, np.ndarray):
-            return last_cursor.reshape(-1)[-1].item()+1
+            return last_cursor.reshape(-1)[-1].item() + 1
         raise ValueError(f"Unrecognised last_cursor type {type(last_cursor)}.")
 
-class NestedStorageCheckpointer(TensorStorageCheckpointer):
+
+class NestedStorageCheckpointer(FlatStorageCheckpointer):
     """Saves the storage in a compact form, saving space on the TED format and using memory-mapped nested tensors.
 
     This class explicitly assumes and does NOT check that:
@@ -219,7 +228,7 @@ class NestedStorageCheckpointer(TensorStorageCheckpointer):
         self._load_hooks = [Nested2TED()]
 
 
-class H5StorageCheckpointer(TensorStorageCheckpointer):
+class H5StorageCheckpointer(NestedStorageCheckpointer):
     """Saves the storage in a compact form, saving space on the TED format and using H5 format to save the data.
 
     This class explicitly assumes and does NOT check that:
@@ -245,9 +254,10 @@ class H5StorageCheckpointer(TensorStorageCheckpointer):
         path.mkdir(exist_ok=True)
         path = path / self.checkpoint_file
 
+        self._save_shift_is_full(storage)
+
         if not storage.initialized:
             raise RuntimeError("Cannot save a non-initialized storage.")
-        metadata = {}
         _storage = storage._storage
         length = len(storage)
         for hook in self._save_hooks:
@@ -255,7 +265,7 @@ class H5StorageCheckpointer(TensorStorageCheckpointer):
         if is_tensor_collection(_storage):
             # try to load the path and overwrite.
             data = PersistentTensorDict.from_dict(_storage, path, **self.kwargs)
-            data["_len"] = length
+            data["_len"] = NonTensorData(data=length)
         else:
             raise ValueError
 

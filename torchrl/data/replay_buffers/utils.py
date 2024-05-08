@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import math
-
 import os
 import typing
 from pathlib import Path
@@ -14,10 +13,12 @@ from typing import Any, Callable, Union
 
 import numpy as np
 import torch
-from tensordict import MemoryMappedTensor, TensorDict, TensorDictBase
+from tensordict import MemoryMappedTensor, NonTensorData, TensorDict, TensorDictBase
 
 from torch import Tensor
-from torchrl._utils import implement_for
+from torch.utils._pytree import LeafSpec, tree_flatten, tree_unflatten
+
+from torchrl._utils import implement_for, logger as torchrl_logger
 
 SINGLE_TENSOR_BUFFER_NAME = os.environ.get(
     "SINGLE_TENSOR_BUFFER_NAME", "_-single-tensor-_"
@@ -155,34 +156,43 @@ class TED2Flat:
 
     """
 
-    def __init__(self, done_key=("next", "done"), shift_key="shift", is_full_key="is_full"):
+    _shift: int = None
+    _is_full: bool = None
+
+    def __init__(
+        self, done_key=("next", "done"), shift_key="shift", is_full_key="is_full"
+    ):
         self.done_key = done_key
         self.shift_key = shift_key
         self.is_full_key = is_full_key
+
     @property
     def shift(self):
         return self._shift
+
     @shift.setter
     def shift(self, value: int):
         self._shift = value
+
     @property
     def is_full(self):
         return self._is_full
+
     @is_full.setter
     def is_full(self, value: int):
         self._is_full = value
 
     def __call__(self, data: TensorDictBase):
         # Get the done state
-        shift = getattr(self, "shift", 0)
-        is_full = getattr(self, "is_full", False)
+        shift = self.shift
+        is_full = self.is_full
         done = data.get(self.done_key)
-        done = done.squeeze(-1)
+        done = done.squeeze(-1).clone()
         if not is_full:
             # shift is the cursor place
-            done[..., shift-1] = True
+            done[..., shift - 1] = True
         else:
-            done = done.roll(shift, dims=0)
+            done = done.roll(-shift, dims=0)
             done[..., -1] = True
 
         # capture for each item in data where the observation should be written
@@ -208,23 +218,22 @@ class TED2Flat:
             else:
                 entry = data.get(key)
             if is_full:
-                entry = entry.roll(shift, dims=0)
+                entry = entry.roll(-shift, dims=0)
 
             if key in keys_to_expand:
                 shape = torch.Size([idx.max() + 2, *entry.shape[1:]])
                 dtype = entry.dtype
-                empty = MemoryMappedTensor.empty(shape=shape, dtype=dtype)
+                empty = MemoryMappedTensor.zeros(shape=shape, dtype=dtype)
                 empty[idx] = entry
                 shifted_next = data.get(("next", key))
                 if is_full:
-                    shifted_next = shifted_next.roll(shift, dims=0)
+                    shifted_next = shifted_next.roll(-shift, dims=0)
                 empty[idx_done] = shifted_next[done]
                 entry = empty
             output.set(key, entry)
         output.set_non_tensor(self.is_full_key, is_full)
         output.set_non_tensor(self.shift_key, shift)
         return output
-
 
 
 class Flat2TED:
@@ -307,12 +316,12 @@ class Flat2TED:
             0
         )
         next_idx = root_idx + 1
-        print('next_idx[-10:]', next_idx[-10:])
 
         out = TensorDict({}, [nsteps])
+
         def maybe_roll(entry):
             if is_full and shift is not None:
-                return entry.roll(-shift, dims=0)
+                return entry.roll(shift, dims=0)
             return entry
 
         root_idx = maybe_roll(root_idx)
@@ -321,7 +330,7 @@ class Flat2TED:
         for key, entry in data.items(True, True):
             if entry.shape[0] == nsteps:
                 if key in ("done", "terminated", "truncated", "reward"):
-                    out["next", key] = entry
+                    out["next", key] = maybe_roll(entry)
                     if key != "reward":
                         out[key] = torch.zeros_like(entry)
                 else:
@@ -336,76 +345,82 @@ class Flat2TED:
 
 
 class TED2Nested(TED2Flat):
+    _shift: int = None
+    _is_full: bool = None
+
     def __call__(self, data: TensorDictBase):
-        shift = data.get_non_tensor(self.shift_key, default=None)
+        data = super().__call__(data)
 
-        # Get the done state
-        done = data.get(self.done_key).clone()
+        shift = self.shift
+        is_full = self.is_full
 
-        assert done.ndim == 2
-        done = done.squeeze(-1)
-        done[..., -1] = True
-        # Get the shapes
+        done = data.get("done")
+        done = done.squeeze(-1).clone()
+        if not is_full:
+            done[..., shift - 1] = True
+        else:
+            done[..., -1] = True
+
+        ntraj = done.sum()
+
         nz = done.nonzero()[:, 0]
         traj_lengths = torch.cat([nz[:1] + 1, nz.diff()])
-        assert traj_lengths.sum() == done.numel(), traj_lengths.sum()
+        if not is_full:
+            traj_lengths = torch.cat(
+                [traj_lengths, (done.shape[0] - traj_lengths.sum()).unsqueeze(0)]
+            )
 
-        # capture for each item in data where the observation should be written
-        idx = torch.arange(data.shape[0])
-        idx_done = (idx + done.cumsum(0))[done]
-        idx += torch.nn.functional.pad(done, [1, 0])[:-1].cumsum(0)
-        # data["custom", "idx_obs"] = idx
+        keys_to_expand, keys_to_keep = zip(
+            *[
+                (key, None) if val.shape[0] != done.shape[0] else (None, key)
+                for key, val in data.items(True, True)
+            ]
+        )
+        keys_to_expand = [key for key in keys_to_expand if key is not None]
+        keys_to_keep = [key for key in keys_to_keep if key is not None]
 
-        # Get the keys that require extra storage
-        keys_to_expand = set(data.get("next").keys(True, True)) - {
-            "terminated",
-            "done",
-            "truncated",
-            "reward",
-        }
+        out = TensorDict({}, batch_size=[ntraj + (not is_full)])
+        for key in keys_to_expand:
+            val = data.get(key)
+            shape = torch.cat(
+                [
+                    traj_lengths.unsqueeze(-1) + 1,
+                    torch.tensor(val.shape[1:], dtype=torch.long).repeat(
+                        traj_lengths.numel(), 1
+                    ),
+                ],
+                -1,
+            )
+            val = MemoryMappedTensor.from_storage(
+                val.untyped_storage(), dtype=val.dtype, shape=shape
+            )
+            out[key] = val
+            # non_nt_shape = torch.Size([idx.max() + 2, *entry.shape[1:]])
+        for key in keys_to_keep:
+            val = data.get(key)
+            shape = torch.cat(
+                [
+                    traj_lengths.unsqueeze(-1),
+                    torch.tensor(val.shape[1:], dtype=torch.long).repeat(
+                        traj_lengths.numel(), 1
+                    ),
+                ],
+                -1,
+            )
+            val = MemoryMappedTensor.from_storage(
+                val.untyped_storage(), dtype=val.dtype, shape=shape
+            )
+            # non_nt_shape = val.shape
+            out[key] = val
 
-        # Create an output storage
-        output = TensorDict({}, batch_size=traj_lengths.shape[:1])
-        total_keys = data.exclude("next").keys(True, True)
-        total_keys = set(total_keys).union(set(data.get("next").keys(True, True)))
-        for key in total_keys:
-            if key in ("done", "truncated", "terminated", "reward"):
-                entry = data.get(("next", key))
-            else:
-                entry = data.get(key)
+        out.set_non_tensor(
+            self.shift_key, data.get_non_tensor(self.shift_key, default=None)
+        )
+        out.set_non_tensor(
+            self.is_full_key, data.get_non_tensor(self.is_full_key, default=None)
+        )
+        return out
 
-            if key in keys_to_expand:
-                shape = torch.cat(
-                    [
-                        traj_lengths.unsqueeze(-1) + 1,
-                        torch.tensor(entry.shape[1:]).repeat(traj_lengths.numel(), 1),
-                    ],
-                    -1,
-                )
-                non_nt_shape = torch.Size([idx.max() + 2, *entry.shape[1:]])
-            else:
-                shape = torch.cat(
-                    [
-                        traj_lengths.unsqueeze(-1),
-                        torch.tensor(entry.shape[1:]).repeat(traj_lengths.numel(), 1),
-                    ],
-                    -1,
-                )
-                non_nt_shape = entry.shape
-            dtype = entry.dtype
-            empty = MemoryMappedTensor.empty(shape=non_nt_shape, dtype=dtype)
-            if key in keys_to_expand:
-                empty[idx] = entry
-                empty[idx_done] = data.get(("next", key))[done]
-            else:
-                empty.untyped_storage().copy_(entry.untyped_storage())
-            # Get the storage of this data
-            storage = empty.untyped_storage()
-            # Make a MemoryMappedTensor out of the storage with the appropriate shape
-            empty = MemoryMappedTensor.from_storage(storage, shape=shape, dtype=dtype)
-            entry = empty
-            output.set(key, entry)
-        return output
 
 class Nested2TED(Flat2TED):
     def __call__(self, data):
@@ -422,25 +437,38 @@ class Nested2TED(Flat2TED):
         return super().__call__(data)
 
 
-class H5Split:
+class H5Split(TED2Flat):
+    _shift: int = None
+    _is_full: bool = None
+
     def __call__(self, data):
         nzeros = int(math.ceil(math.log10(data.shape[0])))
+
+        is_full = data.pop(self.is_full_key)
+        shift = data.pop(self.shift_key)
+
         return TensorDict(
             {
                 f"traj_{str(i).zfill(nzeros)}": _data
                 for i, _data in enumerate(data.unbind(0))
             }
-        )
+        ).update({"is_full": is_full, "shift": shift})
 
 
 class H5Combine:
     def __call__(self, data):
         values = [val for key, val in data.items() if key.startswith("traj")]
-        result = values[0].apply(
-            lambda *x: torch.nested.nested_tensor(list(x)), *values[1:]
+        metadata_keys = [key for key in data.keys() if not key.startswith("traj")]
+        result = TensorDict(
+            {key: NonTensorData(data.get(key).item()) for key in metadata_keys}
         )
-        result.auto_batch_size_()
-        print("result", result)
+        result = result.update(
+            values[0].apply(
+                lambda *x: torch.nested.nested_tensor(list(x)),
+                *values[1:],
+                batch_size=[],
+            )
+        )
         return result
 
 
