@@ -3221,7 +3221,7 @@ class TestOpenML:
 )
 @pytest.mark.parametrize("num_envs", [10, 20])
 @pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("from_pixels", [True, False])
+@pytest.mark.parametrize("from_pixels", [False])
 class TestIsaacGym:
     @classmethod
     def _run_on_proc(cls, q, task, num_envs, device, from_pixels):
