@@ -7777,7 +7777,9 @@ class TestVecNorm:
         for idx in range(nprc):
             queues[idx][1].put(msg)
 
-        td = make_env.state_dict()["transforms.1._extra_state"]["td"]
+        td = TensorDict(
+            make_env.state_dict()["transforms.1._extra_state"]
+        ).unflatten_keys(VecNorm.SEP)
 
         obs_sum = td.get(("some", "obs_sum")).clone()
         obs_ssq = td.get(("some", "obs_ssq")).clone()
@@ -7878,7 +7880,9 @@ class TestVecNorm:
         parallel_sd = parallel_env.state_dict()
         assert "worker0" in parallel_sd
         worker_sd = parallel_sd["worker0"]
-        td = worker_sd["transforms.1._extra_state"]["td"]
+        td = TensorDict(worker_sd["transforms.1._extra_state"]).unflatten_keys(
+            VecNorm.SEP
+        )
         queue_out.put("start")
         msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "first round"
