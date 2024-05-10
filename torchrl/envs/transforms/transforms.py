@@ -4900,7 +4900,7 @@ class VecNorm(Transform):
         if self.lock is not None:
             self.lock.acquire()
 
-        for key in self.in_keys:
+        for key, key_out in zip(self.in_keys, self.out_keys):
             if key not in tensordict.keys(include_nested=True):
                 # TODO: init missing rewards with this
                 # for key_suffix in [_append_last(key, suffix) for suffix in ("_sum", "_ssq", "_count")]:
@@ -4912,7 +4912,7 @@ class VecNorm(Transform):
                 key, tensordict.get(key), N=max(1, tensordict.numel())
             )
 
-            tensordict.set(key, new_val)
+            tensordict.set(key_out, new_val)
 
         if self.lock is not None:
             self.lock.release()
