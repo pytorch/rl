@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import collections
 import functools
 import importlib.util
 import multiprocessing as mp
@@ -4816,6 +4815,8 @@ class VecNorm(Transform):
             Defaults to ``in_keys``.
         shared_td (TensorDictBase, optional): A shared tensordict containing the
             keys of the transform.
+        lock (mp.Lock): a lock to prevent race conditions between processes.
+            Defaults to None (lock created during init).
         decay (number, optional): decay rate of the moving average.
             default: 0.99
         eps (number, optional): lower bound of the running standard
@@ -5019,11 +5020,10 @@ class VecNorm(Transform):
                 standard_normal=True,
                 in_keys=self.in_keys,
             )
-            if len(self.in_keys) == 1:
-                return _out
-            else:
-                out += ObservationNorm
-        return Compose(*out)
+            out += [_out]
+        if len(self.in_keys) > 1:
+            return Compose(*out)
+        return _out
 
     @staticmethod
     def build_td_for_shared_vecnorm(
@@ -5090,24 +5090,39 @@ class VecNorm(Transform):
             return td_select.memmap_()
         return td_select.share_memory_()
 
+    # We use a different separator to ensure that keys can have points within them.
+    SEP = "-<.>-"
+
     def get_extra_state(self) -> OrderedDict:
-        return collections.OrderedDict({"lock": self.lock, "td": self._td})
+        if self._td is None:
+            warnings.warn(
+                "Querying state_dict on an uninitialized VecNorm transform will "
+                "return a `None` value for the summary statistics. "
+                "Loading such a state_dict on an initialized VecNorm will result in "
+                "an error."
+            )
+            return
+        return self._td.flatten_keys(self.SEP).to_dict()
 
     def set_extra_state(self, state: OrderedDict) -> None:
-        lock = state["lock"]
-        if lock is not None:
-            """
-            since locks can't be serialized, we have use cases for stripping them
-            for example in ParallelEnv, in which case keep the lock we already have
-            to avoid an updated tensor dict being sent between processes to erase locks
-            """
-            self.lock = lock
-        td = state["td"]
-        if td is not None and not td.is_shared():
-            raise RuntimeError(
-                "Only shared tensordicts can be set in VecNorm transforms"
-            )
-        self._td = td
+        if state is not None:
+            td = TensorDict(state).unflatten_keys(self.SEP)
+            if self._td is None and not td.is_shared():
+                warnings.warn(
+                    "VecNorm wasn't initialized and the tensordict is not shared. In single "
+                    "process settings, this is ok, but if you need to share the statistics "
+                    "between workers this should require some attention. "
+                    "Make sure that the content of VecNorm is transmitted to the workers "
+                    "after calling load_state_dict and not before, as other workers "
+                    "may not have access to the loaded TensorDict."
+                )
+                td.share_memory_()
+            if self._td is not None:
+                self._td.update_(td)
+            else:
+                self._td = td
+        elif self._td is not None:
+            raise KeyError("Could not find a tensordict in the state_dict.")
 
     def __repr__(self) -> str:
         return (

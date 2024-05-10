@@ -7952,6 +7952,45 @@ class TestVecNorm:
         for key in sorted(transform.__dict__.keys()):
             assert isinstance(transform.__dict__[key], type(transform2.__dict__[key]))
 
+    def test_state_dict_vecnorm(self):
+        transform0 = Compose(
+            VecNorm(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+        )
+        td = TensorDict({"a": torch.randn(3, 4), ("b", "c"): torch.randn(3, 4)}, [3, 4])
+        with pytest.warns(UserWarning, match="Querying state_dict on an uninitialized"):
+            sd_empty = transform0.state_dict()
+
+        transform1 = transform0.clone()
+        # works fine
+        transform1.load_state_dict(sd_empty)
+        transform1._step(td, td)
+        with pytest.raises(KeyError, match="Could not find a tensordict"):
+            transform1.load_state_dict(sd_empty)
+
+        transform0._step(td, td)
+        sd = transform0.state_dict()
+
+        transform1 = transform0.clone()
+        assert transform0[0]._td.is_shared() is transform1[0]._td.is_shared()
+
+        def assert_differs(a, b):
+            assert a.untyped_storage().data_ptr() == b.untyped_storage().data_ptr()
+
+        transform1[0]._td.apply(assert_differs, transform0[0]._td, filter_empty=True)
+
+        transform1 = Compose(
+            VecNorm(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+        )
+        with pytest.warns(UserWarning, match="VecNorm wasn't initialized"):
+            transform1.load_state_dict(sd)
+        transform1._step(td, td)
+
+        transform1 = Compose(
+            VecNorm(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+        )
+        transform1._step(td, td)
+        transform1.load_state_dict(sd)
+
 
 def test_added_transforms_are_in_eval_mode_trivial():
     base_env = ContinuousActionVecMockEnv()
