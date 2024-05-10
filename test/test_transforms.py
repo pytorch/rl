@@ -7991,6 +7991,15 @@ class TestVecNorm:
         transform1._step(td, td)
         transform1.load_state_dict(sd)
 
+    def test_to_obsnorm_multikeys(self):
+        transform0 = Compose(
+            VecNorm(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+        )
+        td = TensorDict({"a": torch.randn(3, 4), ("b", "c"): torch.randn(3, 4)}, [3, 4])
+        td0 = transform0._step(td, td.clone())
+        td1 = transform0[0].to_observation_norm()._step(td, td.clone())
+        assert_allclose_td(td0, td1)
+
 
 def test_added_transforms_are_in_eval_mode_trivial():
     base_env = ContinuousActionVecMockEnv()

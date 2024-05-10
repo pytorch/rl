@@ -5007,7 +5007,7 @@ class VecNorm(Transform):
     def to_observation_norm(self) -> Union[Compose, ObservationNorm]:
         """Converts VecNorm into an ObservationNorm class that can be used at inference time."""
         out = []
-        for key in self.in_keys:
+        for key, key_out in zip(self.in_keys, self.out_keys):
             _sum = self._td.get(_append_last(key, "_sum"))
             _ssq = self._td.get(_append_last(key, "_ssq"))
             _count = self._td.get(_append_last(key, "_count"))
@@ -5018,7 +5018,8 @@ class VecNorm(Transform):
                 loc=mean,
                 scale=std,
                 standard_normal=True,
-                in_keys=self.in_keys,
+                in_keys=key,
+                out_keys=key_out,
             )
             out += [_out]
         if len(self.in_keys) > 1:
@@ -5127,7 +5128,7 @@ class VecNorm(Transform):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(decay={self.decay:4.4f},"
-            f"eps={self.eps:4.4f}, keys={self.in_keys})"
+            f"eps={self.eps:4.4f}, in_keys={self.in_keys}, out_keys={self.out_keys})"
         )
 
     def __getstate__(self) -> Dict[str, Any]:
