@@ -31,6 +31,8 @@ from .models import (
     DuelingCnnDQNet,
     MLP,
     MultiAgentConvNet,
+    MultiAgentGRU,
+    MultiAgentLSTM,
     MultiAgentMLP,
     NoisyLazyLinear,
     NoisyLinear,

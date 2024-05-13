@@ -286,29 +286,34 @@ class LSTM(LSTMBase):
 
         return outputs, (torch.stack(h_t_out, 0), torch.stack(c_t_out, 0))
 
-    def forward(self, input, hx=None):  # noqa: F811
+    def _make_zero_recurrent(self, input):
         real_hidden_size = self.proj_size if self.proj_size > 0 else self.hidden_size
+        max_batch_size = input.size(0) if self.batch_first else input.size(1)
+        h_zeros = torch.zeros(
+            self.num_layers,
+            max_batch_size,
+            real_hidden_size,
+            dtype=input.dtype,
+            device=input.device,
+        )
+        c_zeros = torch.zeros(
+            self.num_layers,
+            max_batch_size,
+            self.hidden_size,
+            dtype=input.dtype,
+            device=input.device,
+        )
+        hx = (h_zeros, c_zeros)
+        return hx
+
+    def forward(self, input, hx=None):  # noqa: F811
         if input.dim() != 3:
             raise ValueError(
                 f"LSTM: Expected input to be 3D, got {input.dim()}D instead"
             )
-        max_batch_size = input.size(0) if self.batch_first else input.size(1)
-        if hx is None:
-            h_zeros = torch.zeros(
-                self.num_layers,
-                max_batch_size,
-                real_hidden_size,
-                dtype=input.dtype,
-                device=input.device,
-            )
-            c_zeros = torch.zeros(
-                self.num_layers,
-                max_batch_size,
-                self.hidden_size,
-                dtype=input.dtype,
-                device=input.device,
-            )
-            hx = (h_zeros, c_zeros)
+        if hx is None or all(_hx is None for _hx in hx):
+            hx = self._make_zero_recurrent(input)
+
         return self._lstm(input, hx)
 
 
@@ -921,7 +926,6 @@ class GRU(GRUBase):
         return hy
 
     def _gru(self, x, hx):
-
         if not self.batch_first:
             x = x.permute(
                 1, 0, 2
@@ -976,32 +980,35 @@ class GRU(GRUBase):
 
         return outputs, torch.stack(h_t, 0)
 
+    def _make_zero_recurrent(self, input):
+        real_hidden_size = self.proj_size if self.proj_size > 0 else self.hidden_size
+        max_batch_size = input.size(0) if self.batch_first else input.size(1)
+        h_zeros = torch.zeros(
+            self.num_layers,
+            max_batch_size,
+            real_hidden_size,
+            dtype=input.dtype,
+            device=input.device,
+        )
+        return h_zeros
+
     def forward(self, input, hx=None):  # noqa: F811
         if input.dim() != 3:
             raise ValueError(
                 f"GRU: Expected input to be 3D, got {input.dim()}D instead"
             )
+
         if hx is not None and hx.dim() != 3:
             raise RuntimeError(
                 f"For batched 3-D input, hx should also be 3-D but got {hx.dim()}-D tensor"
             )
-        max_batch_size = input.size(0) if self.batch_first else input.size(1)
-        if hx is None:
-            hx = torch.zeros(
-                self.num_layers,
-                max_batch_size,
-                self.hidden_size,
-                dtype=input.dtype,
-                device=input.device,
-            )
+
+        if hx is None or all(_hx is None for _hx in hx):
+            hx = self._make_zero_recurrent(input)
 
         self.check_forward_args(input, hx, batch_sizes=None)
-        result = self._gru(input, hx)
 
-        output = result[0]
-        hidden = result[1]
-
-        return output, hidden
+        return self._gru(input, hx)
 
 
 class GRUModule(ModuleBase):

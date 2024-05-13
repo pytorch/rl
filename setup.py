@@ -169,10 +169,10 @@ def _main(argv):
     args, unknown = parse_args(argv)
     name = args.package_name
     is_nightly = "nightly" in name
-    if is_nightly:
-        tensordict_dep = "tensordict-nightly"
-    else:
-        tensordict_dep = "tensordict>=0.4.0"
+    # if is_nightly:
+    tensordict_dep = "tensordict-nightly"
+    # else:
+    #     tensordict_dep = "tensordict>=0.4.0"
 
     if is_nightly:
         version = get_nightly_version()
