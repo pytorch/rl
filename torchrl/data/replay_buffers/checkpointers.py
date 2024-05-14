@@ -72,6 +72,9 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
 
     This class supports TensorDict-based storages as well as pytrees.
 
+    This class will call save and load hooks if provided. These hooks should take as input the
+    data being transformed as well as the path where the data should be saved.
+
     """
 
     _save_hooks = []
@@ -86,13 +89,19 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
         metadata = {}
         _storage = storage._storage
         for hook in self._save_hooks:
-            _storage = hook(_storage)
+            _storage = hook(_storage, path=path)
         if is_tensor_collection(_storage):
-            # try to load the path and overwrite.
-            _storage.memmap(
-                path,
-                copy_existing=True,  # num_threads=torch.get_num_threads()
-            )
+            if (
+                _storage.is_memmap()
+                and Path(_storage.saved_path).absolute() == Path(path).absolute()
+            ):
+                _storage.memmap_refresh_()
+            else:
+                # try to load the path and overwrite.
+                _storage.memmap(
+                    path,
+                    copy_existing=True,  # num_threads=torch.get_num_threads()
+                )
             is_pytree = False
         else:
             _save_pytree(_storage, metadata, path)
@@ -153,8 +162,13 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
                     )
         else:
             _storage = TensorDict.load_memmap(path)
+            if storage.initialized:
+                dest = storage._storage
+            else:
+                # TODO: This could load the RAM a lot, maybe try to catch this within the hook and use memmap instead
+                dest = None
             for hook in self._load_hooks:
-                _storage = hook(_storage)
+                _storage = hook(_storage, out=dest)
             if not storage.initialized:
                 # this should not be reached if is_pytree=True
                 storage._init(_storage[0])
@@ -171,7 +185,11 @@ class FlatStorageCheckpointer(TensorStorageCheckpointer):
 
       - done states (including terminated and truncated) at the root are always False;
       - observations in the "next" tensordict are shifted by one step in the future (this
-        is not the case when a multi-step transform is used for instance).
+        is not the case when a multi-step transform is used for instance) unless `done` is `True`
+        in which case the observation in `("next", key)` at time `t` and the one in `key` at time
+        `t+1` should not match.
+
+    .. warning:: Given the above limitations, one should make sure that
 
     """
 
@@ -261,6 +279,7 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
         _storage = storage._storage
         length = len(storage)
         for hook in self._save_hooks:
+            # we don't pass a path here since we're not reusing the tensordict
             _storage = hook(_storage)
         if is_tensor_collection(_storage):
             # try to load the path and overwrite.

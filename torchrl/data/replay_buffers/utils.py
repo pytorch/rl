@@ -182,7 +182,7 @@ class TED2Flat:
     def is_full(self, value: int):
         self._is_full = value
 
-    def __call__(self, data: TensorDictBase):
+    def __call__(self, data: TensorDictBase, path: Path = None):
         # Get the done state
         shift = self.shift
         is_full = self.is_full
@@ -209,30 +209,47 @@ class TED2Flat:
         }
 
         # Create an output storage
-        output = TensorDict({}, [])
+        output = TensorDict()
+
+        output.set_non_tensor(self.is_full_key, is_full)
+        output.set_non_tensor(self.shift_key, shift)
+
+        output.memmap_(path)
+
         total_keys = data.exclude("next").keys(True, True)
         total_keys = set(total_keys).union(set(data.get("next").keys(True, True)))
+
         for key in total_keys:
             if key in ("done", "truncated", "terminated", "reward"):
                 entry = data.get(("next", key))
             else:
                 entry = data.get(key)
-            if is_full:
-                entry = entry.roll(-shift, dims=0)
 
             if key in keys_to_expand:
                 shape = torch.Size([idx.max() + 2, *entry.shape[1:]])
                 dtype = entry.dtype
-                empty = MemoryMappedTensor.zeros(shape=shape, dtype=dtype)
-                empty[idx] = entry
+                mmap = output.make_memmap(key, shape=shape, dtype=dtype)
                 shifted_next = data.get(("next", key))
                 if is_full:
-                    shifted_next = shifted_next.roll(-shift, dims=0)
-                empty[idx_done] = shifted_next[done]
-                entry = empty
-            output.set(key, entry)
-        output.set_non_tensor(self.is_full_key, is_full)
-        output.set_non_tensor(self.shift_key, shift)
+                    _roll_inplace(entry, shift=-shift, out=mmap, index_dest=idx)
+                    _roll_inplace(
+                        shifted_next,
+                        shift=-shift,
+                        out=mmap,
+                        index_dest=idx_done,
+                        index_source=done,
+                    )
+                else:
+                    mmap[idx] = entry
+                    mmap[idx_done] = shifted_next[done]
+            elif is_full:
+                mmap = output.make_memmap(key, shape=entry.shape, dtype=entry.dtype)
+                # mmap.copy_(entry.roll(shifts=-shift, dims=0))
+                _roll_inplace(entry, shift=-shift, out=mmap)
+            else:
+                mmap = output.make_memmap(key, shape=entry.shape, dtype=entry.dtype)
+                mmap.copy_(entry)
+
         return output
 
 
@@ -302,7 +319,7 @@ class Flat2TED:
         self.shift_key = shift_key
         self.is_full_key = is_full_key
 
-    def __call__(self, data):
+    def __call__(self, data, out: TensorDictBase = None):
         done = data.get(self.done_key)
         done = done.clone()
         shift = data.get_non_tensor(self.shift_key, default=None)
@@ -317,11 +334,19 @@ class Flat2TED:
         )
         next_idx = root_idx + 1
 
-        out = TensorDict({}, [nsteps])
+        if out is None:
+            out = TensorDict({}, [nsteps])
 
-        def maybe_roll(entry):
+        def maybe_roll(entry, out=None):
             if is_full and shift is not None:
-                return entry.roll(shift, dims=0)
+                if out is not None:
+                    _roll_inplace(entry, shift=shift, out=out)
+                    return
+                else:
+                    return entry.roll(shift, dims=0)
+            if out is not None:
+                out.copy_(entry)
+                return
             return entry
 
         root_idx = maybe_roll(root_idx)
@@ -330,17 +355,30 @@ class Flat2TED:
         for key, entry in data.items(True, True):
             if entry.shape[0] == nsteps:
                 if key in ("done", "terminated", "truncated", "reward"):
-                    out["next", key] = maybe_roll(entry)
-                    if key != "reward":
+                    if key != "reward" and key not in out.keys(True, True):
+                        # Create a done state at the root full of 0s
                         out[key] = torch.zeros_like(entry)
+                    entry = maybe_roll(entry, out=out.get(("next", key), None))
+                    if entry is not None:
+                        out["next", key] = entry
                 else:
                     # action and similar
-                    out[key] = maybe_roll(entry)
+                    entry = maybe_roll(entry, out=out.get(key, default=None))
+                    if entry is not None:
+                        # then out is not locked
+                        out[key] = entry
             else:
-                root_entry = entry[root_idx]
-                next_entry = entry[next_idx]
-                out["next", key] = next_entry
-                out[key] = root_entry
+                dest_next = out.get(("next", key), None)
+                if dest_next is not None:
+                    dest_next.copy_(entry[next_idx])
+                else:
+                    out["next", key] = entry[next_idx]
+
+                dest = out.get(key, None)
+                if dest is not None:
+                    dest.copy_(entry[root_idx])
+                else:
+                    out[key] = entry[root_idx]
         return out
 
 
@@ -350,8 +388,8 @@ class TED2Nested(TED2Flat):
     _shift: int = None
     _is_full: bool = None
 
-    def __call__(self, data: TensorDictBase):
-        data = super().__call__(data)
+    def __call__(self, data: TensorDictBase, path: Path = None):
+        data = super().__call__(data, path=path)
 
         shift = self.shift
         is_full = self.is_full
@@ -382,6 +420,16 @@ class TED2Nested(TED2Flat):
         keys_to_keep = [key for key in keys_to_keep if key is not None]
 
         out = TensorDict({}, batch_size=[ntraj + (not is_full)])
+
+        out.set_non_tensor(
+            self.shift_key, data.get_non_tensor(self.shift_key, default=None)
+        )
+        out.set_non_tensor(
+            self.is_full_key, data.get_non_tensor(self.is_full_key, default=None)
+        )
+
+        out.memmap_(path)
+
         for key in keys_to_expand:
             val = data.get(key)
             shape = torch.cat(
@@ -393,10 +441,11 @@ class TED2Nested(TED2Flat):
                 ],
                 -1,
             )
-            val = MemoryMappedTensor.from_storage(
-                val.untyped_storage(), dtype=val.dtype, shape=shape
+            # This works because the storage location is the same as the previous one - no copy is done
+            # but a new shape is written
+            out.make_memmap_from_storage(
+                key, val.untyped_storage(), dtype=val.dtype, shape=shape
             )
-            out[key] = val
             # non_nt_shape = torch.Size([idx.max() + 2, *entry.shape[1:]])
         for key in keys_to_keep:
             val = data.get(key)
@@ -409,25 +458,17 @@ class TED2Nested(TED2Flat):
                 ],
                 -1,
             )
-            val = MemoryMappedTensor.from_storage(
-                val.untyped_storage(), dtype=val.dtype, shape=shape
+            out.make_memmap_from_storage(
+                key, val.untyped_storage(), dtype=val.dtype, shape=shape
             )
-            # non_nt_shape = val.shape
-            out[key] = val
 
-        out.set_non_tensor(
-            self.shift_key, data.get_non_tensor(self.shift_key, default=None)
-        )
-        out.set_non_tensor(
-            self.is_full_key, data.get_non_tensor(self.is_full_key, default=None)
-        )
         return out
 
 
 class Nested2TED(Flat2TED):
     """Converts a nested tensordict where each row is a trajectory into the TED format."""
 
-    def __call__(self, data):
+    def __call__(self, data, out: TensorDictBase = None):
         # Get a flat representation of data
         def flatten_het_dim(tensor):
             shape = [tensor.size(i) for i in range(2, tensor.ndim)]
@@ -438,7 +479,7 @@ class Nested2TED(Flat2TED):
 
         data = data.apply(flatten_het_dim, batch_size=[])
         data.auto_batch_size_()
-        return super().__call__(data)
+        return super().__call__(data, out=out)
 
 
 class H5Split(TED2Flat):
@@ -450,13 +491,15 @@ class H5Split(TED2Flat):
     def __call__(self, data):
         nzeros = int(math.ceil(math.log10(data.shape[0])))
 
-        is_full = data.pop(self.is_full_key)
-        shift = data.pop(self.shift_key)
+        is_full = data.get(self.is_full_key)
+        shift = data.get(self.shift_key)
 
         return TensorDict(
             {
                 f"traj_{str(i).zfill(nzeros)}": _data
-                for i, _data in enumerate(data.unbind(0))
+                for i, _data in enumerate(
+                    data.exclude(self.is_full_key, self.shift_key).unbind(0)
+                )
             }
         ).update({"is_full": is_full, "shift": shift})
 
@@ -468,7 +511,7 @@ class H5Combine:
         values = [val for key, val in data.items() if key.startswith("traj")]
         metadata_keys = [key for key in data.keys() if not key.startswith("traj")]
         result = TensorDict(
-            {key: NonTensorData(data.get(key).item()) for key in metadata_keys}
+            {key: NonTensorData(data[key].item()) for key in metadata_keys}
         )
         result = result.update(
             values[0].apply(
@@ -644,3 +687,28 @@ def _init_pytree(scratch_dir, max_size, data):  # noqa: F811
         out.append(save_tensor(tensor_path, tensor))
 
     return tree_unflatten(out, data_specs)
+
+
+def _roll_inplace(tensor, shift, out, index_dest=None, index_source=None):
+    # slice 0
+    source0 = tensor[:-shift]
+    if index_source is not None:
+        source0 = source0[index_source[shift:]]
+
+    slice0_shift = source0.shape[0]
+    if index_dest is not None:
+        out[index_dest[-slice0_shift:]] = source0
+    else:
+        slice0 = out[-slice0_shift:]
+        slice0.copy_(source0)
+
+    # slice 1
+    source1 = tensor[-shift:]
+    if index_source is not None:
+        source1 = source1[index_source[:shift]]
+    if index_dest is not None:
+        out[index_dest[:-slice0_shift]] = source1
+    else:
+        slice1 = out[:-slice0_shift]
+        slice1.copy_(source1)
+    return out
