@@ -392,6 +392,8 @@ TorchRL offers two distinctive ways of accomplishing this:
 Checkpointing Replay Buffers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+.. _checkpoint-rb:
+
 Each component of the replay buffer can potentially be stateful and, as such,
 require a dedicated way of being serialized.
 Our replay buffer enjoys two separate APIs for saving their state on disk:
@@ -412,7 +414,7 @@ Under the hood, a naive call to :meth:`~torchrl.data.ReplayBuffer.dumps` will ju
 `dumps` method in a specific folder for each of its components (except transforms
 which we don't assume to be serializable using memory-mapped tensors in general).
 
-Saving data in TED-format may however consume much more memory than required. If continuous
+Saving data in :ref:`TED-format <TED-format>` may however consume much more memory than required. If continuous
 trajectories are stored in a buffer, we can avoid saving duplicated observations by saving all the
 observations at the root plus only the last element of the `"next"` sub-tensordict's observations, which
 can reduce the storage consumption up to two times. To enable this, three checkpointer classes are available:
@@ -426,9 +428,11 @@ compress the data and save some more space.
 
 .. warning:: The checkpointers make some restrictive assumption about the replay buffers. First, it is assumed that
   the ``done`` state accurately represents the end of a trajectory (except for the last trajectory which was written
-  for which the writer cursor indicates where to place the truncated signal). Furthermore, only done states that have
-  as many elements as the root tensordict are allowed: if the done state has extra elements that are not represented in
-  the batch-size of the storage, these checkpointers will fail.
+  for which the writer cursor indicates where to place the truncated signal). For MARL usage, one should note that
+  only done states that have as many elements as the root tensordict are allowed:
+  if the done state has extra elements that are not represented in
+  the batch-size of the storage, these checkpointers will fail. For example, a done state with shape ``torch.Size([3, 4, 5])``
+  within a storage of shape ``torch.Size([3, 4])`` is not allowed.
 
 Here is a concrete example of how an H5DB checkpointer could be used in practice:
 
@@ -449,8 +453,6 @@ Here is a concrete example of how an H5DB checkpointer could be used in practice
   >>> for i, data in enumerate(collector):
   ...     rb.extend(data)
   ...     assert rb._storage.max_size == 102
-  ...     if i == 0:
-  ...         rb_test.extend(data)
   ...     rb.dumps(path_to_save_dir)
   ...     rb_test.loads(path_to_save_dir)
   ...     assert_allclose_td(rb_test[:], rb[:])
@@ -579,7 +581,7 @@ its action, info, or done state.
 Flattening TED to reduce memory consumption
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-TED copies the observations twice in memory, which can impact the feasibility of using this format
+TED copies the observations twice in the memory, which can impact the feasibility of using this format
 in practice. Since it is being used mostly for ease of representation, one can store the data
 in a flat manner but represent it as TED during training.
 

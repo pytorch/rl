@@ -21,6 +21,7 @@ from tensordict import (
     NonTensorData,
     TensorDict,
     TensorDictBase,
+    unravel_key,
 )
 from torch import Tensor
 from torch.nn import functional as F
@@ -120,6 +121,19 @@ def _is_int(index):
 class TED2Flat:
     """A storage saving hook to serialize TED data in a compact format.
 
+    Args:
+        done_key (NestedKey, optional): the key where the done states should be read.
+            Defaults to ``("next", "done")``.
+        shift_key (NestedKey, optional): the key where the shift will be written.
+            Defaults to "shift".
+        is_full_key (NestedKey, optional): the key where the is_full attribute will be written.
+            Defaults to "is_full".
+        done_keys (Tuple[NestedKey], optional): a tuple of nested keys indicating the done entries.
+            Defaults to ("done", "truncated", "terminated")
+        reward_keys (Tuple[NestedKey], optional): a tuple of nested keys indicating the reward entries.
+            Defaults to ("reward",)
+
+
     Examples:
         >>> import tempfile
         >>>
@@ -167,11 +181,18 @@ class TED2Flat:
     _is_full: bool = None
 
     def __init__(
-        self, done_key=("next", "done"), shift_key="shift", is_full_key="is_full"
+        self,
+        done_key=("next", "done"),
+        shift_key="shift",
+        is_full_key="is_full",
+        done_keys=("done", "truncated", "terminated"),
+        reward_keys=("reward",),
     ):
         self.done_key = done_key
         self.shift_key = shift_key
         self.is_full_key = is_full_key
+        self.done_keys = {unravel_key(key) for key in done_keys}
+        self.reward_keys = {unravel_key(key) for key in reward_keys}
 
     @property
     def shift(self):
@@ -212,19 +233,16 @@ class TED2Flat:
         ntraj = done.sum()
 
         # Get the keys that require extra storage
-        keys_to_expand = set(data.get("next").keys(True, True)) - {
-            "terminated",
-            "done",
-            "truncated",
-            "reward",
-        }
+        keys_to_expand = set(data.get("next").keys(True, True)) - (
+            self.done_keys.union(self.reward_keys)
+        )
 
         total_keys = data.exclude("next").keys(True, True)
         total_keys = set(total_keys).union(set(data.get("next").keys(True, True)))
 
         len_with_offset = data.numel() + ntraj  # + done[0].numel()
         for key in total_keys:
-            if key in ("done", "truncated", "terminated", "reward"):
+            if key in (self.done_keys.union(self.reward_keys)):
                 entry = data.get(("next", key))
             else:
                 entry = data.get(key)
@@ -301,7 +319,7 @@ class TED2Flat:
         idx += torch.nn.functional.pad(done, [1, 0])[:-1].cumsum(0)
 
         for key in total_keys:
-            if key in ("done", "truncated", "terminated", "reward"):
+            if key in (self.done_keys.union(self.reward_keys)):
                 entry = data.get(("next", key))
             else:
                 entry = data.get(key)
@@ -332,6 +350,18 @@ class TED2Flat:
 
 class Flat2TED:
     """A storage loading hook to deserialize flattened TED data to TED format.
+
+    Args:
+        done_key (NestedKey, optional): the key where the done states should be read.
+            Defaults to ``("next", "done")``.
+        shift_key (NestedKey, optional): the key where the shift will be written.
+            Defaults to "shift".
+        is_full_key (NestedKey, optional): the key where the is_full attribute will be written.
+            Defaults to "is_full".
+        done_keys (Tuple[NestedKey], optional): a tuple of nested keys indicating the done entries.
+            Defaults to ("done", "truncated", "terminated")
+        reward_keys (Tuple[NestedKey], optional): a tuple of nested keys indicating the reward entries.
+            Defaults to ("reward",)
 
     Examples:
         >>> import tempfile
@@ -391,10 +421,19 @@ class Flat2TED:
 
     """
 
-    def __init__(self, done_key="done", shift_key="shift", is_full_key="is_full"):
+    def __init__(
+        self,
+        done_key="done",
+        shift_key="shift",
+        is_full_key="is_full",
+        done_keys=("done", "truncated", "terminated"),
+        reward_keys=("reward",),
+    ):
         self.done_key = done_key
         self.shift_key = shift_key
         self.is_full_key = is_full_key
+        self.done_keys = {unravel_key(key) for key in done_keys}
+        self.reward_keys = {unravel_key(key) for key in reward_keys}
 
     def __call__(self, data: TensorDictBase, out: TensorDictBase = None):
         _storage_shape = data.get_non_tensor("_storage_shape", default=None)
@@ -517,7 +556,7 @@ class Flat2TED:
 
         for key, entry in data.items(True, True):
             if entry.shape[0] == nsteps:
-                if key in ("done", "terminated", "truncated", "reward"):
+                if key in (self.done_keys.union(self.reward_keys)):
                     if key != "reward" and key not in out.keys(True, True):
                         # Create a done state at the root full of 0s
                         out.set(key, torch.zeros_like(entry), inplace=True)

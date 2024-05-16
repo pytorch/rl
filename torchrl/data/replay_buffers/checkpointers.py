@@ -189,13 +189,18 @@ class FlatStorageCheckpointer(TensorStorageCheckpointer):
         in which case the observation in `("next", key)` at time `t` and the one in `key` at time
         `t+1` should not match.
 
-    .. warning:: Given the above limitations, one should make sure that
+    .. seealso: The full list of arguments can be found in :class:`~torchrl.data.TED2Flat`.
 
     """
 
-    def __init__(self):
-        self._save_hooks = [TED2Flat()]
-        self._load_hooks = [Flat2TED()]
+    def __init__(self, done_keys=None, reward_keys=None):
+        kwargs = {}
+        if done_keys is not None:
+            kwargs["done_keys"] = done_keys
+        if reward_keys is not None:
+            kwargs["reward_keys"] = reward_keys
+        self._save_hooks = [TED2Flat(**kwargs)]
+        self._load_hooks = [Flat2TED(**kwargs)]
 
     def _save_shift_is_full(self, storage):
         is_full = storage._is_full
@@ -239,11 +244,18 @@ class NestedStorageCheckpointer(FlatStorageCheckpointer):
       - observations in the "next" tensordict are shifted by one step in the future (this
         is not the case when a multi-step transform is used for instance).
 
+    .. seealso: The full list of arguments can be found in :class:`~torchrl.data.TED2Flat`.
+
     """
 
-    def __init__(self):
-        self._save_hooks = [TED2Nested()]
-        self._load_hooks = [Nested2TED()]
+    def __init__(self, done_keys=None, reward_keys=None, **kwargs):
+        kwargs = {}
+        if done_keys is not None:
+            kwargs["done_keys"] = done_keys
+        if reward_keys is not None:
+            kwargs["reward_keys"] = reward_keys
+        self._save_hooks = [TED2Nested(**kwargs)]
+        self._load_hooks = [Nested2TED(**kwargs)]
 
 
 class H5StorageCheckpointer(NestedStorageCheckpointer):
@@ -255,22 +267,39 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
       - observations in the "next" tensordict are shifted by one step in the future (this
         is not the case when a multi-step transform is used for instance).
 
-    Args:
+    Keyword Args:
         checkpoint_file: the filename where to save the checkpointed data.
             This will be ignored iff the path passed to dumps / loads ends with the ``.h5``
             suffix. Defaults to ``"checkpoint.h5"``.
-        **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`.
+        h5_kwargs (Dict[str, Any] or Tuple[Tuple[str, Any], ...]): kwargs to be
+            passed to :meth:`h5py.File.create_dataset`.
 
     .. note:: To prevent out-of-memory issues, the data of the H5 file will be temporarily written
         on memory-mapped tensors stored in shared file system. The physical memory usage may increase
         during loading as a consequence.
 
+    .. seealso: The full list of arguments can be found in :class:`~torchrl.data.TED2Flat`. Note that this class only
+        supports keyword arguments.
+
     """
 
-    def __init__(self, checkpoint_file: str = "checkpoint.h5", **kwargs):
-        self._save_hooks = [TED2Nested(), H5Split()]
-        self._load_hooks = [H5Combine(), Nested2TED()]
-        self.kwargs = kwargs
+    def __init__(
+        self,
+        *,
+        checkpoint_file: str = "checkpoint.h5",
+        done_keys=None,
+        reward_keys=None,
+        h5_kwargs=None,
+        **kwargs,
+    ):
+        ted2_kwargs = kwargs
+        if done_keys is not None:
+            ted2_kwargs["done_keys"] = done_keys
+        if reward_keys is not None:
+            ted2_kwargs["reward_keys"] = reward_keys
+        self._save_hooks = [TED2Nested(**ted2_kwargs), H5Split()]
+        self._load_hooks = [H5Combine(), Nested2TED(**ted2_kwargs)]
+        self.kwargs = {} if h5_kwargs is None else dict(h5_kwargs)
         self.checkpoint_file = checkpoint_file
 
     def dumps(self, storage, path):

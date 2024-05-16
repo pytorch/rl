@@ -2922,10 +2922,8 @@ class TestCheckpointers:
         rb_test = ReplayBuffer(storage=storage_type(100))
         rb.storage.checkpointer = checkpointer()
         rb_test.storage.checkpointer = checkpointer()
-        for i, data in enumerate(collector):
+        for data in collector:
             rb.extend(data)
-            if i == 0:
-                rb_test.extend(data)
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])
@@ -2946,11 +2944,9 @@ class TestCheckpointers:
         rb_test = ReplayBuffer(storage=storage_type(100, ndim=2))
         rb.storage.checkpointer = checkpointer()
         rb_test.storage.checkpointer = checkpointer()
-        for i, data in enumerate(collector):
+        for data in collector:
             rb.extend(data)
             assert rb._storage.max_size == 102
-            if i == 0:
-                rb_test.extend(data)
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])
