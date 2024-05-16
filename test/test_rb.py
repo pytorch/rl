@@ -2929,10 +2929,11 @@ class TestCheckpointers:
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])
+
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     @pytest.mark.parametrize(
         "checkpointer",
-        [FlatStorageCheckpointer, H5StorageCheckpointer, NestedStorageCheckpointer],
+        [FlatStorageCheckpointer, NestedStorageCheckpointer, H5StorageCheckpointer],
     )
     def test_multi_env(self, storage_type, checkpointer, tmpdir):
         env = SerialEnv(3, lambda: GymEnv(CARTPOLE_VERSIONED(), device=None))
@@ -2947,6 +2948,7 @@ class TestCheckpointers:
         rb_test.storage.checkpointer = checkpointer()
         for i, data in enumerate(collector):
             rb.extend(data)
+            assert rb._storage.max_size == 102
             if i == 0:
                 rb_test.extend(data)
             rb.dumps(tmpdir)

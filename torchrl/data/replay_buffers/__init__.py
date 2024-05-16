@@ -5,6 +5,7 @@
 
 from .checkpointers import (
     FlatStorageCheckpointer,
+    H5StorageCheckpointer,
     ListStorageCheckpointer,
     NestedStorageCheckpointer,
     StorageCheckpointerBase,
@@ -37,7 +38,7 @@ from .storages import (
     StorageEnsemble,
     TensorStorage,
 )
-from .utils import Flat2TED, TED2Flat
+from .utils import Flat2TED, H5Combine, H5Split, Nested2TED, TED2Flat, TED2Nested
 from .writers import (
     ImmutableDatasetWriter,
     RoundRobinWriter,

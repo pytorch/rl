@@ -136,25 +136,31 @@ using the following components:
     :template: rl_template.rst
 
 
-    Sampler
+    FlatStorageCheckpointer
+    H5StorageCheckpointer
+    ImmutableDatasetWriter
+    LazyMemmapStorage
+    LazyTensorStorage
+    ListStorage
+    ListStorageCheckpointer
+    NestedStorageCheckpointer
     PrioritizedSampler
     PrioritizedSliceSampler
     RandomSampler
+    RoundRobinWriter
+    Sampler
     SamplerWithoutReplacement
     SliceSampler
     SliceSamplerWithoutReplacement
     Storage
-    ListStorage
-    LazyTensorStorage
-    LazyMemmapStorage
-    TensorStorage
-    Writer
-    ImmutableDatasetWriter
-    RoundRobinWriter
-    TensorDictRoundRobinWriter
+    StorageCheckpointerBase
+    StorageEnsembleCheckpointer
     TensorDictMaxValueWriter
-    TED2Flat
-    Flat2TED
+    TensorDictRoundRobinWriter
+    TensorStorage
+    TensorStorageCheckpointer
+    Writer
+
 
 Storage choice is very influential on replay buffer sampling latency, especially
 in distributed reinforcement learning settings with larger data volumes.
@@ -391,16 +397,64 @@ require a dedicated way of being serialized.
 Our replay buffer enjoys two separate APIs for saving their state on disk:
 :meth:`~torchrl.data.ReplayBuffer.dumps` and :meth:`~torchrl.data.ReplayBuffer.loads` will save the
 data of each component except transforms (storage, writer, sampler) using memory-mapped
-tensors and json files for the metadata. This will work across all classes except
+tensors and json files for the metadata.
+
+This will work across all classes except
 :class:`~torchrl.data.replay_buffers.storages.ListStorage`, which content
 cannot be anticipated (and as such does not comply with memory-mapped data
 structures such as those that can be found in the tensordict library).
+
 This API guarantees that a buffer that is saved and then loaded back will be in
 the exact same state, whether we look at the status of its sampler (eg, priority trees)
 its writer (eg, max writer heaps) or its storage.
-Under the hood, :meth:`~torchrl.data.ReplayBuffer.dumps` will just call the public
+
+Under the hood, a naive call to :meth:`~torchrl.data.ReplayBuffer.dumps` will just call the public
 `dumps` method in a specific folder for each of its components (except transforms
 which we don't assume to be serializable using memory-mapped tensors in general).
+
+Saving data in TED-format may however consume much more memory than required. If continuous
+trajectories are stored in a buffer, we can avoid saving duplicated observations by saving all the
+observations at the root plus only the last element of the `"next"` sub-tensordict's observations, which
+can reduce the storage consumption up to two times. To enable this, three checkpointer classes are available:
+:class:`~torchrl.data.FlatStorageCheckpointer` will discard duplicated observations to compress the TED format. At
+load time, this class will re-write the observations in the correct format. If the buffer is saved on disk,
+the operations executed by this checkpointer will not require any additional RAM.
+The :class:`~torchrl.data.NestedStorageCheckpointer` will save the trajectories using nested tensors to make the data
+representation more apparent (each item along the first dimension representing a distinct trajectory).
+Finally, the :class:`~torchrl.data.H5StorageCheckpointer` will save the buffer in an H5DB format, enabling users to
+compress the data and save some more space.
+
+.. warning:: The checkpointers make some restrictive assumption about the replay buffers. First, it is assumed that
+  the ``done`` state accurately represents the end of a trajectory (except for the last trajectory which was written
+  for which the writer cursor indicates where to place the truncated signal). Furthermore, only done states that have
+  as many elements as the root tensordict are allowed: if the done state has extra elements that are not represented in
+  the batch-size of the storage, these checkpointers will fail.
+
+Here is a concrete example of how an H5DB checkpointer could be used in practice:
+
+  >>> from torchrl.data import ReplayBuffer, H5StorageCheckpointer, LazyMemmapStorage
+  >>> from torchrl.collectors import SyncDataCollector
+  >>> from torchrl.envs import GymEnv, SerialEnv
+  >>> import torch
+  >>> env = SerialEnv(3, lambda: GymEnv("CartPole-v1", device=None))
+  >>> env.set_seed(0)
+  >>> torch.manual_seed(0)
+  >>> collector = SyncDataCollector(
+  >>>     env, policy=env.rand_step, total_frames=200, frames_per_batch=22
+  >>> )
+  >>> rb = ReplayBuffer(storage=LazyMemmapStorage(100, ndim=2))
+  >>> rb_test = ReplayBuffer(storage=LazyMemmapStorage(100, ndim=2))
+  >>> rb.storage.checkpointer = H5StorageCheckpointer()
+  >>> rb_test.storage.checkpointer = H5StorageCheckpointer()
+  >>> for i, data in enumerate(collector):
+  ...     rb.extend(data)
+  ...     assert rb._storage.max_size == 102
+  ...     if i == 0:
+  ...         rb_test.extend(data)
+  ...     rb.dumps(path_to_save_dir)
+  ...     rb_test.loads(path_to_save_dir)
+  ...     assert_allclose_td(rb_test[:], rb[:])
+
 
 Whenever saving data using :meth:`~torchrl.data.ReplayBuffer.dumps` is not possible, an
 alternative way is to use :meth:`~torchrl.data.ReplayBuffer.state_dict`, which returns a data
@@ -884,6 +938,12 @@ Utils
     consolidate_spec
     check_no_exclusive_keys
     contains_lazy_spec
+    Nested2TED
+    Flat2TED
+    H5Combine
+    H5Split
+    TED2Flat
+    TED2Nested
 
 .. currentmodule:: torchrl.envs.transforms.rb_transforms
 

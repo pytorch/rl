@@ -256,8 +256,14 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
         is not the case when a multi-step transform is used for instance).
 
     Args:
-        checkpoint_file: TODO
+        checkpoint_file: the filename where to save the checkpointed data.
+            This will be ignored iff the path passed to dumps / loads ends with the ``.h5``
+            suffix. Defaults to ``"checkpoint.h5"``.
         **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`.
+
+    .. note:: To prevent out-of-memory issues, the data of the H5 file will be temporarily written
+        on memory-mapped tensors stored in shared file system. The physical memory usage may increase
+        during loading as a consequence.
 
     """
 
@@ -268,16 +274,14 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
         self.checkpoint_file = checkpoint_file
 
     def dumps(self, storage, path):
-        path = Path(path)
-        path.mkdir(exist_ok=True)
-        path = path / self.checkpoint_file
+        path = self._get_path(path)
 
         self._save_shift_is_full(storage)
 
         if not storage.initialized:
             raise RuntimeError("Cannot save a non-initialized storage.")
         _storage = storage._storage
-        length = len(storage)
+        length = storage._len
         for hook in self._save_hooks:
             # we don't pass a path here since we're not reusing the tensordict
             _storage = hook(_storage)
@@ -286,23 +290,37 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
             data = PersistentTensorDict.from_dict(_storage, path, **self.kwargs)
             data["_len"] = NonTensorData(data=length)
         else:
-            raise ValueError
+            raise ValueError("Only tensor collections are supported.")
 
     def loads(self, storage, path):
-        path = Path(path)
-        path = path / self.checkpoint_file
+        path = self._get_path(path)
         data = PersistentTensorDict.from_h5(path)
+        if storage.initialized:
+            dest = storage._storage
+        else:
+            # TODO: This could load the RAM a lot, maybe try to catch this within the hook and use memmap instead
+            dest = None
         _len = data["_len"]
         for hook in self._load_hooks:
-            data = hook(data)
+            data = hook(data, out=dest)
         if not storage.initialized:
             # this should not be reached if is_pytree=True
             storage._init(data[0])
             storage._storage.update_(data)
         else:
             storage._storage.copy_(data)
-        # TODO
         storage._len = _len
+
+    def _get_path(self, path):
+        path = Path(path)
+        if path.suffix == ".h5":
+            return str(path.absolute())
+        try:
+            path.mkdir(exist_ok=True)
+        except Exception:
+            raise RuntimeError(f"Failed to create the checkpoint directory {path}.")
+        path = path / self.checkpoint_file
+        return str(path.absolute())
 
 
 class StorageEnsembleCheckpointer(StorageCheckpointerBase):

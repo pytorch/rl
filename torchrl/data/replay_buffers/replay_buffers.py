@@ -357,7 +357,7 @@ class ReplayBuffer:
         if isinstance(index, str) or (isinstance(index, tuple) and unravel_key(index)):
             return self[:][index]
         if isinstance(index, tuple):
-            if len(index) > 1:
+            if len(index) == 1:
                 return self[index[0]]
             else:
                 return self[:][index]

@@ -858,10 +858,12 @@ class LazyTensorStorage(TensorStorage):
 
         def max_size_along_dim0(data_shape):
             if self.ndim > 1:
-                return (
+                result = (
                     -(self.max_size // -data_shape[: self.ndim - 1].numel()),
                     *data_shape,
                 )
+                self.max_size = torch.Size(result).numel()
+                return result
             return (self.max_size, *data_shape)
 
         if is_tensor_collection(data):
@@ -1043,10 +1045,12 @@ class LazyMemmapStorage(LazyTensorStorage):
 
         def max_size_along_dim0(data_shape):
             if self.ndim > 1:
-                return (
+                result = (
                     -(self.max_size // -data_shape[: self.ndim - 1].numel()),
                     *data_shape,
                 )
+                self.max_size = torch.Size(result).numel()
+                return result
             return (self.max_size, *data_shape)
 
         if is_tensor_collection(data):
