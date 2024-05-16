@@ -7,7 +7,10 @@ from typing import Optional
 
 import torch
 
-from torchrl.data import ReplayBuffer, TensorDictReplayBuffer
+from torchrl.data.replay_buffers.replay_buffers import (
+    ReplayBuffer,
+    TensorDictReplayBuffer,
+)
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.utils import DEVICE_TYPING

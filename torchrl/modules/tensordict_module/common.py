@@ -5,27 +5,30 @@
 
 from __future__ import annotations
 
+import importlib.util
 import inspect
 import re
 import warnings
-from typing import Iterable, Optional, Type, Union
+from typing import Iterable, List, Optional, Type, Union
 
 import torch
 
-from tensordict.nn import TensorDictModule
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDictBase, unravel_key_list
+
+from tensordict.nn import dispatch, TensorDictModule, TensorDictModuleBase
+from tensordict.utils import NestedKey
+
 from torch import nn
+from torch.nn import functional as F
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 
 from torchrl.data.utils import DEVICE_TYPING
 
-_has_functorch = False
-try:
+_has_functorch = importlib.util.find_spec("functorch") is not None
+if _has_functorch:
     from functorch import FunctionalModule, FunctionalModuleWithBuffers
-
-    _has_functorch = True
-except ImportError:
+else:
     warnings.warn(
         "failed to import functorch. TorchRL's features that do not require "
         "functional programming should work, but functionality and performance "
@@ -135,7 +138,6 @@ class SafeModule(TensorDictModule):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torchrl.data import UnboundedContinuousTensorSpec
         >>> from torchrl.modules import TensorDictModule
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
@@ -147,8 +149,9 @@ class SafeModule(TensorDictModule):
         ...    in_keys=["input", "hidden"],
         ...    out_keys=["output"],
         ...    )
-        >>> params = make_functional(td_fmodule)
-        >>> td_functional = td_fmodule(td.clone(), params=params)
+        >>> params = TensorDict.from_module(td_fmodule)
+        >>> with params.to_module(td_module):
+        ...     td_functional = td_fmodule(td.clone())
         >>> print(td_functional)
         TensorDict(
             fields={
@@ -209,6 +212,8 @@ class SafeModule(TensorDictModule):
         self.register_spec(safe=safe, spec=spec)
 
     def register_spec(self, safe, spec):
+        if spec is not None:
+            spec = spec.clone()
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):
@@ -217,22 +222,25 @@ class SafeModule(TensorDictModule):
                     f"got more than one out_key for the TensorDictModule: {self.out_keys},\nbut only one spec. "
                     "Consider using a CompositeSpec object or no spec at all."
                 )
-            spec = CompositeSpec(**{self.out_keys[0]: spec})
+            spec = CompositeSpec({self.out_keys[0]: spec})
         elif spec is not None and isinstance(spec, CompositeSpec):
-            if "_" in spec.keys():
+            if "_" in spec.keys() and spec["_"] is not None:
                 warnings.warn('got a spec with key "_": it will be ignored')
         elif spec is None:
             spec = CompositeSpec()
 
-        if set(spec.keys(True, True)) != set(self.out_keys):
+        # unravel_key_list(self.out_keys) can be removed once 473 is merged in tensordict
+        spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
+        out_keys = set(unravel_key_list(self.out_keys))
+        if spec_keys != out_keys:
             # then assume that all the non indicated specs are None
-            for key in self.out_keys:
-                if key not in spec:
+            for key in out_keys:
+                if key not in spec_keys:
                     spec[key] = None
-
-        if set(spec.keys(True, True)) != set(self.out_keys):
+            spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
+        if spec_keys != out_keys:
             raise RuntimeError(
-                f"spec keys and out_keys do not match, got: {set(spec.keys(True))} and {set(self.out_keys)} respectively"
+                f"spec keys and out_keys do not match, got: {spec_keys} and {out_keys} respectively"
             )
 
         self._spec = spec
@@ -357,12 +365,16 @@ def ensure_tensordict_compatible(
     module: Union[
         FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
     ],
-    in_keys: Optional[Iterable[str]] = None,
-    out_keys: Optional[Iterable[str]] = None,
+    in_keys: Optional[List[NestedKey]] = None,
+    out_keys: Optional[List[NestedKey]] = None,
     safe: bool = False,
     wrapper_type: Optional[Type] = TensorDictModule,
     **kwargs,
 ):
+    """Ensures module is compatible with TensorDictModule and, if not, it wraps it."""
+    in_keys = unravel_key_list(in_keys) if in_keys else in_keys
+    out_keys = unravel_key_list(out_keys) if out_keys else out_keys
+
     """Checks and ensures an object with forward method is TensorDict compatible."""
     if is_tensordict_compatible(module):
         if in_keys is not None and set(in_keys) != set(module.in_keys):
@@ -401,3 +413,111 @@ def ensure_tensordict_compatible(
     if out_keys is not None:
         kwargs["out_keys"] = out_keys
     return wrapper_type(module, **kwargs)
+
+
+class VmapModule(TensorDictModuleBase):
+    """A TensorDictModule wrapper to vmap over the input.
+
+    It is intended to be used with modules that accept data with one less batch
+    dimension than the one provided. By using this wrapper, one can hide a
+    batch dimension and satisfy the wrapped module.
+
+    Args:
+        module (TensorDictModuleBase): the module to vmap over.
+        vmap_dim (int, optional): the vmap input and output dim.
+            If none is provided, the last dimension of the tensordict is
+            assumed.
+
+    .. note::
+
+      Since vmap requires to have control over the batch size of the input
+      this module does not support dispatched arguments
+
+    Example:
+        >>> lam = TensorDictModule(lambda x: x[0], in_keys=["x"], out_keys=["y"])
+        >>> sample_in = torch.ones((10,3,2))
+        >>> sample_in_td = TensorDict({"x":sample_in}, batch_size=[10])
+        >>> lam(sample_in)
+        >>> vm = VmapModule(lam, 0)
+        >>> vm(sample_in_td)
+        >>> assert (sample_in_td["x"][:, 0] == sample_in_td["y"]).all()
+    """
+
+    def __init__(self, module: TensorDictModuleBase, vmap_dim=None):
+        if not _has_functorch:
+            raise ImportError("VmapModule requires torch>=1.13.")
+        super().__init__()
+        self.in_keys = module.in_keys
+        self.out_keys = module.out_keys
+        self.module = module
+        self.vmap_dim = vmap_dim
+        if torch.__version__ >= "2.0":
+            self._vmap = torch.vmap
+        else:
+            import functorch
+
+            self._vmap = functorch.vmap
+
+    def forward(self, tensordict):
+        # TODO: there is a risk of segfault if input is not a tensordict.
+        # We should investigate (possibly prevent it c++ side?)
+        vmap_dim = self.vmap_dim
+        if vmap_dim is None:
+            ndim = tensordict.ndim
+            vmap_dim = ndim - 1
+        td = self._vmap(self.module, (vmap_dim,), (vmap_dim,))(tensordict)
+        return tensordict.update(td)
+
+
+class DistributionalDQNnet(TensorDictModuleBase):
+    """Distributional Deep Q-Network softmax layer.
+
+    This layer should be used in between a regular model that predicts the
+    action values and a distribution which acts on logits values.
+
+    Args:
+        in_keys (list of str or tuples of str): input keys to the log-softmax
+            operation. Defaults to ``["action_value"]``.
+        out_keys (list of str or tuples of str): output keys to the log-softmax
+            operation. Defaults to ``["action_value"]``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> net = DistributionalDQNnet()
+        >>> td = TensorDict({"action_value": torch.randn(10, 5)}, batch_size=[10])
+        >>> net(td)
+        TensorDict(
+            fields={
+                action_value: Tensor(shape=torch.Size([10, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False)
+
+    """
+
+    _wrong_out_feature_dims_error = (
+        "DistributionalDQNnet requires dqn output to be at least "
+        "2-dimensional, with dimensions *Batch x #Atoms x #Actions. Got {0} "
+        "instead."
+    )
+
+    def __init__(self, *, in_keys=None, out_keys=None):
+        super().__init__()
+        if in_keys is None:
+            in_keys = ["action_value"]
+        if out_keys is None:
+            out_keys = ["action_value"]
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+
+    @dispatch(auto_batch_size=False)
+    def forward(self, tensordict):
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            q_values = tensordict.get(in_key)
+            if q_values.ndimension() < 2:
+                raise RuntimeError(
+                    self._wrong_out_feature_dims_error.format(q_values.shape)
+                )
+            tensordict.set(out_key, F.log_softmax(q_values, dim=-2))
+        return tensordict

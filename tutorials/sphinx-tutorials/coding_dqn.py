@@ -1,8 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 TorchRL trainer: A DQN example
 ==============================
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
+
+.. _coding_dqn:
 
 """
 
@@ -34,18 +35,18 @@ TorchRL trainer: A DQN example
 # - how to build an environment in TorchRL, including transforms (e.g. data
 #   normalization, frame concatenation, resizing and turning to grayscale)
 #   and parallel execution. Unlike what we did in the
-#   `DDPG tutorial <https://pytorch.org/rl/tutorials/coding_ddpg.html>`_, we
+#   :ref:`DDPG tutorial <coding_ddpg>`, we
 #   will normalize the pixels and not the state vector.
 # - how to design a :class:`~torchrl.modules.QValueActor` object, i.e. an actor
 #   that estimates the action values and picks up the action with the highest
 #   estimated return;
 # - how to collect data from your environment efficiently and store them
 #   in a replay buffer;
-# - how to use multi-step, a simple preprocessing step for off-policy algorithms;
+# - how to use multi-step, a simple preprocessing step for off-policy sota-implementations;
 # - and finally how to evaluate your model.
 #
 # **Prerequisites**: We encourage you to get familiar with torchrl through the
-# `PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>`_ first.
+# :ref:`PPO tutorial <coding_ppo>` first.
 #
 # DQN
 # ---
@@ -86,15 +87,36 @@ TorchRL trainer: A DQN example
 import tempfile
 import warnings
 
-warnings.filterwarnings("ignore")
-# sphinx_gallery_end_ignore
+from tensordict.nn import TensorDictSequential
 
+warnings.filterwarnings("ignore")
+
+from torch import multiprocessing
+
+# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
+# `__main__` method call, but for the easy of reading the code switch to fork
+# which is also a default spawn method in Google's Colaboratory
+try:
+    is_sphinx = __sphinx_build__
+except NameError:
+    is_sphinx = False
+
+try:
+    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
+    mp_context = "fork"
+except RuntimeError:
+    # If we can't set the method globally we can still run the parallel env with "fork"
+    # This will fail on windows! Use "spawn" and put the script within `if __name__ == "__main__"`
+    mp_context = "fork"
+    pass
+
+# sphinx_gallery_end_ignore
 import os
 import uuid
 
 import torch
 from torch import nn
-from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector
 from torchrl.data import LazyMemmapStorage, MultiStep, TensorDictReplayBuffer
 from torchrl.envs import (
     EnvCreator,
@@ -113,7 +135,7 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
 )
-from torchrl.modules import DuelingCnnDQNet, EGreedyWrapper, QValueActor
+from torchrl.modules import DuelingCnnDQNet, EGreedyModule, QValueActor
 
 from torchrl.objectives import DQNLoss, SoftUpdate
 from torchrl.record.loggers.csv import CSVLogger
@@ -197,20 +219,26 @@ def is_notebook() -> bool:
 def make_env(
     parallel=False,
     obs_norm_sd=None,
+    num_workers=1,
 ):
     if obs_norm_sd is None:
         obs_norm_sd = {"standard_normal": True}
     if parallel:
+
+        def maker():
+            return GymEnv(
+                "CartPole-v1",
+                from_pixels=True,
+                pixels_only=True,
+                device=device,
+            )
+
         base_env = ParallelEnv(
             num_workers,
-            EnvCreator(
-                lambda: GymEnv(
-                    "CartPole-v1",
-                    from_pixels=True,
-                    pixels_only=True,
-                    device=device,
-                )
-            ),
+            EnvCreator(maker),
+            # Don't create a sub-process if we have only one worker
+            serial_for_single=True,
+            mp_start_method=mp_context,
         )
     else:
         base_env = GymEnv(
@@ -258,6 +286,8 @@ def get_norm_stats():
     # let's check that normalizing constants have a size of ``[C, 1, 1]`` where
     # ``C=4`` (because of :class:`~torchrl.envs.CatFrames`).
     print("state dict of the observation norm:", obs_norm_sd)
+    test_env.close()
+    del test_env
     return obs_norm_sd
 
 
@@ -316,13 +346,14 @@ def make_model(dummy_env):
     tensordict = dummy_env.fake_tensordict()
     actor(tensordict)
 
-    # we wrap our actor in an EGreedyWrapper for data collection
-    actor_explore = EGreedyWrapper(
-        actor,
+    # we join our actor with an EGreedyModule for data collection
+    exploration_module = EGreedyModule(
+        spec=dummy_env.action_spec,
         annealing_num_steps=total_frames,
         eps_init=eps_greedy_val,
         eps_end=eps_greedy_val_env,
     )
+    actor_explore = TensorDictSequential(actor, exploration_module)
 
     return actor, actor_explore
 
@@ -334,7 +365,7 @@ def make_model(dummy_env):
 # Replay buffers
 # ~~~~~~~~~~~~~~
 #
-# Replay buffers play a central role in off-policy RL algorithms such as DQN.
+# Replay buffers play a central role in off-policy RL sota-implementations such as DQN.
 # They constitute the dataset we will be sampling from during training.
 #
 # Here, we will use a regular sampling strategy, although a prioritized RB
@@ -362,13 +393,20 @@ def get_replay_buffer(buffer_size, n_optim, batch_size):
 # Data collector
 # ~~~~~~~~~~~~~~
 #
-# As in `PPO <https://pytorch.org/rl/tutorials/coding_ppo.html>`_ and
-# `DDPG <https://pytorch.org/rl/tutorials/coding_ddpg.html>`_, we will be using
+# As in :ref:`PPO <coding_ppo>` and
+# :ref:`DDPG <coding_ddpg>`, we will be using
 # a data collector as a dataloader in the outer loop.
 #
 # We choose the following configuration: we will be running a series of
 # parallel environments synchronously in parallel in different collectors,
 # themselves running in parallel but asynchronously.
+#
+# .. note::
+#   This feature is only available when running the code within the "spawn"
+#   start method of python multiprocessing library. If this tutorial is run
+#   directly as a script (thereby using the "fork" method) we will be using
+#   a regular :class:`~torchrl.collectors.SyncDataCollector`.
+#
 # The advantage of this configuration is that we can balance the amount of
 # compute that is executed in batch with what we want to be executed
 # asynchronously. We encourage the reader to experiment how the collection
@@ -377,9 +415,9 @@ def get_replay_buffer(buffer_size, n_optim, batch_size):
 # environment executed in parallel in each collector (controlled by the
 # ``num_workers`` hyperparameter).
 #
-# When building the collector, we can choose on which device we want the
-# environment and policy to execute the operations through the ``device``
-# keyword argument. The ``storing_devices`` argument will modify the
+# Collector's devices are fully parametrizable through the ``device`` (general),
+# ``policy_device``, ``env_device`` and ``storing_device`` arguments.
+# The ``storing_device`` argument will modify the
 # location of the data being collected: if the batches that we are gathering
 # have a considerable size, we may want to store them on a different location
 # than the device where the computation is happening. For asynchronous data
@@ -390,18 +428,24 @@ def get_replay_buffer(buffer_size, n_optim, batch_size):
 
 
 def get_collector(
-    obs_norm_sd,
+    stats,
     num_collectors,
     actor_explore,
     frames_per_batch,
     total_frames,
     device,
 ):
-    data_collector = MultiaSyncDataCollector(
-        [
-            make_env(parallel=True, obs_norm_sd=obs_norm_sd),
-        ]
-        * num_collectors,
+    # We can't use nested child processes with mp_start_method="fork"
+    if is_fork:
+        cls = SyncDataCollector
+        env_arg = make_env(parallel=True, obs_norm_sd=stats, num_workers=num_workers)
+    else:
+        cls = MultiaSyncDataCollector
+        env_arg = [
+            make_env(parallel=True, obs_norm_sd=stats, num_workers=num_workers)
+        ] * num_collectors
+    data_collector = cls(
+        env_arg,
         policy=actor_explore,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -427,13 +471,13 @@ def get_collector(
 # Target parameters
 # ~~~~~~~~~~~~~~~~~
 #
-# Many off-policy RL algorithms use the concept of "target parameters" when it
+# Many off-policy RL sota-implementations use the concept of "target parameters" when it
 # comes to estimate the value of the next state or state-action pair.
 # The target parameters are lagged copies of the model parameters. Because
 # their predictions mismatch those of the current model configuration, they
 # help learning by putting a pessimistic bound on the value being estimated.
 # This is a powerful trick (known as "Double Q-Learning") that is ubiquitous
-# in similar algorithms.
+# in similar sota-implementations.
 #
 
 
@@ -452,7 +496,12 @@ def get_loss_module(actor, gamma):
 # in practice, and the performance of the algorithm should hopefully not be
 # too sensitive to slight variations of these.
 
-device = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
+is_fork = multiprocessing.get_start_method() == "fork"
+device = (
+    torch.device(0)
+    if torch.cuda.is_available() and not is_fork
+    else torch.device("cpu")
+)
 
 ###############################################################################
 # Optimizer
@@ -566,7 +615,12 @@ actor, actor_explore = make_model(test_env)
 loss_module, target_net_updater = get_loss_module(actor, gamma)
 
 collector = get_collector(
-    stats, num_collectors, actor_explore, frames_per_batch, total_frames, device
+    stats=stats,
+    num_collectors=num_collectors,
+    actor_explore=actor_explore,
+    frames_per_batch=frames_per_batch,
+    total_frames=total_frames,
+    device=device,
 )
 optimizer = torch.optim.Adam(
     loss_module.parameters(), lr=lr, weight_decay=wd, betas=betas
@@ -626,12 +680,18 @@ recorder = Recorder(
 recorder.register(trainer)
 
 ###############################################################################
+# The exploration module epsilon factor is also annealed:
+#
+
+trainer.register_op("post_steps", actor_explore[1].step, frames=frames_per_batch)
+
+###############################################################################
 # - Any callable (including :class:`~torchrl.trainers.TrainerHookBase`
 #   subclasses) can be registered using :meth:`~torchrl.trainers.Trainer.register_op`.
 #   In this case, a location must be explicitly passed (). This method gives
 #   more control over the location of the hook but it also requires more
 #   understanding of the Trainer mechanism.
-#   Check the `trainer documentation <https://pytorch.org/rl/reference/trainers.html>`_
+#   Check the :ref:`trainer documentation <ref_trainers>`
 #   for a detailed description of the trainer hooks.
 #
 trainer.register_op("post_optim", target_net_updater.step)
@@ -708,7 +768,7 @@ print_csv_files_in_folder(logger.experiment.log_dir)
 # - A prioritized replay buffer could also be used. This will give a
 #   higher priority to samples that have the worst value accuracy.
 #   Learn more on the
-#   `replay buffer section <https://pytorch.org/rl/reference/data.html#composable-replay-buffers>`_
+#   :ref:`replay buffer section <ref_buffers>`
 #   of the documentation.
 # - A distributional loss (see :class:`~torchrl.objectives.DistributionalDQNLoss`
 #   for more information).

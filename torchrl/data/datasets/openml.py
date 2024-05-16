@@ -2,26 +2,32 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
-from typing import Callable, Optional
+import os
+from pathlib import Path
+from typing import Callable
 
 import numpy as np
-from tensordict.tensordict import TensorDict
+from tensordict import TensorDict
+from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 
+from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import (
-    LazyMemmapStorage,
     Sampler,
     SamplerWithoutReplacement,
-    TensorDictReplayBuffer,
+    TensorStorage,
     Writer,
 )
 
 
-class OpenMLExperienceReplay(TensorDictReplayBuffer):
+class OpenMLExperienceReplay(BaseDatasetExperienceReplay):
     """An experience replay for OpenML data.
 
     This class provides an easy entry point for public datasets.
     See "Dua, D. and Graff, C. (2017) UCI Machine Learning Repository. http://archive.ics.uci.edu/ml"
+
+    The data format follows the :ref:`TED convention <TED-format>`.
 
     The data is accessed via scikit-learn. Make sure sklearn and pandas are
     installed before retrieving the data:
@@ -38,7 +44,7 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
-            a default RoundRobinWriter() will be used.
+            a default :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter` will be used.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset.
@@ -47,7 +53,7 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
         transform (Transform, optional): Transform to be executed when sample() is called.
-            To chain transforms use the :obj:`Compose` class.
+            To chain transforms use the :class:`~torchrl.envs.transforms.transforms.Compose` class.
 
     """
 
@@ -55,23 +61,32 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
         self,
         name: str,
         batch_size: int,
-        sampler: Optional[Sampler] = None,
-        writer: Optional[Writer] = None,
-        collate_fn: Optional[Callable] = None,
+        root: Path | None = None,
+        sampler: Sampler | None = None,
+        writer: Writer | None = None,
+        collate_fn: Callable | None = None,
         pin_memory: bool = False,
-        prefetch: Optional[int] = None,
-        transform: Optional["Transform"] = None,  # noqa-F821
+        prefetch: int | None = None,
+        transform: "Transform" | None = None,  # noqa-F821
     ):
 
         if sampler is None:
             sampler = SamplerWithoutReplacement()
+        if root is None:
+            root = _get_root_dir("openml")
+        self.root = Path(root)
+        self.dataset_id = name
 
-        dataset = self._get_data(
-            name,
-        )
+        if not self._is_downloaded():
+            dataset = self._get_data(
+                name,
+            )
+            storage = TensorStorage(dataset.memmap(self._dataset_path))
+        else:
+            dataset = TensorDict.load_memmap(self._dataset_path)
+            storage = TensorStorage(dataset)
+
         self.max_outcome_val = dataset["y"].max().item()
-
-        storage = LazyMemmapStorage(dataset.shape[0])
         super().__init__(
             batch_size=batch_size,
             storage=storage,
@@ -82,7 +97,13 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
             prefetch=prefetch,
             transform=transform,
         )
-        self.extend(dataset)
+
+    @property
+    def _dataset_path(self):
+        return self.root / self.dataset_id
+
+    def _is_downloaded(self):
+        return os.path.exists(self._dataset_path)
 
     @classmethod
     def _get_data(cls, dataset_name):
@@ -115,7 +136,9 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
                 X[col] = encoder.fit_transform(X[col])
             y = encoder.fit_transform(y)
             if dataset_name == "adult_onehot":
-                cat_features = OneHotEncoder(sparse=False).fit_transform(X[cat_ix])
+                cat_features = OneHotEncoder(sparse_output=False).fit_transform(
+                    X[cat_ix]
+                )
                 num_features = StandardScaler().fit_transform(X[num_ix])
                 X = np.concatenate((num_features, cat_features), axis=1)
             else:
@@ -129,7 +152,7 @@ class OpenMLExperienceReplay(TensorDictReplayBuffer):
             # X = X.drop(["veil-type"],axis=1)
             y = encoder.fit_transform(y)
             if dataset_name == "mushroom_onehot":
-                X = OneHotEncoder(sparse=False).fit_transform(X)
+                X = OneHotEncoder(sparse_output=False).fit_transform(X)
             else:
                 X = StandardScaler().fit_transform(X)
         elif dataset_name == "covertype":

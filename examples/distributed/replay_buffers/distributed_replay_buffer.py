@@ -16,7 +16,7 @@ import time
 import torch
 import torch.distributed.rpc as rpc
 from tensordict import TensorDict
-from torchrl._utils import accept_remote_rref_invocation
+from torchrl._utils import accept_remote_rref_invocation, logger as torchrl_logger
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -50,7 +50,7 @@ class DummyDataCollectorNode:
     def __init__(self, replay_buffer: rpc.RRef) -> None:
         self.id = rpc.get_worker_info().id
         self.replay_buffer = replay_buffer
-        print("Data Collector Node constructed")
+        torchrl_logger.info("Data Collector Node constructed")
 
     def _submit_random_item_async(self) -> rpc.RRef:
         td = TensorDict({"a": torch.randint(100, (1,))}, [])
@@ -68,7 +68,7 @@ class DummyDataCollectorNode:
         """Method that begins experience collection (we just generate random TensorDicts in this example). `accept_remote_rref_invocation` enables this method to be invoked remotely provided the class instantiation `rpc.RRef` is provided in place of the object reference."""
         for elem in range(50):
             time.sleep(random.randint(1, 4))
-            print(
+            torchrl_logger.info(
                 f"Collector [{self.id}] submission {elem}: {self._submit_random_item_async().to_here()}"
             )
 
@@ -77,22 +77,22 @@ class DummyTrainerNode:
     """Trainer node responsible for learning from experiences sampled from an experience replay buffer."""
 
     def __init__(self) -> None:
-        print("DummyTrainerNode")
+        torchrl_logger.info("DummyTrainerNode")
         self.id = rpc.get_worker_info().id
         self.replay_buffer = self._create_replay_buffer()
         self._create_and_launch_data_collectors()
 
     def train(self, iterations: int) -> None:
         for iteration in range(iterations):
-            print(f"[{self.id}] Training Iteration: {iteration}")
+            torchrl_logger.info(f"[{self.id}] Training Iteration: {iteration}")
             time.sleep(3)
             batch = rpc.rpc_sync(
                 self.replay_buffer.owner(),
                 ReplayBufferNode.sample,
                 args=(self.replay_buffer, 16),
             )
-            print(f"[{self.id}] Sample Obtained Iteration: {iteration}")
-            print(f"{batch}")
+            torchrl_logger.info(f"[{self.id}] Sample Obtained Iteration: {iteration}")
+            torchrl_logger.info(f"{batch}")
 
     def _create_replay_buffer(self) -> rpc.RRef:
         while True:
@@ -101,10 +101,10 @@ class DummyTrainerNode:
                 buffer_rref = rpc.remote(
                     replay_buffer_info, ReplayBufferNode, args=(10000,)
                 )
-                print(f"Connected to replay buffer {replay_buffer_info}")
+                torchrl_logger.info(f"Connected to replay buffer {replay_buffer_info}")
                 return buffer_rref
             except Exception as e:
-                print(f"Failed to connect to replay buffer: {e}")
+                torchrl_logger.info(f"Failed to connect to replay buffer: {e}")
                 time.sleep(RETRY_DELAY_SECS)
 
     def _create_and_launch_data_collectors(self) -> None:
@@ -118,7 +118,7 @@ class DummyTrainerNode:
                 data_collector_info = rpc.get_worker_info(
                     f"DataCollector{data_collector_number}"
                 )
-                print(f"Data collector info: {data_collector_info}")
+                torchrl_logger.info(f"Data collector info: {data_collector_info}")
                 dc_ref = rpc.remote(
                     data_collector_info,
                     DummyDataCollectorNode,
@@ -130,11 +130,11 @@ class DummyTrainerNode:
                 retries = 0
             except Exception:
                 retries += 1
-                print(
+                torchrl_logger.info(
                     f"Failed to connect to DataCollector{data_collector_number} with {retries} retries"
                 )
                 if retries >= RETRY_LIMIT:
-                    print(f"{len(data_collectors)} data collectors")
+                    torchrl_logger.info(f"{len(data_collectors)} data collectors")
                     for data_collector_info, data_collector in zip(
                         data_collector_infos, data_collectors
                     ):
@@ -149,8 +149,10 @@ class DummyTrainerNode:
 
 
 class ReplayBufferNode(RemoteTensorDictReplayBuffer):
-    """Experience replay buffer node that is capable of accepting remote connections. Being a `RemoteTensorDictReplayBuffer` means all of it's public methods are remotely invokable using `torch.rpc`.
-    Using a LazyMemmapStorage is highly advised in distributed settings with shared storage due to the lower serialisation cost of MemmapTensors as well as the ability to specify file storage locations which can improve ability to recover from node failures.
+    """Experience replay buffer node that is capable of accepting remote connections. Being a `RemoteTensorDictReplayBuffer`
+    means all of it's public methods are remotely invokable using `torch.rpc`.
+    Using a LazyMemmapStorage is highly advised in distributed settings with shared storage due to the lower serialisation
+    cost of MemoryMappedTensors as well as the ability to specify file storage locations which can improve ability to recover from node failures.
 
     Args:
         capacity (int): the maximum number of elements that can be stored in the replay buffer.
@@ -170,7 +172,7 @@ class ReplayBufferNode(RemoteTensorDictReplayBuffer):
 if __name__ == "__main__":
     args = parser.parse_args()
     rank = args.rank
-    print(f"Rank: {rank}")
+    torchrl_logger.info(f"Rank: {rank}")
 
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"
@@ -187,21 +189,21 @@ if __name__ == "__main__":
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
         )
-        print(f"Initialised Trainer Node {rank}")
+        torchrl_logger.info(f"Initialised Trainer Node {rank}")
         trainer = DummyTrainerNode()
         trainer.train(100)
         breakpoint()
     elif rank == 1:
         # rank 1 is the replay buffer
         # replay buffer waits passively for construction instructions from trainer node
-        print(REPLAY_BUFFER_NODE)
+        torchrl_logger.info(REPLAY_BUFFER_NODE)
         rpc.init_rpc(
             REPLAY_BUFFER_NODE,
             rank=rank,
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
         )
-        print(f"Initialised RB Node {rank}")
+        torchrl_logger.info(f"Initialised RB Node {rank}")
         breakpoint()
     elif rank >= 2:
         # rank 2+ is a new data collector node
@@ -212,7 +214,7 @@ if __name__ == "__main__":
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
         )
-        print(f"Initialised DC Node {rank}")
+        torchrl_logger.info(f"Initialised DC Node {rank}")
         breakpoint()
     else:
         sys.exit(1)

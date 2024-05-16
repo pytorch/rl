@@ -2,19 +2,17 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib.util
+
 import os
+from typing import Dict, Sequence, Union
 
 from torch import Tensor
 
 from .common import Logger
 
-
-try:
-    from torch.utils.tensorboard import SummaryWriter
-
-    _has_tb = True
-except ImportError:
-    _has_tb = False
+_has_tb = importlib.util.find_spec("tensorboard") is not None
+_has_omgaconf = importlib.util.find_spec("omegaconf") is not None
 
 
 class TensorboardLogger(Logger):
@@ -22,7 +20,7 @@ class TensorboardLogger(Logger):
 
     Args:
         exp_name (str): The name of the experiment.
-        log_dir (str): the tensorboard log_dir.
+        log_dir (str): the tensorboard log_dir. Defaults to ``td_logs``.
 
     """
 
@@ -33,7 +31,7 @@ class TensorboardLogger(Logger):
 
         self._has_imported_moviepy = False
 
-    def _create_experiment(self) -> "SummaryWriter":
+    def _create_experiment(self) -> "SummaryWriter":  # noqa
         """Creates a tensorboard experiment.
 
         Args:
@@ -45,6 +43,8 @@ class TensorboardLogger(Logger):
         """
         if not _has_tb:
             raise ImportError("torch.utils.tensorboard could not be imported")
+
+        from torch.utils.tensorboard import SummaryWriter
 
         log_dir = str(os.path.join(self.log_dir, self.exp_name))
         return SummaryWriter(log_dir=log_dir)
@@ -91,15 +91,45 @@ class TensorboardLogger(Logger):
             **kwargs,
         )
 
-    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
+    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
         """Logs the hyperparameters of the experiment.
 
         Args:
-            cfg (DictConfig): The configuration of the experiment.
+            cfg (DictConfig or dict): The configuration of the experiment.
 
         """
-        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(cfg).items())])
-        self.experiment.add_text("hparams", txt)
+        if type(cfg) is not dict and _has_omgaconf:
+            if not _has_omgaconf:
+                raise ImportError(
+                    "OmegaConf could not be imported. "
+                    "Cannot log hydra configs without OmegaConf."
+                )
+            from omegaconf import OmegaConf
+
+            cfg = OmegaConf.to_container(cfg, resolve=True)
+        self.experiment.add_hparams(cfg, metric_dict={})
 
     def __repr__(self) -> str:
         return f"TensorboardLogger(experiment={self.experiment.__repr__()})"
+
+    def log_histogram(self, name: str, data: Sequence, **kwargs):
+        """Add histogram to summary.
+
+        Args:
+            name (str): Data identifier
+            data (torch.Tensor, numpy.ndarray, or string/blobname): Values to build histogram
+
+        Keyword Args:
+            step (int): Global step value to record
+            bins (str): One of {‘tensorflow’,’auto’, ‘fd’, …}. This determines how the bins are made. You can find other options in: https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html
+            walltime (float): Optional override default walltime (time.time()) seconds after epoch of event
+
+        """
+        global_step = kwargs.pop("step", None)
+        bins = kwargs.pop("bins")
+        walltime = kwargs.pop("walltime", None)
+        if len(kwargs):
+            raise TypeError(f"Unrecognised arguments {kwargs}.")
+        self.experiment.add_histogram(
+            tag=name, values=data, global_step=global_step, bins=bins, walltime=walltime
+        )

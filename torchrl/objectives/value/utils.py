@@ -8,6 +8,7 @@ from typing import Union
 import torch
 
 from tensordict import TensorDictBase
+from tensordict.utils import expand_right
 
 
 def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
@@ -181,36 +182,40 @@ def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
     return gammas
 
 
-def _flatten_batch(tensor):
+def _flatten_batch(tensor, time_dim=-1):
     """Because we mark the end of each batch with a truncated signal, we can concatenate them.
 
     Args:
-        tensor (torch.Tensor): a tensor of shape [*B, T]
+        tensor (torch.Tensor): a tensor of shape [*B, T, *F]
+        time_dim (int, optional): the time dimension T. Defaults to -1.
 
     """
-    return tensor.flatten(0, -1)
+    return tensor.flatten(0, time_dim)
 
 
-def _get_num_per_traj(dones_and_truncated):
+def _get_num_per_traj(done):
     """Because we mark the end of each batch with a truncated signal, we can concatenate them.
 
     Args:
-        dones_and_truncated (torch.Tensor): A done or truncated mark of shape [*B, T]
+        done (torch.Tensor): A done or truncated mark of shape [*B, T]
 
     Returns:
         A list of integers representing the number of steps in each trajectory
 
     """
-    dones_and_truncated = dones_and_truncated.clone()
-    dones_and_truncated[..., -1] = True
+    done = done.clone()
+    done[..., -1] = True
     # TODO: find a way of copying once only, eg not using reshape
-    num_per_traj = torch.where(dones_and_truncated.reshape(-1))[0] + 1
+    num_per_traj = torch.where(done.reshape(-1))[0] + 1
     num_per_traj[1:] = num_per_traj[1:] - num_per_traj[:-1]
     return num_per_traj
 
 
 def _split_and_pad_sequence(
-    tensor: Union[torch.Tensor, TensorDictBase], splits: torch.Tensor, return_mask=False
+    tensor: Union[torch.Tensor, TensorDictBase],
+    splits: torch.Tensor,
+    return_mask=False,
+    time_dim=-1,
 ):
     """Given a tensor of size [*B, T, F] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax, *other].
 
@@ -276,16 +281,17 @@ def _split_and_pad_sequence(
                  [19, 19, 19]]])
 
     """
-    tensor = _flatten_batch(tensor)
     max_seq_len = torch.max(splits)
     shape = (len(splits), max_seq_len)
 
     # int16 supports length up to 32767
     dtype = (
-        torch.int16 if tensor.shape[-1] < torch.iinfo(torch.int16).max else torch.int32
+        torch.int16 if tensor.shape[-2] < torch.iinfo(torch.int16).max else torch.int32
     )
     arange = torch.arange(max_seq_len, device=tensor.device, dtype=dtype).unsqueeze(0)
     mask = arange < splits.unsqueeze(1)
+
+    tensor = _flatten_batch(tensor, time_dim=time_dim)
 
     def _fill_tensor(tensor):
         empty_tensor = torch.zeros(
@@ -294,8 +300,8 @@ def _split_and_pad_sequence(
             dtype=tensor.dtype,
             device=tensor.device,
         )
-        empty_tensor[mask] = tensor
-        return empty_tensor
+        mask_expand = expand_right(mask, (*mask.shape, *tensor.shape[1:]))
+        return torch.masked_scatter(empty_tensor, mask_expand, tensor.reshape(-1))
 
     if isinstance(tensor, TensorDictBase):
         tensor = tensor.apply(_fill_tensor, batch_size=[*shape])

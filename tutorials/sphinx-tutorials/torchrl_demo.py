@@ -1,7 +1,6 @@
-# -*- coding: utf-8 -*-
 """
 Introduction to TorchRL
-============================
+=======================
 This demo was presented at ICML 2022 on the industry demo day.
 """
 ##############################################################################
@@ -32,83 +31,144 @@ This demo was presented at ICML 2022 on the industry demo day.
 # **Content**:
 #    .. aafig::
 #
-#      "torchrl"
-#      │
-#      ├── "collectors"
-#      │   └── "collectors.py"
-#      ├── "data"
-#      │   ├── "tensor_specs.py"
-#      │   ├── "postprocs"
-#      │   │  └── "postprocs.py"
-#      │   └── "replay_buffers"
-#      │      ├── "replay_buffers.py"
-#      │      └── "storages.py"
-#      ├── "envs"
-#      │   ├── "common.py"
-#      │   ├── "env_creator.py"
-#      │   ├── "gym_like.py"
-#      │   ├── "vec_env.py"
-#      │   ├── "libs"
-#      │   │  ├── "dm_control.py"
-#      │   │  └── "gym.py"
-#      │   └── "transforms"
-#      │      ├── "functional.py"
-#      │      └── "transforms.py"
-#      ├── "modules"
-#      │   ├── "distributions"
-#      │   │  ├── "continuous.py"
-#      │   │  └── "discrete.py"
-#      │   ├── "models"
-#      │   │  ├── "models.py"
-#      │   │  └── "exploration.py"
-#      │   └── "tensordict_module"
-#      │      ├── "actors.py"
-#      │      ├── "common.py"
-#      │      ├── "exploration.py"
-#      │      ├── "probabilistic.py"
-#      │      └── "sequence.py"
-#      ├── "objectives"
-#      │   ├── "common.py"
-#      │   ├── "ddpg.py"
-#      │   ├── "dqn.py"
-#      │   ├── "functional.py"
-#      │   ├── "ppo.py"
-#      │   ├── "redq.py"
-#      │   ├── "reinforce.py"
-#      │   ├── "sac.py"
-#      │   ├── "utils.py"
-#      │   └── "value"
-#      │      ├── "advantages.py"
-#      │      ├── "functional.py"
-#      │      ├── "pg.py"
-#      │      ├── "utils.py"
-#      │      └── "vtrace.py"
-#      ├── "record"
-#      │   └── "recorder.py"
-#      └── "trainers"
-#          ├── "loggers"
-#          │  ├── "common.py"
-#          │  ├── "csv.py"
-#          │  ├── "mlflow.py"
-#          │  ├── "tensorboard.py"
-#          │  └── "wandb.py"
-#          ├── "trainers.py"
-#          └── "helpers"
-#             ├── "collectors.py"
-#             ├── "envs.py"
-#             ├── "loggers.py"
-#             ├── "losses.py"
-#             ├── "models.py"
-#             ├── "replay_buffer.py"
-#             └── "trainers.py"
+#       "torchrl"
+#       │
+#       ├── "collectors"
+#       │   └── "collectors.py"
+#       │   │
+#       │   └── "distributed"
+#       │       └── "default_configs.py"
+#       │       └── "generic.py"
+#       │       └── "ray.py"
+#       │       └── "rpc.py"
+#       │       └── "sync.py"
+#       ├── "data"
+#       │   │
+#       │   ├── "datasets"
+#       │   │   └── "atari_dqn.py"
+#       │   │   └── "d4rl.py"
+#       │   │   └── "d4rl_infos.py"
+#       │   │   └── "gen_dgrl.py"
+#       │   │   └── "minari_data.py"
+#       │   │   └── "openml.py"
+#       │   │   └── "openx.py"
+#       │   │   └── "roboset.py"
+#       │   │   └── "vd4rl.py"
+#       │   ├── "postprocs"
+#       │   │   └── "postprocs.py"
+#       │   ├── "replay_buffers"
+#       │   │   └── "replay_buffers.py"
+#       │   │   └── "samplers.py"
+#       │   │   └── "storages.py"
+#       │   │   └── "writers.py"
+#       │   ├── "rlhf"
+#       │   │   └── "dataset.py"
+#       │   │   └── "prompt.py"
+#       │   │   └── "reward.py"
+#       │   └── "tensor_specs.py"
+#       ├── "envs"
+#       │   └── "batched_envs.py"
+#       │   └── "common.py"
+#       │   └── "env_creator.py"
+#       │   └── "gym_like.py"
+#       │   ├── "libs"
+#       │   │   └── "brax.py"
+#       │   │   └── "dm_control.py"
+#       │   │   └── "envpool.py"
+#       │   │   └── "gym.py"
+#       │   │   └── "habitat.py"
+#       │   │   └── "isaacgym.py"
+#       │   │   └── "jumanji.py"
+#       │   │   └── "openml.py"
+#       │   │   └── "pettingzoo.py"
+#       │   │   └── "robohive.py"
+#       │   │   └── "smacv2.py"
+#       │   │   └── "vmas.py"
+#       │   ├── "model_based"
+#       │   │   └── "common.py"
+#       │   │   └── "dreamer.py"
+#       │   ├── "transforms"
+#       │   │   └── "functional.py"
+#       │   │   └── "gym_transforms.py"
+#       │   │   └── "r3m.py"
+#       │   │   └── "rlhf.py"
+#       │   │   └── "vc1.py"
+#       │   │   └── "vip.py"
+#       │   └── "vec_envs.py"
+#       ├── "modules"
+#       │   ├── "distributions"
+#       │   │   └── "continuous.py"
+#       │   │   └── "discrete.py"
+#       │   │   └── "truncated_normal.py"
+#       │   ├── "models"
+#       │   │   └── "decision_transformer.py"
+#       │   │   └── "exploration.py"
+#       │   │   └── "model_based.py"
+#       │   │   └── "models.py"
+#       │   │   └── "multiagent.py"
+#       │   │   └── "rlhf.py"
+#       │   ├── "planners"
+#       │   │   └── "cem.py"
+#       │   │   └── "common.py"
+#       │   │   └── "mppi.py"
+#       │   └── "tensordict_module"
+#       │       └── "actors.py"
+#       │       └── "common.py"
+#       │       └── "exploration.py"
+#       │       └── "probabilistic.py"
+#       │       └── "rnn.py"
+#       │       └── "sequence.py"
+#       │       └── "world_models.py"
+#       ├── "objectives"
+#       │   └── "a2c.py"
+#       │   └── "common.py"
+#       │   └── "cql.py"
+#       │   └── "ddpg.py"
+#       │   └── "decision_transformer.py"
+#       │   └── "deprecated.py"
+#       │   └── "dqn.py"
+#       │   └── "dreamer.py"
+#       │   └── "functional.py"
+#       │   └── "iql.py"
+#       │   ├── "multiagent"
+#       │   │   └── "qmixer.py"
+#       │   └── "ppo.py"
+#       │   └── "redq.py"
+#       │   └── "reinforce.py"
+#       │   └── "sac.py"
+#       │   └── "td3.py"
+#       │   ├── "value"
+#       │       └── "advantages.py"
+#       │       └── "functional.py"
+#       │       └── "pg.py"
+#       ├── "record"
+#       │   ├── "loggers"
+#       │   │   └── "common.py"
+#       │   │   └── "csv.py"
+#       │   │   └── "mlflow.py"
+#       │   │   └── "tensorboard.py"
+#       │   │   └── "wandb.py"
+#       │   └── "recorder.py"
+#       ├── "trainers"
+#       │   │
+#       │   ├── "helpers"
+#       │   │   └── "collectors.py"
+#       │   │   └── "envs.py"
+#       │   │   └── "logger.py"
+#       │   │   └── "losses.py"
+#       │   │   └── "models.py"
+#       │   │   └── "replay_buffer.py"
+#       │   │   └── "trainers.py"
+#       │   └── "trainers.py"
+#       └── "version.py"
 #
-# Unlike other domains, RL is less about media than *algorithms*. As such, it
+# Unlike other domains, RL is less about media than *sota-implementations*. As such, it
 # is harder to make truly independent components.
 #
 # What TorchRL is not:
 #
-# * a collection of algorithms: we do not intend to provide SOTA implementations of RL algorithms,
-#   but we provide these algorithms only as examples of how to use the library.
+# * a collection of sota-implementations: we do not intend to provide SOTA implementations of RL sota-implementations,
+#   but we provide these sota-implementations only as examples of how to use the library.
 #
 # * a research framework: modularity in TorchRL comes in two flavours. First, we try
 #   to build re-usable components, such that they can be easily swapped with each other.
@@ -128,6 +188,23 @@ This demo was presented at ICML 2022 on the industry demo day.
 import warnings
 
 warnings.filterwarnings("ignore")
+
+from torch import multiprocessing
+
+# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
+# `__main__` method call, but for the easy of reading the code switch to fork
+# which is also a default spawn method in Google's Colaboratory
+try:
+    is_sphinx = __sphinx_build__
+except NameError:
+    is_sphinx = False
+
+try:
+    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
+except RuntimeError:
+    pass
+
+
 # sphinx_gallery_end_ignore
 
 import torch
@@ -360,6 +437,7 @@ from torchrl.envs import ParallelEnv
 base_env = ParallelEnv(
     4,
     lambda: GymEnv("Pendulum-v1", frame_skip=3, from_pixels=True, pixels_only=False),
+    mp_start_method="fork",  # This will break on Windows machines! Remove and decorate with if __name__ == "__main__"
 )
 env = TransformedEnv(
     base_env, Compose(StepCounter(), ToTensorImage())
@@ -463,21 +541,30 @@ print(tensordict)
 # Functional Programming (Ensembling / Meta-RL)
 # ----------------------------------------------
 
-from tensordict.nn import make_functional
+from tensordict import TensorDict
 
-params = make_functional(sequence)
-len(list(sequence.parameters()))  # functional modules have no parameters
-
-###############################################################################
-
-sequence(tensordict, params)
+params = TensorDict.from_module(sequence)
+print("extracted params", params)
 
 ###############################################################################
+# functional call using tensordict:
 
-import functorch
+with params.to_module(sequence):
+    sequence(tensordict)
+
+###############################################################################
+# Using vectorized map for model ensembling
+from torch import vmap
 
 params_expand = params.expand(4)
-tensordict_exp = functorch.vmap(sequence, (None, 0))(tensordict, params_expand)
+
+
+def exec_sequence(params, data):
+    with params.to_module(sequence):
+        return sequence(data)
+
+
+tensordict_exp = vmap(exec_sequence, (0, None))(params_expand, tensordict)
 print(tensordict_exp)
 
 ###############################################################################
@@ -643,13 +730,17 @@ from tensordict.nn import TensorDictModule
 
 from torchrl.collectors import MultiaSyncDataCollector, MultiSyncDataCollector
 
-from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs import EnvCreator, SerialEnv
 from torchrl.envs.libs.gym import GymEnv
 
 ###############################################################################
 # EnvCreator makes sure that we can send a lambda function from process to process
+# We use a SerialEnv for simplicity, but for larger jobs a ParallelEnv would be better suited.
 
-parallel_env = ParallelEnv(3, EnvCreator(lambda: GymEnv("Pendulum-v1")))
+parallel_env = SerialEnv(
+    3,
+    EnvCreator(lambda: GymEnv("Pendulum-v1")),
+)
 create_env_fn = [parallel_env, parallel_env]
 
 actor_module = nn.Linear(3, 1)
@@ -666,8 +757,7 @@ collector = MultiSyncDataCollector(
     total_frames=240,
     max_frames_per_traj=-1,  # envs are terminating, we don't need to stop them early
     frames_per_batch=60,  # we want 60 frames at a time (we have 3 envs per sub-collector)
-    storing_devices=devices,  # len must match len of env created
-    devices=devices,
+    device=devices,
 )
 
 ###############################################################################
@@ -689,8 +779,7 @@ collector = MultiaSyncDataCollector(
     total_frames=240,
     max_frames_per_traj=-1,  # envs are terminating, we don't need to stop them early
     frames_per_batch=60,  # we want 60 frames at a time (we have 3 envs per sub-collector)
-    storing_devices=devices,  # len must match len of env created
-    devices=devices,
+    device=devices,
 )
 
 for i, d in enumerate(collector):
@@ -725,7 +814,8 @@ value = TensorDictModule(
     value_module, in_keys=["observation", "action"], out_keys=["state_action_value"]
 )
 
-loss_fn = DDPGLoss(actor, value, gamma=0.99)
+loss_fn = DDPGLoss(actor, value)
+loss_fn.make_value_estimator(loss_fn.default_value_estimator, gamma=0.99)
 
 ###############################################################################
 

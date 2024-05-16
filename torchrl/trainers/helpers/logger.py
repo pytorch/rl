@@ -28,3 +28,5 @@ class LoggerConfig:
     # Keys to log in the recorder
     offline_logging: bool = True
     # If True, Wandb will do the logging offline
+    project_name: str = ""
+    # The name of the project for WandB

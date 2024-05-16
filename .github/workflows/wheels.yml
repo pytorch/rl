@@ -4,7 +4,7 @@ on:
     types: [opened, synchronize, reopened]
   push:
     branches:
-      - release/0.1.1
+      - release/*
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
@@ -18,8 +18,8 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python_version: [["3.7", "cp37-cp37m"], ["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
-        cuda_support: [["", "--extra-index-url https://download.pytorch.org/whl/cpu", "\"['cpu', '11.3', '11.6']\"", "cpu"]]
+        python_version: [["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"], ["3.11", "cp311-cp311"]]
+        cuda_support: [["", "--index-url https://download.pytorch.org/whl/cpu", "\"['cpu', '11.3', '11.6']\"", "cpu"]]
     container: pytorch/manylinux-${{ matrix.cuda_support[3] }}
     steps:
       - name: Checkout torchrl
@@ -32,7 +32,7 @@ jobs:
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install wheel
-          BUILD_VERSION=0.1.1 python3 setup.py bdist_wheel
+          TORCHRL_BUILD_VERSION=0.4.0 python3 setup.py bdist_wheel
           # NB: wheels have the linux_x86_64 tag so we rename to manylinux1
           # find . -name 'dist/*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
@@ -52,43 +52,11 @@ jobs:
           name: torchrl-batch.whl
           path: dist/*.whl
 
-  build-wheel-mac:
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        python_version: [["3.7", "3.7"], ["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python_version[1] }}
-          architecture: x64
-      - name: Checkout torchrl
-        uses: actions/checkout@v2
-      - name: Install PyTorch RC
-        run: |
-          python3 -mpip install torch --extra-index-url https://download.pytorch.org/whl/cpu
-      - name: Build wheel
-        run: |
-          export CC=clang CXX=clang++
-          python3 -mpip install wheel
-          BUILD_VERSION=0.1.1 python3 setup.py bdist_wheel
-      - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v2
-        with:
-          name: torchrl-mac-${{ matrix.python_version[0] }}.whl
-          path: dist/torchrl-*.whl
-      - name: Upload wheel for download
-        uses: actions/upload-artifact@v2
-        with:
-          name: torchrl-batch.whl
-          path: dist/*.whl
-
   build-wheel-windows:
     runs-on: windows-latest
     strategy:
       matrix:
-        python_version: [["3.7", "3.7"], ["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
+        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -99,12 +67,12 @@ jobs:
       - name: Install PyTorch RC
         shell: bash
         run: |
-          python3 -mpip install torch --extra-index-url https://download.pytorch.org/whl/cpu
+          python3 -mpip install torch --index-url https://download.pytorch.org/whl/cpu
       - name: Build wheel
         shell: bash
         run: |
             python3 -mpip install wheel
-            BUILD_VERSION=0.1.1 python3 setup.py bdist_wheel
+            TORCHRL_BUILD_VERSION=0.4.0 python3 setup.py bdist_wheel
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
         with:
@@ -118,11 +86,11 @@ jobs:
 
 
   test-wheel:
-    needs: [build-wheel-linux, build-wheel-mac]
+    needs: [build-wheel-linux]
     strategy:
       matrix:
-        os: [["linux", "ubuntu-20.04"], ["mac", "macos-latest"]]
-        python_version: [ "3.7", "3.8", "3.9", "3.10" ]
+        os: [["linux", "ubuntu-20.04"]]
+        python_version: [ "3.8", "3.9", "3.10", "3.11" ]
     runs-on: ${{ matrix.os[1] }}
     steps:
       - name: Setup Python
@@ -134,13 +102,13 @@ jobs:
         uses: actions/checkout@v2
       - name: Install PyTorch RC
         run: |
-          python3 -mpip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
+          python3 -mpip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
       - name: Upgrade pip
         run: |
           python3 -mpip install --upgrade pip
       - name: Install tensordict
         run: |
-          python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
+          python3 -mpip install git+https://github.com/pytorch/tensordict.git
       - name: Install test dependencies
         run: |
           python3 -mpip install numpy pytest pytest-cov codecov unittest-xml-reporting pillow>=4.1.1 scipy av networkx expecttest pyyaml
@@ -165,14 +133,14 @@ jobs:
           python -m torch.utils.collect_env
           python -c "import torchrl; print(torchrl.__version__)"
           EXIT_STATUS=0
-          pytest test/smoke_test.py -v --durations 20
+          pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
 
   test-wheel-windows:
     needs: build-wheel-windows
     strategy:
       matrix:
-        python_version: [ "3.7", "3.8", "3.9", "3.10" ]
+        python_version: [ "3.8", "3.9", "3.10", "3.11" ]
     runs-on: windows-latest
     steps:
       - name: Setup Python
@@ -184,7 +152,7 @@ jobs:
       - name: Install PyTorch RC
         shell: bash
         run: |
-          python3 -mpip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
+          python3 -mpip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
       - name: Upgrade pip
         shell: bash
         run: |
@@ -192,7 +160,7 @@ jobs:
       - name: Install tensordict
         shell: bash
         run: |
-          python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
+          python3 -mpip install git+https://github.com/pytorch/tensordict.git
       - name: Install test dependencies
         shell: bash
         run: |
@@ -221,5 +189,5 @@ jobs:
           python -m torch.utils.collect_env
           python -c "import torchrl; print(torchrl.__version__)"
           EXIT_STATUS=0
-          pytest test/smoke_test.py -v --durations 20
+          pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS

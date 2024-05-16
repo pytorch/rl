@@ -12,7 +12,13 @@ from .continuous import (
     TanhNormal,
     TruncatedNormal,
 )
-from .discrete import __all__ as _all_discrete, MaskedCategorical, OneHotCategorical
+from .discrete import (
+    __all__ as _all_discrete,
+    MaskedCategorical,
+    MaskedOneHotCategorical,
+    OneHotCategorical,
+    ReparamGradientStrategy,
+)
 
 distributions_maps = {
     distribution_class.lower(): eval(distribution_class)

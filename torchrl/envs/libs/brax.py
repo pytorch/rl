@@ -2,11 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib.util
 
 from typing import Dict, Optional, Union
 
 import torch
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
@@ -14,40 +15,71 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
+from torchrl.envs.utils import _classproperty
 
-try:
-    import brax
-    import brax.envs
-    import jax
-    from torchrl.envs.libs.jax_utils import (
-        _extract_spec,
-        _ndarray_to_tensor,
-        _object_to_tensordict,
-        _tensor_to_ndarray,
-        _tensordict_to_object,
-        _tree_flatten,
-        _tree_reshape,
-    )
-
-    _has_brax = True
-    IMPORT_ERR = ""
-except ImportError as err:
-    _has_brax = False
-    IMPORT_ERR = str(err)
+_has_brax = importlib.util.find_spec("brax") is not None
+from torchrl.envs.libs.jax_utils import (
+    _extract_spec,
+    _ndarray_to_tensor,
+    _object_to_tensordict,
+    _tensor_to_ndarray,
+    _tensordict_to_object,
+    _tree_flatten,
+    _tree_reshape,
+)
 
 
 def _get_envs():
     if not _has_brax:
-        return []
+        raise ImportError("BRAX is not installed in your virtual environment.")
+
+    import brax.envs
+
     return list(brax.envs._envs.keys())
 
 
 class BraxWrapper(_EnvWrapper):
     """Google Brax environment wrapper.
 
+    Brax offers a vectorized and differentiable simulation framework based on Jax.
+    TorchRL's wrapper incurs some overhead for the jax-to-torch conversion,
+    but computational graphs can still be built on top of the simulated trajectories,
+    allowing for backpropagation through the rollout.
+
+    GitHub: https://github.com/google/brax
+
+    Paper: https://arxiv.org/abs/2106.13281
+
+    Args:
+        env (brax.envs.base.PipelineEnv): the environment to wrap.
+        categorical_action_encoding (bool, optional): if ``True``, categorical
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            Defaults to ``False``.
+
+    Keyword Args:
+        from_pixels (bool, optional): Not yet supported.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        batch_size (torch.Size, optional): the batch size of the environment.
+            In ``brax``, this indicates the number of vectorized environments.
+            Defaults to ``torch.Size([])``.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+
+    Attributes:
+        available_envs: environments availalbe to build
+
     Examples:
-        >>> env = brax.envs.get_environment("ant")
-        >>> env = BraxWrapper(env)
+        >>> import brax.envs
+        >>> from torchrl.envs import BraxWrapper
+        >>> base_env = brax.envs.get_environment("ant")
+        >>> env = BraxWrapper(base_env)
         >>> env.set_seed(0)
         >>> td = env.reset()
         >>> td["action"] = env.action_spec.rand()
@@ -71,15 +103,97 @@ class BraxWrapper(_EnvWrapper):
             is_shared=False)
         >>> print(env.available_envs)
         ['acrobot', 'ant', 'fast', 'fetch', ...]
+
+    To take advante of Brax, one usually executes multiple environments at the
+    same time. In the following example, we iteratively test different batch sizes
+    and report the execution time for a short rollout:
+
+    Examples:
+        >>> from torch.utils.benchmark import Timer
+        >>> for batch_size in [4, 16, 128]:
+        ...     timer = Timer('''
+        ... env.rollout(100)
+        ... ''',
+        ...     setup=f'''
+        ... import brax.envs
+        ... from torchrl.envs import BraxWrapper
+        ... env = BraxWrapper(brax.envs.get_environment("ant"), batch_size=[{batch_size}])
+        ... env.set_seed(0)
+        ... env.rollout(2)
+        ... ''')
+        ...     print(batch_size, timer.timeit(10))
+        4
+        env.rollout(100)
+        setup: [...]
+        310.00 ms
+        1 measurement, 10 runs , 1 thread
+
+        16
+        env.rollout(100)
+        setup: [...]
+        268.46 ms
+        1 measurement, 10 runs , 1 thread
+
+        128
+        env.rollout(100)
+        setup: [...]
+        433.80 ms
+        1 measurement, 10 runs , 1 thread
+
+    One can backpropagate through the rollout and optimize the policy directly:
+
+        >>> import brax.envs
+        >>> from torchrl.envs import BraxWrapper
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torch import nn
+        >>> import torch
+        >>>
+        >>> env = BraxWrapper(brax.envs.get_environment("ant"), batch_size=[10], requires_grad=True)
+        >>> env.set_seed(0)
+        >>> torch.manual_seed(0)
+        >>> policy = TensorDictModule(nn.Linear(27, 8), in_keys=["observation"], out_keys=["action"])
+        >>>
+        >>> td = env.rollout(10, policy)
+        >>>
+        >>> td["next", "reward"].mean().backward(retain_graph=True)
+        >>> print(policy.module.weight.grad.norm())
+        tensor(213.8605)
+
     """
 
     git_url = "https://github.com/google/brax"
-    available_envs = _get_envs()
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_brax:
+            return []
+        return list(_get_envs())
+
     libname = "brax"
 
-    @property
-    def lib(self):
+    _lib = None
+    _jax = None
+
+    @_classproperty
+    def lib(cls):
+        if cls._lib is not None:
+            return cls._lib
+
+        import brax
+        import brax.envs
+
+        cls._lib = brax
         return brax
+
+    @_classproperty
+    def jax(cls):
+        if cls._jax is not None:
+            return cls._jax
+
+        import jax
+
+        cls._jax = jax
+        return jax
 
     def __init__(self, env=None, categorical_action_encoding=False, **kwargs):
         if env is not None:
@@ -89,6 +203,8 @@ class BraxWrapper(_EnvWrapper):
         super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):
+        brax = self.lib
+
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
@@ -111,10 +227,14 @@ class BraxWrapper(_EnvWrapper):
         self.requires_grad = requires_grad
 
         if from_pixels:
-            raise NotImplementedError("TODO")
+            raise NotImplementedError(
+                "from_pixels=True is not yest supported within BraxWrapper"
+            )
         return env
 
-    def _make_state_spec(self, env: "brax.envs.env.Env"):
+    def _make_state_spec(self, env: "brax.envs.env.Env"):  # noqa: F821
+        jax = self.jax
+
         key = jax.random.PRNGKey(0)
         state = env.reset(key)
         state_dict = _object_to_tensordict(state, self.device, batch_size=())
@@ -122,17 +242,14 @@ class BraxWrapper(_EnvWrapper):
         return state_spec
 
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
-        self.input_spec = CompositeSpec(
-            action=BoundedTensorSpec(
-                minimum=-1,
-                maximum=1,
-                shape=(
-                    *self.batch_size,
-                    env.action_size,
-                ),
-                device=self.device,
+        self.action_spec = BoundedTensorSpec(
+            low=-1,
+            high=1,
+            shape=(
+                *self.batch_size,
+                env.action_size,
             ),
-            shape=self.batch_size,
+            device=self.device,
         )
         self.reward_spec = UnboundedContinuousTensorSpec(
             shape=[
@@ -152,11 +269,13 @@ class BraxWrapper(_EnvWrapper):
             shape=self.batch_size,
         )
         # extract state spec from instance
-        self.state_spec = self._make_state_spec(env)
-        self.input_spec["state"] = self.state_spec
-        self.observation_spec["state"] = self.state_spec.clone()
+        state_spec = self._make_state_spec(env)
+        self.state_spec["state"] = state_spec
+        self.observation_spec["state"] = state_spec.clone()
 
     def _make_state_example(self):
+        jax = self.jax
+
         key = jax.random.PRNGKey(0)
         keys = jax.random.split(key, self.batch_size.numel())
         state = self._vmap_jit_env_reset(jax.numpy.stack(keys))
@@ -164,17 +283,20 @@ class BraxWrapper(_EnvWrapper):
         return state
 
     def _init_env(self) -> Optional[int]:
+        jax = self.jax
         self._key = None
         self._vmap_jit_env_reset = jax.vmap(jax.jit(self._env.reset))
         self._vmap_jit_env_step = jax.vmap(jax.jit(self._env.step))
         self._state_example = self._make_state_example()
 
     def _set_seed(self, seed: int):
+        jax = self.jax
         if seed is None:
             raise Exception("Brax requires an integer seed.")
         self._key = jax.random.PRNGKey(seed)
 
     def _reset(self, tensordict: TensorDictBase = None, **kwargs) -> TensorDictBase:
+        jax = self.jax
 
         # generate random keys
         self._key, *keys = jax.random.split(self._key, 1 + self.numel())
@@ -195,6 +317,7 @@ class BraxWrapper(_EnvWrapper):
                 "observation": state.get("obs"),
                 # "reward": reward,
                 "done": done,
+                "terminated": done.clone(),
                 "state": state,
             },
             batch_size=self.batch_size,
@@ -230,6 +353,7 @@ class BraxWrapper(_EnvWrapper):
                 "observation": next_state.get("obs"),
                 "reward": reward,
                 "done": done,
+                "terminated": done.clone(),
                 "state": next_state,
             },
             batch_size=self.batch_size,
@@ -268,6 +392,7 @@ class BraxWrapper(_EnvWrapper):
                 "observation": next_obs,
                 "reward": next_reward,
                 "done": next_done,
+                "terminated": next_done,
                 "state": next_state,
             },
             batch_size=self.batch_size,
@@ -285,18 +410,125 @@ class BraxWrapper(_EnvWrapper):
             out = self._step_with_grad(tensordict)
         else:
             out = self._step_without_grad(tensordict)
-        out = out.select().set("next", out)
         return out
 
 
 class BraxEnv(BraxWrapper):
-    """Google Brax environment wrapper.
+    """Google Brax environment wrapper built with the environment name.
+
+    Brax offers a vectorized and differentiable simulation framework based on Jax.
+    TorchRL's wrapper incurs some overhead for the jax-to-torch conversion,
+    but computational graphs can still be built on top of the simulated trajectories,
+    allowing for backpropagation through the rollout.
+
+    GitHub: https://github.com/google/brax
+
+    Paper: https://arxiv.org/abs/2106.13281
+
+    Args:
+        env_name (str): the environment name of the env to wrap. Must be part of
+            :attr:`~.available_envs`.
+        categorical_action_encoding (bool, optional): if ``True``, categorical
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            Defaults to ``False``.
+
+    Keyword Args:
+        from_pixels (bool, optional): Not yet supported.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        batch_size (torch.Size, optional): the batch size of the environment.
+            In ``brax``, this indicates the number of vectorized environments.
+            Defaults to ``torch.Size([])``.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+
+    Attributes:
+        available_envs: environments availalbe to build
 
     Examples:
-        >>> env = BraxEnv(env_name="ant")
-        >>> td = env.rand_step()
+        >>> from torchrl.envs import BraxEnv
+        >>> env = BraxEnv("ant")
+        >>> env.set_seed(0)
+        >>> td = env.reset()
+        >>> td["action"] = env.action_spec.rand()
+        >>> td = env.step(td)
         >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([8]), dtype=torch.float32),
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
+                next: TensorDict(
+                    fields={
+                        observation: Tensor(torch.Size([87]), dtype=torch.float32)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(torch.Size([87]), dtype=torch.float32),
+                reward: Tensor(torch.Size([1]), dtype=torch.float32),
+                state: TensorDict(...)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
         >>> print(env.available_envs)
+        ['acrobot', 'ant', 'fast', 'fetch', ...]
+
+    To take advante of Brax, one usually executes multiple environments at the
+    same time. In the following example, we iteratively test different batch sizes
+    and report the execution time for a short rollout:
+
+    Examples:
+        >>> for batch_size in [4, 16, 128]:
+        ...     timer = Timer('''
+        ... env.rollout(100)
+        ... ''',
+        ...     setup=f'''
+        ... from torchrl.envs import BraxEnv
+        ... env = BraxEnv("ant", batch_size=[{batch_size}])
+        ... env.set_seed(0)
+        ... env.rollout(2)
+        ... ''')
+        ...     print(batch_size, timer.timeit(10))
+        4
+        env.rollout(100)
+        setup: [...]
+        310.00 ms
+        1 measurement, 10 runs , 1 thread
+
+        16
+        env.rollout(100)
+        setup: [...]
+        268.46 ms
+        1 measurement, 10 runs , 1 thread
+
+        128
+        env.rollout(100)
+        setup: [...]
+        433.80 ms
+        1 measurement, 10 runs , 1 thread
+
+    One can backpropagate through the rollout and optimize the policy directly:
+
+        >>> from torchrl.envs import BraxEnv
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torch import nn
+        >>> import torch
+        >>>
+        >>> env = BraxEnv("ant", batch_size=[10], requires_grad=True)
+        >>> env.set_seed(0)
+        >>> torch.manual_seed(0)
+        >>> policy = TensorDictModule(nn.Linear(27, 8), in_keys=["observation"], out_keys=["action"])
+        >>>
+        >>> td = env.rollout(10, policy)
+        >>>
+        >>> td["next", "reward"].mean().backward(retain_graph=True)
+        >>> print(policy.module.weight.grad.norm())
+        tensor(213.8605)
 
     """
 
@@ -308,13 +540,13 @@ class BraxEnv(BraxWrapper):
         self,
         env_name: str,
         **kwargs,
-    ) -> "brax.envs.env.Env":
+    ) -> "brax.envs.env.Env":  # noqa: F821
         if not _has_brax:
-            raise RuntimeError(
+            raise ImportError(
                 f"brax not found, unable to create {env_name}. "
                 f"Consider downloading and installing brax from"
                 f" {self.git_url}"
-            ) from IMPORT_ERR
+            )
         from_pixels = kwargs.pop("from_pixels", False)
         pixels_only = kwargs.pop("pixels_only", True)
         requires_grad = kwargs.pop("requires_grad", False)
@@ -344,6 +576,7 @@ class BraxEnv(BraxWrapper):
 class _BraxEnvStep(torch.autograd.Function):
     @staticmethod
     def forward(ctx, env: BraxWrapper, state_td, action_tensor, *qp_values):
+        import jax
 
         # convert tensors to ndarrays
         state_obj = _tensordict_to_object(state_td, env._state_example)
@@ -379,17 +612,8 @@ class _BraxEnvStep(torch.autograd.Function):
     @staticmethod
     def backward(ctx, _, grad_next_obs, grad_next_reward, *grad_next_qp_values):
 
-        # build gradient tensordict with zeros in fields with no grad
-        # if grad_next_reward is None:
-        #     raise RuntimeError("grad_next_reward")
-        #     grad_next_reward = torch.zeros((*ctx.env.batch_size, 1), device=ctx.env.device)
-        # if grad_next_obs is None:
-        #     raise RuntimeError("grad_next_obs")
-        # if any(val is None for val in grad_next_qp_values):
-        #     raise RuntimeError("grad_next_qp_values")
-
         pipeline_state = dict(
-            zip(ctx.next_state["pipeline_state"].keys(), grad_next_qp_values)
+            zip(ctx.next_state.get("pipeline_state").keys(), grad_next_qp_values)
         )
         none_keys = []
 
@@ -397,24 +621,25 @@ class _BraxEnvStep(torch.autograd.Function):
             if val is not None:
                 return val
             none_keys.append(key)
-            return torch.zeros_like(ctx.next_state["pipeline_state"][key])
+            return torch.zeros_like(ctx.next_state.get(("pipeline_state", key)))
 
         pipeline_state = {
             key: _make_none(key, val) for key, val in pipeline_state.items()
         }
-
+        metrics = ctx.next_state.get("metrics", None)
+        if metrics is None:
+            metrics = {}
+        info = ctx.next_state.get("info", None)
+        if info is None:
+            info = {}
         grad_next_state_td = TensorDict(
             source={
                 "pipeline_state": pipeline_state,
                 "obs": grad_next_obs,
                 "reward": grad_next_reward,
-                "done": torch.zeros_like(ctx.next_state["done"]),
-                "metrics": {
-                    k: torch.zeros_like(v) for k, v in ctx.next_state["metrics"].items()
-                },
-                "info": {
-                    k: torch.zeros_like(v) for k, v in ctx.next_state["info"].items()
-                },
+                "done": torch.zeros_like(ctx.next_state.get("done")),
+                "metrics": {k: torch.zeros_like(v) for k, v in metrics.items()},
+                "info": {k: torch.zeros_like(v) for k, v in info.items()},
             },
             device=ctx.env.device,
             batch_size=ctx.env.batch_size,

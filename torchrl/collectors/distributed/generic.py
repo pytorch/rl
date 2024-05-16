@@ -4,19 +4,20 @@
 # LICENSE file in the root directory of this source tree.
 
 r"""Generic distributed data-collector using torch.distributed backend."""
+from __future__ import annotations
 
 import os
 import socket
 import warnings
 from copy import copy, deepcopy
 from datetime import timedelta
-from typing import OrderedDict
+from typing import Callable, List, OrderedDict, Type
 
 import torch.cuda
 from tensordict import TensorDict
-from torch import multiprocessing as mp, nn
+from torch import nn
 
-from torchrl._utils import VERBOSE
+from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
@@ -31,7 +32,8 @@ from torchrl.collectors.distributed.default_configs import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
-from torchrl.envs import EnvBase, EnvCreator
+from torchrl.envs.common import EnvBase
+from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.utils import _convert_exploration_type
 
 SUBMITIT_ERR = None
@@ -49,10 +51,10 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
     os.environ["MASTER_PORT"] = str(tcpport)
 
     if verbose:
-        print(
+        torchrl_logger.info(
             f"Rank0 IP address: '{rank0_ip}' \ttcp port: '{tcpport}', backend={backend}."
         )
-        print(
+        torchrl_logger.info(
             f"node with rank {rank} with world_size {world_size} -- launching distributed"
         )
     torch.distributed.init_process_group(
@@ -63,7 +65,7 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
         init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
     if verbose:
-        print(f"Connected!\nNode with rank {rank} -- creating store")
+        torchrl_logger.info(f"Connected!\nNode with rank {rank} -- creating store")
     # The store carries instructions for the node
     _store = torch.distributed.TCPStore(
         host_name=rank0_ip,
@@ -157,7 +159,9 @@ def _run_collector(
 ):
     rank = torch.distributed.get_rank()
     if verbose:
-        print(f"node with rank {rank} -- creating collector of type {collector_class}")
+        torchrl_logger.info(
+            f"node with rank {rank} -- creating collector of type {collector_class}"
+        )
     if not issubclass(collector_class, SyncDataCollector):
         env_make = [env_make] * num_workers
     else:
@@ -191,30 +195,32 @@ def _run_collector(
     )
     total_frames = 0
     if verbose:
-        print(f"node with rank {rank} -- loop")
+        torchrl_logger.info(f"node with rank {rank} -- loop")
     while True:
         instruction = _store.get(f"NODE_{rank}_in")
         if verbose:
-            print(f"node with rank {rank} -- new instruction: {instruction}")
+            torchrl_logger.info(
+                f"node with rank {rank} -- new instruction: {instruction}"
+            )
         _store.delete_key(f"NODE_{rank}_in")
         if instruction == b"continue":
             _store.set(f"NODE_{rank}_status", b"busy")
             if verbose:
-                print(f"node with rank {rank} -- new data")
+                torchrl_logger.info(f"node with rank {rank} -- new data")
             data = collector.next()
             total_frames += data.numel()
             if verbose:
-                print(f"got data, total frames = {total_frames}")
-                print(f"node with rank {rank} -- sending {data}")
+                torchrl_logger.info(f"got data, total frames = {total_frames}")
+                torchrl_logger.info(f"node with rank {rank} -- sending {data}")
             if _store.get("TRAINER_status") == b"alive":
                 data.isend(dst=0)
                 if verbose:
-                    print(f"node with rank {rank} -- setting to 'done'")
+                    torchrl_logger.info(f"node with rank {rank} -- setting to 'done'")
                 if not sync:
                     _store.set(f"NODE_{rank}_status", b"done")
         elif instruction == b"shutdown":
             if verbose:
-                print(f"node with rank {rank} -- shutting down")
+                torchrl_logger.info(f"node with rank {rank} -- shutting down")
             try:
                 collector.shutdown()
             except Exception:
@@ -255,8 +261,22 @@ class DistributedDataCollector(DataCollectorBase):
         policy (Callable): Policy to be executed in the environment.
             Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
             If ``None`` is provided, the policy used will be a
-            :class:`RandomPolicy` instance with the environment
+            :class:`~torchrl.collectors.RandomPolicy` instance with the environment
             ``action_spec``.
+            Accepted policies are usually subclasses of :class:`~tensordict.nn.TensorDictModuleBase`.
+            This is the recommended usage of the collector.
+            Other callables are accepted too:
+            If the policy is not a ``TensorDictModuleBase`` (e.g., a regular :class:`~torch.nn.Module`
+            instances) it will be wrapped in a `nn.Module` first.
+            Then, the collector will try to assess if these
+            modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+            - If the policy forward signature matches any of ``forward(self, tensordict)``,
+              ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
+              any typing with a single argument typed as a subclass of ``TensorDictBase``)
+              then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
+
+    Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
         total_frames (int): A keyword-only argument representing the total
@@ -264,19 +284,55 @@ class DistributedDataCollector(DataCollectorBase):
             during its lifespan. If the ``total_frames`` is not divisible by
             ``frames_per_batch``, an exception is raised.
              Endless collectors can be created by passing ``total_frames=-1``.
+             Defaults to ``-1`` (endless collector).
+        device (int, str or torch.device, optional): The generic device of the
+            collector. The ``device`` args fills any non-specified device: if
+            ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or
+            ``env_device`` is not specified, its value will be set to ``device``.
+            Defaults to ``None`` (No default device).
+            Lists of devices are supported.
+        storing_device (int, str or torch.device, optional): The *remote* device on which
+            the output :class:`~tensordict.TensorDict` will be stored.
+            If ``device`` is passed and ``storing_device`` is ``None``, it will
+            default to the value indicated by ``device``.
+            For long trajectories, it may be necessary to store the data on a different
+            device than the one where the policy and env are executed.
+            Defaults to ``None`` (the output tensordict isn't on a specific device,
+            leaf tensors sit on the device where they were created).
+            Lists of devices are supported.
+        env_device (int, str or torch.device, optional): The *remote* device on which
+            the environment should be cast (or executed if that functionality is
+            supported). If not specified and the env has a non-``None`` device,
+            ``env_device`` will default to that value. If ``device`` is passed
+            and ``env_device=None``, it will default to ``device``. If the value
+            as such specified of ``env_device`` differs from ``policy_device``
+            and one of them is not ``None``, the data will be cast to ``env_device``
+            before being passed to the env (i.e., passing different devices to
+            policy and env is supported). Defaults to ``None``.
+            Lists of devices are supported.
+        policy_device (int, str or torch.device, optional): The *remote* device on which
+            the policy should be cast.
+            If ``device`` is passed and ``policy_device=None``, it will default
+            to ``device``. If the value as such specified of ``policy_device``
+            differs from ``env_device`` and one of them is not ``None``,
+            the data will be cast to ``policy_device`` before being passed to
+            the policy (i.e., passing different devices to policy and env is
+            supported). Defaults to ``None``.
+            Lists of devices are supported.
         max_frames_per_traj (int, optional): Maximum steps per trajectory.
-            Note that a trajectory can span over multiple batches (unless
+            Note that a trajectory can span across multiple batches (unless
             ``reset_at_each_iter`` is set to ``True``, see below).
             Once a trajectory reaches ``n_steps``, the environment is reset.
             If the environment wraps multiple environments together, the number
             of steps is tracked for each environment independently. Negative
             values are allowed, in which case this argument is ignored.
-            Defaults to ``-1`` (i.e. no maximum number of steps).
+            Defaults to ``None`` (i.e., no maximum number of steps).
         init_random_frames (int, optional): Number of frames for which the
             policy is ignored before it is called. This feature is mainly
             intended to be used in offline/model-based settings, where a
             batch of random trajectories can be used to initialize training.
-            Defaults to ``-1`` (i.e. no random frames).
+            If provided, it will be rounded up to the closest multiple of frames_per_batch.
+            Defaults to ``None`` (i.e. no random frames).
         reset_at_each_iter (bool, optional): Whether environments should be reset
             at the beginning of a batch collection.
             Defaults to ``False``.
@@ -289,13 +345,10 @@ class DistributedDataCollector(DataCollectorBase):
             See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
-        exploration_type (str, optional): interaction mode to be used when
-            collecting data. Must be one of ``"random"``, ``"mode"`` or
-            ``"mean"``.
-            Defaults to ``"random"``
-        reset_when_done (bool, optional): if ``True`` (default), an environment
-            that return a ``True`` value in its ``"done"`` or ``"truncated"``
-            entry will be reset at the corresponding indices.
+        exploration_type (ExplorationType, optional): interaction mode to be used when
+            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.RANDOM``,
+            ``torchrl.envs.utils.ExplorationType.MODE`` or ``torchrl.envs.utils.ExplorationType.MEAN``.
+            Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.
         collector_class (type or str, optional): a collector class for the remote node. Can be
             :class:`~torchrl.collectors.SyncDataCollector`,
             :class:`~torchrl.collectors.MultiSyncDataCollector`,
@@ -324,8 +377,6 @@ class DistributedDataCollector(DataCollectorBase):
             <distributed_backed> is one of ``"gloo"``, ``"mpi"``, ``"nccl"`` or ``"ucc"``. See
             the torch.distributed documentation for more information.
             Defaults to ``"gloo"``.
-        storing_device (torch.device or compatible, optional): the device where the
-            data will be delivered. Defaults to ``"cpu"``.
         update_after_each_batch (bool, optional): if ``True``, the weights will
             be updated after each collection. For ``sync=True``, this means that
             all workers will see their weights updated. For ``sync=False``,
@@ -363,27 +414,29 @@ class DistributedDataCollector(DataCollectorBase):
         create_env_fn,
         policy,
         *,
-        frames_per_batch,
-        total_frames,
-        max_frames_per_traj=-1,
-        init_random_frames=-1,
-        reset_at_each_iter=False,
-        postproc=None,
-        split_trajs=False,
-        exploration_type=DEFAULT_EXPLORATION_TYPE,
-        exploration_mode=None,
-        reset_when_done=True,
-        collector_class=SyncDataCollector,
-        collector_kwargs=None,
-        num_workers_per_collector=1,
-        sync=False,
-        slurm_kwargs=None,
-        backend="gloo",
-        storing_device="cpu",
-        update_after_each_batch=False,
-        max_weight_update_interval=-1,
-        launcher="submitit",
-        tcp_port=None,
+        frames_per_batch: int,
+        total_frames: int = -1,
+        device: torch.device | List[torch.device] = None,
+        storing_device: torch.device | List[torch.device] = None,
+        env_device: torch.device | List[torch.device] = None,
+        policy_device: torch.device | List[torch.device] = None,
+        max_frames_per_traj: int = -1,
+        init_random_frames: int = -1,
+        reset_at_each_iter: bool = False,
+        postproc: Callable | None = None,
+        split_trajs: bool = False,
+        exploration_type: "ExporationType" = DEFAULT_EXPLORATION_TYPE,  # noqa
+        exploration_mode: str = None,
+        collector_class: Type = SyncDataCollector,
+        collector_kwargs: dict = None,
+        num_workers_per_collector: int = 1,
+        sync: bool = False,
+        slurm_kwargs: dict | None = None,
+        backend: str = "gloo",
+        update_after_each_batch: bool = False,
+        max_weight_update_interval: int = -1,
+        launcher: str = "submitit",
+        tcp_port: int = None,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
@@ -406,7 +459,12 @@ class DistributedDataCollector(DataCollectorBase):
         self.policy_weights = policy_weights
         self.num_workers = len(create_env_fn)
         self.frames_per_batch = frames_per_batch
+
+        self.device = device
         self.storing_device = storing_device
+        self.env_device = env_device
+        self.policy_device = policy_device
+
         # make private to avoid changes from users during collection
         self._sync = sync
         self.update_after_each_batch = update_after_each_batch
@@ -446,7 +504,7 @@ class DistributedDataCollector(DataCollectorBase):
         )
 
         # update collector kwargs
-        for collector_kwarg in self.collector_kwargs:
+        for i, collector_kwarg in enumerate(self.collector_kwargs):
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (
                 init_random_frames // self.num_workers
@@ -461,12 +519,12 @@ class DistributedDataCollector(DataCollectorBase):
                 )
             collector_kwarg["reset_at_each_iter"] = reset_at_each_iter
             collector_kwarg["exploration_type"] = exploration_type
-            collector_kwarg["reset_when_done"] = reset_when_done
+            collector_kwarg["device"] = self.device[i]
+            collector_kwarg["storing_device"] = self.storing_device[i]
+            collector_kwarg["env_device"] = self.env_device[i]
+            collector_kwarg["policy_device"] = self.policy_device[i]
 
-        if postproc is not None and hasattr(postproc, "to"):
-            self.postproc = postproc.to(self.storing_device)
-        else:
-            self.postproc = postproc
+        self.postproc = postproc
         self.split_trajs = split_trajs
 
         self.backend = backend
@@ -476,13 +534,73 @@ class DistributedDataCollector(DataCollectorBase):
         self._init_workers()
         self._make_container()
 
+    @property
+    def device(self) -> List[torch.device]:
+        return self._device
+
+    @property
+    def storing_device(self) -> List[torch.device]:
+        return self._storing_device
+
+    @property
+    def env_device(self) -> List[torch.device]:
+        return self._env_device
+
+    @property
+    def policy_device(self) -> List[torch.device]:
+        return self._policy_device
+
+    @device.setter
+    def device(self, value):
+        if isinstance(value, (tuple, list)):
+            if len(value) != self.num_workers:
+                raise RuntimeError(
+                    "The number of devices passed to the collector must match the number of workers."
+                )
+            self._device = value
+        else:
+            self._device = [value] * self.num_workers
+
+    @storing_device.setter
+    def storing_device(self, value):
+        if isinstance(value, (tuple, list)):
+            if len(value) != self.num_workers:
+                raise RuntimeError(
+                    "The number of devices passed to the collector must match the number of workers."
+                )
+            self._storing_device = value
+        else:
+            self._storing_device = [value] * self.num_workers
+
+    @env_device.setter
+    def env_device(self, value):
+        if isinstance(value, (tuple, list)):
+            if len(value) != self.num_workers:
+                raise RuntimeError(
+                    "The number of devices passed to the collector must match the number of workers."
+                )
+            self._env_device = value
+        else:
+            self._env_device = [value] * self.num_workers
+
+    @policy_device.setter
+    def policy_device(self, value):
+        if isinstance(value, (tuple, list)):
+            if len(value) != self.num_workers:
+                raise RuntimeError(
+                    "The number of devices passed to the collector must match the number of workers."
+                )
+            self._policy_device = value
+        else:
+            self._policy_device = [value] * self.num_workers
+
     def _init_master_dist(
         self,
         world_size,
         backend,
     ):
         if self._VERBOSE:
-            print(
+            torchrl_logger.info(
                 f"launching main node with tcp port '{self.tcp_port}' and "
                 f"IP '{self.IPAddr}'. rank: 0, world_size: {world_size}, backend={backend}."
             )
@@ -498,7 +616,7 @@ class DistributedDataCollector(DataCollectorBase):
             init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
         if self._VERBOSE:
-            print("main initiated! Launching store...", end="\t")
+            torchrl_logger.info("main initiated! Launching store...")
         self._store = torch.distributed.TCPStore(
             host_name=self.IPAddr,
             port=int(TCP_PORT) + 1,
@@ -507,12 +625,12 @@ class DistributedDataCollector(DataCollectorBase):
             timeout=timedelta(10),
         )
         if self._VERBOSE:
-            print("done. Setting status to 'alive'")
+            torchrl_logger.info("done. Setting status to 'alive'")
         self._store.set("TRAINER_status", b"alive")
 
     def _make_container(self):
         if self._VERBOSE:
-            print("making container")
+            torchrl_logger.info("making container")
         env_constructor = self.env_constructors[0]
         pseudo_collector = SyncDataCollector(
             env_constructor,
@@ -524,24 +642,11 @@ class DistributedDataCollector(DataCollectorBase):
         for _data in pseudo_collector:
             break
         if self._VERBOSE:
-            print("got data", _data)
-            print("expanding...")
-        if not issubclass(self.collector_class, SyncDataCollector):
-            # Multi-data collectors
-            self._tensordict_out = (
-                _data.expand((self.num_workers, *_data.shape))
-                .to_tensordict()
-                .to(self.storing_device)
-            )
-        else:
-            # Multi-data collectors
-            self._tensordict_out = (
-                _data.expand((self.num_workers, *_data.shape))
-                .to_tensordict()
-                .to(self.storing_device)
-            )
+            torchrl_logger.info(f"got data {_data}")
+            torchrl_logger.info("expanding...")
+        self._tensordict_out = _data.expand((self.num_workers, *_data.shape))
         if self._VERBOSE:
-            print("locking")
+            torchrl_logger.info("locking")
         if self._sync:
             self._tensordict_out.lock_()
             self._tensordict_out_unbind = self._tensordict_out.unbind(0)
@@ -552,11 +657,11 @@ class DistributedDataCollector(DataCollectorBase):
             for td in self._tensordict_out:
                 td.lock_()
         if self._VERBOSE:
-            print("storage created:")
-            print("shutting down...")
+            torchrl_logger.info("storage created:")
+            torchrl_logger.info("shutting down...")
         pseudo_collector.shutdown()
         if self._VERBOSE:
-            print("dummy collector shut down!")
+            torchrl_logger.info("dummy collector shut down!")
         del pseudo_collector
 
     def _init_worker_dist_submitit(self, executor, i):
@@ -610,7 +715,7 @@ class DistributedDataCollector(DataCollectorBase):
         if not isinstance(env_make, (EnvBase, EnvCreator)):
             env_make = CloudpickleWrapper(env_make)
         TCP_PORT = self.tcp_port
-        job = mp.Process(
+        job = _ProcessNoWarn(
             target=_distributed_init_collection_node,
             args=(
                 i + 1,
@@ -639,7 +744,7 @@ class DistributedDataCollector(DataCollectorBase):
         else:
             IPAddr = "localhost"
         if self._VERBOSE:
-            print("Server IP address:", IPAddr)
+            torchrl_logger.info(f"Server IP address: {IPAddr}")
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = str(self.tcp_port)
@@ -655,20 +760,20 @@ class DistributedDataCollector(DataCollectorBase):
         else:
             for i in range(self.num_workers):
                 if self._VERBOSE:
-                    print("Submitting job")
+                    torchrl_logger.info("Submitting job")
                 if self.launcher == "submitit":
                     job = self._init_worker_dist_submitit(
                         executor,
                         i,
                     )
                     if self._VERBOSE:
-                        print("job id", job.job_id)  # ID of your job
+                        torchrl_logger.info(f"job id {job.job_id}")  # ID of your job
                 elif self.launcher == "mp":
                     job = self._init_worker_dist_mp(
                         i,
                     )
                     if self._VERBOSE:
-                        print("job launched")
+                        torchrl_logger.info("job launched")
                 self.jobs.append(job)
             self._init_master_dist(self.num_workers + 1, self.backend)
 
@@ -677,13 +782,13 @@ class DistributedDataCollector(DataCollectorBase):
 
     def _iterator_dist(self):
         if self._VERBOSE:
-            print("iterating...")
+            torchrl_logger.info("iterating...")
 
         total_frames = 0
         if not self._sync:
             for rank in range(1, self.num_workers + 1):
                 if self._VERBOSE:
-                    print(f"sending 'continue' to {rank}")
+                    torchrl_logger.info(f"sending 'continue' to {rank}")
                 self._store.set(f"NODE_{rank}_in", b"continue")
             trackers = []
             for i in range(self.num_workers):
@@ -728,7 +833,7 @@ class DistributedDataCollector(DataCollectorBase):
         if total_frames < self.total_frames:
             for rank in range(1, self.num_workers + 1):
                 if self._VERBOSE:
-                    print(f"sending 'continue' to {rank}")
+                    torchrl_logger.info(f"sending 'continue' to {rank}")
                 self._store.set(f"NODE_{rank}_in", b"continue")
         trackers = []
         for i in range(self.num_workers):
@@ -762,7 +867,7 @@ class DistributedDataCollector(DataCollectorBase):
                     total_frames += data.numel()
                     if total_frames < self.total_frames:
                         if self._VERBOSE:
-                            print(f"sending 'continue' to {rank}")
+                            torchrl_logger.info(f"sending 'continue' to {rank}")
                         self._store.set(f"NODE_{rank}_in", b"continue")
                     trackers[i] = self._tensordict_out[i].irecv(
                         src=i + 1, return_premature=True
@@ -785,7 +890,7 @@ class DistributedDataCollector(DataCollectorBase):
         for i in workers:
             rank = i + 1
             if self._VERBOSE:
-                print(f"updating weights of {rank}")
+                torchrl_logger.info(f"updating weights of {rank}")
             self._store.set(f"NODE_{rank}_in", b"update_weights")
             if self._sync:
                 self.policy_weights.send(rank)
@@ -821,12 +926,12 @@ class DistributedDataCollector(DataCollectorBase):
         for i in range(self.num_workers):
             rank = i + 1
             if self._VERBOSE:
-                print(f"shutting down node with rank={rank}")
+                torchrl_logger.info(f"shutting down node with rank={rank}")
             self._store.set(f"NODE_{rank}_in", b"shutdown")
         for i in range(self.num_workers):
             rank = i + 1
             if self._VERBOSE:
-                print(f"getting status of node {rank}", end="\t")
+                torchrl_logger.info(f"getting status of node {rank}")
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"down":
                 raise RuntimeError(f"Expected 'down' but got status {status}.")
@@ -841,4 +946,4 @@ class DistributedDataCollector(DataCollectorBase):
             elif self.launcher == "submitit_delayed":
                 pass
         if self._VERBOSE:
-            print("collector shut down")
+            torchrl_logger.info("collector shut down")

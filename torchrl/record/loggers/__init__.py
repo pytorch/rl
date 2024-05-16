@@ -5,9 +5,9 @@
 
 from .common import Logger
 
-# from .csv import CSVLogger
-# from .mlflow import MLFlowLogger
-# from .tensorboard import TensorboardLogger
+from .csv import CSVLogger
+from .mlflow import MLFlowLogger
+from .tensorboard import TensorboardLogger
 from .utils import generate_exp_name, get_logger
 
-# from .wandb import WandbLogger
+from .wandb import WandbLogger

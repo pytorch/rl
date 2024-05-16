@@ -3,8 +3,12 @@
 torchrl.modules package
 =======================
 
+.. _ref_modules:
+
 TensorDict modules: Actors, exploration, value models and generative models
 ---------------------------------------------------------------------------
+
+.. _tdmodules:
 
 TorchRL offers a series of module wrappers aimed at making it easy to build
 RL models from the ground up. These wrappers are exclusively based on
@@ -21,8 +25,8 @@ The main features are:
   and/or return the distribution of interest;
 - Custom containers for Q-Value learning, model-based agents and others.
 
-SafeModules
-~~~~~~~~~~~
+TensorDictModules and SafeModules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 TorchRL :class:`~torchrl.modules.tensordict_module.SafeModule` allows you to
 check the you model output matches what is to be expected for the environment.
@@ -48,8 +52,10 @@ projected (in a L1-manner) into the desired domain.
     :template: rl_template_noinherit.rst
 
     Actor
+    MultiStepActorWrapper
     SafeModule
     SafeSequential
+    TanhModule
 
 Exploration wrappers
 ~~~~~~~~~~~~~~~~~~~~
@@ -67,6 +73,7 @@ other cases, the action written in the tensordict is simply the network output.
     :template: rl_template_noinherit.rst
 
     AdditiveGaussianWrapper
+    EGreedyModule
     EGreedyWrapper
     OrnsteinUhlenbeckProcessWrapper
 
@@ -260,10 +267,12 @@ without shared parameters. It is mainly intended as a replacement for
     ActorCriticWrapper
     ActorValueOperator
     ValueOperator
+    DecisionTransformerInferenceWrapper
 
+Domain-specific TensorDict modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Other modules
-~~~~~~~~~~~~~
+These modules include dedicated solutions for MBRL or RLHF pipelines.
 
 .. currentmodule:: torchrl.modules.tensordict_module
 
@@ -271,6 +280,7 @@ Other modules
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    LMHeadActorValueOperator
     WorldModelWrapper
 
 Hooks
@@ -304,7 +314,7 @@ Regular modules
 
     MLP
     ConvNet
-    LSTMNet
+    Conv3dNet
     SqueezeLayer
     Squeeze2dLayer
 
@@ -318,18 +328,41 @@ algorithms, such as DQN, DDPG or Dreamer.
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
-    DuelingCnnDQNet
-    DistributionalDQNnet
+    DTActor
     DdpgCnnActor
     DdpgCnnQNet
     DdpgMlpActor
     DdpgMlpQNet
+    DecisionTransformer
+    DistributionalDQNnet
     DreamerActor
+    DuelingCnnDQNet
+    GRUCell
+    GRU
+    GRUModule
+    LSTMCell
+    LSTM
     LSTMModule
-    ObsEncoder
     ObsDecoder
-    RSSMPrior
+    ObsEncoder
+    OnlineDTActor
     RSSMPosterior
+    RSSMPrior
+
+Multi-agent-specific modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These networks implement models that can be used in
+multi-agent contexts.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    MultiAgentMLP
+    MultiAgentConvNet
+    QMixer
+    VDNMixer
 
 
 Exploration
@@ -380,6 +413,7 @@ Some distributions are typically used in RL scripts.
     TanhDelta
     OneHotCategorical
     MaskedCategorical
+    MaskedOneHotCategorical
 
 Utils
 -----
@@ -393,3 +427,12 @@ Utils
     mappings
     inv_softplus
     biased_softplus
+    get_primers_from_module
+
+.. currentmodule:: torchrl.modules
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    VmapModule

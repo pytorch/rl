@@ -5,16 +5,16 @@
 import time
 from argparse import ArgumentParser
 
-import tqdm
+import gym
 
-from torchrl.collectors.collectors import (
-    MultiSyncDataCollector,
-    RandomPolicy,
-    SyncDataCollector,
-)
+import tqdm
+from torchrl._utils import logger as torchrl_logger
+
+from torchrl.collectors.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.collectors.distributed import DistributedDataCollector
 from torchrl.envs import EnvCreator
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
+from torchrl.envs.utils import RandomPolicy
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -90,7 +90,11 @@ if __name__ == "__main__":
             f"device assignment not implemented for backend {args.backend}"
         )
 
-    make_env = EnvCreator(lambda: GymEnv(args.env))
+    def gym_make():
+        with set_gym_backend(gym):
+            return GymEnv(args.env)
+
+    make_env = EnvCreator(gym_make)
     action_spec = make_env().action_spec
 
     collector = DistributedDataCollector(
@@ -121,5 +125,5 @@ if __name__ == "__main__":
             t0 = time.time()
     collector.shutdown()
     t1 = time.time()
-    print(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    torchrl_logger.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
     exit()

@@ -2,25 +2,37 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import functools
+import re
 import warnings
 from enum import Enum
 from typing import Iterable, Optional, Union
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
+from torch.nn.modules import dropout
 
+try:
+    from torch import vmap
+except ImportError as err:
+    try:
+        from functorch import vmap
+    except ImportError as err_ft:
+        raise err_ft from err
 from torchrl.envs.utils import step_mdp
 
-_GAMMA_LMBDA_DEPREC_WARNING = (
+_GAMMA_LMBDA_DEPREC_ERROR = (
     "Passing gamma / lambda parameters through the loss constructor "
-    "is deprecated and will be removed soon. To customize your value function, "
+    "is a deprecated feature. To customize your value function, "
     "run `loss_module.make_value_estimator(ValueEstimators.<value_fun>, gamma=val)`."
 )
+
+RANDOM_MODULE_LIST = (dropout._DropoutNd,)
 
 
 class ValueEstimators(Enum):
@@ -39,6 +51,7 @@ class ValueEstimators(Enum):
     TD1 = "TD(1) (infinity-step return)"
     TDLambda = "TD(lambda)"
     GAE = "Generalized advantage estimate"
+    VTrace = "V-trace"
 
 
 def default_value_kwargs(value_type: ValueEstimators):
@@ -61,6 +74,8 @@ def default_value_kwargs(value_type: ValueEstimators):
         return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
     elif value_type == ValueEstimators.TDLambda:
         return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
+    elif value_type == ValueEstimators.VTrace:
+        return {"gamma": 0.99, "differentiable": True}
     else:
         raise NotImplementedError(f"Unknown value type {value_type}.")
 
@@ -92,7 +107,7 @@ def distance_loss(
         v2 (Tensor): a tensor with a shape compatible with v1
         loss_function (str): One of "l2", "l1" or "smooth_l1" representing which loss function is to be used.
         strict_shape (bool): if False, v1 and v2 are allowed to have a different shape.
-            Default is :obj:`True`.
+            Default is ``True``.
 
     Returns:
          A tensor of the shape v1.view_as(v2) or v2.view_as(v1) with values equal to the distance loss between the
@@ -141,32 +156,19 @@ class TargetNetUpdater:
         self,
         loss_module: "LossModule",  # noqa: F821
     ):
+        from torchrl.objectives.common import LossModule
+
+        if not isinstance(loss_module, LossModule):
+            raise ValueError("The loss_module must be a LossModule instance.")
         _has_update_associated = getattr(loss_module, "_has_update_associated", None)
-        loss_module._has_update_associated = True
+        for k in loss_module._has_update_associated.keys():
+            loss_module._has_update_associated[k] = True
         try:
             _target_names = []
-            # for properties
-            for name in loss_module.__class__.__dict__:
-                if (
-                    name.startswith("target_")
-                    and (name.endswith("params") or name.endswith("buffers"))
-                    and (getattr(loss_module, name) is not None)
-                ):
+            for name, _ in loss_module.named_children():
+                # the TensorDictParams is a nn.Module instance
+                if name.startswith("target_") and name.endswith("_params"):
                     _target_names.append(name)
-
-            # for regular lists: raise an exception
-            for name in loss_module.__dict__:
-                if (
-                    name.startswith("target_")
-                    and (name.endswith("params") or name.endswith("buffers"))
-                    and (getattr(loss_module, name) is not None)
-                ):
-                    raise RuntimeError(
-                        "Your module seems to have a target tensor list contained "
-                        "in a non-dynamic structure (such as a list). If the "
-                        "module is cast onto a device, the reference to these "
-                        "tensors will be lost."
-                    )
 
             if len(_target_names) == 0:
                 raise RuntimeError(
@@ -178,11 +180,11 @@ class TargetNetUpdater:
             for _source in _source_names:
                 try:
                     getattr(loss_module, _source)
-                except AttributeError:
+                except AttributeError as err:
                     raise RuntimeError(
                         f"Incongruent target and source parameter lists: "
                         f"{_source} is not an attribute of the loss_module"
-                    )
+                    ) from err
 
             self._target_names = _target_names
             self._source_names = _source_names
@@ -191,7 +193,8 @@ class TargetNetUpdater:
             self.init_()
             _has_update_associated = True
         finally:
-            loss_module._has_update_associated = _has_update_associated
+            for k in loss_module._has_update_associated.keys():
+                loss_module._has_update_associated[k] = _has_update_associated
 
     @property
     def _targets(self):
@@ -297,10 +300,8 @@ class SoftUpdate(TargetNetUpdater):
         tau: Optional[float] = None,
     ):
         if eps is None and tau is None:
-            warnings.warn(
-                "Neither eps nor tau was provided. Taking the default value "
-                "eps=0.999. This behaviour will soon be deprecated.",
-                category=DeprecationWarning,
+            raise RuntimeError(
+                "Neither eps nor tau was provided. This behaviour is deprecated.",
             )
             eps = 0.999
         if (eps is None) ^ (tau is None):
@@ -365,18 +366,19 @@ class hold_out_net(_context_manager):
 
     def __init__(self, network: nn.Module) -> None:
         self.network = network
-        try:
-            self.p_example = next(network.parameters())
-        except (AttributeError, StopIteration):
-            self.p_example = torch.tensor([])
-        self._prev_state = []
+        for p in network.parameters():
+            self.mode = p.requires_grad
+            break
+        else:
+            self.mode = True
 
     def __enter__(self) -> None:
-        self._prev_state.append(self.p_example.requires_grad)
-        self.network.requires_grad_(False)
+        if self.mode:
+            self.network.requires_grad_(False)
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.network.requires_grad_(self._prev_state.pop())
+        if self.mode:
+            self.network.requires_grad_()
 
 
 class hold_out_params(_context_manager):
@@ -450,3 +452,94 @@ def next_state_value(
     rewards = rewards.to(torch.float)
     target_value = rewards + (gamma**steps_to_next_obs) * target_value
     return target_value
+
+
+def _cache_values(fun):
+    """Caches the tensordict returned by a property."""
+    name = fun.__name__
+
+    def new_fun(self, netname=None):
+        __dict__ = self.__dict__
+        _cache = __dict__.setdefault("_cache", {})
+        attr_name = name
+        if netname is not None:
+            attr_name += "_" + netname
+        if attr_name in _cache:
+            out = _cache[attr_name]
+            return out
+        if netname is not None:
+            out = fun(self, netname)
+        else:
+            out = fun(self)
+        # TODO: decide what to do with locked tds in functional calls
+        # if is_tensor_collection(out):
+        #     out.lock_()
+        _cache[attr_name] = out
+        return out
+
+    return new_fun
+
+
+def _vmap_func(module, *args, func=None, **kwargs):
+    try:
+
+        def decorated_module(*module_args_params):
+            params = module_args_params[-1]
+            module_args = module_args_params[:-1]
+            with params.to_module(module):
+                if func is None:
+                    return module(*module_args)
+                else:
+                    return getattr(module, func)(*module_args)
+
+        return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
+
+    except RuntimeError as err:
+        if re.match(
+            r"vmap: called random operation while in randomness error mode", str(err)
+        ):
+            raise RuntimeError(
+                "Please use <loss_module>.set_vmap_randomness('different') to handle random operations during vmap."
+            ) from err
+
+
+def _reduce(tensor: torch.Tensor, reduction: str) -> Union[float, torch.Tensor]:
+    """Reduces a tensor given the reduction method."""
+    if reduction == "none":
+        result = tensor
+    elif reduction == "mean":
+        result = tensor.mean()
+    elif reduction == "sum":
+        result = tensor.sum()
+    else:
+        raise NotImplementedError(f"Unknown reduction method {reduction}")
+    return result
+
+
+def _clip_value_loss(
+    old_state_value: torch.Tensor,
+    state_value: torch.Tensor,
+    clip_value: torch.Tensor,
+    target_return: torch.Tensor,
+    loss_value: torch.Tensor,
+    loss_critic_type: str,
+):
+    """Value clipping method for loss computation.
+
+    This method computes a clipped state value from the old state value and the state value,
+    and returns the most pessimistic value prediction between clipped and non-clipped options.
+    It also computes the clip fraction.
+    """
+    pre_clipped = state_value - old_state_value
+    clipped = pre_clipped.clamp(-clip_value, clip_value)
+    with torch.no_grad():
+        clip_fraction = (pre_clipped != clipped).to(state_value.dtype).mean()
+    state_value_clipped = old_state_value + clipped
+    loss_value_clipped = distance_loss(
+        target_return,
+        state_value_clipped,
+        loss_function=loss_critic_type,
+    )
+    # Chose the most pessimistic value prediction between clipped and non-clipped
+    loss_value = torch.max(loss_value, loss_value_clipped)
+    return loss_value, clip_fraction

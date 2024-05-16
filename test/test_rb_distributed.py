@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import os
+
 import sys
 import time
 
@@ -11,7 +12,8 @@ import pytest
 import torch
 import torch.distributed.rpc as rpc
 import torch.multiprocessing as mp
-from tensordict.tensordict import TensorDict
+from tensordict import TensorDict
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -22,10 +24,10 @@ RETRY_BACKOFF = 3
 
 
 class ReplayBufferNode(RemoteTensorDictReplayBuffer):
-    def __init__(self, capacity: int):
+    def __init__(self, capacity: int, scratch_dir=None):
         super().__init__(
             storage=LazyMemmapStorage(
-                max_size=capacity, scratch_dir="/tmp/", device=torch.device("cpu")
+                max_size=capacity, scratch_dir=scratch_dir, device=torch.device("cpu")
             ),
             sampler=RandomSampler(),
             writer=RoundRobinWriter(),
@@ -109,7 +111,7 @@ def _construct_buffer(target):
             buffer_rref = rpc.remote(target, ReplayBufferNode, args=(1000,))
             return buffer_rref
         except Exception as e:
-            print(f"Failed to connect: {e}")
+            torchrl_logger.info(f"Failed to connect: {e}")
             time.sleep(RETRY_BACKOFF)
     raise RuntimeError("Unable to connect to replay buffer")
 

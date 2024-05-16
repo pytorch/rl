@@ -15,15 +15,23 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, U
 
 import numpy as np
 import torch.nn
+from tensordict import pad, TensorDictBase
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import pad, TensorDictBase
 from tensordict.utils import expand_right
 from torch import nn, optim
 
-from torchrl._utils import _CKPT_BACKEND, KeyDependentDefaultDict, VERBOSE
+from torchrl._utils import (
+    _CKPT_BACKEND,
+    KeyDependentDefaultDict,
+    logger as torchrl_logger,
+    VERBOSE,
+)
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.collectors.utils import split_trajectories
-from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
+from torchrl.data.replay_buffers import (
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
+)
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -114,12 +122,12 @@ class Trainer:
         clip_grad_norm (bool, optional): If True, the gradients will be clipped
             based on the total norm of the model parameters. If False,
             all the partial derivatives will be clamped to
-            (-clip_norm, clip_norm). Default is :obj:`True`.
+            (-clip_norm, clip_norm). Default is ``True``.
         clip_norm (Number, optional): value to be used for clipping gradients.
             Default is None (no clip norm).
         progress_bar (bool, optional): If True, a progress bar will be
             displayed using tqdm. If tqdm is not installed, this option
-            won't have any effect. Default is :obj:`True`
+            won't have any effect. Default is ``True``
         seed (int, optional): Seed to be used for the collector, pytorch and
             numpy. Default is ``None``.
         save_trainer_interval (int, optional): How often the trainer should be
@@ -465,11 +473,14 @@ class Trainer:
         self.collector.shutdown()
 
     def __del__(self):
-        self.collector.shutdown()
+        try:
+            self.collector.shutdown()
+        except Exception:
+            pass
 
     def shutdown(self):
         if VERBOSE:
-            print("shutting down collector")
+            torchrl_logger.info("shutting down collector")
         self.collector.shutdown()
 
     def optim_steps(self, batch: TensorDictBase) -> None:
@@ -651,21 +662,13 @@ class ReplayBufferTrainer(TrainerHookBase):
         batch_size: Optional[int] = None,
         memmap: bool = False,
         device: DEVICE_TYPING = "cpu",
-        flatten_tensordicts: bool = None,
+        flatten_tensordicts: bool = False,
         max_dims: Optional[Sequence[int]] = None,
     ) -> None:
         self.replay_buffer = replay_buffer
         self.batch_size = batch_size
         self.memmap = memmap
         self.device = device
-        if flatten_tensordicts is None:
-            warnings.warn(
-                "flatten_tensordicts default value will soon be changed "
-                "to False for a faster execution. Make sure your "
-                "code is robust to this change.",
-                category=DeprecationWarning,
-            )
-            flatten_tensordicts = True
         self.flatten_tensordicts = flatten_tensordicts
         self.max_dims = max_dims
 
@@ -990,7 +993,7 @@ def mask_batch(batch: TensorDictBase) -> TensorDictBase:
 
 
 class BatchSubSampler(TrainerHookBase):
-    """Data subsampler for online RL algorithms.
+    """Data subsampler for online RL sota-implementations.
 
     This class subsamples a part of a whole batch of data just collected from the
     environment.

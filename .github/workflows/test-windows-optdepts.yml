@@ -1,0 +1,101 @@
+name: Unit-tests on Windows
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+  workflow_dispatch:
+
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
+jobs:
+  unittests-cpu:
+    uses: pytorch/test-infra/.github/workflows/windows_job.yml@main
+    with:
+      runner: "windows.4xlarge"
+      repository: pytorch/rl
+      timeout: 40
+      script: |
+        set -euxo pipefail
+
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="cpu"
+        export torch_cuda="False"
+
+        # TODO: Port this to pytorch/test-infra/.github/workflows/windows_job.yml
+        export PATH="/c/Jenkins/Miniconda3/Scripts:${PATH}"
+
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
+
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        ## setup_env.sh
+        ./.github/unittest/windows_optdepts/scripts/setup_env.sh
+
+        ## install.sh
+        ./.github/unittest/windows_optdepts/scripts/install.sh
+
+        ## run_test.sh
+        ./.github/unittest/windows_optdepts/scripts/run_test.sh
+
+        ## post_process.sh
+        ./.github/unittest/windows_optdepts/scripts/post_process.sh
+
+#  unittests-gpu:
+#    uses: pytorch/test-infra/.github/workflows/windows_job.yml@main
+#    with:
+#      runner: "windows.g5.4xlarge.nvidia.gpu"
+#      repository: pytorch/rl
+#      timeout: 40
+#      script: |
+#        set -euxo pipefail
+#
+#        export PYTHON_VERSION="3.9"
+#        export CUDA_VERSION="11.6"
+#        export CU_VERSION="cu116"
+#        export torch_cuda="True"
+#
+#        # TODO: Port this to pytorch/test-infra/.github/workflows/windows_job.yml
+#        export PATH="/c/Jenkins/Miniconda3/Scripts:${PATH}"
+#
+#        echo "PYTHON_VERSION: $PYTHON_VERSION"
+#
+#        if [[ "${{ github.ref }}" =~ release/* ]]; then
+#          export RELEASE=1
+#          export TORCH_VERSION=stable
+#        else
+#          export RELEASE=0
+#          export TORCH_VERSION=nightly
+#        fi
+#
+#        ## setup_env.sh
+#        ./.github/unittest/windows_optdepts/scripts/setup_env.sh
+#
+#        ## Install CUDA
+#        packaging/windows/internal/cuda_install.bat
+#
+#        ## Update CUDA Driver
+#        packaging/windows/internal/driver_update.bat
+#
+#        ## install.sh
+#        ./.github/unittest/windows_optdepts/scripts/install.sh
+#
+#        ## run_test.sh
+#        ./.github/unittest/windows_optdepts/scripts/run_test.sh
+#
+#        ## post_process.sh
+#        ./.github/unittest/windows_optdepts/scripts/post_process.sh

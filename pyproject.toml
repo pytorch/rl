@@ -3,12 +3,3 @@ first_party_detection = false
 
 [build-system]
 requires = ["setuptools", "wheel", "torch", "ninja"]
-
-first_party_detection = false
-
-target-version = ["py38"]
-
-excludes = [
-    "gallery",
-    "tutorials",
-]

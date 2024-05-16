@@ -1,0 +1,24 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - pip:
+    - cloudpickle
+    - gym
+    - gym-notices
+    - numpy
+    - pyglet==1.5.27
+    - six
+    - torch
+    - vmas
+    - zipp
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - pytest-error-for-skips
+    - expecttest
+    - pyyaml
+    - scipy

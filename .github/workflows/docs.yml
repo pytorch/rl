@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+      - release/*
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]
+      - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
   pull_request:
     branches:
       - "*"
@@ -16,25 +20,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build_docs_job:
-    runs-on: linux.g5.4xlarge.nvidia.gpu
-    defaults:
-      run:
-        shell: bash -l {0}
-    container: nvidia/cudagl:11.4.0-runtime
-    steps:
-    - name: Install deps
-      run: |
+  build-docs:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      upload-artifact: docs
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        set -e
+        set -v
         apt-get update && apt-get install -y git wget gcc g++
-    - name: Checkout
-      uses: actions/checkout@v3
-    # Update references
-    - name: Setup conda
-      run: |
         root_dir="$(pwd)"
         conda_dir="${root_dir}/conda"
         env_dir="${root_dir}/env"
         os=Linux
+        
         # 1. Install conda at ./conda
         printf "* Installing conda\n"
         wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
@@ -44,58 +50,118 @@ jobs:
         conda create --prefix "${env_dir}" -y python=3.8
         printf "* Activating\n"
         conda activate "${env_dir}"
-    - name: Update pip
-      run: |
+        
+        # 2. upgrade pip, ninja and packaging
         apt-get install python3.8 python3-pip -y
-        pip3 install --upgrade pip
-    - name: check python version
-      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install setuptools ninja packaging -U
+        
+        # 3. check python version
         python3 --version
-    - name: Check git version
-      run: git version
-    - name: Install PyTorch
-      shell: bash
-      run: |
-        pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
-        #pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu118 --quiet --root-user-action=ignore
-    - name: Install tensordict
-      run: |
-        pip3 install git+https://github.com/pytorch-labs/tensordict.git --quiet --root-user-action=ignore
-    - name: Install TorchRL
-      run: |
+        
+        # 4. Check git version
+        git version
+        
+        # 5. Install PyTorch
+        python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
+        
+        # 6. Install tensordict
+        python3 -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
+        
+        # 7. Install TorchRL
         python3 setup.py develop
-    - name: Install requirements
-      run: |
-        pip3 install -r docs/requirements.txt --quiet --root-user-action=ignore
-    - name: Test torchrl installation
-      shell: bash
-      run: |
+        
+        # 8. Install requirements
+        python3 -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
+
+        # 9. Set sanitize version
+        if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
+          echo '::group::Enable version string sanitization'
+          # This environment variable just has to exist and must not be empty. The actual value is arbitrary.
+          # See docs/source/conf.py for details
+          export RL_SANITIZE_VERSION_STR_IN_DOCS=1
+          echo '::endgroup::'
+        fi
+
+        # 10. Test torchrl installation
         mkdir _tmp
         cd _tmp
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
         print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
         cd ..
-    - name: Build the docset
-      id: build_doc
-      run: |
+        
+        # 11. Build doc
         cd ./docs
-        #timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+        # bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
         cd ..
-    - name: Install rsync 📚
-      run: |
-        apt-get update && apt-get install -y rsync
-    - name: Pull TensorDict docs
-      run: |
-        git clone --branch gh-pages https://github.com/pytorch-labs/tensordict.git docs/_local_build/tensordict
-        rm -rf docs/_local_build/tensordict/.git
-    - name: Get output time
-      run: echo "The time was ${{ steps.build.outputs.time }}"
-    - name: Deploy
-      if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-      uses: JamesIves/github-pages-deploy-action@releases/v4
-      with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: gh-pages # The branch the action should deploy to.
-          folder: docs/_local_build/ # The folder the action should deploy.
-          CLEAN: false
+
+        cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
+        echo $(ls "${RUNNER_ARTIFACT_DIR}")
+        if [[ ${{ github.event_name == 'pull_request' }} ]]; then
+          cp -r docs/_local_build/* "${RUNNER_DOCS_DIR}"
+        fi
+
+  upload:
+    needs: build-docs
+    if: github.repository == 'pytorch/rl' && github.event_name == 'push' && 
+        ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
+    permissions:
+      contents: write
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      download-artifact: docs
+      ref: gh-pages
+      test-infra-ref: main
+      script: |
+        set -euo pipefail
+
+        REF_TYPE=${{ github.ref_type }}
+        REF_NAME=${{ github.ref_name }}
+
+        if [[ "${REF_TYPE}" == branch ]]; then
+          if [[ "${REF_NAME}" == main ]]; then
+            TARGET_FOLDER="${REF_NAME}"
+          # Bebug:
+          # else
+          #   TARGET_FOLDER="release-doc"
+          fi
+        elif [[ "${REF_TYPE}" == tag ]]; then
+          case "${REF_NAME}" in
+            *-rc*)
+              echo "Aborting upload since this is an RC tag: ${REF_NAME}"
+              exit 0
+              ;;
+            *)
+              # Strip the leading "v" as well as the trailing patch version. For example:
+              # 'v0.15.2' -> '0.15'
+              TARGET_FOLDER=$(echo "${REF_NAME}" | sed 's/v\([0-9]\+\)\.\([0-9]\+\)\.[0-9]\+/\1.\2/')
+              ;;
+          esac
+        fi
+
+        echo "Target Folder: ${TARGET_FOLDER}"
+
+        mkdir -p "${TARGET_FOLDER}"
+        rm -rf "${TARGET_FOLDER}"/*
+
+        echo $(ls "${RUNNER_ARTIFACT_DIR}")
+        rsync -a "${RUNNER_ARTIFACT_DIR}"/ "${TARGET_FOLDER}"
+        git add "${TARGET_FOLDER}" || true
+
+        # Debug
+        # if [[ "${TARGET_FOLDER}" == "main" ]] || [[ "${TARGET_FOLDER}" == "release-doc" ]]; then
+        if [[ "${TARGET_FOLDER}" == "main" ]] ; then
+          mkdir -p _static
+          rm -rf _static/*
+          cp -r "${TARGET_FOLDER}"/_static/* _static
+          git add _static || true
+        fi
+
+        git config user.name 'pytorchbot'
+        git config user.email 'soumith+bot@pytorch.org'
+        git config http.postBuffer 524288000
+        git commit -m "auto-generating sphinx docs" || true
+        git push

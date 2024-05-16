@@ -4,7 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import warnings
-from typing import Optional, Sequence, Type, Union
+from typing import Dict, List, Optional, Type, Union
+
+from tensordict import TensorDictBase, unravel_key_list
 
 from tensordict.nn import (
     InteractionType,
@@ -12,8 +14,7 @@ from tensordict.nn import (
     ProbabilisticTensorDictSequential,
     TensorDictModule,
 )
-from tensordict.tensordict import TensorDictBase
-
+from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.modules.distributions import Delta
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
@@ -48,14 +49,14 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
     a deterministic mapping function.
 
     Args:
-        in_keys (str or iterable of str or dict): key(s) that will be read from the
+        in_keys (NestedKey or list of NestedKey or dict): key(s) that will be read from the
             input TensorDict and used to build the distribution. Importantly, if it's an
-            iterable of string or a string, those keys must match the keywords used by
+            list of NestedKey or a NestedKey, the leaf (last element) of those keys must match the keywords used by
             the distribution class of interest, e.g. :obj:`"loc"` and :obj:`"scale"` for
-            the Normal distribution and similar. If in_keys is a dictionary,, the keys
+            the Normal distribution and similar. If in_keys is a dictionary, the keys
             are the keys of the distribution and the values are the keys in the
             tensordict that will get match to the corresponding distribution keys.
-        out_keys (str or iterable of str): keys where the sampled values will be
+        out_keys (NestedKey or list of NestedKey): keys where the sampled values will be
             written. Importantly, if these keys are found in the input TensorDict, the
             sampling step will be skipped.
         spec (TensorSpec): specs of the first output tensor. Used when calling
@@ -84,6 +85,8 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         return_log_prob (bool, optional): if ``True``, the log-probability of the
             distribution sample will be written in the tensordict with the key
             `'sample_log_prob'`. Default is ``False``.
+        log_prob_key (NestedKey, optional): key where to write the log_prob if return_log_prob = True.
+            Defaults to `'sample_log_prob'`.
         cache_dist (bool, optional): EXPERIMENTAL: if ``True``, the parameters of the
             distribution (i.e. the output of the module) will be written to the
             tensordict along with the sample. Those parameters can be used to re-compute
@@ -97,8 +100,8 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
 
     def __init__(
         self,
-        in_keys: Union[str, Sequence[str], dict],
-        out_keys: Union[str, Sequence[str]],
+        in_keys: Union[NestedKey, List[NestedKey], Dict[str, NestedKey]],
+        out_keys: Optional[Union[NestedKey, List[NestedKey]]] = None,
         spec: Optional[TensorSpec] = None,
         safe: bool = False,
         default_interaction_mode: str = None,
@@ -106,6 +109,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         distribution_class: Type = Delta,
         distribution_kwargs: Optional[dict] = None,
         return_log_prob: bool = False,
+        log_prob_key: Optional[NestedKey] = "sample_log_prob",
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
     ):
@@ -117,10 +121,12 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             distribution_class=distribution_class,
             distribution_kwargs=distribution_kwargs,
             return_log_prob=return_log_prob,
+            log_prob_key=log_prob_key,
             cache_dist=cache_dist,
             n_empirical_estimate=n_empirical_estimate,
         )
-
+        if spec is not None:
+            spec = spec.clone()
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):
@@ -129,22 +135,24 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
                     f"got more than one out_key for the SafeModule: {self.out_keys},\nbut only one spec. "
                     "Consider using a CompositeSpec object or no spec at all."
                 )
-            spec = CompositeSpec(**{self.out_keys[0]: spec})
+            spec = CompositeSpec({self.out_keys[0]: spec})
         elif spec is not None and isinstance(spec, CompositeSpec):
             if "_" in spec.keys():
                 warnings.warn('got a spec with key "_": it will be ignored')
         elif spec is None:
             spec = CompositeSpec()
-
-        if set(spec.keys(True, True)) != set(self.out_keys):
+        spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
+        out_keys = set(unravel_key_list(self.out_keys))
+        if spec_keys != out_keys:
             # then assume that all the non indicated specs are None
-            for key in self.out_keys:
-                if key not in spec:
+            for key in out_keys:
+                if key not in spec_keys:
                     spec[key] = None
+            spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
 
-        if set(spec.keys(True, True)) != set(self.out_keys):
+        if spec_keys != out_keys:
             raise RuntimeError(
-                f"spec keys and out_keys do not match, got: {set(spec.keys(True, True))} and {set(self.out_keys)} respectively"
+                f"spec keys and out_keys do not match, got: {spec_keys} and {out_keys} respectively"
             )
 
         self._spec = spec
@@ -210,7 +218,7 @@ class SafeProbabilisticTensorDictSequential(
             of the input keys. If so, the only module that will be executed are those
             who can be executed given the keys that are present. Also, if the input
             tensordict is a lazy stack of tensordicts AND if partial_tolerant is
-            :obj:`True` AND if the stack does not have the required keys, then
+            ``True`` AND if the stack does not have the required keys, then
             TensorDictSequential will scan through the sub-tensordicts looking for those
             that have the required keys, if any.
 

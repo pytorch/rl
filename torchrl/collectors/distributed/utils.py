@@ -1,7 +1,7 @@
 import subprocess
 import time
 
-from torchrl._utils import VERBOSE
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.collectors.distributed.default_configs import (
     DEFAULT_SLURM_CONF,
     DEFAULT_SLURM_CONF_MAIN,
@@ -51,8 +51,8 @@ class submitit_delayed_launcher:
         >>> num_jobs=2
         >>> @submitit_delayed_launcher(num_jobs=num_jobs)
         ... def main():
-        ...     from torchrl.envs.libs.gym import GymEnv
-        ...     from torchrl.collectors.collectors import RandomPolicy
+        ...     from torchrl.envs.utils import RandomPolicy
+                from torchrl.envs.libs.gym import GymEnv
         ...     from torchrl.data import BoundedTensorSpec
         ...     collector = DistributedDataCollector(
         ...         [EnvCreator(lambda: GymEnv("Pendulum-v1"))] * num_jobs,
@@ -96,7 +96,7 @@ class submitit_delayed_launcher:
             executor.update_parameters(**self.submitit_main_conf)
             main_job = executor.submit(main_func)
             # listen to output file looking for IP address
-            print(f"job id: {main_job.job_id}")
+            torchrl_logger.info(f"job id: {main_job.job_id}")
             time.sleep(2.0)
             node = None
             while not node:
@@ -107,10 +107,11 @@ class submitit_delayed_launcher:
                 except ValueError:
                     time.sleep(0.5)
                     continue
-            print(f"node: {node}")
-            cmd = f"sinfo -n {node} -O nodeaddr | tail -1"
+            torchrl_logger.info(f"node: {node}")
+            # by default, sinfo will truncate the node name at char 20, we increase this to 200
+            cmd = f"sinfo -n {node} -O nodeaddr:200 | tail -1"
             rank0_ip = subprocess.check_output(cmd, shell=True, text=True).strip()
-            print(f"IP: {rank0_ip}")
+            torchrl_logger.info(f"IP: {rank0_ip}")
             world_size = self.num_jobs + 1
 
             # submit jobs

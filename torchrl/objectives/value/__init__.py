@@ -12,4 +12,5 @@ from .advantages import (
     TDLambdaEstimate,
     TDLambdaEstimator,
     ValueEstimatorBase,
+    VTrace,
 )

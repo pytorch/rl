@@ -27,6 +27,7 @@ import time
 from argparse import ArgumentParser
 
 import tqdm
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.distributed import submitit_delayed_launcher
 
 from torchrl.collectors.distributed.default_configs import (
@@ -111,15 +112,22 @@ frames_per_batch = args.frames_per_batch
     tcpport=tcp_port,
 )
 def main():
+    import gym
     from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
-    from torchrl.collectors.collectors import RandomPolicy
     from torchrl.data import BoundedTensorSpec
-    from torchrl.envs.libs.gym import GymEnv
+    from torchrl.envs.libs.gym import GymEnv, set_gym_backend
+    from torchrl.envs.utils import RandomPolicy
 
     collector_class = SyncDataCollector if num_workers == 1 else MultiSyncDataCollector
     device_str = "device" if num_workers == 1 else "devices"
+
+    def make_env():
+        # gymnasium breaks when using multiproc
+        with set_gym_backend(gym):
+            return GymEnv("ALE/Pong-v5")
+
     collector = DistributedDataCollector(
-        [EnvCreator(lambda: GymEnv("ALE/Pong-v5"))] * num_jobs,
+        [EnvCreator(make_env)] * num_jobs,
         policy=RandomPolicy(BoundedTensorSpec(-1, 1, shape=(1,))),
         launcher="submitit_delayed",
         frames_per_batch=frames_per_batch,
@@ -142,7 +150,7 @@ def main():
         if i == 10:
             t0 = time.time()
     t1 = time.time()
-    print(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    torchrl_logger.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
     collector.shutdown()
     exit()
 

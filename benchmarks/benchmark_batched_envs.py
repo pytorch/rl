@@ -15,11 +15,8 @@ Requires pandas ("pip install pandas").
 
 """
 
-import logging
-
-logging.basicConfig(level=logging.ERROR)
-logging.captureWarnings(True)
 import pandas as pd
+from torchrl._utils import logger as torchrl_logger
 
 pd.set_option("display.max_columns", 100)
 pd.set_option("display.width", 1000)
@@ -68,8 +65,8 @@ if __name__ == "__main__":
         devices.append("cuda")
     for device in devices:
         for num_workers in [1, 4, 16]:
-            print(f"With num_workers={num_workers}, {device}")
-            print("Multithreaded...")
+            torchrl_logger.info(f"With num_workers={num_workers}, {device}")
+            torchrl_logger.info("Multithreaded...")
             env_multithreaded = create_multithreaded(num_workers, device)
             res_multithreaded = Timer(
                 stmt="run_env(env)",
@@ -78,7 +75,7 @@ if __name__ == "__main__":
             )
             time_multithreaded = res_multithreaded.blocked_autorange().mean
 
-            print("Serial...")
+            torchrl_logger.info("Serial...")
             env_serial = create_serial(num_workers, device)
             res_serial = Timer(
                 stmt="run_env(env)",
@@ -87,7 +84,7 @@ if __name__ == "__main__":
             )
             time_serial = res_serial.blocked_autorange().mean
 
-            print("Parallel...")
+            torchrl_logger.info("Parallel...")
             env_parallel = create_parallel(num_workers, device)
             res_parallel = Timer(
                 stmt="run_env(env)",
@@ -96,7 +93,6 @@ if __name__ == "__main__":
             )
             time_parallel = res_parallel.blocked_autorange().mean
 
-            print(time_serial, time_parallel, time_multithreaded)
             res[f"num_workers_{num_workers}_{device}"] = {
                 "Serial, s": time_serial,
                 "Parallel, s": time_parallel,
@@ -105,5 +101,4 @@ if __name__ == "__main__":
     df = pd.DataFrame(res).round(3)
     gain = 1 - df.loc["Multithreaded, s"] / df.loc["Parallel, s"]
     df.loc["Gain, %", :] = (gain * 100).round(1)
-    print(df)
     df.to_csv("multithreaded_benchmark.csv")

@@ -5,6 +5,7 @@
 import argparse
 import distutils.command.clean
 import glob
+import logging
 import os
 import shutil
 import subprocess
@@ -31,8 +32,8 @@ def get_version():
     version_txt = os.path.join(cwd, "version.txt")
     with open(version_txt, "r") as f:
         version = f.readline().strip()
-    if os.getenv("BUILD_VERSION"):
-        version = os.getenv("BUILD_VERSION")
+    if os.getenv("TORCHRL_BUILD_VERSION"):
+        version = os.getenv("TORCHRL_BUILD_VERSION")
     elif sha != "Unknown":
         version += "+" + sha[:7]
     return version
@@ -67,10 +68,14 @@ def write_version_file(version):
         f.write("git_version = {}\n".format(repr(sha)))
 
 
-def _get_pytorch_version():
+def _get_pytorch_version(is_nightly, is_local):
     # if "PYTORCH_VERSION" in os.environ:
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
-    return "torch"
+    if is_nightly:
+        return "torch>=2.4.0.dev"
+    elif is_local:
+        return "torch"
+    return "torch>=2.3.0"
 
 
 def _get_packages():
@@ -94,7 +99,7 @@ class clean(distutils.command.clean.clean):
 
         # Remove torchrl extension
         for path in (ROOT_DIR / "torchrl").glob("**/*.so"):
-            print(f"removing '{path}'")
+            logging.info(f"removing '{path}'")
             path.unlink()
         # Remove build directory
         build_dirs = [
@@ -102,7 +107,7 @@ class clean(distutils.command.clean.clean):
         ]
         for path in build_dirs:
             if path.exists():
-                print(f"removing '{path}' (and everything under it)")
+                logging.info(f"removing '{path}' (and everything under it)")
                 shutil.rmtree(str(path), ignore_errors=True)
 
 
@@ -126,7 +131,7 @@ def get_extensions():
     }
     debug_mode = os.getenv("DEBUG", "0") == "1"
     if debug_mode:
-        print("Compiling in debug mode")
+        logging.info("Compiling in debug mode")
         extra_compile_args = {
             "cxx": [
                 "-O0",
@@ -164,17 +169,24 @@ def _main(argv):
     args, unknown = parse_args(argv)
     name = args.package_name
     is_nightly = "nightly" in name
+    if is_nightly:
+        tensordict_dep = "tensordict-nightly"
+    else:
+        tensordict_dep = "tensordict>=0.4.0"
 
     if is_nightly:
         version = get_nightly_version()
         write_version_file(version)
-        print("Building wheel {}-{}".format(package_name, version))
-        print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
     else:
         version = get_version()
+        write_version_file(version)
+    TORCHRL_BUILD_VERSION = os.getenv("TORCHRL_BUILD_VERSION")
+    logging.info("Building wheel {}-{}".format(package_name, version))
+    logging.info(f"TORCHRL_BUILD_VERSION is {TORCHRL_BUILD_VERSION}")
 
-    pytorch_package_dep = _get_pytorch_version()
-    print("-- PyTorch dependency:", pytorch_package_dep)
+    is_local = TORCHRL_BUILD_VERSION is None
+    pytorch_package_dep = _get_pytorch_version(is_nightly, is_local)
+    logging.info("-- PyTorch dependency:", pytorch_package_dep)
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
 
@@ -182,6 +194,46 @@ def _main(argv):
     long_description = (this_directory / "README.md").read_text()
     sys.argv = [sys.argv[0]] + unknown
 
+    extra_requires = {
+        "atari": [
+            "gym",
+            "atari-py",
+            "ale-py",
+            "gym[accept-rom-license]",
+            "pygame",
+        ],
+        "dm_control": ["dm_control"],
+        "gym_continuous": ["gymnasium", "mujoco"],
+        "rendering": ["moviepy"],
+        "tests": ["pytest", "pyyaml", "pytest-instafail", "scipy"],
+        "utils": [
+            "tensorboard",
+            "wandb",
+            "tqdm",
+            "hydra-core>=1.1",
+            "hydra-submitit-launcher",
+            "git",
+        ],
+        "checkpointing": [
+            "torchsnapshot",
+        ],
+        "offline-data": [
+            "huggingface_hub",  # for roboset
+            "minari",
+            "requests",
+            "tqdm",
+            "torchvision",
+            "scikit-learn",
+            "pandas",
+            "h5py",
+            "pillow",
+        ],
+        "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot"],
+    }
+    extra_requires["all"] = set()
+    for key in list(extra_requires.keys()):
+        extra_requires["all"] = extra_requires["all"].union(extra_requires[key])
+    extra_requires["all"] = sorted(extra_requires["all"])
     setup(
         # Metadata
         name=name,
@@ -191,9 +243,18 @@ def _main(argv):
         url="https://github.com/pytorch/rl",
         long_description=long_description,
         long_description_content_type="text/markdown",
-        license="BSD",
+        license="MIT",
         # Package info
-        packages=find_packages(exclude=("test", "tutorials")),
+        packages=find_packages(
+            exclude=(
+                "test",
+                "tutorials",
+                "docs",
+                "examples",
+                "knowledge_base",
+                "packaging",
+            )
+        ),
         ext_modules=get_extensions(),
         cmdclass={
             "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
@@ -204,37 +265,15 @@ def _main(argv):
             "numpy",
             "packaging",
             "cloudpickle",
-            "tensordict>=0.1.1",
+            tensordict_dep,
         ],
-        extras_require={
-            "atari": [
-                "gym<=0.24",
-                "atari-py",
-                "ale-py",
-                "gym[accept-rom-license]",
-                "pygame",
-            ],
-            "dm_control": ["dm_control"],
-            "gym_continuous": ["mujoco-py", "mujoco"],
-            "rendering": ["moviepy"],
-            "tests": ["pytest", "pyyaml", "pytest-instafail", "scipy"],
-            "utils": [
-                "tensorboard",
-                "wandb",
-                "tqdm",
-                "hydra-core>=1.1",
-                "hydra-submitit-launcher",
-            ],
-            "checkpointing": [
-                "torchsnapshot",
-            ],
-        },
+        extras_require=extra_requires,
         zip_safe=False,
         classifiers=[
-            "Programming Language :: Python :: 3.7",
             "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
+            "Programming Language :: Python :: 3.11",
             "License :: OSI Approved :: MIT License",
             "Operating System :: OS Independent",
             "Development Status :: 4 - Beta",
@@ -247,5 +286,4 @@ def _main(argv):
 
 
 if __name__ == "__main__":
-
     _main(sys.argv[1:])

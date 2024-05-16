@@ -1,0 +1,31 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - protobuf
+  - pip:
+    - hypothesis
+    - future
+    - cloudpickle
+    - pygame
+    - moviepy
+    - tqdm
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - expecttest
+    - pyyaml
+    - scipy
+    - hydra-core
+    - imageio==2.26.0
+    - dm_control
+    - mlflow
+    - av
+    - coverage
+    - vmas
+    - transformers
+    - gym[atari]
+    - gym[accept-rom-license]

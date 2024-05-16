@@ -6,9 +6,9 @@ import abc
 from typing import Optional
 
 import torch
-from tensordict.tensordict import TensorDictBase
+from tensordict import TensorDictBase
 
-from torchrl.envs import EnvBase
+from torchrl.envs.common import EnvBase
 from torchrl.modules import SafeModule
 
 

@@ -1,0 +1,19 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - pip:
+    - hypothesis
+    - future
+    - cloudpickle
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - expecttest
+    - pyyaml
+    - scipy
+    - coverage
+    - ray<2.8.0

@@ -837,7 +837,7 @@ class TestSubSampler:
 class TestRecorder:
     def _get_args(self):
         args = Namespace()
-        args.env_name = PONG_VERSIONED
+        args.env_name = PONG_VERSIONED()
         args.env_task = ""
         args.grayscale = True
         args.env_library = "gym"
@@ -895,7 +895,7 @@ class TestRecorder:
                     },
                 )
                 ea.Reload()
-                img = ea.Images(f"tmp_{PONG_VERSIONED}_video")
+                img = ea.Images(f"tmp_{PONG_VERSIONED()}_video")
                 try:
                     assert len(img) == N // args.record_interval
                     break
@@ -943,6 +943,7 @@ class TestRecorder:
                 stats={"loc": 0, "scale": 1},
                 logger=logger,
             )()
+            environment.rollout(2)
 
             recorder = Recorder(
                 record_frames=args.record_frames,

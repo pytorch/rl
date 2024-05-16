@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Using pretrained models
 =======================
@@ -13,6 +12,28 @@ This tutorial explains how to use pretrained models in TorchRL.
 # in one or the other context. In this tutorial, we will be using R3M (https://arxiv.org/abs/2203.12601),
 # but other models (e.g. VIP) will work equally well.
 #
+
+# sphinx_gallery_start_ignore
+import warnings
+
+warnings.filterwarnings("ignore")
+from torch import multiprocessing
+
+# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
+# `__main__` method call, but for the easy of reading the code switch to fork
+# which is also a default spawn method in Google's Colaboratory
+try:
+    is_sphinx = __sphinx_build__
+except NameError:
+    is_sphinx = False
+
+try:
+    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
+except RuntimeError:
+    pass
+
+# sphinx_gallery_end_ignore
+
 import torch.cuda
 from tensordict.nn import TensorDictSequential
 from torch import nn
@@ -20,7 +41,12 @@ from torchrl.envs import R3MTransform, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import Actor
 
-device = "cuda:0" if torch.cuda.device_count() else "cpu"
+is_fork = multiprocessing.get_start_method() == "fork"
+device = (
+    torch.device(0)
+    if torch.cuda.is_available() and not is_fork
+    else torch.device("cpu")
+)
 
 ##############################################################################
 # Let us first create an environment. For the sake of simplicity, we will be using
@@ -88,7 +114,7 @@ print("rollout, fine tuning:", rollout)
 #
 from torchrl.data import LazyMemmapStorage, ReplayBuffer
 
-storage = LazyMemmapStorage(1000, device=device)
+storage = LazyMemmapStorage(1000)
 rb = ReplayBuffer(storage=storage, transform=r3m)
 
 ##############################################################################

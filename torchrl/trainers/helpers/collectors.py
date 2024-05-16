@@ -6,8 +6,9 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
+from tensordict import TensorDictBase
+
 from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModuleWrapper
-from tensordict.tensordict import TensorDictBase
 
 from torchrl.collectors.collectors import (
     DataCollectorBase,
@@ -15,8 +16,8 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     SyncDataCollector,
 )
-from torchrl.data import MultiStep
-from torchrl.envs import ParallelEnv
+from torchrl.data.postprocs import MultiStep
+from torchrl.envs.batched_envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import ExplorationType
 
@@ -255,7 +256,7 @@ def make_collector_offpolicy(
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> DataCollectorBase:
-    """Returns a data collector for off-policy algorithms.
+    """Returns a data collector for off-policy sota-implementations.
 
     Args:
         make_env (Callable): environment creator
@@ -411,7 +412,7 @@ class OffPolicyCollectorConfig(OnPolicyCollectorConfig):
     """Off-policy collector config struct."""
 
     multi_step: bool = False
-    # whether or not multi-step rewards should be used.
+    # whether multi-step rewards should be used.
     n_steps_return: int = 3
     # If multi_step is set to True, this value defines the number of steps to look ahead for the reward computation.
     init_random_frames: int = 50000

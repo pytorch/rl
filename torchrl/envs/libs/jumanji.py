@@ -2,49 +2,51 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
-from typing import Dict, Optional, Union
+import importlib.util
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict.tensordict import TensorDict, TensorDictBase
+from packaging import version
+from tensordict import TensorDict, TensorDictBase
+
+from torchrl.envs.common import _EnvPostInit
+from torchrl.envs.utils import _classproperty
+
+_has_jumanji = importlib.util.find_spec("jumanji") is not None
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DEVICE_TYPING,
     DiscreteTensorSpec,
+    MultiDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
-from torchrl.envs import GymLikeEnv
+from torchrl.envs.gym_like import GymLikeEnv
 
-try:
-    import jax
-    import jumanji
-    from jax import numpy as jnp
-    from torchrl.envs.libs.jax_utils import (
-        _extract_spec,
-        _ndarray_to_tensor,
-        _object_to_tensordict,
-        _tensordict_to_object,
-        _tree_flatten,
-        _tree_reshape,
-    )
-
-    _has_jumanji = True
-    IMPORT_ERR = ""
-except ImportError as err:
-    _has_jumanji = False
-    IMPORT_ERR = str(err)
+from torchrl.envs.libs.jax_utils import (
+    _extract_spec,
+    _ndarray_to_tensor,
+    _object_to_tensordict,
+    _tensordict_to_object,
+    _tree_flatten,
+    _tree_reshape,
+)
 
 
 def _get_envs():
     if not _has_jumanji:
-        return []
+        raise ImportError("Jumanji is not installed in your virtual environment.")
+    import jumanji
+
     return jumanji.registered_environments()
 
 
@@ -54,6 +56,8 @@ def _jumanji_to_torchrl_spec_transform(
     device: DEVICE_TYPING = None,
     categorical_action_encoding: bool = True,
 ) -> TensorSpec:
+    import jumanji
+
     if isinstance(spec, jumanji.specs.DiscreteArray):
         action_space_cls = (
             DiscreteTensorSpec
@@ -63,14 +67,25 @@ def _jumanji_to_torchrl_spec_transform(
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return action_space_cls(spec.num_values, dtype=dtype, device=device)
+    if isinstance(spec, jumanji.specs.MultiDiscreteArray):
+        action_space_cls = (
+            MultiDiscreteTensorSpec
+            if categorical_action_encoding
+            else MultiOneHotDiscreteTensorSpec
+        )
+        if dtype is None:
+            dtype = numpy_to_torch_dtype_dict[spec.dtype]
+        return action_space_cls(
+            torch.as_tensor(np.asarray(spec.num_values)), dtype=dtype, device=device
+        )
     elif isinstance(spec, jumanji.specs.BoundedArray):
         shape = spec.shape
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return BoundedTensorSpec(
             shape=shape,
-            minimum=np.asarray(spec.minimum),
-            maximum=np.asarray(spec.maximum),
+            low=np.asarray(spec.minimum),
+            high=np.asarray(spec.maximum),
             dtype=dtype,
             device=device,
         )
@@ -100,50 +115,241 @@ def _jumanji_to_torchrl_spec_transform(
         raise TypeError(f"Unsupported spec type {type(spec)}")
 
 
-class JumanjiWrapper(GymLikeEnv):
+class _JumanjiMakeRender(_EnvPostInit):
+    def __call__(self, *args, **kwargs):
+        instance = super().__call__(*args, **kwargs)
+        if instance.from_pixels:
+            return instance.make_render()
+        return instance
+
+
+class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
     """Jumanji environment wrapper.
 
+    Jumanji offers a vectorized simulation framework based on Jax.
+    TorchRL's wrapper incurs some overhead for the jax-to-torch conversion,
+    but computational graphs can still be built on top of the simulated trajectories,
+    allowing for backpropagation through the rollout.
+
+    GitHub: https://github.com/instadeepai/jumanji
+
+    Doc: https://instadeepai.github.io/jumanji/
+
+    Paper: https://arxiv.org/abs/2306.09884
+
+    Args:
+        env (jumanji.env.Environment): the env to wrap.
+        categorical_action_encoding (bool, optional): if ``True``, categorical
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            Defaults to ``False``.
+
+    Keyword Args:
+        from_pixels (bool, optional): Whether the environment should render its output.
+            This will drastically impact the environment throughput. Only the first environment
+            will be rendered. See :meth:`~torchrl.envs.JumanjiWrapper.render` for more information.
+            Defaults to `False`.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        batch_size (torch.Size, optional): the batch size of the environment.
+            With ``jumanji``, this indicates the number of vectorized environments.
+            Defaults to ``torch.Size([])``.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+
+    Attributes:
+        available_envs: environments availalbe to build
+
     Examples:
-        >>> env = jumanji.make("Snake-6x6-v0")
-        >>> env = JumanjiWrapper(env)
+    Examples:
+        >>> import jumanji
+        >>> from torchrl.envs import JumanjiWrapper
+        >>> base_env = jumanji.make("Snake-v1")
+        >>> env = JumanjiWrapper(base_env)
         >>> env.set_seed(0)
         >>> td = env.reset()
         >>> td["action"] = env.action_spec.rand()
         >>> td = env.step(td)
-        >>> print(td1)
+        >>> print(td)
         TensorDict(
             fields={
-                action: Tensor(torch.Size([1]), dtype=torch.int32),
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
+                action: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                action_mask: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.bool, is_shared=False),
+                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                grid: Tensor(shape=torch.Size([12, 12, 5]), device=cpu, dtype=torch.float32, is_shared=False),
                 next: TensorDict(
                     fields={
-                        observation: Tensor(torch.Size([6, 6, 5]), dtype=torch.float32)},
+                        action_mask: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.bool, is_shared=False),
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        grid: Tensor(shape=torch.Size([12, 12, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        state: TensorDict(
+                            fields={
+                                action_mask: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.bool, is_shared=False),
+                                body: Tensor(shape=torch.Size([12, 12]), device=cpu, dtype=torch.bool, is_shared=False),
+                                body_state: Tensor(shape=torch.Size([12, 12]), device=cpu, dtype=torch.int32, is_shared=False),
+                                fruit_position: TensorDict(
+                                    fields={
+                                        col: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                                        row: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False)},
+                                    batch_size=torch.Size([]),
+                                    device=cpu,
+                                    is_shared=False),
+                                head_position: TensorDict(
+                                    fields={
+                                        col: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                                        row: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False)},
+                                    batch_size=torch.Size([]),
+                                    device=cpu,
+                                    is_shared=False),
+                                key: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int32, is_shared=False),
+                                length: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                                step_count: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                                tail: Tensor(shape=torch.Size([12, 12]), device=cpu, dtype=torch.bool, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=cpu,
+                            is_shared=False),
+                        step_count: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
                     batch_size=torch.Size([]),
                     device=cpu,
                     is_shared=False),
-                observation: Tensor(torch.Size([6, 6, 5]), dtype=torch.float32),
-                reward: Tensor(torch.Size([1]), dtype=torch.float32),
-                state: TensorDict(...)},
+                state: TensorDict(
+                    fields={
+                        action_mask: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.bool, is_shared=False),
+                        body: Tensor(shape=torch.Size([12, 12]), device=cpu, dtype=torch.bool, is_shared=False),
+                        body_state: Tensor(shape=torch.Size([12, 12]), device=cpu, dtype=torch.int32, is_shared=False),
+                        fruit_position: TensorDict(
+                            fields={
+                                col: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                                row: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=cpu,
+                            is_shared=False),
+                        head_position: TensorDict(
+                            fields={
+                                col: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                                row: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=cpu,
+                            is_shared=False),
+                        key: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int32, is_shared=False),
+                        length: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                        step_count: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                        tail: Tensor(shape=torch.Size([12, 12]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False),
+                step_count: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
             batch_size=torch.Size([]),
             device=cpu,
             is_shared=False)
         >>> print(env.available_envs)
-        ['Snake-6x6-v0', 'Snake-12x12-v0', 'TSP50-v0', 'TSP100-v0', ...]
+        ['Game2048-v1',
+         'Maze-v0',
+         'Cleaner-v0',
+         'CVRP-v1',
+         'MultiCVRP-v0',
+         'Minesweeper-v0',
+         'RubiksCube-v0',
+         'Knapsack-v1',
+         'Sudoku-v0',
+         'Snake-v1',
+         'TSP-v1',
+         'Connector-v2',
+         'MMST-v0',
+         'GraphColoring-v0',
+         'RubiksCube-partly-scrambled-v0',
+         'RobotWarehouse-v0',
+         'Tetris-v0',
+         'BinPack-v2',
+         'Sudoku-very-easy-v0',
+         'JobShop-v0']
+
+    To take advante of Jumanji, one usually executes multiple environments at the
+    same time.
+
+        >>> import jumanji
+        >>> from torchrl.envs import JumanjiWrapper
+        >>> base_env = jumanji.make("Snake-v1")
+        >>> env = JumanjiWrapper(base_env, batch_size=[10])
+        >>> env.set_seed(0)
+        >>> td = env.reset()
+        >>> td["action"] = env.action_spec.rand()
+        >>> td = env.step(td)
+
+    In the following example, we iteratively test different batch sizes
+    and report the execution time for a short rollout:
+
+    Examples:
+        >>> from torch.utils.benchmark import Timer
+        >>> for batch_size in [4, 16, 128]:
+        ...     timer = Timer(
+        ...     '''
+        ... env.rollout(100)
+        ... ''',
+        ... setup=f'''
+        ... from torchrl.envs import JumanjiWrapper
+        ... import jumanji
+        ... env = JumanjiWrapper(jumanji.make('Snake-v1'), batch_size=[{batch_size}])
+        ... env.set_seed(0)
+        ... env.rollout(2)
+        ... ''')
+        ...     print(batch_size, timer.timeit(number=10))
+        4
+        env.rollout(100)
+        setup: [...]
+        Median: 122.40 ms
+        2 measurements, 1 runs per measurement, 1 thread
+
+        16
+        env.rollout(100)
+        setup: [...]
+        Median: 134.39 ms
+        2 measurements, 1 runs per measurement, 1 thread
+
+        128
+        env.rollout(100)
+        setup: [...]
+        Median: 172.31 ms
+        2 measurements, 1 runs per measurement, 1 thread
+
     """
 
     git_url = "https://github.com/instadeepai/jumanji"
-    available_envs = _get_envs()
     libname = "jumanji"
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_jumanji:
+            return []
+        return sorted(_get_envs())
 
     @property
     def lib(self):
+        import jumanji
+
+        if version.parse(jumanji.__version__) < version.parse("1.0.0"):
+            raise ImportError("jumanji version must be >= 1.0.0")
         return jumanji
 
-    def __init__(self, env: "jumanji.env.Environment" = None, **kwargs):
+    def __init__(
+        self,
+        env: "jumanji.env.Environment" = None,  # noqa: F821
+        categorical_action_encoding=True,
+        **kwargs,
+    ):
         if not _has_jumanji:
             raise ImportError(
                 "jumanji is not installed or importing it failed. Consider checking your installation."
-            ) from IMPORT_ERR
+            )
+        self.categorical_action_encoding = categorical_action_encoding
         if env is not None:
             kwargs["env"] = env
         super().__init__(**kwargs)
@@ -161,11 +367,42 @@ class JumanjiWrapper(GymLikeEnv):
         self.from_pixels = from_pixels
         self.pixels_only = pixels_only
 
-        if from_pixels:
-            raise NotImplementedError("TODO")
         return env
 
+    def make_render(self):
+        """Returns a transformed environment that can be rendered.
+
+        Examples:
+            >>> from torchrl.envs import JumanjiEnv
+            >>> from torchrl.record import CSVLogger, VideoRecorder
+            >>>
+            >>> envname = JumanjiEnv.available_envs[-1]
+            >>> logger = CSVLogger("jumanji", video_format="mp4", video_fps=2)
+            >>> env = JumanjiEnv(envname, from_pixels=True)
+            >>>
+            >>> env = env.append_transform(
+            ...     VideoRecorder(logger=logger, in_keys=["pixels"], tag=envname)
+            ... )
+            >>> env.set_seed(0)
+            >>> r = env.rollout(100)
+            >>> env.transform.dump()
+
+        """
+        from torchrl.record import PixelRenderTransform
+
+        return self.append_transform(
+            PixelRenderTransform(
+                out_keys=["pixels"],
+                pass_tensordict=True,
+                as_non_tensor=bool(self.batch_size),
+                as_numpy=bool(self.batch_size),
+            )
+        )
+
     def _make_state_example(self, env):
+        import jax
+        from jax import numpy as jnp
+
         key = jax.random.PRNGKey(0)
         keys = jax.random.split(key, self.batch_size.numel())
         state, _ = jax.vmap(env.reset)(jnp.stack(keys))
@@ -173,21 +410,27 @@ class JumanjiWrapper(GymLikeEnv):
         return state
 
     def _make_state_spec(self, env) -> TensorSpec:
+        import jax
+
         key = jax.random.PRNGKey(0)
         state, _ = env.reset(key)
         state_dict = _object_to_tensordict(state, self.device, batch_size=())
         state_spec = _extract_spec(state_dict)
         return state_spec
 
-    def _make_input_spec(self, env) -> TensorSpec:
-        return CompositeSpec(
-            action=_jumanji_to_torchrl_spec_transform(
-                env.action_spec(), device=self.device
-            ),
-        ).expand(self.batch_size)
+    def _make_action_spec(self, env) -> TensorSpec:
+        action_spec = _jumanji_to_torchrl_spec_transform(
+            env.action_spec,
+            device=self.device,
+            categorical_action_encoding=self.categorical_action_encoding,
+        )
+        action_spec = action_spec.expand(*self.batch_size, *action_spec.shape)
+        return action_spec
 
     def _make_observation_spec(self, env) -> TensorSpec:
-        spec = env.observation_spec()
+        jumanji = self.lib
+
+        spec = env.observation_spec
         new_spec = _jumanji_to_torchrl_spec_transform(spec, device=self.device)
         if isinstance(spec, jumanji.specs.Array):
             return CompositeSpec(observation=new_spec).expand(self.batch_size)
@@ -200,7 +443,7 @@ class JumanjiWrapper(GymLikeEnv):
 
     def _make_reward_spec(self, env) -> TensorSpec:
         reward_spec = _jumanji_to_torchrl_spec_transform(
-            env.reward_spec(), device=self.device
+            env.reward_spec, device=self.device
         )
         if not len(reward_spec.shape):
             reward_spec.shape = torch.Size([1])
@@ -209,19 +452,20 @@ class JumanjiWrapper(GymLikeEnv):
     def _make_specs(self, env: "jumanji.env.Environment") -> None:  # noqa: F821
 
         # extract spec from jumanji definition
-        self.input_spec = self._make_input_spec(env)
+        self.action_spec = self._make_action_spec(env)
         self.observation_spec = self._make_observation_spec(env)
         self.reward_spec = self._make_reward_spec(env)
 
         # extract state spec from instance
-        self.state_spec = self._make_state_spec(env).expand(self.batch_size)
-        self.input_spec["state"] = self.state_spec
-        self.observation_spec["state"] = self.state_spec
+        state_spec = self._make_state_spec(env).expand(self.batch_size)
+        self.state_spec["state"] = state_spec
+        self.observation_spec["state"] = state_spec.clone()
 
         # build state example for data conversion
         self._state_example = self._make_state_example(env)
 
     def _check_kwargs(self, kwargs: Dict):
+        jumanji = self.lib
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
@@ -231,28 +475,123 @@ class JumanjiWrapper(GymLikeEnv):
     def _init_env(self):
         pass
 
+    @property
+    def key(self):
+        key = getattr(self, "_key", None)
+        if key is None:
+            raise RuntimeError(
+                "the env.key attribute wasn't found. Make sure to call `env.set_seed(seed)` before any interaction."
+            )
+        return key
+
+    @key.setter
+    def key(self, value):
+        self._key = value
+
     def _set_seed(self, seed):
+        import jax
+
         if seed is None:
             raise Exception("Jumanji requires an integer seed.")
         self.key = jax.random.PRNGKey(seed)
 
     def read_state(self, state):
         state_dict = _object_to_tensordict(state, self.device, self.batch_size)
-        return self.state_spec.encode(state_dict)
+        return self.state_spec["state"].encode(state_dict)
 
     def read_obs(self, obs):
+        from jax import numpy as jnp
+
         if isinstance(obs, (list, jnp.ndarray, np.ndarray)):
             obs_dict = _ndarray_to_tensor(obs).to(self.device)
         else:
             obs_dict = _object_to_tensordict(obs, self.device, self.batch_size)
         return super().read_obs(obs_dict)
 
+    def render(
+        self,
+        tensordict,
+        matplotlib_backend: str | None = None,
+        as_numpy: bool = False,
+        **kwargs,
+    ):
+        """Renders the environment output given an input tensordict.
+
+        This method is intended to be called by the :class:`~torchrl.record.PixelRenderTransform`
+        created whenever `from_pixels=True` is selected.
+        To create an appropriate rendering transform, use a similar call as bellow:
+
+            >>> from torchrl.record import PixelRenderTransform
+            >>> matplotlib_backend = None # Change this value if a specific matplotlib backend has to be used.
+            >>> env = env.append_transform(
+            ...     PixelRenderTransform(out_keys=["pixels"], pass_tensordict=True, matplotlib_backend=matplotlib_backend)
+            ... )
+
+        This pipeline will write a `"pixels"` entry in your output tensordict.
+
+        Args:
+            tensordict (TensorDictBase): a tensordict containing a state to represent
+            matplotlib_backend (str, optional): the matplotlib backend
+            as_numpy (bool, optional): if ``False``, the np.ndarray will be converted to a torch.Tensor.
+                Defaults to ``False``.
+
+        """
+        import io
+
+        import jax
+        import jax.numpy as jnp
+        import jumanji
+
+        try:
+            import matplotlib
+            import matplotlib.pyplot as plt
+            import PIL
+            import torchvision.transforms.v2.functional
+        except ImportError as err:
+            raise ImportError(
+                "Rendering with Jumanji requires torchvision, matplotlib and PIL to be installed."
+            ) from err
+
+        if matplotlib_backend is not None:
+            matplotlib.use(matplotlib_backend)
+
+        # Get only one env
+        _state_example = self._state_example
+        while tensordict.ndim:
+            tensordict = tensordict[0]
+            _state_example = jax.tree_util.tree_map(
+                lambda x: jnp.take(x, 0, axis=0), _state_example
+            )
+        # Patch jumanji is_notebook
+        is_notebook = jumanji.environments.is_notebook
+        try:
+            jumanji.environments.is_notebook = lambda: False
+
+            isinteractive = plt.isinteractive()
+            plt.ion()
+            buf = io.BytesIO()
+            state = _tensordict_to_object(tensordict.get("state"), _state_example)
+            self._env.render(state, **kwargs)
+            plt.savefig(buf, format="png")
+            buf.seek(0)
+            # Load the image into a PIL object.
+            img = PIL.Image.open(buf)
+            img_array = torchvision.transforms.v2.functional.pil_to_tensor(img)
+            if not isinteractive:
+                plt.ioff()
+            plt.close()
+            if not as_numpy:
+                return img_array[:3]
+            return img_array[:3].numpy()
+        finally:
+            jumanji.environments.is_notebook = is_notebook
+
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        import jax
 
         # prepare inputs
         state = _tensordict_to_object(tensordict.get("state"), self._state_example)
         action = self.read_action(tensordict.get("action"))
-        reward = self.reward_spec.zero()
 
         # flatten batch size into vector
         state = _tree_flatten(state, self.batch_size)
@@ -268,7 +607,7 @@ class JumanjiWrapper(GymLikeEnv):
         # collect outputs
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
-        reward = self.read_reward(reward, np.asarray(timestep.reward))
+        reward = self.read_reward(np.asarray(timestep.reward))
         done = timestep.step_type == self.lib.types.StepType.LAST
         done = _ndarray_to_tensor(done).view(torch.bool).to(self.device)
 
@@ -280,13 +619,17 @@ class JumanjiWrapper(GymLikeEnv):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
+        tensordict_out.set("terminated", done)
+        # tensordict_out.set("terminated", done)
         tensordict_out["state"] = state_dict
 
-        return tensordict_out.select().set("next", tensordict_out)
+        return tensordict_out
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
+        import jax
+        from jax import numpy as jnp
 
         # generate random keys
         self.key, *keys = jax.random.split(self.key, self.numel() + 1)
@@ -301,7 +644,7 @@ class JumanjiWrapper(GymLikeEnv):
         # collect outputs
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
-        done = self.done_spec.zero()
+        done_td = self.full_done_spec.zero()
 
         # build results
         tensordict_out = TensorDict(
@@ -309,20 +652,203 @@ class JumanjiWrapper(GymLikeEnv):
             batch_size=self.batch_size,
             device=self.device,
         )
-        tensordict_out.set("done", done)
+        tensordict_out.update(done_td)
         tensordict_out["state"] = state_dict
 
         return tensordict_out
 
+    def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
+        ...
+
+    def _reset_output_transform(self, reset_outputs_tuple: Tuple) -> Tuple:
+        ...
+
 
 class JumanjiEnv(JumanjiWrapper):
-    """Jumanji environment wrapper.
+    """Jumanji environment wrapper built with the environment name.
+
+    Jumanji offers a vectorized simulation framework based on Jax.
+    TorchRL's wrapper incurs some overhead for the jax-to-torch conversion,
+    but computational graphs can still be built on top of the simulated trajectories,
+    allowing for backpropagation through the rollout.
+
+    GitHub: https://github.com/instadeepai/jumanji
+
+    Doc: https://instadeepai.github.io/jumanji/
+
+    Paper: https://arxiv.org/abs/2306.09884
+
+    Args:
+        env_name (str): the name of the environment to wrap. Must be part of :attr:`~.available_envs`.
+        categorical_action_encoding (bool, optional): if ``True``, categorical
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            Defaults to ``False``.
+
+    Keyword Args:
+        from_pixels (bool, optional): Not yet supported.
+        frame_skip (int, optional): if provided, indicates for how many steps the
+            same action is to be repeated. The observation returned will be the
+            last observation of the sequence, whereas the reward will be the sum
+            of rewards across steps.
+        device (torch.device, optional): if provided, the device on which the data
+            is to be cast. Defaults to ``torch.device("cpu")``.
+        batch_size (torch.Size, optional): the batch size of the environment.
+            With ``jumanji``, this indicates the number of vectorized environments.
+            Defaults to ``torch.Size([])``.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+
+    Attributes:
+        available_envs: environments availalbe to build
 
     Examples:
-        >>> env = JumanjiEnv(env_name="Snake-6x6-v0", frame_skip=4)
-        >>> td = env.rand_step()
+        >>> from torchrl.envs import JumanjiEnv
+        >>> env = JumanjiEnv("Snake-v1")
+        >>> env.set_seed(0)
+        >>> td = env.reset()
+        >>> td["action"] = env.action_spec.rand()
+        >>> td = env.step(td)
         >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                action_mask: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.bool, is_shared=False),
+                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                grid: Tensor(shape=torch.Size([12, 12, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        action_mask: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.bool, is_shared=False),
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        grid: Tensor(shape=torch.Size([12, 12, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        state: TensorDict(
+                            fields={
+                                action_mask: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.bool, is_shared=False),
+                                body: Tensor(shape=torch.Size([12, 12]), device=cpu, dtype=torch.bool, is_shared=False),
+                                body_state: Tensor(shape=torch.Size([12, 12]), device=cpu, dtype=torch.int32, is_shared=False),
+                                fruit_position: TensorDict(
+                                    fields={
+                                        col: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                                        row: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False)},
+                                    batch_size=torch.Size([]),
+                                    device=cpu,
+                                    is_shared=False),
+                                head_position: TensorDict(
+                                    fields={
+                                        col: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                                        row: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False)},
+                                    batch_size=torch.Size([]),
+                                    device=cpu,
+                                    is_shared=False),
+                                key: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int32, is_shared=False),
+                                length: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                                step_count: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                                tail: Tensor(shape=torch.Size([12, 12]), device=cpu, dtype=torch.bool, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=cpu,
+                            is_shared=False),
+                        step_count: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False),
+                state: TensorDict(
+                    fields={
+                        action_mask: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.bool, is_shared=False),
+                        body: Tensor(shape=torch.Size([12, 12]), device=cpu, dtype=torch.bool, is_shared=False),
+                        body_state: Tensor(shape=torch.Size([12, 12]), device=cpu, dtype=torch.int32, is_shared=False),
+                        fruit_position: TensorDict(
+                            fields={
+                                col: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                                row: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=cpu,
+                            is_shared=False),
+                        head_position: TensorDict(
+                            fields={
+                                col: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                                row: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=cpu,
+                            is_shared=False),
+                        key: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int32, is_shared=False),
+                        length: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                        step_count: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                        tail: Tensor(shape=torch.Size([12, 12]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False),
+                step_count: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
         >>> print(env.available_envs)
+        ['Game2048-v1',
+         'Maze-v0',
+         'Cleaner-v0',
+         'CVRP-v1',
+         'MultiCVRP-v0',
+         'Minesweeper-v0',
+         'RubiksCube-v0',
+         'Knapsack-v1',
+         'Sudoku-v0',
+         'Snake-v1',
+         'TSP-v1',
+         'Connector-v2',
+         'MMST-v0',
+         'GraphColoring-v0',
+         'RubiksCube-partly-scrambled-v0',
+         'RobotWarehouse-v0',
+         'Tetris-v0',
+         'BinPack-v2',
+         'Sudoku-very-easy-v0',
+         'JobShop-v0']
+
+    To take advante of Jumanji, one usually executes multiple environments at the
+    same time.
+
+        >>> from torchrl.envs import JumanjiEnv
+        >>> env = JumanjiEnv("Snake-v1", batch_size=[10])
+        >>> env.set_seed(0)
+        >>> td = env.reset()
+        >>> td["action"] = env.action_spec.rand()
+        >>> td = env.step(td)
+
+    In the following example, we iteratively test different batch sizes
+    and report the execution time for a short rollout:
+
+    Examples:
+        >>> from torch.utils.benchmark import Timer
+        >>> for batch_size in [4, 16, 128]:
+        ...     timer = Timer(
+        ...     '''
+        ... env.rollout(100)
+        ... ''',
+        ... setup=f'''
+        ... from torchrl.envs import JumanjiEnv
+        ... env = JumanjiEnv('Snake-v1', batch_size=[{batch_size}])
+        ... env.set_seed(0)
+        ... env.rollout(2)
+        ... ''')
+        ...     print(batch_size, timer.timeit(number=10))
+        4 <torch.utils.benchmark.utils.common.Measurement object at 0x1fca91910>
+        env.rollout(100)
+        setup: [...]
+          Median: 122.40 ms
+          2 measurements, 1 runs per measurement, 1 thread
+        16 <torch.utils.benchmark.utils.common.Measurement object at 0x1ff9baee0>
+        env.rollout(100)
+        setup: [...]
+          Median: 134.39 ms
+          2 measurements, 1 runs per measurement, 1 thread
+        128 <torch.utils.benchmark.utils.common.Measurement object at 0x1ff9ba7c0>
+        env.rollout(100)
+        setup: [...]
+          Median: 172.31 ms
+          2 measurements, 1 runs per measurement, 1 thread
     """
 
     def __init__(self, env_name, **kwargs):
@@ -333,13 +859,13 @@ class JumanjiEnv(JumanjiWrapper):
         self,
         env_name: str,
         **kwargs,
-    ) -> "jumanji.env.Environment":
+    ) -> "jumanji.env.Environment":  # noqa: F821
         if not _has_jumanji:
-            raise RuntimeError(
+            raise ImportError(
                 f"jumanji not found, unable to create {env_name}. "
                 f"Consider installing jumanji. More info:"
                 f" {self.git_url}."
-            ) from IMPORT_ERR
+            )
         from_pixels = kwargs.pop("from_pixels", False)
         pixels_only = kwargs.pop("pixels_only", True)
         if kwargs:

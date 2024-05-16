@@ -1,0 +1,608 @@
+name: Libs Tests on Linux
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+  workflow_dispatch:
+
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
+jobs:
+
+  unittests-atari-dqn:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="cu117"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+
+        bash .github/unittest/linux_libs/scripts_ataridqn/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_ataridqn/install.sh
+        bash .github/unittest/linux_libs/scripts_ataridqn/run_test.sh
+        bash .github/unittest/linux_libs/scripts_ataridqn/post_process.sh
+
+  unittests-brax:
+    strategy:
+      matrix:
+        python_version: ["3.11"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+
+        export PYTHON_VERSION="3.11"
+        export CU_VERSION="12.1"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_brax/run_all.sh
+
+  unittests-d4rl:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="cu117"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        bash .github/unittest/linux_libs/scripts_d4rl/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_d4rl/install.sh
+        bash .github/unittest/linux_libs/scripts_d4rl/run_test.sh
+        bash .github/unittest/linux_libs/scripts_d4rl/post_process.sh
+
+  unittests-envpool:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="cu117"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        bash .github/unittest/linux_libs/scripts_d4rl/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_d4rl/install.sh
+        bash .github/unittest/linux_libs/scripts_d4rl/run_test.sh
+        bash .github/unittest/linux_libs/scripts_d4rl/post_process.sh
+
+  unittests-gendgrl:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="cu117"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+
+        bash .github/unittest/linux_libs/scripts_gen-dgrl/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_gen-dgrl/install.sh
+        bash .github/unittest/linux_libs/scripts_gen-dgrl/run_test.sh
+        bash .github/unittest/linux_libs/scripts_gen-dgrl/post_process.sh
+
+  unittests-gym:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      # gpu-arch-type: "cuda"
+      # gpu-arch-version: "11.6"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euxo pipefail
+        export PYTHON_VERSION="3.9"
+        # export CU_VERSION="${{ inputs.gpu-arch-version }}"
+        export CU_VERSION="11.4"
+        export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/work/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin"
+        export TAR_OPTIONS="--no-same-owner"
+        export BATCHED_PIPE_TIMEOUT=60
+
+        ./.github/unittest/linux_libs/scripts_gym/setup_env.sh
+        ./.github/unittest/linux_libs/scripts_gym/batch_scripts.sh
+        ./.github/unittest/linux_libs/scripts_gym/post_process.sh
+
+  unittests-jumanji:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="12.1"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_jumanji/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_jumanji/install.sh
+        bash .github/unittest/linux_libs/scripts_jumanji/run_test.sh
+        bash .github/unittest/linux_libs/scripts_jumanji/post_process.sh
+
+  unittests-meltingpot:
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "12.1"
+      docker-image: "nvidia/cuda:12.4.1-runtime-ubuntu22.04"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.11"
+        export CU_VERSION="12.1"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_meltingpot/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_meltingpot/install.sh
+        bash .github/unittest/linux_libs/scripts_meltingpot/run_test.sh
+        bash .github/unittest/linux_libs/scripts_meltingpot/post_process.sh
+
+  unittests-minari:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="cu117"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        bash .github/unittest/linux_libs/scripts_minari/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_minari/install.sh
+        bash .github/unittest/linux_libs/scripts_minari/run_test.sh
+        bash .github/unittest/linux_libs/scripts_minari/post_process.sh
+
+  unittests-openx:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="cu117"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        bash .github/unittest/linux_libs/scripts_openx/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_openx/install.sh
+        bash .github/unittest/linux_libs/scripts_openx/run_test.sh
+        bash .github/unittest/linux_libs/scripts_openx/post_process.sh
+
+  unittests-pettingzoo:
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="12.1"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_pettingzoo/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_pettingzoo/install.sh
+        bash .github/unittest/linux_libs/scripts_pettingzoo/run_test.sh
+        bash .github/unittest/linux_libs/scripts_pettingzoo/post_process.sh
+
+  unittests-robohive:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="cu117"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        bash .github/unittest/linux_libs/scripts_robohive/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_robohive/install_and_run_test.sh
+        bash .github/unittest/linux_libs/scripts_robohive/post_process.sh
+
+  unittests-roboset:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="cu117"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        bash .github/unittest/linux_libs/scripts_roboset/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_roboset/install.sh
+        bash .github/unittest/linux_libs/scripts_roboset/run_test.sh
+        bash .github/unittest/linux_libs/scripts_roboset/post_process.sh
+
+  unittests-sklearn:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      # gpu-arch-type: cuda
+      # gpu-arch-version: "11.7"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="cu117"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        bash .github/unittest/linux_libs/scripts_sklearn/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_sklearn/install.sh
+        bash .github/unittest/linux_libs/scripts_sklearn/run_test.sh
+        bash .github/unittest/linux_libs/scripts_sklearn/post_process.sh
+
+  unittests-smacv2:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="12.1"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_smacv2/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_smacv2/install.sh
+        bash .github/unittest/linux_libs/scripts_smacv2/run_test.sh
+        bash .github/unittest/linux_libs/scripts_smacv2/post_process.sh
+
+  unittests-vd4rl:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="cu117"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        bash .github/unittest/linux_libs/scripts_vd4rl/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_vd4rl/install.sh
+        bash .github/unittest/linux_libs/scripts_vd4rl/run_test.sh
+        bash .github/unittest/linux_libs/scripts_vd4rl/post_process.sh
+
+  unittests-vmas:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="12.1"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_vmas/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_vmas/install.sh
+        bash .github/unittest/linux_libs/scripts_vmas/run_test.sh
+        bash .github/unittest/linux_libs/scripts_vmas/post_process.sh

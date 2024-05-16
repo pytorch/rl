@@ -1,0 +1,20 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - pip:
+    - cloudpickle
+    - gym
+    - gym-notices
+    - zipp
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - pytest-error-for-skips
+    - expecttest
+    - pyyaml
+    - numpy==1.23.0
+    - git+https://github.com/oxwhirl/smacv2.git

@@ -15,7 +15,7 @@ pip install tensordict-nightly
 ```
 or the git version of the library:
 ```
-pip install git+https://github.com/pytorch-labs/tensordict
+pip install git+https://github.com/pytorch/tensordict
 ```
 
 Once cloned, make sure you install torchrl in develop mode by running

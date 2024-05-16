@@ -4,13 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 
 r"""Generic distributed data-collector using torch.distributed.rpc backend."""
+from __future__ import annotations
+
 import collections
 import os
 import socket
 import time
 import warnings
 from copy import copy, deepcopy
-from typing import OrderedDict
+from typing import Callable, List, OrderedDict
+
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors.distributed import DEFAULT_SLURM_CONF
 from torchrl.collectors.distributed.default_configs import (
@@ -32,10 +36,10 @@ except ModuleNotFoundError as err:
     SUBMITIT_ERR = err
 import torch.cuda
 from tensordict import TensorDict
-from torch import multiprocessing as mp, nn
+from torch import nn
 
 from torch.distributed import rpc
-from torchrl._utils import VERBOSE
+from torchrl._utils import _ProcessNoWarn, VERBOSE
 
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
@@ -44,7 +48,8 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     SyncDataCollector,
 )
-from torchrl.envs import EnvBase, EnvCreator
+from torchrl.envs.common import EnvBase
+from torchrl.envs.env_creator import EnvCreator
 
 
 def _rpc_init_collection_node(
@@ -73,7 +78,7 @@ def _rpc_init_collection_node(
         **tensorpipe_options,
     )
     if verbose:
-        print(
+        torchrl_logger.info(
             f"init rpc with master addr: {os.environ['MASTER_ADDR']}:{os.environ['MASTER_PORT']}"
         )
     rpc.init_rpc(
@@ -94,31 +99,81 @@ class RPCDataCollector(DataCollectorBase):
     Args:
         create_env_fn (Callable or List[Callabled]): list of Callables, each returning an
             instance of :class:`~torchrl.envs.EnvBase`.
-        policy (Callable, optional): Instance of TensorDictModule class.
-            Must accept TensorDictBase object as input.
+        policy (Callable): Policy to be executed in the environment.
+            Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
             If ``None`` is provided, the policy used will be a
-            :class:`RandomPolicy` instance with the environment
+            :class:`~torchrl.collectors.RandomPolicy` instance with the environment
             ``action_spec``.
-        frames_per_batch (int): A keyword-only argument representing the
-            total number of elements in a batch.
-        total_frames (int): A keyword-only argument representing the
-            total number of frames returned by the collector
+            Accepted policies are usually subclasses of :class:`~tensordict.nn.TensorDictModuleBase`.
+            This is the recommended usage of the collector.
+            Other callables are accepted too:
+            If the policy is not a ``TensorDictModuleBase`` (e.g., a regular :class:`~torch.nn.Module`
+            instances) it will be wrapped in a `nn.Module` first.
+            Then, the collector will try to assess if these
+            modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+            - If the policy forward signature matches any of ``forward(self, tensordict)``,
+              ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
+              any typing with a single argument typed as a subclass of ``TensorDictBase``)
+              then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
+
+    Keyword Args:
+        frames_per_batch (int): A keyword-only argument representing the total
+            number of elements in a batch.
+        total_frames (int): A keyword-only argument representing the total
+            number of frames returned by the collector
             during its lifespan. If the ``total_frames`` is not divisible by
             ``frames_per_batch``, an exception is raised.
              Endless collectors can be created by passing ``total_frames=-1``.
+             Defaults to ``-1`` (endless collector).
+        device (int, str or torch.device, optional): The generic device of the
+            collector. The ``device`` args fills any non-specified device: if
+            ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or
+            ``env_device`` is not specified, its value will be set to ``device``.
+            Defaults to ``None`` (No default device).
+            Lists of devices are supported.
+        storing_device (int, str or torch.device, optional): The *remote* device on which
+            the output :class:`~tensordict.TensorDict` will be stored.
+            If ``device`` is passed and ``storing_device`` is ``None``, it will
+            default to the value indicated by ``device``.
+            For long trajectories, it may be necessary to store the data on a different
+            device than the one where the policy and env are executed.
+            Defaults to ``None`` (the output tensordict isn't on a specific device,
+            leaf tensors sit on the device where they were created).
+            Lists of devices are supported.
+        env_device (int, str or torch.device, optional): The *remote* device on which
+            the environment should be cast (or executed if that functionality is
+            supported). If not specified and the env has a non-``None`` device,
+            ``env_device`` will default to that value. If ``device`` is passed
+            and ``env_device=None``, it will default to ``device``. If the value
+            as such specified of ``env_device`` differs from ``policy_device``
+            and one of them is not ``None``, the data will be cast to ``env_device``
+            before being passed to the env (i.e., passing different devices to
+            policy and env is supported). Defaults to ``None``.
+            Lists of devices are supported.
+        policy_device (int, str or torch.device, optional): The *remote* device on which
+            the policy should be cast.
+            If ``device`` is passed and ``policy_device=None``, it will default
+            to ``device``. If the value as such specified of ``policy_device``
+            differs from ``env_device`` and one of them is not ``None``,
+            the data will be cast to ``policy_device`` before being passed to
+            the policy (i.e., passing different devices to policy and env is
+            supported). Defaults to ``None``.
+            Lists of devices are supported.
         max_frames_per_traj (int, optional): Maximum steps per trajectory.
-            Note that a trajectory can span over multiple batches (unless
+            Note that a trajectory can span across multiple batches (unless
             ``reset_at_each_iter`` is set to ``True``, see below).
             Once a trajectory reaches ``n_steps``, the environment is reset.
             If the environment wraps multiple environments together, the number
             of steps is tracked for each environment independently. Negative
             values are allowed, in which case this argument is ignored.
-            Defaults to ``-1`` (i.e. no maximum number of steps).
+            Defaults to ``None`` (i.e., no maximum number of steps).
         init_random_frames (int, optional): Number of frames for which the
             policy is ignored before it is called. This feature is mainly
             intended to be used in offline/model-based settings, where a
             batch of random trajectories can be used to initialize training.
-            Defaults to ``-1`` (i.e. no random frames).
+            If provided, it will be rounded up to the closest multiple of frames_per_batch.
+            Defaults to ``None`` (i.e. no random frames).
         reset_at_each_iter (bool, optional): Whether environments should be reset
             at the beginning of a batch collection.
             Defaults to ``False``.
@@ -131,14 +186,10 @@ class RPCDataCollector(DataCollectorBase):
             See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
-        exploration_type (str, optional): interaction mode to be used when
-            collecting data. Must be one of ``ExplorationType.RANDOM``,
-            ``ExplorationType.MODE`` or
-            ``ExplorationType.MEAN``.
-            Defaults to ``ExplorationType.RANDOM``
-        reset_when_done (bool, optional): if ``True`` (default), an environment
-            that return a ``True`` value in its ``"done"`` or ``"truncated"``
-            entry will be reset at the corresponding indices.
+        exploration_type (ExplorationType, optional): interaction mode to be used when
+            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.RANDOM``,
+            ``torchrl.envs.utils.ExplorationType.MODE`` or ``torchrl.envs.utils.ExplorationType.MEAN``.
+            Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.
         collector_class (type or str, optional): a collector class for the remote node. Can be
             :class:`~torchrl.collectors.SyncDataCollector`,
             :class:`~torchrl.collectors.MultiSyncDataCollector`,
@@ -154,7 +205,6 @@ class RPCDataCollector(DataCollectorBase):
               should always be preferred. If multiple simultaneous environment
               need to be executed on a single node, consider using a
               :class:`~torchrl.envs.ParallelEnv` instance.
-
         collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the
             remote data-collector. If a list is provided, each element will
             correspond to an individual set of keyword arguments for the
@@ -172,9 +222,6 @@ class RPCDataCollector(DataCollectorBase):
             first-served" fashion.
         slurm_kwargs (dict): a dictionary of parameters to be passed to the
             submitit executor.
-        storing_device (int, str or torch.device, optional): the device where
-            data will be stored and delivered by the iterator. Defaults to
-            ``"cpu"``.
         update_after_each_batch (bool, optional): if ``True``, the weights will
             be updated after each collection. For ``sync=True``, this means that
             all workers will see their weights updated. For ``sync=False``,
@@ -215,22 +262,24 @@ class RPCDataCollector(DataCollectorBase):
         create_env_fn,
         policy,
         *,
-        frames_per_batch,
-        total_frames,
-        max_frames_per_traj=-1,
-        init_random_frames=-1,
-        reset_at_each_iter=False,
-        postproc=None,
-        split_trajs=False,
-        exploration_type=DEFAULT_EXPLORATION_TYPE,
-        exploration_mode=None,
-        reset_when_done=True,
+        frames_per_batch: int,
+        total_frames: int = -1,
+        device: torch.device | List[torch.device] = None,
+        storing_device: torch.device | List[torch.device] = None,
+        env_device: torch.device | List[torch.device] = None,
+        policy_device: torch.device | List[torch.device] = None,
+        max_frames_per_traj: int = -1,
+        init_random_frames: int = -1,
+        reset_at_each_iter: bool = False,
+        postproc: Callable | None = None,
+        split_trajs: bool = False,
+        exploration_type: "ExporationType" = DEFAULT_EXPLORATION_TYPE,  # noqa
+        exploration_mode: str = None,
         collector_class=SyncDataCollector,
         collector_kwargs=None,
         num_workers_per_collector=1,
         sync=False,
         slurm_kwargs=None,
-        storing_device="cpu",
         update_after_each_batch=False,
         max_weight_update_interval=-1,
         launcher="submitit",
@@ -257,6 +306,12 @@ class RPCDataCollector(DataCollectorBase):
         self.policy_weights = policy_weights
         self.num_workers = len(create_env_fn)
         self.frames_per_batch = frames_per_batch
+
+        self.device = device
+        self.storing_device = storing_device
+        self.env_device = env_device
+        self.policy_device = policy_device
+
         self.storing_device = storing_device
         # make private to avoid changes from users during collection
         self._sync = sync
@@ -298,7 +353,7 @@ class RPCDataCollector(DataCollectorBase):
         )
 
         # update collector kwargs
-        for collector_kwarg in self.collector_kwargs:
+        for i, collector_kwarg in enumerate(self.collector_kwargs):
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (
                 init_random_frames // self.num_workers
@@ -313,12 +368,12 @@ class RPCDataCollector(DataCollectorBase):
                 )
             collector_kwarg["reset_at_each_iter"] = reset_at_each_iter
             collector_kwarg["exploration_type"] = exploration_type
-            collector_kwarg["reset_when_done"] = reset_when_done
+            collector_kwarg["device"] = self.device[i]
+            collector_kwarg["storing_device"] = self.storing_device[i]
+            collector_kwarg["env_device"] = self.env_device[i]
+            collector_kwarg["policy_device"] = self.policy_device[i]
 
-        if postproc is not None and hasattr(postproc, "to"):
-            self.postproc = postproc.to(self.storing_device)
-        else:
-            self.postproc = postproc
+        self.postproc = postproc
         self.split_trajs = split_trajs
 
         if tensorpipe_options is None:
@@ -328,6 +383,66 @@ class RPCDataCollector(DataCollectorBase):
                 tensorpipe_options
             )
         self._init()
+
+    @property
+    def device(self) -> List[torch.device]:
+        return self._device
+
+    @property
+    def storing_device(self) -> List[torch.device]:
+        return self._storing_device
+
+    @property
+    def env_device(self) -> List[torch.device]:
+        return self._env_device
+
+    @property
+    def policy_device(self) -> List[torch.device]:
+        return self._policy_device
+
+    @device.setter
+    def device(self, value):
+        if isinstance(value, (tuple, list)):
+            if len(value) != self.num_workers:
+                raise RuntimeError(
+                    "The number of devices passed to the collector must match the number of workers."
+                )
+            self._device = value
+        else:
+            self._device = [value] * self.num_workers
+
+    @storing_device.setter
+    def storing_device(self, value):
+        if isinstance(value, (tuple, list)):
+            if len(value) != self.num_workers:
+                raise RuntimeError(
+                    "The number of devices passed to the collector must match the number of workers."
+                )
+            self._storing_device = value
+        else:
+            self._storing_device = [value] * self.num_workers
+
+    @env_device.setter
+    def env_device(self, value):
+        if isinstance(value, (tuple, list)):
+            if len(value) != self.num_workers:
+                raise RuntimeError(
+                    "The number of devices passed to the collector must match the number of workers."
+                )
+            self._env_device = value
+        else:
+            self._env_device = [value] * self.num_workers
+
+    @policy_device.setter
+    def policy_device(self, value):
+        if isinstance(value, (tuple, list)):
+            if len(value) != self.num_workers:
+                raise RuntimeError(
+                    "The number of devices passed to the collector must match the number of workers."
+                )
+            self._policy_device = value
+        else:
+            self._policy_device = [value] * self.num_workers
 
     def _init_master_rpc(
         self,
@@ -343,7 +458,7 @@ class RPCDataCollector(DataCollectorBase):
                         f"COLLECTOR_NODE_{rank}", {0: self.visible_devices[i]}
                     )
         if self._VERBOSE:
-            print("init rpc")
+            torchrl_logger.info("init rpc")
         rpc.init_rpc(
             "TRAINER_NODE",
             rank=0,
@@ -374,7 +489,9 @@ class RPCDataCollector(DataCollectorBase):
                 time.sleep(time_interval)
                 try:
                     if self._VERBOSE:
-                        print(f"trying to connect to collector node {i + 1}")
+                        torchrl_logger.info(
+                            f"trying to connect to collector node {i + 1}"
+                        )
                     collector_info = rpc.get_worker_info(f"COLLECTOR_NODE_{i + 1}")
                     break
                 except RuntimeError as err:
@@ -389,7 +506,7 @@ class RPCDataCollector(DataCollectorBase):
             if not isinstance(env_make, (EnvBase, EnvCreator)):
                 env_make = CloudpickleWrapper(env_make)
             if self._VERBOSE:
-                print("Making collector in remote node")
+                torchrl_logger.info("Making collector in remote node")
             collector_rref = rpc.remote(
                 collector_infos[i],
                 collector_class,
@@ -413,7 +530,7 @@ class RPCDataCollector(DataCollectorBase):
         if not self._sync:
             for i in range(num_workers):
                 if self._VERBOSE:
-                    print("Asking for the first batch")
+                    torchrl_logger.info("Asking for the first batch")
                 future = rpc.rpc_async(
                     collector_infos[i],
                     collector_class.next,
@@ -443,10 +560,10 @@ class RPCDataCollector(DataCollectorBase):
                 self._VERBOSE,
             )
             if self._VERBOSE:
-                print("job id", job.job_id)  # ID of your job
+                torchrl_logger.info(f"job id {job.job_id}")  # ID of your job
             return job
         elif self.launcher == "mp":
-            job = mp.Process(
+            job = _ProcessNoWarn(
                 target=_rpc_init_collection_node,
                 args=(
                     i + 1,
@@ -487,7 +604,7 @@ class RPCDataCollector(DataCollectorBase):
         self.jobs = []
         for i in range(self.num_workers):
             if self._VERBOSE:
-                print(f"Submitting job {i}")
+                torchrl_logger.info(f"Submitting job {i}")
             job = self._init_worker_rpc(
                 executor,
                 i,
@@ -544,7 +661,7 @@ class RPCDataCollector(DataCollectorBase):
         futures = []
         for i in workers:
             if self._VERBOSE:
-                print(f"calling update on worker {i}")
+                torchrl_logger.info(f"calling update on worker {i}")
             futures.append(
                 rpc.rpc_async(
                     self.collector_infos[i],
@@ -555,14 +672,14 @@ class RPCDataCollector(DataCollectorBase):
         if wait:
             for i in workers:
                 if self._VERBOSE:
-                    print(f"waiting for worker {i}")
+                    torchrl_logger.info(f"waiting for worker {i}")
                 futures[i].wait()
                 if self._VERBOSE:
-                    print("got it!")
+                    torchrl_logger.info("got it!")
 
     def _next_async_rpc(self):
         if self._VERBOSE:
-            print("next async")
+            torchrl_logger.info("next async")
         if not len(self.futures):
             raise StopIteration(
                 f"The queue is empty, the collector has ran out of data after {self._collected_frames} collected frames."
@@ -573,7 +690,7 @@ class RPCDataCollector(DataCollectorBase):
                 if self.update_after_each_batch:
                     self.update_policy_weights_(workers=(i,), wait=False)
                 if self._VERBOSE:
-                    print(f"future {i} is done")
+                    torchrl_logger.info(f"future {i} is done")
                 data = future.value()
                 self._collected_frames += data.numel()
                 if self._collected_frames < self.total_frames:
@@ -583,12 +700,12 @@ class RPCDataCollector(DataCollectorBase):
                         args=(self.collector_rrefs[i],),
                     )
                     self.futures.append((future, i))
-                return data.to(self.storing_device)
+                return data
             self.futures.append((future, i))
 
     def _next_sync_rpc(self):
         if self._VERBOSE:
-            print("next sync: futures")
+            torchrl_logger.info("next sync: futures")
         if self.update_after_each_batch:
             self.update_policy_weights_()
         for i in range(self.num_workers):
@@ -605,12 +722,12 @@ class RPCDataCollector(DataCollectorBase):
             if future.done():
                 data += [future.value()]
                 if self._VERBOSE:
-                    print(
+                    torchrl_logger.info(
                         f"got data from {i} // data has len {len(data)} / {self.num_workers}"
                     )
             else:
                 self.futures.append((future, i))
-        data = torch.cat(data).to(self.storing_device)
+        data = torch.cat(data)
         traj_ids = data.get(("collector", "traj_ids"), None)
         if traj_ids is not None:
             for i in range(1, self.num_workers):
@@ -636,15 +753,15 @@ class RPCDataCollector(DataCollectorBase):
         if self._shutdown:
             return
         if self._VERBOSE:
-            print("shutting down")
+            torchrl_logger.info("shutting down")
         for future, i in self.futures:
             # clear the futures
             while future is not None and not future.done():
-                print(f"waiting for proc {i} to clear")
+                torchrl_logger.info(f"waiting for proc {i} to clear")
                 future.wait()
         for i in range(self.num_workers):
             if self._VERBOSE:
-                print(f"shutting down {i}")
+                torchrl_logger.info(f"shutting down {i}")
             rpc.rpc_sync(
                 self.collector_infos[i],
                 self.collector_class.shutdown,
@@ -652,7 +769,7 @@ class RPCDataCollector(DataCollectorBase):
                 timeout=int(IDLE_TIMEOUT),
             )
         if self._VERBOSE:
-            print("rpc shutdown")
+            torchrl_logger.info("rpc shutdown")
         rpc.shutdown(timeout=int(IDLE_TIMEOUT))
         if self.launcher == "mp":
             for job in self.jobs:

@@ -4,10 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 from torch import nn
 
-from torchrl.envs import EnvBase
+from torchrl.envs.common import EnvBase
 from torchrl.modules.planners.common import MPCPlannerBase
 
 
@@ -51,13 +51,13 @@ class MPPIPlanner(MPCPlannerBase):
         >>> class MyMBEnv(ModelBasedEnvBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
+        ...         self.state_spec = CompositeSpec(
+        ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
+        ...         )
         ...         self.observation_spec = CompositeSpec(
         ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
         ...         )
-        ...         self.input_spec = CompositeSpec(
-        ...             hidden_observation=UnboundedContinuousTensorSpec((4,)),
-        ...             action=UnboundedContinuousTensorSpec((1,)),
-        ...         )
+        ...         self.action_spec = UnboundedContinuousTensorSpec((1,))
         ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
@@ -67,10 +67,13 @@ class MPPIPlanner(MPCPlannerBase):
         ...             device=self.device,
         ...         )
         ...         tensordict = tensordict.update(
-        ...             self.input_spec.rand())
+        ...             self.full_state_spec.rand())
         ...         tensordict = tensordict.update(
-        ...             self.observation_spec.rand())
+        ...             self.full_action_spec.rand())
+        ...         tensordict = tensordict.update(
+        ...             self.full_observation_spec.rand())
         ...         return tensordict
+        ...
         >>> from torchrl.modules import MLP, WorldModelWrapper
         >>> import torch.nn as nn
         >>> world_model = WorldModelWrapper(
@@ -112,10 +115,12 @@ class MPPIPlanner(MPCPlannerBase):
                     fields={
                         done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                         hidden_observation: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                        reward: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        reward: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
                     batch_size=torch.Size([5]),
                     device=cpu,
-                    is_shared=False)},
+                    is_shared=False),
+                terminated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
             batch_size=torch.Size([5]),
             device=cpu,
             is_shared=False)
@@ -140,7 +145,7 @@ class MPPIPlanner(MPCPlannerBase):
         self.num_candidates = num_candidates
         self.top_k = top_k
         self.reward_key = reward_key
-        self.register_buffer("temperature", torch.tensor(temperature))
+        self.register_buffer("temperature", torch.as_tensor(temperature))
 
     def planning(self, tensordict: TensorDictBase) -> torch.Tensor:
         batch_size = tensordict.batch_size

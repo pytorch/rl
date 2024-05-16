@@ -20,18 +20,21 @@ The default task is `Pong-v5` but a different one can be picked through the
 import time
 from argparse import ArgumentParser
 
+import gym
+
 import torch
 import tqdm
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
-    RandomPolicy,
     SyncDataCollector,
 )
 from torchrl.collectors.distributed import DistributedDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
+from torchrl.envs.utils import RandomPolicy
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -89,11 +92,19 @@ if __name__ == "__main__":
 
     device_count = torch.cuda.device_count()
 
-    make_env = EnvCreator(lambda: GymEnv(args.env))
+    def gym_make():
+        with set_gym_backend(gym):
+            return GymEnv(args.env)
+
+    make_env = EnvCreator(gym_make)
     if args.worker_parallelism == "collector" or num_workers == 1:
         action_spec = make_env().action_spec
     else:
-        make_env = ParallelEnv(num_workers, make_env)
+        make_env = ParallelEnv(
+            num_workers,
+            make_env,
+            serial_for_single=True,
+        )
         action_spec = make_env.action_spec
 
     if args.worker_parallelism == "collector" and num_workers > 1:
@@ -149,5 +160,5 @@ if __name__ == "__main__":
             t0 = time.time()
     collector.shutdown()
     t1 = time.time()
-    print(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    torchrl_logger.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
     exit()

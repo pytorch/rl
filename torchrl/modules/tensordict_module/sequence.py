@@ -25,7 +25,7 @@ class SafeSequential(TensorDictSequential, SafeModule):
          partial_tolerant (bool, optional): if ``True``, the input tensordict can miss some of the input keys.
             If so, the only module that will be executed are those who can be executed given the keys that
             are present.
-            Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is :obj:`True` AND if the
+            Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is ``True`` AND if the
             stack does not have the required keys, then SafeSequential will scan through the sub-tensordicts
             looking for those that have the required keys, if any.
 
@@ -33,7 +33,6 @@ class SafeSequential(TensorDictSequential, SafeModule):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
         >>> from torchrl.modules import TanhNormal, SafeSequential, TensorDictModule, NormalParamWrapper
         >>> from torchrl.modules.tensordict_module import SafeProbabilisticModule
@@ -58,8 +57,9 @@ class SafeSequential(TensorDictSequential, SafeModule):
         ...    out_keys=["output"],
         ...    )
         >>> td_module = SafeSequential(td_module1, td_module2)
-        >>> params = make_functional(td_module)
-        >>> td_module(td, params=params)
+        >>> params = TensorDict.from_module(td_module)
+        >>> with params.to_module(td_module):
+        ...     td_module(td)
         >>> print(td)
         TensorDict(
             fields={

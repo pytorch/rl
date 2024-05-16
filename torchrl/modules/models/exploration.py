@@ -32,14 +32,14 @@ class NoisyLinear(nn.Linear):
     Args:
         in_features (int): input features dimension
         out_features (int): out features dimension
-        bias (bool): if ``True``, a bias term will be added to the matrix multiplication: Ax + b.
-            default: True
+        bias (bool, optional): if ``True``, a bias term will be added to the matrix multiplication: Ax + b.
+            Defaults to ``True``
         device (DEVICE_TYPING, optional): device of the layer.
-            default: "cpu"
+            Defaults to ``"cpu"``
         dtype (torch.dtype, optional): dtype of the parameters.
-            default: None
-        std_init (scalar): initial value of the Gaussian standard deviation before optimization.
-            default: 1.0
+            Defaults to ``None`` (default pytorch dtype)
+        std_init (scalar, optional): initial value of the Gaussian standard deviation before optimization.
+            Defaults to ``0.1``
 
     """
 
@@ -154,13 +154,14 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
 
     Args:
         out_features (int): out features dimension
-        bias (bool): if ``True``, a bias term will be added to the matrix multiplication: Ax + b.
-            default: True
+        bias (bool, optional): if ``True``, a bias term will be added to the matrix multiplication: Ax + b.
+            Defaults to ``True``.
         device (DEVICE_TYPING, optional): device of the layer.
+            Defaults to ``"cpu"``.
         dtype (torch.dtype, optional): dtype of the parameters.
-            default: None
+            Defaults to the default PyTorch dtype.
         std_init (scalar): initial value of the Gaussian standard deviation before optimization.
-            default: 1.0
+            Defaults to 0.1
 
     """
 
@@ -253,14 +254,18 @@ class gSDEModule(nn.Module):
             outputs a distribution average.
         action_dim (int): the dimension of the action.
         state_dim (int): the state dimension.
-        sigma_init (float): the initial value of the standard deviation. The
+        sigma_init (float, optional): the initial value of the standard deviation. The
             softplus non-linearity is used to map the log_sigma parameter to a
-            positive value.
-        scale_min (float, optional): min value of the scale.
-        scale_max (float, optional): max value of the scale.
+            positive value. Defaults to ``1.0``.
+        scale_min (float, optional): min value of the scale. Defaults to ``0.01``.
+        scale_max (float, optional): max value of the scale. Defaults to ``10.0``.
+        learn_sigma (bool, optional): if ``True``, the value of the ``sigma``
+            variable will be included in the module parameters, making it learnable.
+            Defaults to ``True``.
         transform (torch.distribution.Transform, optional): a transform to apply
-            to the sampled action.
-        device (DEVICE_TYPING, optional): device to create the model on.
+            to the sampled action. Defaults to ``None`` (no transform).
+        device (torch.device, optional): device to create the model on.
+            Defaults to ``"cpu"``.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -340,7 +345,9 @@ class gSDEModule(nn.Module):
             )
 
         if sigma_init != 0.0:
-            self.register_buffer("sigma_init", torch.tensor(sigma_init, device=device))
+            self.register_buffer(
+                "sigma_init", torch.as_tensor(sigma_init, device=device)
+            )
 
     @property
     def sigma(self):
@@ -409,8 +416,22 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
     This module behaves exactly as gSDEModule except that it does not require the
     user to specify the action and state dimension.
     If the input state is multi-dimensional (i.e. more than one state is provided), the
-    sigma value is initialized such that the resulting variance will match :obj:`sigma_init`
-    (or 1 if no :obj:`sigma_init` value is provided).
+    sigma value is initialized such that the resulting variance will match ``sigma_init``
+    (or 1 if no ``sigma_init`` value is provided).
+
+    Args:
+        sigma_init (float, optional): the initial value of the standard deviation. The
+            softplus non-linearity is used to map the log_sigma parameter to a
+            positive value. Defaults to ``None`` (learned).
+        scale_min (float, optional): min value of the scale. Defaults to ``0.01``.
+        scale_max (float, optional): max value of the scale. Defaults to ``10.0``.
+        learn_sigma (bool, optional): if ``True``, the value of the ``sigma``
+            variable will be included in the module parameters, making it learnable.
+            Defaults to ``True``.
+        transform (torch.distribution.Transform, optional): a transform to apply
+            to the sampled action. Defaults to ``None`` (no transform).
+        device (torch.device, optional): device to create the model on.
+            Defaults to ``"cpu"``.
 
     """
 

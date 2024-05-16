@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+title: TorchRL
+authors:
+  - family-names: PyTorch Team
+url: https://pytorch.org/rl
+preferred-citation:
+  type: conference-paper
+  title: "TorchRL: A data-driven decision-making library for PyTorch"
+  authors:
+    - family-names: Bou
+      given-names: Albert
+    - family-names: Bettini
+      given-names: Matteo
+    - family-names: Dittert
+      given-names: Sebastian
+    - family-names: Kumar
+      given-names: Vikash
+    - family-names: Sodhani
+      given-names: Shagun
+    - family-names: Yang
+      given-names: Xiaomeng
+    - family-names: De Fabritiis
+      given-names: Gianni
+    - family-names: Moens
+      given-names: Vincent
+  collection-title: arXiv
+  year: 2023
+  url: https://arxiv.org/abs/2306.00577
