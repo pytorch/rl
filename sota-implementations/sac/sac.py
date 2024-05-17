@@ -10,6 +10,9 @@ It supports state environments like MuJoCo.
 
 The helper functions are coded in the utils.py associated with this script.
 """
+import signal
+import sys
+
 import time
 
 import hydra
@@ -32,6 +35,10 @@ from utils import (
     make_replay_buffer,
     make_sac_agent,
     make_sac_optimizer,
+    # my changes
+    get_random_offline_data,
+    finish_logging,
+    catch_sigint,
 )
 
 
@@ -60,6 +67,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "group": cfg.logger.group_name,
             },
         )
+        # catch SIGINT at any point in training and exit gracefully
+        signal_handler = catch_sigint(logger)
+        signal.signal(signal.SIGINT, signal_handler)
 
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
@@ -84,6 +94,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         scratch_dir=cfg.replay_buffer.scratch_dir,
         device="cpu",
     )
+    # TODO: rename replay_buffer to "online_buffer"
+    # TODO: merge online/offline later
+    offline_buffer = get_random_offline_data(cfg, train_env)
 
     # Create optimizers
     (

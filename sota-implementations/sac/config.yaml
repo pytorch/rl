@@ -17,6 +17,8 @@ collector:
   env_per_collector: 1
   reset_at_each_iter: False
 
+  offline_frames: 10_000
+
 # replay buffer
 replay_buffer:
   size: 1000000
@@ -31,6 +33,8 @@ optim:
   lr: 3.0e-4
   weight_decay: 0.0
   batch_size: 256
+  online_ratio: 0.5
+
   target_update_polyak: 0.995
   alpha_init: 1.0
   adam_eps: 1.0e-8
