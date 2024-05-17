@@ -61,8 +61,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             },
         )
 
-    torch.manual_seed(cfg.env.seed)
-    np.random.seed(cfg.env.seed)
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
 
     # Create environments
     train_env, eval_env = make_environment(cfg, logger=logger)

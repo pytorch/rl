@@ -77,7 +77,7 @@ def make_environment(cfg, logger=None):
         EnvCreator(partial),
         serial_for_single=True,
     )
-    parallel_env.set_seed(cfg.env.seed)
+    parallel_env.set_seed(cfg.seed)
 
     train_env = apply_env_transforms(parallel_env, cfg.env.max_episode_steps)
 
@@ -113,7 +113,7 @@ def make_collector(cfg, train_env, actor_model_explore):
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.device,
     )
-    collector.set_seed(cfg.env.seed)
+    collector.set_seed(cfg.seed)
     return collector
 
 
