@@ -1949,14 +1949,26 @@ class NonTensorSpec(TensorSpec):
     def clone(self) -> NonTensorSpec:
         return self.__class__(shape=self.shape, device=self.device, dtype=self.dtype)
 
-    def rand(self, shape):
-        return NonTensorData(data=None, batch_size=self.shape, device=self.device)
+    def rand(self, shape=None):
+        if shape is None:
+            shape = ()
+        return NonTensorData(
+            data=None, batch_size=(*shape, self.shape), device=self.device
+        )
 
-    def zero(self, batch_size):
-        return NonTensorData(data=None, batch_size=self.shape, device=self.device)
+    def zero(self, shape=None):
+        if shape is None:
+            shape = ()
+        return NonTensorData(
+            data=None, batch_size=(*shape, self.shape), device=self.device
+        )
 
-    def one(self, batch_size):
-        return NonTensorData(data=None, batch_size=self.shape, device=self.device)
+    def one(self, shape=None):
+        if shape is None:
+            shape = ()
+        return NonTensorData(
+            data=None, batch_size=(*shape, self.shape), device=self.device
+        )
 
     def is_in(self, val: torch.Tensor) -> bool:
         shape = torch.broadcast_shapes(self.shape, val.shape)
