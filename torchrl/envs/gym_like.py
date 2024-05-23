@@ -125,7 +125,16 @@ class default_info_dict_reader(BaseInfoDictReader):
         for key in keys:
             if key in info_dict:
                 if info_dict[key].dtype == np.dtype("O"):
-                    val = np.stack(info_dict[key])
+                    data = info_dict[key].copy()
+                    is_none = np.array([info is None for info in data])
+                    if is_none.any():
+                        nz = (~is_none).nonzero()[0][0]
+                        zero_like = torch.utils._pytree.tree_map(
+                            lambda x: np.zeros_like(x), data[nz]
+                        )
+                        for idx in is_none.nonzero()[0]:
+                            data[idx] = zero_like
+                    val = torch.utils._pytree.tree_map(lambda *x: np.stack(x), *data)
                 else:
                     val = info_dict[key]
                 tensordict.set(key, val)

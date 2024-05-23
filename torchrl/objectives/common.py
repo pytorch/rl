@@ -24,7 +24,7 @@ from torchrl.objectives.value import ValueEstimatorBase
 
 
 def _updater_check_forward_prehook(module, *args, **kwargs):
-    if not all(v for v in module._has_update_associated.values()) and RL_WARNINGS:
+    if not all(module._has_update_associated.values()) and RL_WARNINGS:
         warnings.warn(
             module.TARGET_NET_WARNING,
             category=UserWarning,
