@@ -1953,21 +1953,21 @@ class NonTensorSpec(TensorSpec):
         if shape is None:
             shape = ()
         return NonTensorData(
-            data=None, batch_size=(*shape, self.shape), device=self.device
+            data=None, batch_size=(*shape, *self.shape), device=self.device
         )
 
     def zero(self, shape=None):
         if shape is None:
             shape = ()
         return NonTensorData(
-            data=None, batch_size=(*shape, self.shape), device=self.device
+            data=None, batch_size=(*shape, *self.shape), device=self.device
         )
 
     def one(self, shape=None):
         if shape is None:
             shape = ()
         return NonTensorData(
-            data=None, batch_size=(*shape, self.shape), device=self.device
+            data=None, batch_size=(*shape, *self.shape), device=self.device
         )
 
     def is_in(self, val: torch.Tensor) -> bool:
