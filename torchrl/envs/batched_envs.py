@@ -2151,7 +2151,7 @@ def _run_worker_pipe_direct(
             # by output) of the step!
             # Caveat: for RNN we may need some keys of the "next" TD so we pass the list
             # through data
-            td, root_next_td = env.step_and_maybe_reset(data)
+            td, root_next_td = env.step_and_maybe_reset(data.clone())
 
             if event is not None:
                 event.record()
