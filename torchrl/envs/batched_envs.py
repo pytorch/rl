@@ -10,6 +10,7 @@ import functools
 import gc
 
 import os
+import tempfile
 import weakref
 from collections import OrderedDict
 from copy import copy, deepcopy
@@ -184,6 +185,9 @@ class BatchedEnvBase(EnvBase):
             Uses the default start method if not indicated ('spawn' by default in
             TorchRL if not initiated differently before first import).
             To be used only with :class:`~torchrl.envs.ParallelEnv` subclasses.
+        use_buffers (bool, optional): whether communication between workers should
+            occur via circular preallocated memory buffers. Defaults to ``True`` unless
+            one of the environment has dynamic specs.
 
     .. note::
         One can pass keyword arguments to each sub-environments using the following
@@ -297,6 +301,7 @@ class BatchedEnvBase(EnvBase):
         serial_for_single: bool = False,
         non_blocking: bool = False,
         mp_start_method: str = None,
+        use_buffers: bool=None,
     ):
         super().__init__(device=device)
         self.serial_for_single = serial_for_single
@@ -304,6 +309,7 @@ class BatchedEnvBase(EnvBase):
         self.num_sub_threads = num_sub_threads
         self.num_threads = num_threads
         self._cache_in_keys = None
+        self._use_buffers = use_buffers
 
         self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
         if callable(create_env_fn):
@@ -353,7 +359,6 @@ class BatchedEnvBase(EnvBase):
                 f"Cannot use mp_start_method={mp_start_method} with envs of type {type(self)}."
             )
         self._mp_start_method = mp_start_method
-        self._use_buffers = None
 
     @property
     def non_blocking(self):
@@ -469,7 +474,12 @@ class BatchedEnvBase(EnvBase):
             self.meta_data = meta_data.expand(
                 *(self.num_workers, *meta_data.batch_size)
             )
-            self._use_buffers = not self.meta_data.has_dynamic_specs
+            if self._use_buffers is not False:
+                _use_buffers = not self.meta_data.has_dynamic_specs
+                if self._use_buffers and not _use_buffers:
+                    warn("A value of use_buffers=True was passed but this is incompatible "
+                         "with the list of environments provided. Turning use_buffers to False.")
+                self._use_buffers = _use_buffers
             if self.share_individual_td is None:
                 self.share_individual_td = False
         else:
@@ -489,9 +499,14 @@ class BatchedEnvBase(EnvBase):
                         "be True to accomodate non-stackable tensors."
                     )
                 self.share_individual_td = share_individual_td
-            self._use_buffers = all(
+            _use_buffers = all(
                 not metadata.has_dynamic_specs for metadata in self.meta_data
             )
+            if self._use_buffers and not _use_buffers:
+                warn("A value of use_buffers=True was passed but this is incompatible "
+                     "with the list of environments provided. Turning use_buffers to False.")
+            self._use_buffers = _use_buffers
+
         self._set_properties()
 
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
@@ -1368,17 +1383,26 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     def _step_and_maybe_reset_no_buffers(
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
-        for i, data in enumerate(tensordict.unbind(0)):
-            self.parent_channels[i].send(("step_and_maybe_reset", data))
-        out_next, out_root = [], []
-        for i, channel in enumerate(self.parent_channels):
-            self._events[i].wait()
-            next_td, root_td = channel.recv()
-            out_root.append(root_td)
-            out_next.append(next_td)
-        return LazyStackedTensorDict.maybe_dense_stack(
+
+        for i, _data in enumerate(tensordict.unbind(0)):
+            self.parent_channels[i].send(("step_and_maybe_reset", _data))
+
+        results = [None] * self.num_workers
+
+        consumed_indices = []
+        events = set(range(self.num_workers))
+        while len(consumed_indices) < self.num_workers:
+            for i in list(events):
+                if self._events[i].is_set():
+                    results[i] = self.parent_channels[i].recv()
+                    self._events[i].clear()
+                    consumed_indices.append(i)
+                    events.discard(i)
+
+        out_next, out_root = zip(*(future for future in results))
+        return TensorDict.maybe_dense_stack(
             out_next
-        ), LazyStackedTensorDict.maybe_dense_stack(out_root)
+        ), TensorDict.maybe_dense_stack(out_root)
 
     @torch.no_grad()
     @_check_start
@@ -1401,7 +1425,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             keys_to_update=self._env_input_keys,
             non_blocking=self.non_blocking,
         )
-        next_td_passthrough = tensordict.get("next")
+        next_td_passthrough = tensordict.get("next", default=None)
         if next_td_passthrough is not None:
             # if we have input "next" data (eg, RNNs which pass the next state)
             # the sub-envs will need to process them through step_and_maybe_reset.
@@ -1483,7 +1507,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             keys_to_update=list(self._env_input_keys),
             non_blocking=self.non_blocking,
         )
-        next_td_passthrough = tensordict.get("next")
+        next_td_passthrough = tensordict.get("next", None)
         if next_td_passthrough is not None:
             # if we have input "next" data (eg, RNNs which pass the next state)
             # the sub-envs will need to process them through step_and_maybe_reset.
@@ -2132,8 +2156,8 @@ def _run_worker_pipe_direct(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_event.set()
             child_pipe.send((td, root_next_td))
+            mp_event.set()
             del td, root_next_td
 
         elif cmd == "close":

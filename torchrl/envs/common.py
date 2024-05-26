@@ -348,14 +348,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self.__dict__.setdefault("_batch_size", None)
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
-            output_spec = self.__dict__.get("_output_spec", None)
+            output_spec = self.__dict__.get("_output_spec")
             if output_spec is not None:
                 self.__dict__["_output_spec"] = (
                     output_spec.to(self.device)
                     if self.device is not None
                     else output_spec
                 )
-            input_spec = self.__dict__.get("_input_spec", None)
+            input_spec = self.__dict__.get("_input_spec")
             if input_spec is not None:
                 self.__dict__["_input_spec"] = (
                     input_spec.to(self.device)
@@ -477,12 +477,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @property
     def device(self) -> torch.device:
-        device = self.__dict__.get("_device", None)
+        device = self.__dict__.get("_device")
         return device
 
     @device.setter
     def device(self, value: torch.device) -> None:
-        device = self.__dict__.get("_device", None)
+        device = self.__dict__.get("_device")
         if device is None:
             self.__dict__["_device"] = value
             return
@@ -557,7 +557,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
 
         """
-        input_spec = self.__dict__.get("_input_spec", None)
+        input_spec = self.__dict__.get("_input_spec")
         if input_spec is None:
             input_spec = CompositeSpec(
                 full_state_spec=None,
@@ -617,7 +617,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
 
         """
-        output_spec = self.__dict__.get("_output_spec", None)
+        output_spec = self.__dict__.get("_output_spec")
         if output_spec is None:
             output_spec = CompositeSpec(
                 shape=self.batch_size,
@@ -638,7 +638,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        action_keys = self.__dict__.get("_action_keys", None)
+        action_keys = self.__dict__.get("_action_keys")
         if action_keys is not None:
             return action_keys
         keys = self.input_spec["full_action_spec"].keys(True, True)
@@ -646,6 +646,22 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             raise AttributeError("Could not find action spec")
         keys = sorted(keys, key=_repr_by_depth)
         self.__dict__["_action_keys"] = keys
+        return keys
+
+    @property
+    def state_keys(self) -> List[NestedKey]:
+        """The state keys of an environment.
+
+        By default, there will only be one key named "state".
+
+        Keys are sorted by depth in the data tree.
+        """
+        state_keys = self.__dict__.get("_state_keys")
+        if state_keys is not None:
+            return state_keys
+        keys = self.input_spec["full_state_spec"].keys(True, True)
+        keys = sorted(keys, key=_repr_by_depth)
+        self.__dict__["_state_keys"] = keys
         return keys
 
     @property
@@ -833,7 +849,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        reward_keys = self.__dict__.get("_reward_keys", None)
+        reward_keys = self.__dict__.get("_reward_keys")
         if reward_keys is not None:
             return reward_keys
 
@@ -1029,7 +1045,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        done_keys = self.__dict__.get("_done_keys", None)
+        done_keys = self.__dict__.get("_done_keys")
         if done_keys is not None:
             return done_keys
         done_keys = sorted(self.full_done_spec.keys(True, True), key=_repr_by_depth)
@@ -1384,6 +1400,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def state_spec(self, value: CompositeSpec) -> None:
         try:
             self.input_spec.unlock_()
+            try:
+                delattr(self, "_state_keys")
+            except AttributeError:
+                pass
             if value is None:
                 self.input_spec["full_state_spec"] = CompositeSpec(
                     device=self.device, shape=self.batch_size
@@ -2616,7 +2636,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @property
     def _step_mdp(self):
-        step_func = self.__dict__.get("_step_mdp_value", None)
+        step_func = self.__dict__.get("_step_mdp_value")
         if step_func is None:
             step_func = _StepMDP(self, exclude_action=False)
             self.__dict__["_step_mdp_value"] = step_func
@@ -2769,7 +2789,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @property
     def _simple_done(self):
-        _simple_done = self.__dict__.get("_simple_done_value", None)
+        _simple_done = self.__dict__.get("_simple_done_value")
         if _simple_done is None:
             key_set = set(self.full_done_spec.keys())
             _simple_done = key_set == {
@@ -2823,6 +2843,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self.__dict__["_reward_keys"] = None
         self.__dict__["_done_keys"] = None
         self.__dict__["_action_keys"] = None
+        self.__dict__["_state_keys"] = None
         self.__dict__["_done_keys_group"] = None
 
     @property
@@ -2836,7 +2857,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        reset_keys = self.__dict__.get("_reset_keys", None)
+        reset_keys = self.__dict__.get("_reset_keys")
         if reset_keys is not None:
             return reset_keys
 
@@ -2880,7 +2901,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         inner lists contain the done keys (eg, done and truncated) that can
         be read to determine a reset when it is absent.
         """
-        done_keys_group = self.__dict__.get("_done_keys_group", None)
+        done_keys_group = self.__dict__.get("_done_keys_group")
         if done_keys_group is not None:
             return done_keys_group
 
@@ -3038,7 +3059,7 @@ class _EnvWrapper(EnvBase):
         self._init_env()  # runs all the steps to have a ready-to-use env
 
     def _sync_device(self):
-        sync_func = self.__dict__.get("_sync_device_val", None)
+        sync_func = self.__dict__.get("_sync_device_val")
         if sync_func is None:
             device = self.device
             if device.type != "cuda":
