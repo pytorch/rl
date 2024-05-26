@@ -4782,4 +4782,4 @@ def _minmax_dtype(dtype):
 
 
 def _remove_neg_shapes(shape):
-    return torch.Size([d if d >= 0 else 1 for d in shape])
+    return torch.Size([int(d) if d >= 0 else 1 for d in shape])
