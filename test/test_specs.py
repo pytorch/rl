@@ -3467,19 +3467,22 @@ class TestDynamicSpec:
             disc=disc,
             moneh=moneh,
             mdisc=mdisc,
-            shape=(-1, 1, 2)
+            shape=(-1, 1, 2),
         )
         assert spec.shape == (-1, 1, 2)
 
-        data = TensorDict({
-            "unb": xunb,
-            "unbd": xunbd,
-            "bound": xbound,
-            "oneh": xoneh,
-            "disc": xdisc,
-            "moneh": xmoneh,
-            "mdisc": xmdisc,
-        }, [3, 1, 2])
+        data = TensorDict(
+            {
+                "unb": xunb,
+                "unbd": xunbd,
+                "bound": xbound,
+                "oneh": xoneh,
+                "disc": xdisc,
+                "moneh": xmoneh,
+                "mdisc": xmdisc,
+            },
+            [3, 1, 2],
+        )
         assert spec.is_in(data)
 
 

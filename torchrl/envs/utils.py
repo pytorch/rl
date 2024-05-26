@@ -748,19 +748,31 @@ def check_env_specs(
     - List of keys present in fake but not in real: {fake_tensordict_keys-real_tensordict_keys}.
 """
         )
-    if (
-        fake_tensordict_select.apply(lambda x: torch.zeros_like(x))
-        != real_tensordict_select.apply(lambda x: torch.zeros_like(x))
-    ).any():
-        raise AssertionError(
-            "zeroing the two tensordicts did not make them identical. "
-            f"Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
-        )
-
-    # Checks shapes and eventually dtypes of keys at all nesting levels
-    _per_level_env_check(
-        fake_tensordict_select, real_tensordict_select, check_dtype=check_dtype
+    zeroing_err_msg = (
+        "zeroing the two tensordicts did not make them identical. "
+        "Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
     )
+
+    if env._has_dynamic_specs:
+        for real, fake in zip(real_tensordict.unbind(-1), fake_tensordict.unbind(-1)):
+            fake = fake.apply(lambda x, y: x.expand_as(y), real)
+            if (torch.zeros_like(real) != torch.zeros_like(fake)).any():
+                raise AssertionError(zeroing_err_msg)
+
+            # Checks shapes and eventually dtypes of keys at all nesting levels
+            _per_level_env_check(fake, real, check_dtype=check_dtype)
+
+    else:
+        if (
+            torch.zeros_like(fake_tensordict_select)
+            != torch.zeros_like(real_tensordict_select)
+        ).any():
+            raise AssertionError(zeroing_err_msg)
+
+        # Checks shapes and eventually dtypes of keys at all nesting levels
+        _per_level_env_check(
+            fake_tensordict_select, real_tensordict_select, check_dtype=check_dtype
+        )
 
     # Check specs
     last_td = real_tensordict[..., -1]

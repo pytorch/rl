@@ -42,6 +42,7 @@ from mocking_classes import (
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
     DummyModelBasedEnvBase,
+    EnvWithDynamicSpec,
     HeterogeneousCountingEnv,
     HeterogeneousCountingEnvPolicy,
     MockBatchedLockedEnv,
@@ -3047,6 +3048,18 @@ class TestAutoReset:
             assert lazy["lidar"][done.squeeze()].isnan().all()
             assert not lazy["lidar"][~done.squeeze()].isnan().any()
             assert (lazy_root["lidar"][1:][done[:-1].squeeze()] == 0).all()
+
+
+class TestEnvWithDynamicSpec:
+    def test_dynamic_rollout(self):
+        env = EnvWithDynamicSpec()
+        with pytest.raises(
+            RuntimeError,
+            match="The environment specs are dynamic. Call rollout with return_contiguous=False",
+        ):
+            rollout = env.rollout(4)
+        rollout = env.rollout(4, return_contiguous=False)
+        check_env_specs(env, return_contiguous=False)
 
 
 if __name__ == "__main__":

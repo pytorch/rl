@@ -620,6 +620,11 @@ class TensorSpec:
     def ndimension(self):
         return len(self.shape)
 
+    @property
+    def _safe_shape(self):
+        """Returns a shape where all heterogeneous values are replaced by one (to be expandable)."""
+        return torch.Size([v if v > 0 else 1 for v in self.shape])
+
     @abc.abstractmethod
     def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
         """Indexes the input tensor.
@@ -791,7 +796,9 @@ class TensorSpec:
         """
         if shape is None:
             shape = torch.Size([])
-        return torch.zeros((*shape, *self.shape), dtype=self.dtype, device=self.device)
+        return torch.zeros(
+            (*shape, *self._safe_shape), dtype=self.dtype, device=self.device
+        )
 
     @abc.abstractmethod
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> "TensorSpec":
@@ -1653,14 +1660,14 @@ class BoundedTensorSpec(TensorSpec):
         else:
             shape_corr = None
         if high.ndimension():
-            if shape_corr is not None and shape_corr != high.shape_corr:
+            if shape_corr is not None and shape_corr != high.shape:
                 raise RuntimeError(err_msg)
-            shape = high.shape_corr
+            shape = high.shape
             low = low.expand(shape_corr).clone()
         elif low.ndimension():
-            if shape_corr is not None and shape_corr != low.shape_corr:
+            if shape_corr is not None and shape_corr != low.shape:
                 raise RuntimeError(err_msg)
-            shape = low.shape_corr
+            shape = low.shape
             high = high.expand(shape_corr).clone()
         elif shape_corr is None:
             raise RuntimeError(err_msg)
@@ -1673,7 +1680,7 @@ class BoundedTensorSpec(TensorSpec):
         elif high.numel() > low.numel():
             low = low.expand_as(high).clone()
         if shape_corr is None:
-            shape = low.shape_corr
+            shape = low.shape
         else:
             if isinstance(shape_corr, float):
                 shape_corr = torch.Size([shape_corr])
@@ -1973,21 +1980,21 @@ class NonTensorSpec(TensorSpec):
         if shape is None:
             shape = ()
         return NonTensorData(
-            data=None, batch_size=(*shape, *self.shape), device=self.device
+            data=None, batch_size=(*shape, *self._safe_shape), device=self.device
         )
 
     def zero(self, shape=None):
         if shape is None:
             shape = ()
         return NonTensorData(
-            data=None, batch_size=(*shape, *self.shape), device=self.device
+            data=None, batch_size=(*shape, *self._safe_shape), device=self.device
         )
 
     def one(self, shape=None):
         if shape is None:
             shape = ()
         return NonTensorData(
-            data=None, batch_size=(*shape, *self.shape), device=self.device
+            data=None, batch_size=(*shape, *self._safe_shape), device=self.device
         )
 
     def is_in(self, val: torch.Tensor) -> bool:

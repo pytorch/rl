@@ -2291,6 +2291,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             shape=self.batch_size,
         ).lock_()
 
+    @property
+    def _has_dynamic_specs(self) -> bool:
+        return any(
+            any(s == -1 for s in spec.shape)
+            for spec in self.output_spec.values(True, True)
+        ) or any(
+            any(s == -1 for s in spec.shape)
+            for spec in self.input_spec.values(True, True)
+        )
+
     def rollout(
         self,
         max_steps: int,
@@ -2564,9 +2574,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordicts = self._rollout_nonstop(**kwargs)
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
         if return_contiguous:
-            out_td = torch.stack(tensordicts, len(batch_size), out=out)
+            try:
+                out_td = torch.stack(tensordicts, len(batch_size), out=out)
+            except RuntimeError as err:
+                if (
+                    "The shapes of the tensors to stack is incompatible" in str(err)
+                    and self._has_dynamic_specs
+                ):
+                    raise RuntimeError(
+                        "The environment specs are dynamic. Call rollout with return_contiguous=False."
+                    )
+                raise
         else:
-            out_td = LazyStackedTensorDict.lazy_stack(
+            out_td = LazyStackedTensorDict.maybe_dense_stack(
                 tensordicts, len(batch_size), out=out
             )
         if set_truncated:
@@ -2927,9 +2947,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         full_done_spec = self.output_spec["full_done_spec"]
 
         fake_obs = observation_spec.zero()
+        fake_reward = reward_spec.zero()
+        fake_done = full_done_spec.zero()
 
         fake_state = state_spec.zero()
         fake_action = action_spec.zero()
+
         if any(
             isinstance(val, LazyStackedTensorDict) for val in fake_action.values(True)
         ):
@@ -2940,9 +2963,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         # the input and output key may match, but the output prevails
         # Hence we generate the input, and override using the output
         fake_in_out = fake_input.update(fake_obs)
-
-        fake_reward = reward_spec.zero()
-        fake_done = full_done_spec.zero()
 
         next_output = fake_obs.clone()
         next_output.update(fake_reward)
