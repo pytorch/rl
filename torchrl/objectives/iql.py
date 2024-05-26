@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
@@ -233,6 +233,16 @@ class IQLLoss(LossModule):
         "loss_value",
         "entropy",
     ]
+
+    actor_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    qvalue_network: TensorDictModule
+    qvalue_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
+    value_network: TensorDictModule | None
+    value_network_params: TensorDictParams | None
+    target_value_network_params: TensorDictParams | None
 
     def __init__(
         self,
@@ -705,6 +715,16 @@ class DiscreteIQLLoss(IQLLoss):
         "loss_value",
         "entropy",
     ]
+
+    actor_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    qvalue_network: TensorDictModule
+    qvalue_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
+    value_network: TensorDictModule | None
+    value_network_params: TensorDictParams | None
+    target_value_network_params: TensorDictParams | None
 
     def __init__(
         self,

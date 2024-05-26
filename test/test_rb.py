@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 import torch
 
-from _utils_internal import get_default_devices, make_tc
+from _utils_internal import CARTPOLE_VERSIONED, get_default_devices, make_tc
 
 from mocking_classes import CountingEnv
 from packaging import version
@@ -35,7 +35,9 @@ from torch.utils._pytree import tree_flatten, tree_map
 from torchrl.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
+    FlatStorageCheckpointer,
     MultiStep,
+    NestedStorageCheckpointer,
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
@@ -44,6 +46,7 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.data.replay_buffers import samplers, writers
+from torchrl.data.replay_buffers.checkpointers import H5StorageCheckpointer
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     PrioritizedSliceSampler,
@@ -2899,6 +2902,54 @@ class TestRBMultidim:
                 sample["next", "done"].sum(),
             )
             assert (split_trajectories(sample)["next", "done"].sum(-2) == 1).all()
+
+
+@pytest.mark.skipif(not _has_gym, reason="gym required")
+class TestCheckpointers:
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    @pytest.mark.parametrize(
+        "checkpointer",
+        [FlatStorageCheckpointer, H5StorageCheckpointer, NestedStorageCheckpointer],
+    )
+    def test_simple_env(self, storage_type, checkpointer, tmpdir):
+        env = GymEnv(CARTPOLE_VERSIONED(), device=None)
+        env.set_seed(0)
+        torch.manual_seed(0)
+        collector = SyncDataCollector(
+            env, policy=env.rand_step, total_frames=200, frames_per_batch=22
+        )
+        rb = ReplayBuffer(storage=storage_type(100))
+        rb_test = ReplayBuffer(storage=storage_type(100))
+        rb.storage.checkpointer = checkpointer()
+        rb_test.storage.checkpointer = checkpointer()
+        for data in collector:
+            rb.extend(data)
+            rb.dumps(tmpdir)
+            rb_test.loads(tmpdir)
+            assert_allclose_td(rb_test[:], rb[:])
+
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    @pytest.mark.parametrize(
+        "checkpointer",
+        [FlatStorageCheckpointer, NestedStorageCheckpointer, H5StorageCheckpointer],
+    )
+    def test_multi_env(self, storage_type, checkpointer, tmpdir):
+        env = SerialEnv(3, lambda: GymEnv(CARTPOLE_VERSIONED(), device=None))
+        env.set_seed(0)
+        torch.manual_seed(0)
+        collector = SyncDataCollector(
+            env, policy=env.rand_step, total_frames=200, frames_per_batch=22
+        )
+        rb = ReplayBuffer(storage=storage_type(100, ndim=2))
+        rb_test = ReplayBuffer(storage=storage_type(100, ndim=2))
+        rb.storage.checkpointer = checkpointer()
+        rb_test.storage.checkpointer = checkpointer()
+        for data in collector:
+            rb.extend(data)
+            assert rb._storage.max_size == 102
+            rb.dumps(tmpdir)
+            rb_test.loads(tmpdir)
+            assert_allclose_td(rb_test[:], rb[:])
 
 
 if __name__ == "__main__":

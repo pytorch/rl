@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import dispatch
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import nn
 from torchrl.data.tensor_specs import TensorSpec
@@ -167,6 +167,10 @@ class DQNLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
     out_keys = ["loss"]
+
+    value_network: TensorDictModule
+    value_network_params: TensorDictParams
+    target_value_network_params: TensorDictParams
 
     def __init__(
         self,
@@ -433,6 +437,10 @@ class DistributionalDQNLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
+
+    value_network: TensorDictModule
+    value_network_params: TensorDictParams
+    target_value_network_params: TensorDictParams
 
     def __init__(
         self,

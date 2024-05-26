@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import (
     dispatch,
     ProbabilisticTensorDictModule,
@@ -279,6 +279,13 @@ class PPOLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
+
+    actor_network: TensorDictModule
+    critic_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    critic_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_critic_network_params: TensorDictParams
 
     def __init__(
         self,
@@ -717,6 +724,13 @@ class ClipPPOLoss(PPOLoss):
 
     """
 
+    actor_network: TensorDictModule
+    critic_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    critic_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_critic_network_params: TensorDictParams
+
     def __init__(
         self,
         actor_network: ProbabilisticTensorDictSequential | None = None,
@@ -945,6 +959,13 @@ class KLPENPPOLoss(PPOLoss):
       This will work regardless of whether separate_losses is activated or not.
 
     """
+
+    actor_network: TensorDictModule
+    critic_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    critic_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_critic_network_params: TensorDictParams
 
     def __init__(
         self,

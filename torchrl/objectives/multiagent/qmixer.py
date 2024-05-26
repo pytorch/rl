@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import nn
@@ -182,6 +182,13 @@ class QMixerLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
     out_keys = ["loss"]
+
+    local_value_network: TensorDictModule
+    local_value_network_params: TensorDictParams
+    target_local_value_network_params: TensorDictParams
+    mixer_network: TensorDictModule
+    mixer_network_params: TensorDictParams
+    target_mixer_network_params: TensorDictParams
 
     def __init__(
         self,

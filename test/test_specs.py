@@ -3483,6 +3483,14 @@ class TestDynamicSpec:
         assert spec.is_in(data)
 
 
+class TestNonTensorSpec:
+    def test_sample(self):
+        nts = NonTensorSpec(shape=(3, 4))
+        assert nts.one((2,)).shape == (2, 3, 4)
+        assert nts.rand((2,)).shape == (2, 3, 4)
+        assert nts.zero((2,)).shape == (2, 3, 4)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

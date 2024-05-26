@@ -382,6 +382,13 @@ class LSTMModule(ModuleBase):
         set_recurrent_mode: controls whether the module should be executed in
             recurrent mode.
 
+    .. note:: This module relies on specific ``recurrent_state`` keys being present in the input
+        TensorDicts. To generate a :class:`~torchrl.envs.transforms.TensorDictPrimer` transform that will automatically
+        add hidden states to the environment TensorDicts, use the method :func:`~torchrl.modules.rnn.LSTMModule.make_tensordict_primer`.
+        If this class is a submodule in a larger module, the method :func:`~torchrl.models.utils.get_primers_from_module` can be called
+        on the parent module to automatically generate the primer transforms required for all submodules, including this one.
+
+
     Examples:
         >>> from torchrl.envs import TransformedEnv, InitTracker
         >>> from torchrl.envs import GymEnv
@@ -1058,6 +1065,12 @@ class GRUModule(ModuleBase):
     Methods:
         set_recurrent_mode: controls whether the module should be executed in
             recurrent mode.
+
+    .. note:: This module relies on specific ``recurrent_state`` keys being present in the input
+        TensorDicts. To generate a :class:`~torchrl.envs.transforms.TensorDictPrimer` transform that will automatically
+        add hidden states to the environment TensorDicts, use the method :func:`~torchrl.modules.rnn.GRUModule.make_tensordict_primer`.
+        If this class is a submodule in a larger module, the method :func:`~torchrl.models.utils.get_primers_from_module` can be called
+        on the parent module to automatically generate the primer transforms required for all submodules, including this one.
 
     Examples:
         >>> from torchrl.envs import TransformedEnv, InitTracker

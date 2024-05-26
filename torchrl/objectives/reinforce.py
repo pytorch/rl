@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
@@ -214,6 +214,13 @@ class ReinforceLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
     out_keys = ["loss_actor", "loss_value"]
+
+    actor_network: TensorDictModule
+    critic_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    critic_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_critic_network_params: TensorDictParams
 
     @classmethod
     def __new__(cls, *args, **kwargs):

@@ -5,14 +5,12 @@
 from __future__ import annotations
 
 import abc
-import json
 import os
 import textwrap
 import warnings
 from collections import OrderedDict
 from copy import copy
 from multiprocessing.context import get_spawning_popen
-from pathlib import Path
 from typing import Any, Dict, List, Sequence, Union
 
 import numpy as np
@@ -25,16 +23,17 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.memmap import MemoryMappedTensor
-from tensordict.utils import _STRDTYPE2DTYPE
 from torch import multiprocessing as mp
-from torch.utils._pytree import LeafSpec, tree_flatten, tree_map, tree_unflatten
+from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
 
 from torchrl._utils import implement_for, logger as torchrl_logger
-from torchrl.data.replay_buffers.utils import _is_int, INT_CLASSES
-
-SINGLE_TENSOR_BUFFER_NAME = os.environ.get(
-    "SINGLE_TENSOR_BUFFER_NAME", "_-single-tensor-_"
+from torchrl.data.replay_buffers.checkpointers import (
+    ListStorageCheckpointer,
+    StorageCheckpointerBase,
+    StorageEnsembleCheckpointer,
+    TensorStorageCheckpointer,
 )
+from torchrl.data.replay_buffers.utils import _init_pytree, _is_int, INT_CLASSES
 
 
 class Storage:
@@ -50,9 +49,23 @@ class Storage:
 
     ndim = 1
     max_size: int
+    _default_checkpointer: StorageCheckpointerBase
 
-    def __init__(self, max_size: int) -> None:
+    def __init__(
+        self, max_size: int, checkpointer: StorageCheckpointerBase | None = None
+    ) -> None:
         self.max_size = int(max_size)
+        self.checkpointer = checkpointer
+
+    @property
+    def checkpointer(self):
+        return self._checkpointer
+
+    @checkpointer.setter
+    def checkpointer(self, value: StorageCheckpointerBase | None) -> None:
+        if value is None:
+            value = self._default_checkpointer()
+        self._checkpointer = value
 
     @property
     def _is_full(self):
@@ -76,13 +89,11 @@ class Storage:
     def get(self, index: int) -> Any:
         ...
 
-    @abc.abstractmethod
     def dumps(self, path):
-        ...
+        self.checkpointer.dumps(self, path)
 
-    @abc.abstractmethod
     def loads(self, path):
-        ...
+        self.checkpointer.loads(self, path)
 
     def attach(self, buffer: Any) -> None:
         """This function attaches a sampler to this storage.
@@ -160,6 +171,18 @@ class Storage:
             f"Please report this exception as well as the use case (incl. buffer construction) on github."
         )
 
+    def save(self, *args, **kwargs):
+        """Alias for :meth:`~.dumps`."""
+        return self.dumps(*args, **kwargs)
+
+    def dump(self, *args, **kwargs):
+        """Alias for :meth:`~.dumps`."""
+        return self.dumps(*args, **kwargs)
+
+    def load(self, *args, **kwargs):
+        """Alias for :meth:`~.loads`."""
+        return self.loads(*args, **kwargs)
+
 
 class ListStorage(Storage):
     """A storage stored in a list.
@@ -173,19 +196,11 @@ class ListStorage(Storage):
 
     """
 
+    _default_checkpointer = ListStorageCheckpointer
+
     def __init__(self, max_size: int):
         super().__init__(max_size)
         self._storage = []
-
-    def dumps(self, path):
-        raise NotImplementedError(
-            "ListStorage doesn't support serialization via `dumps` - `loads` API."
-        )
-
-    def loads(self, path):
-        raise NotImplementedError(
-            "ListStorage doesn't support serialization via `dumps` - `loads` API."
-        )
 
     def set(self, cursor: Union[int, Sequence[int], slice], data: Any):
         if not isinstance(cursor, INT_CLASSES):
@@ -351,6 +366,7 @@ class TensorStorage(Storage):
     """
 
     _storage = None
+    _default_checkpointer = TensorStorageCheckpointer
 
     def __init__(
         self,
@@ -388,82 +404,7 @@ class TensorStorage(Storage):
             else "auto"
         )
         self._storage = storage
-
-    def dumps(self, path):
-        path = Path(path)
-        path.mkdir(exist_ok=True)
-
-        if not self.initialized:
-            raise RuntimeError("Cannot save a non-initialized storage.")
-        metadata = {}
-        if is_tensor_collection(self._storage):
-            # try to load the path and overwrite.
-            self._storage.memmap(
-                path, copy_existing=True, num_threads=torch.get_num_threads()
-            )
-            is_pytree = False
-        else:
-            _save_pytree(self._storage, metadata, path)
-            is_pytree = True
-
-        with open(path / "storage_metadata.json", "w") as file:
-            json.dump(
-                {
-                    "metadata": metadata,
-                    "is_pytree": is_pytree,
-                    "len": self._len,
-                },
-                file,
-            )
-
-    def loads(self, path):
-        with open(path / "storage_metadata.json", "r") as file:
-            metadata = json.load(file)
-        is_pytree = metadata["is_pytree"]
-        _len = metadata["len"]
-        if is_pytree:
-            path = Path(path)
-            for local_path, md in metadata["metadata"].items():
-                # load tensor
-                local_path_dot = local_path.replace(".", "/")
-                total_tensor_path = path / (local_path_dot + ".memmap")
-                shape = torch.Size(md["shape"])
-                dtype = _STRDTYPE2DTYPE[md["dtype"]]
-                tensor = MemoryMappedTensor.from_filename(
-                    filename=total_tensor_path, shape=shape, dtype=dtype
-                )
-                # split path
-                local_path = local_path.split(".")
-                # replace potential dots
-                local_path = [_path.replace("_<dot>_", ".") for _path in local_path]
-                if self.initialized:
-                    # copy in-place
-                    _storage_tensor = self._storage
-                    # in this case there is a single tensor, so we skip
-                    if local_path != ["_-single-tensor-_"]:
-                        for _path in local_path:
-                            if _path.isdigit():
-                                _path_attempt = int(_path)
-                                try:
-                                    _storage_tensor = _storage_tensor[_path_attempt]
-                                    continue
-                                except IndexError:
-                                    pass
-                            _storage_tensor = _storage_tensor[_path]
-                    _storage_tensor.copy_(tensor)
-                else:
-                    raise RuntimeError(
-                        "Cannot fill a non-initialized pytree-based TensorStorage."
-                    )
-        else:
-            _storage = TensorDict.load_memmap(path)
-            if not self.initialized:
-                # this should not be reached if is_pytree=True
-                self._init(_storage[0])
-                self._storage.update_(_storage)
-            else:
-                self._storage.copy_(_storage)
-        self._len = _len
+        self._last_cursor = None
 
     @property
     def _len(self):
@@ -689,6 +630,8 @@ class TensorStorage(Storage):
         data: Union[TensorDictBase, torch.Tensor],
     ):
 
+        self._last_cursor = cursor
+
         if isinstance(data, list):
             # flip list
             try:
@@ -725,6 +668,8 @@ class TensorStorage(Storage):
         cursor: Union[int, Sequence[int], slice],
         data: Union[TensorDictBase, torch.Tensor],
     ):
+
+        self._last_cursor = cursor
 
         if isinstance(data, list):
             # flip list
@@ -892,6 +837,8 @@ class LazyTensorStorage(TensorStorage):
 
     """
 
+    _default_checkpointer = TensorStorageCheckpointer
+
     def __init__(
         self,
         max_size: int,
@@ -911,10 +858,12 @@ class LazyTensorStorage(TensorStorage):
 
         def max_size_along_dim0(data_shape):
             if self.ndim > 1:
-                return (
+                result = (
                     -(self.max_size // -data_shape[: self.ndim - 1].numel()),
                     *data_shape,
                 )
+                self.max_size = torch.Size(result).numel()
+                return result
             return (self.max_size, *data_shape)
 
         if is_tensor_collection(data):
@@ -1002,6 +951,8 @@ class LazyMemmapStorage(LazyTensorStorage):
             is_shared=False)
 
     """
+
+    _default_checkpointer = TensorStorageCheckpointer
 
     def __init__(
         self,
@@ -1094,10 +1045,12 @@ class LazyMemmapStorage(LazyTensorStorage):
 
         def max_size_along_dim0(data_shape):
             if self.ndim > 1:
-                return (
+                result = (
                     -(self.max_size // -data_shape[: self.ndim - 1].numel()),
                     *data_shape,
                 )
+                self.max_size = torch.Size(result).numel()
+                return result
             return (self.max_size, *data_shape)
 
         if is_tensor_collection(data):
@@ -1147,6 +1100,8 @@ class StorageEnsemble(Storage):
 
     """
 
+    _default_checkpointer = StorageEnsembleCheckpointer
+
     def __init__(
         self,
         *storages: Storage,
@@ -1193,22 +1148,6 @@ class StorageEnsemble(Storage):
 
     def _get_storage(self, sub):
         return self._storages[sub]
-
-    def dumps(self, path: Path):
-        path = Path(path).absolute()
-        for i, storage in enumerate(self._storages):
-            storage.dumps(path / str(i))
-        if self._transforms is not None:
-            for i, transform in enumerate(self._transforms):
-                torch.save(transform.state_dict(), path / f"{i}_transform.pt")
-
-    def loads(self, path: Path):
-        path = Path(path).absolute()
-        for i, storage in enumerate(self._storages):
-            storage.loads(path / str(i))
-        if self._transforms is not None:
-            for i, transform in enumerate(self._transforms):
-                transform.load_state_dict(torch.load(path / f"{i}_transform.pt"))
 
     def state_dict(self) -> Dict[str, Any]:
         raise NotImplementedError
@@ -1325,172 +1264,6 @@ def _make_memmap(tensor, path):
 
 def _make_empty_memmap(shape, dtype, path):
     return MemoryMappedTensor.empty(shape=shape, dtype=dtype, filename=path)
-
-
-@implement_for("torch", "2.3", None)
-def _path2str(path, default_name=None):
-    # Uses the Keys defined in pytree to build a path
-    from torch.utils._pytree import MappingKey, SequenceKey
-
-    if default_name is None:
-        default_name = SINGLE_TENSOR_BUFFER_NAME
-    if not path:
-        return default_name
-    if isinstance(path, tuple):
-        return "/".join([_path2str(_sub, default_name=default_name) for _sub in path])
-    if isinstance(path, MappingKey):
-        if not isinstance(path.key, (int, str, bytes)):
-            raise ValueError("Values must be of type int, str or bytes in PyTree maps.")
-        result = str(path.key)
-        if result == default_name:
-            raise RuntimeError(
-                "A tensor had the same identifier as the default name used when the buffer contains "
-                f"a single tensor (name={default_name}). This behaviour is not allowed. Please rename your "
-                f"tensor in the map/dict or set a new default name with the environment variable SINGLE_TENSOR_BUFFER_NAME."
-            )
-        return result
-    if isinstance(path, SequenceKey):
-        return str(path.idx)
-
-
-@implement_for("torch", None, "2.3")
-def _path2str(path, default_name=None):  # noqa: F811
-    raise RuntimeError
-
-
-def _get_paths(spec, cumulpath=""):
-    # alternative way to build a path without the keys
-    if isinstance(spec, LeafSpec):
-        yield cumulpath if cumulpath else SINGLE_TENSOR_BUFFER_NAME
-
-    contexts = spec.context
-    children_specs = spec.children_specs
-    if contexts is None:
-        contexts = range(len(children_specs))
-
-    for context, spec in zip(contexts, children_specs):
-        cpath = "/".join((cumulpath, str(context))) if cumulpath else str(context)
-        yield from _get_paths(spec, cpath)
-
-
-def _save_pytree_common(tensor_path, path, tensor, metadata):
-    if "." in tensor_path:
-        tensor_path.replace(".", "_<dot>_")
-    total_tensor_path = path / (tensor_path + ".memmap")
-    if os.path.exists(total_tensor_path):
-        MemoryMappedTensor.from_filename(
-            shape=tensor.shape,
-            filename=total_tensor_path,
-            dtype=tensor.dtype,
-        ).copy_(tensor)
-    else:
-        os.makedirs(total_tensor_path.parent, exist_ok=True)
-        MemoryMappedTensor.from_tensor(
-            tensor,
-            filename=total_tensor_path,
-            copy_existing=True,
-            copy_data=True,
-        )
-    key = tensor_path.replace("/", ".")
-    if key in metadata:
-        raise KeyError(
-            "At least two values have conflicting representations in "
-            f"the data structure to be serialized: {key}."
-        )
-    metadata[key] = {
-        "dtype": str(tensor.dtype),
-        "shape": list(tensor.shape),
-    }
-
-
-@implement_for("torch", "2.3", None)
-def _save_pytree(_storage, metadata, path):
-    from torch.utils._pytree import tree_map_with_path
-
-    def save_tensor(
-        tensor_path: tuple, tensor: torch.Tensor, metadata=metadata, path=path
-    ):
-        tensor_path = _path2str(tensor_path)
-        _save_pytree_common(tensor_path, path, tensor, metadata)
-
-    tree_map_with_path(save_tensor, _storage)
-
-
-@implement_for("torch", None, "2.3")
-def _save_pytree(_storage, metadata, path):  # noqa: F811
-
-    flat_storage, storage_specs = tree_flatten(_storage)
-    storage_paths = _get_paths(storage_specs)
-
-    def save_tensor(
-        tensor_path: str, tensor: torch.Tensor, metadata=metadata, path=path
-    ):
-        _save_pytree_common(tensor_path, path, tensor, metadata)
-
-    for tensor, tensor_path in zip(flat_storage, storage_paths):
-        save_tensor(tensor_path, tensor)
-
-
-def _init_pytree_common(tensor_path, scratch_dir, max_size_fn, tensor):
-    if "." in tensor_path:
-        tensor_path.replace(".", "_<dot>_")
-    if scratch_dir is not None:
-        total_tensor_path = Path(scratch_dir) / (tensor_path + ".memmap")
-        if os.path.exists(total_tensor_path):
-            raise RuntimeError(
-                f"The storage of tensor {total_tensor_path} already exists. "
-                f"To load an existing replay buffer, use storage.loads. "
-                f"Choose a different path to store your buffer or delete the existing files."
-            )
-        os.makedirs(total_tensor_path.parent, exist_ok=True)
-    else:
-        total_tensor_path = None
-    out = MemoryMappedTensor.empty(
-        shape=max_size_fn(tensor.shape),
-        filename=total_tensor_path,
-        dtype=tensor.dtype,
-    )
-    try:
-        filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-        torchrl_logger.debug(
-            f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
-        )
-    except (RuntimeError, AttributeError):
-        pass
-    return out
-
-
-@implement_for("torch", "2.3", None)
-def _init_pytree(scratch_dir, max_size_fn, data):
-    from torch.utils._pytree import tree_map_with_path
-
-    # If not a tensorclass/tensordict, it must be a tensor(-like) or a PyTree
-    # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
-    def save_tensor(tensor_path: tuple, tensor: torch.Tensor):
-        tensor_path = _path2str(tensor_path)
-        return _init_pytree_common(tensor_path, scratch_dir, max_size_fn, tensor)
-
-    out = tree_map_with_path(save_tensor, data)
-    return out
-
-
-@implement_for("torch", None, "2.3")
-def _init_pytree(scratch_dir, max_size, data):  # noqa: F811
-
-    flat_data, data_specs = tree_flatten(data)
-    data_paths = _get_paths(data_specs)
-    data_paths = list(data_paths)
-
-    # If not a tensorclass/tensordict, it must be a tensor(-like) or a PyTree
-    # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
-    def save_tensor(tensor_path: str, tensor: torch.Tensor):
-        return _init_pytree_common(tensor_path, scratch_dir, max_size, tensor)
-
-    out = []
-    for tensor, tensor_path in zip(flat_data, data_paths):
-        out.append(save_tensor(tensor_path, tensor))
-
-    return tree_unflatten(out, data_specs)
 
 
 def _flip_list(data):
