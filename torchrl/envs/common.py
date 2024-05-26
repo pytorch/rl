@@ -76,6 +76,7 @@ class EnvMetaData:
         self.env_str = env_str
         self.batch_locked = batch_locked
         self.device_map = device_map
+        self.has_dynamic_specs = _has_dynamic_specs(specs)
 
     @property
     def tensordict(self):
@@ -2293,12 +2294,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @property
     def _has_dynamic_specs(self) -> bool:
-        return any(
-            any(s == -1 for s in spec.shape)
-            for spec in self.output_spec.values(True, True)
-        ) or any(
-            any(s == -1 for s in spec.shape)
-            for spec in self.input_spec.values(True, True)
+        return _has_dynamic_specs(self.output_spec) or _has_dynamic_specs(
+            self.input_spec
         )
 
     def rollout(
@@ -3158,3 +3155,7 @@ def _get_sync_func(policy_device, env_device):
 
 def _do_nothing():
     return
+
+
+def _has_dynamic_specs(spec: CompositeSpec):
+    return any(any(s == -1 for s in spec.shape) for spec in spec.values(True, True))

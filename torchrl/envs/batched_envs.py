@@ -21,7 +21,12 @@ from warnings import warn
 
 import torch
 
-from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+from tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict._tensordict import unravel_key
 from torch import multiprocessing as mp
 from torchrl._utils import (
@@ -32,7 +37,7 @@ from torchrl._utils import (
 )
 from torchrl.data.tensor_specs import CompositeSpec
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
-from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase
+from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, EnvMetaData
 from torchrl.envs.env_creator import get_env_metadata
 
 # legacy
@@ -114,7 +119,7 @@ class _PEnvMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         serial_for_single = kwargs.pop("serial_for_single", False)
         if serial_for_single:
-            num_workers = kwargs.get("num_workers", None)
+            num_workers = kwargs.get("num_workers")
             # Remove start method from kwargs
             kwargs.pop("mp_start_method", None)
             if num_workers is None:
@@ -348,6 +353,7 @@ class BatchedEnvBase(EnvBase):
                 f"Cannot use mp_start_method={mp_start_method} with envs of type {type(self)}."
             )
         self._mp_start_method = mp_start_method
+        self._use_buffers = None
 
     @property
     def non_blocking(self):
@@ -359,7 +365,7 @@ class BatchedEnvBase(EnvBase):
 
     @property
     def _sync_m2w(self) -> Callable:
-        sync_func = self.__dict__.get("_sync_m2w_value", None)
+        sync_func = self.__dict__.get("_sync_m2w_value")
         if sync_func is None:
             sync_m2w, sync_w2m = self._find_sync_values()
             self.__dict__["_sync_m2w_value"] = sync_m2w
@@ -369,7 +375,7 @@ class BatchedEnvBase(EnvBase):
 
     @property
     def _sync_w2m(self) -> Callable:
-        sync_func = self.__dict__.get("_sync_w2m_value", None)
+        sync_func = self.__dict__.get("_sync_w2m_value")
         if sync_func is None:
             sync_m2w, sync_w2m = self._find_sync_values()
             self.__dict__["_sync_m2w_value"] = sync_m2w
@@ -379,6 +385,8 @@ class BatchedEnvBase(EnvBase):
 
     def _find_sync_values(self):
         """Returns the m2w and w2m sync values, in that order."""
+        if not self._use_buffers:
+            return _do_nothing, _do_nothing
         # Simplest case: everything is on the same device
         worker_device = self.shared_tensordict_parent.device
         self_device = self.device
@@ -455,15 +463,18 @@ class BatchedEnvBase(EnvBase):
     ):
         if self._single_task:
             # if EnvCreator, the metadata are already there
-            meta_data = get_env_metadata(create_env_fn[0], create_env_kwargs[0])
+            meta_data: EnvMetaData = get_env_metadata(
+                create_env_fn[0], create_env_kwargs[0]
+            )
             self.meta_data = meta_data.expand(
                 *(self.num_workers, *meta_data.batch_size)
             )
+            self._use_buffers = not self.meta_data.has_dynamic_specs
             if self.share_individual_td is None:
                 self.share_individual_td = False
         else:
             n_tasks = len(create_env_fn)
-            self.meta_data = []
+            self.meta_data: List[EnvMetaData] = []
             for i in range(n_tasks):
                 self.meta_data.append(
                     get_env_metadata(create_env_fn[i], create_env_kwargs[i]).clone()
@@ -478,6 +489,9 @@ class BatchedEnvBase(EnvBase):
                         "be True to accomodate non-stackable tensors."
                     )
                 self.share_individual_td = share_individual_td
+            self._use_buffers = all(
+                not metadata.has_dynamic_specs for metadata in self.meta_data
+            )
         self._set_properties()
 
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
@@ -614,6 +628,8 @@ class BatchedEnvBase(EnvBase):
 
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
+        if not self._use_buffers:
+            return
         shared_tensordict_parent = self._env_tensordict.clone()
         if self._env_tensordict.shape[0] != self.num_workers:
             raise RuntimeError(
@@ -917,25 +933,47 @@ class SerialEnv(BatchedEnvBase):
                 tensordict_ = None
             tds.append((i, tensordict_))
 
-        self._sync_m2w()
+        if not self._use_buffers:
+            out_tds = [None] * self.num_workers
 
+        self._sync_m2w()
         for i, tensordict_ in tds:
             _env = self._envs[i]
             _td = _env.reset(tensordict=tensordict_, **list_of_kwargs[i])
-            try:
-                self.shared_tensordicts[i].update_(
-                    _td,
-                    keys_to_update=list(self._selected_reset_keys_filt),
-                    non_blocking=self.non_blocking,
-                )
-            except RuntimeError as err:
-                if "no_grad mode" in str(err):
-                    raise RuntimeError(
-                        "Cannot update a view of a tensordict when gradients are required. "
-                        "To collect gradient across sub-environments, please set the "
-                        "share_individual_td argument to True."
+            if self._use_buffers:
+                try:
+                    self.shared_tensordicts[i].update_(
+                        _td,
+                        keys_to_update=list(self._selected_reset_keys_filt),
+                        non_blocking=self.non_blocking,
                     )
-                raise
+                except RuntimeError as err:
+                    if "no_grad mode" in str(err):
+                        raise RuntimeError(
+                            "Cannot update a view of a tensordict when gradients are required. "
+                            "To collect gradient across sub-environments, please set the "
+                            "share_individual_td argument to True."
+                        )
+                    raise
+            else:
+                out_tds[i] = _td
+        if not self._use_buffers:
+            first_non_none = None
+            first_none = None
+            for i, item in enumerate(out_tds):
+                if item is not None:
+                    first_non_none = i
+                    if first_none is not None:
+                        break
+                else:
+                    first_none = i
+                    if first_non_none is not None:
+                        break
+            if first_none is not None:
+                empty_td = out_tds[first_non_none].empty(recurse=True)
+                out_tds = [item if item is not None else empty_td for item in out_tds]
+
+            return LazyStackedTensorDict.maybe_dense_stack(out_tds)
 
         selected_output_keys = self._selected_reset_keys_filt
         device = self.device
@@ -971,7 +1009,6 @@ class SerialEnv(BatchedEnvBase):
         tensordict: TensorDict,
     ) -> TensorDict:
         tensordict_in = tensordict.clone(False)
-        next_td = self.shared_tensordict_parent.get("next")
         data_in = []
         for i in range(self.num_workers):
             # shared_tensordicts are locked, and we need to select the keys since we update in-place.
@@ -986,13 +1023,21 @@ class SerialEnv(BatchedEnvBase):
 
         self._sync_m2w()
 
-        for i, _data_in in enumerate(data_in):
-            out_td = self._envs[i]._step(_data_in)
-            next_td[i].update_(
-                out_td,
-                keys_to_update=list(self._env_output_keys),
-                non_blocking=self.non_blocking,
-            )
+        if self._use_buffers:
+            next_td = self.shared_tensordict_parent.get("next")
+            for i, _data_in in enumerate(data_in):
+                out_td = self._envs[i]._step(_data_in)
+                next_td[i].update_(
+                    out_td,
+                    keys_to_update=list(self._env_output_keys),
+                    non_blocking=self.non_blocking,
+                )
+        else:
+            tds = []
+            for i, _data_in in enumerate(data_in):
+                out_td = self._envs[i]._step(_data_in)
+                tds.append(out_td)
+            return LazyStackedTensorDict.maybe_dense_stack(tds)
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -1229,7 +1274,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         self.parent_channels = []
         self._workers = []
-        func = _run_worker_pipe_shared_mem
+        if self._use_buffers:
+            func = _run_worker_pipe_shared_mem
+        else:
+            func = _run_worker_pipe_direct
         # We look for cuda tensors through the leaves
         # because the shared tensordict could be partially on cuda
         # and some leaves may be inaccessible through get (e.g., LazyStacked)
@@ -1238,7 +1286,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         def look_for_cuda(tensor, has_cuda=has_cuda):
             has_cuda[0] = has_cuda[0] or tensor.is_cuda
 
-        self.shared_tensordict_parent.apply(look_for_cuda, filter_empty=True)
+        if self._use_buffers:
+            self.shared_tensordict_parent.apply(look_for_cuda, filter_empty=True)
         has_cuda = has_cuda[0]
         if has_cuda:
             self.event = torch.cuda.Event()
@@ -1261,15 +1310,20 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "child_pipe": child_pipe,
                         "env_fun": env_fun,
                         "env_fun_kwargs": self.create_env_kwargs[idx],
-                        "shared_tensordict": self.shared_tensordicts[idx],
-                        "_selected_input_keys": self._selected_input_keys,
-                        "_selected_reset_keys": self._selected_reset_keys,
-                        "_selected_step_keys": self._selected_step_keys,
                         "has_lazy_inputs": self.has_lazy_inputs,
                         "num_threads": num_sub_threads,
                         "non_blocking": self.non_blocking,
                     }
                 )
+                if self._use_buffers:
+                    kwargs[idx].update(
+                        {
+                            "shared_tensordict": self.shared_tensordicts[idx],
+                            "_selected_input_keys": self._selected_input_keys,
+                            "_selected_reset_keys": self._selected_reset_keys,
+                            "_selected_step_keys": self._selected_step_keys,
+                        }
+                    )
                 process = proc_fun(target=func, kwargs=kwargs[idx])
                 process.daemon = True
                 process.start()
@@ -1311,11 +1365,29 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             event.wait(self._timeout)
             event.clear()
 
+    def _step_and_maybe_reset_no_buffers(
+        self, tensordict: TensorDictBase
+    ) -> Tuple[TensorDictBase, TensorDictBase]:
+        for i, data in enumerate(tensordict.unbind(0)):
+            self.parent_channels[i].send(("step_and_maybe_reset", data))
+        out_next, out_root = [], []
+        for i, channel in enumerate(self.parent_channels):
+            self._events[i].wait()
+            next_td, root_td = channel.recv()
+            out_root.append(root_td)
+            out_next.append(next_td)
+        return LazyStackedTensorDict.maybe_dense_stack(
+            out_next
+        ), LazyStackedTensorDict.maybe_dense_stack(out_root)
+
     @torch.no_grad()
     @_check_start
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
+        if not self._use_buffers:
+            # Simply dispatch the input to the workers
+            return self._step_and_maybe_reset_no_buffers(tensordict)
         # We must use the in_keys and nothing else for the following reasons:
         # - efficiency: copying all the keys will in practice mean doing a lot
         #   of writing operations since the input tensordict may (and often will)
@@ -1324,13 +1396,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         #   and this transform overrides an observation key (eg, CatFrames)
         #   the shape, dtype or device may not necessarily match and writing
         #   the value in-place will fail.
-
         self.shared_tensordict_parent.update_(
             tensordict,
             keys_to_update=self._env_input_keys,
             non_blocking=self.non_blocking,
         )
-        next_td_passthrough = tensordict.get("next", None)
+        next_td_passthrough = tensordict.get("next")
         if next_td_passthrough is not None:
             # if we have input "next" data (eg, RNNs which pass the next state)
             # the sub-envs will need to process them through step_and_maybe_reset.
@@ -1381,9 +1452,23 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         tensordict.set("next", next_td)
         return tensordict, tensordict_
 
+    def _step_no_buffers(
+        self, tensordict: TensorDictBase
+    ) -> Tuple[TensorDictBase, TensorDictBase]:
+        for i, data in enumerate(tensordict.unbind(0)):
+            self.parent_channels[i].send(("step", data))
+        out_tds = []
+        for i, channel in enumerate(self.parent_channels):
+            self._events[i].wait()
+            td = channel.recv()
+            out_tds.append(td)
+        return LazyStackedTensorDict.maybe_dense_stack(out_tds)
+
     @torch.no_grad()
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if not self._use_buffers:
+            return self._step_no_buffers(tensordict)
         # We must use the in_keys and nothing else for the following reasons:
         # - efficiency: copying all the keys will in practice mean doing a lot
         #   of writing operations since the input tensordict may (and often will)
@@ -1398,7 +1483,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             keys_to_update=list(self._env_input_keys),
             non_blocking=self.non_blocking,
         )
-        next_td_passthrough = tensordict.get("next", None)
+        next_td_passthrough = tensordict.get("next")
         if next_td_passthrough is not None:
             # if we have input "next" data (eg, RNNs which pass the next state)
             # the sub-envs will need to process them through step_and_maybe_reset.
@@ -1450,14 +1535,48 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         self._sync_w2m()
         return out
 
+    def _reset_no_buffers(
+        self,
+        tensordict: TensorDictBase,
+        reset_kwargs_list,
+        needs_resetting,
+    ) -> Tuple[TensorDictBase, TensorDictBase]:
+        tdunbound = (
+            tensordict.unbind(0)
+            if is_tensor_collection(tensordict)
+            else [None] * self.num_workers
+        )
+        for i, (data, reset_kwargs) in enumerate(zip(tdunbound, reset_kwargs_list)):
+            if not needs_resetting[i]:
+                continue
+            self.parent_channels[i].send(("reset", (data, reset_kwargs)))
+        out_tds = []
+        for i, channel in enumerate(self.parent_channels):
+            if not needs_resetting[i]:
+                out_tds.append(None)
+            self._events[i].wait()
+            td = channel.recv()
+            out_tds.append(td)
+        if not needs_resetting.all():
+            for data in out_tds:
+                if data is not None:
+                    empty_data = data.empty(recurse=True)
+                    break
+            else:
+                raise RuntimeError("Could not find any non-None reset result")
+            out_tds = [out if out is not None else empty_data for out in out_tds]
+        return LazyStackedTensorDict.maybe_dense_stack(out_tds)
+
     @torch.no_grad()
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+
         list_of_kwargs = kwargs.pop("list_of_kwargs", [kwargs] * self.num_workers)
         if kwargs is not list_of_kwargs[0] and kwargs:
             # this means that kwargs had more than one element and that a list was provided
             for elt in list_of_kwargs:
                 elt.update(kwargs)
+
         if tensordict is not None:
             needs_resetting = _aggregate_end_of_traj(
                 tensordict, reset_keys=self.reset_keys
@@ -1472,6 +1591,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             needs_resetting = torch.ones(
                 (self.num_workers,), device=self.device, dtype=torch.bool
             )
+
+        if not self._use_buffers:
+            return self._reset_no_buffers(tensordict, list_of_kwargs, needs_resetting)
 
         outs = []
         for i in range(self.num_workers):
@@ -1571,8 +1693,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             for i in range(self.num_workers):
                 self._events[i].wait(self._timeout)
                 self._events[i].clear()
-
-            del self.shared_tensordicts, self.shared_tensordict_parent
+            if self._use_buffers:
+                del self.shared_tensordicts, self.shared_tensordict_parent
 
             for channel in self.parent_channels:
                 channel.close()
@@ -1840,6 +1962,187 @@ def _run_worker_pipe_shared_mem(
                 data,
                 next_shared_tensordict,
                 root_shared_tensordict,
+            )
+            mp_event.set()
+            child_pipe.close()
+            if verbose:
+                torchrl_logger.info(f"{pid} closed")
+            gc.collect()
+            break
+
+        elif cmd == "load_state_dict":
+            env.load_state_dict(data)
+            mp_event.set()
+
+        elif cmd == "state_dict":
+            state_dict = _recursively_strip_locks_from_state_dict(env.state_dict())
+            msg = "state_dict"
+            child_pipe.send((msg, state_dict))
+            del state_dict
+
+        else:
+            err_msg = f"{cmd} from env"
+            try:
+                attr = getattr(env, cmd)
+                if callable(attr):
+                    args, kwargs = data
+                    args_replace = []
+                    for _arg in args:
+                        if isinstance(_arg, str) and _arg == "_self":
+                            continue
+                        else:
+                            args_replace.append(_arg)
+                    result = attr(*args_replace, **kwargs)
+                else:
+                    result = attr
+            except Exception as err:
+                raise AttributeError(
+                    f"querying {err_msg} resulted in an error."
+                ) from err
+            if cmd not in ("to"):
+                child_pipe.send(("_".join([cmd, "done"]), result))
+            else:
+                # don't send env through pipe
+                child_pipe.send(("_".join([cmd, "done"]), None))
+
+
+def _run_worker_pipe_direct(
+    parent_pipe: connection.Connection,
+    child_pipe: connection.Connection,
+    env_fun: Union[EnvBase, Callable],
+    env_fun_kwargs: Dict[str, Any],
+    mp_event: mp.Event = None,
+    non_blocking: bool = False,
+    has_lazy_inputs: bool = False,
+    verbose: bool = False,
+    num_threads: int | None = None,  # for fork start method
+) -> None:
+    if num_threads is not None:
+        torch.set_num_threads(num_threads)
+
+    parent_pipe.close()
+    pid = os.getpid()
+    if not isinstance(env_fun, EnvBase):
+        env = env_fun(**env_fun_kwargs)
+    else:
+        if env_fun_kwargs:
+            raise RuntimeError(
+                "env_fun_kwargs must be empty if an environment is passed to a process."
+            )
+        env = env_fun
+    del env_fun
+    for spec in env.output_spec.values(True, True):
+        if spec.device.type == "cuda":
+            has_cuda = True
+            break
+    else:
+        for spec in env.input_spec.values(True, True):
+            if spec.device.type == "cuda":
+                has_cuda = True
+                break
+        else:
+            has_cuda = False
+    if has_cuda:
+        event = torch.cuda.Event()
+    else:
+        event = None
+
+    i = -1
+    import torchrl
+
+    _timeout = torchrl._utils.BATCHED_PIPE_TIMEOUT
+
+    initialized = False
+
+    child_pipe.send("started")
+    while True:
+        try:
+            if child_pipe.poll(_timeout):
+                cmd, data = child_pipe.recv()
+            else:
+                raise TimeoutError(
+                    f"Worker timed out after {_timeout}s, "
+                    f"increase timeout if needed throught the BATCHED_PIPE_TIMEOUT environment variable."
+                )
+        except EOFError as err:
+            raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
+        if cmd == "seed":
+            if not initialized:
+                raise RuntimeError("call 'init' before closing")
+            # torch.manual_seed(data)
+            # np.random.seed(data)
+            new_seed = env.set_seed(data[0], static_seed=data[1])
+            child_pipe.send(("seeded", new_seed))
+
+        elif cmd == "init":
+            if verbose:
+                torchrl_logger.info(f"initializing {pid}")
+            if initialized:
+                raise RuntimeError("worker already initialized")
+            i = 0
+
+            initialized = True
+
+        elif cmd == "reset":
+            if verbose:
+                torchrl_logger.info(f"resetting worker {pid}")
+            if not initialized:
+                raise RuntimeError("call 'init' before resetting")
+            # we use 'data' to pass the keys that we need to pass to reset,
+            # because passing the entire buffer may have unwanted consequences
+            data, reset_kwargs = data
+            cur_td = env.reset(
+                tensordict=data,
+                **reset_kwargs,
+            )
+            if event is not None:
+                event.record()
+                event.synchronize()
+            mp_event.set()
+            child_pipe.send(cur_td)
+            del cur_td
+
+        elif cmd == "step":
+            if not initialized:
+                raise RuntimeError("called 'init' before step")
+            i += 1
+            # No need to copy here since we don't write in-place
+            next_td = env._step(data)
+            if event is not None:
+                event.record()
+                event.synchronize()
+            mp_event.set()
+            child_pipe.send(next_td)
+            del next_td
+
+        elif cmd == "step_and_maybe_reset":
+            if not initialized:
+                raise RuntimeError("called 'init' before step")
+            i += 1
+            # We must copy the root shared td here, or at least get rid of done:
+            # if we don't `td is root_shared_tensordict`
+            # which means that root_shared_tensordict will carry the content of next
+            # in the next iteration. When using StepCounter, it will look for an
+            # existing done state, find it and consider the env as done by input (not
+            # by output) of the step!
+            # Caveat: for RNN we may need some keys of the "next" TD so we pass the list
+            # through data
+            td, root_next_td = env.step_and_maybe_reset(data)
+
+            if event is not None:
+                event.record()
+                event.synchronize()
+            mp_event.set()
+            child_pipe.send((td, root_next_td))
+            del td, root_next_td
+
+        elif cmd == "close":
+            if not initialized:
+                raise RuntimeError("call 'init' before closing")
+            env.close()
+            del (
+                env,
+                data,
             )
             mp_event.set()
             child_pipe.close()

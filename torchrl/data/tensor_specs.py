@@ -2127,10 +2127,11 @@ class UnboundedContinuousTensorSpec(TensorSpec):
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
-        if any(val < 0 for val in shape):
-            raise ValueError(
-                f"{self.__class__.__name__}.expand does not support negative shapes."
-            )
+        # TODO: this blocks batched envs which expand shapes
+        # if any(val < 0 for val in shape):
+        #     raise ValueError(
+        #         f"{self.__class__.__name__}.expand does not support negative shapes."
+        #     )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
                 f"The last {self.ndim} of the expanded shape {shape} must match the"

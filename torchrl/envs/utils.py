@@ -293,7 +293,6 @@ class _StepMDP:
                 tensordict.stack_dim,
             )
             return out
-
         next_td = tensordict._get_str("next", None)
         if self.validate(tensordict):
             if self.keep_other:
@@ -306,12 +305,25 @@ class _StepMDP:
                     out,
                     _allow_absent_keys=self._allow_absent_keys,
                 )
-            self._grab_and_place(
-                self.keys_from_next,
-                next_td,
-                out,
-                _allow_absent_keys=self._allow_absent_keys,
-            )
+            if isinstance(next_td, LazyStackedTensorDict):
+                if not isinstance(out, LazyStackedTensorDict):
+                    out = LazyStackedTensorDict(
+                        *out.unbind(next_td.stack_dim), stack_dim=next_td.stack_dim
+                    )
+                for _next_td, _out in zip(next_td.tensordicts, out.tensordicts):
+                    self._grab_and_place(
+                        self.keys_from_next,
+                        _next_td,
+                        _out,
+                        _allow_absent_keys=self._allow_absent_keys,
+                    )
+            else:
+                self._grab_and_place(
+                    self.keys_from_next,
+                    next_td,
+                    out,
+                    _allow_absent_keys=self._allow_absent_keys,
+                )
             return out
         else:
             out = next_td.empty()
