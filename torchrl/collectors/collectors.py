@@ -2424,10 +2424,10 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                 data, idx = new_data
                 self.out_tensordicts[idx] = data
                 if use_buffers is None and j > 0:
-                    self._use_buffers = False
+                    use_buffers = self._use_buffers = False
             except TypeError:
                 if use_buffers is None:
-                    self._use_buffers = True
+                    use_buffers = self._use_buffers = True
                     idx = new_data
                 else:
                     raise

@@ -560,6 +560,7 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
         total_frames=20000,
         device="cpu",
     )
+    assert collector._use_buffers
     for i, d in enumerate(collector):
         if i == 0:
             b1 = d
@@ -587,14 +588,18 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
             b2c = d
         else:
             break
+    assert ccollector._use_buffers
     assert d.names[-1] == "time"
-    with pytest.raises(AssertionError):
-        assert_allclose_td(b1c, b2c)
 
-    assert_allclose_td(b1c, b1)
-    assert_allclose_td(b2c, b2)
+    try:
+        with pytest.raises(AssertionError):
+            assert_allclose_td(b1c, b2c)
 
-    ccollector.shutdown()
+        assert_allclose_td(b1c, b1)
+        assert_allclose_td(b2c, b2)
+    finally:
+        ccollector.shutdown()
+        del ccollector
 
 
 @pytest.mark.skipif(not _has_gym, reason="gym library is not installed")
