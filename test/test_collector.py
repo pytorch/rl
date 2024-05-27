@@ -560,18 +560,20 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
         total_frames=20000,
         device="cpu",
     )
-    assert collector._use_buffers
-    for i, d in enumerate(collector):
-        if i == 0:
-            b1 = d
-        elif i == 1:
-            b2 = d
-        else:
-            break
-    assert d.names[-1] == "time"
-    with pytest.raises(AssertionError):
-        assert_allclose_td(b1, b2)
-    collector.shutdown()
+    try:
+        assert collector._use_buffers
+        for i, d in enumerate(collector):
+            if i == 0:
+                b1 = d
+            elif i == 1:
+                b2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(b1, b2)
+    finally:
+        collector.shutdown()
 
     ccollector = aSyncDataCollector(
         create_env_fn=env_fn,
@@ -588,10 +590,11 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
             b2c = d
         else:
             break
-    assert ccollector._use_buffers
-    assert d.names[-1] == "time"
 
     try:
+        assert ccollector._use_buffers
+        assert d.names[-1] == "time"
+
         with pytest.raises(AssertionError):
             assert_allclose_td(b1c, b2c)
 
@@ -949,10 +952,12 @@ def test_collector_consistency(num_env, env_name, seed=100):
     env.set_seed(seed)
     rollout1b = env.rollout(policy=policy, max_steps=50, auto_reset=True)
     rollout2 = env.rollout(policy=policy, max_steps=50, auto_reset=True)
-    assert_allclose_td(rollout1a, rollout1b)
-    with pytest.raises(AssertionError):
-        assert_allclose_td(rollout1a, rollout2)
-    env.close()
+    try:
+        assert_allclose_td(rollout1a, rollout1b)
+        with pytest.raises(AssertionError):
+            assert_allclose_td(rollout1a, rollout2)
+    finally:
+        env.close()
 
     collector = SyncDataCollector(
         create_env_fn=env_fn,
@@ -966,17 +971,19 @@ def test_collector_consistency(num_env, env_name, seed=100):
     collector_iter = iter(collector)
     b1 = next(collector_iter)
     b2 = next(collector_iter)
-    with pytest.raises(AssertionError):
-        assert_allclose_td(b1, b2)
 
     # if num_env == 1:
     #     # rollouts collected through DataCollector are padded using pad_sequence, which introduces a first dimension
     #     rollout1a = rollout1a.unsqueeze(0)
-    assert (
-        rollout1a.batch_size == b1.batch_size
-    ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
-    assert_allclose_td(rollout1a, b1.select(*rollout1a.keys(True, True)))
-    collector.shutdown()
+    try:
+        with pytest.raises(AssertionError):
+            assert_allclose_td(b1, b2)
+        assert (
+            rollout1a.batch_size == b1.batch_size
+        ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
+        assert_allclose_td(rollout1a, b1.select(*rollout1a.keys(True, True)))
+    finally:
+        collector.shutdown()
 
 
 @pytest.mark.parametrize("num_env", [1, 2])
@@ -1078,6 +1085,7 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
 
     collector20.shutdown()
     del collector20
+
     data20 = torch.cat(data20, data1.ndim - 1)
     data20 = data20[..., :max_frames_per_traj]
 
