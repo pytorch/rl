@@ -34,6 +34,7 @@ from mocking_classes import (
     DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
+    EnvWithDynamicSpec,
     HeterogeneousCountingEnv,
     HeterogeneousCountingEnvPolicy,
     MockSerialEnv,
@@ -2581,6 +2582,44 @@ class TestUniqueTraj:
         finally:
             c.shutdown()
             del c
+
+
+class TestDynamicEnvs:
+    def test_dynamic_sync_collector(self):
+        env = EnvWithDynamicSpec()
+        policy = RandomPolicy(env.action_spec)
+        collector = SyncDataCollector(
+            env, policy, frames_per_batch=20, total_frames=100
+        )
+        for data in collector:
+            assert isinstance(data, LazyStackedTensorDict)
+
+    def test_dynamic_multisync_collector(self):
+        env = EnvWithDynamicSpec
+        policy = RandomPolicy(env().action_spec)
+        collector = MultiSyncDataCollector(
+            [env],
+            policy,
+            frames_per_batch=20,
+            total_frames=100,
+            use_buffers=False,
+            cat_results="stack",
+        )
+        for data in collector:
+            assert isinstance(data, LazyStackedTensorDict)
+
+    def test_dynamic_multiasync_collector(self):
+        env = EnvWithDynamicSpec
+        policy = RandomPolicy(env().action_spec)
+        collector = MultiaSyncDataCollector(
+            [env],
+            policy,
+            frames_per_batch=20,
+            total_frames=100,
+            # use_buffers=False,
+        )
+        for data in collector:
+            assert isinstance(data, LazyStackedTensorDict)
 
 
 if __name__ == "__main__":

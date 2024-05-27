@@ -3061,6 +3061,90 @@ class TestEnvWithDynamicSpec:
         rollout = env.rollout(4, return_contiguous=False)
         check_env_specs(env, return_contiguous=False)
 
+    @pytest.mark.skipif(not _has_gym, reason="requires gym to be installed")
+    @pytest.mark.parametrize("penv", [SerialEnv, ParallelEnv])
+    def test_batched_nondynamic(self, penv):
+        # Tests not using buffers in batched envs
+        env_buffers = penv(
+            3,
+            lambda: GymEnv(CARTPOLE_VERSIONED(), device=None),
+            use_buffers=True,
+            mp_start_method=mp_ctx if penv is ParallelEnv else None,
+        )
+        env_buffers.set_seed(0)
+        torch.manual_seed(0)
+        rollout_buffers = env_buffers.rollout(
+            20, return_contiguous=True, break_when_any_done=False
+        )
+        del env_buffers
+        gc.collect()
+
+        env_no_buffers = penv(
+            3,
+            lambda: GymEnv(CARTPOLE_VERSIONED(), device=None),
+            use_buffers=False,
+            mp_start_method=mp_ctx if penv is ParallelEnv else None,
+        )
+        env_no_buffers.set_seed(0)
+        torch.manual_seed(0)
+        rollout_no_buffers = env_no_buffers.rollout(
+            20, return_contiguous=True, break_when_any_done=False
+        )
+        del env_no_buffers
+        gc.collect()
+        assert_allclose_td(rollout_buffers, rollout_no_buffers)
+
+    @pytest.mark.parametrize("break_when_any_done", [False, True])
+    def test_batched_dynamic(self, break_when_any_done):
+        list_of_envs = [EnvWithDynamicSpec(i + 4) for i in range(3)]
+        dummy_rollouts = [
+            env.rollout(
+                20, return_contiguous=False, break_when_any_done=break_when_any_done
+            )
+            for env in list_of_envs
+        ]
+        t = min(dr.shape[0] for dr in dummy_rollouts)
+        dummy_rollouts = TensorDict.maybe_dense_stack([dr[:t] for dr in dummy_rollouts])
+        del list_of_envs
+
+        # Tests not using buffers in batched envs
+        env_no_buffers = SerialEnv(
+            3,
+            [lambda i=i + 4: EnvWithDynamicSpec(i) for i in range(3)],
+            use_buffers=False,
+        )
+        env_no_buffers.set_seed(0)
+        torch.manual_seed(0)
+        rollout_no_buffers_serial = env_no_buffers.rollout(
+            20, return_contiguous=False, break_when_any_done=break_when_any_done
+        )
+        del env_no_buffers
+        gc.collect()
+        assert_allclose_td(
+            dummy_rollouts.exclude("action"),
+            rollout_no_buffers_serial.exclude("action"),
+        )
+
+        env_no_buffers = ParallelEnv(
+            3,
+            [lambda i=i + 4: EnvWithDynamicSpec(i) for i in range(3)],
+            use_buffers=False,
+            mp_start_method=mp_ctx,
+        )
+        env_no_buffers.set_seed(0)
+        torch.manual_seed(0)
+        rollout_no_buffers_parallel = env_no_buffers.rollout(
+            20, return_contiguous=False, break_when_any_done=break_when_any_done
+        )
+        del env_no_buffers
+        gc.collect()
+
+        assert_allclose_td(
+            dummy_rollouts.exclude("action"),
+            rollout_no_buffers_parallel.exclude("action"),
+        )
+        assert_allclose_td(rollout_no_buffers_serial, rollout_no_buffers_parallel)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

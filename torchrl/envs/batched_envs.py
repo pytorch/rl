@@ -10,7 +10,6 @@ import functools
 import gc
 
 import os
-import tempfile
 import weakref
 from collections import OrderedDict
 from copy import copy, deepcopy
@@ -463,6 +462,10 @@ class BatchedEnvBase(EnvBase):
         out["_sync_w2m_value"] = None
         return out
 
+    @property
+    def _has_dynamic_specs(self):
+        return not self._use_buffers
+
     def _get_metadata(
         self, create_env_fn: List[Callable], create_env_kwargs: List[Dict]
     ):
@@ -842,6 +845,16 @@ class BatchedEnvBase(EnvBase):
             self.__dict__["_output_spec"] = self.__dict__["_output_spec"].to(device)
         return self
 
+    def _reset_proc_data(self, tensordict, tensordict_reset):
+        # since we call `reset` directly, all the postproc has been completed
+        if tensordict is not None:
+            if isinstance(tensordict_reset, LazyStackedTensorDict) and not isinstance(
+                tensordict, LazyStackedTensorDict
+            ):
+                tensordict = LazyStackedTensorDict(*tensordict.unbind(0))
+            return _update_during_reset(tensordict_reset, tensordict, self.reset_keys)
+        return tensordict_reset
+
 
 class SerialEnv(BatchedEnvBase):
     """Creates a series of environments in the same process."""
@@ -927,14 +940,20 @@ class SerialEnv(BatchedEnvBase):
                 needs_resetting = needs_resetting.any(-1)
             elif not needs_resetting.ndim:
                 needs_resetting = needs_resetting.expand((self.num_workers,))
+            tensordict = tensordict.unbind(0)
         else:
             needs_resetting = torch.ones(
                 (self.num_workers,), device=self.device, dtype=torch.bool
             )
 
+        if not self._use_buffers:
+            out_tds = [None] * self.num_workers
+
         tds = []
         for i, _env in enumerate(self._envs):
             if not needs_resetting[i]:
+                if not self._use_buffers and tensordict is not None:
+                    out_tds[i] = tensordict[i].exclude(*self._envs[i].reset_keys)
                 continue
             if tensordict is not None:
                 tensordict_ = tensordict[i]
@@ -951,9 +970,6 @@ class SerialEnv(BatchedEnvBase):
             else:
                 tensordict_ = None
             tds.append((i, tensordict_))
-
-        if not self._use_buffers:
-            out_tds = [None] * self.num_workers
 
         self._sync_m2w()
         for i, tensordict_ in tds:
@@ -977,22 +993,23 @@ class SerialEnv(BatchedEnvBase):
             else:
                 out_tds[i] = _td
         if not self._use_buffers:
-            first_non_none = None
-            first_none = None
-            for i, item in enumerate(out_tds):
-                if item is not None:
-                    first_non_none = i
-                    if first_none is not None:
-                        break
-                else:
-                    first_none = i
-                    if first_non_none is not None:
-                        break
-            if first_none is not None:
-                empty_td = out_tds[first_non_none].empty(recurse=True)
-                out_tds = [item if item is not None else empty_td for item in out_tds]
-
-            return LazyStackedTensorDict.maybe_dense_stack(out_tds)
+            # first_non_none = None
+            # first_none = None
+            # for i, item in enumerate(out_tds):
+            #     if item is not None:
+            #         first_non_none = i
+            #         if first_none is not None:
+            #             break
+            #     else:
+            #         first_none = i
+            #         if first_non_none is not None:
+            #             break
+            # if first_none is not None:
+            #     empty_td = out_tds[first_non_none].empty(recurse=True)
+            #     out_tds = [item if item is not None else empty_td for item in out_tds]
+            #
+            result = LazyStackedTensorDict.maybe_dense_stack(out_tds)
+            return result
 
         selected_output_keys = self._selected_reset_keys_filt
         device = self.device
@@ -1015,12 +1032,6 @@ class SerialEnv(BatchedEnvBase):
                 out = out.to(device, non_blocking=self.non_blocking)
                 self._sync_w2m()
         return out
-
-    def _reset_proc_data(self, tensordict, tensordict_reset):
-        # since we call `reset` directly, all the postproc has been completed
-        if tensordict is not None:
-            return _update_during_reset(tensordict_reset, tensordict, self.reset_keys)
-        return tensordict_reset
 
     @_check_start
     def _step(
@@ -1387,27 +1398,26 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     def _step_and_maybe_reset_no_buffers(
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
-        return super().step_and_maybe_reset(tensordict)
 
-        # for i, _data in enumerate(tensordict.unbind(0)):
-        #     self.parent_channels[i].send(("step_and_maybe_reset", _data))
-        #
-        # results = [None] * self.num_workers
-        #
-        # consumed_indices = []
-        # events = set(range(self.num_workers))
-        # while len(consumed_indices) < self.num_workers:
-        #     for i in list(events):
-        #         if self._events[i].is_set():
-        #             results[i] = self.parent_channels[i].recv()
-        #             self._events[i].clear()
-        #             consumed_indices.append(i)
-        #             events.discard(i)
-        #
-        # out_next, out_root = zip(*(future for future in results))
-        # return TensorDict.maybe_dense_stack(
-        #     out_next
-        # ), TensorDict.maybe_dense_stack(out_root)
+        for i, _data in enumerate(tensordict.unbind(0)):
+            self.parent_channels[i].send(("step_and_maybe_reset", _data))
+
+        results = [None] * self.num_workers
+
+        consumed_indices = []
+        events = set(range(self.num_workers))
+        while len(consumed_indices) < self.num_workers:
+            for i in list(events):
+                if self._events[i].is_set():
+                    results[i] = self.parent_channels[i].recv()
+                    self._events[i].clear()
+                    consumed_indices.append(i)
+                    events.discard(i)
+
+        out_next, out_root = zip(*(future for future in results))
+        return TensorDict.maybe_dense_stack(out_next), TensorDict.maybe_dense_stack(
+            out_root
+        )
 
     @torch.no_grad()
     @_check_start
@@ -1416,7 +1426,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     ) -> Tuple[TensorDictBase, TensorDictBase]:
         if not self._use_buffers:
             # Simply dispatch the input to the workers
-            return self._step_and_maybe_reset_no_buffers(tensordict)
+            # return self._step_and_maybe_reset_no_buffers(tensordict)
+            return super().step_and_maybe_reset(tensordict)
+
         # We must use the in_keys and nothing else for the following reasons:
         # - efficiency: copying all the keys will in practice mean doing a lot
         #   of writing operations since the input tensordict may (and often will)
@@ -1575,26 +1587,19 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             if is_tensor_collection(tensordict)
             else [None] * self.num_workers
         )
+        out_tds = [None] * self.num_workers
         for i, (data, reset_kwargs) in enumerate(zip(tdunbound, reset_kwargs_list)):
             if not needs_resetting[i]:
+                out_tds[i] = tdunbound[i].exclude(*self.reset_keys)
                 continue
             self.parent_channels[i].send(("reset", (data, reset_kwargs)))
-        out_tds = []
+
         for i, channel in enumerate(self.parent_channels):
             if not needs_resetting[i]:
-                out_tds.append(None)
                 continue
             self._events[i].wait()
             td = channel.recv()
-            out_tds.append(td)
-        if not needs_resetting.all():
-            for data in out_tds:
-                if data is not None:
-                    empty_data = data.empty(recurse=True)
-                    break
-            else:
-                raise RuntimeError("Could not find any non-None reset result")
-            out_tds = [out if out is not None else empty_data for out in out_tds]
+            out_tds[i] = td
         return LazyStackedTensorDict.maybe_dense_stack(out_tds)
 
     @torch.no_grad()

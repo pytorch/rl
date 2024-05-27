@@ -1393,7 +1393,13 @@ def _update_during_reset(
                 reset = reset.any(-1)
             reset = reset.reshape(node.shape)
             # node.update(node.where(~reset, other=node_reset, pad=0))
+
             node.where(~reset, other=node_reset, out=node, pad=0)
+            # node = node.clone()
+            # idx = reset.nonzero(as_tuple=True)[0]
+            # node[idx].update(node_reset[idx])
+            # node["done"] = torch.zeros((*node.shape, 1), dtype=torch.bool)
+
     return tensordict
 
 
