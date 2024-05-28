@@ -17,7 +17,7 @@ import numpy as np
 import torch
 from packaging import version
 
-from tensordict import TensorDictBase, TensorDict
+from tensordict import TensorDict, TensorDictBase
 from torch.utils._pytree import tree_map
 
 from torchrl._utils import implement_for
@@ -1561,9 +1561,7 @@ class terminal_obs_reader(default_info_dict_reader):
             if is_none.any():
                 # Then it is a final observation and we delegate the registration to the appropriate reader
                 nz = (~is_none).nonzero()[0][0]
-                zero_like = tree_map(
-                    lambda x: np.zeros_like(x), nparray[nz]
-                )
+                zero_like = tree_map(lambda x: np.zeros_like(x), nparray[nz])
                 for idx in is_none.nonzero()[0]:
                     nparray[idx] = zero_like
             return tree_map(lambda *x: np.stack(x), *nparray)
