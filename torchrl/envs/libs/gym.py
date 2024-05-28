@@ -18,6 +18,7 @@ import torch
 from packaging import version
 
 from tensordict import TensorDictBase
+from torch.utils._pytree import tree_map
 
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
@@ -1549,26 +1550,26 @@ class terminal_obs_reader(default_info_dict_reader):
 
     def __call__(self, info_dict, tensordict):
         def replace_none(nparray):
+            if not isinstance(nparray, np.ndarray) or nparray.dtype != np.dtype("O"):
+                return nparray
             is_none = np.array([info is None for info in nparray])
             if is_none.any():
                 # Then it is a final observation and we delegate the registration to the appropriate reader
                 nz = (~is_none).nonzero()[0][0]
-                zero_like = torch.utils._pytree.tree_map(
+                zero_like = tree_map(
                     lambda x: np.zeros_like(x), nparray[nz]
                 )
                 for idx in is_none.nonzero()[0]:
                     nparray[idx] = zero_like
-            return torch.utils._pytree.tree_map(lambda *x: np.stack(x), *nparray)
+            return tree_map(lambda *x: np.stack(x), *nparray)
 
+        info_dict = tree_map(replace_none, info_dict)
         # get the terminal observation
         terminal_obs = info_dict.pop(self.backend_key[self.backend], None)
         # get the terminal info dict
         terminal_info = info_dict.pop(self.backend_info_key[self.backend], None)
         if terminal_info is None:
             terminal_info = {}
-        else:
-            # Turn an array of dict in a dict of arrays
-            terminal_info = replace_none(terminal_info.copy())
 
         super().__call__(info_dict, tensordict)
         if not self._final_validated:
@@ -1577,8 +1578,6 @@ class terminal_obs_reader(default_info_dict_reader):
 
         final_info = terminal_info.copy()
         if terminal_obs is not None:
-            # replace none
-            terminal_obs = replace_none(terminal_obs.copy())
             final_info["observation"] = terminal_obs
 
         for key in self.info_spec[self.name].keys():
