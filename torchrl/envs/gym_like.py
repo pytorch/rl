@@ -109,7 +109,7 @@ class default_info_dict_reader(BaseInfoDictReader):
     def __call__(
         self, info_dict: Dict[str, Any], tensordict: TensorDictBase
     ) -> TensorDictBase:
-        if not isinstance(info_dict, dict) and len(self.keys):
+        if not isinstance(info_dict, (dict, TensorDictBase)) and len(self.keys):
             warnings.warn(
                 f"Found an info_dict of type {type(info_dict)} "
                 f"but expected type or subtype `dict`."

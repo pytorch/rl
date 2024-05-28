@@ -17,7 +17,7 @@ import numpy as np
 import torch
 from packaging import version
 
-from tensordict import TensorDictBase
+from tensordict import TensorDictBase, TensorDict
 from torch.utils._pytree import tree_map
 
 from torchrl._utils import implement_for
@@ -1526,6 +1526,11 @@ class terminal_obs_reader(default_info_dict_reader):
             # presented as a np.ndarray. The key should be pixels or observation.
             # We just write that value at its location in the tensor
             tensor[index] = torch.as_tensor(obs, device=tensor.device)
+        if isinstance(obs, torch.Tensor):
+            # Simplest case: there is one observation,
+            # presented as a np.ndarray. The key should be pixels or observation.
+            # We just write that value at its location in the tensor
+            tensor[index] = obs.to(device=tensor.device)
         elif isinstance(obs, dict):
             if key not in obs:
                 raise KeyError(
@@ -1564,10 +1569,13 @@ class terminal_obs_reader(default_info_dict_reader):
             return tree_map(lambda *x: np.stack(x), *nparray)
 
         info_dict = tree_map(replace_none, info_dict)
+        # convert info_dict to a tensordict
+        info_dict = TensorDict(info_dict)
         # get the terminal observation
         terminal_obs = info_dict.pop(self.backend_key[self.backend], None)
         # get the terminal info dict
         terminal_info = info_dict.pop(self.backend_info_key[self.backend], None)
+
         if terminal_info is None:
             terminal_info = {}
 
@@ -1585,7 +1593,7 @@ class terminal_obs_reader(default_info_dict_reader):
             spec = self.info_spec[self.name, key]
 
             final_obs_buffer = spec.zero()
-            terminal_obs = final_info.get(key)
+            terminal_obs = final_info.get(key, None)
             if terminal_obs is not None:
                 for i, obs in enumerate(terminal_obs):
                     # writes final_obs inplace with terminal_obs content
