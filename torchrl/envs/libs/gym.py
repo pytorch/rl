@@ -17,7 +17,8 @@ import numpy as np
 import torch
 from packaging import version
 
-from tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
+from torch.utils._pytree import tree_map
 
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
@@ -37,7 +38,7 @@ from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_d
 from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
 
-from torchrl.envs.gym_like import BaseInfoDictReader, GymLikeEnv
+from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
 
 from torchrl.envs.utils import _classproperty
 
@@ -576,11 +577,11 @@ class _AsyncMeta(_EnvPostInit):
                     )
                     add_info_dict = False
             if add_info_dict:
-                # First register the basic info dict reader
-                instance.auto_register_info_dict()
-                # Make it so that infos are properly cast where they should at done time
-                instance.set_info_dict_reader(
-                    terminal_obs_reader(instance.observation_spec, backend=backend)
+                # register terminal_obs_reader
+                instance.auto_register_info_dict(
+                    info_dict_reader=terminal_obs_reader(
+                        instance.observation_spec, backend=backend
+                    )
                 )
             return TransformedEnv(instance, VecGymEnvTransform())
         return instance
@@ -1470,7 +1471,7 @@ class MOGymEnv(GymEnv):
     _make_specs = set_gym_backend("gymnasium")(GymEnv._make_specs)
 
 
-class terminal_obs_reader(BaseInfoDictReader):
+class terminal_obs_reader(default_info_dict_reader):
     """Terminal observation reader for 'vectorized' gym environments.
 
     When running envs in parallel, Gym(nasium) writes the result of the true call
@@ -1507,11 +1508,11 @@ class terminal_obs_reader(BaseInfoDictReader):
     }
 
     def __init__(self, observation_spec: CompositeSpec, backend, name="final"):
+        super().__init__()
         self.name = name
-        self._info_spec = CompositeSpec(
-            {name: observation_spec.clone()}, shape=observation_spec.shape
-        )
+        self._obs_spec = observation_spec.clone()
         self.backend = backend
+        self._final_validated = False
 
     @property
     def info_spec(self):
@@ -1525,6 +1526,11 @@ class terminal_obs_reader(BaseInfoDictReader):
             # presented as a np.ndarray. The key should be pixels or observation.
             # We just write that value at its location in the tensor
             tensor[index] = torch.as_tensor(obs, device=tensor.device)
+        if isinstance(obs, torch.Tensor):
+            # Simplest case: there is one observation,
+            # presented as a np.ndarray. The key should be pixels or observation.
+            # We just write that value at its location in the tensor
+            tensor[index] = obs.to(device=tensor.device)
         elif isinstance(obs, dict):
             if key not in obs:
                 raise KeyError(
@@ -1548,36 +1554,54 @@ class terminal_obs_reader(BaseInfoDictReader):
             )
 
     def __call__(self, info_dict, tensordict):
-        terminal_obs = info_dict.get(self.backend_key[self.backend], None)
-        terminal_info = info_dict.get(self.backend_info_key[self.backend], None)
-        if terminal_info is not None:
-            # terminal_info is a list of items that can be None or not
-            # If they're not None, they are a dict of values that we want to put in a root dict
-            keys = set()
-            for info in terminal_info:
-                if info is None:
-                    continue
-                keys = keys.union(info.keys())
-            terminal_info = {
-                key: [info[key] if info is not None else info for info in terminal_info]
-                for key in keys
-            }
-        else:
+        def replace_none(nparray):
+            if not isinstance(nparray, np.ndarray) or nparray.dtype != np.dtype("O"):
+                return nparray
+            is_none = np.array([info is None for info in nparray])
+            if is_none.any():
+                # Then it is a final observation and we delegate the registration to the appropriate reader
+                nz = (~is_none).nonzero()[0][0]
+                zero_like = tree_map(lambda x: np.zeros_like(x), nparray[nz])
+                for idx in is_none.nonzero()[0]:
+                    nparray[idx] = zero_like
+            return tree_map(lambda *x: np.stack(x), *nparray)
+
+        info_dict = tree_map(replace_none, info_dict)
+        # convert info_dict to a tensordict
+        info_dict = TensorDict(info_dict)
+        # get the terminal observation
+        terminal_obs = info_dict.pop(self.backend_key[self.backend], None)
+        # get the terminal info dict
+        terminal_info = info_dict.pop(self.backend_info_key[self.backend], None)
+
+        if terminal_info is None:
             terminal_info = {}
-        obs_dict = terminal_info.copy()
+
+        super().__call__(info_dict, tensordict)
+        if not self._final_validated:
+            self.info_spec[self.name] = self._obs_spec.update(self.info_spec)
+            self._final_validated = True
+
+        final_info = terminal_info.copy()
         if terminal_obs is not None:
-            obs_dict["observation"] = terminal_obs
-        for key, terminal_obs in obs_dict.items():
+            final_info["observation"] = terminal_obs
+
+        for key in self.info_spec[self.name].keys():
+
             spec = self.info_spec[self.name, key]
-            # for key, item in self.info_spec.items(True, True):
-            #     key = (key,) if isinstance(key, str) else key
+
             final_obs_buffer = spec.zero()
+            terminal_obs = final_info.get(key, None)
             if terminal_obs is not None:
                 for i, obs in enumerate(terminal_obs):
                     # writes final_obs inplace with terminal_obs content
                     self._read_obs(obs, key, final_obs_buffer, index=i)
             tensordict.set((self.name, key), final_obs_buffer)
         return tensordict
+
+    def reset(self):
+        super().reset()
+        self._final_validated = False
 
 
 def _flip_info_tuple(info: Tuple[Dict]) -> Dict[str, tuple]:

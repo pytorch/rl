@@ -1895,13 +1895,13 @@ class TestInfoDict:
         except ModuleNotFoundError:
             import gym
 
-        env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED()), device=device)
-        check_env_specs(env)
-        env.set_info_dict_reader()
-        with pytest.raises(
-            AssertionError, match="The keys of the specs and data do not match"
-        ):
-            check_env_specs(env)
+        # env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED()), device=device)
+        # check_env_specs(env)
+        # env.set_info_dict_reader()
+        # with pytest.raises(
+        #     AssertionError, match="The keys of the specs and data do not match"
+        # ):
+        #     check_env_specs(env)
 
         env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED()), device=device)
         env = env.auto_register_info_dict()

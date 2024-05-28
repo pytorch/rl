@@ -2780,6 +2780,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 device=cpu,
                 is_shared=False)
         """
+        if tensordict.device != self.device:
+            tensordict = tensordict.to(self.device)
         tensordict = self.step(tensordict)
         # done and truncated are in done_keys
         # We read if any key is done.
