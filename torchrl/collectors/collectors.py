@@ -809,9 +809,6 @@ class SyncDataCollector(DataCollectorBase):
             self._truncated_keys = [
                 key for key in self.env.done_keys if _ends_with(key, "truncated")
             ]
-            self._truncated_keys = self._truncated_keys + [
-                unravel_key(("next", key)) for key in self._truncated_keys
-            ]
 
     @classmethod
     def _get_devices(
@@ -1779,8 +1776,8 @@ also that the state dict is synchronised across processes if needed."""
             self.queue_out.close()
             for pipe in self.pipes:
                 pipe.close()
-                for proc in self.procs:
-                    proc.join(1.0)
+            for proc in self.procs:
+                proc.join(1.0)
         finally:
             import torchrl
 

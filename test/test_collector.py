@@ -1840,6 +1840,7 @@ def test_set_truncated(collector_cls):
             break
     finally:
         collector.shutdown()
+        del collector
 
 
 class TestNestedEnvsCollector:

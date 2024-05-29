@@ -118,6 +118,7 @@ def _check_for_faulty_process(processes):
             for _p in processes:
                 if _p.is_alive():
                     _p.terminate()
+                    _p.close()
         if terminate:
             break
     if terminate:
