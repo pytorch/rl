@@ -275,7 +275,8 @@ def _gym_to_torchrl_spec_transform(
         return BinaryDiscreteTensorSpec(
             spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
         )
-    elif isinstance(spec, gym_spaces.Sequence):
+    # a spec type cannot be a string, so we're sure that versions of gym that don't have Sequence will just skip through this
+    elif isinstance(spec, getattr(gym_spaces, "Sequence", str)):
         if not spec.stack:
             raise ValueError(
                 "Sequence spaces must have the stack argument set to ``True``."
@@ -1098,6 +1099,12 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @implement_for("gym", None, "0.26")
     def _reset_output_transform(self, reset_data):  # noqa: F811
+        if (
+            isinstance(reset_data, tuple)
+            and len(reset_data) == 2
+            and isinstance(reset_data[1], dict)
+        ):
+            return reset_data
         return reset_data, None
 
     @implement_for("gym", "0.26", None)

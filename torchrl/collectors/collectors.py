@@ -32,7 +32,6 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
     TensorDictParams,
-    unravel_key,
 )
 from tensordict.nn import TensorDictModule
 from torch import multiprocessing as mp
