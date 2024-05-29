@@ -323,8 +323,10 @@ def test_discrete_conversion(n, device, shape):
     assert categorical.to_one_hot_spec() == one_hot
     assert one_hot.to_categorical_spec() == categorical
 
-    assert categorical.is_in(one_hot.to_categorical(one_hot.rand(shape)))
-    assert one_hot.is_in(categorical.to_one_hot(categorical.rand(shape)))
+    categorical_recon = one_hot.to_categorical(one_hot.rand(shape))
+    assert categorical.is_in(categorical_recon), (categorical, categorical_recon)
+    one_hot_recon = categorical.to_one_hot(categorical.rand(shape))
+    assert one_hot.is_in(one_hot_recon), (one_hot, one_hot_recon)
 
 
 @pytest.mark.parametrize("ns", [[5], [5, 2, 3], [4, 5, 1, 3]])
@@ -338,8 +340,10 @@ def test_multi_discrete_conversion(ns, shape, device):
     assert categorical.to_one_hot_spec() == one_hot
     assert one_hot.to_categorical_spec() == categorical
 
-    assert categorical.is_in(one_hot.to_categorical(one_hot.rand(shape)))
-    assert one_hot.is_in(categorical.to_one_hot(categorical.rand(shape)))
+    categorical_recon = one_hot.to_categorical(one_hot.rand(shape))
+    assert categorical.is_in(categorical_recon), (categorical, categorical_recon)
+    one_hot_recon = categorical.to_one_hot(categorical.rand(shape))
+    assert one_hot.is_in(one_hot_recon), (one_hot, one_hot_recon)
 
 
 @pytest.mark.parametrize("is_complete", [True, False])

@@ -30,8 +30,11 @@ from typing import (
 )
 
 import numpy as np
+
+import tensordict
 import torch
 from tensordict import (
+    is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorData,
     TensorDict,
@@ -105,7 +108,7 @@ def _validate_idx(shape: list[int], idx: int, axis: int = 0):
         idx (int): Index, may be negative
         axis (int): Shape axis to check
     """
-    if idx >= shape[axis] or idx < 0 and -idx > shape[axis]:
+    if shape[axis] >= 0 and (idx >= shape[axis] or idx < 0 and -idx > shape[axis]):
         raise IndexError(
             f"index {idx} is out of bounds for axis {axis} with size {shape[axis]}"
         )
@@ -371,6 +374,12 @@ class ContinuousBox(Box):
     @property
     def high(self):
         return self._high.to(self.device)
+
+    def unbind(self, dim: int = 0):
+        return tuple(
+            type(self)(low, high, self.device)
+            for (low, high) in zip(self.low.unbind(dim), self.high.unbind(dim))
+        )
 
     @low.setter
     def low(self, value):
@@ -670,6 +679,15 @@ class TensorSpec:
         shape = _unsqueezed_shape(self.shape, dim)
         return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
 
+    def make_neg_dim(self, dim):
+        if dim < 0:
+            dim = self.ndim + dim
+        if dim < 0 or dim > self.ndim - 1:
+            raise ValueError(f"dim={dim} is out of bound for ndim={self.ndim}")
+        self.shape = torch.Size(
+            [s if i != dim else -1 for i, s in enumerate(self.shape)]
+        )
+
     def reshape(self, *shape):
         """Reshapes a tensorspec.
 
@@ -724,8 +742,24 @@ class TensorSpec:
         Returns:
             boolean indicating if values belongs to the TensorSpec box
 
+        .. note:: The same result can be obtained through ``sample in spec``.
+
         """
         raise NotImplementedError
+
+    def __contains__(self, item):
+        """Returns whether a sample is contained within the space defined by the TensorSpec.
+
+        See :meth:`~.is_in` for more information.
+        """
+        return self.is_in(item)
+
+    def contains(self, item):
+        """Returns whether a sample is contained within the space defined by the TensorSpec.
+
+        See :meth:`~.is_in` for more information.
+        """
+        return self.is_in(item)
 
     def project(self, val: torch.Tensor) -> torch.Tensor:
         """If the input tensor is not in the TensorSpec box, it maps it back to it given some heuristic.
@@ -773,7 +807,7 @@ class TensorSpec:
 
     @abc.abstractmethod
     def rand(self, shape=None) -> torch.Tensor:
-        """Returns a random tensor in the box. The sampling will be uniform unless the box is unbounded.
+        """Returns a random tensor in the space defined by the spec. The sampling will be uniform unless the box is unbounded.
 
         Args:
             shape (torch.Size): shape of the random tensor
@@ -783,6 +817,14 @@ class TensorSpec:
 
         """
         raise NotImplementedError
+
+    @property
+    def sample(self):
+        """Returns a random tensor in the space defined by the spec.
+
+        See :meth:`~.rand` for details.
+        """
+        return self.rand
 
     def zero(self, shape=None) -> torch.Tensor:
         """Returns a zero-filled tensor in the box.
@@ -846,7 +888,7 @@ class TensorSpec:
             )
         return cls.SPEC_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
-    def unbind(self, dim: int):
+    def unbind(self, dim: int = 0):
         raise NotImplementedError
 
 
@@ -965,35 +1007,56 @@ class _LazyStackedMixin(Generic[T]):
             dim = self.dim + len(shape)
         else:
             dim = self.dim
-        return LazyStackedTensorDict.maybe_dense_stack(
-            [spec.zero(shape) for spec in self._specs], dim
-        )
+        if dim != 0:
+            raise RuntimeError(
+                f"Cannot create a nested tensor with a stack dimension other than 0. Got dim={0}"
+            )
+        return torch.nested.nested_tensor([spec.zero(shape) for spec in self._specs])
+
+    def one(self, shape=None) -> TensorDictBase:
+        if shape is not None:
+            dim = self.dim + len(shape)
+        else:
+            dim = self.dim
+        if dim != 0:
+            raise RuntimeError(
+                f"Cannot create a nested tensor with a stack dimension other than 0. Got dim={0}"
+            )
+        return torch.nested.nested_tensor([spec.one(shape) for spec in self._specs])
 
     def rand(self, shape=None) -> TensorDictBase:
         if shape is not None:
             dim = self.dim + len(shape)
         else:
             dim = self.dim
-        return LazyStackedTensorDict.maybe_dense_stack(
-            [spec.rand(shape) for spec in self._specs], dim
-        )
+        samples = [spec.rand(shape) for spec in self._specs]
+        if dim != 0:
+            raise RuntimeError(
+                f"Cannot create a nested tensor with a stack dimension other than 0. Got self.dim={self.dim}."
+            )
+        return torch.nested.nested_tensor(samples)
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> T:
         if dest is None:
             return self
         return torch.stack([spec.to(dest) for spec in self._specs], self.dim)
 
-    def unbind(self, dim: int):
-        if dim == self.stack_dim:
-            return self._specs
+    def unbind(self, dim: int = 0):
+        if dim < 0:
+            dim = self.ndim + dim
         shape = self.shape
         if dim < 0 or dim > self.ndim - 1 or shape[dim] == -1:
             raise ValueError(
                 f"Provided dim {dim} is not valid for unbinding shape {shape}"
             )
+        if dim == self.stack_dim:
+            return self._specs
+        elif dim > self.dim:
+            dim = dim - 1
+            return type(self)(*[spec.unbind(dim) for spec in self._specs], dim=self.dim)
         else:
-            raise ValueError(
-                f"A {type(self)} instance can only be unbound along its stack dimension. Expected {self.stack_dim}, received {dim} instead."
+            return type(self)(
+                *[spec.unbind(dim) for spec in self._specs], dim=self.dim - 1
             )
 
     def unsqueeze(self, dim: int):
@@ -1013,6 +1076,20 @@ class _LazyStackedMixin(Generic[T]):
         return torch.stack(
             [spec.unsqueeze(new_dim) for spec in self._specs], dim=new_stack_dim
         )
+
+    def make_neg_dim(self, dim: int):
+        if dim < 0:
+            dim = self.ndim + dim
+        if dim < 0 or dim > self.ndim - 1:
+            raise ValueError(f"dim={dim} is out of bound for ndim={self.ndim}")
+        if dim == self.dim:
+            raise ValueError("Cannot make dim=self.dim negative")
+        if dim < self.dim:
+            for spec in self._specs:
+                spec.make_neg_dim(dim)
+        else:
+            for spec in self._specs:
+                spec.make_neg_dim(dim - 1)
 
     def squeeze(self, dim: int = None):
         if dim is None:
@@ -1133,6 +1210,20 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         shape.insert(dim, len(self._specs))
         return torch.Size(shape)
 
+    @shape.setter
+    def shape(self, shape):
+        if len(shape) != len(self.shape):
+            raise RuntimeError(
+                f"Cannot set shape of different length from self. shape={shape}, self.shape={self.shape}"
+            )
+        if shape[self.dim] != self.shape[self.dim]:
+            raise RuntimeError(
+                f"The shape attribute mismatches between the input {shape} and self.shape={self.shape}."
+            )
+        shape_strip = torch.Size([s for i, s in enumerate(self.shape) if i != self.dim])
+        for spec in self._specs:
+            spec.shape = shape_strip
+
     def expand(self, *shape):
         if len(shape) == 1 and not isinstance(shape[0], (int,)):
             return self.expand(*shape[0])
@@ -1168,10 +1259,12 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         )
 
     def type_check(self, value: torch.Tensor, key: str = None) -> None:
-        raise NOT_IMPLEMENTED_ERROR
+        for (val, spec) in zip(value.unbind(self.dim), self._specs):
+            spec.type_check(val)
 
-    def is_in(self, val) -> bool:
-        raise NOT_IMPLEMENTED_ERROR
+    def is_in(self, value) -> bool:
+        # We don't use unbind because value could be a tuple
+        return all(value in spec for (value, spec) in zip(value, self._specs))
 
     @property
     def space(self):
@@ -1183,7 +1276,19 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
     def encode(
         self, val: Union[np.ndarray, torch.Tensor], *, ignore_device=False
     ) -> torch.Tensor:
-        raise NOT_IMPLEMENTED_ERROR
+        if self.dim != 0 and not isinstance(val, tuple):
+            val = val.unbind(self.dim)
+        samples = [spec.encode(_val) for _val, spec in zip(val, self._specs)]
+        if is_tensor_collection(samples[0]):
+            return LazyStackedTensorDict.maybe_dense_stack(samples, dim=self.dim)
+        if isinstance(samples[0], torch.Tensor):
+            if any(t.is_nested for t in samples):
+                raise RuntimeError("Cannot stack nested tensors together.")
+            if len(samples) > 1 and not all(
+                t.shape == samples[0].shape for t in samples[1:]
+            ):
+                return torch.nested.nested_tensor(samples)
+            return torch.stack(samples, dim=self.dim)
 
 
 @dataclass(repr=False)
@@ -1383,7 +1488,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             mask=mask,
         )
 
-    def unbind(self, dim: int):
+    def unbind(self, dim: int = 0):
         if dim in (len(self.shape), -1):
             raise ValueError(f"Final dimension of {type(self)} must remain unchanged")
         orig_dim = dim
@@ -1663,12 +1768,14 @@ class BoundedTensorSpec(TensorSpec):
             if shape_corr is not None and shape_corr != high.shape:
                 raise RuntimeError(err_msg)
             shape = high.shape
-            low = low.expand(shape_corr).clone()
+            if shape_corr is not None:
+                low = low.expand(shape_corr).clone()
         elif low.ndimension():
             if shape_corr is not None and shape_corr != low.shape:
                 raise RuntimeError(err_msg)
             shape = low.shape
-            high = high.expand(shape_corr).clone()
+            if shape_corr is not None:
+                high = high.expand(shape_corr).clone()
         elif shape_corr is None:
             raise RuntimeError(err_msg)
         else:
@@ -1789,7 +1896,7 @@ class BoundedTensorSpec(TensorSpec):
             dtype=self.dtype,
         )
 
-    def unbind(self, dim: int):
+    def unbind(self, dim: int = 0):
         if dim in (len(self.shape), -1):
             raise ValueError(f"Final dimension of {type(self)} must remain unchanged")
         orig_dim = dim
@@ -1804,13 +1911,13 @@ class BoundedTensorSpec(TensorSpec):
         high = self.space.high.unbind(dim)
         return tuple(
             self.__class__(
-                low=low[i],
-                high=high[i],
+                low=low,
+                high=high,
                 shape=shape,
                 device=self.device,
                 dtype=self.dtype,
             )
-            for i in range(self.shape[dim])
+            for low, high in zip(low, high)
         )
 
     def rand(self, shape=None) -> torch.Tensor:
@@ -1818,7 +1925,7 @@ class BoundedTensorSpec(TensorSpec):
             shape = torch.Size([])
         a, b = self.space
         if self.dtype in (torch.float, torch.double, torch.half):
-            shape = [*shape, *self.shape]
+            shape = [*shape, *self._safe_shape]
             out = (
                 torch.zeros(shape, dtype=self.dtype, device=self.device).uniform_()
                 * (b - a)
@@ -1839,7 +1946,9 @@ class BoundedTensorSpec(TensorSpec):
             else:
                 mini = self.space.low
             interval = maxi - mini
-            r = torch.rand(torch.Size([*shape, *self.shape]), device=interval.device)
+            r = torch.rand(
+                torch.Size([*shape, *self._safe_shape]), device=interval.device
+            )
             r = interval * r
             r = self.space.low + r
             r = r.to(self.dtype).to(self.device)
@@ -1863,8 +1972,14 @@ class BoundedTensorSpec(TensorSpec):
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
-        shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val.shape)
-        shape_match = val.shape == shape
+        val_shape = _remove_neg_shapes(tensordict.utils._shape(val))
+        shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val_shape)
+        shape = list(shape)
+        shape[-len(self.shape) :] = [
+            s if s_prev >= 0 else s_prev
+            for (s_prev, s) in zip(self.shape, shape[-len(self.shape) :])
+        ]
+        shape_match = all(s1 == s2 or s1 == -1 for s1, s2 in zip(shape, val_shape))
         if not shape_match:
             return False
         dtype_match = val.dtype == self.dtype
@@ -1874,6 +1989,13 @@ class BoundedTensorSpec(TensorSpec):
             within_bounds = (val >= self.space.low.to(val.device)).all() and (
                 val <= self.space.high.to(val.device)
             ).all()
+            return within_bounds
+        except NotImplementedError:
+            within_bounds = all(
+                (_val >= space.low.to(val.device)).all()
+                and (_val <= space.high.to(val.device)).all()
+                for (_val, space) in zip(val, self.space.unbind(0))
+            )
             return within_bounds
         except RuntimeError as err:
             if "The size of tensor a" in str(err):
@@ -2035,7 +2157,7 @@ class NonTensorSpec(TensorSpec):
         indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
         return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
 
-    def unbind(self, dim: int):
+    def unbind(self, dim: int = 0):
         orig_dim = dim
         if dim < 0:
             dim = len(self.shape) + dim
@@ -2155,7 +2277,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
         return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
 
-    def unbind(self, dim: int):
+    def unbind(self, dim: int = 0):
         orig_dim = dim
         if dim < 0:
             dim = len(self.shape) + dim
@@ -2307,7 +2429,7 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
         return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
 
-    def unbind(self, dim: int):
+    def unbind(self, dim: int = 0):
         orig_dim = dim
         if dim < 0:
             dim = len(self.shape) + dim
@@ -2716,7 +2838,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype, mask=mask
         )
 
-    def unbind(self, dim: int):
+    def unbind(self, dim: int = 0):
         if dim in (len(self.shape), -1):
             raise ValueError(f"Final dimension of {type(self)} must remain unchanged")
         orig_dim = dim
@@ -2925,7 +3047,7 @@ class DiscreteTensorSpec(TensorSpec):
             safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
-        return torch.nn.functional.one_hot(val, self.space.n)
+        return torch.nn.functional.one_hot(val, self.space.n).bool()
 
     def to_one_hot_spec(self) -> OneHotDiscreteTensorSpec:
         """Converts the spec to the equivalent one-hot spec."""
@@ -2992,7 +3114,7 @@ class DiscreteTensorSpec(TensorSpec):
             mask=mask,
         )
 
-    def unbind(self, dim: int):
+    def unbind(self, dim: int = 0):
         orig_dim = dim
         if dim < 0:
             dim = len(self.shape) + dim
@@ -3117,7 +3239,7 @@ class BinaryDiscreteTensorSpec(DiscreteTensorSpec):
             n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
         )
 
-    def unbind(self, dim: int):
+    def unbind(self, dim: int = 0):
         if dim in (len(self.shape) - 1, -1):
             raise ValueError(f"Final dimension of {type(self)} must remain unchanged")
 
@@ -3424,7 +3546,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             self.assert_is_in(val)
         return torch.cat(
             [
-                torch.nn.functional.one_hot(val[..., i], n)
+                torch.nn.functional.one_hot(val[..., i], n).bool()
                 for i, n in enumerate(self.nvec)
             ],
             -1,
@@ -3517,7 +3639,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             mask=mask,
         )
 
-    def unbind(self, dim: int):
+    def unbind(self, dim: int = 0):
         if dim in (len(self.shape), -1):
             raise ValueError(f"Final dimension of {type(self)} must remain unchanged")
         orig_dim = dim
@@ -4206,7 +4328,7 @@ class CompositeSpec(TensorSpec):
             device=device,
         )
 
-    def unbind(self, dim: int):
+    def unbind(self, dim: int = 0):
         orig_dim = dim
         if dim < 0:
             dim = len(self.shape) + dim
@@ -4443,8 +4565,8 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
 
         return indent(f"exclusive_fields={{\n{exclusive_key_str}}}", 4 * " ")
 
-    def is_in(self, val) -> bool:
-        for spec, subval in zip(self._specs, val.unbind(self.dim)):
+    def is_in(self, value) -> bool:
+        for spec, subval in zip(self._specs, value.unbind(self.dim)):
             if not spec.is_in(subval):
                 return False
         return True
@@ -4557,12 +4679,41 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         )
 
     def empty(self):
-        return torch.stack([spec.empty() for spec in self._specs], dim=self.stack_dim)
+        return LazyStackedCompositeSpec.maybe_dense_stack(
+            [spec.empty() for spec in self._specs], dim=self.stack_dim
+        )
 
     def encode(
         self, vals: Dict[str, Any], ignore_device: bool = False
     ) -> Dict[str, torch.Tensor]:
         raise NOT_IMPLEMENTED_ERROR
+
+    def zero(self, shape=None) -> TensorDictBase:
+        if shape is not None:
+            dim = self.dim + len(shape)
+        else:
+            dim = self.dim
+        return LazyStackedTensorDict.maybe_dense_stack(
+            [spec.zero(shape) for spec in self._specs], dim
+        )
+
+    def one(self, shape=None) -> TensorDictBase:
+        if shape is not None:
+            dim = self.dim + len(shape)
+        else:
+            dim = self.dim
+        return LazyStackedTensorDict.maybe_dense_stack(
+            [spec.one(shape) for spec in self._specs], dim
+        )
+
+    def rand(self, shape=None) -> TensorDictBase:
+        if shape is not None:
+            dim = self.dim + len(shape)
+        else:
+            dim = self.dim
+        return LazyStackedTensorDict.maybe_dense_stack(
+            [spec.rand(shape) for spec in self._specs], dim
+        )
 
 
 # for SPEC_CLASS in [BinaryDiscreteTensorSpec, BoundedTensorSpec, DiscreteTensorSpec, MultiDiscreteTensorSpec, MultiOneHotDiscreteTensorSpec, OneHotDiscreteTensorSpec, UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec]:
@@ -4763,6 +4914,7 @@ class _CompositeSpecKeysView:
 
     def __contains__(self, item):
         item = unravel_key(item)
+
         if len(item) == 1:
             item = item[0]
         for key in self.__iter__():
