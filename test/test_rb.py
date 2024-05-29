@@ -896,7 +896,7 @@ class TestLazyStorages:
 @pytest.mark.parametrize("contiguous", [True, False])
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("alpha", [0.0, 0.7])
-def test_ptdrb(priority_key, contiguous, alpha,  device):
+def test_ptdrb(priority_key, contiguous, alpha, device):
     torch.manual_seed(0)
     np.random.seed(0)
     rb = TensorDictReplayBuffer(
@@ -934,6 +934,11 @@ def test_ptdrb(priority_key, contiguous, alpha,  device):
     assert s.batch_size == torch.Size([5])
     assert (td2[s.get("_idx").squeeze()].get("a") == s.get("a")).all()
     assert_allclose_td(td2[s.get("_idx").squeeze()].select("a"), s.select("a"))
+
+    if (
+        alpha == 0.0
+    ):  # when alpha is 0.0, sampling is uniform, so no need to check priority sampling
+        return
 
     # test strong update
     # get all indices that match first item
