@@ -895,11 +895,12 @@ class TestLazyStorages:
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])
 @pytest.mark.parametrize("device", get_default_devices())
-def test_ptdrb(priority_key, contiguous, device):
+@pytest.mark.parametrize("alpha", [0.0, 0.7])
+def test_ptdrb(priority_key, contiguous, alpha,  device):
     torch.manual_seed(0)
     np.random.seed(0)
     rb = TensorDictReplayBuffer(
-        sampler=samplers.PrioritizedSampler(5, alpha=0.7, beta=0.9),
+        sampler=samplers.PrioritizedSampler(5, alpha=alpha, beta=0.9),
         priority_key=priority_key,
         batch_size=5,
     )
