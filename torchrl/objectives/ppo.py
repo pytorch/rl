@@ -473,7 +473,9 @@ class PPOLoss(LossModule):
             raise RuntimeError("tensordict prev_log_prob requires grad.")
 
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
-        return log_weight, dist
+        kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
+
+        return log_weight, dist, kl_approx
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         # TODO: if the advantage is gathered by forward, this introduces an
@@ -556,12 +558,13 @@ class PPOLoss(LossModule):
             scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
-        log_weight, dist = self._log_weight(tensordict)
+        log_weight, dist, kl_approx = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
         td_out = TensorDict({"loss_objective": -neg_loss}, batch_size=[])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach().mean())  # for logging
+            td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
@@ -811,7 +814,7 @@ class ClipPPOLoss(PPOLoss):
             scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
-        log_weight, dist = self._log_weight(tensordict)
+        log_weight, dist, kl_approx = self._log_weight(tensordict)
         # ESS for logging
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
@@ -835,6 +838,7 @@ class ClipPPOLoss(PPOLoss):
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach().mean())  # for logging
+            td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
@@ -1089,7 +1093,7 @@ class KLPENPPOLoss(PPOLoss):
             loc = advantage.mean()
             scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
-        log_weight, dist = self._log_weight(tensordict_copy)
+        log_weight, dist, kl_approx = self._log_weight(tensordict_copy)
         neg_loss = log_weight.exp() * advantage
 
         with self.actor_network_params.to_module(
@@ -1118,6 +1122,7 @@ class KLPENPPOLoss(PPOLoss):
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach().mean())  # for logging
+            td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict_copy)
