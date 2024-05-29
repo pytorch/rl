@@ -1726,11 +1726,13 @@ def test_maxframes_error():
 @pytest.mark.parametrize("env_device", [None, *get_available_devices()])
 @pytest.mark.parametrize("storing_device", [None, *get_available_devices()])
 @pytest.mark.parametrize("parallel", [False, True])
+@pytest.mark.parametrize("share_individual_td", [False, True])
 def test_reset_heterogeneous_envs(
     policy_device: torch.device,
     env_device: torch.device,
     storing_device: torch.device,
     parallel,
+    share_individual_td,
 ):
     if (
         policy_device is not None
@@ -1746,7 +1748,9 @@ def test_reset_heterogeneous_envs(
         cls = ParallelEnv
     else:
         cls = SerialEnv
-    env = cls(2, [env1, env2], device=env_device, share_individual_td=True)
+    env = cls(
+        2, [env1, env2], device=env_device, share_individual_td=share_individual_td
+    )
     collector = SyncDataCollector(
         env,
         RandomPolicy(env.action_spec),

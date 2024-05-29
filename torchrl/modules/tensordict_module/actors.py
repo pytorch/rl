@@ -158,7 +158,7 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
             the output value. Should be one of: 'InteractionType.MODE',
             'InteractionType.MEDIAN', 'InteractionType.MEAN' or
             'InteractionType.RANDOM' (in which case the value is sampled
-            randomly from the distribution). Defaults to is 'InteractionType.RANDOM'.
+            randomly from the distribution). Defaults to is 'InteractionType.MODE'.
 
             .. note:: When a sample is drawn, the :class:`ProbabilisticActor` instance will
               first look for the interaction mode dictated by the
