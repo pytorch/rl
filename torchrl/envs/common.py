@@ -79,15 +79,16 @@ class EnvMetaData:
 
     @property
     def tensordict(self):
-        return self._tensordict.to(self.device)
+        return self._tensordict.apply(lambda x: torch.zeros_like(x, device=self.device))
+
+    @tensordict.setter
+    def tensordict(self, value: TensorDictBase):
+        # self._tensordict = value.to("meta")
+        self._tensordict = value.to("cpu")
 
     @property
     def specs(self):
         return self._specs.to(self.device)
-
-    @tensordict.setter
-    def tensordict(self, value: TensorDictBase):
-        self._tensordict = value.to("cpu")
 
     @specs.setter
     def specs(self, value: CompositeSpec):
@@ -98,9 +99,16 @@ class EnvMetaData:
         tensordict = env.fake_tensordict().clone()
 
         for done_key in env.done_keys:
+            # Create a reset key with the shape of the parent tensordict
+            done = tensordict.get(unravel_key(("next", done_key)))
+            shape = tensordict.get(unravel_key(("next", done_key))[:-1]).shape
+            if done.shape == torch.Size([*shape, 1]):
+                reset = done.new_zeros(shape)
+            else:
+                reset = torch.zeros_like(done)
             tensordict.set(
                 _replace_last(done_key, "_reset"),
-                torch.zeros_like(tensordict.get(("next", done_key))),
+                reset,
             )
 
         specs = env.specs.to("cpu")

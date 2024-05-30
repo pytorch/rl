@@ -248,6 +248,29 @@ designing reset functionalities:
   components, in which case the non-reset data will be meaningless and should
   be discarded.
 
+.. warning:: The ``"_reset"`` entries may have a different shape than the ``done``
+  states, but they should usually always have the shape of their parent tensordict unless
+  in specific limited cases.
+  The reason for this different is the following:
+  For single agent, single task scripts, the ``"done"`` value is usually configured with
+  a trailing singleton dimension such that these code snipped can work without unwanted
+  broadcasting:
+
+    >>> obs = data["next", "observation"] # shape [B, O]
+    >>> reward = data["next", "reward"] # shape [B, 1]
+    >>> done = data["next", "done"] # shape [B, 1]
+    >>> next_value = pred(obs) # shape [B, 1]
+    >>> pred_value = reward + (1 - done.int()) * next_value # shape [B, 1]
+
+  This code snippet would require multiple unsqueeze operations by the user to avoid
+  broadcasting some values to a ``[B, B]`` shape.
+
+  However, the reset key does not need this trailing singleton dimension which
+  internally can load the code with hard to cope with squeezing and unsqueezing operations.
+
+  TorchRL handles the ``"_reset"`` entries internally and this should not impact the user
+  experience.
+
 Below, we give some examples of the expected effect that ``"_reset"`` keys will
 have on an environment returning zeros after reset:
 
