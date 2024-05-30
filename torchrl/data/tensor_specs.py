@@ -742,17 +742,8 @@ class TensorSpec:
         Returns:
             boolean indicating if values belongs to the TensorSpec box
 
-        .. note:: The same result can be obtained through ``sample in spec``.
-
         """
         raise NotImplementedError
-
-    def __contains__(self, item):
-        """Returns whether a sample is contained within the space defined by the TensorSpec.
-
-        See :meth:`~.is_in` for more information.
-        """
-        return self.is_in(item)
 
     def contains(self, item):
         """Returns whether a sample is contained within the space defined by the TensorSpec.
