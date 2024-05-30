@@ -3489,6 +3489,34 @@ class TestDynamicSpec:
         )
         assert spec.is_in(data)
 
+    def test_expand(self):
+        unb = UnboundedContinuousTensorSpec((-1, 1, 2))
+        unbd = UnboundedDiscreteTensorSpec((-1, 1, 2))
+        bound = BoundedTensorSpec(shape=(-1, 1, 2), low=-1, high=1)
+        oneh = OneHotDiscreteTensorSpec(shape=(-1, 1, 2, 4), n=4)
+        disc = DiscreteTensorSpec(shape=(-1, 1, 2), n=4)
+        moneh = MultiOneHotDiscreteTensorSpec(shape=(-1, 1, 2, 7), nvec=[3, 4])
+        mdisc = MultiDiscreteTensorSpec(shape=(-1, 1, 2, 2), nvec=[3, 4])
+
+        spec = CompositeSpec(
+            unb=unb,
+            unbd=unbd,
+            bound=bound,
+            oneh=oneh,
+            disc=disc,
+            moneh=moneh,
+            mdisc=mdisc,
+            shape=(-1, 1, 2),
+        )
+        assert spec.shape == (-1, 1, 2)
+        # runs
+        spec.expand(-1, 4, 2)
+        # runs
+        spec.expand(3, -1, 1, 2)
+        # breaks
+        with pytest.raises(ValueError, match="The last 3 of the expanded shape"):
+            spec.expand(3, 3, 1, 2)
+
 
 class TestNonTensorSpec:
     def test_sample(self):

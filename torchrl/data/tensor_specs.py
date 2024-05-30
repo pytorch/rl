@@ -1254,7 +1254,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
             spec.type_check(val)
 
     def is_in(self, value) -> bool:
-        if self.dim == 0:
+        if self.dim == 0 and not hasattr(value, "unbind"):
             # We don't use unbind because value could be a tuple or a nested tensor
             return all(
                 spec.contains(value) for (value, spec) in zip(value, self._specs)
@@ -1365,7 +1365,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     def update_mask(self, mask):
         if mask is not None:
             try:
-                mask = mask.expand(self.shape)
+                mask = mask.expand(self._safe_shape)
             except RuntimeError as err:
                 raise RuntimeError("Cannot expand mask to the desired shape.") from err
             if mask.dtype != torch.bool:
@@ -1405,10 +1405,6 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
-        if any(val < 0 for val in shape):
-            raise ValueError(
-                f"{self.__class__.__name__}.expand does not support negative shapes."
-            )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
@@ -1416,7 +1412,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             )
         mask = self.mask
         if mask is not None:
-            mask = mask.expand(shape)
+            mask = mask.expand(_remove_neg_shapes(shape))
         return self.__class__(
             n=shape[-1],
             shape=shape,
@@ -1524,7 +1520,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             n = self.space.n
             m = torch.randint(n, shape, device=self.device)
         else:
-            mask = mask.expand(*shape, mask.shape[-1])
+            mask = mask.expand(_remove_neg_shapes(*shape, mask.shape[-1]))
             if mask.ndim > 2:
                 mask_flat = torch.flatten(mask, 0, -2)
             else:
@@ -1622,7 +1618,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
     def is_in(self, val: torch.Tensor) -> bool:
         if self.mask is None:
-            shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val.shape)
+            shape = torch.broadcast_shapes(self._safe_shape, val.shape)
             shape_match = val.shape == shape
             if not shape_match:
                 return False
@@ -1765,13 +1761,15 @@ class BoundedTensorSpec(TensorSpec):
         if high.ndimension():
             if shape_corr is not None and shape_corr != high.shape:
                 raise RuntimeError(err_msg)
-            shape = high.shape
+            if shape is None:
+                shape = high.shape
             if shape_corr is not None:
                 low = low.expand(shape_corr).clone()
         elif low.ndimension():
             if shape_corr is not None and shape_corr != low.shape:
                 raise RuntimeError(err_msg)
-            shape = low.shape
+            if shape is None:
+                shape = low.shape
             if shape_corr is not None:
                 high = high.expand(shape_corr).clone()
         elif shape_corr is None:
@@ -1807,6 +1805,8 @@ class BoundedTensorSpec(TensorSpec):
             dtype=dtype,
             domain=domain,
         )
+        if self.shape == torch.Size([0, 0]):
+            raise RuntimeError
 
     def __eq__(self, other):
         return (
@@ -1828,7 +1828,10 @@ class BoundedTensorSpec(TensorSpec):
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
-        if any(val < 0 for val in shape):
+        if any(
+            orig_val != val and val < 0
+            for val, orig_val in zip(shape[-len(self.shape) :], self.shape)
+        ):
             raise ValueError(
                 f"{self.__class__.__name__}.expand does not support negative shapes."
             )
@@ -1838,8 +1841,8 @@ class BoundedTensorSpec(TensorSpec):
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
-            low=self.space.low.expand(shape).clone(),
-            high=self.space.high.expand(shape).clone(),
+            low=self.space.low.expand(_remove_neg_shapes(shape)).clone(),
+            high=self.space.high.expand(_remove_neg_shapes(shape)).clone(),
             shape=shape,
             device=self.device,
             dtype=self.dtype,
@@ -1971,10 +1974,10 @@ class BoundedTensorSpec(TensorSpec):
 
     def is_in(self, val: torch.Tensor) -> bool:
         val_shape = _remove_neg_shapes(tensordict.utils._shape(val))
-        shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val_shape)
+        shape = torch.broadcast_shapes(self._safe_shape, val_shape)
         shape = list(shape)
         shape[-len(self.shape) :] = [
-            s if s_prev >= 0 else s_prev
+            s_prev if s_prev >= 0 else s
             for (s_prev, s) in zip(self.shape, shape[-len(self.shape) :])
         ]
         shape_match = all(s1 == s2 or s1 == -1 for s1, s2 in zip(shape, val_shape))
@@ -2118,7 +2121,7 @@ class NonTensorSpec(TensorSpec):
         )
 
     def is_in(self, val: torch.Tensor) -> bool:
-        shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val.shape)
+        shape = torch.broadcast_shapes(self._safe_shape, val.shape)
         return (
             isinstance(val, NonTensorData)
             and val.shape == shape
@@ -2238,7 +2241,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         return torch.empty(shape, device=self.device, dtype=self.dtype).random_()
 
     def is_in(self, val: torch.Tensor) -> bool:
-        shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val.shape)
+        shape = torch.broadcast_shapes(self._safe_shape, val.shape)
         return val.shape == shape and val.dtype == self.dtype
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
@@ -2394,16 +2397,12 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         return r.to(self.device)
 
     def is_in(self, val: torch.Tensor) -> bool:
-        shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val.shape)
+        shape = torch.broadcast_shapes(self._safe_shape, val.shape)
         return val.shape == shape and val.dtype == self.dtype
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
-        if any(val < 0 for val in shape):
-            raise ValueError(
-                f"{self.__class__.__name__}.expand does not support negative shapes."
-            )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
@@ -2562,7 +2561,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     def update_mask(self, mask):
         if mask is not None:
             try:
-                mask = mask.expand(*self.shape)
+                mask = mask.expand(*self._safe_shape)
             except RuntimeError as err:
                 raise RuntimeError("Cannot expand mask to the desired shape.") from err
             if mask.dtype != torch.bool:
@@ -2643,7 +2642,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
                 -1,
             ).squeeze(-2)
             return x
-        mask = mask.expand(*shape, mask.shape[-1])
+        mask = mask.expand(_remove_neg_shapes(*shape, mask.shape[-1]))
         mask_splits = torch.split(mask, [space.n for space in self.space], -1)
         out = []
         for _mask in mask_splits:
@@ -2770,10 +2769,6 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         nvecs = [space.n for space in self.space]
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
-        if any(val < 0 for val in shape):
-            raise ValueError(
-                f"{self.__class__.__name__}.expand does not support negative shapes."
-            )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
@@ -2935,7 +2930,7 @@ class DiscreteTensorSpec(TensorSpec):
     def update_mask(self, mask):
         if mask is not None:
             try:
-                mask = mask.expand(*self.shape, self.space.n)
+                mask = mask.expand(_remove_neg_shapes(*self.shape, self.space.n))
             except RuntimeError as err:
                 raise RuntimeError("Cannot expand mask to the desired shape.") from err
             if mask.dtype != torch.bool:
@@ -2954,7 +2949,7 @@ class DiscreteTensorSpec(TensorSpec):
                 dtype=self.dtype,
             )
         mask = self.mask
-        mask = mask.expand(*shape, *mask.shape)
+        mask = mask.expand(_remove_neg_shapes(*shape, *mask.shape))
         if mask.ndim > 2:
             mask_flat = torch.flatten(mask, 0, -2)
         else:
@@ -2979,7 +2974,7 @@ class DiscreteTensorSpec(TensorSpec):
 
     def is_in(self, val: torch.Tensor) -> bool:
         if self.mask is None:
-            shape = torch.broadcast_shapes(_remove_neg_shapes(self.shape), val.shape)
+            shape = torch.broadcast_shapes(self._safe_shape, val.shape)
             shape_match = val.shape == shape
             if not shape_match:
                 return False
@@ -3059,10 +3054,6 @@ class DiscreteTensorSpec(TensorSpec):
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
-        if any(val < 0 for val in shape):
-            raise ValueError(
-                f"{self.__class__.__name__}.expand does not support negative shapes."
-            )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
@@ -3363,7 +3354,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
     def update_mask(self, mask):
         if mask is not None:
             try:
-                mask = mask.expand(*self.shape[:-1], mask.shape[-1])
+                mask = mask.expand(_remove_neg_shapes(*self.shape[:-1], mask.shape[-1]))
             except RuntimeError as err:
                 raise RuntimeError("Cannot expand mask to the desired shape.") from err
             if mask.dtype != torch.bool:
@@ -3563,10 +3554,6 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
-        if any(val < 0 for val in shape):
-            raise ValueError(
-                f"{self.__class__.__name__}.expand does not support negative shapes."
-            )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
@@ -4213,7 +4200,7 @@ class CompositeSpec(TensorSpec):
                 for key in self.keys(True)
                 if isinstance(key, str) and self[key] is not None
             },
-            torch.Size([*shape, *self.shape]),
+            torch.Size([*shape, *self._safe_shape]),
             device=device,
         )
 
@@ -4254,24 +4241,23 @@ class CompositeSpec(TensorSpec):
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
-        if any(val < 0 for val in shape):
-            raise ValueError("CompositeSpec.expand does not support negative shapes.")
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"The last {self.ndim} of the expanded shape {shape} must match the "
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
         try:
             device = self.device
         except RuntimeError:
             device = self._device
+        specs = {
+            key: value.expand((*shape, *value.shape[self.ndim :]))
+            if value is not None
+            else None
+            for key, value in tuple(self.items())
+        }
         out = CompositeSpec(
-            {
-                key: value.expand((*shape, *value.shape[self.ndim :]))
-                if value is not None
-                else None
-                for key, value in tuple(self.items())
-            },
+            specs,
             shape=shape,
             device=device,
         )
@@ -4565,7 +4551,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
 
     def is_in(self, value) -> bool:
         for spec, subval in zip(self._specs, value.unbind(self.dim)):
-            if not spec.is_in(subval):
+            if not spec.contains(subval):
                 return False
         return True
 

@@ -161,7 +161,7 @@ def _empty_like_spec(specs: List[TensorSpec], shape):
     else:
         # the exclusive key has values which are TensorSpecs ->
         # if the shapes of the values are all the same, we create a TensorSpec with leading shape `shape` and following dims 0 (having the same ndims as the values)
-        # if the shapes of the values differ,  we create a TensorSpec with 0 size in the differing dims
+        # if the shapes of the values differ,  we create a TensorSpec with -1 size in the differing dims
         spec_shape = list(spec.shape)
 
         for dim_index in range(len(spec_shape)):
@@ -171,11 +171,11 @@ def _empty_like_spec(specs: List[TensorSpec], shape):
                     hetero_dim = True
                     break
             if hetero_dim:
-                spec_shape[dim_index] = 0
+                spec_shape[dim_index] = -1
 
         if 0 not in spec_shape:  # the values have all same shape
             spec_shape = [
-                dim if i < len(shape) else 0 for i, dim in enumerate(spec_shape)
+                dim if i < len(shape) else -1 for i, dim in enumerate(spec_shape)
             ]
 
         spec = spec[(0,) * len(spec.shape)]

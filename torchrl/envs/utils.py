@@ -809,7 +809,7 @@ def check_env_specs(
         if spec is None:
             spec = CompositeSpec(shape=env.batch_size, device=env.device)
         td = last_td.select(*spec.keys(True, True), strict=True)
-        if not spec.is_in(td):
+        if not spec.contains(td):
             raise AssertionError(
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )
@@ -821,7 +821,7 @@ def check_env_specs(
         if spec is None:
             spec = CompositeSpec(shape=env.batch_size, device=env.device)
         td = last_td.get("next").select(*spec.keys(True, True), strict=True)
-        if not spec.is_in(td):
+        if not spec.contains(td):
             raise AssertionError(
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )

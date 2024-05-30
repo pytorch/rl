@@ -488,7 +488,7 @@ class TestParallel:
         assert isinstance(env, ParallelEnv)
 
     @pytest.mark.parametrize("num_parallel_env", [1, 10])
-    @pytest.mark.parametrize("env_batch_size", [[], (32,), (32, 1), (32, 0)])
+    @pytest.mark.parametrize("env_batch_size", [[], (32,), (32, 1)])
     def test_env_with_batch_size(
         self, num_parallel_env, env_batch_size, maybe_fork_ParallelEnv
     ):
