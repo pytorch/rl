@@ -1881,8 +1881,8 @@ class AutoResetHeteroCountingEnv(HeterogeneousCountingEnv):
                     lazy[obskey[1:]] += expand_right(
                         self.count[..., i, 0], lazy[obskey[1:]].shape
                     ).clone()
-        td.update(self.output_spec["full_done_spec"].zero())
-        td.update(self.output_spec["full_reward_spec"].zero())
+        td.update(self.full_done_spec.zero())
+        td.update(self.full_reward_spec.zero())
 
         assert td.batch_size == self.batch_size
         return td

@@ -632,7 +632,7 @@ class TensorSpec:
     @property
     def _safe_shape(self):
         """Returns a shape where all heterogeneous values are replaced by one (to be expandable)."""
-        return torch.Size([v if v > 0 else 1 for v in self.shape])
+        return torch.Size([int(v) if v >= 0 else 1 for v in self.shape])
 
     @abc.abstractmethod
     def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
