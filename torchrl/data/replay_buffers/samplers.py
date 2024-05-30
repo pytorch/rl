@@ -333,9 +333,9 @@ class PrioritizedSampler(Sampler):
         dtype: torch.dtype = torch.float,
         reduction: str = "max",
     ) -> None:
-        if alpha <= 0:
+        if alpha < 0:
             raise ValueError(
-                f"alpha must be strictly greater than 0, got alpha={alpha}"
+                f"alpha must be greater or equal than 0, got alpha={alpha}"
             )
         if beta < 0:
             raise ValueError(f"beta must be greater or equal to 0, got beta={beta}")
