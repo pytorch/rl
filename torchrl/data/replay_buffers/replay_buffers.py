@@ -633,7 +633,9 @@ class ReplayBuffer:
             ret = self._sample(batch_size)
         else:
             with self._futures_lock:
-                while (len(self._prefetch_queue) < self._prefetch_cap) and not self._sampler.ran_out:
+                while (
+                    len(self._prefetch_queue) < self._prefetch_cap
+                ) and not self._sampler.ran_out:
                     fut = self._prefetch_executor.submit(self._sample, batch_size)
                     self._prefetch_queue.append(fut)
                 ret = self._prefetch_queue.popleft().result()
@@ -714,7 +716,9 @@ class ReplayBuffer:
                 "Cannot iterate over the replay buffer. "
                 "Batch_size was not specified during construction of the replay buffer."
             )
-        while not self._sampler.ran_out or (self._prefetch and len(self._prefetch_queue)):
+        while not self._sampler.ran_out or (
+            self._prefetch and len(self._prefetch_queue)
+        ):
             yield self.sample()
 
     def __getstate__(self) -> Dict[str, Any]:
