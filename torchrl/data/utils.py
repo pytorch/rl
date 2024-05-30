@@ -75,7 +75,7 @@ def consolidate_spec(
     recurse_through_entries: bool = True,
     recurse_through_stack: bool = True,
 ):
-    """Given a TensorSpec, removes exclusive keys by adding 0 shaped specs.
+    """Given a TensorSpec, removes exclusive keys by adding -1 shaped specs.
 
     Args:
         spec (CompositeSpec): the spec to be consolidated.
@@ -173,7 +173,7 @@ def _empty_like_spec(specs: List[TensorSpec], shape):
             if hetero_dim:
                 spec_shape[dim_index] = -1
 
-        if 0 not in spec_shape:  # the values have all same shape
+        if -1 not in spec_shape:  # the values have all same shape
             spec_shape = [
                 dim if i < len(shape) else -1 for i, dim in enumerate(spec_shape)
             ]

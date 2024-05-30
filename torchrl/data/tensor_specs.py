@@ -4918,5 +4918,7 @@ def _minmax_dtype(dtype):
     return info.min, info.max
 
 
-def _remove_neg_shapes(shape):
+def _remove_neg_shapes(*shape):
+    if len(shape) == 1 and not isinstance(shape[0], int):
+        return _remove_neg_shapes(*shape[0])
     return torch.Size([int(d) if d >= 0 else 1 for d in shape])
