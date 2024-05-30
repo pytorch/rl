@@ -1254,8 +1254,15 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
             spec.type_check(val)
 
     def is_in(self, value) -> bool:
-        # We don't use unbind because value could be a tuple
-        return all(value in spec for (value, spec) in zip(value, self._specs))
+        if self.dim == 0:
+            # We don't use unbind because value could be a tuple or a nested tensor
+            return all(
+                spec.contains(value) for (value, spec) in zip(value, self._specs)
+            )
+        return all(
+            spec.contains(value)
+            for (value, spec) in zip(value.unbind(self.dim), self._specs)
+        )
 
     @property
     def space(self):

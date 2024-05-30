@@ -365,9 +365,10 @@ class TestGym:
         # sample_pt = torch.utils._pytree.tree_map(lambda x: torch.stack(list(x)), sample_pt, is_leaf=lambda x: isinstance(x, tuple))
         spec = _gym_to_torchrl_spec_transform(space)
         rand = spec.rand()
-        assert spec.is_in(rand)
-        assert rand in spec
-        assert sample_pt in spec, (rand, sample_pt)
+
+        assert spec.contains(rand), (rand, spec)
+        assert spec.contains(sample_pt), (rand, sample_pt)
+
         space_recon = _torchrl_to_gym_spec_transform(spec)
         assert space_recon == space, (space_recon, space)
         rand_numpy = rand.numpy()
