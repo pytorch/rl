@@ -1805,8 +1805,6 @@ class BoundedTensorSpec(TensorSpec):
             dtype=dtype,
             domain=domain,
         )
-        if self.shape == torch.Size([0, 0]):
-            raise RuntimeError
 
     def __eq__(self, other):
         return (
