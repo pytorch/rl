@@ -1154,10 +1154,6 @@ def _terminated_or_truncated(
 
         if aggregate is not None:
             if key is not None:
-                if aggregate.ndim > data.ndim:
-                    # accounts for trailing singleton dim in done.
-                    # _reset is always expanded on the right if needed so this can only be useful
-                    aggregate = aggregate.squeeze(-1)
                 data.set(key, aggregate)
                 list_of_keys.append(curr_done_key + (key,))
             any_eot = any_eot | aggregate.any()
