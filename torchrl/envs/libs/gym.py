@@ -277,9 +277,15 @@ def _gym_to_torchrl_spec_transform(
         )
     # a spec type cannot be a string, so we're sure that versions of gym that don't have Sequence will just skip through this
     elif isinstance(spec, getattr(gym_spaces, "Sequence", str)):
-        if not spec.stack:
+        if not hasattr(spec, "stack"):
+            # gym does not have a stack attribute in sequence
             raise ValueError(
-                "Sequence spaces must have the stack argument set to ``True``."
+                "gymnasium should be used whenever a Sequence is present, as it needs to be stacked. "
+                "If you need the gym backend at all price, please raise an issue on the TorchRL GitHub repository."
+            )
+        if not getattr(spec, "stack", False):
+            raise ValueError(
+                "Sequence spaces must have the stack argument set to ``True``. "
             )
         space = spec.feature_space
         out = _gym_to_torchrl_spec_transform(space, device=device, dtype=dtype)

@@ -313,66 +313,77 @@ class TestGym:
         assert spec == recon
         assert recon.shape == spec.shape
 
+    @pytest.mark.parametrize("order", ["tuple_seq"])
+    @implement_for("gym")
+    def test_gym_spec_cast_tuple_sequential(self, order):
+        pytest.skip("Sequence not available in gym")
+
     # @pytest.mark.parametrize("order", ["seq_tuple", "tuple_seq"])
     @pytest.mark.parametrize("order", ["tuple_seq"])
-    def test_gym_spec_cast_tuple_sequential(self, order):
-        if order == "seq_tuple":
-            space = gym_backend("spaces").Dict(
-                feature=gym_backend("spaces").Sequence(
-                    gym_backend("spaces").Tuple(
-                        (
-                            gym_backend("spaces").Box(-1, 1, shape=(2, 2)),
-                            gym_backend("spaces").Box(-1, 1, shape=(1, 2)),
-                        )
-                    ),
-                )
-            )
-        elif order == "tuple_seq":
-            space = gym_backend("spaces").Dict(
-                feature=gym_backend("spaces").Tuple(
-                    (
-                        gym_backend("spaces").Sequence(
-                            gym_backend("spaces").Box(-1, 1, shape=(2, 2)), stack=True
+    @implement_for("gymnasium")
+    def test_gym_spec_cast_tuple_sequential(self, order):  # noqa: F811
+        with set_gym_backend("gymnasium"):
+            if order == "seq_tuple":
+                # Requires nested tensors to be created along dim=1, disabling
+                space = gym_backend("spaces").Dict(
+                    feature=gym_backend("spaces").Sequence(
+                        gym_backend("spaces").Tuple(
+                            (
+                                gym_backend("spaces").Box(-1, 1, shape=(2, 2)),
+                                gym_backend("spaces").Box(-1, 1, shape=(1, 2)),
+                            )
                         ),
-                        gym_backend("spaces").Sequence(
-                            gym_backend("spaces").Box(-1, 1, shape=(1, 2)), stack=True
-                        ),
-                    ),
-                )
-            )
-        else:
-            raise NotImplementedError
-        sample = space.sample()
-        partial_tree_map = functools.partial(
-            tree_map, is_leaf=lambda x: isinstance(x, (tuple, torch.Tensor))
-        )
-
-        def stack_tuples(item):
-            if isinstance(item, tuple):
-                try:
-                    return torch.stack(
-                        [partial_tree_map(stack_tuples, x) for x in item]
+                        stack=True,
                     )
-                except RuntimeError:
-                    item = [partial_tree_map(stack_tuples, x) for x in item]
+                )
+            elif order == "tuple_seq":
+                space = gym_backend("spaces").Dict(
+                    feature=gym_backend("spaces").Tuple(
+                        (
+                            gym_backend("spaces").Sequence(
+                                gym_backend("spaces").Box(-1, 1, shape=(2, 2)),
+                                stack=True,
+                            ),
+                            gym_backend("spaces").Sequence(
+                                gym_backend("spaces").Box(-1, 1, shape=(1, 2)),
+                                stack=True,
+                            ),
+                        ),
+                    )
+                )
+            else:
+                raise NotImplementedError
+            sample = space.sample()
+            partial_tree_map = functools.partial(
+                tree_map, is_leaf=lambda x: isinstance(x, (tuple, torch.Tensor))
+            )
+
+            def stack_tuples(item):
+                if isinstance(item, tuple):
                     try:
-                        return torch.nested.nested_tensor(item)
+                        return torch.stack(
+                            [partial_tree_map(stack_tuples, x) for x in item]
+                        )
                     except RuntimeError:
-                        return tuple(item)
-            return torch.as_tensor(item)
+                        item = [partial_tree_map(stack_tuples, x) for x in item]
+                        try:
+                            return torch.nested.nested_tensor(item)
+                        except RuntimeError:
+                            return tuple(item)
+                return torch.as_tensor(item)
 
-        sample_pt = partial_tree_map(stack_tuples, sample)
-        # sample_pt = torch.utils._pytree.tree_map(lambda x: torch.stack(list(x)), sample_pt, is_leaf=lambda x: isinstance(x, tuple))
-        spec = _gym_to_torchrl_spec_transform(space)
-        rand = spec.rand()
+            sample_pt = partial_tree_map(stack_tuples, sample)
+            # sample_pt = torch.utils._pytree.tree_map(lambda x: torch.stack(list(x)), sample_pt, is_leaf=lambda x: isinstance(x, tuple))
+            spec = _gym_to_torchrl_spec_transform(space)
+            rand = spec.rand()
 
-        assert spec.contains(rand), (rand, spec)
-        assert spec.contains(sample_pt), (rand, sample_pt)
+            assert spec.contains(rand), (rand, spec)
+            assert spec.contains(sample_pt), (rand, sample_pt)
 
-        space_recon = _torchrl_to_gym_spec_transform(spec)
-        assert space_recon == space, (space_recon, space)
-        rand_numpy = rand.numpy()
-        assert space.contains(rand_numpy)
+            space_recon = _torchrl_to_gym_spec_transform(spec)
+            assert space_recon == space, (space_recon, space)
+            rand_numpy = rand.numpy()
+            assert space.contains(rand_numpy)
 
     _BACKENDS = [None]
     if _has_gymnasium:
