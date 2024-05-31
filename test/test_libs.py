@@ -88,7 +88,7 @@ from torchrl.envs import (
     RenameTransform,
 )
 from torchrl.envs.batched_envs import SerialEnv
-from torchrl.envs.libs.brax import _has_brax, BraxEnv
+from torchrl.envs.libs.brax import _has_brax, BraxEnv, BraxWrapper
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.envpool import _has_envpool, MultiThreadedEnvWrapper
 from torchrl.envs.libs.gym import (
@@ -1882,6 +1882,32 @@ class TestEnvPool:
 @pytest.mark.skipif(not _has_brax, reason="brax not installed")
 @pytest.mark.parametrize("envname", ["fast"])
 class TestBrax:
+    @pytest.mark.parametrize("requires_grad", [False, True])
+    def test_brax_constructor(self, envname, requires_grad):
+        env0 = BraxEnv(envname, requires_grad=requires_grad)
+        env1 = BraxWrapper(env0._env, requires_grad=requires_grad)
+
+        env0.set_seed(0)
+        torch.manual_seed(0)
+        init = env0.reset()
+        if requires_grad:
+            init = init.apply(
+                lambda x: x.requires_grad_(True) if x.is_floating_point() else x
+            )
+        r0 = env0.rollout(10, tensordict=init, auto_reset=False)
+        assert r0.requires_grad == requires_grad
+
+        env1.set_seed(0)
+        torch.manual_seed(0)
+        init = env1.reset()
+        if requires_grad:
+            init = init.apply(
+                lambda x: x.requires_grad_(True) if x.is_floating_point() else x
+            )
+        r1 = env1.rollout(10, tensordict=init, auto_reset=False)
+        assert r1.requires_grad == requires_grad
+        assert_allclose_td(r0.data, r1.data)
+
     def test_brax_seeding(self, envname):
         final_seed = []
         tdreset = []
