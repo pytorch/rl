@@ -1751,9 +1751,9 @@ class MultiKeyCountingEnv(EnvBase):
         if tensordict is not None:
             _reset = tensordict.get("_reset", None)
             if _reset is not None:
-                self.count[_reset] = self.start_val
-                self.count_nested_1[_reset] = self.start_val
-                self.count_nested_2[_reset] = self.start_val
+                self.count[_reset.squeeze(-1)] = self.start_val
+                self.count_nested_1[_reset.squeeze(-1)] = self.start_val
+                self.count_nested_2[_reset.squeeze(-1)] = self.start_val
             else:
                 reset_all = True
 
