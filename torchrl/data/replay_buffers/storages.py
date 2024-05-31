@@ -867,10 +867,10 @@ class LazyTensorStorage(TensorStorage):
             return (self.max_size, *data_shape)
 
         if is_tensor_collection(data):
-            out = data.expand(max_size_along_dim0(data.shape))
+            out = data.to(self.device)
+            out = out.expand(max_size_along_dim0(data.shape))
             out = out.clone()
             out = out.zero_()
-            out = out.to(self.device)
         else:
             # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
             out = tree_map(
