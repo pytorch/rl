@@ -18,15 +18,12 @@ from typing import (
     Callable,
     Dict,
     Generic,
-    ItemsView,
-    KeysView,
     List,
     Optional,
     Sequence,
     Tuple,
     TypeVar,
     Union,
-    ValuesView,
 )
 
 import numpy as np
@@ -780,7 +777,7 @@ class TensorSpec:
                 f"and spec was {self}."
             )
 
-    def type_check(self, value: torch.Tensor, key: str = None) -> None:
+    def type_check(self, value: torch.Tensor, key: NestedKey = None) -> None:
         """Checks the input value dtype against the TensorSpec dtype and raises an exception if they don't match.
 
         Args:
@@ -1249,7 +1246,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
             self.dim + len(expand_shape),
         )
 
-    def type_check(self, value: torch.Tensor, key: str = None) -> None:
+    def type_check(self, value: torch.Tensor, key: NestedKey | None = None) -> None:
         for (val, spec) in zip(value.unbind(self.dim), self._specs):
             spec.type_check(val)
 
@@ -3949,13 +3946,11 @@ class CompositeSpec(TensorSpec):
     def __iter__(self):
         yield from self._specs
 
-    def __delitem__(self, key: str) -> None:
-        if isinstance(key, tuple) and len(key) > 1:
+    def __delitem__(self, key: NestedKey) -> None:
+        key = unravel_key(key)
+        if isinstance(key, tuple):
             spec = self[key[:-1]]
             del spec[key[-1]]
-            return
-        elif isinstance(key, tuple):
-            del self._specs[key[0]]
             return
         elif not isinstance(key, str):
             raise TypeError(
@@ -3963,7 +3958,7 @@ class CompositeSpec(TensorSpec):
             )
 
         if key in {"shape", "device", "dtype", "space"}:
-            raise AttributeError(f"CompositeSpec has no key {key}")
+            raise ValueError(f"Key name {key} is prohibited.")
         del self._specs[key]
 
     def encode(
@@ -4046,7 +4041,9 @@ class CompositeSpec(TensorSpec):
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
-    ) -> KeysView:
+        *,
+        is_leaf: Callable[[type], bool] | None = None,
+    ) -> _CompositeSpecKeysView:  # noqa: D417
         """Keys of the CompositeSpec.
 
         The keys argument reflect those of :class:`tensordict.TensorDict`.
@@ -4061,16 +4058,27 @@ class CompositeSpec(TensorSpec):
                 will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
                 will lead to the keys :obj:`["next", ("next", "obs")]`.
                 Default is ``False``.
+
+        Keyword Args:
+            is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
+                should be seen as a leaf. By default, all non-CompositeSpec nodes are considered as
+                leaves.
+
         """
-        return _CompositeSpecKeysView(
-            self, include_nested=include_nested, leaves_only=leaves_only
-        )
+        return _CompositeSpecItemsView(
+            self,
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=is_leaf,
+        )._keys()
 
     def items(
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
-    ) -> ItemsView:
+        *,
+        is_leaf: Callable[[type], bool] | None = None,
+    ) -> _CompositeSpecItemsView:  # noqa: D417
         """Items of the CompositeSpec.
 
         Args:
@@ -4083,22 +4091,26 @@ class CompositeSpec(TensorSpec):
                 will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
                 will lead to the keys :obj:`["next", ("next", "obs")]`.
                 Default is ``False``.
+
+        Keyword Args:
+            is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
+                should be seen as a leaf. By default, all non-CompositeSpec nodes are considered as
+                leaves.
         """
-        if not include_nested and not leaves_only:
-            yield from self._specs.items()
-        else:
-            yield from (
-                (key, self[key])
-                for key in self.keys(
-                    include_nested=include_nested, leaves_only=leaves_only
-                )
-            )
+        return _CompositeSpecItemsView(
+            self,
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=is_leaf,
+        )
 
     def values(
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
-    ) -> ValuesView:
+        *,
+        is_leaf: Callable[[type], bool] | None = None,
+    ) -> _CompositeSpecValuesView:  # noqa: D417
         """Values of the CompositeSpec.
 
         Args:
@@ -4111,16 +4123,18 @@ class CompositeSpec(TensorSpec):
                 will contain every level of nesting, i.e. a :obj:`CompositeSpec(next=CompositeSpec(obs=None))`
                 will lead to the keys :obj:`["next", ("next", "obs")]`.
                 Default is ``False``.
+
+        Keyword Args:
+            is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
+                should be seen as a leaf. By default, all non-CompositeSpec nodes are considered as
+                leaves.
         """
-        if not include_nested and not leaves_only:
-            yield from self._specs.values()
-        else:
-            yield from (
-                self[key]
-                for key in self.keys(
-                    include_nested=include_nested, leaves_only=leaves_only
-                )
-            )
+        return _CompositeSpecItemsView(
+            self,
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=is_leaf,
+        )._values()
 
     def _reshape(self, shape):
         _specs = {
@@ -4450,34 +4464,49 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
     def __len__(self):
         return self.shape[0]
 
-    def values(
+    def keys(
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
-    ):
-        for key in self.keys(include_nested=include_nested, leaves_only=leaves_only):
-            yield self[key]
+        *,
+        is_leaf: Callable[[type], bool] | None = None,
+    ) -> _CompositeSpecKeysView:
+        return _CompositeSpecItemsView(
+            self,
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=is_leaf,
+        )._keys()
 
     def items(
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
-    ):
-        for key in self.keys(include_nested=include_nested, leaves_only=leaves_only):
-            yield key, self[key]
+        *,
+        is_leaf: Callable[[type], bool] | None = None,
+    ) -> _CompositeSpecItemsView:
+        return list(
+            _CompositeSpecItemsView(
+                self,
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+                is_leaf=is_leaf,
+            )
+        )
 
-    def keys(
+    def values(
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
-    ) -> KeysView:
-        keys = self._specs[0].keys(
-            include_nested=include_nested, leaves_only=leaves_only
-        )
-        keys = set(keys)
-        for spec in self._specs[1:]:
-            keys = keys.intersection(spec.keys(include_nested, leaves_only))
-        return sorted(keys, key=str)
+        *,
+        is_leaf: Callable[[type], bool] | None = None,
+    ) -> _CompositeSpecValuesView:
+        return _CompositeSpecItemsView(
+            self,
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=is_leaf,
+        )._values()
 
     def project(self, val: TensorDictBase) -> TensorDictBase:
         vals = []
@@ -4571,7 +4600,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
                 continue
         if not at_least_one_deletion:
             raise KeyError(
-                f"Key {key} must be present in at least one of the stacked specs"
+                f"Key {key} must be present in at least one of the stacked specs."
             )
         return self
 
@@ -4858,32 +4887,75 @@ def _unsqueezed_shape(shape: torch.Size, dim: int) -> torch.Size:
     return torch.Size(new_shape)
 
 
-class _CompositeSpecKeysView:
-    """Wrapper class that enables richer behaviour of `key in tensordict.keys()`."""
+class _CompositeSpecItemsView:
+    """Wrapper class that enables richer behaviour of `items` for CompositeSpec."""
 
     def __init__(
         self,
         composite: CompositeSpec,
         include_nested,
         leaves_only,
+        *,
+        is_leaf,
     ):
         self.composite = composite
         self.leaves_only = leaves_only
         self.include_nested = include_nested
+        self.is_leaf = is_leaf
 
     def __iter__(self):
-        for key, item in self.composite.items():
+        from tensordict.base import _NESTED_TENSORS_AS_LISTS
+
+        is_leaf = self.is_leaf
+        if is_leaf in (None, _NESTED_TENSORS_AS_LISTS):
+
+            def _is_leaf(cls):
+                return not issubclass(cls, CompositeSpec)
+
+        else:
+            _is_leaf = is_leaf
+
+        def _iter_from_item(key, item):
             if self.include_nested and isinstance(item, CompositeSpec):
-                for subkey in item.keys(
-                    include_nested=True, leaves_only=self.leaves_only
+                for subkey, subitem in item.items(
+                    include_nested=True,
+                    leaves_only=self.leaves_only,
+                    is_leaf=is_leaf,
                 ):
                     if not isinstance(subkey, tuple):
                         subkey = (subkey,)
-                    yield (key, *subkey)
-                if not self.leaves_only:
-                    yield key
-            elif not isinstance(item, CompositeSpec) or not self.leaves_only:
-                yield key
+                    yield (key, *subkey), subitem
+            if not self.leaves_only and not _is_leaf(type(item)):
+                yield (key, item)
+            elif not self.leaves_only or _is_leaf(type(item)):
+                yield key, item
+
+        for key, item in self._get_composite_items(is_leaf):
+            if is_leaf is _NESTED_TENSORS_AS_LISTS and isinstance(
+                item, _LazyStackedMixin
+            ):
+                for (i, spec) in enumerate(item._specs):
+                    yield from _iter_from_item(unravel_key((key, str(i))), spec)
+            else:
+                yield from _iter_from_item(key, item)
+
+    def _get_composite_items(self, is_leaf):
+
+        if isinstance(self.composite, LazyStackedCompositeSpec):
+            from tensordict.base import _NESTED_TENSORS_AS_LISTS
+
+            if is_leaf is _NESTED_TENSORS_AS_LISTS:
+                for i, spec in enumerate(self.composite._specs):
+                    for key, item in spec.items():
+                        yield ((str(i), key), item)
+            else:
+                keys = self.composite._specs[0].keys()
+                keys = set(keys)
+                for spec in self.composite._specs[1:]:
+                    keys = keys.intersection(spec.keys())
+                yield from ((key, self.composite[key]) for key in sorted(keys, key=str))
+        else:
+            yield from self.composite._specs.items()
 
     def __len__(self):
         i = 0
@@ -4892,7 +4964,7 @@ class _CompositeSpecKeysView:
         return i
 
     def __repr__(self):
-        return f"_CompositeSpecKeysView(keys={list(self)})"
+        return f"{type(self).__name__}(keys={list(self)})"
 
     def __contains__(self, item):
         item = unravel_key(item)
@@ -4904,6 +4976,44 @@ class _CompositeSpecKeysView:
                 return True
         else:
             return False
+
+    def _keys(self):
+        return _CompositeSpecKeysView(self)
+
+    def _values(self):
+        return _CompositeSpecValuesView(self)
+
+
+class _CompositeSpecKeysView:
+    def __init__(self, items: _CompositeSpecItemsView):
+        self.items = items
+
+    def __iter__(self):
+        yield from (key for (key, _) in self.items)
+
+    def __contains__(self, item):
+        item = unravel_key(item)
+        return any(key == item for key in self)
+
+    def __len__(self):
+        return len(self.items)
+
+    def __repr__(self):
+        return f"{type(self).__name__}(keys={list(self)})"
+
+
+class _CompositeSpecValuesView:
+    def __init__(self, items: _CompositeSpecItemsView):
+        self.items = items
+
+    def __iter__(self):
+        yield from (val for (_, val) in self.items)
+
+    def __len__(self):
+        return len(self.items)
+
+    def __repr__(self):
+        return f"{type(self).__name__}(values={list(self)})"
 
 
 def _minmax_dtype(dtype):

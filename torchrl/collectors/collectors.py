@@ -200,7 +200,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             self.policy_weights.data.update_(self.get_weights_fn())
 
     def __iter__(self) -> Iterator[TensorDictBase]:
-        return self.iterator()
+        yield from self.iterator()
 
     def next(self):
         try:
@@ -796,6 +796,8 @@ class SyncDataCollector(DataCollectorBase):
         )
         self._final_rollout.refine_names(..., "time")
 
+        assert self._final_rollout.names[-1] == "time"
+
     def _set_truncated_keys(self):
         self._truncated_keys = []
         if self.set_truncated:
@@ -1080,25 +1082,30 @@ class SyncDataCollector(DataCollectorBase):
                                 )
                     else:
                         result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
+                        assert result.names[-1] == "time"
                     break
             else:
                 if self._use_buffers:
                     result = self._final_rollout
                     try:
-                        self._final_rollout = torch.stack(
+                        result = torch.stack(
                             tensordicts,
                             self._final_rollout.ndim - 1,
                             out=self._final_rollout,
                         )
+                        assert result.names[-1] == "time"
+
                     except RuntimeError:
                         with self._final_rollout.unlock_():
-                            self._final_rollout = torch.stack(
+                            result = torch.stack(
                                 tensordicts,
                                 self._final_rollout.ndim - 1,
                                 out=self._final_rollout,
                             )
+                            assert result.names[-1] == "time"
                 else:
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
+                    result.refine_names(..., "time")
 
         return self._maybe_set_truncated(result)
 
@@ -2213,7 +2220,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     ("collector", "traj_ids"), torch.stack(traj_ids_list), inplace=True
                 )
             else:
-                if not self._use_buffers:
+                if self._use_buffers is None:
+                    torchrl_logger.warning(
+                        "use_buffer not specified and not yet inferred from data, assuming `True`."
+                    )
+                elif not self._use_buffers:
                     raise RuntimeError(
                         "Cannot concatenate results with use_buffers=False"
                     )
@@ -2455,7 +2466,6 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             _check_for_faulty_process(self.procs)
             self._iter += 1
             idx, j, out = self._get_from_queue()
-
             worker_frames = out.numel()
             if self.split_trajs:
                 out = split_trajectories(out, prefix="collector")
@@ -2854,6 +2864,7 @@ def _main_async_collector(
                             else x
                         )
                 data = (collected_tensordict, idx)
+                assert collected_tensordict.names[-1] == "time"
             else:
                 if next_data is not collected_tensordict:
                     raise RuntimeError(

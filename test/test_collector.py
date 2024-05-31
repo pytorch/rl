@@ -798,12 +798,8 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 
 
 @pytest.mark.parametrize("num_env", [1, 2])
-@pytest.mark.parametrize(
-    "env_name",
-    [
-        "vec",
-    ],
-)  # 1226: for efficiency, we just test vec, not "conv"
+# 1226: for efficiency, we just test vec, not "conv"
+@pytest.mark.parametrize("env_name", ["vec"])
 def test_collector_batch_size(
     num_env, env_name, seed=100, num_workers=2, frames_per_batch=20
 ):
@@ -1428,6 +1424,7 @@ def test_collector_device_combinations(device, storing_device):
         device=device,
         storing_device=storing_device,
     )
+    assert collector._use_buffers
     batch = next(collector.iterator())
     assert batch.device == torch.device(storing_device)
     collector.shutdown()
@@ -2581,6 +2578,7 @@ class TestUniqueTraj:
         try:
             for d in c:
                 buffer.extend(d)
+            assert c._use_buffers
             traj_ids = buffer[:].get(("collector", "traj_ids"))
             # check that we have as many trajs as expected (no skip)
             assert traj_ids.unique().numel() == traj_ids.max() + 1
@@ -2611,6 +2609,7 @@ class TestDynamicEnvs:
         )
         for data in collector:
             assert isinstance(data, LazyStackedTensorDict)
+            assert data.names[-1] == "time"
 
     def test_dynamic_multisync_collector(self):
         env = EnvWithDynamicSpec
@@ -2625,6 +2624,7 @@ class TestDynamicEnvs:
         )
         for data in collector:
             assert isinstance(data, LazyStackedTensorDict)
+            assert data.names[-1] == "time"
 
     def test_dynamic_multiasync_collector(self):
         env = EnvWithDynamicSpec
@@ -2638,6 +2638,7 @@ class TestDynamicEnvs:
         )
         for data in collector:
             assert isinstance(data, LazyStackedTensorDict)
+            assert data.names[-1] == "time"
 
 
 if __name__ == "__main__":

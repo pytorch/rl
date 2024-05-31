@@ -665,12 +665,12 @@ SUPPORTED_LIBRARIES = {
 
 def _per_level_env_check(data0, data1, check_dtype):
     """Checks shape and dtype of two tensordicts, accounting for lazy stacks."""
-    if isinstance(data0, LazyStackedTensorDict) and isinstance(
-        data1, LazyStackedTensorDict
-    ):
-        if data0.stack_dim != data1.stack_dim:
-            raise AssertionError(f"Stack dimension mismatch: {data0} vs {data1}.")
-        for _data0, _data1 in zip(data0.tensordicts, data1.tensordicts):
+    if isinstance(data0, LazyStackedTensorDict):
+        for _data0, _data1 in zip(data0.tensordicts, data1.unbind(data0.stack_dim)):
+            _per_level_env_check(_data0, _data1, check_dtype=check_dtype)
+        return
+    if isinstance(data1, LazyStackedTensorDict):
+        for _data0, _data1 in zip(data0.unbind(data1.stack_dim), data1.tensordicts):
             _per_level_env_check(_data0, _data1, check_dtype=check_dtype)
         return
     else:
@@ -764,8 +764,9 @@ def check_env_specs(
         "zeroing the two tensordicts did not make them identical. "
         "Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
     )
+    from torchrl.envs.common import _has_dynamic_specs
 
-    if env._has_dynamic_specs:
+    if _has_dynamic_specs(env.specs):
         for real, fake in zip(real_tensordict.unbind(-1), fake_tensordict.unbind(-1)):
             fake = fake.apply(lambda x, y: x.expand_as(y), real)
             if (torch.zeros_like(real) != torch.zeros_like(fake)).any():

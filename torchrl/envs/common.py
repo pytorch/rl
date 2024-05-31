@@ -2314,9 +2314,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @property
     def _has_dynamic_specs(self) -> bool:
-        return _has_dynamic_specs(self.output_spec) or _has_dynamic_specs(
-            self.input_spec
-        )
+        return _has_dynamic_specs(self.specs)
 
     def rollout(
         self,
@@ -3181,4 +3179,9 @@ def _do_nothing():
 
 
 def _has_dynamic_specs(spec: CompositeSpec):
-    return any(any(s == -1 for s in spec.shape) for spec in spec.values(True, True))
+    from tensordict.base import _NESTED_TENSORS_AS_LISTS
+
+    return any(
+        any(s == -1 for s in spec.shape)
+        for spec in spec.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+    )
