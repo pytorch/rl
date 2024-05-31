@@ -335,6 +335,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     dtype=torch.bool,
                     domain=discrete), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
 
+    .. note:: Learn more about dynamic specs and environments :ref:`here <dynamic_envs>`.
     """
 
     def __init__(

@@ -188,6 +188,8 @@ class BatchedEnvBase(EnvBase):
             occur via circular preallocated memory buffers. Defaults to ``True`` unless
             one of the environment has dynamic specs.
 
+              .. note:: Learn more about dynamic specs and environments :ref:`here <dynamic_envs>`.
+
     .. note::
         One can pass keyword arguments to each sub-environments using the following
         technique: every keyword argument in :meth:`~.reset` will be passed to each
@@ -993,21 +995,6 @@ class SerialEnv(BatchedEnvBase):
             else:
                 out_tds[i] = _td
         if not self._use_buffers:
-            # first_non_none = None
-            # first_none = None
-            # for i, item in enumerate(out_tds):
-            #     if item is not None:
-            #         first_non_none = i
-            #         if first_none is not None:
-            #             break
-            #     else:
-            #         first_none = i
-            #         if first_non_none is not None:
-            #             break
-            # if first_none is not None:
-            #     empty_td = out_tds[first_non_none].empty(recurse=True)
-            #     out_tds = [item if item is not None else empty_td for item in out_tds]
-            #
             result = LazyStackedTensorDict.maybe_dense_stack(out_tds)
             return result
 
