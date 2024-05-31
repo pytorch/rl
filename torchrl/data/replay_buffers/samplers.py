@@ -42,6 +42,13 @@ _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 class Sampler(ABC):
     """A generic sampler base class for composable Replay Buffers."""
 
+    @property
+    def auto_reset(self) -> bool:
+        return getattr(self, "_auto_reset", True)
+    @auto_reset.setter
+    def auto_reset(self, value: bool) -> None:
+        self._auto_reset = value
+
     @abstractmethod
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
         ...
@@ -137,6 +144,10 @@ class SamplerWithoutReplacement(Sampler):
         shuffle (bool, optional): if ``False``, the items are not randomly
             permuted. This enables to iterate over the replay buffer in the
             order the data was collected. Defaults to ``True``.
+        auto_reset (bool, optional): if ``True`` (default), the sampler is reset whenever
+            :meth:`~.sample` is called and `self.ran_out=True`. Otherwise, asking for a
+            sample will return a `StopIteration` object and :meth:`~.reset` will have to
+            be called explicitly.
 
     *Caution*: If the size of the storage changes in between two calls, the samples will be re-shuffled
     (as we can't generally keep track of which samples have been sampled before and which haven't).
@@ -150,12 +161,13 @@ class SamplerWithoutReplacement(Sampler):
 
     """
 
-    def __init__(self, drop_last: bool = False, shuffle: bool = True):
+    def __init__(self, drop_last: bool = False, shuffle: bool = True, auto_reset: bool = True):
         self._sample_list = None
         self.len_storage = 0
         self.drop_last = drop_last
         self._ran_out = False
         self.shuffle = shuffle
+        self.auto_reset = auto_reset
 
     def dumps(self, path):
         path = Path(path)
@@ -166,6 +178,9 @@ class SamplerWithoutReplacement(Sampler):
                 self.state_dict(),
                 file,
             )
+
+    def extend(self, index: torch.Tensor) -> None:
+        self._sample_list = None
 
     def loads(self, path):
         with open(path / "sampler_metadata.json", "r") as file:
@@ -184,19 +199,27 @@ class SamplerWithoutReplacement(Sampler):
             _sample_list = torch.arange(len_storage, device=device)
         self._sample_list = _sample_list
 
-    def _single_sample(self, len_storage, batch_size):
-        index = self._sample_list[:batch_size]
-        self._sample_list = self._sample_list[batch_size:]
-
+    def _maybe_reset(self, *, len_storage, batch_size, force_reset: bool = False):
         # check if we have enough elements for one more batch, assuming same batch size
         # will be used each time sample is called
         if self._sample_list.shape[0] == 0 or (
             self.drop_last and len(self._sample_list) < batch_size
         ):
-            self.ran_out = True
-            self._get_sample_list(storage=None, len_storage=len_storage)
-        else:
-            self.ran_out = False
+            self.ran_out = not self.auto_reset
+            if self.auto_reset or force_reset:
+                self._get_sample_list(storage=None, len_storage=len_storage)
+
+    def _single_sample(self, len_storage, batch_size):
+        if self.ran_out and not self.auto_reset:
+            # Reset has not been executed
+            # This block is only accessible when `__iter__` is being called in a replay buffer with prefetch>0
+            return StopIteration
+        self.ran_out = False
+        if not self.auto_reset:
+            self._maybe_reset(len_storage=len_storage, batch_size=batch_size, force_reset=True)
+        index = self._sample_list[:batch_size]
+        self._sample_list = self._sample_list[batch_size:]
+        self._maybe_reset(len_storage=len_storage, batch_size=batch_size)
         return index
 
     def _storage_len(self, storage):
@@ -204,10 +227,9 @@ class SamplerWithoutReplacement(Sampler):
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
         len_storage = self._storage_len(storage)
-        if len_storage == 0:
-            raise RuntimeError(_EMPTY_STORAGE_ERROR)
         if not len_storage:
-            raise RuntimeError("An empty storage was passed")
+            raise RuntimeError(_EMPTY_STORAGE_ERROR)
+        # Reset when the length of the storage has changed
         if self.len_storage != len_storage or self._sample_list is None:
             self._get_sample_list(storage, len_storage)
         if len_storage < batch_size and self.drop_last:
@@ -218,6 +240,8 @@ class SamplerWithoutReplacement(Sampler):
             )
         self.len_storage = len_storage
         index = self._single_sample(len_storage, batch_size)
+        if index is StopIteration:
+            return index
         if storage.ndim > 1:
             index = torch.unravel_index(index, storage.shape)
         # we 'always' return the indices. The 'drop_last' just instructs the

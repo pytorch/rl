@@ -570,7 +570,10 @@ class ReplayBuffer:
     @pin_memory_output
     def _sample(self, batch_size: int) -> Tuple[Any, dict]:
         with self._replay_lock:
-            index, info = self._sampler.sample(self._storage, batch_size)
+            index_info = self._sampler.sample(self._storage, batch_size)
+            if index_info is StopIteration:
+                return StopIteration
+            index, info = index_info
             info["index"] = index
             data = self._storage.get(index)
         # if self.dim_extend > 0:
@@ -635,10 +638,12 @@ class ReplayBuffer:
             with self._futures_lock:
                 while (
                     len(self._prefetch_queue) < self._prefetch_cap
-                ) and not self._sampler.ran_out:
+                ):
                     fut = self._prefetch_executor.submit(self._sample, batch_size)
                     self._prefetch_queue.append(fut)
                 ret = self._prefetch_queue.popleft().result()
+                if ret is StopIteration:
+                    return ret
 
         if return_info:
             return ret
@@ -709,17 +714,29 @@ class ReplayBuffer:
         return self
 
     def __iter__(self):
-        if self._sampler.ran_out:
+        auto_reset = self._sampler.auto_reset
+        # settomg auto_reset to False ensures the sampler will return a StopIteration whenever all the data is consumed
+        self._sampler.auto_reset = False
+        # Telling the sampler it has not ran out ensures a new list will be sampled if possible
+        self._sampler.ran_out = False
+        try:
+            if self._batch_size is None:
+                raise RuntimeError(
+                    "Cannot iterate over the replay buffer. "
+                    "Batch_size was not specified during construction of the replay buffer."
+                )
+            while not self._sampler.ran_out or (
+                self._prefetch and len(self._prefetch_queue)
+            ):
+                sample = self.sample()
+                if sample is StopIteration:
+                    print('breaking')
+                    break
+                yield sample
+        finally:
+            self._sampler.auto_reset = auto_reset
             self._sampler.ran_out = False
-        if self._batch_size is None:
-            raise RuntimeError(
-                "Cannot iterate over the replay buffer. "
-                "Batch_size was not specified during construction of the replay buffer."
-            )
-        while not self._sampler.ran_out or (
-            self._prefetch and len(self._prefetch_queue)
-        ):
-            yield self.sample()
+            self._prefetch_queue.clear()
 
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
