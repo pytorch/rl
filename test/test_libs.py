@@ -3518,6 +3518,32 @@ class TestPettingZoo:
         vec_env = maybe_fork_ParallelEnv(2, create_env_fn=env_fun)
         vec_env.rollout(100, break_when_any_done=False)
 
+    def test_reset_parallel_env(self, maybe_fork_ParallelEnv):
+        def base_env_fn():
+            return PettingZooEnv(
+                task="multiwalker_v9",
+                parallel=True,
+                seed=0,
+                n_walkers=3,
+                max_cycles=1000,
+            )
+
+        collector = SyncDataCollector(
+            lambda: maybe_fork_ParallelEnv(
+                num_workers=2,
+                create_env_fn=base_env_fn,
+                device="cpu",
+            ),
+            policy=None,
+            frames_per_batch=100,
+            max_frames_per_traj=50,
+            total_frames=200,
+            reset_at_each_iter=False,
+        )
+        for _ in collector:
+            pass
+        collector.shutdown()
+
     @pytest.mark.parametrize("task", ["knights_archers_zombies_v10", "pistonball_v6"])
     @pytest.mark.parametrize("parallel", [True, False])
     def test_collector(self, task, parallel):
