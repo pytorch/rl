@@ -1881,8 +1881,8 @@ class AutoResetHeteroCountingEnv(HeterogeneousCountingEnv):
                     lazy[obskey[1:]] += expand_right(
                         self.count[..., i, 0], lazy[obskey[1:]].shape
                     ).clone()
-        td.update(self.output_spec["full_done_spec"].zero())
-        td.update(self.output_spec["full_reward_spec"].zero())
+        td.update(self.full_done_spec.zero())
+        td.update(self.full_reward_spec.zero())
 
         assert td.batch_size == self.batch_size
         return td
@@ -1896,3 +1896,57 @@ class AutoResetHeteroCountingEnv(HeterogeneousCountingEnv):
         reset_td.update(self.full_done_spec.zero())
         assert reset_td.batch_size == self.batch_size
         return reset_td
+
+
+class EnvWithDynamicSpec(EnvBase):
+    def __init__(self, max_count=5):
+        super().__init__(batch_size=())
+        self.observation_spec = CompositeSpec(
+            observation=UnboundedContinuousTensorSpec(shape=(3, -1, 2)),
+        )
+        self.action_spec = BoundedTensorSpec(low=-1, high=1, shape=(2,))
+        self.full_done_spec = CompositeSpec(
+            done=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
+            terminated=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
+            truncated=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
+        )
+        self.reward_spec = UnboundedContinuousTensorSpec((1,), dtype=torch.float)
+        self.count = 0
+        self.max_count = max_count
+
+    def _reset(self, tensordict=None):
+        self.count = 0
+        data = TensorDict(
+            {
+                "observation": torch.full(
+                    (3, self.count + 1, 2),
+                    self.count,
+                    dtype=self.observation_spec["observation"].dtype,
+                )
+            }
+        )
+        data.update(self.done_spec.zero())
+        return data
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        self.count += 1
+        done = self.count >= self.max_count
+        observation = TensorDict(
+            {
+                "observation": torch.full(
+                    (3, self.count + 1, 2),
+                    self.count,
+                    dtype=self.observation_spec["observation"].dtype,
+                )
+            }
+        )
+        done = self.full_done_spec.zero() | done
+        reward = self.full_reward_spec.zero()
+        return observation.update(done).update(reward)
+
+    def _set_seed(self, seed: Optional[int]):
+        self.manual_seed = seed
+        return seed

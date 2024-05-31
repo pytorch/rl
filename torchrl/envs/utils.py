@@ -293,7 +293,6 @@ class _StepMDP:
                 tensordict.stack_dim,
             )
             return out
-
         next_td = tensordict._get_str("next", None)
         if self.validate(tensordict):
             if self.keep_other:
@@ -306,12 +305,25 @@ class _StepMDP:
                     out,
                     _allow_absent_keys=self._allow_absent_keys,
                 )
-            self._grab_and_place(
-                self.keys_from_next,
-                next_td,
-                out,
-                _allow_absent_keys=self._allow_absent_keys,
-            )
+            if isinstance(next_td, LazyStackedTensorDict):
+                if not isinstance(out, LazyStackedTensorDict):
+                    out = LazyStackedTensorDict(
+                        *out.unbind(next_td.stack_dim), stack_dim=next_td.stack_dim
+                    )
+                for _next_td, _out in zip(next_td.tensordicts, out.tensordicts):
+                    self._grab_and_place(
+                        self.keys_from_next,
+                        _next_td,
+                        _out,
+                        _allow_absent_keys=self._allow_absent_keys,
+                    )
+            else:
+                self._grab_and_place(
+                    self.keys_from_next,
+                    next_td,
+                    out,
+                    _allow_absent_keys=self._allow_absent_keys,
+                )
             return out
         else:
             out = next_td.empty()
@@ -653,12 +665,12 @@ SUPPORTED_LIBRARIES = {
 
 def _per_level_env_check(data0, data1, check_dtype):
     """Checks shape and dtype of two tensordicts, accounting for lazy stacks."""
-    if isinstance(data0, LazyStackedTensorDict) and isinstance(
-        data1, LazyStackedTensorDict
-    ):
-        if data0.stack_dim != data1.stack_dim:
-            raise AssertionError(f"Stack dimension mismatch: {data0} vs {data1}.")
-        for _data0, _data1 in zip(data0.tensordicts, data1.tensordicts):
+    if isinstance(data0, LazyStackedTensorDict):
+        for _data0, _data1 in zip(data0.tensordicts, data1.unbind(data0.stack_dim)):
+            _per_level_env_check(_data0, _data1, check_dtype=check_dtype)
+        return
+    if isinstance(data1, LazyStackedTensorDict):
+        for _data0, _data1 in zip(data0.unbind(data1.stack_dim), data1.tensordicts):
             _per_level_env_check(_data0, _data1, check_dtype=check_dtype)
         return
     else:
@@ -748,19 +760,32 @@ def check_env_specs(
     - List of keys present in fake but not in real: {fake_tensordict_keys-real_tensordict_keys}.
 """
         )
-    if (
-        fake_tensordict_select.apply(lambda x: torch.zeros_like(x))
-        != real_tensordict_select.apply(lambda x: torch.zeros_like(x))
-    ).any():
-        raise AssertionError(
-            "zeroing the two tensordicts did not make them identical. "
-            f"Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
-        )
-
-    # Checks shapes and eventually dtypes of keys at all nesting levels
-    _per_level_env_check(
-        fake_tensordict_select, real_tensordict_select, check_dtype=check_dtype
+    zeroing_err_msg = (
+        "zeroing the two tensordicts did not make them identical. "
+        "Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
     )
+    from torchrl.envs.common import _has_dynamic_specs
+
+    if _has_dynamic_specs(env.specs):
+        for real, fake in zip(real_tensordict.unbind(-1), fake_tensordict.unbind(-1)):
+            fake = fake.apply(lambda x, y: x.expand_as(y), real)
+            if (torch.zeros_like(real) != torch.zeros_like(fake)).any():
+                raise AssertionError(zeroing_err_msg)
+
+            # Checks shapes and eventually dtypes of keys at all nesting levels
+            _per_level_env_check(fake, real, check_dtype=check_dtype)
+
+    else:
+        if (
+            torch.zeros_like(fake_tensordict_select)
+            != torch.zeros_like(real_tensordict_select)
+        ).any():
+            raise AssertionError(zeroing_err_msg)
+
+        # Checks shapes and eventually dtypes of keys at all nesting levels
+        _per_level_env_check(
+            fake_tensordict_select, real_tensordict_select, check_dtype=check_dtype
+        )
 
     # Check specs
     last_td = real_tensordict[..., -1]
@@ -785,7 +810,7 @@ def check_env_specs(
         if spec is None:
             spec = CompositeSpec(shape=env.batch_size, device=env.device)
         td = last_td.select(*spec.keys(True, True), strict=True)
-        if not spec.is_in(td):
+        if not spec.contains(td):
             raise AssertionError(
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )
@@ -797,7 +822,7 @@ def check_env_specs(
         if spec is None:
             spec = CompositeSpec(shape=env.batch_size, device=env.device)
         td = last_td.get("next").select(*spec.keys(True, True), strict=True)
-        if not spec.is_in(td):
+        if not spec.contains(td):
             raise AssertionError(
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )
@@ -1369,7 +1394,13 @@ def _update_during_reset(
                 reset = reset.any(-1)
             reset = reset.reshape(node.shape)
             # node.update(node.where(~reset, other=node_reset, pad=0))
+
             node.where(~reset, other=node_reset, out=node, pad=0)
+            # node = node.clone()
+            # idx = reset.nonzero(as_tuple=True)[0]
+            # node[idx].update(node_reset[idx])
+            # node["done"] = torch.zeros((*node.shape, 1), dtype=torch.bool)
+
     return tensordict
 
 

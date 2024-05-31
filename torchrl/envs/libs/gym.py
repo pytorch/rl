@@ -27,6 +27,7 @@ from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
+    LazyStackedTensorSpec,
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
@@ -245,8 +246,8 @@ def _gym_to_torchrl_spec_transform(
         ).expand(batch_size)
     gym_spaces = gym_backend("spaces")
     if isinstance(spec, gym_spaces.tuple.Tuple):
-        return torch.stack(
-            [
+        result = LazyStackedTensorSpec(
+            *[
                 _gym_to_torchrl_spec_transform(
                     s,
                     device=device,
@@ -255,8 +256,9 @@ def _gym_to_torchrl_spec_transform(
                 )
                 for s in spec
             ],
-            0,
+            dim=0,
         )
+        return result
     if isinstance(spec, gym_spaces.discrete.Discrete):
         action_space_cls = (
             DiscreteTensorSpec
@@ -273,6 +275,23 @@ def _gym_to_torchrl_spec_transform(
         return BinaryDiscreteTensorSpec(
             spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
         )
+    # a spec type cannot be a string, so we're sure that versions of gym that don't have Sequence will just skip through this
+    elif isinstance(spec, getattr(gym_spaces, "Sequence", str)):
+        if not hasattr(spec, "stack"):
+            # gym does not have a stack attribute in sequence
+            raise ValueError(
+                "gymnasium should be used whenever a Sequence is present, as it needs to be stacked. "
+                "If you need the gym backend at all price, please raise an issue on the TorchRL GitHub repository."
+            )
+        if not getattr(spec, "stack", False):
+            raise ValueError(
+                "Sequence spaces must have the stack argument set to ``True``. "
+            )
+        space = spec.feature_space
+        out = _gym_to_torchrl_spec_transform(space, device=device, dtype=dtype)
+        out = out.unsqueeze(0)
+        out.make_neg_dim(0)
+        return out
     elif isinstance(spec, gym_spaces.multi_discrete.MultiDiscrete):
         if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
             dtype = (
@@ -418,6 +437,15 @@ def _torchrl_to_gym_spec_transform(
     """
     gym_spaces = gym_backend("spaces")
     shape = spec.shape
+    if any(s == -1 for s in spec.shape):
+        if spec.shape[0] == -1:
+            spec = spec.clone()
+            spec = spec[0]
+            return gym_spaces.Sequence(_torchrl_to_gym_spec_transform(spec), stack=True)
+        else:
+            return gym_spaces.Tuple(
+                tuple(_torchrl_to_gym_spec_transform(spec) for spec in spec.unbind(0))
+            )
     if isinstance(spec, MultiDiscreteTensorSpec):
         return _multidiscrete_convert(gym_spaces, spec)
     if isinstance(spec, MultiOneHotDiscreteTensorSpec):
@@ -670,6 +698,28 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         if no other reader is provided. To provide another reader, refer to
         :meth:`~.set_info_dict_reader`. To automatically register the info_dict
         content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
+        For parallel (Vectorized) environments, the info dictionary reader is automatically set and should
+        not be set manually.
+
+    .. note:: Gym spaces are not completely covered.
+        The following spaces are accounted for provided that they can be represented by a torch.Tensor, a nested tensor
+        and/or within a tensordict:
+
+          - spaces.Box
+          - spaces.Sequence
+          - spaces.Tuple
+          - spaces.Discrete
+          - spaces.MultiBinary
+          - spaces.MultiDiscrete
+          - spaces.Dict
+
+        Some considerations should be made when working with gym spaces. For instance, a tuple of spaces
+        can only be supported if the spaces are semantically identical (same dtype and same number of dimensions).
+        Ragged dimension can be supported through :func:`~torch.nested.nested_tensor`, but then there should be only
+        one level of tuple and data should be stacked along the first dimension (as nested_tensors can only be
+        stacked along the first dimension).
+
+        Check the example in examples/envs/gym_conversion_examples.py to know more!
 
     """
 
@@ -1055,6 +1105,12 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @implement_for("gym", None, "0.26")
     def _reset_output_transform(self, reset_data):  # noqa: F811
+        if (
+            isinstance(reset_data, tuple)
+            and len(reset_data) == 2
+            and isinstance(reset_data[1], dict)
+        ):
+            return reset_data
         return reset_data, None
 
     @implement_for("gym", "0.26", None)
@@ -1241,6 +1297,9 @@ class GymEnv(GymWrapper):
             >>> print(env.spec.max_episode_steps)
             200
 
+
+        If a use-case is not covered by TorchRL, please submit an issue on GitHub.
+
     Examples:
         >>> from torchrl.envs import GymEnv
         >>> env = GymEnv("Pendulum-v1")
@@ -1284,6 +1343,26 @@ class GymEnv(GymWrapper):
         if no other reader is provided. To provide another reader, refer to
         :meth:`~.set_info_dict_reader`. To automatically register the info_dict
         content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
+
+    .. note:: Gym spaces are not completely covered.
+        The following spaces are accounted for provided that they can be represented by a torch.Tensor, a nested tensor
+        and/or within a tensordict:
+
+          - spaces.Box
+          - spaces.Sequence
+          - spaces.Tuple
+          - spaces.Discrete
+          - spaces.MultiBinary
+          - spaces.MultiDiscrete
+          - spaces.Dict
+
+        Some considerations should be made when working with gym spaces. For instance, a tuple of spaces
+        can only be supported if the spaces are semantically identical (same dtype and same number of dimensions).
+        Ragged dimension can be supported through :func:`~torch.nested.nested_tensor`, but then there should be only
+        one level of tuple and data should be stacked along the first dimension (as nested_tensors can only be
+        stacked along the first dimension).
+
+        Check the example in examples/envs/gym_conversion_examples.py to know more!
 
     """
 
