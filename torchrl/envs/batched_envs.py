@@ -1877,8 +1877,7 @@ def _run_worker_pipe_shared_mem(
         if cmd == "seed":
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
-            # torch.manual_seed(data)
-            # np.random.seed(data)
+            torch.manual_seed(data[0])
             new_seed = env.set_seed(data[0], static_seed=data[1])
             child_pipe.send(("seeded", new_seed))
 
