@@ -140,11 +140,11 @@ class TestTanhNormal:
         scale = 1
         loc = torch.randn(1, 2, 3, 4)
         t = TanhNormal(loc=loc, scale=scale, event_dims=event_dims)
-        mean = t.mean
-        assert mean.shape == loc.shape
+        sample = t.sample()
+        assert sample.shape == loc.shape
         exp_shape = loc.shape[:-event_dims] if event_dims > 0 else loc.shape
-        assert t.log_prob(mean).shape == exp_shape, (
-            t.log_prob(mean).shape,
+        assert t.log_prob(sample).shape == exp_shape, (
+            t.log_prob(sample).shape,
             event_dims,
             exp_shape,
         )
@@ -187,13 +187,13 @@ class TestTruncatedNormal:
             a = d.rsample(shape)
             assert a.device == device
             assert a.shape[: len(shape)] == shape
-            assert (a >= d.min).all()
-            assert (a <= d.max).all()
+            assert (a >= d.low).all()
+            assert (a <= d.high).all()
             lp = d.log_prob(a)
             assert torch.isfinite(lp).all()
-        oob_min = d.min.expand((*d.batch_shape, *d.event_shape)) - 1e-2
+        oob_min = d.low.expand((*d.batch_shape, *d.event_shape)) - 1e-2
         assert not torch.isfinite(d.log_prob(oob_min)).any()
-        oob_max = d.max.expand((*d.batch_shape, *d.event_shape)) + 1e-2
+        oob_max = d.high.expand((*d.batch_shape, *d.event_shape)) + 1e-2
         assert not torch.isfinite(d.log_prob(oob_max)).any()
 
     @pytest.mark.skipif(not _has_scipy, reason="scipy not installed")
