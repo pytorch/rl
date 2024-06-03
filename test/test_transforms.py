@@ -9225,6 +9225,7 @@ class TestKLRewardTransform(TransformBase):
     )
     def test_transform_env(self, out_key):
         base_env = self.envclass()
+        torch.manual_seed(0)
         actor = self._make_actor()
         # we need to patch the env and create a sample_log_prob spec to make check_env_specs happy
         env = TransformedEnv(
@@ -9234,6 +9235,7 @@ class TestKLRewardTransform(TransformBase):
                 KLRewardTransform(actor, out_keys=out_key),
             ),
         )
+        torch.manual_seed(0)
         actor = self._make_actor()
         td1 = env.rollout(3, actor)
         tdparams = TensorDict(dict(actor.named_parameters()), []).unflatten_keys(".")

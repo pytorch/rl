@@ -2218,17 +2218,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """Sets the seed of the environment and returns the next seed to be used (which is the input seed if a single environment is present).
 
         Args:
-            seed (int): seed to be set
+            seed (int): seed to be set. The seed is set only locally in the environment. To handle the global seed,
+                see :func:`~torch.manual_seed`.
             static_seed (bool, optional): if ``True``, the seed is not incremented.
                 Defaults to False
 
         Returns:
             integer representing the "next seed": i.e. the seed that should be
-            used for another environment if created concomittently to this environment.
+            used for another environment if created concomitantly to this environment.
 
         """
-        if seed is not None:
-            torch.manual_seed(seed)
         self._set_seed(seed)
         if seed is not None and not static_seed:
             new_seed = seed_generator(seed)
