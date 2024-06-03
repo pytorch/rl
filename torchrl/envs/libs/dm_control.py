@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from dm_env import StepType
 
 from torchrl._utils import logger as torchrl_logger, VERBOSE
 
@@ -321,7 +322,14 @@ class DMControlWrapper(GymLikeEnv):
             timestep_tuple = (timestep_tuple,)
         reward = timestep_tuple[0].reward
 
-        done = truncated = terminated = False  # dm_control envs are non-terminating
+        truncated = terminated = False
+        if timestep_tuple[0].step_type == StepType.LAST:
+            if np.isclose(timestep_tuple[0].discount, 1):
+                truncated = True
+            else:
+                terminated = True
+        done = truncated or terminated
+
         observation = timestep_tuple[0].observation
         info = {}
 
