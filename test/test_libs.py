@@ -1307,12 +1307,12 @@ def _make_gym_environment(env_name):  # noqa: F811
 
 
 @pytest.mark.skipif(not _has_dmc, reason="no dm_control library found")
-@pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
-@pytest.mark.parametrize("frame_skip", [1, 3])
-@pytest.mark.parametrize(
-    "from_pixels,pixels_only", [[True, True], [True, False], [False, False]]
-)
 class TestDMControl:
+    @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
+    @pytest.mark.parametrize("frame_skip", [1, 3])
+    @pytest.mark.parametrize(
+        "from_pixels,pixels_only", [[True, True], [True, False], [False, False]]
+    )
     def test_dmcontrol(self, env_name, task, frame_skip, from_pixels, pixels_only):
         if from_pixels and (not torch.has_cuda or not torch.cuda.device_count()):
             raise pytest.skip("no cuda device")
@@ -1384,6 +1384,11 @@ class TestDMControl:
         assert final_seed0 == final_seed2
         assert_allclose_td(rollout0, rollout2)
 
+    @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
+    @pytest.mark.parametrize("frame_skip", [1, 3])
+    @pytest.mark.parametrize(
+        "from_pixels,pixels_only", [[True, True], [True, False], [False, False]]
+    )
     def test_faketd(self, env_name, task, frame_skip, from_pixels, pixels_only):
         if from_pixels and not torch.cuda.device_count():
             raise pytest.skip("no cuda device")
@@ -1397,6 +1402,13 @@ class TestDMControl:
         )
         check_env_specs(env)
 
+    def test_truncated(self):
+        env = DMControlEnv("walker", "walk")
+        r = env.rollout(1001)
+        assert r.shape == (1000,)
+        assert r[-1]["next", "truncated"]
+        assert r[-1]["next", "done"]
+        assert not r[-1]["next", "terminated"]
 
 params = []
 if _has_dmc:
