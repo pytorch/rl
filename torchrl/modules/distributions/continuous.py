@@ -2,14 +2,15 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from numbers import Number
 from typing import Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
-from torch import distributions as D, nn
+from torch import autograd, distributions as D, nn
 from torch.distributions import constraints
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
@@ -310,7 +311,8 @@ class TanhNormal(FasterTransformedDistribution):
         min (torch.Tensor or number, optional): minimum value of the distribution. Default is -1.0;
         max (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
         event_dims (int, optional): number of dimensions describing the action.
-            Default is 1;
+            Default is 1. Setting ``event_dims`` to ``0`` will result in a log-probability that has the same shape
+            as the input, ``1`` will reduce (sum over) the last dimension, ``2`` the last two etc.
         tanh_loc (bool, optional): if ``True``, the above formula is used for the location scaling, otherwise the raw
             value is kept. Default is ``False``;
     """
@@ -322,36 +324,58 @@ class TanhNormal(FasterTransformedDistribution):
 
     num_params = 2
 
+    def _warn_minmax(self):
+        warnings.warn(
+            f"the min / high keyword arguments are deprecated in favor of low / high in {type(self).__name__} "
+            f"and will be removed entirely in v0.6. ",
+            DeprecationWarning,
+        )
+
     def __init__(
         self,
         loc: torch.Tensor,
         scale: torch.Tensor,
         upscale: Union[torch.Tensor, Number] = 5.0,
-        min: Union[torch.Tensor, Number] = -1.0,
-        max: Union[torch.Tensor, Number] = 1.0,
-        event_dims: int = 1,
+        low: Union[torch.Tensor, Number] = -1.0,
+        high: Union[torch.Tensor, Number] = 1.0,
+        event_dims: int | None = None,
         tanh_loc: bool = False,
+        **kwargs,
     ):
-        err_msg = "TanhNormal max values must be strictly greater than min values"
-        if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
-            if not (max > min).all():
+        if "max" in kwargs:
+            self._warn_minmax()
+            high = kwargs.pop("max")
+        if "min" in kwargs:
+            self._warn_minmax()
+            low = kwargs.pop("min")
+
+        if not isinstance(loc, torch.Tensor):
+            loc = torch.as_tensor(loc, dtype=torch.get_default_dtype())
+        if not isinstance(scale, torch.Tensor):
+            scale = torch.as_tensor(scale, dtype=torch.get_default_dtype())
+        if event_dims is None:
+            event_dims = min(1, loc.ndim)
+
+        err_msg = "TanhNormal high values must be strictly greater than low values"
+        if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
+            if not (high > low).all():
                 raise RuntimeError(err_msg)
-        elif isinstance(max, Number) and isinstance(min, Number):
-            if not max > min:
+        elif isinstance(high, Number) and isinstance(low, Number):
+            if not high > low:
                 raise RuntimeError(err_msg)
         else:
-            if not all(max > min):
+            if not all(high > low):
                 raise RuntimeError(err_msg)
 
-        if isinstance(max, torch.Tensor):
-            self.non_trivial_max = (max != 1.0).any()
+        if isinstance(high, torch.Tensor):
+            self.non_trivial_max = (high != 1.0).any()
         else:
-            self.non_trivial_max = max != 1.0
+            self.non_trivial_max = high != 1.0
 
-        if isinstance(min, torch.Tensor):
-            self.non_trivial_min = (min != -1.0).any()
+        if isinstance(low, torch.Tensor):
+            self.non_trivial_min = (low != -1.0).any()
         else:
-            self.non_trivial_min = min != -1.0
+            self.non_trivial_min = low != -1.0
 
         self.tanh_loc = tanh_loc
         self._event_dims = event_dims
@@ -363,24 +387,34 @@ class TanhNormal(FasterTransformedDistribution):
             else upscale.to(self.device)
         )
 
-        if isinstance(max, torch.Tensor):
-            max = max.to(loc.device)
-        if isinstance(min, torch.Tensor):
-            min = min.to(loc.device)
-        self.min = min
-        self.max = max
+        if isinstance(high, torch.Tensor):
+            high = high.to(loc.device)
+        if isinstance(low, torch.Tensor):
+            low = low.to(loc.device)
+        self.low = low
+        self.high = high
 
         t = SafeTanhTransform()
         if self.non_trivial_max or self.non_trivial_min:
             t = D.ComposeTransform(
                 [
                     t,
-                    D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                    D.AffineTransform(loc=(high + low) / 2, scale=(high - low) / 2),
                 ]
             )
         self._t = t
 
         self.update(loc, scale)
+
+    @property
+    def min(self):
+        self._warn_minmax()
+        return self.low
+
+    @property
+    def max(self):
+        self._warn_minmax()
+        return self.high
 
     def update(self, loc: torch.Tensor, scale: torch.Tensor) -> None:
         if self.tanh_loc:
@@ -392,21 +426,70 @@ class TanhNormal(FasterTransformedDistribution):
 
         if (
             hasattr(self, "base_dist")
-            and (self.base_dist.base_dist.loc.shape == self.loc.shape)
-            and (self.base_dist.base_dist.scale.shape == self.scale.shape)
+            and (self.root_dist.loc.shape == self.loc.shape)
+            and (self.root_dist.scale.shape == self.scale.shape)
         ):
-            self.base_dist.base_dist.loc = self.loc
-            self.base_dist.base_dist.scale = self.scale
+            self.root_dist.loc = self.loc
+            self.root_dist.scale = self.scale
         else:
-            base = D.Independent(D.Normal(self.loc, self.scale), self._event_dims)
-            super().__init__(base, self._t)
+            if self._event_dims > 0:
+                base = D.Independent(D.Normal(self.loc, self.scale), self._event_dims)
+                super().__init__(base, self._t)
+            else:
+                base = D.Normal(self.loc, self.scale)
+                super().__init__(base, self._t)
+
+    @property
+    def root_dist(self):
+        bd = self
+        while hasattr(bd, "base_dist"):
+            bd = bd.base_dist
+        return bd
 
     @property
     def mode(self):
-        m = self.base_dist.base_dist.mean
+        def newton_raphson_step(x, alpha=1):
+            # find where gradient is approx 0
+            f = lambda x: self.log_prob(x).mean()
+
+            def grad(x):
+                return torch.func.grad(f)(x)
+
+            def hess(x):
+                return torch.func.grad_and_value(grad)(x)
+
+            h, g = hess(x)
+            step = g / h
+            return (alpha * step).detach()
+
+        # Get starting point
+        m = self.root_dist.mean
         for t in self.transforms:
             m = t(m)
+
+        # m is our start point
+        for alpha in torch.arange(0.9, 0, -0.05):
+            m = m.clone().requires_grad_()
+            newton_raphson_step_vmap = lambda x: newton_raphson_step(x, alpha=alpha)
+            for i in range(m.ndim):
+                newton_raphson_step_vmap = torch.vmap(newton_raphson_step_vmap)
+            step = newton_raphson_step_vmap(m)
+            m = m.detach()
+            # Correct the step
+            step = (m + step).clamp(self.low, self.high) - m
+            # make the step
+            m = m + step
+            if abs(step).max() < 1e-3:
+                break
+        else:
+            torchrl_logger.info(
+                f"Failed to find the mode of the TanhNormal distribution. Max step={abs(step).max()}"
+            )
         return m
+
+    @property
+    def mean(self):
+        return self.rsample((1000,)).mean(0)
 
 
 def uniform_sample_tanhnormal(dist: TanhNormal, size=None) -> torch.Tensor:

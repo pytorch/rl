@@ -130,8 +130,8 @@ def test_probabilistic_actor_nested_normal(log_prob_key, nested_dim=5, n_actions
         out_keys=[("data", "action")],
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": action_spec.space.low,
-            "max": action_spec.space.high,
+            "low": action_spec.space.low,
+            "high": action_spec.space.high,
         },
         log_prob_key=log_prob_key,
         return_log_prob=True,
@@ -153,8 +153,8 @@ def test_probabilistic_actor_nested_normal(log_prob_key, nested_dim=5, n_actions
         out_keys=[("data", "action")],
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": action_spec.space.low,
-            "max": action_spec.space.high,
+            "low": action_spec.space.low,
+            "high": action_spec.space.high,
         },
         log_prob_key=log_prob_key,
         return_log_prob=True,

@@ -85,10 +85,10 @@ def _map_all(*tensors_or_other, device):
 
 class TestTanhNormal:
     @pytest.mark.parametrize(
-        "min", [-torch.ones(3), -1, 3 * torch.tensor([-1.0, -2.0, -0.5]), -0.1]
+        "low", [-torch.ones(3), -1, 3 * torch.tensor([-1.0, -2.0, -0.5]), -0.1]
     )
     @pytest.mark.parametrize(
-        "max", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 0.1]
+        "high", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 0.1]
     )
     @pytest.mark.parametrize(
         "vecs",
@@ -102,24 +102,52 @@ class TestTanhNormal:
     )
     @pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_tanhnormal(self, min, max, vecs, upscale, shape, device):
-        min, max, vecs, upscale, shape = _map_all(
-            min, max, vecs, upscale, shape, device=device
+    def test_tanhnormal(self, low, high, vecs, upscale, shape, device):
+        low, high, vecs, upscale, shape = _map_all(
+            low, high, vecs, upscale, shape, device=device
         )
         torch.manual_seed(0)
         d = TanhNormal(
             *vecs,
             upscale=upscale,
-            min=min,
-            max=max,
+            low=low,
+            high=high,
         )
         for _ in range(100):
             a = d.rsample(shape)
             assert a.shape[: len(shape)] == shape
-            assert (a >= d.min).all()
-            assert (a <= d.max).all()
+            assert (a >= d.low).all()
+            assert (a <= d.high).all()
             lp = d.log_prob(a)
             assert torch.isfinite(lp).all()
+
+    def test_tanhnormal_mode(self):
+        # Checks that the std of the mode computed by tanh normal is within a certain range
+        # when starting from close points
+
+        torch.manual_seed(0)
+        # 10 start points with 1000 jitters around that
+        # std of the loc is about 1e-4
+        loc = torch.randn(10) + torch.randn(1000, 10) / 10000
+
+        t = TanhNormal(loc=loc, scale=0.5, low=-1.5, high=1, event_dims=0)
+        mode = t.mode
+        assert mode.shape == loc.shape
+        assert (mode.std(0).max() < 0.1).all(), mode.std(0)
+
+    @pytest.mark.parametrize("event_dims", [0, 1, 2])
+    def test_tanhnormal_event_dims(self, event_dims):
+        scale = 1
+        loc = torch.randn(1, 2, 3, 4)
+        t = TanhNormal(loc=loc, scale=scale, event_dims=event_dims)
+        mean = t.mean
+        assert mean.shape == loc.shape
+        exp_shape = loc.shape[:-event_dims] if event_dims > 0 else loc.shape
+        assert t.log_prob(mean).shape == exp_shape, (
+            t.log_prob(mean).shape,
+            event_dims,
+            exp_shape,
+        )
 
 
 class TestTruncatedNormal:
