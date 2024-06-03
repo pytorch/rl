@@ -1410,6 +1410,7 @@ class TestDMControl:
         assert r[-1]["next", "done"]
         assert not r[-1]["next", "terminated"]
 
+
 params = []
 if _has_dmc:
     params = [
