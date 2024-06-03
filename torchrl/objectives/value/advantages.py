@@ -46,7 +46,7 @@ except ImportError as err:
         from functorch import vmap
     except ImportError:
         raise ImportError(
-            "vmap couldn't be found. Make sure you have torch>1.13 installed."
+            "vmap couldn't be found. Make sure you have torch>2.0 installed."
         ) from err
 
 
