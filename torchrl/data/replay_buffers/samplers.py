@@ -22,9 +22,9 @@ from tensordict.utils import NestedKey
 
 from torchrl._extension import EXTENSION_WARNING
 
-from torchrl._utils import _replace_last, logger
+from torchrl._utils import _replace_last, implement_for, logger
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
-from torchrl.data.replay_buffers.utils import _is_int
+from torchrl.data.replay_buffers.utils import _is_int, _unravel_index
 
 try:
     from torchrl._torchrl import (
@@ -202,7 +202,35 @@ class SamplerWithoutReplacement(Sampler):
     def _storage_len(self, storage):
         return len(storage)
 
+    @implement_for("pytorch", None, "2.2")
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
+        len_storage = self._storage_len(storage)
+        if len_storage == 0:
+            raise RuntimeError(_EMPTY_STORAGE_ERROR)
+        if not len_storage:
+            raise RuntimeError("An empty storage was passed")
+        if self.len_storage != len_storage or self._sample_list is None:
+            self._get_sample_list(storage, len_storage)
+        if len_storage < batch_size and self.drop_last:
+            raise ValueError(
+                f"The batch size ({batch_size}) is greater than the storage capacity ({len_storage}). "
+                "This makes it impossible to return a sample without repeating indices. "
+                "Consider changing the sampler class or turn the 'drop_last' argument to False."
+            )
+        self.len_storage = len_storage
+        index = self._single_sample(len_storage, batch_size)
+        if storage.ndim > 1:
+            index = _unravel_index(index, storage.shape)
+        # we 'always' return the indices. The 'drop_last' just instructs the
+        # sampler to turn to `ran_out = True` whenever the next sample
+        # will be too short. This will be read by the replay buffer
+        # as a signal for an early break of the __iter__().
+        return index, {}
+
+    @implement_for("pytorch", "2.2")
+    def sample(
+        self, storage: Storage, batch_size: int
+    ) -> Tuple[Any, dict]:  # noqa: F811
         len_storage = self._storage_len(storage)
         if len_storage == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
