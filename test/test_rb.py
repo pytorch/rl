@@ -1974,6 +1974,7 @@ class TestSamplers:
                 "count": torch.arange(100),
                 "other": torch.randn((20, 50)).expand(100, 20, 50),
                 done_key: done,
+                "terminated": done,
             },
             [100],
             device=device,
@@ -2035,6 +2036,14 @@ class TestSamplers:
                 samples["another_episode"].view(-1).tolist()
             )
             count_unique = count_unique.union(samples.get("count").view(-1).tolist())
+
+            truncated = info[("next", "truncated")]
+            terminated = info[("next", "terminated")]
+            assert (truncated | terminated).view(num_slices, -1)[:, -1].all()
+            assert (terminated == samples["terminated"].view_as(terminated)).all()
+            done = info[("next", "done")]
+            assert done.view(num_slices, -1)[:, -1].all()
+
             if len(count_unique) == 100:
                 # all items have been sampled
                 break
@@ -2049,11 +2058,6 @@ class TestSamplers:
             assert too_short
 
         assert len(trajs_unique_id) == 4
-        done = info[("next", "done")]
-        assert done.view(num_slices, -1)[:, -1].all()
-        truncated = info[("next", "truncated")]
-        terminated = info[("next", "terminated")]
-        assert (truncated | terminated).view(num_slices, -1)[:, -1].all()
 
     @pytest.mark.parametrize("sampler", [SliceSampler, SliceSamplerWithoutReplacement])
     def test_slice_sampler_at_capacity(self, sampler):
@@ -2877,9 +2881,9 @@ class TestRBMultidim:
         env = SerialEnv(
             3,
             [
-                lambda: CountingEnv(max_steps=31),
-                lambda: CountingEnv(max_steps=32),
-                lambda: CountingEnv(max_steps=33),
+                lambda: CountingEnv(max_steps=31).add_truncated_keys(),
+                lambda: CountingEnv(max_steps=32).add_truncated_keys(),
+                lambda: CountingEnv(max_steps=33).add_truncated_keys(),
             ],
         )
         full_action_spec = CountingEnv(max_steps=32).full_action_spec
@@ -2896,9 +2900,12 @@ class TestRBMultidim:
             batch_size=128,
         )
 
+        # env.add_truncated_keys()
+
         for i in range(50):
-            r = env.rollout(50, policy=policy, break_when_any_done=False)
-            r["next", "done"][:, -1] = 1
+            r = env.rollout(
+                50, policy=policy, break_when_any_done=False, set_truncated=True
+            )
             rb.extend(r)
 
             sample = rb.sample()
