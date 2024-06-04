@@ -857,6 +857,12 @@ class BatchedEnvBase(EnvBase):
             return _update_during_reset(tensordict_reset, tensordict, self.reset_keys)
         return tensordict_reset
 
+    def add_truncated_keys(self):
+        raise RuntimeError(
+            "Cannot add truncated keys to a batched environment. Please add these entries to "
+            "the nested environments by calling sub_env.add_truncated_keys()"
+        )
+
 
 class SerialEnv(BatchedEnvBase):
     """Creates a series of environments in the same process."""

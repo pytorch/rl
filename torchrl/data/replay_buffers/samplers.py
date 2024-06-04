@@ -1184,12 +1184,9 @@ class SliceSampler(Sampler):
             out_of_traj = relative_starts + seq_length > lengths[traj_idx]
             if out_of_traj.any():
                 # a negative start means sampling fewer elements
-                # print('seq_length before', seq_length)
-                # print('relative_starts', relative_starts)
                 seq_length = torch.minimum(
                     seq_length, lengths[traj_idx] - relative_starts
                 )
-                # print('seq_length after', seq_length)
 
         starts = torch.cat(
             [
@@ -1212,18 +1209,11 @@ class SliceSampler(Sampler):
                 truncated.view(num_slices, -1)[:, -1] = 1
             else:
                 truncated[seq_length.cumsum(0) - 1] = 1
-            # a traj is terminated if the stop index along col 0 (time)
-            # equates start + traj length - 1
-            traj_terminated = (
-                stop_idx[traj_idx, 0] == start_idx[traj_idx, 0] + seq_length - 1
+            terminated = (
+                (index[:, 0].unsqueeze(0) == stop_idx[:, 0].unsqueeze(1))
+                .any(0)
+                .unsqueeze(1)
             )
-            terminated = torch.zeros_like(truncated)
-            if traj_terminated.any():
-                if isinstance(seq_length, int):
-                    terminated.view(num_slices, -1)[traj_terminated, -1] = 1
-                else:
-                    terminated[(seq_length.cumsum(0) - 1)[traj_terminated]] = 1
-            truncated = truncated & ~terminated
             done = terminated | truncated
             return index.to(torch.long).unbind(-1), {
                 truncated_key: truncated,
@@ -1664,13 +1654,43 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
 
         if (lengths < seq_length).any():
             if self.strict_length:
-                raise RuntimeError(
-                    "Some stored trajectories have a length shorter than the slice that was asked for. "
-                    "Create the sampler with `strict_length=False` to allow shorter trajectories to appear "
-                    "in you batch."
-                )
-            # make seq_length a tensor with values clamped by lengths
-            seq_length = lengths[traj_idx].clamp_max(seq_length)
+                idx = lengths >= seq_length
+                if not idx.any():
+                    raise RuntimeError(
+                        f"Did not find a single trajectory with sufficient length (length range: {lengths.min()} - {lengths.max()} / required={seq_length}))."
+                    )
+                if (
+                    isinstance(seq_length, torch.Tensor)
+                    and seq_length.shape == lengths.shape
+                ):
+                    seq_length = seq_length[idx]
+                lengths_idx = lengths[idx]
+                start_idx = start_idx[idx]
+                stop_idx = stop_idx[idx]
+
+                # Here we must filter out the indices that correspond to trajectories
+                # we don't want to keep. That could potentially lead to an empty sample.
+                # The difficulty with this adjustment is that traj_idx points to a full
+                # sequences of lengths, but we filter out part of it so we must
+                # convert traj_idx to a boolean mask, index this mask with the
+                # valid indices and then recover the nonzero.
+                idx_mask = torch.zeros_like(idx)
+                idx_mask[traj_idx] = True
+                traj_idx = idx_mask[idx].nonzero().squeeze(-1)
+                if not traj_idx.numel():
+                    raise RuntimeError(
+                        "None of the provided indices pointed to a trajectory of "
+                        "sufficient length. Consider using strict_length=False for the "
+                        "sampler instead."
+                    )
+                num_slices = traj_idx.shape[0]
+                del idx
+                lengths = lengths_idx
+            else:
+                num_slices = traj_idx.shape[0]
+
+                # make seq_length a tensor with values clamped by lengths
+                seq_length = lengths[traj_idx].clamp_max(seq_length)
 
         # build a list of index that we don't want to sample: all the steps at a `seq_length` distance of
         # the end the trajectory, with the end of trajectory (`stop_idx`) included
@@ -1695,7 +1715,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             -1,
         )
         if storage.ndim > 1:
-            # convert the 2d index into a flat one to accomodate the _sum_tree
+            # convert the 2d index into a flat one to accommodate the _sum_tree
             preceding_stop_idx = torch.as_tensor(
                 np.ravel_multi_index(
                     tuple(preceding_stop_idx.transpose(0, 1).numpy()), storage.shape
@@ -1729,42 +1749,10 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             raise ValueError(
                 f"Number of indices is expected to match the batch size ({index.shape[0]} != {batch_size})."
             )
-
-        # if self.truncated_key is not None:
-        #     truncated_key = self.truncated_key
-        #     done_key = _replace_last(truncated_key, "done")
-        #     terminated_key = _replace_last(truncated_key, "terminated")
-        #
-        #     truncated = torch.zeros(
-        #         (index.shape[0], 1), dtype=torch.bool, device=index.device
-        #     )
-        #     if isinstance(seq_length, int):
-        #         truncated.view(num_slices, -1)[:, -1] = 1
-        #     else:
-        #         truncated[seq_length.cumsum(0) - 1] = 1
-        #     # a traj is terminated if the stop index along col 0 (time)
-        #     # equates start + traj length - 1
-        #     traj_terminated = (
-        #         stop_idx[traj_idx, 0] == start_idx[traj_idx, 0] + seq_length - 1
-        #     )
-        #     terminated = torch.zeros_like(truncated)
-        #     if traj_terminated.any():
-        #         if isinstance(seq_length, int):
-        #             truncated.view(num_slices, -1)[traj_terminated] = 1
-        #         else:
-        #             truncated[(seq_length.cumsum(0) - 1)[traj_terminated]] = 1
-        #     truncated = truncated & ~terminated
-        #     done = terminated | truncated
-        #     return index.to(torch.long).unbind(-1), {
-        #         truncated_key: truncated,
-        #         done_key: done,
-        #         terminated_key: terminated,
-        #     }
-
         if self.truncated_key is not None:
-            # TODO: fix this part
             # following logics borrowed from SliceSampler
             truncated_key = self.truncated_key
+
             done_key = _replace_last(truncated_key, "done")
             terminated_key = _replace_last(truncated_key, "terminated")
 
@@ -1775,18 +1763,12 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
                 truncated.view(num_slices, -1)[:, -1] = 1
             else:
                 truncated[seq_length.cumsum(0) - 1] = 1
-            traj_terminated = stop_idx[traj_idx, 0] == (
-                start_idx[traj_idx, 0] + seq_length - 1
+            terminated = (
+                (index[:, 0].unsqueeze(0) == stop_idx[:, 0].unsqueeze(1))
+                .any(0)
+                .unsqueeze(1)
             )
-            terminated = torch.zeros_like(truncated)
-            if traj_terminated.any():
-                if isinstance(seq_length, int):
-                    terminated.view(num_slices, -1)[traj_terminated, -1] = 1
-                else:
-                    terminated[(seq_length.cumsum(0) - 1)[traj_terminated]] = 1
-            truncated = truncated & ~terminated
             done = terminated | truncated
-
             info.update(
                 {
                     truncated_key: truncated,
@@ -1794,6 +1776,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
                     terminated_key: terminated,
                 }
             )
+            return index.to(torch.long).unbind(-1), info
         return index.to(torch.long).unbind(-1), info
 
     def _empty(self):
