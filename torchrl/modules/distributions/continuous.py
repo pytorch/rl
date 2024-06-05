@@ -420,7 +420,8 @@ class TanhNormal(FasterTransformedDistribution):
         self.low = low
         self.high = high
 
-        t = SafeTanhTransform()
+        # t = SafeTanhTransform()
+        t = D.TanhTransform()
         if self.non_trivial_max or self.non_trivial_min:
             t = D.ComposeTransform(
                 [
@@ -474,46 +475,24 @@ class TanhNormal(FasterTransformedDistribution):
 
     @property
     def mode(self):
-        def newton_raphson_step(x, alpha=1):
-
-            # find where gradient is approx 0
-            def f(x):
-                return self.log_prob(x).mean()
-
-            def grad(x):
-                return torch.func.grad(f)(x)
-
-            def hess(x):
-                return torch.func.grad_and_value(grad)(x)
-
-            h, g = hess(x)
-            step = g / h
-            return (alpha * step).detach()
 
         # Get starting point
-        m = self.root_dist.mean
-        for t in self.transforms:
-            m = t(m)
-
-        # m is our start point
-        for alpha in torch.arange(0.9, 0, -0.05):
-            m = m.clone().requires_grad_()
-            newton_raphson_step_vmap = functools.partial(newton_raphson_step, alpha=alpha)
-            for _ in range(m.ndim):
-                newton_raphson_step_vmap = torch.vmap(newton_raphson_step_vmap)
-            step = newton_raphson_step_vmap(m)
-            m = m.detach()
-            # Correct the step
-            step = (m + step).clamp(self.low, self.high) - m
-            # make the step
-            m = m + step
-            if abs(step).max() < 1e-3:
+        m = self.sample((1000,)).mean(0)
+        m = torch.nn.Parameter(m.clamp(self.low, self.high).detach())
+        optim = torch.optim.Adam((m,), lr=1e-2)
+        for _ in range(100):
+            lp = -self.log_prob(m)
+            lp.mean().backward()
+            mc = m.clone().detach()
+            optim.step()
+            optim.zero_grad()
+            m.data.clamp_(self.low, self.high)
+            nans = m.isnan()
+            if nans.any():
+                m.data = torch.where(nans, mc, m.data)
+            if (m - mc).norm() < 1e-3:
                 break
-        else:
-            torchrl_logger.info(
-                f"Failed to find the mode of the TanhNormal distribution. Max step={abs(step).max()}"
-            )
-        return m
+        return m.detach()
 
     @property
     def mean(self):
