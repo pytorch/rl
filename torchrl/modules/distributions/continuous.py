@@ -475,7 +475,20 @@ class TanhNormal(FasterTransformedDistribution):
 
     @property
     def mode(self):
+        warnings.warn(
+            "This computation of the mode is based on the first-order Taylor expansion "
+            "of the transform around the normal mean value, which can be inaccurate. "
+            "To use a more stable implementation of the mode, use dist.get_mode() method instead. "
+            "This implementation will be removed in v0.6.",
+            category=DeprecationWarning,
+        )
+        m = self.base_dist.base_dist.mean
+        for t in self.transforms:
+            m = t(m)
+        return m
 
+    def get_mode(self):
+        """Computes an estimation of the mode using the Adam optimizer."""
         # Get starting point
         m = self.sample((1000,)).mean(0)
         m = torch.nn.Parameter(m.clamp(self.low, self.high).detach())
