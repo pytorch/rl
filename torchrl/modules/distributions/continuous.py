@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import functools
 import warnings
 from numbers import Number
 from typing import Dict, Optional, Sequence, Tuple, Union
@@ -11,7 +10,6 @@ import numpy as np
 import torch
 from torch import distributions as D, nn
 from torch.distributions import constraints
-from torchrl._utils import logger as torchrl_logger
 
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,

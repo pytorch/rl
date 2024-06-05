@@ -135,13 +135,12 @@ class TestTanhNormal:
         mode = t.mode
         assert mode.shape == loc.shape
         empirical_mode, empirical_mode_lp = torch.zeros_like(loc), -float("inf")
-        for v in torch.range(-1, 1, step=0.01):
+        for v in torch.arange(-1, 1, step=0.01):
             lp = t.log_prob(v.expand_as(t.loc))
             empirical_mode = torch.where(lp > empirical_mode_lp, v, empirical_mode)
             empirical_mode_lp = torch.where(
                 lp > empirical_mode_lp, lp, empirical_mode_lp
             )
-        print(abs(empirical_mode - mode).max(), abs(empirical_mode - mode).median())
         assert abs(empirical_mode - mode).max() < 0.1, abs(empirical_mode - mode).max()
         assert mode.shape == loc.shape
         assert (mode.std(0).max() < 0.1).all(), mode.std(0)
