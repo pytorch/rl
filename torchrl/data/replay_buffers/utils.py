@@ -1007,9 +1007,11 @@ def _unravel_index_impl(
 
 @implement_for("torch", None, "2.2")
 def unravel_index(indices, shape):
+    """A version-compatible wrapper around torch.unravel_index."""
     return _unravel_index(indices, shape)
 
 
 @implement_for("torch", "2.2")
-def unravel_index(indices, shape):
+def unravel_index(indices, shape):  # noqa: F811
+    """A version-compatible wrapper around torch.unravel_index."""
     return torch.unravel_index(indices, shape)
