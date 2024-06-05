@@ -22,7 +22,7 @@ from tensordict.utils import NestedKey
 
 from torchrl._extension import EXTENSION_WARNING
 
-from torchrl._utils import _replace_last, implement_for, logger
+from torchrl._utils import _replace_last, logger
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
 from torchrl.data.replay_buffers.utils import _is_int, unravel_index
 

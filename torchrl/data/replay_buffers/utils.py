@@ -993,3 +993,17 @@ def unravel_index(indices, shape):
 def unravel_index(indices, shape):  # noqa: F811
     """A version-compatible wrapper around torch.unravel_index."""
     return torch.unravel_index(indices, shape)
+
+@implement_for("torch", None, "2.3")
+def tree_iter(pytree):
+    """A version-compatible wrapper around tree_iter."""
+    flat_tree, _ = torch.utils._pytree.tree_flatten(pytree)
+    yield from flat_tree
+@implement_for("torch", "2.3", "2.4")
+def tree_iter(pytree):  # noqa: F811
+    """A version-compatible wrapper around tree_iter."""
+    yield from torch.utils._pytree.tree_leaves(pytree)
+@implement_for("torch", "2.4")
+def tree_iter(pytree):  # noqa: F811
+    """A version-compatible wrapper around tree_iter."""
+    yield from torch.utils._pytree.tree_iter(pytree)

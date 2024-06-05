@@ -25,7 +25,7 @@ from tensordict import (
 from tensordict.memmap import MemoryMappedTensor
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
-
+from torchrl.data.replay_buffers.utils import tree_iter
 from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.checkpointers import (
     ListStorageCheckpointer,
@@ -428,7 +428,8 @@ class TensorStorage(Storage):
             if is_tensor_collection(self._storage):
                 _total_shape = self._storage.shape[: self.ndim]
             else:
-                leaf, *_ = torch.utils._pytree.tree_leaves(self._storage)
+                for leaf in tree_iter(self._storage):
+                    break
                 _total_shape = leaf.shape[: self.ndim]
             self.__dict__["_total_shape_value"] = _total_shape
         return _total_shape
@@ -465,7 +466,7 @@ class TensorStorage(Storage):
                 if is_tensor_collection(data):
                     datashape = data.shape[: self.ndim]
                 else:
-                    for leaf in torch.utils._pytree.tree_leaves(data):
+                    for leaf in tree_iter(data):
                         datashape = leaf.shape[: self.ndim]
                         break
                 if batched_data is not None:
