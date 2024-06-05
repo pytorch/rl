@@ -1649,80 +1649,23 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
 
-        num_trajs = lengths.shape[0]
-        traj_idx = torch.arange(0, num_trajs, 1, device=lengths.device)
-
-        if (lengths < seq_length).any():
-            if self.strict_length:
-                idx = lengths >= seq_length
-                if not idx.any():
-                    raise RuntimeError(
-                        f"Did not find a single trajectory with sufficient length (length range: {lengths.min()} - {lengths.max()} / required={seq_length}))."
-                    )
-                if (
-                    isinstance(seq_length, torch.Tensor)
-                    and seq_length.shape == lengths.shape
-                ):
-                    seq_length = seq_length[idx]
-                lengths_idx = lengths[idx]
-                start_idx = start_idx[idx]
-                stop_idx = stop_idx[idx]
-
-                # Here we must filter out the indices that correspond to trajectories
-                # we don't want to keep. That could potentially lead to an empty sample.
-                # The difficulty with this adjustment is that traj_idx points to a full
-                # sequences of lengths, but we filter out part of it so we must
-                # convert traj_idx to a boolean mask, index this mask with the
-                # valid indices and then recover the nonzero.
-                idx_mask = torch.zeros_like(idx)
-                idx_mask[traj_idx] = True
-                traj_idx = idx_mask[idx].nonzero().squeeze(-1)
-                if not traj_idx.numel():
-                    raise RuntimeError(
-                        "None of the provided indices pointed to a trajectory of "
-                        "sufficient length. Consider using strict_length=False for the "
-                        "sampler instead."
-                    )
-                num_slices = traj_idx.shape[0]
-                del idx
-                lengths = lengths_idx
-            else:
-                num_slices = traj_idx.shape[0]
-
-                # make seq_length a tensor with values clamped by lengths
-                seq_length = lengths[traj_idx].clamp_max(seq_length)
-
-        # build a list of index that we don't want to sample: all the steps at a `seq_length` distance of
-        # the end the trajectory, with the end of trajectory (`stop_idx`) included
-        if not isinstance(seq_length, int):
-            try:
-                seq_length = seq_length.unique().item()
-            except RuntimeError:
-                raise NotImplementedError(
-                    f"seq_length as a list is not supported for now. seq_length={seq_length}."
-                )
-
-        subtractive_idx = torch.arange(
-            0, seq_length - 1, 1, device=stop_idx.device, dtype=stop_idx.dtype
-        )
-        preceding_stop_idx = stop_idx[..., 0, None] - subtractive_idx[None, ...]
-        preceding_stop_idx = preceding_stop_idx.reshape(-1, 1)
-        preceding_stop_idx = torch.cat(
-            [
-                preceding_stop_idx,
-                stop_idx[:, 1:].repeat_interleave(seq_length - 1, dim=0),
-            ],
-            -1,
-        )
-        if storage.ndim > 1:
-            # convert the 2d index into a flat one to accommodate the _sum_tree
-            preceding_stop_idx = torch.as_tensor(
-                np.ravel_multi_index(
-                    tuple(preceding_stop_idx.transpose(0, 1).numpy()), storage.shape
-                )
-            )
-        else:
-            preceding_stop_idx = preceding_stop_idx.squeeze()
+        # TODO: for a given length of storage, this can be cached
+        arange = torch.arange(len(storage))
+        # this complex mumbo jumbo creates a left padded tensor with valid indices on the right, e.g.
+        # tensor([[ 0,  1,  2,  3,  4],
+        #         [-1, -1,  5,  6,  7],
+        #         [-1,  8,  9, 10, 11]])
+        # where the -1 items on the left are padded values
+        shapes = lengths.view(-1, 1)
+        assert shapes.sum()-1 == arange[-1], (shapes.sum(), arange[-5:])
+        st, off = torch._nested_compute_contiguous_strides_offsets(shapes.flip(0))
+        nt = torch._nested_view_from_buffer(arange.flip(0), shapes.flip(0), st, off)
+        pad = nt.to_padded_tensor(-1).flip(-1).flip(0)
+        # TODO: if not strict_length, we can sample sequences that are shorter
+        if not self.strict_length:
+            raise NotImplementedError
+        preceding_stop_idx = pad[:, -seq_length:]
+        preceding_stop_idx = preceding_stop_idx[preceding_stop_idx>=0]
 
         # force to not sample index at the end of a trajectory
         self._sum_tree[preceding_stop_idx] = 0.0
@@ -1731,6 +1674,8 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         starts, info = PrioritizedSampler.sample(
             self, storage=storage, batch_size=batch_size // seq_length
         )
+        assert (self._sum_tree[starts.squeeze()] > 0).all()
+
         if isinstance(starts, tuple):
             starts = torch.stack(starts, -1)
         # starts = torch.as_tensor(starts, device=lengths.device)
