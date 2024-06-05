@@ -1003,3 +1003,13 @@ def _unravel_index_impl(
     return indices.unsqueeze(-1).floor_divide(
         torch.tensor(coefs, device=indices.device, dtype=torch.int64)
     ) % torch.tensor(shape, device=indices.device, dtype=torch.int64)
+
+
+@implement_for("torch", None, "2.2")
+def unravel_index(indices, shape):
+    return _unravel_index(indices, shape)
+
+
+@implement_for("torch", "2.2")
+def unravel_index(indices, shape):
+    return torch.unravel_index(indices, shape)
