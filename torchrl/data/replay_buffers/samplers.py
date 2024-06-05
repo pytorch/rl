@@ -202,7 +202,7 @@ class SamplerWithoutReplacement(Sampler):
     def _storage_len(self, storage):
         return len(storage)
 
-    @implement_for("pytorch", None, "2.2")
+    @implement_for("torch", None, "2.2")
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
         len_storage = self._storage_len(storage)
         if len_storage == 0:
@@ -227,7 +227,7 @@ class SamplerWithoutReplacement(Sampler):
         # as a signal for an early break of the __iter__().
         return index, {}
 
-    @implement_for("pytorch", "2.2")
+    @implement_for("torch", "2.2")
     def sample(
         self, storage: Storage, batch_size: int
     ) -> Tuple[Any, dict]:  # noqa: F811
