@@ -57,7 +57,9 @@ class Sampler(ABC):
     ) -> dict | None:
         return
 
-    def mark_update(self, index: Union[int, torch.Tensor]) -> None:
+    def mark_update(
+        self, index: Union[int, torch.Tensor], *, storage: Storage | None = None
+    ) -> None:
         return
 
     @property
@@ -388,10 +390,11 @@ class PrioritizedSampler(Sampler):
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
         p_sum = self._sum_tree.query(0, len(storage))
         p_min = self._min_tree.query(0, len(storage))
+
         if p_sum <= 0:
-            raise RuntimeError("negative p_sum")
+            raise RuntimeError("non-positive p_sum")
         if p_min <= 0:
-            raise RuntimeError("negative p_min")
+            raise RuntimeError("non-positive p_min")
         # For some undefined reason, only np.random works here.
         # All PT attempts fail, even when subsequently transformed into numpy
         mass = np.random.uniform(0.0, p_sum, size=batch_size)
@@ -414,57 +417,93 @@ class PrioritizedSampler(Sampler):
         # weight = np.power(weight / (p_min + self._eps), -self._beta)
         weight = torch.pow(weight / p_min, -self._beta)
         if storage.ndim > 1:
-            shape = storage.shape[1:]
-            shape = (index.numel() // shape.numel(), *shape)
-            index = torch.unravel_index(index, shape)
+            index = torch.unravel_index(index, storage.shape)
         return index, {"_weight": weight}
 
-    @torch.no_grad()
-    def _add_or_extend(self, index: Union[int, torch.Tensor]) -> None:
-        priority = self.default_priority
+        # TODO: This is an option if we want to sample when the trees are not initialized, though it screws up PrioritizedSliceSampler
+        # if p_sum <= 0:
+        #     index, *_ = RandomSampler.sample(self, storage, batch_size)
+        #     device = index[0].device if isinstance(index, tuple) else index.device
+        #     weight = torch.ones(batch_size, device=device)
+        # else:
+        #     if p_min <= 0:
+        #         p_min = 1
+        #
+        #     # For some undefined reason, only np.random works here.
+        #     # All PT attempts fail, even when subsequently transformed into numpy
+        #     mass = np.random.uniform(0.0, p_sum, size=batch_size)
+        #     # mass = torch.zeros(batch_size, dtype=torch.double).uniform_(0.0, p_sum)
+        #     # mass = torch.rand(batch_size).mul_(p_sum)
+        #     index = self._sum_tree.scan_lower_bound(mass)
+        #     index = torch.as_tensor(index)
+        #     if not index.ndim:
+        #         index = index.unsqueeze(0)
+        #     index.clamp_max_(len(storage) - 1)
+        #     weight = torch.as_tensor(self._sum_tree[index])
+        #
+        #     # Importance sampling weight formula:
+        #     #   w_i = (p_i / sum(p) * N) ^ (-beta)
+        #     #   weight_i = w_i / max(w)
+        #     #   weight_i = (p_i / sum(p) * N) ^ (-beta) /
+        #     #       ((min(p) / sum(p) * N) ^ (-beta))
+        #     #   weight_i = ((p_i / sum(p) * N) / (min(p) / sum(p) * N)) ^ (-beta)
+        #     #   weight_i = (p_i / min(p)) ^ (-beta)
+        #     # weight = np.power(weight / (p_min + self._eps), -self._beta)
+        #     weight = torch.pow(weight / p_min, -self._beta)
+        #     if storage.ndim > 1:
+        #         index = torch.unravel_index(index, storage._storage.shape)
+        return index, {"_weight": weight}
 
-        if not (
-            isinstance(priority, float)
-            or len(priority) == 1
-            or len(priority) == len(index)
-        ):
-            raise RuntimeError(
-                "priority should be a scalar or an iterable of the same "
-                "length as index"
-            )
-        # make sure everything is cast to cpu
-        index = torch.as_tensor(index, device=torch.device("cpu"), dtype=torch.long)
-        priority = torch.as_tensor(priority, device=torch.device("cpu"))
-        # MaxValueWriter will set -1 for items in the data that we don't want
-        # to update. We therefore have to keep only the non-negative indices.
-        valid_index = index >= 0
-        if not valid_index.all():
-            if valid_index.any():
-                index = index[valid_index]
-                if priority.numel() > 1:
-                    priority = priority[valid_index]
-            else:
-                return
-
-        self._sum_tree[index] = priority
-        self._min_tree[index] = priority
+    # @torch.no_grad()
+    # def _add_or_extend(self, index: Union[int, torch.Tensor]) -> None:
+    #     priority = self.default_priority
+    #
+    #     if not (
+    #         isinstance(priority, float)
+    #         or len(priority) == 1
+    #         or len(priority) == len(index)
+    #     ):
+    #         raise RuntimeError(
+    #             "priority should be a scalar or an iterable of the same "
+    #             "length as index"
+    #         )
+    #     # make sure everything is cast to cpu
+    #     index = torch.as_tensor(index, device=torch.device("cpu"), dtype=torch.long)
+    #     priority = torch.as_tensor(priority, device=torch.device("cpu"))
+    #     # MaxValueWriter will set -1 for items in the data that we don't want
+    #     # to update. We therefore have to keep only the non-negative indices.
+    #     valid_index = index >= 0
+    #     if not valid_index.all():
+    #         if valid_index.any():
+    #             index = index[valid_index]
+    #             if priority.numel() > 1:
+    #                 priority = priority[valid_index]
+    #         else:
+    #             return
+    #
+    #     self._sum_tree[index] = priority
+    #     self._min_tree[index] = priority
 
     def add(self, index: int) -> None:
         super().add(index)
-        if index is not None:
-            # some writers don't systematically write data and can return None
-            self._add_or_extend(index)
+        # if index is not None:
+        #     # some writers don't systematically write data and can return None
+        #     self._add_or_extend(index)
 
     def extend(self, index: torch.Tensor) -> None:
         super().extend(index)
-        if index is not None:
-            # some writers don't systematically write data and can return None
-            index = index.cpu()
-            self._add_or_extend(index)
+        # if index is not None:
+        #     # some writers don't systematically write data and can return None
+        #     index = index.cpu()
+        #     self._add_or_extend(index)
 
     @torch.no_grad()
     def update_priority(
-        self, index: Union[int, torch.Tensor], priority: Union[float, torch.Tensor]
+        self,
+        index: Union[int, torch.Tensor],
+        priority: Union[float, torch.Tensor],
+        *,
+        storage: TensorStorage | None = None,
     ) -> None:
         """Updates the priority of the data pointed by the index.
 
@@ -473,6 +512,11 @@ class PrioritizedSampler(Sampler):
                 updated.
             priority (Number or torch.Tensor): new priorities of the
                 indexed elements.
+
+        Keyword Args:
+            storage (Storage, optional): a storage used to map the Nd index size to
+                the 1d size of the sum_tree and min_tree. Only required whenever
+                ``index.ndim > 2``.
 
         """
         priority = torch.as_tensor(priority, device=torch.device("cpu")).detach()
@@ -498,22 +542,38 @@ class PrioritizedSampler(Sampler):
                 return
         else:
             if index.ndim > 1:
-                raise ValueError(f"Unsupported index shape: {index.shape}.")
+                if storage is None:
+                    raise RuntimeError(
+                        "storage should be provided to Sampler.update_priority when the storage has more "
+                        "than one dimension."
+                    )
+                try:
+                    shape = storage.shape
+                except AttributeError:
+                    raise AttributeError(
+                        "Could not retrieve the storage shape. If your storage is not a TensorStorage subclass "
+                        "or its shape isn't accessible via the shape attribute, submit an issue on GitHub."
+                    )
+                index = torch.as_tensor(np.ravel_multi_index(index.unbind(-1), shape))
             valid_index = index >= 0
             if not valid_index.any():
                 return
             if not valid_index.all():
                 index = index[valid_index]
-                if priority.numel():
+                if priority.ndim:
                     priority = priority[valid_index]
 
         self._max_priority = priority.max().clamp_min(self._max_priority).item()
         priority = torch.pow(priority + self._eps, self._alpha)
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
+        if storage is not None:
+            psum = self._sum_tree.query(0, len(storage))
 
-    def mark_update(self, index: Union[int, torch.Tensor]) -> None:
-        self.update_priority(index, self.default_priority)
+    def mark_update(
+        self, index: Union[int, torch.Tensor], *, storage: Storage | None = None
+    ) -> None:
+        self.update_priority(index, self.default_priority, storage=storage)
 
     def state_dict(self) -> Dict[str, Any]:
         return {
@@ -1399,7 +1459,10 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         SamplerWithoutReplacement.__init__(self, drop_last=drop_last, shuffle=shuffle)
 
     def __repr__(self):
-        perc = len(self._sample_list) / self.len_storage * 100
+        if self._sample_list is not None:
+            perc = len(self._sample_list) / self.len_storage * 100
+        else:
+            perc = 0
         return (
             f"{self.__class__.__name__}("
             f"num_slices={self.num_slices}, "
@@ -1643,29 +1706,68 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         super(PrioritizedSampler, self).extend(index)
         return super(SliceSampler, self).extend(index)
 
+    def mark_update(
+        self, index: Union[int, torch.Tensor], *, storage: Storage | None = None
+    ) -> None:
+        return PrioritizedSampler.mark_update(self, index, storage=storage)
+
+    def _preceding_stop_idx(self, storage, lengths, seq_length):
+        preceding_stop_idx = self._cache.get("preceding_stop_idx")
+        if preceding_stop_idx is not None:
+            return preceding_stop_idx
+        arange = torch.arange(storage.shape.numel())
+        shapes = lengths.view(-1, 1)
+        assert shapes.sum() - 1 == arange[-1], (shapes.sum(), arange[-5:])
+        if not self.strict_length:
+            # we create a right padded version of the indices
+            # e.g.
+            # tensor([[ 0,  1,  2,  3,  4],
+            #         [ 5,  6,  7, -1, -1],
+            #         [ 8,  9, 10, 11, -1]])
+            st, off = torch._nested_compute_contiguous_strides_offsets(shapes)
+            nt = torch._nested_view_from_buffer(arange, shapes, st, off)
+            pad = nt.to_padded_tensor(-1)
+            if seq_length <= pad.shape[1]:
+                # Mask the rightmost values of that padded tensor
+                preceding_stop_idx = pad[:, -seq_length + 1 :]
+            else:
+                preceding_stop_idx = pad[:, 1:]
+            print('pad', pad)
+            print('seq_length', seq_length)
+            print('preceding_stop_idx', preceding_stop_idx)
+        else:
+            # this complex mumbo jumbo creates a left padded tensor with valid indices on the right, e.g.
+            # tensor([[ 0,  1,  2,  3,  4],
+            #         [-1, -1,  5,  6,  7],
+            #         [-1,  8,  9, 10, 11]])
+            # where the -1 items on the left are padded values
+            st, off = torch._nested_compute_contiguous_strides_offsets(shapes.flip(0))
+            nt = torch._nested_view_from_buffer(arange.flip(0), shapes.flip(0), st, off)
+            pad = nt.to_padded_tensor(-1).flip(-1).flip(0)
+            # Mask the rightmost values of that padded tensor
+            preceding_stop_idx = pad[:, -seq_length + 1 :]
+        preceding_stop_idx = preceding_stop_idx[preceding_stop_idx >= 0]
+        if self.cache_values:
+            self._cache["preceding_stop_idx"] = preceding_stop_idx
+        return preceding_stop_idx
+
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
         # Sample `batch_size` indices representing the start of a slice.
         # The sampling is based on a weight vector.
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
 
-        # TODO: for a given length of storage, this can be cached
-        arange = torch.arange(len(storage))
-        # this complex mumbo jumbo creates a left padded tensor with valid indices on the right, e.g.
-        # tensor([[ 0,  1,  2,  3,  4],
-        #         [-1, -1,  5,  6,  7],
-        #         [-1,  8,  9, 10, 11]])
-        # where the -1 items on the left are padded values
-        shapes = lengths.view(-1, 1)
-        assert shapes.sum()-1 == arange[-1], (shapes.sum(), arange[-5:])
-        st, off = torch._nested_compute_contiguous_strides_offsets(shapes.flip(0))
-        nt = torch._nested_view_from_buffer(arange.flip(0), shapes.flip(0), st, off)
-        pad = nt.to_padded_tensor(-1).flip(-1).flip(0)
-        # TODO: if not strict_length, we can sample sequences that are shorter
-        if not self.strict_length:
-            raise NotImplementedError
-        preceding_stop_idx = pad[:, -seq_length:]
-        preceding_stop_idx = preceding_stop_idx[preceding_stop_idx>=0]
+        preceding_stop_idx = self._preceding_stop_idx(storage, lengths, seq_length)
+        if storage.ndim > 1:
+            # we need too convert indices of the permuted, flatten storage to indices in a flatten storage (not permuted)
+            # This is because the lengths come as they would for a permuted storage
+            preceding_stop_idx2 = torch.unravel_index(
+                preceding_stop_idx, (storage.shape[-1], *storage.shape[:-1])
+            )
+            preceding_stop_idx2 = (preceding_stop_idx2[-1], *preceding_stop_idx2[:-1])
+            preceding_stop_idx = np.ravel_multi_index(
+                preceding_stop_idx2, storage.shape
+            )
 
         # force to not sample index at the end of a trajectory
         self._sum_tree[preceding_stop_idx] = 0.0
@@ -1674,7 +1776,6 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         starts, info = PrioritizedSampler.sample(
             self, storage=storage, batch_size=batch_size // seq_length
         )
-        assert (self._sum_tree[starts.squeeze()] > 0).all()
 
         if isinstance(starts, tuple):
             starts = torch.stack(starts, -1)

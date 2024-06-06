@@ -2000,6 +2000,7 @@ class TestSamplers:
             )
             index = torch.arange(0, num_steps, 1)
             sampler.extend(index)
+            sampler.update_priority(index, 1)
         else:
             sampler = SliceSampler(
                 num_slices=num_slices,
@@ -2013,16 +2014,20 @@ class TestSamplers:
         trajs_unique_id = set()
         too_short = False
         count_unique = set()
-        for _ in range(30):
+        for _ in range(50):
             index, info = sampler.sample(storage, batch_size=batch_size)
             samples = storage._storage[index]
             if strict_length:
                 # check that trajs are ok
                 samples = samples.view(num_slices, -1)
 
-                assert samples["another_episode"].unique(
-                    dim=1
-                ).squeeze().shape == torch.Size([num_slices])
+                unique_another_episode = (
+                    samples["another_episode"].unique(dim=1).squeeze()
+                )
+                assert unique_another_episode.shape == torch.Size([num_slices]), (
+                    num_slices,
+                    samples,
+                )
                 assert (
                     samples["steps"][..., 1:] - 1 == samples["steps"][..., :-1]
                 ).all()
@@ -2255,7 +2260,7 @@ class TestSamplers:
                     curr_eps = curr_eps[curr_eps != 0]
                     assert curr_eps.unique().numel() == 1
 
-    def test_slicesampler_strictlength(self):
+    def test_slice_sampler_strictlength(self):
 
         torch.manual_seed(0)
 
@@ -2298,6 +2303,60 @@ class TestSamplers:
                 assert (sample["traj"] != 0).any()
             else:
                 assert len(sample["traj"].unique()) == 1
+
+    @pytest.mark.parametrize("ndim", [1, 2])
+    @pytest.mark.parametrize("strict_length", [True, False])
+    def test_slice_sampler_prioritized(self, ndim, strict_length):
+        torch.manual_seed(0)
+        out = []
+        for t in range(5):
+            length = (t + 1) * 5
+            done = torch.zeros(length, 1, dtype=torch.bool)
+            done[-1] = 1
+            priority = 10 if t == 0 else 1
+            traj = TensorDict(
+                {
+                    "traj": torch.full((length,), t),
+                    "step_count": torch.arange(length),
+                    "done": done,
+                    "priority": torch.full((length,), priority),
+                },
+                batch_size=length,
+            )
+            out.append(traj)
+        data = torch.cat(out)
+        if ndim == 2:
+            data = torch.stack([data, data])
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(data.numel(), ndim=ndim),
+            sampler=PrioritizedSliceSampler(
+                max_capacity=data.numel(),
+                alpha=1.0,
+                beta=1.0,
+                end_key="done",
+                slice_len=10,
+                strict_length=strict_length,
+            ),
+            batch_size=50,
+        )
+        index = rb.extend(data)
+        # TODO: this should be possible, but it requires some re-orderning of the indices
+        # if ndim > 1:
+        #     assert (rb[index.unbind(-1)].exclude("index") == data.flatten()).all()
+        rb.update_priority(index, data["priority"])
+        samples = []
+        for _ in range(100):
+            samples.append(rb.sample())
+        samples = torch.cat(samples)
+        # the first trajectory has a very high priority, but should only appear
+        # if strict_length=False.
+        if strict_length:
+            assert (samples["traj"] != 0).all(), samples["traj"].unique()
+        else:
+            assert (samples["traj"] == 0).any()
+            sc = samples[samples["traj"] == 0]["step_count"]
+            assert (sc == 0).sum() == (sc == 1).sum()
+            assert (sc == 0).sum() == (sc == 4).sum()
 
 
 def test_prioritized_slice_sampler_doc_example():
