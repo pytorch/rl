@@ -1054,6 +1054,7 @@ class SliceSampler(Sampler):
             seq_length,
             num_slices,
             storage_length=storage_length,
+            storage=storage,
         )
 
     def _sample_slices(
@@ -1065,6 +1066,8 @@ class SliceSampler(Sampler):
         num_slices: int,
         storage_length: int,
         traj_idx: torch.Tensor | None = None,
+        *,
+        storage,
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, Any]]:
         # start_idx and stop_idx are 2d tensors organized like a non-zero
 
@@ -1130,6 +1133,7 @@ class SliceSampler(Sampler):
             seq_length=seq_length,
             storage_length=storage_length,
             traj_idx=traj_idx,
+            storage=storage,
         )
 
     def _get_index(
@@ -1141,6 +1145,8 @@ class SliceSampler(Sampler):
         num_slices: int,
         storage_length: int,
         traj_idx: torch.Tensor | None = None,
+        *,
+        storage,
     ) -> Tuple[torch.Tensor, dict]:
         # end_point is the last possible index for start
         last_indexable_start = lengths[traj_idx] - seq_length + 1
@@ -1209,13 +1215,17 @@ class SliceSampler(Sampler):
                 truncated.view(num_slices, -1)[:, -1] = 1
             else:
                 truncated[seq_length.cumsum(0) - 1] = 1
-            terminated = (
-                (index[:, 0].unsqueeze(0) == stop_idx[:, 0].unsqueeze(1))
-                .any(0)
-                .unsqueeze(1)
-            )
-            done = terminated | truncated
-            return index.to(torch.long).unbind(-1), {
+            index = index.to(torch.long).unbind(-1)
+            st_index = storage[index]
+            try:
+                done = st_index[done_key] | truncated
+            except KeyError:
+                done = truncated.clone()
+            try:
+                terminated = st_index[terminated_key]
+            except KeyError:
+                terminated = torch.zeros_like(truncated)
+            return index, {
                 truncated_key: truncated,
                 done_key: done,
                 terminated_key: terminated,
@@ -1454,6 +1464,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             num_slices,
             storage_length,
             traj_idx=tuple_to_tensor(indices),
+            storage=storage,
         )
         return idx, info
 
@@ -1754,6 +1765,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             truncated_key = self.truncated_key
 
             done_key = _replace_last(truncated_key, "done")
+            print("done_key", done_key)
             terminated_key = _replace_last(truncated_key, "terminated")
 
             truncated = torch.zeros(
@@ -1763,12 +1775,16 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
                 truncated.view(num_slices, -1)[:, -1] = 1
             else:
                 truncated[seq_length.cumsum(0) - 1] = 1
-            terminated = (
-                (index[:, 0].unsqueeze(0) == stop_idx[:, 0].unsqueeze(1))
-                .any(0)
-                .unsqueeze(1)
-            )
-            done = terminated | truncated
+            index = index.to(torch.long).unbind(-1)
+            st_index = storage[index]
+            try:
+                done = st_index[done_key] | truncated
+            except KeyError:
+                done = truncated.clone()
+            try:
+                terminated = st_index[terminated_key]
+            except KeyError:
+                terminated = torch.zeros_like(truncated)
             info.update(
                 {
                     truncated_key: truncated,
@@ -1776,7 +1792,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
                     terminated_key: terminated,
                 }
             )
-            return index.to(torch.long).unbind(-1), info
+            return index, info
         return index.to(torch.long).unbind(-1), info
 
     def _empty(self):
