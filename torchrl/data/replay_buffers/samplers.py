@@ -504,7 +504,7 @@ class PrioritizedSampler(Sampler):
         priority: Union[float, torch.Tensor],
         *,
         storage: TensorStorage | None = None,
-    ) -> None:
+    ) -> None:  # noqa: D417
         """Updates the priority of the data pointed by the index.
 
         Args:
@@ -567,8 +567,6 @@ class PrioritizedSampler(Sampler):
         priority = torch.pow(priority + self._eps, self._alpha)
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
-        if storage is not None:
-            psum = self._sum_tree.query(0, len(storage))
 
     def mark_update(
         self, index: Union[int, torch.Tensor], *, storage: Storage | None = None
@@ -1719,33 +1717,24 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         shapes = lengths.view(-1, 1)
         assert shapes.sum() - 1 == arange[-1], (shapes.sum(), arange[-5:])
         if not self.strict_length:
-            # we create a right padded version of the indices
-            # e.g.
-            # tensor([[ 0,  1,  2,  3,  4],
-            #         [ 5,  6,  7, -1, -1],
-            #         [ 8,  9, 10, 11, -1]])
-            st, off = torch._nested_compute_contiguous_strides_offsets(shapes)
-            nt = torch._nested_view_from_buffer(arange, shapes, st, off)
-            pad = nt.to_padded_tensor(-1)
-            if seq_length <= pad.shape[1]:
-                # Mask the rightmost values of that padded tensor
-                preceding_stop_idx = pad[:, -seq_length + 1 :]
-            else:
-                preceding_stop_idx = pad[:, 1:]
-            print('pad', pad)
-            print('seq_length', seq_length)
-            print('preceding_stop_idx', preceding_stop_idx)
-        else:
-            # this complex mumbo jumbo creates a left padded tensor with valid indices on the right, e.g.
-            # tensor([[ 0,  1,  2,  3,  4],
-            #         [-1, -1,  5,  6,  7],
-            #         [-1,  8,  9, 10, 11]])
-            # where the -1 items on the left are padded values
-            st, off = torch._nested_compute_contiguous_strides_offsets(shapes.flip(0))
-            nt = torch._nested_view_from_buffer(arange.flip(0), shapes.flip(0), st, off)
-            pad = nt.to_padded_tensor(-1).flip(-1).flip(0)
-            # Mask the rightmost values of that padded tensor
-            preceding_stop_idx = pad[:, -seq_length + 1 :]
+            # First, remove the starts from the arange
+            # We do this because each traj can be sampled
+            all_but_starts = torch.ones(arange.shape, dtype=torch.bool)
+            starts = lengths.cumsum(0)
+            starts = torch.cat([torch.zeros_like(starts[:1]), starts[:-1]])
+            all_but_starts[starts] = False
+            arange = arange[all_but_starts]
+            shapes = shapes - 1
+        # this complex mumbo jumbo creates a left padded tensor with valid indices on the right, e.g.
+        # tensor([[ 0,  1,  2,  3,  4],
+        #         [-1, -1,  5,  6,  7],
+        #         [-1,  8,  9, 10, 11]])
+        # where the -1 items on the left are padded values
+        st, off = torch._nested_compute_contiguous_strides_offsets(shapes.flip(0))
+        nt = torch._nested_view_from_buffer(arange.flip(0), shapes.flip(0), st, off)
+        pad = nt.to_padded_tensor(-1).flip(-1).flip(0)
+        # Mask the rightmost values of that padded tensor
+        preceding_stop_idx = pad[:, -seq_length + 1 :]
         preceding_stop_idx = preceding_stop_idx[preceding_stop_idx >= 0]
         if self.cache_values:
             self._cache["preceding_stop_idx"] = preceding_stop_idx

@@ -2306,7 +2306,8 @@ class TestSamplers:
 
     @pytest.mark.parametrize("ndim", [1, 2])
     @pytest.mark.parametrize("strict_length", [True, False])
-    def test_slice_sampler_prioritized(self, ndim, strict_length):
+    @pytest.mark.parametrize("circ", [False, True])
+    def test_slice_sampler_prioritized(self, ndim, strict_length, circ):
         torch.manual_seed(0)
         out = []
         for t in range(5):
@@ -2339,10 +2340,13 @@ class TestSamplers:
             ),
             batch_size=50,
         )
-        index = rb.extend(data)
-        # TODO: this should be possible, but it requires some re-orderning of the indices
-        # if ndim > 1:
-        #     assert (rb[index.unbind(-1)].exclude("index") == data.flatten()).all()
+        if not circ:
+            # Simplest case: the buffer is full but no overlap
+            index = rb.extend(data)
+        else:
+            # The buffer is 2/3 -> 1/3 overlapping
+            rb.extend(data[..., : data.shape[-1] // 3])
+            index = rb.extend(data)
         rb.update_priority(index, data["priority"])
         samples = []
         for _ in range(100):
@@ -2354,6 +2358,7 @@ class TestSamplers:
             assert (samples["traj"] != 0).all(), samples["traj"].unique()
         else:
             assert (samples["traj"] == 0).any()
+            # Check that all samples of the first traj contain all elements (since it's too short to fullfill 10 elts)
             sc = samples[samples["traj"] == 0]["step_count"]
             assert (sc == 0).sum() == (sc == 1).sum()
             assert (sc == 0).sum() == (sc == 4).sum()
