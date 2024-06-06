@@ -3369,7 +3369,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             return self
         mask = self.mask.to(dest) if self.mask is not None else None
         return self.__class__(
-            n=self.nvec.to(dest),
+            nvec=self.nvec.to(dest),
             shape=None,
             device=dest_device,
             dtype=dest_dtype,
