@@ -1765,7 +1765,6 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             truncated_key = self.truncated_key
 
             done_key = _replace_last(truncated_key, "done")
-            print("done_key", done_key)
             terminated_key = _replace_last(truncated_key, "terminated")
 
             truncated = torch.zeros(

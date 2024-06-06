@@ -2018,7 +2018,6 @@ class TestSamplers:
         too_short = False
         count_unique = set()
         for _ in range(30):
-            print(sampler)
             index, info = sampler.sample(storage, batch_size=batch_size)
             samples = storage._storage[index]
             if strict_length:
