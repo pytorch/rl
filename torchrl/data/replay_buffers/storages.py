@@ -116,10 +116,7 @@ class Storage:
         return self.get(item)
 
     def __setitem__(self, index, value):
-        ret = self.set(index, value)
-        for ent in self._attached_entities:
-            ent.mark_update(index)
-        return ret
+        return self.set(index, value)
 
     def __iter__(self):
         for i in range(len(self)):
