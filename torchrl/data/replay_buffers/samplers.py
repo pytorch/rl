@@ -1709,9 +1709,11 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
         # Sample `batch_size` indices representing the start of a slice.
         # The sampling is based on a weight vector.
+        print('get start stop')
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
 
+        print('preceding_stop_idx')
         preceding_stop_idx = self._preceding_stop_idx(storage, lengths, seq_length)
         if storage.ndim > 1:
             # we need to convert indices of the permuted, flatten storage to indices in a flatten storage (not permuted)
