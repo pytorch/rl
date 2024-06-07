@@ -1708,7 +1708,8 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             return preceding_stop_idx
         arange = torch.arange(storage.shape.numel())
         shapes = lengths.view(-1, 1)
-        assert shapes.sum() - 1 == arange[-1], (shapes.sum(), arange[-5:])
+        if not shapes.sum() - 1 == arange[-1]
+            raise RuntimeError("Wrong shapes / arange configuration")
         if not self.strict_length:
             # First, remove the starts from the arange
             # We do this because each traj can be sampled
@@ -1787,7 +1788,8 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             if starts_tensor.ndim > 1:
                 starts_tensor = starts_tensor[:, 0]
             seq_length = (stops - starts_tensor + 1).clamp_max(seq_length)
-            assert (seq_length > 0).all()
+            if (seq_length <= 0).any():
+                raise RuntimeError("failed to compute seq_length, please report this bug")
 
         if isinstance(starts, tuple):
             starts = torch.stack(starts, -1)

@@ -1087,15 +1087,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
         index = super()._add(data)
         if index is not None:
-            # if self._storage.ndim > 1:
-            #     if isinstance(index, torch.Tensor) and index.ndim == 2:
-            #         index = index.unbind(-1)
-            #         index = (index[-1], *index[:-1])
-            #         index = torch.stack(list(index), dim=-1)
-            #     elif isinstance(index, tuple):
-            #         index = (index[-1], *index[:-1])
-            #         index = torch.stack(list(index), dim=-1)
-
             if is_tensor_collection(data):
                 self._set_index_in_td(data, index)
 
@@ -1119,15 +1110,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
         # TODO: to be usable directly, the indices should be flipped but the issue
         #  is that just doing this results in indices that are not sorted like the original data
         #  so the actualy indices will have to be used on the _storage directly (not on the buffer)
-        # if self._storage.ndim > 1:
-        #     if isinstance(index, torch.Tensor) and index.ndim == 2:
-        #         index = index.unbind(-1)
-        #         index = (index[-1], *index[:-1])
-        #         index = torch.stack(list(index), dim=-1)
-        #     elif isinstance(index, tuple):
-        #         index = (index[-1], *index[:-1])
-        #         index = torch.stack(list(index), dim=-1)
-
         self._set_index_in_td(tensordicts, index)
         # TODO: in principle this is a good idea but currently it doesn't work + it re-writes a priority that has just been written
         # self.update_tensordict_priority(tensordicts)
