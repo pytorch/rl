@@ -22,7 +22,7 @@ from tensordict.utils import NestedKey
 
 from torchrl._extension import EXTENSION_WARNING
 
-from torchrl._utils import _replace_last, logger
+from torchrl._utils import _replace_last, implement_for, logger
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
 from torchrl.data.replay_buffers.utils import _is_int
 
@@ -1681,6 +1681,29 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
     ) -> None:
         return PrioritizedSampler.mark_update(self, index, storage=storage)
 
+    @implement_for("torch", "2.4")
+    def _padded_indices(self, shapes, arange) -> torch.Tensor:
+        # this complex mumbo jumbo creates a left padded tensor with valid indices on the right, e.g.
+        # tensor([[ 0,  1,  2,  3,  4],
+        #         [-1, -1,  5,  6,  7],
+        #         [-1,  8,  9, 10, 11]])
+        # where the -1 items on the left are padded values
+        st, off = torch._nested_compute_contiguous_strides_offsets(shapes.flip(0))
+        nt = torch._nested_view_from_buffer(
+            arange.flip(0).contiguous(), shapes.flip(0), st, off
+        )
+        pad = nt.to_padded_tensor(-1).flip(-1).flip(0)
+        return pad
+
+    @implement_for("torch", None, "2.4")
+    def _padded_indices(self, shapes, arange) -> torch.Tensor:
+        arange = arange.flip(0).split(shapes.flip(0).squeeze().unbind())
+        return (
+            torch.nn.utils.rnn.pad_sequence(arange, batch_first=True, padding_value=-1)
+            .flip(-1)
+            .flip(0)
+        )
+
     def _preceding_stop_idx(self, storage, lengths, seq_length):
         preceding_stop_idx = self._cache.get("preceding_stop_idx")
         if preceding_stop_idx is not None:
@@ -1698,16 +1721,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             all_but_starts[starts] = False
             arange = arange[all_but_starts]
             shapes = shapes - 1
-        # this complex mumbo jumbo creates a left padded tensor with valid indices on the right, e.g.
-        # tensor([[ 0,  1,  2,  3,  4],
-        #         [-1, -1,  5,  6,  7],
-        #         [-1,  8,  9, 10, 11]])
-        # where the -1 items on the left are padded values
-        st, off = torch._nested_compute_contiguous_strides_offsets(shapes.flip(0))
-        nt = torch._nested_view_from_buffer(
-            arange.flip(0).contiguous(), shapes.flip(0).contiguous(), st, off
-        )
-        pad = nt.to_padded_tensor(-1).flip(-1).flip(0).contiguous()
+        pad = self._padded_indices(shapes, arange)
         _, span_right = self.span[0], self.span[1]
         if span_right and isinstance(span_right, bool):
             preceding_stop_idx = pad[:, -1:]
