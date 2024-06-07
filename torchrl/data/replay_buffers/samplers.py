@@ -1685,7 +1685,6 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         preceding_stop_idx = self._cache.get("preceding_stop_idx")
         if preceding_stop_idx is not None:
             return preceding_stop_idx
-        print('  arange')
         arange = torch.arange(storage.shape.numel())
         shapes = lengths.view(-1, 1).cpu()
         if not shapes.sum() - 1 == arange[-1]:
@@ -1704,13 +1703,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         #         [-1, -1,  5,  6,  7],
         #         [-1,  8,  9, 10, 11]])
         # where the -1 items on the left are padded values
-        print('  nested', shapes)
         st, off = torch._nested_compute_contiguous_strides_offsets(shapes.flip(0))
-        print('st, off', st, off)
         nt = torch._nested_view_from_buffer(arange.flip(0).contiguous(), shapes.flip(0).contiguous(), st, off)
-        print('nt', nt)
         pad = nt.to_padded_tensor(-1).flip(-1).flip(0).contiguous()
-        print('pad', pad)
         _, span_right = self.span[0], self.span[1]
         if span_right and isinstance(span_right, bool):
             preceding_stop_idx = pad[:, -1:]
@@ -1720,17 +1715,14 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         preceding_stop_idx = preceding_stop_idx[preceding_stop_idx >= 0]
         if self.cache_values:
             self._cache["preceding_stop_idx"] = preceding_stop_idx
-        print('  return')
         return preceding_stop_idx
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
         # Sample `batch_size` indices representing the start of a slice.
         # The sampling is based on a weight vector.
-        print('get start stop')
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
 
-        print('preceding_stop_idx')
         preceding_stop_idx = self._preceding_stop_idx(storage, lengths, seq_length)
         if storage.ndim > 1:
             # we need to convert indices of the permuted, flatten storage to indices in a flatten storage (not permuted)
@@ -1743,16 +1735,13 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
                 np.ravel_multi_index(preceding_stop_idx, storage.shape)
             )
 
-        print('edit sum tree')
         # force to not sample index at the end of a trajectory
         self._sum_tree[preceding_stop_idx.cpu().numpy()] = 0.0
         # and no need to update self._min_tree
 
-        print('sample')
         starts, info = PrioritizedSampler.sample(
             self, storage=storage, batch_size=batch_size // seq_length
         )
-        print('get trajs')
         # We must truncate the seq_length if (1) not strict length or (2) span[1]
         if self.span[1] or not self.strict_length:
             if not isinstance(starts, torch.Tensor):
