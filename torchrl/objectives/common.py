@@ -34,7 +34,7 @@ def _updater_check_forward_prehook(module, *args, **kwargs):
 class _LossMeta(abc.ABCMeta):
     def __init__(cls, name, bases, attr_dict):
         super().__init__(name, bases, attr_dict)
-        cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
+        cls.forward = set_exploration_type(ExplorationType.MEAN)(cls.forward)
 
 
 class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
@@ -55,7 +55,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         The value estimator can be changed using the :meth:`~.make_value_estimator` method.
 
     By default, the forward method is always decorated with a
-    gh :class:`torchrl.envs.ExplorationType.MODE`
+    gh :class:`torchrl.envs.ExplorationType.MEAN`
 
     To utilize the ability configuring the tensordict keys via
     :meth:`~.set_keys()` a subclass must define an _AcceptedKeys dataclass.

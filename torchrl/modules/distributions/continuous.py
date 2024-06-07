@@ -391,15 +391,11 @@ class TanhNormal(FasterTransformedDistribution):
             if not all(high > low):
                 raise RuntimeError(err_msg)
 
-        if isinstance(high, torch.Tensor):
-            self.non_trivial_max = (high != 1.0).any()
-        else:
-            self.non_trivial_max = high != 1.0
+        high = torch.as_tensor(high, device=loc.device)
+        low = torch.as_tensor(low, device=loc.device)
+        self.non_trivial_max = (high != 1.0).any()
 
-        if isinstance(low, torch.Tensor):
-            self.non_trivial_min = (low != -1.0).any()
-        else:
-            self.non_trivial_min = low != -1.0
+        self.non_trivial_min = (low != -1.0).any()
 
         self.tanh_loc = tanh_loc
         self._event_dims = event_dims
@@ -444,8 +440,9 @@ class TanhNormal(FasterTransformedDistribution):
     def update(self, loc: torch.Tensor, scale: torch.Tensor) -> None:
         if self.tanh_loc:
             loc = (loc / self.upscale).tanh() * self.upscale
-        if self.non_trivial_max or self.non_trivial_min:
-            loc = loc + (self.high - self.low) / 2 + self.low
+            # loc must be rescaled if tanh_loc
+            if self.non_trivial_max or self.non_trivial_min:
+                loc = loc + (self.high - self.low) / 2 + self.low
         self.loc = loc
         self.scale = scale
 
@@ -485,26 +482,37 @@ class TanhNormal(FasterTransformedDistribution):
             m = t(m)
         return m
 
+    @torch.enable_grad()
     def get_mode(self):
         """Computes an estimation of the mode using the Adam optimizer."""
         # Get starting point
         m = self.sample((1000,)).mean(0)
         m = torch.nn.Parameter(m.clamp(self.low, self.high).detach())
         optim = torch.optim.Adam((m,), lr=1e-2)
+        self_copy = type(self)(
+            loc=self.loc.detach(),
+            scale=self.scale.detach(),
+            low=self.low.detach(),
+            high=self.high.detach(),
+            event_dims=self._event_dims,
+            upscale=self.upscale,
+            tanh_loc=False,
+        )
         for _ in range(200):
-            lp = -self.log_prob(m)
+            lp = -self_copy.log_prob(m)
             lp.mean().backward()
             mc = m.clone().detach()
             m.grad.clamp_max_(1)
             optim.step()
             optim.zero_grad()
-            m.data.clamp_(self.low, self.high)
+            m.data.clamp_(self_copy.low, self_copy.high)
             nans = m.isnan()
             if nans.any():
                 m.data = torch.where(nans, mc, m.data)
             if (m - mc).norm() < 1e-3:
                 break
-        return m.detach()
+        # return m.detach() + (self.loc - self.loc.detach())
+        return m.detach()  #  + (self.loc - self.loc.detach())
 
     @property
     def mean(self):
