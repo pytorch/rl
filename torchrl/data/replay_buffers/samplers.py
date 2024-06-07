@@ -454,48 +454,11 @@ class PrioritizedSampler(Sampler):
         #         index = torch.unravel_index(index, storage._storage.shape)
         return index, {"_weight": weight}
 
-    # @torch.no_grad()
-    # def _add_or_extend(self, index: Union[int, torch.Tensor]) -> None:
-    #     priority = self.default_priority
-    #
-    #     if not (
-    #         isinstance(priority, float)
-    #         or len(priority) == 1
-    #         or len(priority) == len(index)
-    #     ):
-    #         raise RuntimeError(
-    #             "priority should be a scalar or an iterable of the same "
-    #             "length as index"
-    #         )
-    #     # make sure everything is cast to cpu
-    #     index = torch.as_tensor(index, device=torch.device("cpu"), dtype=torch.long)
-    #     priority = torch.as_tensor(priority, device=torch.device("cpu"))
-    #     # MaxValueWriter will set -1 for items in the data that we don't want
-    #     # to update. We therefore have to keep only the non-negative indices.
-    #     valid_index = index >= 0
-    #     if not valid_index.all():
-    #         if valid_index.any():
-    #             index = index[valid_index]
-    #             if priority.numel() > 1:
-    #                 priority = priority[valid_index]
-    #         else:
-    #             return
-    #
-    #     self._sum_tree[index] = priority
-    #     self._min_tree[index] = priority
-
     def add(self, index: int) -> None:
         super().add(index)
-        # if index is not None:
-        #     # some writers don't systematically write data and can return None
-        #     self._add_or_extend(index)
 
     def extend(self, index: torch.Tensor) -> None:
         super().extend(index)
-        # if index is not None:
-        #     # some writers don't systematically write data and can return None
-        #     index = index.cpu()
-        #     self._add_or_extend(index)
 
     @torch.no_grad()
     def update_priority(
@@ -818,7 +781,7 @@ class SliceSampler(Sampler):
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
         compile: bool | dict = False,
-        span: bool | Tuple[bool | int, bool | int] = False,
+        span: bool | int | Tuple[bool | int, bool | int] = False,
     ):
         self.num_slices = num_slices
         self.slice_len = slice_len
@@ -830,7 +793,7 @@ class SliceSampler(Sampler):
         self.strict_length = strict_length
         self._cache = {}
 
-        if isinstance(span, bool):
+        if isinstance(span, (bool, int)):
             span = (span, span)
         self.span = span
 
@@ -901,6 +864,12 @@ class SliceSampler(Sampler):
         return state
 
     def extend(self, index: torch.Tensor) -> None:
+        super().extend(index)
+        if self.cache_values:
+            self._cache.clear()
+
+    def add(self, index: torch.Tensor) -> None:
+        super().add(index)
         if self.cache_values:
             self._cache.clear()
 
@@ -1534,6 +1503,13 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
 
     For more info see :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` and :class:`~torchrl.data.replay_buffers.samplers.PrioritizedSampler`.
 
+    .. warning:: PrioritizedSliceSampler will look at the priorities of the individual transitions and sample the
+        start points accordingly. This means that transitions with a low priority may as well appear in the
+        samples if they follow another of higher priority, and transitions with a high priority but closer to the
+        end of a trajectory may never be sampled if they cannot be used as start points.
+        Currently, it is the user responsibility to aggregate priorities across items of a trajectory using
+        :meth:`~.update_priority`.
+
     Args:
         alpha (float): exponent α determines how much prioritization is used,
             with α = 0 corresponding to the uniform case.
@@ -1601,6 +1577,13 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             the :meth:`~sample` method will be compiled with :func:`~torch.compile`.
             Keyword arguments can also be passed to torch.compile with this arg.
             Defaults to ``False``.
+        span (bool, int, Tuple[bool | int, bool | int], optional): if provided, the sampled
+            trajectory will span across the left and/or the right. This means that possibly
+            fewer elements will be provided than what was required. A boolean value means
+            that at least one element will be sampled per trajectory. An integer `i` means
+            that at least `slice_len - i` samples will be gathered for each sampled trajectory.
+            Using tuples allows a fine grained control over the span on the left (beginning
+            of the stored trajectory) and on the right (end of the stored trajectory).
 
     Examples:
         >>> import torch
@@ -1658,6 +1641,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
         compile: bool | dict = False,
+        span: bool | int | Tuple[bool | int, bool | int] = False,
     ):
         SliceSampler.__init__(
             self,
@@ -1671,6 +1655,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             ends=ends,
             trajectories=trajectories,
             compile=compile,
+            span=span,
         )
         PrioritizedSampler.__init__(
             self,
@@ -1681,6 +1666,18 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             dtype=dtype,
             reduction=reduction,
         )
+        if self.span[0]:
+            # Span left is hard to achieve because we need to sample 'negative' starts, but to sample
+            # the start we rely on PrioritizedSampler which has no idea it's looking at trajectories.
+            #
+            # Another way to go about this would be to stochastically decrease the seq_length to
+            # accommodate this but that would require to over-sample the starts too.
+            #
+            warnings.warn(
+                f"Left spanning is disabled for {type(self).__name__} and will be automatically turned off. "
+                f"If this feature is required, please file an issue on torchrl GitHub repo."
+            )
+            self.span = (0, self.span[1])
 
     def __repr__(self):
         return (
@@ -1699,10 +1696,6 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
     def __getstate__(self):
         state = SliceSampler.__getstate__(self)
         state.update(PrioritizedSampler.__getstate__(self))
-
-    def extend(self, index: torch.Tensor) -> None:
-        super(PrioritizedSampler, self).extend(index)
-        return super(SliceSampler, self).extend(index)
 
     def mark_update(
         self, index: Union[int, torch.Tensor], *, storage: Storage | None = None
@@ -1733,8 +1726,12 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         st, off = torch._nested_compute_contiguous_strides_offsets(shapes.flip(0))
         nt = torch._nested_view_from_buffer(arange.flip(0), shapes.flip(0), st, off)
         pad = nt.to_padded_tensor(-1).flip(-1).flip(0)
-        # Mask the rightmost values of that padded tensor
-        preceding_stop_idx = pad[:, -seq_length + 1 :]
+        _, span_right = self.span[0], self.span[1]
+        if span_right and isinstance(span_right, bool):
+            preceding_stop_idx = pad[:, -1:]
+        else:
+            # Mask the rightmost values of that padded tensor
+            preceding_stop_idx = pad[:, -seq_length + 1 + span_right :]
         preceding_stop_idx = preceding_stop_idx[preceding_stop_idx >= 0]
         if self.cache_values:
             self._cache["preceding_stop_idx"] = preceding_stop_idx
@@ -1750,12 +1747,12 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         if storage.ndim > 1:
             # we need too convert indices of the permuted, flatten storage to indices in a flatten storage (not permuted)
             # This is because the lengths come as they would for a permuted storage
-            preceding_stop_idx2 = torch.unravel_index(
+            preceding_stop_idx = torch.unravel_index(
                 preceding_stop_idx, (storage.shape[-1], *storage.shape[:-1])
             )
-            preceding_stop_idx2 = (preceding_stop_idx2[-1], *preceding_stop_idx2[:-1])
-            preceding_stop_idx = np.ravel_multi_index(
-                preceding_stop_idx2, storage.shape
+            preceding_stop_idx = (preceding_stop_idx[-1], *preceding_stop_idx[:-1])
+            preceding_stop_idx = torch.as_tensor(
+                np.ravel_multi_index(preceding_stop_idx, storage.shape)
             )
 
         # force to not sample index at the end of a trajectory
@@ -1765,6 +1762,32 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         starts, info = PrioritizedSampler.sample(
             self, storage=storage, batch_size=batch_size // seq_length
         )
+        # We must truncate the seq_length if (1) not strict length or (2) span[1]
+        if self.span[1] or not self.strict_length:
+            if not isinstance(starts, torch.Tensor):
+                starts_tensor = torch.stack(list(starts), dim=-1)
+            else:
+                starts_tensor = starts.unsqueeze(1)
+            # Find the stop that comes after the start index
+            # say start_tensor has shape [N, X] and stop_idx has shape [M, X]
+            # diff will have shape [M, N, X]
+            diff = stop_idx.unsqueeze(1) - starts_tensor.unsqueeze(0)
+            # filter out all items that don't belong to the same dim in the storage
+            mask = (diff[:, :, 1:] != 0).any(-1)
+            diff = diff[:, :, 0]
+            diff[mask] = diff.max() + 1
+            diff = diff.reshape(-1, starts_tensor.shape[0])
+            # We remove all neg values from consideration
+            diff[diff < 0] = diff.max() + 1
+            # Take the arg min along dim 0 (thereby reducing dim M)
+            idx = diff.argmin(dim=0)
+            stops = stop_idx[idx, 0]
+            # TODO: here things may not work bc we could have spanning trajs,
+            #  though I cannot show that it breaks in the tests
+            if starts_tensor.ndim > 1:
+                starts_tensor = starts_tensor[:, 0]
+            seq_length = (stops - starts_tensor + 1).clamp_max(seq_length)
+            assert (seq_length > 0).all()
 
         if isinstance(starts, tuple):
             starts = torch.stack(starts, -1)
@@ -1779,11 +1802,6 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         # repeat the weight of each slice to match the number of steps
         info["_weight"] = torch.repeat_interleave(info["_weight"], seq_length)
 
-        # sanity check
-        if index.shape[0] != batch_size:
-            raise ValueError(
-                f"Number of indices is expected to match the batch size ({index.shape[0]} != {batch_size})."
-            )
         if self.truncated_key is not None:
             # following logics borrowed from SliceSampler
             truncated_key = self.truncated_key
@@ -1829,6 +1847,14 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
     def state_dict(self):
         # no op for SliceSampler
         return PrioritizedSampler.state_dict(self)
+
+    def add(self, index: torch.Tensor) -> None:
+        PrioritizedSampler.add(self, index)
+        return SliceSampler.add(self, index)
+
+    def extend(self, index: torch.Tensor) -> None:
+        PrioritizedSampler.extend(self, index)
+        return SliceSampler.extend(self, index)
 
 
 class SamplerEnsemble(Sampler):
