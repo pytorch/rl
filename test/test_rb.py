@@ -2459,6 +2459,25 @@ class TestSamplers:
         else:
             assert found_traj_0
 
+    def test_prb_update_max_priority(self):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(10),
+            sampler=PrioritizedSampler(max_capacity=10, alpha=1.0, beta=1.0),
+        )
+        for data in torch.arange(20):
+            idx = rb.add(data)
+            rb.update_priority(idx, 21 - data)
+            if data <= 9:
+                assert rb._sampler._max_priority[0] == 21
+                assert rb._sampler._max_priority[1] == 0
+            else:
+                assert rb._sampler._max_priority[0] == 11
+                assert rb._sampler._max_priority[1] == 0
+        idx = rb.extend(torch.arange(10))
+        rb.update_priority(idx, 12)
+        assert rb._sampler._max_priority[0] == 12
+        assert rb._sampler._max_priority[1] == 0
+
 
 def test_prioritized_slice_sampler_doc_example():
     sampler = PrioritizedSliceSampler(max_capacity=9, num_slices=3, alpha=0.7, beta=0.9)
