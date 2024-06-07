@@ -32,6 +32,8 @@ from tensordict import (
 )
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
+
+from torchrl._utils import _replace_last
 from torchrl.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -1974,7 +1976,7 @@ class TestSamplers:
                 "count": torch.arange(100),
                 "other": torch.randn((20, 50)).expand(100, 20, 50),
                 done_key: done,
-                "terminated": done,
+                _replace_last(done_key, "terminated"): done,
             },
             [100],
             device=device,
@@ -1997,6 +1999,7 @@ class TestSamplers:
                 end_key=done_key,
                 slice_len=slice_len,
                 strict_length=strict_length,
+                truncated_key=_replace_last(done_key, "truncated"),
             )
             index = torch.arange(0, num_steps, 1)
             sampler.extend(index)
@@ -2008,6 +2011,7 @@ class TestSamplers:
                 end_key=done_key,
                 slice_len=slice_len,
                 strict_length=strict_length,
+                truncated_key=_replace_last(done_key, "truncated"),
             )
         if slice_len is not None:
             num_slices = batch_size // slice_len
@@ -2042,11 +2046,14 @@ class TestSamplers:
             )
             count_unique = count_unique.union(samples.get("count").view(-1).tolist())
 
-            truncated = info[("next", "truncated")]
-            terminated = info[("next", "terminated")]
+            truncated = info[_replace_last(done_key, "truncated")]
+            terminated = info[_replace_last(done_key, "terminated")]
             assert (truncated | terminated).view(num_slices, -1)[:, -1].all()
-            assert (terminated == samples["terminated"].view_as(terminated)).all()
-            done = info[("next", "done")]
+            assert (
+                terminated
+                == samples[_replace_last(done_key, "terminated")].view_as(terminated)
+            ).all()
+            done = info[done_key]
             assert done.view(num_slices, -1)[:, -1].all()
 
             if len(count_unique) == 100:
@@ -2202,10 +2209,10 @@ class TestSamplers:
             trajs_unique_id = trajs_unique_id.union(
                 cur_episodes,
             )
-        done = info[("next", "done")]
-        assert done.view(num_slices, -1)[:, -1].all()
         done_recon = info[("next", "truncated")] | info[("next", "terminated")]
         assert done_recon.view(num_slices, -1)[:, -1].all()
+        done = info[("next", "done")]
+        assert done.view(num_slices, -1)[:, -1].all()
 
     def test_slice_sampler_left_right(self):
         torch.manual_seed(0)
