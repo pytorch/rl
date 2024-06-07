@@ -2003,6 +2003,7 @@ class TestSamplers:
             )
             index = torch.arange(0, num_steps, 1)
             sampler.extend(index)
+            sampler.update_priority(index, 1)
         else:
             sampler = SliceSampler(
                 num_slices=num_slices,
@@ -2017,16 +2018,20 @@ class TestSamplers:
         trajs_unique_id = set()
         too_short = False
         count_unique = set()
-        for _ in range(30):
+        for _ in range(50):
             index, info = sampler.sample(storage, batch_size=batch_size)
             samples = storage._storage[index]
             if strict_length:
                 # check that trajs are ok
                 samples = samples.view(num_slices, -1)
 
-                assert samples["another_episode"].unique(
-                    dim=1
-                ).squeeze().shape == torch.Size([num_slices])
+                unique_another_episode = (
+                    samples["another_episode"].unique(dim=1).squeeze()
+                )
+                assert unique_another_episode.shape == torch.Size([num_slices]), (
+                    num_slices,
+                    samples,
+                )
                 assert (
                     samples["steps"][..., 1:] - 1 == samples["steps"][..., :-1]
                 ).all()
@@ -2262,7 +2267,7 @@ class TestSamplers:
                     curr_eps = curr_eps[curr_eps != 0]
                     assert curr_eps.unique().numel() == 1
 
-    def test_slicesampler_strictlength(self):
+    def test_slice_sampler_strictlength(self):
 
         torch.manual_seed(0)
 
@@ -2305,6 +2310,154 @@ class TestSamplers:
                 assert (sample["traj"] != 0).any()
             else:
                 assert len(sample["traj"].unique()) == 1
+
+    @pytest.mark.parametrize("ndim", [1, 2])
+    @pytest.mark.parametrize("strict_length", [True, False])
+    @pytest.mark.parametrize("circ", [False, True])
+    def test_slice_sampler_prioritized(self, ndim, strict_length, circ):
+        torch.manual_seed(0)
+        out = []
+        for t in range(5):
+            length = (t + 1) * 5
+            done = torch.zeros(length, 1, dtype=torch.bool)
+            done[-1] = 1
+            priority = 10 if t == 0 else 1
+            traj = TensorDict(
+                {
+                    "traj": torch.full((length,), t),
+                    "step_count": torch.arange(length),
+                    "done": done,
+                    "priority": torch.full((length,), priority),
+                },
+                batch_size=length,
+            )
+            out.append(traj)
+        data = torch.cat(out)
+        if ndim == 2:
+            data = torch.stack([data, data])
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(data.numel(), ndim=ndim),
+            sampler=PrioritizedSliceSampler(
+                max_capacity=data.numel(),
+                alpha=1.0,
+                beta=1.0,
+                end_key="done",
+                slice_len=10,
+                strict_length=strict_length,
+                cache_values=True,
+            ),
+            batch_size=50,
+        )
+        if not circ:
+            # Simplest case: the buffer is full but no overlap
+            index = rb.extend(data)
+        else:
+            # The buffer is 2/3 -> 1/3 overlapping
+            rb.extend(data[..., : data.shape[-1] // 3])
+            index = rb.extend(data)
+        rb.update_priority(index, data["priority"])
+        samples = []
+        found_shorter_batch = False
+        for _ in range(100):
+            samples.append(rb.sample())
+            if samples[-1].numel() < 50:
+                found_shorter_batch = True
+        samples = torch.cat(samples)
+        if strict_length:
+            assert not found_shorter_batch
+        else:
+            assert found_shorter_batch
+        # the first trajectory has a very high priority, but should only appear
+        # if strict_length=False.
+        if strict_length:
+            assert (samples["traj"] != 0).all(), samples["traj"].unique()
+        else:
+            assert (samples["traj"] == 0).any()
+            # Check that all samples of the first traj contain all elements (since it's too short to fullfill 10 elts)
+            sc = samples[samples["traj"] == 0]["step_count"]
+            assert (sc == 0).sum() == (sc == 1).sum()
+            assert (sc == 0).sum() == (sc == 4).sum()
+        assert rb._sampler._cache
+        rb.extend(data)
+        assert not rb._sampler._cache
+
+    @pytest.mark.parametrize("ndim", [1, 2])
+    @pytest.mark.parametrize("strict_length", [True, False])
+    @pytest.mark.parametrize("circ", [False, True])
+    @pytest.mark.parametrize(
+        "span", [False, [False, False], [False, True], 3, [False, 3]]
+    )
+    def test_slice_sampler_prioritized_span(self, ndim, strict_length, circ, span):
+        torch.manual_seed(0)
+        out = []
+        # 5 trajs of length 3, 6, 9, 12 and 15
+        for t in range(5):
+            length = (t + 1) * 3
+            done = torch.zeros(length, 1, dtype=torch.bool)
+            done[-1] = 1
+            priority = 1
+            traj = TensorDict(
+                {
+                    "traj": torch.full((length,), t),
+                    "step_count": torch.arange(length),
+                    "done": done,
+                    "priority": torch.full((length,), priority),
+                },
+                batch_size=length,
+            )
+            out.append(traj)
+        data = torch.cat(out)
+        if ndim == 2:
+            data = torch.stack([data, data])
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(data.numel(), ndim=ndim),
+            sampler=PrioritizedSliceSampler(
+                max_capacity=data.numel(),
+                alpha=1.0,
+                beta=1.0,
+                end_key="done",
+                slice_len=5,
+                strict_length=strict_length,
+                cache_values=True,
+                span=span,
+            ),
+            batch_size=5,
+        )
+        if not circ:
+            # Simplest case: the buffer is full but no overlap
+            index = rb.extend(data)
+        else:
+            # The buffer is 2/3 -> 1/3 overlapping
+            rb.extend(data[..., : data.shape[-1] // 3])
+            index = rb.extend(data)
+        rb.update_priority(index, data["priority"])
+        found_traj_0 = False
+        found_traj_4_truncated_left = False
+        found_traj_4_truncated_right = False
+        for i, s in enumerate(rb):
+            t = s["traj"].unique().tolist()
+            assert len(t) == 1
+            t = t[0]
+            if t == 0:
+                found_traj_0 = True
+            if t == 4 and s.numel() < 5:
+                if s["step_count"][0] > 10:
+                    found_traj_4_truncated_right = True
+                if s["step_count"][0] == 0:
+                    found_traj_4_truncated_left = True
+            if i == 1000:
+                break
+        assert not rb._sampler.span[0]
+        # if rb._sampler.span[0]:
+        #     assert found_traj_4_truncated_left
+        if rb._sampler.span[1]:
+            assert found_traj_4_truncated_right
+        else:
+            assert not found_traj_4_truncated_right
+        if strict_length and not rb._sampler.span[1]:
+            assert not found_traj_0
+        else:
+            assert found_traj_0
 
 
 def test_prioritized_slice_sampler_doc_example():

@@ -157,8 +157,13 @@ class RoundRobinWriter(Writer):
         self._cursor = (self._cursor + 1) % self._storage._max_size_along_dim0(
             single_data=data
         )
+        # Replicate index requires the shape of the storage to be known
+        # Other than that, a "flat" (1d) index is ok to write the data
         self._storage[_cursor] = data
-        return self._replicate_index(index)
+        index = self._replicate_index(index)
+        for ent in self._storage._attached_entities:
+            ent.mark_update(index)
+        return index
 
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
@@ -180,8 +185,13 @@ class RoundRobinWriter(Writer):
         )
         # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (batch_size + cur_size) % max_size_along0
+        # Replicate index requires the shape of the storage to be known
+        # Other than that, a "flat" (1d) index is ok to write the data
         self._storage[index] = data
-        return self._replicate_index(index)
+        index = self._replicate_index(index)
+        for ent in self._storage._attached_entities:
+            ent.mark_update(index)
+        return index
 
     def state_dict(self) -> Dict[str, Any]:
         return {"_cursor": self._cursor}
@@ -241,7 +251,10 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
                 ),
             )
         self._storage[index] = data
-        return self._replicate_index(index)
+        index = self._replicate_index(index)
+        for ent in self._storage._attached_entities:
+            ent.mark_update(index)
+        return index
 
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
@@ -264,8 +277,13 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
                     torch.as_tensor(index, device=data.device, dtype=torch.long), data
                 ),
             )
+        # Replicate index requires the shape of the storage to be known
+        # Other than that, a "flat" (1d) index is ok to write the data
         self._storage[index] = data
-        return self._replicate_index(index)
+        index = self._replicate_index(index)
+        for ent in self._storage._attached_entities:
+            ent.mark_update(index)
+        return index
 
 
 class TensorDictMaxValueWriter(Writer):
@@ -445,8 +463,13 @@ class TensorDictMaxValueWriter(Writer):
         index = self.get_insert_index(data)
         if index is not None:
             data.set("index", index)
+            # Replicate index requires the shape of the storage to be known
+            # Other than that, a "flat" (1d) index is ok to write the data
             self._storage[index] = data
-        return self._replicate_index(index)
+            index = self._replicate_index(index)
+            for ent in self._storage._attached_entities:
+                ent.mark_update(index)
+        return index
 
     def extend(self, data: TensorDictBase) -> None:
         """Inserts a series of data points at appropriate indices.
@@ -476,7 +499,10 @@ class TensorDictMaxValueWriter(Writer):
         else:
             device = getattr(self._storage, "device", None)
             out_index = torch.full(data.shape, -1, dtype=torch.long, device=device)
-        return self._replicate_index(out_index)
+        index = self._replicate_index(out_index)
+        for ent in self._storage._attached_entities:
+            ent.mark_update(index)
+        return index
 
     def _empty(self) -> None:
         self._cursor = 0
