@@ -1725,7 +1725,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             )
 
         # force to not sample index at the end of a trajectory
-        self._sum_tree[preceding_stop_idx] = 0.0
+        self._sum_tree[preceding_stop_idx.cpu()] = 0.0
         # and no need to update self._min_tree
 
         starts, info = PrioritizedSampler.sample(
