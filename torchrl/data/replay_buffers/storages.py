@@ -432,8 +432,7 @@ class TensorStorage(Storage):
             if is_tensor_collection(self._storage):
                 _total_shape = self._storage.shape[: self.ndim]
             else:
-                for leaf in tree_iter(self._storage):
-                    break
+                leaf = next(tree_iter(self._storage))
                 _total_shape = leaf.shape[: self.ndim]
             self.__dict__["_total_shape_value"] = _total_shape
         return _total_shape
