@@ -420,38 +420,6 @@ class PrioritizedSampler(Sampler):
             index = torch.unravel_index(index, storage.shape)
         return index, {"_weight": weight}
 
-        # TODO: This is an option if we want to sample when the trees are not initialized, though it screws up PrioritizedSliceSampler
-        # if p_sum <= 0:
-        #     index, *_ = RandomSampler.sample(self, storage, batch_size)
-        #     device = index[0].device if isinstance(index, tuple) else index.device
-        #     weight = torch.ones(batch_size, device=device)
-        # else:
-        #     if p_min <= 0:
-        #         p_min = 1
-        #
-        #     # For some undefined reason, only np.random works here.
-        #     # All PT attempts fail, even when subsequently transformed into numpy
-        #     mass = np.random.uniform(0.0, p_sum, size=batch_size)
-        #     # mass = torch.zeros(batch_size, dtype=torch.double).uniform_(0.0, p_sum)
-        #     # mass = torch.rand(batch_size).mul_(p_sum)
-        #     index = self._sum_tree.scan_lower_bound(mass)
-        #     index = torch.as_tensor(index)
-        #     if not index.ndim:
-        #         index = index.unsqueeze(0)
-        #     index.clamp_max_(len(storage) - 1)
-        #     weight = torch.as_tensor(self._sum_tree[index])
-        #
-        #     # Importance sampling weight formula:
-        #     #   w_i = (p_i / sum(p) * N) ^ (-beta)
-        #     #   weight_i = w_i / max(w)
-        #     #   weight_i = (p_i / sum(p) * N) ^ (-beta) /
-        #     #       ((min(p) / sum(p) * N) ^ (-beta))
-        #     #   weight_i = ((p_i / sum(p) * N) / (min(p) / sum(p) * N)) ^ (-beta)
-        #     #   weight_i = (p_i / min(p)) ^ (-beta)
-        #     # weight = np.power(weight / (p_min + self._eps), -self._beta)
-        #     weight = torch.pow(weight / p_min, -self._beta)
-        #     if storage.ndim > 1:
-        #         index = torch.unravel_index(index, storage._storage.shape)
         return index, {"_weight": weight}
 
     def add(self, index: int) -> None:
