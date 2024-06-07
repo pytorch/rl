@@ -103,6 +103,7 @@ class TestTanhNormal:
     @pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_tanhnormal(self, low, high, vecs, upscale, shape, device):
+        torch.manual_seed(0)
         low, high, vecs, upscale, shape = _map_all(
             low, high, vecs, upscale, shape, device=device
         )
@@ -132,7 +133,7 @@ class TestTanhNormal:
 
         t = TanhNormal(loc=loc, scale=0.5, low=-1, high=1, event_dims=0)
 
-        mode = t.mode
+        mode = t.get_mode()
         assert mode.shape == loc.shape
         empirical_mode, empirical_mode_lp = torch.zeros_like(loc), -float("inf")
         for v in torch.arange(-1, 1, step=0.01):

@@ -275,8 +275,8 @@ class TruncatedNormal(D.Independent):
         base_dist = _TruncatedNormal(
             loc,
             scale,
-            self.low.expand_as(loc),
-            self.high.expand_as(scale),
+            a=self.low.expand_as(loc),
+            b=self.high.expand_as(scale),
             device=self.device,
         )
         super().__init__(base_dist, 1, validate_args=False)
@@ -418,8 +418,8 @@ class TanhNormal(FasterTransformedDistribution):
         self.low = low
         self.high = high
 
-        # t = SafeTanhTransform()
-        t = D.TanhTransform()
+        t = SafeTanhTransform()
+        # t = D.TanhTransform()
         if self.non_trivial_max or self.non_trivial_min:
             t = D.ComposeTransform(
                 [
@@ -480,7 +480,7 @@ class TanhNormal(FasterTransformedDistribution):
             "This implementation will be removed in v0.6.",
             category=DeprecationWarning,
         )
-        m = self.base_dist.base_dist.mean
+        m = self.root_dist.mean
         for t in self.transforms:
             m = t(m)
         return m
@@ -491,10 +491,11 @@ class TanhNormal(FasterTransformedDistribution):
         m = self.sample((1000,)).mean(0)
         m = torch.nn.Parameter(m.clamp(self.low, self.high).detach())
         optim = torch.optim.Adam((m,), lr=1e-2)
-        for _ in range(100):
+        for _ in range(200):
             lp = -self.log_prob(m)
             lp.mean().backward()
             mc = m.clone().detach()
+            m.grad.clamp_max_(1)
             optim.step()
             optim.zero_grad()
             m.data.clamp_(self.low, self.high)
