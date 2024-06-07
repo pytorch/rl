@@ -1724,13 +1724,16 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
                 np.ravel_multi_index(preceding_stop_idx, storage.shape)
             )
 
+        print('edit sum tree')
         # force to not sample index at the end of a trajectory
         self._sum_tree[preceding_stop_idx.cpu()] = 0.0
         # and no need to update self._min_tree
 
+        print('sample')
         starts, info = PrioritizedSampler.sample(
             self, storage=storage, batch_size=batch_size // seq_length
         )
+        print('get trajs')
         # We must truncate the seq_length if (1) not strict length or (2) span[1]
         if self.span[1] or not self.strict_length:
             if not isinstance(starts, torch.Tensor):
