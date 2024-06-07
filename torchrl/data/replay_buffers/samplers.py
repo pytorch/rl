@@ -1704,7 +1704,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         #         [-1,  8,  9, 10, 11]])
         # where the -1 items on the left are padded values
         st, off = torch._nested_compute_contiguous_strides_offsets(shapes.flip(0))
-        nt = torch._nested_view_from_buffer(arange.flip(0).contiguous(), shapes.flip(0).contiguous(), st, off)
+        nt = torch._nested_view_from_buffer(
+            arange.flip(0).contiguous(), shapes.flip(0).contiguous(), st, off
+        )
         pad = nt.to_padded_tensor(-1).flip(-1).flip(0).contiguous()
         _, span_right = self.span[0], self.span[1]
         if span_right and isinstance(span_right, bool):
