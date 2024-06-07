@@ -1911,7 +1911,7 @@ class TestUnbind:
 @pytest.mark.parametrize(
     "device",
     [torch.device("cpu")]
-    + [torch.device(f"cuda:{i}" for i in range(torch.cuda.device_count()))],
+    + [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())],
 )
 class TestTo:
     @pytest.mark.parametrize("shape1", [(5, 4)])
