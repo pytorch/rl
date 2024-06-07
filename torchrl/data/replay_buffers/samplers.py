@@ -1747,9 +1747,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         # We must truncate the seq_length if (1) not strict length or (2) span[1]
         if self.span[1] or not self.strict_length:
             if not isinstance(starts, torch.Tensor):
-                starts_tensor = torch.stack(list(starts), dim=-1)
+                starts_tensor = torch.stack(list(starts), dim=-1).to(stop_idx.device)
             else:
-                starts_tensor = starts.unsqueeze(1)
+                starts_tensor = starts.unsqueeze(1).to(stop_idx.device)
             # Find the stop that comes after the start index
             # say start_tensor has shape [N, X] and stop_idx has shape [M, X]
             # diff will have shape [M, N, X]
