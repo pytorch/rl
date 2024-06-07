@@ -19,6 +19,7 @@ from .replay_buffers import (
     NestedStorageCheckpointer,
     PrioritizedReplayBuffer,
     PrioritizedSampler,
+    PrioritizedSliceSampler,
     RandomSampler,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
