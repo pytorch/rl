@@ -1676,7 +1676,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             return preceding_stop_idx
         arange = torch.arange(storage.shape.numel())
         shapes = lengths.view(-1, 1)
-        if not shapes.sum() - 1 == arange[-1]
+        if not shapes.sum() - 1 == arange[-1]:
             raise RuntimeError("Wrong shapes / arange configuration")
         if not self.strict_length:
             # First, remove the starts from the arange
@@ -1714,7 +1714,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
 
         preceding_stop_idx = self._preceding_stop_idx(storage, lengths, seq_length)
         if storage.ndim > 1:
-            # we need too convert indices of the permuted, flatten storage to indices in a flatten storage (not permuted)
+            # we need to convert indices of the permuted, flatten storage to indices in a flatten storage (not permuted)
             # This is because the lengths come as they would for a permuted storage
             preceding_stop_idx = torch.unravel_index(
                 preceding_stop_idx, (storage.shape[-1], *storage.shape[:-1])
@@ -1757,7 +1757,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
                 starts_tensor = starts_tensor[:, 0]
             seq_length = (stops - starts_tensor + 1).clamp_max(seq_length)
             if (seq_length <= 0).any():
-                raise RuntimeError("failed to compute seq_length, please report this bug")
+                raise RuntimeError(
+                    "failed to compute seq_length, please report this bug"
+                )
 
         if isinstance(starts, tuple):
             starts = torch.stack(starts, -1)
