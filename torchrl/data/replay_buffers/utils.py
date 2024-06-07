@@ -599,6 +599,14 @@ class TED2Nested(TED2Flat):
     _shift: int = None
     _is_full: bool = None
 
+    def __init__(self, *args, **kwargs):
+        if not hasattr(torch, "_nested_compute_contiguous_strides_offsets"):
+            raise ValueError(
+                f"Unsupported torch version {torch.__version__}. "
+                f"torch>=2.4 is required for {type(self).__name__} to be used."
+            )
+        return super().__init__(*args, **kwargs)
+
     def __call__(self, data: TensorDictBase, path: Path = None):
         data = super().__call__(data, path=path)
 
@@ -994,15 +1002,20 @@ def unravel_index(indices, shape):  # noqa: F811
     """A version-compatible wrapper around torch.unravel_index."""
     return torch.unravel_index(indices, shape)
 
+
 @implement_for("torch", None, "2.3")
 def tree_iter(pytree):
     """A version-compatible wrapper around tree_iter."""
     flat_tree, _ = torch.utils._pytree.tree_flatten(pytree)
     yield from flat_tree
+
+
 @implement_for("torch", "2.3", "2.4")
 def tree_iter(pytree):  # noqa: F811
     """A version-compatible wrapper around tree_iter."""
     yield from torch.utils._pytree.tree_leaves(pytree)
+
+
 @implement_for("torch", "2.4")
 def tree_iter(pytree):  # noqa: F811
     """A version-compatible wrapper around tree_iter."""

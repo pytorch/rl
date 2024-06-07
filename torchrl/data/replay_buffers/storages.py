@@ -25,7 +25,6 @@ from tensordict import (
 from tensordict.memmap import MemoryMappedTensor
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
-from torchrl.data.replay_buffers.utils import tree_iter
 from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.checkpointers import (
     ListStorageCheckpointer,
@@ -33,7 +32,12 @@ from torchrl.data.replay_buffers.checkpointers import (
     StorageEnsembleCheckpointer,
     TensorStorageCheckpointer,
 )
-from torchrl.data.replay_buffers.utils import _init_pytree, _is_int, INT_CLASSES
+from torchrl.data.replay_buffers.utils import (
+    _init_pytree,
+    _is_int,
+    INT_CLASSES,
+    tree_iter,
+)
 
 
 class Storage:
@@ -619,8 +623,7 @@ class TensorStorage(Storage):
         if is_tensor_collection(data) or isinstance(data, torch.Tensor):
             numel = data.shape[:ndim].numel()
         else:
-            # unfortunately tree_flatten isn't an iterator so we will have to flatten it all
-            leaf, *_ = torch.utils._pytree.tree_leaves(data)
+            leaf = next(tree_iter(data))
             numel = leaf.shape[:ndim].numel()
         self._len = min(self._len + numel, self.max_size)
 

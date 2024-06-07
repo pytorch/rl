@@ -2933,6 +2933,13 @@ class TestCheckpointers:
         )
         rb = ReplayBuffer(storage=storage_type(100))
         rb_test = ReplayBuffer(storage=storage_type(100))
+        if torch.__version__ < "2.4.0" and checkpointer in (
+            H5StorageCheckpointer,
+            NestedStorageCheckpointer,
+        ):
+            with pytest.raises(ValueError, match="Unsupported torch version"):
+                checkpointer()
+            return
         rb.storage.checkpointer = checkpointer()
         rb_test.storage.checkpointer = checkpointer()
         for data in collector:
@@ -2955,11 +2962,19 @@ class TestCheckpointers:
         )
         rb = ReplayBuffer(storage=storage_type(100, ndim=2))
         rb_test = ReplayBuffer(storage=storage_type(100, ndim=2))
+        if torch.__version__ < "2.4.0" and checkpointer in (
+            H5StorageCheckpointer,
+            NestedStorageCheckpointer,
+        ):
+            with pytest.raises(ValueError, match="Unsupported torch version"):
+                checkpointer()
+            return
         rb.storage.checkpointer = checkpointer()
         rb_test.storage.checkpointer = checkpointer()
         for data in collector:
             rb.extend(data)
             assert rb._storage.max_size == 102
+            rb.dumps(tmpdir)
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])
