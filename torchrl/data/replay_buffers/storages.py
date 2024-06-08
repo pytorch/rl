@@ -49,7 +49,7 @@ class Storage:
 
     ndim = 1
     max_size: int
-    _default_checkpointer: StorageCheckpointerBase
+    _default_checkpointer: StorageCheckpointerBase = StorageCheckpointerBase
 
     def __init__(
         self, max_size: int, checkpointer: StorageCheckpointerBase | None = None
