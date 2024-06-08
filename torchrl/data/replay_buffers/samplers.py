@@ -278,6 +278,9 @@ class PrioritizedSampler(Sampler):
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectory). Can be one of "max", "min",
             "median" or "mean".
+        max_priority_within_buffer (bool, optional): if ``True``, the max-priority
+            is tracked within the buffer. When ``False``, the max-priority tracks
+            the maximum value since the instantiation of the sampler.
 
     Examples:
         >>> from torchrl.data.replay_buffers import ReplayBuffer, LazyTensorStorage, PrioritizedSampler
@@ -334,6 +337,7 @@ class PrioritizedSampler(Sampler):
         eps: float = 1e-8,
         dtype: torch.dtype = torch.float,
         reduction: str = "max",
+        max_priority_within_buffer: bool = False,
     ) -> None:
         if alpha < 0:
             raise ValueError(
@@ -348,6 +352,7 @@ class PrioritizedSampler(Sampler):
         self._eps = eps
         self.reduction = reduction
         self.dtype = dtype
+        self._max_priority_within_buffer = max_priority_within_buffer
         self._init()
 
     def __repr__(self):
@@ -393,6 +398,8 @@ class PrioritizedSampler(Sampler):
         self.__dict__["_max_priority"] = value
 
     def _maybe_erase_max_priority(self, index):
+        if not self._max_priority_within_buffer:
+            return
         max_priority_index = self._max_priority[1]
         if max_priority_index is None:
             return
@@ -1614,6 +1621,10 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             that at least `slice_len - i` samples will be gathered for each sampled trajectory.
             Using tuples allows a fine grained control over the span on the left (beginning
             of the stored trajectory) and on the right (end of the stored trajectory).
+        max_priority_within_buffer (bool, optional): if ``True``, the max-priority
+            is tracked within the buffer. When ``False``, the max-priority tracks
+            the maximum value since the instantiation of the sampler.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -1672,6 +1683,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         strict_length: bool = True,
         compile: bool | dict = False,
         span: bool | int | Tuple[bool | int, bool | int] = False,
+        max_priority_within_buffer: bool = False,
     ):
         SliceSampler.__init__(
             self,
@@ -1695,6 +1707,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             eps=eps,
             dtype=dtype,
             reduction=reduction,
+            max_priority_within_buffer=max_priority_within_buffer,
         )
         if self.span[0]:
             # Span left is hard to achieve because we need to sample 'negative' starts, but to sample
