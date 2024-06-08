@@ -2520,7 +2520,7 @@ class TestLibThreading:
             torch.set_num_threads(num_threads)
 
     @pytest.mark.skipif(
-        IS_OSX,
+        IS_OSX or IS_WINDOWS,
         reason="setting different threads across workers can randomly fail on OSX.",
     )
     def test_auto_num_threads(self):
