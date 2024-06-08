@@ -1696,7 +1696,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         return pad
 
     @implement_for("torch", None, "2.4")
-    def _padded_indices(self, shapes, arange) -> torch.Tensor:
+    def _padded_indices(self, shapes, arange) -> torch.Tensor:  # noqa: F811
         arange = arange.flip(0).split(shapes.flip(0).squeeze().unbind())
         return (
             torch.nn.utils.rnn.pad_sequence(arange, batch_first=True, padding_value=-1)
