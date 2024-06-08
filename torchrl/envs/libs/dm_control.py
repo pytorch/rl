@@ -12,7 +12,6 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from dm_env import StepType
 
 from torchrl._utils import logger as torchrl_logger, VERBOSE
 
@@ -318,6 +317,8 @@ class DMControlWrapper(GymLikeEnv):
     def _output_transform(
         self, timestep_tuple: Tuple["TimeStep"]  # noqa: F821
     ) -> Tuple[np.ndarray, float, bool, bool, dict]:
+        from dm_env import StepType
+
         if type(timestep_tuple) is not tuple:
             timestep_tuple = (timestep_tuple,)
         reward = timestep_tuple[0].reward

@@ -2812,14 +2812,14 @@ def _minari_selected_datasets():
     torch.manual_seed(0)
 
     keys = list(minari.list_remote_datasets())
-    indices = torch.randperm(len(keys))[:10]
+    indices = torch.randperm(len(keys))[:20]
     keys = [keys[idx] for idx in indices]
     keys = [
         key
         for key in keys
         if "=0.4" in minari.list_remote_datasets()[key]["minari_version"]
     ]
-    assert len(keys) > 5
+    assert len(keys) > 5, keys
     _MINARI_DATASETS += keys
 
 
