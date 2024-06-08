@@ -841,7 +841,7 @@ class TestMultiAgent:
             share_params=False,
             depth=2,
         )
-        optim = torch.optim.SGD(mlp.parameters())
+        optim = torch.optim.SGD(mlp.parameters(), lr=1e-3)
         for p in mlp.parameters():
             if isinstance(p, torch.nn.parameter.UninitializedParameter):
                 break
@@ -975,7 +975,7 @@ class TestMultiAgent:
             in_features=None,
             kernel_sizes=3,
         )
-        optim = torch.optim.SGD(cnn.parameters())
+        optim = torch.optim.SGD(cnn.parameters(), lr=1e-3)
         for p in cnn.parameters():
             if isinstance(p, torch.nn.parameter.UninitializedParameter):
                 break

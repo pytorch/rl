@@ -66,6 +66,7 @@ from torchrl.data.replay_buffers.storages import (
     StorageEnsemble,
     TensorStorage,
 )
+from torchrl.data.replay_buffers.utils import tree_iter
 from torchrl.data.replay_buffers.writers import (
     RoundRobinWriter,
     TensorDictMaxValueWriter,
@@ -880,7 +881,7 @@ class TestLazyStorages:
         assert len(memory) == 10
         assert len(memory._storage) == 10
         sample = memory.sample(10)
-        for leaf in torch.utils._pytree.tree_leaves(sample):
+        for leaf in tree_iter(sample):
             assert (leaf.unique(sorted=True) == torch.arange(10)).all()
         memory = ReplayBuffer(
             storage=storage(max_size=max_size),
@@ -2932,7 +2933,7 @@ class TestRBMultidim:
             assert (s.exclude("index") == 1).all()
             assert s.numel() == 4
         else:
-            for leaf in torch.utils._pytree.tree_leaves(s):
+            for leaf in tree_iter(s):
                 assert leaf.shape[0] == 4
                 assert (leaf == 1).all()
 

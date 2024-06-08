@@ -1745,7 +1745,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         if storage.ndim > 1:
             # we need to convert indices of the permuted, flatten storage to indices in a flatten storage (not permuted)
             # This is because the lengths come as they would for a permuted storage
-            preceding_stop_idx = torch.unravel_index(
+            preceding_stop_idx = unravel_index(
                 preceding_stop_idx, (storage.shape[-1], *storage.shape[:-1])
             )
             preceding_stop_idx = (preceding_stop_idx[-1], *preceding_stop_idx[:-1])
