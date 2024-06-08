@@ -2459,6 +2459,35 @@ class TestSamplers:
         else:
             assert found_traj_0
 
+    @pytest.mark.parametrize("max_priority_within_buffer", [True, False])
+    def test_prb_update_max_priority(self, max_priority_within_buffer):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(11),
+            sampler=PrioritizedSampler(
+                max_capacity=11,
+                alpha=1.0,
+                beta=1.0,
+                max_priority_within_buffer=max_priority_within_buffer,
+            ),
+        )
+        for data in torch.arange(20):
+            idx = rb.add(data)
+            rb.update_priority(idx, 21 - data)
+            if data <= 10 or not max_priority_within_buffer:
+                assert rb._sampler._max_priority[0] == 21
+                assert rb._sampler._max_priority[1] == 0
+            else:
+                assert rb._sampler._max_priority[0] == 10
+                assert rb._sampler._max_priority[1] == 0
+        idx = rb.extend(torch.arange(10))
+        rb.update_priority(idx, 12)
+        if max_priority_within_buffer:
+            assert rb._sampler._max_priority[0] == 12
+            assert rb._sampler._max_priority[1] == 0
+        else:
+            assert rb._sampler._max_priority[0] == 21
+            assert rb._sampler._max_priority[1] == 0
+
 
 def test_prioritized_slice_sampler_doc_example():
     sampler = PrioritizedSliceSampler(max_capacity=9, num_slices=3, alpha=0.7, beta=0.9)

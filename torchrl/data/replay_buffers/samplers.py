@@ -278,6 +278,9 @@ class PrioritizedSampler(Sampler):
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectory). Can be one of "max", "min",
             "median" or "mean".
+        max_priority_within_buffer (bool, optional): if ``True``, the max-priority
+            is tracked within the buffer. When ``False``, the max-priority tracks
+            the maximum value since the instantiation of the sampler.
 
     Examples:
         >>> from torchrl.data.replay_buffers import ReplayBuffer, LazyTensorStorage, PrioritizedSampler
@@ -334,6 +337,7 @@ class PrioritizedSampler(Sampler):
         eps: float = 1e-8,
         dtype: torch.dtype = torch.float,
         reduction: str = "max",
+        max_priority_within_buffer: bool = False,
     ) -> None:
         if alpha < 0:
             raise ValueError(
@@ -348,6 +352,7 @@ class PrioritizedSampler(Sampler):
         self._eps = eps
         self.reduction = reduction
         self.dtype = dtype
+        self._max_priority_within_buffer = max_priority_within_buffer
         self._init()
 
     def __repr__(self):
@@ -376,14 +381,62 @@ class PrioritizedSampler(Sampler):
             raise NotImplementedError(
                 f"dtype {self.dtype} not supported by PrioritizedSampler"
             )
-        self._max_priority = 1.0
+        self._max_priority = None
 
     def _empty(self):
         self._init()
 
     @property
+    def _max_priority(self):
+        max_priority_index = self.__dict__.get("_max_priority")
+        if max_priority_index is None:
+            return (None, None)
+        return max_priority_index
+
+    @_max_priority.setter
+    def _max_priority(self, value):
+        self.__dict__["_max_priority"] = value
+
+    def _maybe_erase_max_priority(self, index):
+        if not self._max_priority_within_buffer:
+            return
+        max_priority_index = self._max_priority[1]
+        if max_priority_index is None:
+            return
+
+        def check_index(index=index, max_priority_index=max_priority_index):
+            if isinstance(index, torch.Tensor):
+                # index can be 1d or 2d
+                if index.ndim == 1:
+                    is_overwritten = (index == max_priority_index).any()
+                else:
+                    is_overwritten = (index == max_priority_index).all(-1).any()
+            elif isinstance(index, int):
+                is_overwritten = index == max_priority_index
+            elif isinstance(index, slice):
+                # This won't work if called recursively
+                is_overwritten = max_priority_index in range(
+                    index.indices(self._max_capacity)
+                )
+            elif isinstance(index, tuple):
+                is_overwritten = isinstance(max_priority_index, tuple)
+                if is_overwritten:
+                    for idx, mpi in zip(index, max_priority_index):
+                        is_overwritten &= check_index(idx, mpi)
+            else:
+                raise TypeError(f"index of type {type(index)} is not recognized.")
+            return is_overwritten
+
+        is_overwritten = check_index()
+        if is_overwritten:
+            self._max_priority = None
+
+    @property
     def default_priority(self) -> float:
-        return (self._max_priority + self._eps) ** self._alpha
+        mp = self._max_priority[0]
+        if mp is None:
+            mp = 1
+        return (mp + self._eps) ** self._alpha
 
     def sample(self, storage: Storage, batch_size: int) -> torch.Tensor:
         if len(storage) == 0:
@@ -422,11 +475,13 @@ class PrioritizedSampler(Sampler):
 
         return index, {"_weight": weight}
 
-    def add(self, index: int) -> None:
+    def add(self, index: torch.Tensor | int) -> None:
         super().add(index)
+        self._maybe_erase_max_priority(index)
 
-    def extend(self, index: torch.Tensor) -> None:
+    def extend(self, index: torch.Tensor | tuple) -> None:
         super().extend(index)
+        self._maybe_erase_max_priority(index)
 
     @torch.no_grad()
     def update_priority(
@@ -494,7 +549,10 @@ class PrioritizedSampler(Sampler):
                 if priority.ndim:
                     priority = priority[valid_index]
 
-        self._max_priority = priority.max().clamp_min(self._max_priority).item()
+        max_p, max_p_idx = priority.max(dim=0)
+        max_priority = self._max_priority[0]
+        if max_priority is None or max_p > max_priority:
+            self._max_priority = (max_p, max_p_idx)
         priority = torch.pow(priority + self._eps, self._alpha)
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
@@ -1563,6 +1621,10 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             that at least `slice_len - i` samples will be gathered for each sampled trajectory.
             Using tuples allows a fine grained control over the span on the left (beginning
             of the stored trajectory) and on the right (end of the stored trajectory).
+        max_priority_within_buffer (bool, optional): if ``True``, the max-priority
+            is tracked within the buffer. When ``False``, the max-priority tracks
+            the maximum value since the instantiation of the sampler.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -1621,6 +1683,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         strict_length: bool = True,
         compile: bool | dict = False,
         span: bool | int | Tuple[bool | int, bool | int] = False,
+        max_priority_within_buffer: bool = False,
     ):
         SliceSampler.__init__(
             self,
@@ -1644,6 +1707,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             eps=eps,
             dtype=dtype,
             reduction=reduction,
+            max_priority_within_buffer=max_priority_within_buffer,
         )
         if self.span[0]:
             # Span left is hard to achieve because we need to sample 'negative' starts, but to sample
