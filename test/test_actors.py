@@ -831,6 +831,7 @@ def test_compound_actor(name_map):
         module,
         in_keys=["params"],
         distribution_class=CompositeDistribution,
+        distribution_kwargs=distribution_kwargs,
     )
     if not name_map:
         assert actor.out_keys == module.out_keys + ["normal", "categ"]
@@ -844,7 +845,7 @@ def test_compound_actor(name_map):
     actor(data)
     assert set(data.keys(True, True)) == {
         "categ" if not name_map else ("action", "categ"),
-        "normal" if not name_map else ("action", "categ"),
+        "normal" if not name_map else ("action", "normal"),
         ("params", "categ", "logits"),
         ("params", "normal", "loc"),
         ("params", "normal", "scale"),
