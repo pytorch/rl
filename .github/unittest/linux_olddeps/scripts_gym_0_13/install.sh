@@ -39,7 +39,7 @@ printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     conda install pytorch==2.0 torchvision==0.15 cpuonly -c pytorch
 else
-    conda install pytorch==2.0 torchvision==0.15 pytorch-cuda=11.6 -c pytorch -c nvidia -y
+    conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.8 -c pytorch -c nvidia
 fi
 
 # Solving circular import: https://stackoverflow.com/questions/75501048/how-to-fix-attributeerror-partially-initialized-module-charset-normalizer-has

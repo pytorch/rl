@@ -81,7 +81,7 @@ from torchrl.envs import (
 from torchrl.envs.batched_envs import _stackable
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
-from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper, gym_backend
+from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
 from torchrl.envs.transforms.transforms import AutoResetEnv, AutoResetTransform
 from torchrl.envs.utils import (
