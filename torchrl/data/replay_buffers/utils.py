@@ -469,7 +469,10 @@ class Flat2TED:
                             "Checkpointing an uninitialized buffer with more than 2 dimensions is currently not supported. "
                             "Please file an issue on GitHub to ask for this feature!"
                         )
-                    out_list = [out._get_sub_tensordict((slice(None),)*i + (j,)) for j in range(out.shape[i])]
+                    out_list = [
+                        out._get_sub_tensordict((slice(None),) * i + (j,))
+                        for j in range(out.shape[i])
+                    ]
                     out = LazyStackedTensorDict(*out_list, stack_dim=i)
 
             # Create a function that reads slices of the input data
