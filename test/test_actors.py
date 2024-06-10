@@ -800,7 +800,8 @@ def test_actorcritic(device):
     ) == len(policy_params)
 
 
-def test_compound_actor():
+@pytest.mark.parametrize("name_map", [True, False])
+def test_compound_actor(name_map):
     class Module(nn.Module):
         def forward(self, x):
             return x[..., :3], x[..., 3:6], x[..., 6:]
@@ -814,19 +815,36 @@ def test_compound_actor():
             ("params", "categ", "logits"),
         ],
     )
+    distribution_kwargs = {
+        "distribution_map": {"normal": dist.Normal, "categ": dist.Categorical}
+    }
+    if name_map:
+        distribution_kwargs.update(
+            {
+                "name_map": {
+                    "normal": ("action", "normal"),
+                    "categ": ("action", "categ"),
+                },
+            }
+        )
     actor = ProbabilisticActor(
         module,
         in_keys=["params"],
         distribution_class=CompositeDistribution,
-        distribution_kwargs={
-            "distribution_map": {"normal": dist.Normal, "categ": dist.Categorical}
-        },
     )
+    if not name_map:
+        assert actor.out_keys == module.out_keys + ["normal", "categ"]
+    else:
+        assert actor.out_keys == module.out_keys + [
+            ("action", "normal"),
+            ("action", "categ"),
+        ]
+
     data = TensorDict({"x": torch.rand(10)}, [])
     actor(data)
     assert set(data.keys(True, True)) == {
-        "categ",
-        "normal",
+        "categ" if not name_map else ("action", "categ"),
+        "normal" if not name_map else ("action", "categ"),
         ("params", "categ", "logits"),
         ("params", "normal", "loc"),
         ("params", "normal", "scale"),
