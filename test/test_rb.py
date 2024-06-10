@@ -3123,7 +3123,7 @@ class TestCheckpointers:
         )
         rb = ReplayBuffer(storage=storage_type(100))
         rb_test = ReplayBuffer(storage=storage_type(100))
-        if torch.__version__ < "2.4.0" and checkpointer in (
+        if torch.__version__ < "2.4.0.dev" and checkpointer in (
             H5StorageCheckpointer,
             NestedStorageCheckpointer,
         ):
@@ -3152,7 +3152,7 @@ class TestCheckpointers:
         )
         rb = ReplayBuffer(storage=storage_type(100, ndim=2))
         rb_test = ReplayBuffer(storage=storage_type(100, ndim=2))
-        if torch.__version__ < "2.4.0" and checkpointer in (
+        if torch.__version__ < "2.4.0.dev" and checkpointer in (
             H5StorageCheckpointer,
             NestedStorageCheckpointer,
         ):
