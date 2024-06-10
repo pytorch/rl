@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import re
 
 from numbers import Number
 
@@ -759,13 +760,13 @@ class TestMultiAgent:
     @retry(AssertionError, 5)
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
-    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("centralized", [True, False])
     @pytest.mark.parametrize("n_agent_inputs", [6, None])
     @pytest.mark.parametrize("batch", [(4,), (4, 3), ()])
     def test_multiagent_mlp(
         self,
         n_agents,
-        centralised,
+        centralized,
         share_params,
         batch,
         n_agent_inputs,
@@ -776,7 +777,7 @@ class TestMultiAgent:
             n_agent_inputs=n_agent_inputs,
             n_agent_outputs=n_agent_outputs,
             n_agents=n_agents,
-            centralised=centralised,
+            centralized=centralized,
             share_params=share_params,
             depth=2,
         )
@@ -788,7 +789,7 @@ class TestMultiAgent:
         out = mlp(obs)
         assert out.shape == (*batch, n_agents, n_agent_outputs)
         for i in range(n_agents):
-            if centralised and share_params:
+            if centralized and share_params:
                 assert torch.allclose(out[..., i, :], out[..., 0, :])
             else:
                 for j in range(i + 1, n_agents):
@@ -797,7 +798,7 @@ class TestMultiAgent:
         obs[..., 0, 0] += 1
         out2 = mlp(obs)
         for i in range(n_agents):
-            if centralised:
+            if centralized:
                 # a modification to the input of agent 0 will impact all agents
                 assert not torch.allclose(out[..., i, :], out2[..., i, :])
             elif i > 0:
@@ -817,13 +818,26 @@ class TestMultiAgent:
                 for j in range(i + 1, n_agents):
                     # same input different output
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
+        pattern = rf"""MultiAgentMLP\(
+    MLP\(
+      \(0\): Linear\(in_features=\d+, out_features=32, bias=True\)
+      \(1\): Tanh\(\)
+      \(2\): Linear\(in_features=32, out_features=32, bias=True\)
+      \(3\): Tanh\(\)
+      \(4\): Linear\(in_features=32, out_features=2, bias=True\)
+    \),
+    n_agents={n_agents},
+    share_params={share_params},
+    centralized={centralized},
+    agent_dim={-2}\)"""
+        assert re.match(pattern, str(mlp), re.DOTALL)
 
     def test_multiagent_mlp_lazy(self):
         mlp = MultiAgentMLP(
             n_agent_inputs=None,
             n_agent_outputs=6,
             n_agents=3,
-            centralised=True,
+            centralized=True,
             share_params=False,
             depth=2,
         )
@@ -858,11 +872,11 @@ class TestMultiAgent:
 
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
-    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("centralized", [True, False])
     def test_multiagent_reset_mlp(
         self,
         n_agents,
-        centralised,
+        centralized,
         share_params,
     ):
         actor_net = MultiAgentMLP(
@@ -870,7 +884,7 @@ class TestMultiAgent:
             n_agent_outputs=6,
             num_cells=(4, 4),
             n_agents=n_agents,
-            centralised=centralised,
+            centralized=centralized,
             share_params=share_params,
         )
         params_before = actor_net.params.clone()
@@ -888,13 +902,13 @@ class TestMultiAgent:
 
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
-    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("centralized", [True, False])
     @pytest.mark.parametrize("channels", [3, None])
     @pytest.mark.parametrize("batch", [(4,), (4, 3), ()])
     def test_multiagent_cnn(
         self,
         n_agents,
-        centralised,
+        centralized,
         share_params,
         batch,
         channels,
@@ -904,7 +918,7 @@ class TestMultiAgent:
         torch.manual_seed(0)
         cnn = MultiAgentConvNet(
             n_agents=n_agents,
-            centralised=centralised,
+            centralized=centralized,
             share_params=share_params,
             in_features=channels,
             kernel_sizes=3,
@@ -923,7 +937,7 @@ class TestMultiAgent:
         obs = td[("agents", "observation")]
         out = cnn(obs)
         assert out.shape[:-1] == (*batch, n_agents)
-        if centralised and share_params:
+        if centralized and share_params:
             torch.testing.assert_close(out, out[..., :1, :].expand_as(out))
         else:
             for i in range(n_agents):
@@ -931,7 +945,7 @@ class TestMultiAgent:
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
         obs[..., 0, 0, 0, 0] += 1
         out2 = cnn(obs)
-        if centralised:
+        if centralized:
             # a modification to the input of agent 0 will impact all agents
             assert not torch.isclose(out, out2).all()
         elif n_agents > 1:
@@ -956,7 +970,7 @@ class TestMultiAgent:
         n_channels = 3
         cnn = MultiAgentConvNet(
             n_agents=n_agents,
-            centralised=False,
+            centralized=False,
             share_params=False,
             in_features=None,
             kernel_sizes=3,
@@ -1000,18 +1014,18 @@ class TestMultiAgent:
 
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
-    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("centralized", [True, False])
     def test_multiagent_reset_cnn(
         self,
         n_agents,
-        centralised,
+        centralized,
         share_params,
     ):
         actor_net = MultiAgentConvNet(
             in_features=4,
             num_cells=[5, 5],
             n_agents=n_agents,
-            centralised=centralised,
+            centralized=centralized,
             share_params=share_params,
         )
         params_before = actor_net.params.clone()

@@ -20,7 +20,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs.common import _EnvWrapper
+from torchrl.envs.common import _EnvWrapper, EnvBase
 
 
 class BaseInfoDictReader(metaclass=abc.ABCMeta):
@@ -49,6 +49,8 @@ class default_info_dict_reader(BaseInfoDictReader):
             correspondent key to form a :class:`torchrl.data.CompositeSpec`.
             If not provided, a composite spec with :class:`~torchrl.data.UnboundedContinuousTensorSpec`
             specs will lazyly be created.
+        ignore_private (bool, optional): If ``True``, private infos (starting with
+            an underscore) will be ignored. Defaults to ``True``.
 
     In cases where keys can be directly written to a tensordict (mostly if they abide to the
     tensordict shape), one simply needs to indicate the keys to be registered during
@@ -74,7 +76,9 @@ class default_info_dict_reader(BaseInfoDictReader):
         | Dict[str, TensorSpec]
         | CompositeSpec
         | None = None,
+        ignore_private: bool = True,
     ):
+        self.ignore_private = ignore_private
         self._lazy = False
         if keys is None:
             self._lazy = True
@@ -105,7 +109,7 @@ class default_info_dict_reader(BaseInfoDictReader):
     def __call__(
         self, info_dict: Dict[str, Any], tensordict: TensorDictBase
     ) -> TensorDictBase:
-        if not isinstance(info_dict, dict) and len(self.keys):
+        if not isinstance(info_dict, (dict, TensorDictBase)) and len(self.keys):
             warnings.warn(
                 f"Found an info_dict of type {type(info_dict)} "
                 f"but expected type or subtype `dict`."
@@ -113,16 +117,29 @@ class default_info_dict_reader(BaseInfoDictReader):
         keys = self.keys
         if keys is None:
             keys = info_dict.keys()
+            if self.ignore_private:
+                keys = [key for key in keys if not key.startswith("_")]
             self.keys = keys
+        # create an info_spec only if there is none
         info_spec = None if self.info_spec is not None else CompositeSpec()
         for key in keys:
             if key in info_dict:
-                tensordict.set(key, info_dict[key])
+                val = info_dict[key]
+                if val.dtype == np.dtype("O"):
+                    val = np.stack(val)
+                tensordict.set(key, val)
                 if info_spec is not None:
                     val = tensordict.get(key)
                     info_spec[key] = UnboundedContinuousTensorSpec(
                         val.shape, device=val.device, dtype=val.dtype
                     )
+            elif self.info_spec is not None:
+                if key in self.info_spec:
+                    # Fill missing with 0s
+                    tensordict.set(key, self.info_spec[key].zero())
+            else:
+                raise KeyError(f"The key {key} could not be found or inferred.")
+        # set the info spec if there wasn't any - this should occur only once in this class
         if info_spec is not None:
             if tensordict.device is not None:
                 info_spec = info_spec.to(tensordict.device)
@@ -162,8 +179,9 @@ class GymLikeEnv(_EnvWrapper):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._info_dict_reader = []
-        return super().__new__(cls, *args, _batch_locked=True, **kwargs)
+        self = super().__new__(cls, *args, _batch_locked=True, **kwargs)
+        self._info_dict_reader = []
+        return self
 
     def read_action(self, action):
         """Reads the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.
@@ -421,7 +439,9 @@ class GymLikeEnv(_EnvWrapper):
         ...
 
     def set_info_dict_reader(
-        self, info_dict_reader: BaseInfoDictReader | None = None
+        self,
+        info_dict_reader: BaseInfoDictReader | None = None,
+        ignore_private: bool = True,
     ) -> GymLikeEnv:
         """Sets an info_dict_reader function.
 
@@ -435,6 +455,8 @@ class GymLikeEnv(_EnvWrapper):
                 This function should modify the tensordict in-place. If none is
                 provided, :class:`~torchrl.envs.gym_like.default_info_dict_reader`
                 will be used.
+            ignore_private (bool, optional): If ``True``, private infos (starting with
+                an underscore) will be ignored. Defaults to ``True``.
 
         Returns: the same environment with the dict_reader registered.
 
@@ -455,7 +477,7 @@ class GymLikeEnv(_EnvWrapper):
 
         """
         if info_dict_reader is None:
-            info_dict_reader = default_info_dict_reader()
+            info_dict_reader = default_info_dict_reader(ignore_private=ignore_private)
         self.info_dict_reader.append(info_dict_reader)
         if isinstance(info_dict_reader, BaseInfoDictReader):
             # if we have a BaseInfoDictReader, we know what the specs will be
@@ -475,35 +497,81 @@ class GymLikeEnv(_EnvWrapper):
                 self.rand_step()
                 self.reset()
 
-            for info_key, spec in info_dict_reader.info_spec.items():
-                self.observation_spec[info_key] = spec.to(self.device)
+            self.observation_spec.update(info_dict_reader.info_spec)
 
         return self
 
-    def auto_register_info_dict(self):
-        """Automatically registers the info dict.
+    def auto_register_info_dict(
+        self,
+        ignore_private: bool = True,
+        *,
+        info_dict_reader: BaseInfoDictReader = None,
+    ) -> EnvBase:
+        """Automatically registers the info dict and appends :class:`~torch.envs.transforms.TensorDictPrimer` instances if needed.
 
-        It is assumed that all the information contained in the info dict can be registered as numerical values
-        within the tensordict.
+        If no info_dict_reader is provided, it is assumed that all the information contained in the info dict can
+        be registered as numerical values within the tensordict.
 
         This method returns a (possibly transformed) environment where we make sure that
         the :func:`torchrl.envs.utils.check_env_specs` succeeds, whether
         the info is filled at reset time.
 
-        This method requires running a few iterations in the environment to
-        manually check that the behaviour matches expectations.
+        .. note:: This method requires running a few iterations in the environment to
+          manually check that the behaviour matches expectations.
+
+        Args:
+            ignore_private (bool, optional): If ``True``, private infos (starting with
+                an underscore) will be ignored. Defaults to ``True``.
+
+        Keyword Args:
+            info_dict_reader (BaseInfoDictReader, optional): the info_dict_reader, if it is known in advance.
+                Unlike :meth:`~.set_info_dict_reader`, this method will create the primers necessary to get
+                :func:`~torchrl.envs.utils.check_env_specs` to run.
 
         Examples:
             >>> from torchrl.envs import GymEnv
             >>> env = GymEnv("HalfCheetah-v4")
-            >>> env.register_info_dict()
+            >>> # registers the info dict reader
+            >>> env.auto_register_info_dict()
+            GymEnv(env=HalfCheetah-v4, batch_size=torch.Size([]), device=cpu)
             >>> env.rollout(3)
+            TensorDict(
+                fields={
+                    action: Tensor(shape=torch.Size([3, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                    done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    next: TensorDict(
+                        fields={
+                            done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            observation: Tensor(shape=torch.Size([3, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                            reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                            reward_ctrl: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False),
+                            reward_run: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False),
+                            terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            x_position: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False),
+                            x_velocity: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False)},
+                        batch_size=torch.Size([3]),
+                        device=cpu,
+                        is_shared=False),
+                    observation: Tensor(shape=torch.Size([3, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                    reward_ctrl: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False),
+                    reward_run: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    x_position: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False),
+                    x_velocity: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=cpu,
+                is_shared=False)
+
         """
         from torchrl.envs import check_env_specs, TensorDictPrimer, TransformedEnv
 
         if self.info_dict_reader:
             raise RuntimeError("The environment already has an info-dict reader.")
-        self.set_info_dict_reader()
+        self.set_info_dict_reader(
+            ignore_private=ignore_private, info_dict_reader=info_dict_reader
+        )
         try:
             check_env_specs(self)
             return self

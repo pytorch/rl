@@ -203,6 +203,7 @@ class ReplayBuffer:
         transform: "Transform" | None = None,  # noqa-F821
         batch_size: int | None = None,
         dim_extend: int | None = None,
+        checkpointer: "StorageCheckpointerBase" | None = None,  # noqa: F821
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
         self._storage.attach(self)
@@ -260,6 +261,7 @@ class ReplayBuffer:
         if dim_extend is not None and dim_extend < 0:
             raise ValueError("dim_extend must be a positive value.")
         self.dim_extend = dim_extend
+        self._storage.checkpointer = checkpointer
 
     @property
     def dim_extend(self):
@@ -355,7 +357,7 @@ class ReplayBuffer:
         if isinstance(index, str) or (isinstance(index, tuple) and unravel_key(index)):
             return self[:][index]
         if isinstance(index, tuple):
-            if len(index) > 1:
+            if len(index) == 1:
                 return self[index[0]]
             else:
                 return self[:][index]
@@ -468,6 +470,35 @@ class ReplayBuffer:
             metadata = json.load(file)
         self._batch_size = metadata["batch_size"]
 
+    def save(self, *args, **kwargs):
+        """Alias for :meth:`~.dumps`."""
+        return self.dumps(*args, **kwargs)
+
+    def dump(self, *args, **kwargs):
+        """Alias for :meth:`~.dumps`."""
+        return self.dumps(*args, **kwargs)
+
+    def load(self, *args, **kwargs):
+        """Alias for :meth:`~.loads`."""
+        return self.loads(*args, **kwargs)
+
+    def register_save_hook(self, hook: Callable[[Any], Any]):
+        """Registers a save hook for the storage.
+
+        .. note:: Hooks are currently not serialized when saving a replay buffer: they must
+            be manually re-initialized every time the buffer is created.
+        """
+        self._storage.register_save_hook(hook)
+
+    def register_load_hook(self, hook: Callable[[Any], Any]):
+        """Registers a load hook for the storage.
+
+        .. note:: Hooks are currently not serialized when saving a replay buffer: they must
+            be manually re-initialized every time the buffer is created.
+
+        """
+        self._storage.register_load_hook(hook)
+
     def add(self, data: Any) -> int:
         """Add a single element to the replay buffer.
 
@@ -533,8 +564,11 @@ class ReplayBuffer:
         index: Union[int, torch.Tensor],
         priority: Union[int, torch.Tensor],
     ) -> None:
+        if self.dim_extend > 0 and priority.ndim > 1:
+            priority = self._transpose(priority).flatten()
+            # priority = priority.flatten()
         with self._replay_lock:
-            self._sampler.update_priority(index, priority)
+            self._sampler.update_priority(index, priority, storage=self.storage)
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> Tuple[Any, dict]:
@@ -542,8 +576,6 @@ class ReplayBuffer:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
             data = self._storage.get(index)
-        # if self.dim_extend > 0:
-        #     data = self._transpose(data)
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
@@ -612,7 +644,7 @@ class ReplayBuffer:
         return ret[0]
 
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
-        self._sampler.mark_update(index)
+        self._sampler.mark_update(index, storage=self._storage)
 
     def append_transform(
         self, transform: "Transform", *, invert: bool = False  # noqa-F821
@@ -992,12 +1024,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
     """
 
-    def __init__(self, *, priority_key: str = "td_error", **kw) -> None:
-        writer = kw.get("writer", None)
+    def __init__(self, *, priority_key: str = "td_error", **kwargs) -> None:
+        writer = kwargs.get("writer", None)
         if writer is None:
-            kw["writer"] = TensorDictRoundRobinWriter()
+            kwargs["writer"] = TensorDictRoundRobinWriter()
 
-        super().__init__(**kw)
+        super().__init__(**kwargs)
         self.priority_key = priority_key
 
     def _get_priority_item(self, tensordict: TensorDictBase) -> float:
@@ -1074,8 +1106,13 @@ class TensorDictReplayBuffer(ReplayBuffer):
             return torch.zeros((0, self._storage.ndim), dtype=torch.long)
 
         index = super()._extend(tensordicts)
+
+        # TODO: to be usable directly, the indices should be flipped but the issue
+        #  is that just doing this results in indices that are not sorted like the original data
+        #  so the actualy indices will have to be used on the _storage directly (not on the buffer)
         self._set_index_in_td(tensordicts, index)
-        self.update_tensordict_priority(tensordicts)
+        # TODO: in principle this is a good idea but currently it doesn't work + it re-writes a priority that has just been written
+        # self.update_tensordict_priority(tensordicts)
         return index
 
     def _set_index_in_td(self, tensordict, index):
