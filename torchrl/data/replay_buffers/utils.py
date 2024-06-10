@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import contextlib
+import itertools
 
 import math
+import operator
 import os
 import typing
 from pathlib import Path
@@ -597,6 +599,14 @@ class TED2Nested(TED2Flat):
     _shift: int = None
     _is_full: bool = None
 
+    def __init__(self, *args, **kwargs):
+        if not hasattr(torch, "_nested_compute_contiguous_strides_offsets"):
+            raise ValueError(
+                f"Unsupported torch version {torch.__version__}. "
+                f"torch>=2.4 is required for {type(self).__name__} to be used."
+            )
+        return super().__init__(*args, **kwargs)
+
     def __call__(self, data: TensorDictBase, path: Path = None):
         data = super().__call__(data, path=path)
 
@@ -949,3 +959,64 @@ def _roll_inplace(tensor, shift, out, index_dest=None, index_source=None):
         slice1 = out[:-slice0_shift]
         slice1.copy_(source1)
     return out
+
+
+# Copy-paste of unravel-index for PT 2.0
+def _unravel_index(
+    indices: Tensor, shape: Union[int, typing.Sequence[int], torch.Size]
+) -> typing.Tuple[Tensor, ...]:
+    res_tensor = _unravel_index_impl(indices, shape)
+    return res_tensor.unbind(-1)
+
+
+def _unravel_index_impl(
+    indices: Tensor, shape: Union[int, typing.Sequence[int]]
+) -> Tensor:
+    if isinstance(shape, (int, torch.SymInt)):
+        shape = torch.Size([shape])
+    else:
+        shape = torch.Size(shape)
+
+    coefs = list(
+        reversed(
+            list(
+                itertools.accumulate(
+                    reversed(shape[1:] + torch.Size([1])), func=operator.mul
+                )
+            )
+        )
+    )
+    return indices.unsqueeze(-1).floor_divide(
+        torch.tensor(coefs, device=indices.device, dtype=torch.int64)
+    ) % torch.tensor(shape, device=indices.device, dtype=torch.int64)
+
+
+@implement_for("torch", None, "2.2")
+def unravel_index(indices, shape):
+    """A version-compatible wrapper around torch.unravel_index."""
+    return _unravel_index(indices, shape)
+
+
+@implement_for("torch", "2.2")
+def unravel_index(indices, shape):  # noqa: F811
+    """A version-compatible wrapper around torch.unravel_index."""
+    return torch.unravel_index(indices, shape)
+
+
+@implement_for("torch", None, "2.3")
+def tree_iter(pytree):
+    """A version-compatible wrapper around tree_iter."""
+    flat_tree, _ = torch.utils._pytree.tree_flatten(pytree)
+    yield from flat_tree
+
+
+@implement_for("torch", "2.3", "2.4")
+def tree_iter(pytree):  # noqa: F811
+    """A version-compatible wrapper around tree_iter."""
+    yield from torch.utils._pytree.tree_leaves(pytree)
+
+
+@implement_for("torch", "2.4")
+def tree_iter(pytree):  # noqa: F811
+    """A version-compatible wrapper around tree_iter."""
+    yield from torch.utils._pytree.tree_iter(pytree)

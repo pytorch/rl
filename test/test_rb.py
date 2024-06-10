@@ -66,6 +66,7 @@ from torchrl.data.replay_buffers.storages import (
     StorageEnsemble,
     TensorStorage,
 )
+from torchrl.data.replay_buffers.utils import tree_iter
 from torchrl.data.replay_buffers.writers import (
     RoundRobinWriter,
     TensorDictMaxValueWriter,
@@ -880,7 +881,7 @@ class TestLazyStorages:
         assert len(memory) == 10
         assert len(memory._storage) == 10
         sample = memory.sample(10)
-        for leaf in torch.utils._pytree.tree_leaves(sample):
+        for leaf in tree_iter(sample):
             assert (leaf.unique(sorted=True) == torch.arange(10)).all()
         memory = ReplayBuffer(
             storage=storage(max_size=max_size),
@@ -2961,7 +2962,7 @@ class TestRBMultidim:
             assert (s.exclude("index") == 1).all()
             assert s.numel() == 4
         else:
-            for leaf in torch.utils._pytree.tree_leaves(s):
+            for leaf in tree_iter(s):
                 assert leaf.shape[0] == 4
                 assert (leaf == 1).all()
 
@@ -3122,6 +3123,13 @@ class TestCheckpointers:
         )
         rb = ReplayBuffer(storage=storage_type(100))
         rb_test = ReplayBuffer(storage=storage_type(100))
+        if torch.__version__ < "2.4.0" and checkpointer in (
+            H5StorageCheckpointer,
+            NestedStorageCheckpointer,
+        ):
+            with pytest.raises(ValueError, match="Unsupported torch version"):
+                checkpointer()
+            return
         rb.storage.checkpointer = checkpointer()
         rb_test.storage.checkpointer = checkpointer()
         for data in collector:
@@ -3144,11 +3152,19 @@ class TestCheckpointers:
         )
         rb = ReplayBuffer(storage=storage_type(100, ndim=2))
         rb_test = ReplayBuffer(storage=storage_type(100, ndim=2))
+        if torch.__version__ < "2.4.0" and checkpointer in (
+            H5StorageCheckpointer,
+            NestedStorageCheckpointer,
+        ):
+            with pytest.raises(ValueError, match="Unsupported torch version"):
+                checkpointer()
+            return
         rb.storage.checkpointer = checkpointer()
         rb_test.storage.checkpointer = checkpointer()
         for data in collector:
             rb.extend(data)
             assert rb._storage.max_size == 102
+            rb.dumps(tmpdir)
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])

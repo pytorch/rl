@@ -445,7 +445,7 @@ class VmapModule(TensorDictModuleBase):
 
     def __init__(self, module: TensorDictModuleBase, vmap_dim=None):
         if not _has_functorch:
-            raise ImportError("VmapModule requires torch>=1.13.")
+            raise ImportError("VmapModule requires torch>=2.0.")
         super().__init__()
         self.in_keys = module.in_keys
         self.out_keys = module.out_keys

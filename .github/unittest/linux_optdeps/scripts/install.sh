@@ -29,9 +29,6 @@ else
   pip3 install tensordict
 fi
 
-# smoke test
-python -c "import functorch"
-
 printf "* Installing torchrl\n"
 python setup.py develop
 

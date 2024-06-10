@@ -24,7 +24,7 @@ from torchrl._extension import EXTENSION_WARNING
 
 from torchrl._utils import _replace_last, implement_for, logger
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
-from torchrl.data.replay_buffers.utils import _is_int
+from torchrl.data.replay_buffers.utils import _is_int, unravel_index
 
 try:
     from torchrl._torchrl import (
@@ -204,7 +204,9 @@ class SamplerWithoutReplacement(Sampler):
     def _storage_len(self, storage):
         return len(storage)
 
-    def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
+    def sample(
+        self, storage: Storage, batch_size: int
+    ) -> Tuple[Any, dict]:  # noqa: F811
         len_storage = self._storage_len(storage)
         if len_storage == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
@@ -221,7 +223,7 @@ class SamplerWithoutReplacement(Sampler):
         self.len_storage = len_storage
         index = self._single_sample(len_storage, batch_size)
         if storage.ndim > 1:
-            index = torch.unravel_index(index, storage.shape)
+            index = unravel_index(index, storage.shape)
         # we 'always' return the indices. The 'drop_last' just instructs the
         # sampler to turn to `ran_out = True` whenever the next sample
         # will be too short. This will be read by the replay buffer
@@ -470,7 +472,7 @@ class PrioritizedSampler(Sampler):
         # weight = np.power(weight / (p_min + self._eps), -self._beta)
         weight = torch.pow(weight / p_min, -self._beta)
         if storage.ndim > 1:
-            index = torch.unravel_index(index, storage.shape)
+            index = unravel_index(index, storage.shape)
         return index, {"_weight": weight}
 
         return index, {"_weight": weight}
@@ -1807,7 +1809,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         if storage.ndim > 1:
             # we need to convert indices of the permuted, flatten storage to indices in a flatten storage (not permuted)
             # This is because the lengths come as they would for a permuted storage
-            preceding_stop_idx = torch.unravel_index(
+            preceding_stop_idx = unravel_index(
                 preceding_stop_idx, (storage.shape[-1], *storage.shape[:-1])
             )
             preceding_stop_idx = (preceding_stop_idx[-1], *preceding_stop_idx[:-1])
