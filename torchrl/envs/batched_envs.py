@@ -671,8 +671,8 @@ class BatchedEnvBase(EnvBase):
             self.full_reward_spec,
             self.full_done_spec,
         ):
-            for key, spec in spec.items(True, True):
-                if isinstance(spec, NonTensorSpec):
+            for key, _spec in spec.items(True, True):
+                if isinstance(_spec, NonTensorSpec):
                     non_tensor_keys.append(key)
         self._non_tensor_keys = non_tensor_keys
 

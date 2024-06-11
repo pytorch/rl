@@ -4414,58 +4414,6 @@ class CompositeSpec(TensorSpec):
         return self._locked
 
 
-class NonTensorSpec(TensorSpec):
-    """Tensor spec for non-tensor data.
-
-    This spec has no space or dtype, but the device and shape can be specified
-    (as it is the case for :class:`~tensordict.NonTensorData`).
-
-    """
-
-    shape: torch.Size
-    space: Union[None, Box] = None
-    device: torch.device | None = None
-    dtype: torch.dtype = None
-    domain: str = "continuous"
-
-    def __init__(self, shape=(), device=None):
-        if device is not None:
-            device = torch.device(device)
-        return super().__init__(shape=shape, space=None, device=device, dtype=None)
-
-    def rand(self, shape=None) -> torch.Tensor:
-        return NonTensorData(None, batch_size=self.shape)
-
-    def zero(self, shape=None) -> torch.Tensor:
-        return NonTensorData(None, batch_size=self.shape)
-
-    def expand(self, *shape):
-        if len(shape) == 1 and not isinstance(shape[0], int):
-            shape = shape[0]
-        return NonTensorSpec(device=self.device, shape=shape)
-
-    def is_in(self, val: torch.Tensor) -> bool:
-        return True
-
-    def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
-
-    def to(self, dest):
-        if dest is None:
-            return self
-        if isinstance(dest, torch.dtype):
-            dest_dtype = dest
-            dest_device = self.device
-        else:
-            dest_dtype = self.dtype
-            dest_device = torch.device(dest)
-        if dest_device == self.device and dest_dtype == self.dtype:
-            return self
-        return self.__class__(shape=self.shape, device=dest)
-
-    def clone(self) -> "TensorSpec":
-        return self.__class__(shape=self.shape, device=self.device)
-
 
 class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
     """A lazy representation of a stack of composite specs.
