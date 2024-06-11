@@ -3979,6 +3979,10 @@ class CompositeSpec(TensorSpec):
                 raise KeyError(
                     f"The CompositeSpec instance with keys {self.keys()} does not have a '{key}' key."
                 )
+            except RuntimeError as err:
+                raise RuntimeError(
+                    f"Encoding key {key} raised a RuntimeError. Scroll up to know more."
+                ) from err
         return out
 
     def __repr__(self) -> str:

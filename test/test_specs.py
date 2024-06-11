@@ -1907,6 +1907,22 @@ class TestUnbind:
         assert spec == torch.stack(spec.unbind(0), 0)
         assert spec == torch.stack(spec.unbind(-1), -1)
 
+    def test_composite_encode_err(self):
+        c = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(
+                1,
+            ),
+            b=UnboundedContinuousTensorSpec(
+                2,
+            ),
+        )
+        with pytest.raises(KeyError, match="The CompositeSpec instance with keys"):
+            c.encode({"c": 0})
+        with pytest.raises(
+            RuntimeError, match="raised a RuntimeError. Scroll up to know more"
+        ):
+            c.encode({"a": 0, "b": 0})
+
 
 @pytest.mark.parametrize(
     "device",
