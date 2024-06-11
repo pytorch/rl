@@ -962,6 +962,12 @@ class SliceSampler(Sampler):
             if cursor is not None:
                 if isinstance(cursor, torch.Tensor):
                     cursor = cursor[-1].item()
+                elif isinstance(cursor, range):
+                    cursor = cursor[-1]
+                if not _is_int(cursor):
+                    raise RuntimeError(
+                        "cursor should be an integer or a 1d tensor or a range."
+                    )
                 end = torch.index_fill(
                     end,
                     index=torch.tensor(cursor, device=end.device, dtype=torch.long),
@@ -1006,7 +1012,7 @@ class SliceSampler(Sampler):
             # In this case we have only one start and stop has already been set
             pass
         lengths = stop_idx[:, 0] - start_idx[:, 0] + 1
-        lengths[lengths < 0] = lengths[lengths < 0] + length
+        lengths[lengths <= 0] = lengths[lengths <= 0] + length
         return start_idx, stop_idx, lengths
 
     def _start_to_end(self, st: torch.Tensor, length: int):
@@ -1284,7 +1290,6 @@ class SliceSampler(Sampler):
             ],
             1,
         )
-
         index = self._tensor_slices_from_startend(seq_length, starts, storage_length)
         if self.truncated_key is not None:
             truncated_key = self.truncated_key
