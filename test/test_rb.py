@@ -811,13 +811,13 @@ class TestStorages:
         )
         assert (rb[3:4] == 0).all()
         assert len(rb) == 100
-        rb._writer._cursor == 100
+        assert rb._writer._cursor == 100
         rb[10:20] = TensorDict(
             {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
         )
         assert (rb[10:20] == 0).all()
         assert len(rb) == 100
-        rb._writer._cursor == 100
+        assert rb._writer._cursor == 100
         rb[torch.arange(30, 40)] = TensorDict(
             {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
         )
@@ -841,17 +841,17 @@ class TestStorages:
         )
         assert (rb[0, 3:4] == 0).all()
         assert (rb[1, 3:4] != 0).all()
-        rb._writer._cursor == 50
+        assert rb._writer._cursor == 50
         rb[1, 5:6] = TensorDict(
             {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
         )
         assert (rb[1, 5:6] == 0).all()
-        rb._writer._cursor == 50
+        assert rb._writer._cursor == 50
         rb[:, 7:8] = TensorDict(
             {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
         ).expand(2, 1)
         assert (rb[:, 7:8] == 0).all()
-        rb._writer._cursor == 50
+        assert rb._writer._cursor == 50
         # test broadcasting
         rb[:, 10:20] = TensorDict(
             {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
