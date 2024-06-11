@@ -791,6 +791,74 @@ class TestStorages:
         assert len(rb) == 1
         assert rb[:].shape == torch.Size([1, 2])
 
+    @pytest.mark.parametrize(
+        "storage_type,collate_fn",
+        [
+            (LazyTensorStorage, None),
+            (LazyMemmapStorage, None),
+            (ListStorage, torch.stack),
+        ],
+    )
+    def test_storage_inplace_writing(self, storage_type, collate_fn):
+        rb = ReplayBuffer(storage=storage_type(102), collate_fn=collate_fn)
+        data = TensorDict(
+            {"a": torch.arange(100), ("b", "c"): torch.arange(100)}, [100]
+        )
+        rb.extend(data)
+        assert len(rb) == 100
+        rb[3:4] = TensorDict(
+            {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
+        )
+        assert (rb[3:4] == 0).all()
+        assert len(rb) == 100
+        rb._writer._cursor == 100
+        rb[10:20] = TensorDict(
+            {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
+        )
+        assert (rb[10:20] == 0).all()
+        assert len(rb) == 100
+        rb._writer._cursor == 100
+        rb[torch.arange(30, 40)] = TensorDict(
+            {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
+        )
+        assert (rb[30:40] == 0).all()
+        assert len(rb) == 100
+
+    @pytest.mark.parametrize("storage_type", [LazyTensorStorage, LazyMemmapStorage])
+    def test_storage_inplace_writing_ndim(self, storage_type):
+        rb = ReplayBuffer(storage=storage_type(102, ndim=2))
+        data = TensorDict(
+            {
+                "a": torch.arange(50).expand(2, 50),
+                ("b", "c"): torch.arange(50).expand(2, 50),
+            },
+            [2, 50],
+        )
+        rb.extend(data)
+        assert len(rb) == 100
+        rb[0, 3:4] = TensorDict(
+            {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
+        )
+        assert (rb[0, 3:4] == 0).all()
+        assert (rb[1, 3:4] != 0).all()
+        rb._writer._cursor == 50
+        rb[1, 5:6] = TensorDict(
+            {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
+        )
+        assert (rb[1, 5:6] == 0).all()
+        rb._writer._cursor == 50
+        rb[:, 7:8] = TensorDict(
+            {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
+        ).expand(2, 1)
+        assert (rb[:, 7:8] == 0).all()
+        rb._writer._cursor == 50
+        # test broadcasting
+        rb[:, 10:20] = TensorDict(
+            {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
+        )
+        assert (rb[:, 10:20] == 0).all()
+        assert len(rb) == 100
+
 
 @pytest.mark.parametrize("max_size", [1000])
 @pytest.mark.parametrize("shape", [[3, 4]])

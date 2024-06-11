@@ -86,7 +86,7 @@ class Storage:
         return _attached_entities
 
     @abc.abstractmethod
-    def set(self, cursor: int, data: Any):
+    def set(self, cursor: int, data: Any, *, set_cursor: bool = True):
         ...
 
     @abc.abstractmethod
@@ -116,7 +116,7 @@ class Storage:
         return self.get(item)
 
     def __setitem__(self, index, value):
-        return self.set(index, value)
+        return self.set(index, value, set_cursor=False)
 
     def __iter__(self):
         for i in range(len(self)):
@@ -203,12 +203,18 @@ class ListStorage(Storage):
         super().__init__(max_size)
         self._storage = []
 
-    def set(self, cursor: Union[int, Sequence[int], slice], data: Any):
+    def set(
+        self,
+        cursor: Union[int, Sequence[int], slice],
+        data: Any,
+        *,
+        set_cursor: bool = True,
+    ):
         if not isinstance(cursor, INT_CLASSES):
             if (isinstance(cursor, torch.Tensor) and cursor.numel() <= 1) or (
                 isinstance(cursor, np.ndarray) and cursor.size <= 1
             ):
-                self.set(int(cursor), data)
+                self.set(int(cursor), data, set_cursor=set_cursor)
                 return
             if isinstance(cursor, slice):
                 self._storage[cursor] = data
@@ -227,7 +233,7 @@ class ListStorage(Storage):
                 ),
             ):
                 for _cursor, _data in zip(cursor, data):
-                    self.set(_cursor, _data)
+                    self.set(_cursor, _data, set_cursor=set_cursor)
             else:
                 raise TypeError(
                     f"Cannot extend a {type(self)} with data of type {type(data)}. "
@@ -629,9 +635,11 @@ class TensorStorage(Storage):
         self,
         cursor: Union[int, Sequence[int], slice],
         data: Union[TensorDictBase, torch.Tensor],
+        *,
+        set_cursor: bool = True,
     ):
-
-        self._last_cursor = cursor
+        if set_cursor:
+            self._last_cursor = cursor
 
         if isinstance(data, list):
             # flip list
@@ -648,7 +656,8 @@ class TensorStorage(Storage):
                     f"for per-item addition."
                 )
 
-        self._get_new_len(data, cursor)
+        if set_cursor:
+            self._get_new_len(data, cursor)
 
         if not self.initialized:
             if not isinstance(cursor, INT_CLASSES):
@@ -668,9 +677,12 @@ class TensorStorage(Storage):
         self,
         cursor: Union[int, Sequence[int], slice],
         data: Union[TensorDictBase, torch.Tensor],
+        *,
+        set_cursor: bool = True,
     ):
 
-        self._last_cursor = cursor
+        if set_cursor:
+            self._last_cursor = cursor
 
         if isinstance(data, list):
             # flip list
@@ -686,8 +698,8 @@ class TensorStorage(Storage):
                     f"consider using a tuple instead, as lists are used within `extend` "
                     f"for per-item addition."
                 )
-
-        self._get_new_len(data, cursor)
+        if set_cursor:
+            self._get_new_len(data, cursor)
 
         if not is_tensor_collection(data) and not isinstance(data, torch.Tensor):
             raise NotImplementedError(
