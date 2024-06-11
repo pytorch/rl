@@ -948,7 +948,7 @@ if (downloadNote.length >= 1) {
     var githubLink = "https://github.com/pytorch/rl/blob/main/" + tutorialUrlArray.join("/") + ".py",
         notebookLink = $(".reference.download")[1].href,
         notebookDownloadPath = notebookLink.split('_downloads')[1],
-        colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/_downloads" + notebookDownloadPath;
+        colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
 
     $("#google-colab-link").wrap("<a href=" + colabLink + " data-behavior='call-to-action-event' data-response='Run in Google Colab' target='_blank'/>");
     $("#download-notebook-link").wrap("<a href=" + notebookLink + " data-behavior='call-to-action-event' data-response='Download Notebook'/>");

@@ -88,7 +88,7 @@ from torchrl.envs import (
     RenameTransform,
 )
 from torchrl.envs.batched_envs import SerialEnv
-from torchrl.envs.libs.brax import _has_brax, BraxEnv
+from torchrl.envs.libs.brax import _has_brax, BraxEnv, BraxWrapper
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.envpool import _has_envpool, MultiThreadedEnvWrapper
 from torchrl.envs.libs.gym import (
@@ -189,7 +189,7 @@ if _has_envpool:
 
 _has_pytree = True
 try:
-    from torch.utils._pytree import tree_flatten
+    from torch.utils._pytree import tree_flatten, tree_map
 except ImportError:
     _has_pytree = False
 IS_OSX = platform == "darwin"
@@ -312,6 +312,79 @@ class TestGym:
             assert spec0 == spec1, (key0, key1, spec0, spec1)
         assert spec == recon
         assert recon.shape == spec.shape
+
+    @pytest.mark.parametrize("order", ["tuple_seq"])
+    @implement_for("gym")
+    def test_gym_spec_cast_tuple_sequential(self, order):
+        torchrl_logger.info("Sequence not available in gym")
+        return
+
+    # @pytest.mark.parametrize("order", ["seq_tuple", "tuple_seq"])
+    @pytest.mark.parametrize("order", ["tuple_seq"])
+    @implement_for("gymnasium")
+    def test_gym_spec_cast_tuple_sequential(self, order):  # noqa: F811
+        with set_gym_backend("gymnasium"):
+            if order == "seq_tuple":
+                # Requires nested tensors to be created along dim=1, disabling
+                space = gym_backend("spaces").Dict(
+                    feature=gym_backend("spaces").Sequence(
+                        gym_backend("spaces").Tuple(
+                            (
+                                gym_backend("spaces").Box(-1, 1, shape=(2, 2)),
+                                gym_backend("spaces").Box(-1, 1, shape=(1, 2)),
+                            )
+                        ),
+                        stack=True,
+                    )
+                )
+            elif order == "tuple_seq":
+                space = gym_backend("spaces").Dict(
+                    feature=gym_backend("spaces").Tuple(
+                        (
+                            gym_backend("spaces").Sequence(
+                                gym_backend("spaces").Box(-1, 1, shape=(2, 2)),
+                                stack=True,
+                            ),
+                            gym_backend("spaces").Sequence(
+                                gym_backend("spaces").Box(-1, 1, shape=(1, 2)),
+                                stack=True,
+                            ),
+                        ),
+                    )
+                )
+            else:
+                raise NotImplementedError
+            sample = space.sample()
+            partial_tree_map = functools.partial(
+                tree_map, is_leaf=lambda x: isinstance(x, (tuple, torch.Tensor))
+            )
+
+            def stack_tuples(item):
+                if isinstance(item, tuple):
+                    try:
+                        return torch.stack(
+                            [partial_tree_map(stack_tuples, x) for x in item]
+                        )
+                    except RuntimeError:
+                        item = [partial_tree_map(stack_tuples, x) for x in item]
+                        try:
+                            return torch.nested.nested_tensor(item)
+                        except RuntimeError:
+                            return tuple(item)
+                return torch.as_tensor(item)
+
+            sample_pt = partial_tree_map(stack_tuples, sample)
+            # sample_pt = torch.utils._pytree.tree_map(lambda x: torch.stack(list(x)), sample_pt, is_leaf=lambda x: isinstance(x, tuple))
+            spec = _gym_to_torchrl_spec_transform(space)
+            rand = spec.rand()
+
+            assert spec.contains(rand), (rand, spec)
+            assert spec.contains(sample_pt), (rand, sample_pt)
+
+            space_recon = _torchrl_to_gym_spec_transform(spec)
+            assert space_recon == space, (space_recon, space)
+            rand_numpy = rand.numpy()
+            assert space.contains(rand_numpy)
 
     _BACKENDS = [None]
     if _has_gymnasium:
@@ -1234,12 +1307,12 @@ def _make_gym_environment(env_name):  # noqa: F811
 
 
 @pytest.mark.skipif(not _has_dmc, reason="no dm_control library found")
-@pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
-@pytest.mark.parametrize("frame_skip", [1, 3])
-@pytest.mark.parametrize(
-    "from_pixels,pixels_only", [[True, True], [True, False], [False, False]]
-)
 class TestDMControl:
+    @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
+    @pytest.mark.parametrize("frame_skip", [1, 3])
+    @pytest.mark.parametrize(
+        "from_pixels,pixels_only", [[True, True], [True, False], [False, False]]
+    )
     def test_dmcontrol(self, env_name, task, frame_skip, from_pixels, pixels_only):
         if from_pixels and (not torch.has_cuda or not torch.cuda.device_count()):
             raise pytest.skip("no cuda device")
@@ -1311,6 +1384,11 @@ class TestDMControl:
         assert final_seed0 == final_seed2
         assert_allclose_td(rollout0, rollout2)
 
+    @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
+    @pytest.mark.parametrize("frame_skip", [1, 3])
+    @pytest.mark.parametrize(
+        "from_pixels,pixels_only", [[True, True], [True, False], [False, False]]
+    )
     def test_faketd(self, env_name, task, frame_skip, from_pixels, pixels_only):
         if from_pixels and not torch.cuda.device_count():
             raise pytest.skip("no cuda device")
@@ -1323,6 +1401,14 @@ class TestDMControl:
             pixels_only=pixels_only,
         )
         check_env_specs(env)
+
+    def test_truncated(self):
+        env = DMControlEnv("walker", "walk")
+        r = env.rollout(1001)
+        assert r.shape == (1000,)
+        assert r[-1]["next", "truncated"]
+        assert r[-1]["next", "done"]
+        assert not r[-1]["next", "terminated"]
 
 
 params = []
@@ -1882,6 +1968,32 @@ class TestEnvPool:
 @pytest.mark.skipif(not _has_brax, reason="brax not installed")
 @pytest.mark.parametrize("envname", ["fast"])
 class TestBrax:
+    @pytest.mark.parametrize("requires_grad", [False, True])
+    def test_brax_constructor(self, envname, requires_grad):
+        env0 = BraxEnv(envname, requires_grad=requires_grad)
+        env1 = BraxWrapper(env0._env, requires_grad=requires_grad)
+
+        env0.set_seed(0)
+        torch.manual_seed(0)
+        init = env0.reset()
+        if requires_grad:
+            init = init.apply(
+                lambda x: x.requires_grad_(True) if x.is_floating_point() else x
+            )
+        r0 = env0.rollout(10, tensordict=init, auto_reset=False)
+        assert r0.requires_grad == requires_grad
+
+        env1.set_seed(0)
+        torch.manual_seed(0)
+        init = env1.reset()
+        if requires_grad:
+            init = init.apply(
+                lambda x: x.requires_grad_(True) if x.is_floating_point() else x
+            )
+        r1 = env1.rollout(10, tensordict=init, auto_reset=False)
+        assert r1.requires_grad == requires_grad
+        assert_allclose_td(r0.data, r1.data)
+
     def test_brax_seeding(self, envname):
         final_seed = []
         tdreset = []
@@ -2700,15 +2812,18 @@ def _minari_selected_datasets():
     torch.manual_seed(0)
 
     keys = list(minari.list_remote_datasets())
-    indices = torch.randperm(len(keys))[:10]
+    indices = torch.randperm(len(keys))[:20]
     keys = [keys[idx] for idx in indices]
     keys = [
         key
         for key in keys
         if "=0.4" in minari.list_remote_datasets()[key]["minari_version"]
     ]
-    assert len(keys) > 5
+    assert len(keys) > 5, keys
     _MINARI_DATASETS += keys
+
+
+_minari_selected_datasets()
 
 
 @pytest.mark.skipif(not _has_minari or not _has_gymnasium, reason="Minari not found")
@@ -2717,10 +2832,6 @@ class TestMinari:
     @pytest.mark.parametrize("split", [False, True])
     @pytest.mark.parametrize("selected_dataset", _MINARI_DATASETS)
     def test_load(self, selected_dataset, split):
-        global _MINARI_DATASETS
-        if not _MINARI_DATASETS:
-            _minari_selected_datasets()
-
         torchrl_logger.info(f"dataset {selected_dataset}")
         data = MinariExperienceReplay(
             selected_dataset, batch_size=32, split_trajs=split
@@ -3517,6 +3628,32 @@ class TestPettingZoo:
         )
         vec_env = maybe_fork_ParallelEnv(2, create_env_fn=env_fun)
         vec_env.rollout(100, break_when_any_done=False)
+
+    def test_reset_parallel_env(self, maybe_fork_ParallelEnv):
+        def base_env_fn():
+            return PettingZooEnv(
+                task="multiwalker_v9",
+                parallel=True,
+                seed=0,
+                n_walkers=3,
+                max_cycles=1000,
+            )
+
+        collector = SyncDataCollector(
+            lambda: maybe_fork_ParallelEnv(
+                num_workers=2,
+                create_env_fn=base_env_fn,
+                device="cpu",
+            ),
+            policy=None,
+            frames_per_batch=100,
+            max_frames_per_traj=50,
+            total_frames=200,
+            reset_at_each_iter=False,
+        )
+        for _ in collector:
+            pass
+        collector.shutdown()
 
     @pytest.mark.parametrize("task", ["knights_archers_zombies_v10", "pistonball_v6"])
     @pytest.mark.parametrize("parallel", [True, False])

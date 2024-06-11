@@ -25,7 +25,6 @@ from tensordict import (
 from tensordict.memmap import MemoryMappedTensor
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
-
 from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.checkpointers import (
     ListStorageCheckpointer,
@@ -33,7 +32,12 @@ from torchrl.data.replay_buffers.checkpointers import (
     StorageEnsembleCheckpointer,
     TensorStorageCheckpointer,
 )
-from torchrl.data.replay_buffers.utils import _init_pytree, _is_int, INT_CLASSES
+from torchrl.data.replay_buffers.utils import (
+    _init_pytree,
+    _is_int,
+    INT_CLASSES,
+    tree_iter,
+)
 
 
 class Storage:
@@ -49,7 +53,7 @@ class Storage:
 
     ndim = 1
     max_size: int
-    _default_checkpointer: StorageCheckpointerBase
+    _default_checkpointer: StorageCheckpointerBase = StorageCheckpointerBase
 
     def __init__(
         self, max_size: int, checkpointer: StorageCheckpointerBase | None = None
@@ -112,10 +116,7 @@ class Storage:
         return self.get(item)
 
     def __setitem__(self, index, value):
-        ret = self.set(index, value)
-        for ent in self._attached_entities:
-            ent.mark_update(index)
-        return ret
+        return self.set(index, value)
 
     def __iter__(self):
         for i in range(len(self)):
@@ -428,9 +429,10 @@ class TensorStorage(Storage):
             if is_tensor_collection(self._storage):
                 _total_shape = self._storage.shape[: self.ndim]
             else:
-                leaf, *_ = torch.utils._pytree.tree_leaves(self._storage)
+                leaf = next(tree_iter(self._storage))
                 _total_shape = leaf.shape[: self.ndim]
             self.__dict__["_total_shape_value"] = _total_shape
+            self._len = torch.Size([self._len_along_dim0, *_total_shape[1:]]).numel()
         return _total_shape
 
     @property
@@ -442,10 +444,10 @@ class TensorStorage(Storage):
     def _len_along_dim0(self):
         # returns the length of the buffer along dim0
         len_along_dim = len(self)
-        if self.ndim:
+        if self.ndim > 1:
             _total_shape = self._total_shape
             if _total_shape is not None:
-                len_along_dim = len_along_dim // _total_shape[1:].numel()
+                len_along_dim = -(len_along_dim // -_total_shape[1:].numel())
             else:
                 return None
         return len_along_dim
@@ -453,7 +455,7 @@ class TensorStorage(Storage):
     def _max_size_along_dim0(self, *, single_data=None, batched_data=None):
         # returns the max_size of the buffer along dim0
         max_size = self.max_size
-        if self.ndim:
+        if self.ndim > 1:
             shape = self.shape
             if shape is None:
                 if single_data is not None:
@@ -465,19 +467,19 @@ class TensorStorage(Storage):
                 if is_tensor_collection(data):
                     datashape = data.shape[: self.ndim]
                 else:
-                    for leaf in torch.utils._pytree.tree_leaves(data):
+                    for leaf in tree_iter(data):
                         datashape = leaf.shape[: self.ndim]
                         break
                 if batched_data is not None:
                     datashape = datashape[1:]
-                max_size = max_size // datashape.numel()
+                max_size = -(max_size // -datashape.numel())
             else:
-                max_size = max_size // self._total_shape[1:].numel()
+                max_size = -(max_size // -self._total_shape[1:].numel())
         return max_size
 
     @property
     def shape(self):
-        # Shape, turncated where needed to accomodate for the length of the storage
+        # Shape, truncated where needed to accommodate for the length of the storage
         if self._is_full:
             return self._total_shape
         _total_shape = self._total_shape
@@ -618,8 +620,7 @@ class TensorStorage(Storage):
         if is_tensor_collection(data) or isinstance(data, torch.Tensor):
             numel = data.shape[:ndim].numel()
         else:
-            # unfortunately tree_flatten isn't an iterator so we will have to flatten it all
-            leaf, *_ = torch.utils._pytree.tree_leaves(data)
+            leaf = next(tree_iter(data))
             numel = leaf.shape[:ndim].numel()
         self._len = min(self._len + numel, self.max_size)
 
@@ -867,10 +868,10 @@ class LazyTensorStorage(TensorStorage):
             return (self.max_size, *data_shape)
 
         if is_tensor_collection(data):
-            out = data.expand(max_size_along_dim0(data.shape))
+            out = data.to(self.device)
+            out = out.expand(max_size_along_dim0(data.shape))
             out = out.clone()
             out = out.zero_()
-            out = out.to(self.device)
         else:
             # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
             out = tree_map(
