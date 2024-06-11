@@ -3048,7 +3048,7 @@ class CatFrames(ObservationTransform):
             reset_unfold_list = [torch.zeros_like(reset_unfold_slice)]
             for r in reversed(reset_unfold.unbind(-1)):
                 reset_unfold_list.append(r | reset_unfold_list[-1])
-                reset_unfold_slice = reset_unfold_list[-1]
+                # reset_unfold_slice = reset_unfold_list[-1]
             reset_unfold = torch.stack(list(reversed(reset_unfold_list))[1:], -1)
             reset = reset[prefix + (slice(self.N - 1, None),)]
             reset[prefix + (0,)] = 1
