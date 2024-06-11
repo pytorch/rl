@@ -758,11 +758,6 @@ class BatchedEnvBase(EnvBase):
                 *(unravel_key(("next", key)) for key in self._env_output_keys),
                 strict=False,
             )
-            for key, item in list(shared_tensordict_parent.items(True)):
-                if isinstance(item, NonTensorData):
-                    shared_tensordict_parent.set(
-                        key, NonTensorStack(*item.unbind(0), stack_dim=0)
-                    )
             self.shared_tensordict_parent = shared_tensordict_parent
         else:
             # Multi-task: we share tensordict that *may* have different keys
