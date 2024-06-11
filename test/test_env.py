@@ -42,8 +42,8 @@ from mocking_classes import (
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
     DummyModelBasedEnvBase,
-    EnvWithMetadata,
     EnvWithDynamicSpec,
+    EnvWithMetadata,
     HeterogeneousCountingEnv,
     HeterogeneousCountingEnvPolicy,
     MockBatchedLockedEnv,
@@ -3173,16 +3173,20 @@ class TestNonTensorEnv:
         assert r.get("non_tensor").tolist() == list(range(10))
 
     @pytest.mark.parametrize("bwad", [True, False])
-    def test_serial(self, bwad):
-        env = SerialEnv(2, EnvWithMetadata)
-        r = env.rollout(10, break_when_any_done=bwad)
-        assert r.get("non_tensor").tolist() == [list(range(10))] * 2
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_serial(self, bwad, use_buffers):
+        N = 50
+        env = SerialEnv(2, EnvWithMetadata, use_buffers=use_buffers)
+        r = env.rollout(N, break_when_any_done=bwad)
+        assert r.get("non_tensor").tolist() == [list(range(N))] * 2
 
     @pytest.mark.parametrize("bwad", [True, False])
-    def test_parallel(self, bwad):
-        env = ParallelEnv(2, EnvWithMetadata)
-        r = env.rollout(10, break_when_any_done=bwad)
-        assert r.get("non_tensor").tolist() == [list(range(10))] * 2
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_parallel(self, bwad, use_buffers):
+        N = 50
+        env = ParallelEnv(2, EnvWithMetadata, use_buffers=use_buffers)
+        r = env.rollout(N, break_when_any_done=bwad)
+        assert r.get("non_tensor").tolist() == [list(range(N))] * 2
 
 
 if __name__ == "__main__":

@@ -1833,6 +1833,9 @@ class EnvWithMetadata(EnvBase):
             tensor=UnboundedContinuousTensorSpec(3),
             non_tensor=NonTensorSpec(shape=()),
         )
+        self.state_spec = CompositeSpec(
+            non_tensor=NonTensorSpec(shape=()),
+        )
         self.reward_spec = UnboundedContinuousTensorSpec(1)
         self.action_spec = UnboundedContinuousTensorSpec(1)
 

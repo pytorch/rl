@@ -31,13 +31,6 @@ import numpy as np
 import tensordict
 import torch
 from tensordict import (
-    LazyStackedTensorDict,
-    NonTensorData,
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-)
-from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorData,
