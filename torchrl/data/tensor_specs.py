@@ -4414,7 +4414,6 @@ class CompositeSpec(TensorSpec):
         return self._locked
 
 
-
 class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
     """A lazy representation of a stack of composite specs.
 
