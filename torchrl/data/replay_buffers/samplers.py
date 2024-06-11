@@ -42,6 +42,10 @@ _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 class Sampler(ABC):
     """A generic sampler base class for composable Replay Buffers."""
 
+    # Some samplers - mainly those without replacement -
+    # need to keep track of the number of remaining batches
+    _remaining_batches = int(torch.iinfo(torch.int64).max)
+
     @abstractmethod
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
         ...
@@ -172,7 +176,7 @@ class SamplerWithoutReplacement(Sampler):
             metadata = json.load(file)
         self.load_state_dict(metadata)
 
-    def _get_sample_list(self, storage: Storage, len_storage: int):
+    def _get_sample_list(self, storage: Storage, len_storage: int, batch_size: int):
         if storage is None:
             device = self._sample_list.device
         else:
@@ -183,10 +187,18 @@ class SamplerWithoutReplacement(Sampler):
         else:
             _sample_list = torch.arange(len_storage, device=device)
         self._sample_list = _sample_list
+        if self.drop_last:
+            self._remaining_batches = self._sample_list.numel() // batch_size
+        else:
+            self._remaining_batches = -(self._sample_list.numel() // -batch_size)
 
     def _single_sample(self, len_storage, batch_size):
         index = self._sample_list[:batch_size]
         self._sample_list = self._sample_list[batch_size:]
+        if self.drop_last:
+            self._remaining_batches = self._sample_list.numel() // batch_size
+        else:
+            self._remaining_batches = -(self._sample_list.numel() // -batch_size)
 
         # check if we have enough elements for one more batch, assuming same batch size
         # will be used each time sample is called
@@ -194,7 +206,9 @@ class SamplerWithoutReplacement(Sampler):
             self.drop_last and len(self._sample_list) < batch_size
         ):
             self.ran_out = True
-            self._get_sample_list(storage=None, len_storage=len_storage)
+            self._get_sample_list(
+                storage=None, len_storage=len_storage, batch_size=batch_size
+            )
         else:
             self.ran_out = False
         return index
@@ -209,7 +223,7 @@ class SamplerWithoutReplacement(Sampler):
         if not len_storage:
             raise RuntimeError("An empty storage was passed")
         if self.len_storage != len_storage or self._sample_list is None:
-            self._get_sample_list(storage, len_storage)
+            self._get_sample_list(storage, len_storage, batch_size=batch_size)
         if len_storage < batch_size and self.drop_last:
             raise ValueError(
                 f"The batch size ({batch_size}) is greater than the storage capacity ({len_storage}). "

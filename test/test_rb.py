@@ -1923,6 +1923,25 @@ class TestSamplers:
         s = new_replay_buffer.sample(batch_size=1)
         assert (s.exclude("index") == 0).all()
 
+    def test_sampler_without_replacement_cap_prefetch(self):
+        torch.manual_seed(0)
+        data = TensorDict({"a": torch.arange(10)}, batch_size=[10])
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(10),
+            sampler=SamplerWithoutReplacement(),
+            batch_size=2,
+            prefetch=3,
+        )
+        rb.extend(data)
+
+        for _ in range(100):
+            s = set()
+            for i, d in enumerate(rb):
+                assert i <= 4
+                s = s.union(set(d["a"].tolist()))
+            assert i == 4
+            assert s == set(range(10))
+
     @pytest.mark.parametrize(
         "batch_size,num_slices,slice_len,prioritized",
         [
