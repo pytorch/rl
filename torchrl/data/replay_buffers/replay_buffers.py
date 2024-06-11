@@ -718,9 +718,7 @@ class ReplayBuffer:
                 "Cannot iterate over the replay buffer. "
                 "Batch_size was not specified during construction of the replay buffer."
             )
-        while not self._sampler.ran_out or (
-            self._prefetch and len(self._prefetch_queue)
-        ):
+        while not self._sampler.ran_out:
             yield self.sample()
 
     def __getstate__(self) -> Dict[str, Any]:
