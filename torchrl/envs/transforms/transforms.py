@@ -2802,7 +2802,7 @@ class CatFrames(ObservationTransform):
 
     inplace = False
     _CAT_DIM_ERR = (
-        "dim must be < 0 to accomodate for tensordict of "
+        "dim must be < 0 to accommodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
     )
     ACCEPTED_PADDING = {"same", "constant", "zeros"}
