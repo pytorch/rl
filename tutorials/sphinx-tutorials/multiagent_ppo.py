@@ -1,25 +1,17 @@
-# -*- coding: utf-8 -*-
 """
 Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
 ===============================================================
 **Author**: `Matteo Bettini <https://github.com/matteobettini>`_
 
-.. note::
-
-   If you are interested in Multi-Agent Reinforcement Learning (MARL) in
-   TorchRL, check out
-   `BenchMARL <https://github.com/facebookresearch/BenchMARL>`__: a benchmarking library where you
-   can train and compare MARL algorithms, tasks, and models using TorchRL!
+.. seealso::
+   The `BenchMARL <https://github.com/facebookresearch/BenchMARL>`__ library provides state-of-the-art
+   implementations of MARL algorithms using TorchRL.
 
 This tutorial demonstrates how to use PyTorch and :py:mod:`torchrl` to
 solve a Multi-Agent Reinforcement Learning (MARL) problem.
 
-A code-only version of this tutorial is available in the
-`TorchRL examples <https://github.com/pytorch/rl/tree/main/examples/multiagent/mappo_ippo.py>`__,
-alongside other simple scripts for many MARL algorithms (QMIX, MADDPG, IQL).
-
-For ease of use, this tutorial will follow the general structure of the already available
-`single agent PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>`__.
+For ease of use, this tutorial will follow the general structure of the already available in:
+:doc:`/tutorials/coding_ppo`.
 It is suggested but not mandatory to get familiar with that prior to starting this tutorial.
 
 In this tutorial, we will use the *Navigation* environment from
@@ -53,7 +45,7 @@ Key learnings:
 # .. code-block:: bash
 #
 #    !pip3 install torchrl
-#    !pip3 install vmas==1.2.11
+#    !pip3 install vmas
 #    !pip3 install tqdm
 #
 # Proximal Policy Optimization (PPO) is a policy-gradient algorithm where a
@@ -63,7 +55,7 @@ Key learnings:
 # the foundational policy-optimization algorithm. For more information, see the
 # `Proximal Policy Optimization Algorithms <https://arxiv.org/abs/1707.06347>`_ paper.
 #
-# This type of algorithms is usually trained *on-policy*. This means that, at every learning iteration, we have a
+# This type of sota-implementations is usually trained *on-policy*. This means that, at every learning iteration, we have a
 # **sampling** and a **training** phase. In the **sampling** phase of iteration :math:`t`, rollouts are collected
 # form agents' interactions in the environment using the current policies :math:`\mathbf{\pi}_t`.
 # In the **training** phase, all the collected rollouts are immediately fed to the training process to perform
@@ -122,10 +114,9 @@ Key learnings:
 # Torch
 import torch
 
+# Tensordict modules
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
-
-# Tensordict modules
 from torch import multiprocessing
 
 # Data collection
@@ -184,7 +175,7 @@ max_grad_norm = 1.0  # Maximum norm for the gradients
 
 # PPO
 clip_epsilon = 0.2  # clip value for PPO loss
-gamma = 0.9  # discount factor
+gamma = 0.99  # discount factor
 lmbda = 0.9  # lambda for generalised advantage estimation
 entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 
@@ -196,7 +187,7 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 # TorchRL API allows integrating various types of multi-agent environment flavours.
 # Some examples include environments with shared or individual agent rewards, done flags, and observations.
 # For more information on how the multi-agent environments API works in TorchRL, you can check out the dedicated
-# `doc section <https://pytorch.org/rl/reference/envs.html#multi-agent-environments>`_.
+# :ref:`doc section <MARL-environment-API>`.
 #
 # The VMAS simulator, in particular, models agents with individual rewards, info, observations, and actions, but
 # with a collective done flag.
@@ -263,7 +254,7 @@ env = VmasEnv(
 # - ``action_spec`` defines the action space;
 # - ``reward_spec`` defines the reward domain;
 # - ``done_spec`` defines the done domain;
-# - ``observation_spec`` which defines the domain of all other outputs from environmnet steps;
+# - ``observation_spec`` which defines the domain of all other outputs from environment steps;
 #
 #
 
@@ -302,7 +293,7 @@ print("done_keys:", env.done_keys)
 # Transforms
 # ~~~~~~~~~~
 #
-# We can append any TorchRL transform we need to our enviornment.
+# We can append any TorchRL transform we need to our environment.
 # These will modify its input/output in some desired way.
 # We stress that, in multi-agent contexts, it is paramount to provide explicitly the keys to modify.
 #
@@ -560,7 +551,7 @@ collector = SyncDataCollector(
 # Replay buffer
 # -------------
 #
-# Replay buffers are a common building piece of off-policy RL algorithms.
+# Replay buffers are a common building piece of off-policy RL sota-implementations.
 # In on-policy contexts, a replay buffer is refilled every time a batch of
 # data is collected, and its data is repeatedly consumed for a certain number
 # of epochs.
@@ -787,20 +778,23 @@ plt.show()
 # - How we can use :class:`tensordict.TensorDict` to carry multi-agent data;
 # - How we can tie all the library components (collectors, modules, replay buffers, and losses) in a multi-agent MAPPO/IPPO training loop.
 #
-# Now that you are proficient with multi-agent PPO, you can check out all
-# `TorchRL multi-agent examples <https://github.com/pytorch/rl/tree/main/examples/multiagent>`__.
-# These are code-only scripts of many popular MARL algorithms such as the ones seen in this tutorial,
+# Now that you are proficient with multi-agent DDPG, you can check out all the TorchRL multi-agent implementations in the
+# GitHub repository.
+# These are code-only scripts of many popular MARL sota-implementations such as the ones seen in this tutorial,
 # QMIX, MADDPG, IQL, and many more!
+#
+# You can also check out our other multi-agent tutorial on how to train competitive
+# MADDPG/IDDPG in PettingZoo/VMAS with multiple agent groups: :doc:`/tutorials/multiagent_competitive_ddpg`.
 #
 # If you are interested in creating or wrapping your own multi-agent environments in TorchRL,
 # you can check out the dedicated
-# `doc section <https://pytorch.org/rl/reference/envs.html#multi-agent-environments>`_.
+# :ref:`doc section <MARL-environment-API>`.
 #
 # Finally, you can modify the parameters of this tutorial to try many other configurations and scenarios
 # to become a MARL master.
 # Here are a few videos of some possible scenarios you can try in VMAS.
 #
-# .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/VMAS_scenarios.gif?raw=true
+# .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/vmas_scenarios_more.gif?raw=true
 #    :alt: VMAS scenarios
 #
 #    Scenarios available in `VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__

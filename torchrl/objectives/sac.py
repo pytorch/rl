@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import math
 import warnings
 from dataclasses import dataclass
@@ -11,7 +13,7 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
@@ -26,6 +28,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -97,6 +100,10 @@ class SACLoss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
         >>> import torch
@@ -260,6 +267,16 @@ class SACLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
 
+    actor_network: TensorDictModule
+    qvalue_network: TensorDictModule
+    value_network: TensorDictModule | None
+    actor_network_params: TensorDictParams
+    qvalue_network_params: TensorDictParams
+    value_network_params: TensorDictParams | None
+    target_actor_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
+    target_value_network_params: TensorDictParams | None
+
     def __init__(
         self,
         actor_network: ProbabilisticActor,
@@ -280,9 +297,12 @@ class SACLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        reduction: str = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
@@ -381,6 +401,7 @@ class SACLoss(LossModule):
             self._vmap_qnetwork00 = _vmap_func(
                 qvalue_network, randomness=self.vmap_randomness
             )
+        self.reduction = reduction
 
     @property
     def target_entropy_buffer(self):
@@ -557,17 +578,24 @@ class SACLoss(LossModule):
             )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
-        entropy = -metadata_actor["log_prob"].mean()
+        entropy = -metadata_actor["log_prob"]
         out = {
-            "loss_actor": loss_actor.mean(),
-            "loss_qvalue": loss_qvalue.mean(),
-            "loss_alpha": loss_alpha.mean(),
+            "loss_actor": loss_actor,
+            "loss_qvalue": loss_qvalue,
+            "loss_alpha": loss_alpha,
             "alpha": self._alpha,
-            "entropy": entropy,
+            "entropy": entropy.detach().mean(),
         }
         if self._version == 1:
-            out["loss_value"] = loss_value.mean()
-        return TensorDict(out, [])
+            out["loss_value"] = loss_value
+        td_out = TensorDict(out, [])
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
+        )
+        return td_out
 
     @property
     @_cache_values
@@ -584,7 +612,7 @@ class SACLoss(LossModule):
             a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
 
-        td_q = tensordict.select(*self.qvalue_network.in_keys)
+        td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qnetworkN0(
             td_q,
@@ -703,7 +731,7 @@ class SACLoss(LossModule):
         target_value = self._compute_target_v2(tensordict)
 
         tensordict_expand = self._vmap_qnetworkN0(
-            tensordict.select(*self.qvalue_network.in_keys),
+            tensordict.select(*self.qvalue_network.in_keys, strict=False),
             self.qvalue_network_params,
         )
         pred_val = tensordict_expand.get(self.tensor_keys.state_action_value).squeeze(
@@ -722,7 +750,7 @@ class SACLoss(LossModule):
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # value loss
-        td_copy = tensordict.select(*self.value_network.in_keys).detach()
+        td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
         with self.value_network_params.to_module(self.value_network):
             self.value_network(td_copy)
         pred_val = td_copy.get(self.tensor_keys.value).squeeze(-1)
@@ -784,7 +812,7 @@ class DiscreteSACLoss(LossModule):
             :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
         num_actions (int, optional): number of actions in the action space.
             To be provided if target_entropy is set to "auto".
-        num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
+        num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 2.
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of `"smooth_l1"`, "l2",
             "l1", Default is "smooth_l1".
         alpha_init (float, optional): initial entropy multiplier.
@@ -805,6 +833,10 @@ class DiscreteSACLoss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
     >>> import torch
@@ -952,6 +984,16 @@ class DiscreteSACLoss(LossModule):
         "entropy",
     ]
 
+    actor_network: TensorDictModule
+    qvalue_network: TensorDictModule
+    value_network: TensorDictModule | None
+    actor_network_params: TensorDictParams
+    qvalue_network_params: TensorDictParams
+    value_network_params: TensorDictParams | None
+    target_actor_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
+    target_value_network_params: TensorDictParams | None
+
     def __init__(
         self,
         actor_network: ProbabilisticActor,
@@ -970,7 +1012,10 @@ class DiscreteSACLoss(LossModule):
         delay_qvalue: bool = True,
         priority_key: str = None,
         separate_losses: bool = False,
+        reduction: str = None,
     ):
+        if reduction is None:
+            reduction = "mean"
         self._in_keys = None
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
@@ -1051,6 +1096,7 @@ class DiscreteSACLoss(LossModule):
         self._vmap_qnetworkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
+        self.reduction = reduction
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -1106,15 +1152,22 @@ class DiscreteSACLoss(LossModule):
             )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
-        entropy = -metadata_actor["log_prob"].mean()
+        entropy = -metadata_actor["log_prob"]
         out = {
-            "loss_actor": loss_actor.mean(),
-            "loss_qvalue": loss_value.mean(),
-            "loss_alpha": loss_alpha.mean(),
+            "loss_actor": loss_actor,
+            "loss_qvalue": loss_value,
+            "loss_alpha": loss_alpha,
             "alpha": self._alpha,
-            "entropy": entropy,
+            "entropy": entropy.detach().mean(),
         }
-        return TensorDict(out, [])
+        td_out = TensorDict(out, [])
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
+        )
+        return td_out
 
     def _compute_target(self, tensordict) -> Tensor:
         r"""Value network for SAC v2.
@@ -1163,7 +1216,7 @@ class DiscreteSACLoss(LossModule):
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         target_value = self._compute_target(tensordict)
         tensordict_expand = self._vmap_qnetworkN0(
-            tensordict.select(*self.qvalue_network.in_keys),
+            tensordict.select(*self.qvalue_network.in_keys, strict=False),
             self.qvalue_network_params,
         )
 
@@ -1189,7 +1242,7 @@ class DiscreteSACLoss(LossModule):
             chosen_action_value,
             target_value.expand_as(chosen_action_value),
             loss_function=self.loss_function,
-        ).mean(0)
+        ).sum(0)
 
         metadata = {
             "td_error": td_error.detach().max(0)[0],
@@ -1205,7 +1258,7 @@ class DiscreteSACLoss(LossModule):
         prob = dist.probs
         log_prob = dist.logits
 
-        td_q = tensordict.select(*self.qvalue_network.in_keys)
+        td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
 
         td_q = self._vmap_qnetworkN0(
             td_q, self._cached_detached_qvalue_params  # should we clone?

@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+      - release/*
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]
+      - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
   pull_request:
     branches:
       - "*"
@@ -59,7 +63,7 @@ jobs:
         git version
         
         # 5. Install PyTorch
-        python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
+        python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
         
         # 6. Install tensordict
         python3 -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
@@ -69,15 +73,24 @@ jobs:
         
         # 8. Install requirements
         python3 -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
-        
-        # 9. Test torchrl installation
+
+        # 9. Set sanitize version
+        if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
+          echo '::group::Enable version string sanitization'
+          # This environment variable just has to exist and must not be empty. The actual value is arbitrary.
+          # See docs/source/conf.py for details
+          export RL_SANITIZE_VERSION_STR_IN_DOCS=1
+          echo '::endgroup::'
+        fi
+
+        # 10. Test torchrl installation
         mkdir _tmp
         cd _tmp
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
         print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
         cd ..
         
-        # 10. Build doc
+        # 11. Build doc
         cd ./docs
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         # bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
@@ -108,37 +121,44 @@ jobs:
         REF_TYPE=${{ github.ref_type }}
         REF_NAME=${{ github.ref_name }}
 
-        # TODO: adopt this behaviour
-        # if [[ "${REF_TYPE}" == branch ]]; then
-        #   TARGET_FOLDER="${REF_NAME}"
-        # elif [[ "${REF_TYPE}" == tag ]]; then
-        #   case "${REF_NAME}" in
-        #     *-rc*)
-        #       echo "Aborting upload since this is an RC tag: ${REF_NAME}"
-        #       exit 0
-        #       ;;
-        #     *)
-        #       # Strip the leading "v" as well as the trailing patch version. For example:
-        #       # 'v0.15.2' -> '0.15'
-        #       TARGET_FOLDER=$(echo "${REF_NAME}" | sed 's/v\([0-9]\+\)\.\([0-9]\+\)\.[0-9]\+/\1.\2/')
-        #       ;;
-        #   esac
-        # fi
-        TARGET_FOLDER="./"
+        if [[ "${REF_TYPE}" == branch ]]; then
+          if [[ "${REF_NAME}" == main ]]; then
+            TARGET_FOLDER="${REF_NAME}"
+          # Bebug:
+          # else
+          #   TARGET_FOLDER="release-doc"
+          fi
+        elif [[ "${REF_TYPE}" == tag ]]; then
+          case "${REF_NAME}" in
+            *-rc*)
+              echo "Aborting upload since this is an RC tag: ${REF_NAME}"
+              exit 0
+              ;;
+            *)
+              # Strip the leading "v" as well as the trailing patch version. For example:
+              # 'v0.15.2' -> '0.15'
+              TARGET_FOLDER=$(echo "${REF_NAME}" | sed 's/v\([0-9]\+\)\.\([0-9]\+\)\.[0-9]\+/\1.\2/')
+              ;;
+          esac
+        fi
+
         echo "Target Folder: ${TARGET_FOLDER}"
 
-        # mkdir -p "${TARGET_FOLDER}"
-        # rm -rf "${TARGET_FOLDER}"/*
+        mkdir -p "${TARGET_FOLDER}"
+        rm -rf "${TARGET_FOLDER}"/*
+
         echo $(ls "${RUNNER_ARTIFACT_DIR}")
         rsync -a "${RUNNER_ARTIFACT_DIR}"/ "${TARGET_FOLDER}"
         git add "${TARGET_FOLDER}" || true
 
-        # if [[ "${TARGET_FOLDER}" == main ]]; then
-        #   mkdir -p _static
-        #   rm -rf _static/*
-        #   cp -r "${TARGET_FOLDER}"/_static/* _static
-        #   git add _static || true
-        # fi
+        # Debug
+        # if [[ "${TARGET_FOLDER}" == "main" ]] || [[ "${TARGET_FOLDER}" == "release-doc" ]]; then
+        if [[ "${TARGET_FOLDER}" == "main" ]] ; then
+          mkdir -p _static
+          rm -rf _static/*
+          cp -r "${TARGET_FOLDER}"/_static/* _static
+          git add _static || true
+        fi
 
         git config user.name 'pytorchbot'
         git config user.email 'soumith+bot@pytorch.org'

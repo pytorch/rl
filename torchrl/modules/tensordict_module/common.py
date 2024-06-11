@@ -15,10 +15,11 @@ import torch
 
 from tensordict import TensorDictBase, unravel_key_list
 
-from tensordict.nn import TensorDictModule, TensorDictModuleBase
+from tensordict.nn import dispatch, TensorDictModule, TensorDictModuleBase
 from tensordict.utils import NestedKey
 
 from torch import nn
+from torch.nn import functional as F
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 
@@ -444,7 +445,7 @@ class VmapModule(TensorDictModuleBase):
 
     def __init__(self, module: TensorDictModuleBase, vmap_dim=None):
         if not _has_functorch:
-            raise ImportError("VmapModule requires torch>=1.13.")
+            raise ImportError("VmapModule requires torch>=2.0.")
         super().__init__()
         self.in_keys = module.in_keys
         self.out_keys = module.out_keys
@@ -466,3 +467,57 @@ class VmapModule(TensorDictModuleBase):
             vmap_dim = ndim - 1
         td = self._vmap(self.module, (vmap_dim,), (vmap_dim,))(tensordict)
         return tensordict.update(td)
+
+
+class DistributionalDQNnet(TensorDictModuleBase):
+    """Distributional Deep Q-Network softmax layer.
+
+    This layer should be used in between a regular model that predicts the
+    action values and a distribution which acts on logits values.
+
+    Args:
+        in_keys (list of str or tuples of str): input keys to the log-softmax
+            operation. Defaults to ``["action_value"]``.
+        out_keys (list of str or tuples of str): output keys to the log-softmax
+            operation. Defaults to ``["action_value"]``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> net = DistributionalDQNnet()
+        >>> td = TensorDict({"action_value": torch.randn(10, 5)}, batch_size=[10])
+        >>> net(td)
+        TensorDict(
+            fields={
+                action_value: Tensor(shape=torch.Size([10, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False)
+
+    """
+
+    _wrong_out_feature_dims_error = (
+        "DistributionalDQNnet requires dqn output to be at least "
+        "2-dimensional, with dimensions *Batch x #Atoms x #Actions. Got {0} "
+        "instead."
+    )
+
+    def __init__(self, *, in_keys=None, out_keys=None):
+        super().__init__()
+        if in_keys is None:
+            in_keys = ["action_value"]
+        if out_keys is None:
+            out_keys = ["action_value"]
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+
+    @dispatch(auto_batch_size=False)
+    def forward(self, tensordict):
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            q_values = tensordict.get(in_key)
+            if q_values.ndimension() < 2:
+                raise RuntimeError(
+                    self._wrong_out_feature_dims_error.format(q_values.shape)
+                )
+            tensordict.set(out_key, F.log_softmax(q_values, dim=-2))
+        return tensordict

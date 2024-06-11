@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import collections
+import contextlib
 import json
 import textwrap
 import threading
@@ -21,7 +22,7 @@ from tensordict import (
     is_tensor_collection,
     is_tensorclass,
     LazyStackedTensorDict,
-    TensorDict,
+    NestedKey,
     TensorDictBase,
     unravel_key,
 )
@@ -38,11 +39,13 @@ from torchrl.data.replay_buffers.samplers import (
 )
 from torchrl.data.replay_buffers.storages import (
     _get_default_collate,
+    _stack_anything,
     ListStorage,
     Storage,
     StorageEnsemble,
 )
 from torchrl.data.replay_buffers.utils import (
+    _is_int,
     _reduce,
     _to_numpy,
     _to_torch,
@@ -56,6 +59,7 @@ from torchrl.data.replay_buffers.writers import (
     WriterEnsemble,
 )
 from torchrl.data.utils import DEVICE_TYPING
+from torchrl.envs.transforms.transforms import _InvertTransform
 
 
 class ReplayBuffer:
@@ -96,6 +100,27 @@ class ReplayBuffer:
               incompatible with prefetching (since this requires to know the
               batch-size in advance) as well as with samplers that have a
               ``drop_last`` argument.
+        dim_extend (int, optional): indicates the dim to consider for
+            extension when calling :meth:`~.extend`. Defaults to ``storage.ndim-1``.
+            When using ``dim_extend > 0``, we recommend using the ``ndim``
+            argument in the storage instantiation if that argument is
+            available, to let storages know that the data is
+            multi-dimensional and keep consistent notions of storage-capacity
+            and batch-size during sampling.
+
+            .. note:: This argument has no effect on :meth:`~.add` and
+                therefore should be used with caution when both :meth:`~.add`
+                and :meth:`~.extend` are used in a codebase. For example:
+
+                    >>> data = torch.zeros(3, 4)
+                    >>> rb = ReplayBuffer(
+                    ...     storage=LazyTensorStorage(10, ndim=2),
+                    ...     dim_extend=1)
+                    >>> # these two approaches are equivalent:
+                    >>> for d in data.unbind(1):
+                    ...     rb.add(d)
+                    >>> rb.extend(data)
+
 
     Examples:
         >>> import torch
@@ -177,6 +202,8 @@ class ReplayBuffer:
         prefetch: int | None = None,
         transform: "Transform" | None = None,  # noqa-F821
         batch_size: int | None = None,
+        dim_extend: int | None = None,
+        checkpointer: "StorageCheckpointerBase" | None = None,  # noqa: F821
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
         self._storage.attach(self)
@@ -195,8 +222,11 @@ class ReplayBuffer:
 
         self._replay_lock = threading.RLock()
         self._futures_lock = threading.RLock()
-        from torchrl.data.replay_buffers.transforms import _CallableTransform
-        from torchrl.envs.transforms.transforms import Compose, Transform
+        from torchrl.envs.transforms.transforms import (
+            _CallableTransform,
+            Compose,
+            Transform,
+        )
 
         if transform is None:
             transform = Compose()
@@ -228,6 +258,41 @@ class ReplayBuffer:
                 "Please pass the batch-size to the ReplayBuffer constructor."
             )
         self._batch_size = batch_size
+        if dim_extend is not None and dim_extend < 0:
+            raise ValueError("dim_extend must be a positive value.")
+        self.dim_extend = dim_extend
+        self._storage.checkpointer = checkpointer
+
+    @property
+    def dim_extend(self):
+        return self._dim_extend
+
+    @dim_extend.setter
+    def dim_extend(self, value):
+        if (
+            hasattr(self, "_dim_extend")
+            and self._dim_extend is not None
+            and self._dim_extend != value
+        ):
+            raise RuntimeError(
+                "dim_extend cannot be reset. Please create a new replay buffer."
+            )
+
+        if value is None:
+            if self._storage is not None:
+                ndim = self._storage.ndim
+                value = ndim - 1
+            else:
+                value = 1
+
+        self._dim_extend = value
+
+    def _transpose(self, data):
+        if is_tensor_collection(data):
+            return data.transpose(self.dim_extend, 0)
+        return torch.utils._pytree.tree_map(
+            lambda x: x.transpose(self.dim_extend, 0), data
+        )
 
     def _get_collate_fn(self, collate_fn):
         self._collate_fn = (
@@ -271,34 +336,50 @@ class ReplayBuffer:
             return len(self._storage)
 
     def __repr__(self) -> str:
-        return (
-            f"{type(self).__name__}("
-            f"storage={self._storage}, "
-            f"sampler={self._sampler}, "
-            f"writer={self._writer}"
-            ")"
-        )
+        from torchrl.envs.transforms import Compose
+
+        storage = textwrap.indent(f"storage={self._storage}", " " * 4)
+        writer = textwrap.indent(f"writer={self._writer}", " " * 4)
+        sampler = textwrap.indent(f"sampler={self._sampler}", " " * 4)
+        if self._transform is not None and not (
+            isinstance(self._transform, Compose) and not len(self._transform)
+        ):
+            transform = textwrap.indent(f"transform={self._transform}", " " * 4)
+            transform = f"\n{self._transform}, "
+        else:
+            transform = ""
+        batch_size = textwrap.indent(f"batch_size={self._batch_size}", " " * 4)
+        collate_fn = textwrap.indent(f"collate_fn={self._collate_fn}", " " * 4)
+        return f"{self.__class__.__name__}(\n{storage}, \n{sampler}, \n{writer}, {transform}\n{batch_size}, \n{collate_fn})"
 
     @pin_memory_output
-    def __getitem__(self, index: Union[int, torch.Tensor]) -> Any:
+    def __getitem__(self, index: int | torch.Tensor | NestedKey) -> Any:
         if isinstance(index, str) or (isinstance(index, tuple) and unravel_key(index)):
             return self[:][index]
+        if isinstance(index, tuple):
+            if len(index) == 1:
+                return self[index[0]]
+            else:
+                return self[:][index]
         index = _to_numpy(index)
-        with self._replay_lock:
-            data = self._storage[index]
+
+        if self.dim_extend > 0:
+            index = (slice(None),) * self.dim_extend + (index,)
+            with self._replay_lock:
+                data = self._storage[index]
+            data = self._transpose(data)
+        else:
+            with self._replay_lock:
+                data = self._storage[index]
 
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
 
         if self._transform is not None and len(self._transform):
-            is_td = True
-            if not is_tensor_collection(data):
-                data = TensorDict({"data": data}, [])
-                is_td = False
-            with data.unlock_():
+            with data.unlock_() if is_tensor_collection(
+                data
+            ) else contextlib.nullcontext():
                 data = self._transform(data)
-            if not is_td:
-                data = data["data"]
 
         return data
 
@@ -389,6 +470,35 @@ class ReplayBuffer:
             metadata = json.load(file)
         self._batch_size = metadata["batch_size"]
 
+    def save(self, *args, **kwargs):
+        """Alias for :meth:`~.dumps`."""
+        return self.dumps(*args, **kwargs)
+
+    def dump(self, *args, **kwargs):
+        """Alias for :meth:`~.dumps`."""
+        return self.dumps(*args, **kwargs)
+
+    def load(self, *args, **kwargs):
+        """Alias for :meth:`~.loads`."""
+        return self.loads(*args, **kwargs)
+
+    def register_save_hook(self, hook: Callable[[Any], Any]):
+        """Registers a save hook for the storage.
+
+        .. note:: Hooks are currently not serialized when saving a replay buffer: they must
+            be manually re-initialized every time the buffer is created.
+        """
+        self._storage.register_save_hook(hook)
+
+    def register_load_hook(self, hook: Callable[[Any], Any]):
+        """Registers a load hook for the storage.
+
+        .. note:: Hooks are currently not serialized when saving a replay buffer: they must
+            be manually re-initialized every time the buffer is created.
+
+        """
+        self._storage.register_load_hook(hook)
+
     def add(self, data: Any) -> int:
         """Add a single element to the replay buffer.
 
@@ -401,6 +511,8 @@ class ReplayBuffer:
         if self._transform is not None and len(self._transform):
             with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
                 data = self._transform.inv(data)
+        if data is None:
+            return torch.zeros((0, self._storage.ndim), dtype=torch.long)
         return self._add(data)
 
     def _add(self, data):
@@ -411,6 +523,8 @@ class ReplayBuffer:
 
     def _extend(self, data: Sequence) -> torch.Tensor:
         with self._replay_lock:
+            if self.dim_extend > 0:
+                data = self._transpose(data)
             index = self._writer.extend(data)
             self._sampler.extend(index)
         return index
@@ -441,6 +555,8 @@ class ReplayBuffer:
         if self._transform is not None and len(self._transform):
             with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
                 data = self._transform.inv(data)
+        if data is None:
+            return torch.zeros((0, self._storage.ndim), dtype=torch.long)
         return self._extend(data)
 
     def update_priority(
@@ -448,8 +564,11 @@ class ReplayBuffer:
         index: Union[int, torch.Tensor],
         priority: Union[int, torch.Tensor],
     ) -> None:
+        if self.dim_extend > 0 and priority.ndim > 1:
+            priority = self._transpose(priority).flatten()
+            # priority = priority.flatten()
         with self._replay_lock:
-            self._sampler.update_priority(index, priority)
+            self._sampler.update_priority(index, priority, storage=self.storage)
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> Tuple[Any, dict]:
@@ -461,15 +580,10 @@ class ReplayBuffer:
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
             is_td = is_tensor_collection(data)
-            if is_td:
-                is_locked = data.is_locked
-                if is_locked:
-                    data.unlock_()
-            with _set_dispatch_td_nn_modules(is_td):
+            with data.unlock_() if is_td else contextlib.nullcontext(), _set_dispatch_td_nn_modules(
+                is_td
+            ):
                 data = self._transform(data)
-            if is_td:
-                if is_locked:
-                    data.lock_()
 
         return data, info
 
@@ -520,7 +634,10 @@ class ReplayBuffer:
             ret = self._sample(batch_size)
         else:
             with self._futures_lock:
-                while len(self._prefetch_queue) < self._prefetch_cap:
+                while (
+                    len(self._prefetch_queue)
+                    < min(self._sampler._remaining_batches, self._prefetch_cap)
+                ) and not self._sampler.ran_out:
                     fut = self._prefetch_executor.submit(self._sample, batch_size)
                     self._prefetch_queue.append(fut)
                 ret = self._prefetch_queue.popleft().result()
@@ -530,25 +647,50 @@ class ReplayBuffer:
         return ret[0]
 
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
-        self._sampler.mark_update(index)
+        self._sampler.mark_update(index, storage=self._storage)
 
-    def append_transform(self, transform: "Transform") -> None:  # noqa-F821
+    def append_transform(
+        self, transform: "Transform", *, invert: bool = False  # noqa-F821
+    ) -> ReplayBuffer:  # noqa: D417
         """Appends transform at the end.
 
         Transforms are applied in order when `sample` is called.
 
         Args:
             transform (Transform): The transform to be appended
+
+        Keyword Args:
+            invert (bool, optional): if ``True``, the transform will be inverted (forward calls will be called
+                during writing and inverse calls during reading). Defaults to ``False``.
+
+        Example:
+            >>> rb = ReplayBuffer(storage=LazyMemmapStorage(10), batch_size=4)
+            >>> data = TensorDict({"a": torch.zeros(10)}, [10])
+            >>> def t(data):
+            ...     data += 1
+            ...     return data
+            >>> rb.append_transform(t, invert=True)
+            >>> rb.extend(data)
+            >>> assert (data == 1).all()
+
         """
-        from torchrl.data.replay_buffers.transforms import _CallableTransform
-        from torchrl.envs.transforms.transforms import Transform
+        from torchrl.envs.transforms.transforms import _CallableTransform, Transform
 
         if not isinstance(transform, Transform) and callable(transform):
             transform = _CallableTransform(transform)
+        if invert:
+            transform = _InvertTransform(transform)
         transform.eval()
         self._transform.append(transform)
+        return self
 
-    def insert_transform(self, index: int, transform: "Transform") -> None:  # noqa-F821
+    def insert_transform(
+        self,
+        index: int,
+        transform: "Transform",  # noqa-F821
+        *,
+        invert: bool = False,
+    ) -> ReplayBuffer:  # noqa: D417
         """Inserts transform.
 
         Transforms are executed in order when `sample` is called.
@@ -556,9 +698,17 @@ class ReplayBuffer:
         Args:
             index (int): Position to insert the transform.
             transform (Transform): The transform to be appended
+
+        Keyword Args:
+            invert (bool, optional): if ``True``, the transform will be inverted (forward calls will be called
+                during writing and inverse calls during reading). Defaults to ``False``.
+
         """
         transform.eval()
+        if invert:
+            transform = _InvertTransform(transform)
         self._transform.insert(index, transform)
+        return self
 
     def __iter__(self):
         if self._sampler.ran_out:
@@ -568,7 +718,9 @@ class ReplayBuffer:
                 "Cannot iterate over the replay buffer. "
                 "Batch_size was not specified during construction of the replay buffer."
             )
-        while not self._sampler.ran_out:
+        while not self._sampler.ran_out or (
+            self._prefetch and len(self._prefetch_queue)
+        ):
             yield self.sample()
 
     def __getstate__(self) -> Dict[str, Any]:
@@ -591,6 +743,33 @@ class ReplayBuffer:
             _futures_lock = threading.RLock()
             state["_futures_lock"] = _futures_lock
         self.__dict__.update(state)
+
+    @property
+    def sampler(self):
+        """The sampler of the replay buffer.
+
+        The sampler must be an instance of :class:`~torchrl.data.replay_buffers.Sampler`.
+
+        """
+        return self._sampler
+
+    @property
+    def writer(self):
+        """The writer of the replay buffer.
+
+        The writer must be an instance of :class:`~torchrl.data.replay_buffers.Writer`.
+
+        """
+        return self._writer
+
+    @property
+    def storage(self):
+        """The storage of the replay buffer.
+
+        The storage must be an instance of :class:`~torchrl.data.replay_buffers.Storage`.
+
+        """
+        return self._storage
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
@@ -638,6 +817,26 @@ class PrioritizedReplayBuffer(ReplayBuffer):
               incompatible with prefetching (since this requires to know the
               batch-size in advance) as well as with samplers that have a
               ``drop_last`` argument.
+        dim_extend (int, optional): indicates the dim to consider for
+            extension when calling :meth:`~.extend`. Defaults to ``storage.ndim-1``.
+            When using ``dim_extend > 0``, we recommend using the ``ndim``
+            argument in the storage instantiation if that argument is
+            available, to let storages know that the data is
+            multi-dimensional and keep consistent notions of storage-capacity
+            and batch-size during sampling.
+
+            .. note:: This argument has no effect on :meth:`~.add` and
+                therefore should be used with caution when both :meth:`~.add`
+                and :meth:`~.extend` are used in a codebase. For example:
+
+                    >>> data = torch.zeros(3, 4)
+                    >>> rb = ReplayBuffer(
+                    ...     storage=LazyTensorStorage(10, ndim=2),
+                    ...     dim_extend=1)
+                    >>> # these two approaches are equivalent:
+                    >>> for d in data.unbind(1):
+                    ...     rb.add(d)
+                    >>> rb.extend(data)
 
     .. note::
         Generic prioritized replay buffers (ie. non-tensordict backed) require
@@ -688,6 +887,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         prefetch: int | None = None,
         transform: "Transform" | None = None,  # noqa-F821
         batch_size: int | None = None,
+        dim_extend: int | None = None,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -700,6 +900,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             prefetch=prefetch,
             transform=transform,
             batch_size=batch_size,
+            dim_extend=dim_extend,
         )
 
 
@@ -746,6 +947,26 @@ class TensorDictReplayBuffer(ReplayBuffer):
             This is to be used when the sampler is of type
             :class:`~torchrl.data.PrioritizedSampler`.
             Defaults to ``"td_error"``.
+        dim_extend (int, optional): indicates the dim to consider for
+            extension when calling :meth:`~.extend`. Defaults to ``storage.ndim-1``.
+            When using ``dim_extend > 0``, we recommend using the ``ndim``
+            argument in the storage instantiation if that argument is
+            available, to let storages know that the data is
+            multi-dimensional and keep consistent notions of storage-capacity
+            and batch-size during sampling.
+
+            .. note:: This argument has no effect on :meth:`~.add` and
+                therefore should be used with caution when both :meth:`~.add`
+                and :meth:`~.extend` are used in a codebase. For example:
+
+                    >>> data = torch.zeros(3, 4)
+                    >>> rb = ReplayBuffer(
+                    ...     storage=LazyTensorStorage(10, ndim=2),
+                    ...     dim_extend=1)
+                    >>> # these two approaches are equivalent:
+                    >>> for d in data.unbind(1):
+                    ...     rb.add(d)
+                    >>> rb.extend(data)
 
     Examples:
         >>> import torch
@@ -808,19 +1029,20 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
     """
 
-    def __init__(self, *, priority_key: str = "td_error", **kw) -> None:
-        writer = kw.get("writer", None)
+    def __init__(self, *, priority_key: str = "td_error", **kwargs) -> None:
+        writer = kwargs.get("writer", None)
         if writer is None:
-            kw["writer"] = TensorDictRoundRobinWriter()
+            kwargs["writer"] = TensorDictRoundRobinWriter()
 
-        super().__init__(**kw)
+        super().__init__(**kwargs)
         self.priority_key = priority_key
 
     def _get_priority_item(self, tensordict: TensorDictBase) -> float:
-        if "_data" in tensordict.keys():
-            tensordict = tensordict.get("_data")
-
         priority = tensordict.get(self.priority_key, None)
+        if self._storage.ndim > 1:
+            # We have to flatten the priority otherwise we'll be aggregating
+            # the priority across batches
+            priority = priority.flatten(0, self._storage.ndim - 1)
         if priority is None:
             return self._sampler.default_priority
         try:
@@ -834,12 +1056,13 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 f" {tensordict.get(self.priority_key).shape} but expected "
                 f"scalar value"
             )
+
+        if self._storage.ndim > 1:
+            priority = priority.unflatten(0, tensordict.shape[: self._storage.ndim])
+
         return priority
 
     def _get_priority_vector(self, tensordict: TensorDictBase) -> torch.Tensor:
-        if "_data" in tensordict.keys():
-            tensordict = tensordict.get("_data")
-
         priority = tensordict.get(self.priority_key, None)
         if priority is None:
             return torch.tensor(
@@ -847,9 +1070,16 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 dtype=torch.float,
                 device=tensordict.device,
             ).expand(tensordict.shape[0])
+        if self._storage.ndim > 1:
+            # We have to flatten the priority otherwise we'll be aggregating
+            # the priority across batches
+            priority = priority.flatten(0, self._storage.ndim - 1)
 
         priority = priority.reshape(priority.shape[0], -1)
         priority = _reduce(priority, self._sampler.reduction, dim=1)
+
+        if self._storage.ndim > 1:
+            priority = priority.unflatten(0, tensordict.shape[: self._storage.ndim])
 
         return priority
 
@@ -857,67 +1087,57 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if self._transform is not None:
             with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
                 data = self._transform.inv(data)
+        if data is None:
+            return torch.zeros((0, self._storage.ndim), dtype=torch.long)
 
-        if is_tensor_collection(data):
-            data_add = TensorDict(
-                {
-                    "_data": data,
-                },
-                batch_size=[],
-                device=data.device,
-            )
-            if data.batch_size:
-                data_add["_rb_batch_size"] = torch.as_tensor(data.batch_size)
-
-        else:
-            data_add = data
-
-        index = super()._add(data_add)
+        index = super()._add(data)
         if index is not None:
-            if is_tensor_collection(data_add):
-                data_add.set("index", index)
+            if is_tensor_collection(data):
+                self._set_index_in_td(data, index)
 
-            # priority = self._get_priority(data)
-            # if priority:
-            self.update_tensordict_priority(data_add)
+            self.update_tensordict_priority(data)
         return index
 
     def extend(self, tensordicts: TensorDictBase) -> torch.Tensor:
-
-        tensordicts = TensorDict(
-            {"_data": tensordicts},
-            batch_size=tensordicts.batch_size[:1],
-        )
-        if tensordicts.batch_dims > 1:
-            # we want the tensordict to have one dimension only. The batch size
-            # of the sampled tensordicts can be changed thereafter
-            if not isinstance(tensordicts, LazyStackedTensorDict):
-                tensordicts = tensordicts.clone(recurse=False)
-            else:
-                tensordicts = tensordicts.contiguous()
-            # we keep track of the batch size to reinstantiate it when sampling
-            if "_rb_batch_size" in tensordicts.keys():
-                raise KeyError(
-                    "conflicting key '_rb_batch_size'. Consider removing from data."
-                )
-            shape = torch.tensor(tensordicts.batch_size[1:]).expand(
-                tensordicts.batch_size[0], tensordicts.batch_dims - 1
+        if not isinstance(tensordicts, TensorDictBase):
+            raise ValueError(
+                f"{self.__class__.__name__} only accepts TensorDictBase subclasses. tensorclasses "
+                f"and other types are not compatible with that class. "
+                "Please use a regular `ReplayBuffer` instead."
             )
-            tensordicts.set("_rb_batch_size", shape)
-        tensordicts.set(
-            "index",
-            torch.zeros(tensordicts.shape, device=tensordicts.device, dtype=torch.int),
-        )
-
         if self._transform is not None:
-            data = self._transform.inv(tensordicts.get("_data"))
-            tensordicts.set("_data", data)
-            if data.device is not None:
-                tensordicts = tensordicts.to(data.device)
+            tensordicts = self._transform.inv(tensordicts)
+        if tensordicts is None:
+            return torch.zeros((0, self._storage.ndim), dtype=torch.long)
 
         index = super()._extend(tensordicts)
-        self.update_tensordict_priority(tensordicts)
+
+        # TODO: to be usable directly, the indices should be flipped but the issue
+        #  is that just doing this results in indices that are not sorted like the original data
+        #  so the actualy indices will have to be used on the _storage directly (not on the buffer)
+        self._set_index_in_td(tensordicts, index)
+        # TODO: in principle this is a good idea but currently it doesn't work + it re-writes a priority that has just been written
+        # self.update_tensordict_priority(tensordicts)
         return index
+
+    def _set_index_in_td(self, tensordict, index):
+        if index is None:
+            return
+        if _is_int(index):
+            index = torch.as_tensor(index, device=tensordict.device)
+        elif index.ndim == 2 and index.shape[:1] != tensordict.shape[:1]:
+            for dim in range(2, tensordict.ndim + 1):
+                if index.shape[:1].numel() == tensordict.shape[:dim].numel():
+                    # if index has 2 dims and is in a non-zero format
+                    index = index.unflatten(0, tensordict.shape[:dim])
+                    break
+            else:
+                raise RuntimeError(
+                    f"could not find how to reshape index with shape {index.shape} to fit in tensordict with shape {tensordict.shape}"
+                )
+            tensordict.set("index", index)
+            return
+        tensordict.set("index", expand_as_right(index, tensordict))
 
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
         if not isinstance(self._sampler, PrioritizedSampler):
@@ -930,7 +1150,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         while index.shape != priority.shape:
             # reduce index
             index = index[..., 0]
-        self.update_priority(index, priority)
+        return self.update_priority(index, priority)
 
     def sample(
         self,
@@ -967,11 +1187,22 @@ class TensorDictReplayBuffer(ReplayBuffer):
             is_locked = data.is_locked
             if is_locked:
                 data.unlock_()
-            for k, v in info.items():
-                v = _to_torch(v, data.device)
-                if v.shape[: data.batch_dims] != data.batch_size:
-                    v = expand_as_right(v, data)
-                data.set(k, v)
+            for key, val in info.items():
+                if key == "index" and isinstance(val, tuple):
+                    val = torch.stack(val, -1)
+                try:
+                    val = _to_torch(val, data.device)
+                    if val.ndim < data.ndim:
+                        val = expand_as_right(val, data)
+                    data.set(key, val)
+                except RuntimeError:
+                    raise RuntimeError(
+                        "Failed to set the metadata (e.g., indices or weights) in the sampled tensordict within TensorDictReplayBuffer.sample. "
+                        "This is probably caused by a shape mismatch (one of the transforms has proably modified "
+                        "the shape of the output tensordict). "
+                        "You can always recover these items from the `sample` method from a regular ReplayBuffer "
+                        "instance with the 'return_info' flag set to True."
+                    )
             if is_locked:
                 data.lock_()
         elif not is_tc and include_info in (True, None):
@@ -979,6 +1210,19 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if return_info:
             return data, info
         return data
+
+    @pin_memory_output
+    def _sample(self, batch_size: int) -> Tuple[Any, dict]:
+        with self._replay_lock:
+            index, info = self._sampler.sample(self._storage, batch_size)
+            info["index"] = index
+            data = self._storage.get(index)
+        if not isinstance(index, INT_CLASSES):
+            data = self._collate_fn(data)
+        if self._transform is not None and len(self._transform):
+            with data.unlock_(), _set_dispatch_td_nn_modules(True):
+                data = self._transform(data)
+        return data, info
 
 
 class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
@@ -1032,6 +1276,26 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectories). Can be one of "max", "min",
             "median" or "mean".
+        dim_extend (int, optional): indicates the dim to consider for
+            extension when calling :meth:`~.extend`. Defaults to ``storage.ndim-1``.
+            When using ``dim_extend > 0``, we recommend using the ``ndim``
+            argument in the storage instantiation if that argument is
+            available, to let storages know that the data is
+            multi-dimensional and keep consistent notions of storage-capacity
+            and batch-size during sampling.
+
+            .. note:: This argument has no effect on :meth:`~.add` and
+                therefore should be used with caution when both :meth:`~.add`
+                and :meth:`~.extend` are used in a codebase. For example:
+
+                    >>> data = torch.zeros(3, 4)
+                    >>> rb = ReplayBuffer(
+                    ...     storage=LazyTensorStorage(10, ndim=2),
+                    ...     dim_extend=1)
+                    >>> # these two approaches are equivalent:
+                    >>> for d in data.unbind(1):
+                    ...     rb.add(d)
+                    >>> rb.extend(data)
 
     Examples:
         >>> import torch
@@ -1104,6 +1368,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         transform: "Transform" | None = None,  # noqa-F821
         reduction: str = "max",
         batch_size: int | None = None,
+        dim_extend: int | None = None,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -1119,6 +1384,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             prefetch=prefetch,
             transform=transform,
             batch_size=batch_size,
+            dim_extend=dim_extend,
         )
 
 
@@ -1332,6 +1598,8 @@ class ReplayBufferEnsemble(ReplayBuffer):
 
     """
 
+    _collate_fn_val = None
+
     def __init__(
         self,
         *rbs,
@@ -1347,8 +1615,10 @@ class ReplayBufferEnsemble(ReplayBuffer):
         num_buffer_sampled: int | None = None,
         **kwargs,
     ):
+
         if collate_fn is None:
-            collate_fn = torch.stack
+            collate_fn = _stack_anything
+
         if rbs:
             if storages is not None or samplers is not None or writers is not None:
                 raise RuntimeError

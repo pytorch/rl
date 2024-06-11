@@ -10,14 +10,11 @@ import gym
 import tqdm
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.collectors.collectors import (
-    MultiSyncDataCollector,
-    RandomPolicy,
-    SyncDataCollector,
-)
+from torchrl.collectors.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.collectors.distributed import DistributedDataCollector
 from torchrl.envs import EnvCreator
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
+from torchrl.envs.utils import RandomPolicy
 
 parser = ArgumentParser()
 parser.add_argument(

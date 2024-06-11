@@ -2,12 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
 
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec, TensorSpec
@@ -18,6 +20,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -65,6 +68,10 @@ class TD3Loss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
         >>> import torch
@@ -201,6 +208,13 @@ class TD3Loss(LossModule):
         "target_value",
     ]
 
+    actor_network: TensorDictModule
+    qvalue_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    qvalue_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
+
     def __init__(
         self,
         actor_network: TensorDictModule,
@@ -217,7 +231,10 @@ class TD3Loss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        reduction: str = None,
     ) -> None:
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
@@ -299,6 +316,7 @@ class TD3Loss(LossModule):
         self._vmap_actor_network00 = _vmap_func(
             self.actor_network, randomness=self.vmap_randomness
         )
+        self.reduction = reduction
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -345,11 +363,13 @@ class TD3Loss(LossModule):
         )
 
     def actor_loss(self, tensordict):
-        tensordict_actor_grad = tensordict.select(*self.actor_network.in_keys)
+        tensordict_actor_grad = tensordict.select(
+            *self.actor_network.in_keys, strict=False
+        )
         with self.actor_network_params.to_module(self.actor_network):
             tensordict_actor_grad = self.actor_network(tensordict_actor_grad)
         actor_loss_td = tensordict_actor_grad.select(
-            *self.qvalue_network.in_keys
+            *self.qvalue_network.in_keys, strict=False
         ).expand(
             self.num_qvalue_nets, *tensordict_actor_grad.batch_size
         )  # for actor loss
@@ -361,10 +381,11 @@ class TD3Loss(LossModule):
             .get(self.tensor_keys.state_action_value)
             .squeeze(-1)
         )
-        loss_actor = -(state_action_value_actor[0]).mean()
+        loss_actor = -(state_action_value_actor[0])
         metadata = {
-            "state_action_value_actor": state_action_value_actor.mean().detach(),
+            "state_action_value_actor": state_action_value_actor.detach(),
         }
+        loss_actor = _reduce(loss_actor, reduction=self.reduction)
         return loss_actor, metadata
 
     def value_loss(self, tensordict):
@@ -379,7 +400,7 @@ class TD3Loss(LossModule):
 
         with torch.no_grad():
             next_td_actor = step_mdp(tensordict).select(
-                *self.actor_network.in_keys
+                *self.actor_network.in_keys, strict=False
             )  # next_observation ->
             with self.target_actor_network_params.to_module(self.actor_network):
                 next_td_actor = self.actor_network(next_td_actor)
@@ -390,7 +411,9 @@ class TD3Loss(LossModule):
                 self.tensor_keys.action,
                 next_action,
             )
-            next_val_td = next_td_actor.select(*self.qvalue_network.in_keys).expand(
+            next_val_td = next_td_actor.select(
+                *self.qvalue_network.in_keys, strict=False
+            ).expand(
                 self.num_qvalue_nets, *next_td_actor.batch_size
             )  # for next value estimation
             next_target_q1q2 = (
@@ -410,7 +433,7 @@ class TD3Loss(LossModule):
             next_target_qvalue.unsqueeze(-1),
         )
 
-        qval_td = tensordict.select(*self.qvalue_network.in_keys).expand(
+        qval_td = tensordict.select(*self.qvalue_network.in_keys, strict=False).expand(
             self.num_qvalue_nets,
             *tensordict.batch_size,
         )
@@ -428,22 +451,18 @@ class TD3Loss(LossModule):
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
 
         td_error = (current_qvalue - target_value).pow(2)
-        loss_qval = (
-            distance_loss(
-                current_qvalue,
-                target_value.expand_as(current_qvalue),
-                loss_function=self.loss_function,
-            )
-            .mean(-1)
-            .sum()
-        )
+        loss_qval = distance_loss(
+            current_qvalue,
+            target_value.expand_as(current_qvalue),
+            loss_function=self.loss_function,
+        ).sum(0)
         metadata = {
             "td_error": td_error,
-            "next_state_value": next_target_qvalue.mean().detach(),
-            "pred_value": current_qvalue.mean().detach(),
-            "target_value": target_value.mean().detach(),
+            "next_state_value": next_target_qvalue.detach(),
+            "pred_value": current_qvalue.detach(),
+            "target_value": target_value.detach(),
         }
-
+        loss_qval = _reduce(loss_qval, reduction=self.reduction)
         return loss_qval, metadata
 
     @dispatch
@@ -467,7 +486,6 @@ class TD3Loss(LossModule):
             },
             batch_size=[],
         )
-
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):

@@ -4,9 +4,18 @@
 # LICENSE file in the root directory of this source tree.
 
 
+from torchrl.modules.tensordict_module.common import DistributionalDQNnet
+
 from .decision_transformer import DecisionTransformer
 from .exploration import NoisyLazyLinear, NoisyLinear, reset_noise
-from .model_based import DreamerActor, ObsDecoder, ObsEncoder, RSSMPosterior, RSSMPrior
+from .model_based import (
+    DreamerActor,
+    ObsDecoder,
+    ObsEncoder,
+    RSSMPosterior,
+    RSSMPrior,
+    RSSMRollout,
+)
 from .models import (
     Conv2dNet,
     Conv3dNet,
@@ -15,10 +24,9 @@ from .models import (
     DdpgCnnQNet,
     DdpgMlpActor,
     DdpgMlpQNet,
-    DistributionalDQNnet,
     DTActor,
     DuelingCnnDQNet,
-    LSTMNet,
+    DuelingMlpDQNet,
     MLP,
     OnlineDTActor,
 )

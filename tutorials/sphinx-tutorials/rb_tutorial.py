@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Using Replay Buffers
 ====================
@@ -291,7 +290,7 @@ data = MyData(
 )
 
 tempdir = tempfile.TemporaryDirectory()
-buffer_lazymemmap = TensorDictReplayBuffer(
+buffer_lazymemmap = ReplayBuffer(
     storage=LazyMemmapStorage(size, scratch_dir=tempdir), batch_size=12
 )
 buffer_lazymemmap.extend(data)
@@ -646,7 +645,7 @@ plt.hist(sample["index"].numpy())
 # transformations can be recycled in the replay buffer:
 
 
-from torchrl.collectors import RandomPolicy, SyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     Compose,
@@ -655,6 +654,7 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
 )
+from torchrl.envs.utils import RandomPolicy
 
 env = TransformedEnv(
     GymEnv("CartPole-v1", from_pixels=True),
@@ -778,6 +778,7 @@ t = Compose(
     ),
     Resize(in_keys=["pixels_trsf", ("next", "pixels_trsf")], w=64, h=64),
     GrayScale(in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
+    UnsqueezeTransform(-4, in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
     CatFrames(dim=-4, N=4, in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
 )
 rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(size), transform=t, batch_size=16)
@@ -786,7 +787,7 @@ rb.add(data_exclude)
 
 
 ######################################################################
-# Let us sample one element from the buffer. The shape of the transformed
+# Let us sample one batch from the buffer. The shape of the transformed
 # pixel keys should have a length of 4 along the 4th dimension starting from
 # the end:
 #
@@ -873,3 +874,4 @@ print("steps are successive", sample["steps"])
 #   :class:`~torchrl.data.PrioritizedSliceSampler` and
 #   :class:`~torchrl.data.SliceSamplerWithoutReplacement`, or other writers
 #   such as :class:`~torchrl.data.TensorDictMaxValueWriter`.
+# - Check how to checkpoint ReplayBuffers in :ref:`the doc <checkpoint-rb>`.

@@ -113,9 +113,9 @@ frames_per_batch = args.frames_per_batch
 def main():
     import gym
     from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
-    from torchrl.collectors.collectors import RandomPolicy
     from torchrl.data import BoundedTensorSpec
     from torchrl.envs.libs.gym import GymEnv, set_gym_backend
+    from torchrl.envs.utils import RandomPolicy
 
     collector_class = SyncDataCollector if num_workers == 1 else MultiSyncDataCollector
     device_str = "device" if num_workers == 1 else "devices"

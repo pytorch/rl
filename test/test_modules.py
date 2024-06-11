@@ -3,12 +3,15 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import re
+
 from numbers import Number
 
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_default_devices
+
+from _utils_internal import get_default_devices, retry
 from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
@@ -21,7 +24,6 @@ from torchrl.modules import (
     GRUCell,
     LSTM,
     LSTMCell,
-    LSTMNet,
     MultiAgentConvNet,
     MultiAgentMLP,
     OnlineDTActor,
@@ -58,65 +60,99 @@ def double_prec_fixture():
     torch.set_default_dtype(dtype)
 
 
-@pytest.mark.parametrize("in_features", [3, 10, None])
-@pytest.mark.parametrize("out_features", [3, (3, 10)])
-@pytest.mark.parametrize("depth, num_cells", [(3, 32), (None, (32, 32, 32))])
-@pytest.mark.parametrize(
-    "activation_class, activation_kwargs",
-    [(nn.ReLU, {"inplace": True}), (nn.ReLU, {}), (nn.PReLU, {})],
-)
-@pytest.mark.parametrize(
-    "norm_class, norm_kwargs",
-    [
-        (nn.LazyBatchNorm1d, {}),
-        (nn.BatchNorm1d, {"num_features": 32}),
-        (nn.LayerNorm, {"normalized_shape": 32}),
-    ],
-)
-@pytest.mark.parametrize("dropout", [0.0, 0.5])
-@pytest.mark.parametrize("bias_last_layer", [True, False])
-@pytest.mark.parametrize("single_bias_last_layer", [True, False])
-@pytest.mark.parametrize("layer_class", [nn.Linear, NoisyLinear])
-@pytest.mark.parametrize("device", get_default_devices())
-def test_mlp(
-    in_features,
-    out_features,
-    depth,
-    num_cells,
-    activation_class,
-    activation_kwargs,
-    dropout,
-    bias_last_layer,
-    norm_class,
-    norm_kwargs,
-    single_bias_last_layer,
-    layer_class,
-    device,
-    seed=0,
-):
-    torch.manual_seed(seed)
-    batch = 2
-    mlp = MLP(
-        in_features=in_features,
-        out_features=out_features,
-        depth=depth,
-        num_cells=num_cells,
-        activation_class=activation_class,
-        activation_kwargs=activation_kwargs,
-        norm_class=norm_class,
-        norm_kwargs=norm_kwargs,
-        dropout=dropout,
-        bias_last_layer=bias_last_layer,
-        single_bias_last_layer=False,
-        layer_class=layer_class,
-        device=device,
+class TestMLP:
+    @pytest.mark.parametrize("in_features", [3, 10, None])
+    @pytest.mark.parametrize("out_features", [3, (3, 10)])
+    @pytest.mark.parametrize("depth, num_cells", [(3, 32), (None, (32, 32, 32))])
+    @pytest.mark.parametrize(
+        "activation_class, activation_kwargs",
+        [(nn.ReLU, {"inplace": True}), (nn.ReLU, {}), (nn.PReLU, {})],
     )
-    if in_features is None:
-        in_features = 5
-    x = torch.randn(batch, in_features, device=device)
-    y = mlp(x)
-    out_features = [out_features] if isinstance(out_features, Number) else out_features
-    assert y.shape == torch.Size([batch, *out_features])
+    @pytest.mark.parametrize(
+        "norm_class, norm_kwargs",
+        [
+            (nn.LazyBatchNorm1d, {}),
+            (nn.BatchNorm1d, {"num_features": 32}),
+            (nn.LayerNorm, {"normalized_shape": 32}),
+        ],
+    )
+    @pytest.mark.parametrize("dropout", [0.0, 0.5])
+    @pytest.mark.parametrize("bias_last_layer", [True, False])
+    @pytest.mark.parametrize("single_bias_last_layer", [True, False])
+    @pytest.mark.parametrize("layer_class", [nn.Linear, NoisyLinear])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_mlp(
+        self,
+        in_features,
+        out_features,
+        depth,
+        num_cells,
+        activation_class,
+        activation_kwargs,
+        dropout,
+        bias_last_layer,
+        norm_class,
+        norm_kwargs,
+        single_bias_last_layer,
+        layer_class,
+        device,
+        seed=0,
+    ):
+        torch.manual_seed(seed)
+        batch = 2
+        mlp = MLP(
+            in_features=in_features,
+            out_features=out_features,
+            depth=depth,
+            num_cells=num_cells,
+            activation_class=activation_class,
+            activation_kwargs=activation_kwargs,
+            norm_class=norm_class,
+            norm_kwargs=norm_kwargs,
+            dropout=dropout,
+            bias_last_layer=bias_last_layer,
+            single_bias_last_layer=False,
+            layer_class=layer_class,
+            device=device,
+        )
+        if in_features is None:
+            in_features = 5
+        x = torch.randn(batch, in_features, device=device)
+        y = mlp(x)
+        out_features = (
+            [out_features] if isinstance(out_features, Number) else out_features
+        )
+        assert y.shape == torch.Size([batch, *out_features])
+
+    def test_kwargs(self):
+        def make_activation(shift):
+            return lambda x: x + shift
+
+        def layer(*args, **kwargs):
+            linear = nn.Linear(*args, **kwargs)
+            linear.weight.data.copy_(torch.eye(4))
+            return linear
+
+        in_features = 4
+        out_features = 4
+        num_cells = [4, 4, 4]
+        mlp = MLP(
+            in_features=in_features,
+            out_features=out_features,
+            num_cells=num_cells,
+            activation_class=make_activation,
+            activation_kwargs=[{"shift": 0}, {"shift": 1}, {"shift": 2}],
+            layer_class=layer,
+            layer_kwargs=[{"bias": False}] * 4,
+            bias_last_layer=False,
+        )
+        x = torch.zeros(4)
+        y = mlp(x)
+        for i, module in enumerate(mlp.modules()):
+            if isinstance(module, nn.Linear):
+                assert (module.weight == torch.eye(4)).all(), i
+                assert module.bias is None, i
+        assert (y == 3).all()
 
 
 @pytest.mark.parametrize("in_features", [3, 10, None])
@@ -312,140 +348,6 @@ def test_noisy(layer_class, device, seed=0):
     torch.testing.assert_close(y2, y3)
     with pytest.raises(AssertionError):
         torch.testing.assert_close(y1, y2)
-
-
-@pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("out_features", [3, 4])
-@pytest.mark.parametrize("hidden_size", [8, 9])
-@pytest.mark.parametrize("num_layers", [1, 2])
-@pytest.mark.parametrize("has_precond_hidden", [True, False])
-def test_lstm_net(
-    device,
-    out_features,
-    hidden_size,
-    num_layers,
-    has_precond_hidden,
-    double_prec_fixture,
-):
-    torch.manual_seed(0)
-    batch = 5
-    time_steps = 6
-    in_features = 7
-    net = LSTMNet(
-        out_features,
-        {
-            "input_size": hidden_size,
-            "hidden_size": hidden_size,
-            "num_layers": num_layers,
-        },
-        {"out_features": hidden_size},
-        device=device,
-    )
-    # test single step vs multi-step
-    x = torch.randn(batch, time_steps, in_features, device=device)
-    x_unbind = x.unbind(1)
-    tds_loop = []
-    if has_precond_hidden:
-        hidden0_out0, hidden1_out0 = torch.randn(
-            2, batch, time_steps, num_layers, hidden_size, device=device
-        )
-        hidden0_out0[:, 1:] = 0.0
-        hidden1_out0[:, 1:] = 0.0
-        hidden0_out = hidden0_out0[:, 0]
-        hidden1_out = hidden1_out0[:, 0]
-    else:
-        hidden0_out, hidden1_out = None, None
-        hidden0_out0, hidden1_out0 = None, None
-
-    for _x in x_unbind:
-        y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(
-            _x, hidden0_out, hidden1_out
-        )
-        td = TensorDict(
-            {
-                "y": y,
-                "hidden0_in": hidden0_in,
-                "hidden1_in": hidden1_in,
-                "hidden0_out": hidden0_out,
-                "hidden1_out": hidden1_out,
-            },
-            [batch],
-        )
-        tds_loop.append(td)
-    tds_loop = torch.stack(tds_loop, 1)
-
-    y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(
-        x, hidden0_out0, hidden1_out0
-    )
-    tds_vec = TensorDict(
-        {
-            "y": y,
-            "hidden0_in": hidden0_in,
-            "hidden1_in": hidden1_in,
-            "hidden0_out": hidden0_out,
-            "hidden1_out": hidden1_out,
-        },
-        [batch, time_steps],
-    )
-    torch.testing.assert_close(tds_vec["y"], tds_loop["y"])
-    torch.testing.assert_close(
-        tds_vec["hidden0_out"][:, -1], tds_loop["hidden0_out"][:, -1]
-    )
-    torch.testing.assert_close(
-        tds_vec["hidden1_out"][:, -1], tds_loop["hidden1_out"][:, -1]
-    )
-
-
-@pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("out_features", [3, 5])
-@pytest.mark.parametrize("hidden_size", [3, 5])
-def test_lstm_net_nobatch(device, out_features, hidden_size):
-    time_steps = 6
-    in_features = 4
-    net = LSTMNet(
-        out_features,
-        {"input_size": hidden_size, "hidden_size": hidden_size},
-        {"out_features": hidden_size},
-        device=device,
-    )
-    # test single step vs multi-step
-    x = torch.randn(time_steps, in_features, device=device)
-    x_unbind = x.unbind(0)
-    tds_loop = []
-    hidden0_in, hidden1_in, hidden0_out, hidden1_out = [
-        None,
-    ] * 4
-    for _x in x_unbind:
-        y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(
-            _x, hidden0_out, hidden1_out
-        )
-        td = TensorDict(
-            {
-                "y": y,
-                "hidden0_in": hidden0_in,
-                "hidden1_in": hidden1_in,
-                "hidden0_out": hidden0_out,
-                "hidden1_out": hidden1_out,
-            },
-            [],
-        )
-        tds_loop.append(td)
-    tds_loop = torch.stack(tds_loop, 0)
-
-    y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(x.unsqueeze(0))
-    tds_vec = TensorDict(
-        {
-            "y": y,
-            "hidden0_in": hidden0_in,
-            "hidden1_in": hidden1_in,
-            "hidden0_out": hidden0_out,
-            "hidden1_out": hidden1_out,
-        },
-        [1, time_steps],
-    ).squeeze(0)
-    torch.testing.assert_close(tds_vec["y"], tds_loop["y"])
-    torch.testing.assert_close(tds_vec["hidden0_out"][-1], tds_loop["hidden0_out"][-1])
-    torch.testing.assert_close(tds_vec["hidden1_out"][-1], tds_loop["hidden1_out"][-1])
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -855,26 +757,27 @@ class TestMultiAgent:
         )
         return td
 
+    @retry(AssertionError, 5)
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
-    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("centralized", [True, False])
     @pytest.mark.parametrize("n_agent_inputs", [6, None])
-    @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
+    @pytest.mark.parametrize("batch", [(4,), (4, 3), ()])
     def test_multiagent_mlp(
         self,
         n_agents,
-        centralised,
+        centralized,
         share_params,
         batch,
         n_agent_inputs,
         n_agent_outputs=2,
     ):
-        torch.manual_seed(0)
+        torch.manual_seed(1)
         mlp = MultiAgentMLP(
             n_agent_inputs=n_agent_inputs,
             n_agent_outputs=n_agent_outputs,
             n_agents=n_agents,
-            centralised=centralised,
+            centralized=centralized,
             share_params=share_params,
             depth=2,
         )
@@ -886,7 +789,7 @@ class TestMultiAgent:
         out = mlp(obs)
         assert out.shape == (*batch, n_agents, n_agent_outputs)
         for i in range(n_agents):
-            if centralised and share_params:
+            if centralized and share_params:
                 assert torch.allclose(out[..., i, :], out[..., 0, :])
             else:
                 for j in range(i + 1, n_agents):
@@ -895,14 +798,16 @@ class TestMultiAgent:
         obs[..., 0, 0] += 1
         out2 = mlp(obs)
         for i in range(n_agents):
-            if centralised:
+            if centralized:
                 # a modification to the input of agent 0 will impact all agents
                 assert not torch.allclose(out[..., i, :], out2[..., i, :])
             elif i > 0:
                 assert torch.allclose(out[..., i, :], out2[..., i, :])
 
-        obs = torch.randn(*batch, 1, n_agent_inputs).expand(
-            *batch, n_agents, n_agent_inputs
+        obs = (
+            torch.randn(*batch, 1, n_agent_inputs)
+            .expand(*batch, n_agents, n_agent_inputs)
+            .clone()
         )
         out = mlp(obs)
         for i in range(n_agents):
@@ -913,17 +818,30 @@ class TestMultiAgent:
                 for j in range(i + 1, n_agents):
                     # same input different output
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
+        pattern = rf"""MultiAgentMLP\(
+    MLP\(
+      \(0\): Linear\(in_features=\d+, out_features=32, bias=True\)
+      \(1\): Tanh\(\)
+      \(2\): Linear\(in_features=32, out_features=32, bias=True\)
+      \(3\): Tanh\(\)
+      \(4\): Linear\(in_features=32, out_features=2, bias=True\)
+    \),
+    n_agents={n_agents},
+    share_params={share_params},
+    centralized={centralized},
+    agent_dim={-2}\)"""
+        assert re.match(pattern, str(mlp), re.DOTALL)
 
     def test_multiagent_mlp_lazy(self):
         mlp = MultiAgentMLP(
             n_agent_inputs=None,
             n_agent_outputs=6,
             n_agents=3,
-            centralised=True,
+            centralized=True,
             share_params=False,
             depth=2,
         )
-        optim = torch.optim.Adam(mlp.parameters())
+        optim = torch.optim.SGD(mlp.parameters(), lr=1e-3)
         for p in mlp.parameters():
             if isinstance(p, torch.nn.parameter.UninitializedParameter):
                 break
@@ -938,6 +856,11 @@ class TestMultiAgent:
             td = self._get_mock_input_td(3, 4, batch=(10,))
             obs = td.get(("agents", "observation"))
             out = mlp(obs)
+            assert (
+                not mlp.params[0]
+                .apply(lambda x, y: torch.isclose(x, y), mlp.params[1])
+                .any()
+            )
             out.mean().backward()
             optim.step()
         for p in mlp.parameters():
@@ -949,25 +872,56 @@ class TestMultiAgent:
 
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
-    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("centralized", [True, False])
+    def test_multiagent_reset_mlp(
+        self,
+        n_agents,
+        centralized,
+        share_params,
+    ):
+        actor_net = MultiAgentMLP(
+            n_agent_inputs=4,
+            n_agent_outputs=6,
+            num_cells=(4, 4),
+            n_agents=n_agents,
+            centralized=centralized,
+            share_params=share_params,
+        )
+        params_before = actor_net.params.clone()
+        actor_net.reset_parameters()
+        params_after = actor_net.params
+        assert not params_before.apply(
+            lambda x, y: torch.isclose(x, y), params_after, batch_size=[]
+        ).any()
+        if params_after.numel() > 1:
+            assert (
+                not params_after[0]
+                .apply(lambda x, y: torch.isclose(x, y), params_after[1], batch_size=[])
+                .any()
+            )
+
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize("share_params", [True, False])
+    @pytest.mark.parametrize("centralized", [True, False])
     @pytest.mark.parametrize("channels", [3, None])
-    @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
+    @pytest.mark.parametrize("batch", [(4,), (4, 3), ()])
     def test_multiagent_cnn(
         self,
         n_agents,
-        centralised,
+        centralized,
         share_params,
         batch,
         channels,
-        x=50,
-        y=50,
+        x=15,
+        y=15,
     ):
         torch.manual_seed(0)
         cnn = MultiAgentConvNet(
             n_agents=n_agents,
-            centralised=centralised,
+            centralized=centralized,
             share_params=share_params,
             in_features=channels,
+            kernel_sizes=3,
         )
         if channels is None:
             channels = 3
@@ -983,21 +937,20 @@ class TestMultiAgent:
         obs = td[("agents", "observation")]
         out = cnn(obs)
         assert out.shape[:-1] == (*batch, n_agents)
-        for i in range(n_agents):
-            if centralised and share_params:
-                assert torch.allclose(out[..., i, :], out[..., 0, :])
-            else:
+        if centralized and share_params:
+            torch.testing.assert_close(out, out[..., :1, :].expand_as(out))
+        else:
+            for i in range(n_agents):
                 for j in range(i + 1, n_agents):
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
-
         obs[..., 0, 0, 0, 0] += 1
         out2 = cnn(obs)
-        for i in range(n_agents):
-            if centralised:
-                # a modification to the input of agent 0 will impact all agents
-                assert not torch.allclose(out[..., i, :], out2[..., i, :])
-            elif i > 0:
-                assert torch.allclose(out[..., i, :], out2[..., i, :])
+        if centralized:
+            # a modification to the input of agent 0 will impact all agents
+            assert not torch.isclose(out, out2).all()
+        elif n_agents > 1:
+            assert not torch.isclose(out[..., 0, :], out2[..., 0, :]).all()
+            torch.testing.assert_close(out[..., 1:, :], out2[..., 1:, :])
 
         obs = torch.randn(*batch, 1, channels, x, y).expand(
             *batch, n_agents, channels, x, y
@@ -1013,13 +966,16 @@ class TestMultiAgent:
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
 
     def test_multiagent_cnn_lazy(self):
+        n_agents = 5
+        n_channels = 3
         cnn = MultiAgentConvNet(
-            n_agents=5,
-            centralised=False,
+            n_agents=n_agents,
+            centralized=False,
             share_params=False,
             in_features=None,
+            kernel_sizes=3,
         )
-        optim = torch.optim.Adam(cnn.parameters())
+        optim = torch.optim.SGD(cnn.parameters(), lr=1e-3)
         for p in cnn.parameters():
             if isinstance(p, torch.nn.parameter.UninitializedParameter):
                 break
@@ -1034,14 +990,19 @@ class TestMultiAgent:
             td = TensorDict(
                 {
                     "agents": TensorDict(
-                        {"observation": torch.randn(10, 5, 3, 50, 50)},
-                        [10, 5],
+                        {"observation": torch.randn(4, n_agents, n_channels, 15, 15)},
+                        [4, 5],
                     )
                 },
-                batch_size=[10],
+                batch_size=[4],
             )
             obs = td[("agents", "observation")]
             out = cnn(obs)
+            assert (
+                not cnn.params[0]
+                .apply(lambda x, y: torch.isclose(x, y), cnn.params[1])
+                .any()
+            )
             out.mean().backward()
             optim.step()
         for p in cnn.parameters():
@@ -1052,17 +1013,36 @@ class TestMultiAgent:
                 raise AssertionError("UninitializedParameter found")
 
     @pytest.mark.parametrize("n_agents", [1, 3])
-    @pytest.mark.parametrize(
-        "batch",
-        [
-            (10,),
-            (
-                10,
-                3,
-            ),
-            (),
-        ],
-    )
+    @pytest.mark.parametrize("share_params", [True, False])
+    @pytest.mark.parametrize("centralized", [True, False])
+    def test_multiagent_reset_cnn(
+        self,
+        n_agents,
+        centralized,
+        share_params,
+    ):
+        actor_net = MultiAgentConvNet(
+            in_features=4,
+            num_cells=[5, 5],
+            n_agents=n_agents,
+            centralized=centralized,
+            share_params=share_params,
+        )
+        params_before = actor_net.params.clone()
+        actor_net.reset_parameters()
+        params_after = actor_net.params
+        assert not params_before.apply(
+            lambda x, y: torch.isclose(x, y), params_after, batch_size=[]
+        ).any()
+        if params_after.numel() > 1:
+            assert (
+                not params_after[0]
+                .apply(lambda x, y: torch.isclose(x, y), params_after[1], batch_size=[])
+                .any()
+            )
+
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
     def test_vdn(self, n_agents, batch):
         torch.manual_seed(0)
         mixer = VDNMixer(n_agents=n_agents, device="cpu")
@@ -1075,17 +1055,7 @@ class TestMultiAgent:
         assert torch.equal(obs.sum(-2), out)
 
     @pytest.mark.parametrize("n_agents", [1, 3])
-    @pytest.mark.parametrize(
-        "batch",
-        [
-            (10,),
-            (
-                10,
-                3,
-            ),
-            (),
-        ],
-    )
+    @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
     @pytest.mark.parametrize("state_shape", [(64, 64, 3), (10,)])
     def test_qmix(self, n_agents, batch, state_shape):
         torch.manual_seed(0)
@@ -1271,7 +1241,6 @@ class TestDecisionTransformer:
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("bias", [True, False])
 def test_python_lstm_cell(device, bias):
-
     lstm_cell1 = LSTMCell(10, 20, device=device, bias=bias)
     lstm_cell2 = nn.LSTMCell(10, 20, device=device, bias=bias)
 
@@ -1307,7 +1276,6 @@ def test_python_lstm_cell(device, bias):
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("bias", [True, False])
 def test_python_gru_cell(device, bias):
-
     gru_cell1 = GRUCell(10, 20, device=device, bias=bias)
     gru_cell2 = nn.GRUCell(10, 20, device=device, bias=bias)
 

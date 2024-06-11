@@ -51,8 +51,8 @@ class submitit_delayed_launcher:
         >>> num_jobs=2
         >>> @submitit_delayed_launcher(num_jobs=num_jobs)
         ... def main():
-        ...     from torchrl.envs.libs.gym import GymEnv
-        ...     from torchrl.collectors.collectors import RandomPolicy
+        ...     from torchrl.envs.utils import RandomPolicy
+                from torchrl.envs.libs.gym import GymEnv
         ...     from torchrl.data import BoundedTensorSpec
         ...     collector = DistributedDataCollector(
         ...         [EnvCreator(lambda: GymEnv("Pendulum-v1"))] * num_jobs,

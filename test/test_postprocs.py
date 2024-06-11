@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import functools
 
 import pytest
 import torch
@@ -12,7 +13,7 @@ from torchrl.collectors.utils import split_trajectories
 from torchrl.data.postprocs.postprocs import MultiStep
 
 
-@pytest.mark.parametrize("n", range(13))
+@pytest.mark.parametrize("n", range(1, 14))
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("key", ["observation", "pixels", "observation_whatever"])
 def test_multistep(n, key, device, T=11):
@@ -57,7 +58,7 @@ def test_multistep(n, key, device, T=11):
 
     assert ms_tensordict.get("done").max() == 1
 
-    if n == 0:
+    if n == 1:
         assert_allclose_td(
             tensordict, ms_tensordict.select(*list(tensordict.keys(True, True)))
         )
@@ -75,12 +76,10 @@ def test_multistep(n, key, device, T=11):
     )
 
     # check that next obs is properly replaced, or that it is terminated
-    next_obs = ms_tensordict.get(key)[:, (1 + ms.n_steps) :]
-    true_next_obs = ms_tensordict.get(("next", key))[:, : -(1 + ms.n_steps)]
+    next_obs = ms_tensordict.get(key)[:, (ms.n_steps) :]
+    true_next_obs = ms_tensordict.get(("next", key))[:, : -(ms.n_steps)]
     terminated = ~ms_tensordict.get("nonterminal")
-    assert (
-        (next_obs == true_next_obs).all(-1) | terminated[:, (1 + ms.n_steps) :]
-    ).all()
+    assert ((next_obs == true_next_obs).all(-1) | terminated[:, (ms.n_steps) :]).all()
 
     # test gamma computation
     torch.testing.assert_close(
@@ -88,7 +87,7 @@ def test_multistep(n, key, device, T=11):
     )
 
     # test reward
-    if n > 0:
+    if n > 1:
         assert (
             ms_tensordict.get(("next", "reward"))
             != ms_tensordict.get(("next", "original_reward"))
@@ -104,36 +103,17 @@ def test_multistep(n, key, device, T=11):
 @pytest.mark.parametrize(
     "batch_size",
     [
-        [
-            4,
-        ],
+        [4],
         [],
-        [
-            1,
-        ],
+        [1],
         [2, 3],
     ],
 )
-@pytest.mark.parametrize(
-    "T",
-    [
-        10,
-        1,
-        2,
-    ],
-)
-@pytest.mark.parametrize(
-    "obs_dim",
-    [
-        [
-            1,
-        ],
-        [],
-    ],
-)
+@pytest.mark.parametrize("T", [10, 1, 2])
+@pytest.mark.parametrize("obs_dim", [[1], []])
 @pytest.mark.parametrize("unsq_reward", [True, False])
 @pytest.mark.parametrize("last_done", [True, False])
-@pytest.mark.parametrize("n_steps", [3, 1, 0])
+@pytest.mark.parametrize("n_steps", [4, 2, 1])
 def test_mutistep_cattrajs(
     batch_size, T, obs_dim, unsq_reward, last_done, device, n_steps
 ):
@@ -165,7 +145,7 @@ def test_mutistep_cattrajs(
     )
     ms = MultiStep(0.98, n_steps)
     tdm = ms(td)
-    if n_steps == 0:
+    if n_steps == 1:
         # n_steps = 0 has no effect
         for k in td["next"].keys():
             assert (tdm["next", k] == td["next", k]).all()
@@ -178,7 +158,7 @@ def test_mutistep_cattrajs(
         if unsq_reward:
             done = done.squeeze(-1)
         for t in range(T):
-            idx = t + n_steps
+            idx = t + n_steps - 1
             while (done[..., t:idx].any() and idx > t) or idx > done.shape[-1] - 1:
                 idx = idx - 1
             next_obs.append(obs[..., idx])
@@ -276,12 +256,22 @@ class TestSplits:
 
     @pytest.mark.parametrize("num_workers", range(3, 34, 3))
     @pytest.mark.parametrize("traj_len", [10, 17, 50, 97])
-    def test_splits(self, num_workers, traj_len):
+    @pytest.mark.parametrize(
+        "constr",
+        [
+            functools.partial(split_trajectories, prefix="collector"),
+            functools.partial(split_trajectories),
+            functools.partial(
+                split_trajectories, trajectory_key=("collector", "traj_ids")
+            ),
+        ],
+    )
+    def test_splits(self, num_workers, traj_len, constr):
 
         trajs = TestSplits.create_fake_trajs(num_workers, traj_len)
         assert trajs.shape[0] == num_workers
         assert trajs.shape[1] == traj_len
-        split_trajs = split_trajectories(trajs, prefix="collector")
+        split_trajs = constr(trajs)
         assert (
             split_trajs.shape[0] == split_trajs.get(("collector", "traj_ids")).max() + 1
         )

@@ -20,8 +20,8 @@ import torch
 
 from tensordict import PersistentTensorDict, TensorDict
 from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
+from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
-from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
@@ -55,7 +55,7 @@ _DTYPE_DIR = {
 }
 
 
-class MinariExperienceReplay(TensorDictReplayBuffer):
+class MinariExperienceReplay(BaseDatasetExperienceReplay):
     """Minari Experience replay dataset.
 
     Learn more about Minari on their website: https://minari.farama.org/
@@ -73,7 +73,7 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
             `<root>/<dataset_id>`. If none is provided, it defaults to
             ``~/.cache/torchrl/minari`.
         download (bool or str, optional): Whether the dataset should be downloaded if
-            not found. Defaults to ``True``. Download can also be passed as "force",
+            not found. Defaults to ``True``. Download can also be passed as ``"force"``,
             in which case the downloaded data will be overwritten.
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
@@ -185,7 +185,8 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         if self.download == "force" or (self.download and not self._is_downloaded()):
             if self.download == "force":
                 try:
-                    shutil.rmtree(self.data_path_root)
+                    if os.path.exists(self.data_path_root):
+                        shutil.rmtree(self.data_path_root)
                     if self.data_path != self.data_path_root:
                         shutil.rmtree(self.data_path)
                 except FileNotFoundError:
@@ -223,17 +224,17 @@ class MinariExperienceReplay(TensorDictReplayBuffer):
         return os.path.exists(self.data_path_root)
 
     @property
-    def data_path(self):
+    def data_path(self) -> Path:
         if self.split_trajs:
             return Path(self.root) / (self.dataset_id + "_split")
         return self.data_path_root
 
     @property
-    def data_path_root(self):
+    def data_path_root(self) -> Path:
         return Path(self.root) / self.dataset_id
 
     @property
-    def metadata_path(self):
+    def metadata_path(self) -> Path:
         return Path(self.root) / self.dataset_id / "env_metadata.json"
 
     def _download_and_preproc(self):

@@ -2,21 +2,22 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import math
 from dataclasses import dataclass
 from typing import Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import dispatch
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 
 from torch import distributions as d
 from torchrl.modules import ProbabilisticActor
 
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import distance_loss
+from torchrl.objectives.utils import _reduce, distance_loss
 
 
 class OnlineDTLoss(LossModule):
@@ -42,7 +43,10 @@ class OnlineDTLoss(LossModule):
             stochastic policy. Default is "auto", where target entropy is
             computed as :obj:`-prod(n_actions)`.
         samples_mc_entropy (int): number of samples to estimate the entropy
-
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
     """
 
     @dataclass
@@ -68,6 +72,10 @@ class OnlineDTLoss(LossModule):
 
     default_keys = _AcceptedKeys()
 
+    actor_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+
     def __init__(
         self,
         actor_network: ProbabilisticActor,
@@ -78,9 +86,12 @@ class OnlineDTLoss(LossModule):
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         samples_mc_entropy: int = 1,
+        reduction: str = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
 
         # Actor Network
@@ -147,6 +158,7 @@ class OnlineDTLoss(LossModule):
 
         self.samples_mc_entropy = samples_mc_entropy
         self._set_in_keys()
+        self.reduction = reduction
 
     def _set_in_keys(self):
         keys = self.actor_network.in_keys
@@ -210,8 +222,8 @@ class OnlineDTLoss(LossModule):
         with self.actor_network_params.to_module(self.actor_network):
             action_dist = self.actor_network.get_dist(tensordict)
 
-        log_likelihood = action_dist.log_prob(target_actions).mean()
-        entropy = self.get_entropy_bonus(action_dist).mean()
+        log_likelihood = action_dist.log_prob(target_actions)
+        entropy = self.get_entropy_bonus(action_dist)
         entropy_bonus = self.alpha.detach() * entropy
 
         loss_alpha = self.log_alpha.exp() * (entropy - self.target_entropy).detach()
@@ -220,10 +232,17 @@ class OnlineDTLoss(LossModule):
             "loss_log_likelihood": -log_likelihood,
             "loss_entropy": -entropy_bonus,
             "loss_alpha": loss_alpha,
-            "entropy": entropy.detach(),
+            "entropy": entropy.detach().mean(),
             "alpha": self.alpha.detach(),
         }
-        return TensorDict(out, [])
+        td_out = TensorDict(out, [])
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
+        )
+        return td_out
 
 
 class DTLoss(LossModule):
@@ -236,7 +255,10 @@ class DTLoss(LossModule):
 
     Keyword Args:
         loss_function (str): loss function to use. Defaults to ``"l2"``.
-
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
     """
 
     @dataclass
@@ -260,14 +282,21 @@ class DTLoss(LossModule):
 
     default_keys = _AcceptedKeys()
 
+    actor_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+
     def __init__(
         self,
         actor_network: ProbabilisticActor,
         *,
         loss_function: str = "l2",
+        reduction: str = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
 
         # Actor Network
@@ -277,6 +306,7 @@ class DTLoss(LossModule):
             create_target_params=False,
         )
         self.loss_function = loss_function
+        self.reduction = reduction
 
     def _set_in_keys(self):
         keys = self.actor_network.in_keys
@@ -324,8 +354,10 @@ class DTLoss(LossModule):
             pred_actions,
             target_actions,
             loss_function=self.loss_function,
-        ).mean()
+        )
+        loss = _reduce(loss, reduction=self.reduction)
         out = {
             "loss": loss,
         }
-        return TensorDict(out, [])
+        td_out = TensorDict(out, [])
+        return td_out

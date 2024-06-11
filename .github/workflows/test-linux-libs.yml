@@ -30,6 +30,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -45,19 +53,29 @@ jobs:
   unittests-brax:
     strategy:
       matrix:
-        python_version: ["3.9"]
+        python_version: ["3.11"]
         cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
 
-        export PYTHON_VERSION="3.9"
+        export PYTHON_VERSION="3.11"
         export CU_VERSION="12.1"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
@@ -81,6 +99,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -99,7 +125,7 @@ jobs:
       matrix:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
@@ -107,6 +133,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -133,6 +167,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -159,6 +201,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euxo pipefail
         export PYTHON_VERSION="3.9"
         # export CU_VERSION="${{ inputs.gpu-arch-version }}"
@@ -176,14 +226,24 @@ jobs:
       matrix:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="12.1"
@@ -199,6 +259,40 @@ jobs:
         bash .github/unittest/linux_libs/scripts_jumanji/run_test.sh
         bash .github/unittest/linux_libs/scripts_jumanji/post_process.sh
 
+  unittests-meltingpot:
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "12.1"
+      docker-image: "nvidia/cuda:12.4.1-runtime-ubuntu22.04"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.11"
+        export CU_VERSION="12.1"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_meltingpot/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_meltingpot/install.sh
+        bash .github/unittest/linux_libs/scripts_meltingpot/run_test.sh
+        bash .github/unittest/linux_libs/scripts_meltingpot/post_process.sh
+
   unittests-minari:
     strategy:
       matrix:
@@ -212,6 +306,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -238,6 +340,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -252,14 +362,24 @@ jobs:
         bash .github/unittest/linux_libs/scripts_openx/post_process.sh
 
   unittests-pettingzoo:
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="12.1"
@@ -280,6 +400,7 @@ jobs:
       matrix:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
@@ -287,6 +408,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -312,6 +441,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -339,6 +476,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -364,8 +509,17 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="12.1"
@@ -394,6 +548,14 @@ jobs:
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="cu117"
@@ -412,14 +574,24 @@ jobs:
       matrix:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
       timeout: 120
       script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         set -euo pipefail
         export PYTHON_VERSION="3.9"
         export CU_VERSION="12.1"

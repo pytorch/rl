@@ -2,16 +2,18 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import functools
 import os
-
+import sys
 import time
 import warnings
 from collections import defaultdict
 
 import pytest
+import torch
 
 CALL_TIMES = defaultdict(lambda: 0.0)
+IS_OSX = sys.platform == "darwin"
 
 
 def pytest_sessionfinish(maxprint=50):
@@ -97,6 +99,20 @@ def pytest_addoption(parser):
         "--runslow", action="store_true", default=False, help="run slow tests"
     )
 
+    parser.addoption(
+        "--mp_fork",
+        action="store_true",
+        default=False,
+        help="Use 'fork' start method for mp dedicated tests.",
+    )
+
+    parser.addoption(
+        "--mp_fork_if_no_cuda",
+        action="store_true",
+        default=False,
+        help="Use 'fork' start method for mp dedicated tests only if there is no cuda device available.",
+    )
+
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "slow: mark test as slow to run")
@@ -110,3 +126,18 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "slow" in item.keywords:
             item.add_marker(skip_slow)
+
+
+@pytest.fixture
+def maybe_fork_ParallelEnv(request):
+    from torchrl.envs import ParallelEnv
+
+    if not IS_OSX and (
+        request.config.getoption("--mp_fork")
+        or (
+            request.config.getoption("--mp_fork_if_no_cuda")
+            and not torch.cuda.is_available()
+        )
+    ):
+        return functools.partial(ParallelEnv, mp_start_method="fork")
+    return ParallelEnv

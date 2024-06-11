@@ -29,12 +29,12 @@ from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
-    RandomPolicy,
     SyncDataCollector,
 )
 from torchrl.collectors.distributed import DistributedDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
+from torchrl.envs.utils import RandomPolicy
 
 parser = ArgumentParser()
 parser.add_argument(

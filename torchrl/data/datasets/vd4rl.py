@@ -23,8 +23,8 @@ from tensordict import PersistentTensorDict, TensorDict
 from torch import multiprocessing as mp
 
 from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
+from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
-from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
@@ -39,7 +39,7 @@ _has_hf_hub = importlib.util.find_spec("huggingface_hub", None) is not None
 THIS_DIR = pathlib.Path(__file__).parent
 
 
-class VD4RLExperienceReplay(TensorDictReplayBuffer):
+class VD4RLExperienceReplay(BaseDatasetExperienceReplay):
     """V-D4RL experience replay dataset.
 
     This class downloads the H5/npz data from V-D4RL and processes it in a mmap
@@ -65,7 +65,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
             `<root>/<dataset_id>`. If none is provided, it defaults to
             ``~/.cache/torchrl/vd4rl`.
         download (bool or str, optional): Whether the dataset should be downloaded if
-            not found. Defaults to ``True``. Download can also be passed as "force",
+            not found. Defaults to ``True``. Download can also be passed as ``"force"``,
             in which case the downloaded data will be overwritten.
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
@@ -199,7 +199,8 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
         if self.download == "force" or (self.download and not self._is_downloaded()):
             if self.download == "force":
                 try:
-                    shutil.rmtree(self.data_path_root)
+                    if os.path.exists(self.data_path_root):
+                        shutil.rmtree(self.data_path_root)
                     if self.data_path != self.data_path_root:
                         shutil.rmtree(self.data_path)
                 except FileNotFoundError:
@@ -367,7 +368,7 @@ class VD4RLExperienceReplay(TensorDictReplayBuffer):
             td.set("truncated", torch.zeros_like(td.get(("next", "truncated"))))
 
         pixels = td.get("pixels")
-        subtd = td.get_sub_tensordict(slice(0, -1))
+        subtd = td._get_sub_tensordict(slice(0, -1))
         subtd.set(("next", "pixels"), pixels[1:], inplace=True)
         state = td.get("state", None)
         if state is not None:

@@ -5,12 +5,13 @@
 
 import argparse
 import dataclasses
+import pathlib
 import sys
-
 from time import sleep
 
 import pytest
 import torch
+
 from _utils_internal import generate_seeds, get_default_devices
 from torchrl._utils import timeit
 
@@ -37,8 +38,6 @@ from torchrl.envs.transforms.transforms import (
     FlattenObservation,
     TransformedEnv,
 )
-from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules.tensordict_module.common import _has_functorch
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import (
     EnvConfig,
@@ -49,9 +48,6 @@ from torchrl.trainers.helpers.models import (
     DiscreteModelConfig,
     DreamerConfig,
     make_dqn_actor,
-    make_dreamer,
-    make_redq_model,
-    REDQModelConfig,
 )
 
 TORCH_VERSION = version.parse(torch.__version__)
@@ -68,12 +64,14 @@ else:
 
 @pytest.fixture
 def dreamer_constructor_fixture():
-    import os
 
     # we hack the env constructor
     import sys
 
-    sys.path.append(os.path.dirname(__file__) + "/../examples/dreamer/")
+    sys.path.append(
+        str(pathlib.Path(__file__).parent.parent / "sota-implementations" / "dreamer")
+    )
+
     from dreamer_utils import transformed_env_constructor
 
     yield transformed_env_constructor
@@ -158,225 +156,6 @@ def test_dqn_maker(
             proof_environment.close()
             raise
         proof_environment.close()
-
-
-@pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
-@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
-@pytest.mark.skipif(not _has_gym, reason="No gym library found")
-@pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
-@pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
-@pytest.mark.parametrize("exploration", [ExplorationType.MODE, ExplorationType.RANDOM])
-def test_redq_make(device, from_pixels, gsde, exploration):
-    if not gsde and exploration != ExplorationType.RANDOM:
-        pytest.skip("no need to test this setting")
-    flags = list(from_pixels + gsde)
-    if gsde and from_pixels:
-        pytest.skip("gsde and from_pixels are incompatible")
-
-    config_fields = [
-        (config_field.name, config_field.type, config_field)
-        for config_cls in (
-            EnvConfig,
-            REDQModelConfig,
-        )
-        for config_field in dataclasses.fields(config_cls)
-    ]
-
-    Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
-    cs = ConfigStore.instance()
-    cs.store(name="config", node=Config)
-    with initialize(version_base="1.1", config_path=None):
-        cfg = compose(config_name="config", overrides=flags)
-
-        env_maker = (
-            ContinuousActionConvMockEnvNumpy
-            if from_pixels
-            else ContinuousActionVecMockEnv
-        )
-        env_maker = transformed_env_constructor(
-            cfg,
-            use_env_creator=False,
-            custom_env_maker=env_maker,
-            stats={"loc": 0.0, "scale": 1.0},
-        )
-        proof_environment = env_maker()
-
-        model = make_redq_model(
-            proof_environment,
-            device=device,
-            cfg=cfg,
-        )
-        actor, qvalue = model
-        td = proof_environment.reset().to(device)
-        with set_exploration_type(exploration):
-            actor(td)
-        expected_keys = [
-            "done",
-            "terminated",
-            "action",
-            "sample_log_prob",
-            "loc",
-            "scale",
-            "step_count",
-            "is_init",
-        ]
-        if len(gsde):
-            expected_keys += ["_eps_gSDE"]
-        if from_pixels:
-            expected_keys += [
-                "hidden",
-                "pixels",
-                "pixels_orig",
-            ]
-        else:
-            expected_keys += ["observation_vector", "observation_orig"]
-
-        try:
-            assert set(td.keys()) == set(expected_keys)
-        except AssertionError:
-            proof_environment.close()
-            raise
-
-        if cfg.gSDE:
-            tsf_loc = actor.module[0].module[-1].module.transform(td.get("loc"))
-            if exploration == ExplorationType.RANDOM:
-                with pytest.raises(AssertionError):
-                    torch.testing.assert_close(td.get("action"), tsf_loc)
-            else:
-                torch.testing.assert_close(td.get("action"), tsf_loc)
-
-        qvalue(td)
-        expected_keys = [
-            "done",
-            "terminated",
-            "action",
-            "sample_log_prob",
-            "state_action_value",
-            "loc",
-            "scale",
-            "step_count",
-            "is_init",
-        ]
-        if len(gsde):
-            expected_keys += ["_eps_gSDE"]
-        if from_pixels:
-            expected_keys += [
-                "hidden",
-                "pixels",
-                "pixels_orig",
-            ]
-        else:
-            expected_keys += ["observation_vector", "observation_orig"]
-        try:
-            assert set(td.keys()) == set(expected_keys)
-        except AssertionError:
-            proof_environment.close()
-            raise
-        proof_environment.close()
-        del proof_environment
-
-
-@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
-@pytest.mark.skipif(not _has_gym, reason="No gym library found")
-@pytest.mark.skipif(
-    version.parse(torch.__version__) < version.parse("1.11.0"),
-    reason="""Dreamer works with batches of null to 2 dimensions. Torch < 1.11
-requires one-dimensional batches (for RNN and Conv nets for instance). If you'd like
-to see torch < 1.11 supported for dreamer, please submit an issue.""",
-)
-@pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("tanh_loc", [(), ("tanh_loc=True",)])
-@pytest.mark.parametrize("exploration", [ExplorationType.MODE, ExplorationType.RANDOM])
-def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture):
-    transformed_env_constructor = dreamer_constructor_fixture
-    flags = ["from_pixels=True", "catframes=1"]
-
-    config_fields = [
-        (config_field.name, config_field.type, config_field)
-        for config_cls in (
-            EnvConfig,
-            DreamerConfig,
-        )
-        for config_field in dataclasses.fields(config_cls)
-    ]
-
-    Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
-    cs = ConfigStore.instance()
-    cs.store(name="config", node=Config)
-    with initialize(version_base="1.1", config_path=None):
-        cfg = compose(config_name="config", overrides=flags)
-        env_maker = ContinuousActionConvMockEnvNumpy
-        env_maker = transformed_env_constructor(
-            cfg,
-            use_env_creator=False,
-            custom_env_maker=env_maker,
-            stats={"loc": 0.0, "scale": 1.0},
-        )
-        proof_environment = env_maker().to(device)
-        model = make_dreamer(
-            proof_environment=proof_environment,
-            device=device,
-            cfg=cfg,
-        )
-        world_model, model_based_env, actor_model, value_model, policy = model
-        out = world_model(proof_environment.rollout(3))
-        expected_keys = {
-            "action",
-            "belief",
-            "done",
-            "terminated",
-            ("next", "done"),
-            ("next", "terminated"),
-            ("next", "reward"),
-            ("next", "belief"),
-            ("next", "encoded_latents"),
-            ("next", "pixels"),
-            ("next", "pixels_orig"),
-            ("next", "posterior_mean"),
-            ("next", "posterior_std"),
-            ("next", "prior_mean"),
-            ("next", "prior_std"),
-            ("next", "state"),
-            "pixels",
-            "pixels_orig",
-            "state",
-            ("next", "reco_pixels"),
-            "next",
-        }
-        assert set(out.keys(True)) == expected_keys
-
-        simulated_data = model_based_env.rollout(3)
-        expected_keys = {
-            "action",
-            "belief",
-            "done",
-            "terminated",
-            ("next", "done"),
-            ("next", "terminated"),
-            ("next", "reward"),
-            ("next", "belief"),
-            ("next", "state"),
-            ("next", "pixels"),
-            ("next", "pixels_orig"),
-            "pixels_orig",
-            "pixels",
-            "state",
-            "next",
-        }
-        assert expected_keys == set(simulated_data.keys(True))
-
-        simulated_action = actor_model(model_based_env.reset())
-        real_action = actor_model(proof_environment.reset())
-        simulated_policy_action = policy(model_based_env.reset())
-        real_policy_action = policy(proof_environment.reset())
-        assert "action" in simulated_action.keys()
-        assert "action" in real_action.keys()
-        assert "action" in simulated_policy_action.keys()
-        assert "action" in real_policy_action.keys()
-
-        value_td = value_model(proof_environment.reset())
-        assert "state_value" in value_td.keys()
 
 
 @pytest.mark.parametrize("initial_seed", range(5))

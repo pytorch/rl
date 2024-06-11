@@ -5,16 +5,14 @@
 from __future__ import annotations
 
 import contextlib
-import functools
 
 import math
-import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import (
     dispatch,
     ProbabilisticTensorDictModule,
@@ -28,6 +26,7 @@ from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
+    _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
     default_value_kwargs,
@@ -102,6 +101,11 @@ class PPOLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        clip_value (float, optional): If provided, it will be used to compute a clipped version of the value
+            prediction with respect to the input tensordict value estimate and use it to calculate the value loss.
+            The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
+            and preventing large updates. However, it will have no impact if the value estimate was done by the current
+            version of the value estimator. Defaults to ``None``.
 
     .. note::
       The advantage (typically GAE) can be computed by the loss function or
@@ -276,6 +280,13 @@ class PPOLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
 
+    actor_network: TensorDictModule
+    critic_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    critic_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_critic_network_params: TensorDictParams
+
     def __init__(
         self,
         actor_network: ProbabilisticTensorDictSequential | None = None,
@@ -296,6 +307,8 @@ class PPOLoss(LossModule):
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
         reduction: str = None,
+        clip_value: float | None = None,
+        **kwargs,
     ):
         if actor is not None:
             actor_network = actor
@@ -358,54 +371,23 @@ class PPOLoss(LossModule):
             value=value_key,
         )
 
+        if clip_value is not None:
+            if isinstance(clip_value, float):
+                clip_value = torch.tensor(clip_value)
+            elif isinstance(clip_value, torch.Tensor):
+                if clip_value.numel() != 1:
+                    raise ValueError(
+                        f"clip_value must be a float or a scalar tensor, got {clip_value}."
+                    )
+            else:
+                raise ValueError(
+                    f"clip_value must be a float or a scalar tensor, got {clip_value}."
+                )
+        self.register_buffer("clip_value", clip_value)
+
     @property
     def functional(self):
         return self._functional
-
-    @property
-    def actor(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.actor is deprecated, use {self.__class__.__name__}.actor_network instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.actor_network
-
-    @property
-    def critic(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.critic is deprecated, use {self.__class__.__name__}.critic_network instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.critic_network
-
-    @property
-    def actor_params(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.actor_network_params
-
-    @property
-    def critic_params(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.critic_params is deprecated, use {self.__class__.__name__}.critic_network_params instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.critic_network_params
-
-    @property
-    def target_critic_params(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.target_critic_params is deprecated, use {self.__class__.__name__}.target_critic_network_params instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.target_critic_network_params
 
     def _set_in_keys(self):
         keys = [
@@ -438,6 +420,8 @@ class PPOLoss(LossModule):
                 keys.extend(["entropy", "loss_entropy"])
             if self.loss_critic:
                 keys.append("loss_critic")
+            if self.clip_value:
+                keys.append("value_clip_fraction")
             self._out_keys = keys
         return self._out_keys
 
@@ -489,7 +473,9 @@ class PPOLoss(LossModule):
             raise RuntimeError("tensordict prev_log_prob requires grad.")
 
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
-        return log_weight, dist
+        kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
+
+        return log_weight, dist, kl_approx
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         # TODO: if the advantage is gathered by forward, this introduces an
@@ -507,6 +493,16 @@ class PPOLoss(LossModule):
                 f"can be used for the value loss."
             )
 
+        if self.clip_value:
+            try:
+                old_state_value = tensordict.get(self.tensor_keys.value)
+            except KeyError:
+                raise KeyError(
+                    f"clip_value is set to {self.clip_value}, but "
+                    f"the key {self.tensor_keys.value} was not found in the input tensordict. "
+                    f"Make sure that the value_key passed to PPO exists in the input tensordict."
+                )
+
         with self.critic_network_params.to_module(
             self.critic_network
         ) if self.functional else contextlib.nullcontext():
@@ -516,7 +512,7 @@ class PPOLoss(LossModule):
             state_value = state_value_td.get(self.tensor_keys.value)
         except KeyError:
             raise KeyError(
-                f"the key {self.tensor_keys.value} was not found in the input tensordict. "
+                f"the key {self.tensor_keys.value} was not found in the critic output tensordict. "
                 f"Make sure that the value_key passed to PPO is accurate."
             )
 
@@ -525,7 +521,19 @@ class PPOLoss(LossModule):
             state_value,
             loss_function=self.loss_critic_type,
         )
-        return self.critic_coef * loss_value
+
+        clip_fraction = None
+        if self.clip_value:
+            loss_value, clip_fraction = _clip_value_loss(
+                old_state_value,
+                state_value,
+                self.clip_value.to(state_value.device),
+                target_return,
+                loss_value,
+                self.loss_critic_type,
+            )
+
+        return self.critic_coef * loss_value, clip_fraction
 
     @property
     @_cache_values
@@ -550,20 +558,25 @@ class PPOLoss(LossModule):
             scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
-        log_weight, dist = self._log_weight(tensordict)
+        log_weight, dist, kl_approx = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
         td_out = TensorDict({"loss_objective": -neg_loss}, batch_size=[])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("entropy", entropy.detach().mean())  # for logging
+            td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict)
+            loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+            if value_clip_fraction is not None:
+                td_out.set("value_clip_fraction", value_clip_fraction)
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
-
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
@@ -663,6 +676,13 @@ class ClipPPOLoss(PPOLoss):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        clip_value (bool or float, optional): If a ``float`` is provided, it will be used to compute a clipped
+            version of the value prediction with respect to the input tensordict value estimate and use it to
+            calculate the value loss. The purpose of clipping is to limit the impact of extreme value predictions,
+            helping stabilize training and preventing large updates. However, it will have no impact if the value
+            estimate was done by the current version of the value estimator. If instead ``True`` is provided, the
+            ``clip_epsilon`` parameter will be used as the clipping threshold. If not provided or ``False``, no
+            clipping will be performed. Defaults to ``False``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -707,6 +727,13 @@ class ClipPPOLoss(PPOLoss):
 
     """
 
+    actor_network: TensorDictModule
+    critic_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    critic_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_critic_network_params: TensorDictParams
+
     def __init__(
         self,
         actor_network: ProbabilisticTensorDictSequential | None = None,
@@ -718,12 +745,17 @@ class ClipPPOLoss(PPOLoss):
         entropy_coef: float = 0.01,
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
-        normalize_advantage: bool = True,
+        normalize_advantage: bool = False,
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
+        clip_value: bool | float | None = None,
         **kwargs,
     ):
+        # Define clipping of the value loss
+        if isinstance(clip_value, bool):
+            clip_value = clip_epsilon if clip_value else None
+
         super(ClipPPOLoss, self).__init__(
             actor_network,
             critic_network,
@@ -736,6 +768,7 @@ class ClipPPOLoss(PPOLoss):
             gamma=gamma,
             separate_losses=separate_losses,
             reduction=reduction,
+            clip_value=clip_value,
             **kwargs,
         )
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
@@ -750,11 +783,13 @@ class ClipPPOLoss(PPOLoss):
     @property
     def out_keys(self):
         if self._out_keys is None:
-            keys = ["loss_objective"]
+            keys = ["loss_objective", "clip_fraction"]
             if self.entropy_bonus:
                 keys.extend(["entropy", "loss_entropy"])
             if self.loss_critic:
                 keys.append("loss_critic")
+            if self.clip_value:
+                keys.append("value_clip_fraction")
             keys.append("ESS")
             self._out_keys = keys
         return self._out_keys
@@ -779,7 +814,7 @@ class ClipPPOLoss(PPOLoss):
             scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
-        log_weight, dist = self._log_weight(tensordict)
+        log_weight, dist, kl_approx = self._log_weight(tensordict)
         # ESS for logging
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
@@ -792,22 +827,31 @@ class ClipPPOLoss(PPOLoss):
         gain1 = log_weight.exp() * advantage
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
-        gain2 = log_weight_clip.exp() * advantage
+        clip_fraction = (log_weight_clip != log_weight).to(log_weight.dtype).mean()
+        ratio = log_weight_clip.exp()
+        gain2 = ratio * advantage
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
         td_out = TensorDict({"loss_objective": -gain}, batch_size=[])
+        td_out.set("clip_fraction", clip_fraction)
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("entropy", entropy.detach().mean())  # for logging
+            td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict)
+            loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
+            if value_clip_fraction is not None:
+                td_out.set("value_clip_fraction", value_clip_fraction)
 
         td_out.set("ESS", _reduce(ess, self.reduction) / batch)
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
         return td_out
 
@@ -871,6 +915,11 @@ class KLPENPPOLoss(PPOLoss):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        clip_value (float, optional): If provided, it will be used to compute a clipped version of the value
+            prediction with respect to the input tensordict value estimate and use it to calculate the value loss.
+            The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
+            and preventing large updates. However, it will have no impact if the value estimate was done by the current
+            version of the value estimator. Defaults to ``None``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -915,6 +964,13 @@ class KLPENPPOLoss(PPOLoss):
 
     """
 
+    actor_network: TensorDictModule
+    critic_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    critic_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_critic_network_params: TensorDictParams
+
     def __init__(
         self,
         actor_network: ProbabilisticTensorDictSequential | None = None,
@@ -930,10 +986,11 @@ class KLPENPPOLoss(PPOLoss):
         entropy_coef: float = 0.01,
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
-        normalize_advantage: bool = True,
+        normalize_advantage: bool = False,
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
+        clip_value: float | None = None,
         **kwargs,
     ):
         super(KLPENPPOLoss, self).__init__(
@@ -948,6 +1005,7 @@ class KLPENPPOLoss(PPOLoss):
             gamma=gamma,
             separate_losses=separate_losses,
             reduction=reduction,
+            clip_value=clip_value,
             **kwargs,
         )
 
@@ -1004,6 +1062,8 @@ class KLPENPPOLoss(PPOLoss):
                 keys.extend(["entropy", "loss_entropy"])
             if self.loss_critic:
                 keys.append("loss_critic")
+            if self.clip_value:
+                keys.append("value_clip_fraction")
             self._out_keys = keys
         return self._out_keys
 
@@ -1033,7 +1093,7 @@ class KLPENPPOLoss(PPOLoss):
             loc = advantage.mean()
             scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
-        log_weight, dist = self._log_weight(tensordict_copy)
+        log_weight, dist, kl_approx = self._log_weight(tensordict_copy)
         neg_loss = log_weight.exp() * advantage
 
         with self.actor_network_params.to_module(
@@ -1061,13 +1121,19 @@ class KLPENPPOLoss(PPOLoss):
 
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("entropy", entropy.detach().mean())  # for logging
+            td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict_copy)
+            loss_critic, value_clip_fraction = self.loss_critic(tensordict_copy)
             td_out.set("loss_critic", loss_critic)
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+            if value_clip_fraction is not None:
+                td_out.set("value_clip_fraction", value_clip_fraction)
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
 
         return td_out

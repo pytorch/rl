@@ -54,7 +54,13 @@ class MLFlowLogger(Logger):
         """
         if not _has_mlflow:
             raise ImportError("MLFlow is not installed")
-        self.id = mlflow.create_experiment(**self._mlflow_kwargs)
+
+        # Only create experiment if it doesnt exist
+        experiment = mlflow.get_experiment_by_name(self._mlflow_kwargs["name"])
+        if experiment is None:
+            self.id = mlflow.create_experiment(**self._mlflow_kwargs)
+        else:
+            self.id = experiment.experiment_id
         return mlflow.start_run(experiment_id=self.id)
 
     def log_scalar(self, name: str, value: float, step: Optional[int] = None) -> None:

@@ -39,6 +39,14 @@ jobs:
         export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
         export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
 
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
 

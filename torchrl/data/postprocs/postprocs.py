@@ -93,6 +93,48 @@ class MultiStep(nn.Module):
         gamma (float): Discount factor for return computation
         n_steps (integer): maximum look-ahead steps.
 
+    .. note:: This class is meant to be used within a ``DataCollector``.
+        It will only treat the data passed to it at the end of a collection,
+        and ignore data preceding that collection or coming in the next batch.
+        As such, results on the last steps of the batch may likely be biased
+        by the early truncation of the trajectory.
+        To mitigate this effect, please use :class:`~torchrl.envs.transforms.MultiStepTransform`
+        within the replay buffer instead.
+
+    Examples:
+        >>> from torchrl.collectors import SyncDataCollector, RandomPolicy
+        >>> from torchrl.data.postprocs import MultiStep
+        >>> from torchrl.envs import GymEnv, TransformedEnv, StepCounter
+        >>> env = TransformedEnv(GymEnv("CartPole-v1"), StepCounter())
+        >>> env.set_seed(0)
+        >>> collector = SyncDataCollector(env, policy=RandomPolicy(env.action_spec),
+        ...     frames_per_batch=10, total_frames=2000, postproc=MultiStep(n_steps=4, gamma=0.99))
+        >>> for data in collector:
+        ...     break
+        >>> print(data["step_count"])
+        tensor([[0],
+                [1],
+                [2],
+                [3],
+                [4],
+                [5],
+                [6],
+                [7],
+                [8],
+                [9]])
+        >>> # the next step count is shifted by 3 steps in the future
+        >>> print(data["next", "step_count"])
+        tensor([[ 5],
+                [ 6],
+                [ 7],
+                [ 8],
+                [ 9],
+                [10],
+                [10],
+                [10],
+                [10],
+                [10]])
+
     """
 
     def __init__(
@@ -101,7 +143,7 @@ class MultiStep(nn.Module):
         n_steps: int,
     ):
         super().__init__()
-        if n_steps < 0:
+        if n_steps <= 0:
             raise ValueError("n_steps must be a non-negative integer.")
         if not (gamma > 0 and gamma <= 1):
             raise ValueError(f"got out-of-bounds gamma decay: gamma={gamma}")
@@ -115,6 +157,10 @@ class MultiStep(nn.Module):
                 dtype=torch.float,
             ).reshape(1, 1, -1),
         )
+        self.done_key = "done"
+        self.done_keys = ("done", "terminated", "truncated")
+        self.reward_keys = ("reward",)
+        self.mask_key = ("collector", "mask")
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Re-writes a tensordict following the multi-step transform.
@@ -151,68 +197,99 @@ class MultiStep(nn.Module):
             in-place transformation of the input tensordict.
 
         """
-        tensordict = tensordict.clone(False)
-        done = tensordict.get(("next", "done"))
-        truncated = tensordict.get(
-            ("next", "truncated"), torch.zeros((), dtype=done.dtype, device=done.device)
+        return _multi_step_func(
+            tensordict,
+            done_key=self.done_key,
+            done_keys=self.done_keys,
+            reward_keys=self.reward_keys,
+            mask_key=self.mask_key,
+            n_steps=self.n_steps,
+            gamma=self.gamma,
         )
-        done = done | truncated
 
-        # we'll be using the done states to index the tensordict.
-        # if the shapes don't match we're in trouble.
-        ndim = tensordict.ndim
-        if done.shape != tensordict.shape:
-            if done.shape[-1] == 1 and done.shape[:-1] == tensordict.shape:
-                done = done.squeeze(-1)
-            else:
-                try:
-                    # let's try to reshape the tensordict
-                    tensordict.batch_size = done.shape
-                    tensordict = tensordict.apply(
-                        lambda x: x.transpose(ndim - 1, tensordict.ndim - 1),
-                        batch_size=done.transpose(ndim - 1, tensordict.ndim - 1).shape,
-                    )
-                    done = tensordict.get(("next", "done"))
-                except Exception as err:
-                    raise RuntimeError(
-                        "tensordict shape must be compatible with the done's shape "
-                        "(trailing singleton dimension excluded)."
-                    ) from err
 
-        mask = tensordict.get(("collector", "mask"), None)
-        reward = tensordict.get(("next", "reward"))
-        *batch, T = tensordict.batch_size
+def _multi_step_func(
+    tensordict,
+    *,
+    done_key,
+    done_keys,
+    reward_keys,
+    mask_key,
+    n_steps,
+    gamma,
+):
+    # in accordance with common understanding of what n_steps should be
+    n_steps = n_steps - 1
+    tensordict = tensordict.clone(False)
+    done = tensordict.get(("next", done_key))
+
+    # we'll be using the done states to index the tensordict.
+    # if the shapes don't match we're in trouble.
+    ndim = tensordict.ndim
+    if done.shape != tensordict.shape:
+        if done.shape[-1] == 1 and done.shape[:-1] == tensordict.shape:
+            done = done.squeeze(-1)
+        else:
+            try:
+                # let's try to reshape the tensordict
+                tensordict.batch_size = done.shape
+                tensordict = tensordict.apply(
+                    lambda x: x.transpose(ndim - 1, tensordict.ndim - 1),
+                    batch_size=done.transpose(ndim - 1, tensordict.ndim - 1).shape,
+                )
+                done = tensordict.get(("next", done_key))
+            except Exception as err:
+                raise RuntimeError(
+                    "tensordict shape must be compatible with the done's shape "
+                    "(trailing singleton dimension excluded)."
+                ) from err
+
+    if mask_key is not None:
+        mask = tensordict.get(mask_key, None)
+    else:
+        mask = None
+
+    *batch, T = tensordict.batch_size
+
+    summed_rewards = []
+    for reward_key in reward_keys:
+        reward = tensordict.get(("next", reward_key))
 
         # sum rewards
-        summed_rewards, time_to_obs = _get_reward(
-            self.gamma, reward, done, self.n_steps
-        )
-        idx_to_gather = torch.arange(
-            T, device=time_to_obs.device, dtype=time_to_obs.dtype
-        ).expand(*batch, T)
-        idx_to_gather = idx_to_gather + time_to_obs
-        # idx_to_gather looks like  tensor([[ 2,  3,  4,  5,  5,  5,  8,  9, 10, 10, 10]])
-        # with a done state         tensor([[ 0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  1]])
-        # meaning that the first obs will be replaced by the third, the second by the fourth etc.
-        # The fifth remains the fifth as it is terminal
-        tensordict_gather = (
-            tensordict["next"].exclude("reward", "done").gather(-1, idx_to_gather)
-        )
+        summed_reward, time_to_obs = _get_reward(gamma, reward, done, n_steps)
+        summed_rewards.append(summed_reward)
 
-        tensordict.set("steps_to_next_obs", time_to_obs + 1)
-        tensordict.rename_key_(("next", "reward"), ("next", "original_reward"))
-        tensordict.get("next").update(tensordict_gather)
-        tensordict.set(("next", "reward"), summed_rewards)
-        tensordict.set("gamma", self.gamma ** (time_to_obs + 1))
-        nonterminal = time_to_obs != 0
-        if mask is not None:
-            mask = mask.view(*batch, T)
-            nonterminal[~mask] = False
-        tensordict.set("nonterminal", nonterminal)
-        if tensordict.ndim != ndim:
-            tensordict = tensordict.apply(
-                lambda x: x.transpose(ndim - 1, tensordict.ndim - 1),
-                batch_size=done.transpose(ndim - 1, tensordict.ndim - 1).shape,
-            )
-            tensordict.batch_size = tensordict.batch_size[:ndim]
-        return tensordict
+    idx_to_gather = torch.arange(
+        T, device=time_to_obs.device, dtype=time_to_obs.dtype
+    ).expand(*batch, T)
+    idx_to_gather = idx_to_gather + time_to_obs
+
+    # idx_to_gather looks like  tensor([[ 2,  3,  4,  5,  5,  5,  8,  9, 10, 10, 10]])
+    # with a done state         tensor([[ 0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  1]])
+    # meaning that the first obs will be replaced by the third, the second by the fourth etc.
+    # The fifth remains the fifth as it is terminal
+    tensordict_gather = (
+        tensordict.get("next")
+        .exclude(*reward_keys, *done_keys)
+        .gather(-1, idx_to_gather)
+    )
+
+    tensordict.set("steps_to_next_obs", time_to_obs + 1)
+    for reward_key, summed_reward in zip(reward_keys, summed_rewards):
+        tensordict.rename_key_(("next", reward_key), ("next", "original_reward"))
+        tensordict.set(("next", reward_key), summed_reward)
+
+    tensordict.get("next").update(tensordict_gather)
+    tensordict.set("gamma", gamma ** (time_to_obs + 1))
+    nonterminal = time_to_obs != 0
+    if mask is not None:
+        mask = mask.view(*batch, T)
+        nonterminal[~mask] = False
+    tensordict.set("nonterminal", nonterminal)
+    if tensordict.ndim != ndim:
+        tensordict = tensordict.apply(
+            lambda x: x.transpose(ndim - 1, tensordict.ndim - 1),
+            batch_size=done.transpose(ndim - 1, tensordict.ndim - 1).shape,
+        )
+        tensordict.batch_size = tensordict.batch_size[:ndim]
+    return tensordict

@@ -12,7 +12,6 @@ from typing import Optional, Tuple, Union
 
 import torch
 
-from tensordict import MemmapTensor
 
 __all__ = [
     "generalized_advantage_estimate",
@@ -59,10 +58,7 @@ def _transpose_time(fun):
         time_dim = kwargs.pop("time_dim", -2)
 
         def transpose_tensor(tensor):
-            if (
-                not isinstance(tensor, (torch.Tensor, MemmapTensor))
-                or tensor.numel() <= 1
-            ):
+            if not isinstance(tensor, torch.Tensor) or tensor.numel() <= 1:
                 return tensor, False
             if time_dim >= 0:
                 timedim = time_dim - tensor.ndim
@@ -81,13 +77,16 @@ def _transpose_time(fun):
             return tensor, single_dim
 
         if time_dim != -2:
-            args, single_dim = zip(*(transpose_tensor(arg) for arg in args))
-            single_dim = any(single_dim)
+            single_dim = False
+            if args:
+                args, single_dim = zip(*(transpose_tensor(arg) for arg in args))
+                single_dim = any(single_dim)
             for k, item in list(kwargs.items()):
                 item, sd = transpose_tensor(item)
                 single_dim = single_dim or sd
                 kwargs[k] = item
-            out = fun(*args, time_dim=-2, **kwargs)
+            # We don't pass time_dim because it isn't supposed to be used thereafter
+            out = fun(*args, **kwargs)
             if isinstance(out, torch.Tensor):
                 out = transpose_tensor(out)[0]
                 if single_dim:
@@ -96,7 +95,8 @@ def _transpose_time(fun):
             if single_dim:
                 return tuple(transpose_tensor(_out)[0].squeeze(-2) for _out in out)
             return tuple(transpose_tensor(_out)[0] for _out in out)
-        out = fun(*args, time_dim=time_dim, **kwargs)
+        # We don't pass time_dim because it isn't supposed to be used thereafter
+        out = fun(*args, **kwargs)
         if isinstance(out, tuple):
             for _out in out:
                 if _out.ndim < 2:
@@ -123,6 +123,7 @@ def generalized_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
+    *,
     time_dim: int = -2,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Generalized advantage estimate of a trajectory.
@@ -267,6 +268,7 @@ def vec_generalized_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
+    *,
     time_dim: int = -2,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Vectorized Generalized advantage estimate of a trajectory.
@@ -457,6 +459,7 @@ def td1_return_estimate(
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
     rolling_gamma: bool = None,
+    *,
     time_dim: int = -2,
 ) -> torch.Tensor:
     r"""TD(1) return estimate.
@@ -760,6 +763,7 @@ def td_lambda_return_estimate(
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
     rolling_gamma: bool = None,
+    *,
     time_dim: int = -2,
 ) -> torch.Tensor:
     r"""TD(:math:`\lambda`) return estimate.
@@ -864,6 +868,7 @@ def td_lambda_advantage_estimate(
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
     rolling_gamma: bool = None,
+    # not a kwarg because used directly
     time_dim: int = -2,
 ) -> torch.Tensor:
     r"""TD(:math:`\lambda`) advantage estimate.
@@ -997,6 +1002,7 @@ def vec_td_lambda_return_estimate(
     done,
     terminated: torch.Tensor | None = None,
     rolling_gamma: Optional[bool] = None,
+    *,
     time_dim: int = -2,
 ):
     r"""Vectorized TD(:math:`\lambda`) return estimate.
@@ -1148,6 +1154,7 @@ def vec_td_lambda_advantage_estimate(
     done,
     terminated: torch.Tensor | None = None,
     rolling_gamma: bool = None,
+    # not a kwarg because used directly
     time_dim: int = -2,
 ):
     r"""Vectorized TD(:math:`\lambda`) advantage estimate.
@@ -1230,6 +1237,7 @@ def vtrace_advantage_estimate(
     terminated: torch.Tensor | None = None,
     rho_thresh: Union[float, torch.Tensor] = 1.0,
     c_thresh: Union[float, torch.Tensor] = 1.0,
+    # not a kwarg because used directly
     time_dim: int = -2,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Computes V-Trace off-policy actor critic targets.
@@ -1310,6 +1318,7 @@ def reward2go(
     reward,
     done,
     gamma,
+    *,
     time_dim: int = -2,
 ):
     """Compute the discounted cumulative sum of rewards given multiple trajectories and the episode ends.
@@ -1349,13 +1358,19 @@ def reward2go(
         raise ValueError(
             f"reward and done must share the same shape, got {reward.shape} and {done.shape}"
         )
+    # flatten if needed
+    if reward.ndim > 2:
+        # we know time dim is at -2, let's put it at -3
+        rflip = reward.transpose(-2, -3)
+        rflip_shape = rflip.shape[-2:]
+        r2go = reward2go(
+            rflip.flatten(-2, -1), done.transpose(-2, -3).flatten(-2, -1), gamma=gamma
+        ).unflatten(-1, rflip_shape)
+        return r2go.transpose(-2, -3)
+
     # place time at dim -1
     reward = reward.transpose(-2, -1)
     done = done.transpose(-2, -1)
-    # flatten if needed
-    if reward.ndim > 2:
-        reward = reward.flatten(0, -2)
-        done = done.flatten(0, -2)
 
     num_per_traj = _get_num_per_traj(done)
     td0_flat = _split_and_pad_sequence(reward, num_per_traj)
@@ -1363,7 +1378,13 @@ def reward2go(
     cumsum = _custom_conv1d(td0_flat.unsqueeze(1), gammas)
     cumsum = cumsum.squeeze(1)
     cumsum = _inv_pad_sequence(cumsum, num_per_traj)
-    cumsum = cumsum.view_as(reward)
+    cumsum = cumsum.reshape_as(reward)
+    cumsum = cumsum.transpose(-2, -1)
     if cumsum.shape != shape:
-        cumsum = cumsum.view(shape)
+        try:
+            cumsum = cumsum.reshape(shape)
+        except RuntimeError:
+            raise RuntimeError(
+                f"Wrong shape for output reward2go: {cumsum.shape} when {shape} was expected."
+            )
     return cumsum

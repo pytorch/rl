@@ -3,6 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from torchrl.modules.tensordict_module.common import DistributionalDQNnet
+
 from .distributions import (
     Delta,
     distributions_maps,
@@ -24,11 +26,9 @@ from .models import (
     DdpgMlpActor,
     DdpgMlpQNet,
     DecisionTransformer,
-    DistributionalDQNnet,
     DreamerActor,
     DTActor,
     DuelingCnnDQNet,
-    LSTMNet,
     MLP,
     MultiAgentConvNet,
     MultiAgentMLP,
@@ -41,6 +41,7 @@ from .models import (
     reset_noise,
     RSSMPosterior,
     RSSMPrior,
+    RSSMRollout,
     Squeeze2dLayer,
     SqueezeLayer,
     VDNMixer,
@@ -64,6 +65,7 @@ from .tensordict_module import (
     LSTM,
     LSTMCell,
     LSTMModule,
+    MultiStepActorWrapper,
     OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
     QValueActor,

@@ -13,6 +13,7 @@ import logging
 
 import math
 import os
+import pickle
 import sys
 import time
 import traceback
@@ -26,11 +27,12 @@ from typing import Any, Callable, cast, Dict, TypeVar, Union
 import numpy as np
 import torch
 from packaging.version import parse
+from tensordict import unravel_key
 
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
 
-LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "DEBUG")
+LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "INFO")
 logger = logging.getLogger("torchrl")
 logger.setLevel(getattr(logging, LOGGING_LEVEL))
 # Disable propagation to the root logger
@@ -47,6 +49,9 @@ logger.addHandler(console_handler)
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
+if RL_WARNINGS:
+    warnings.simplefilter("once", DeprecationWarning)
+
 BATCHED_PIPE_TIMEOUT = float(os.environ.get("BATCHED_PIPE_TIMEOUT", "10000.0"))
 
 
@@ -93,6 +98,12 @@ class timeit:
             )
             logger.info(" -- ".join(strings))
 
+    @classmethod
+    def todict(cls, percall=True):
+        if percall:
+            return {key: val[0] for key, val in cls._REG.items()}
+        return {key: val[1] for key, val in cls._REG.items()}
+
     @staticmethod
     def erase():
         for k in timeit._REG:
@@ -107,6 +118,7 @@ def _check_for_faulty_process(processes):
             for _p in processes:
                 if _p.is_alive():
                     _p.terminate()
+                    _p.close()
         if terminate:
             break
     if terminate:
@@ -363,6 +375,7 @@ class implement_for:
     _lazy_impl = collections.defaultdict(list)
 
     def _delazify(self, func_name):
+        out = None
         for local_call in implement_for._lazy_impl[func_name]:
             out = local_call()
         return out
@@ -636,11 +649,13 @@ class _ProcessNoWarn(mp.Process):
     """A private Process class that shuts down warnings on the subprocess and controls the number of threads in the subprocess."""
 
     @wraps(mp.Process.__init__)
-    def __init__(self, *args, num_threads=None, **kwargs):
+    def __init__(self, *args, num_threads=None, _start_method=None, **kwargs):
         import torchrl
 
         self.filter_warnings_subprocess = torchrl.filter_warnings_subprocess
         self.num_threads = num_threads
+        if _start_method is not None:
+            self._start_method = _start_method
         super().__init__(*args, **kwargs)
 
     def run(self, *args, **kwargs):
@@ -699,11 +714,25 @@ def print_directory_tree(path, indent="", display_metadata=True):
         logger.info(indent + os.path.basename(path))
 
 
+def _ends_with(key, match):
+    if isinstance(key, str):
+        return key == match
+    return key[-1] == match
+
+
 def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
     if isinstance(key, str):
         return new_ending
     else:
         return key[:-1] + (new_ending,)
+
+
+def _append_last(key: NestedKey, new_suffix: str) -> NestedKey:
+    key = unravel_key(key)
+    if isinstance(key, str):
+        return key + new_suffix
+    else:
+        return key[:-1] + (key[-1] + new_suffix,)
 
 
 class _rng_decorator(_DecoratorContextManager):
@@ -741,3 +770,11 @@ class _rng_decorator(_DecoratorContextManager):
 
         else:
             torch.random.set_rng_state(self._state)
+
+
+def _can_be_pickled(obj):
+    try:
+        pickle.dumps(obj)
+        return True
+    except (pickle.PickleError, AttributeError, TypeError):
+        return False

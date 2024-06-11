@@ -2,13 +2,15 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import math
 from dataclasses import dataclass
 from numbers import Number
 from typing import Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
 from tensordict.nn import dispatch, TensorDictModule, TensorDictSequential
 from tensordict.utils import NestedKey
@@ -21,6 +23,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
@@ -76,6 +79,10 @@ class REDQLoss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        reduction (str, optional): Specifies the reduction to apply to the output:
+            ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
+            ``"mean"``: the sum of the output will be divided by the number of
+            elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
         >>> import torch
@@ -233,6 +240,13 @@ class REDQLoss(LossModule):
         "target_value",
     ]
 
+    actor_network: TensorDictModule
+    qvalue_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    qvalue_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
+
     def __init__(
         self,
         actor_network: TensorDictModule,
@@ -252,7 +266,10 @@ class REDQLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
+        reduction: str = None,
     ):
+        if reduction is None:
+            reduction = "mean"
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority_key=priority_key)
@@ -309,7 +326,7 @@ class REDQLoss(LossModule):
         self._target_entropy = target_entropy
         self._action_spec = action_spec
         self.target_entropy_buffer = None
-
+        self.reduction = reduction
         self.gSDE = gSDE
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
@@ -424,7 +441,7 @@ class REDQLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
         tensordict_select = tensordict.clone(False).select(
-            "next", *obs_keys, self.tensor_keys.action
+            "next", *obs_keys, self.tensor_keys.action, strict=False
         )
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
@@ -436,10 +453,10 @@ class REDQLoss(LossModule):
         )
 
         tensordict_actor_grad = tensordict_select.select(
-            *obs_keys
+            *obs_keys, strict=False
         )  # to avoid overwriting keys
         next_td_actor = step_mdp(tensordict_select).select(
-            *self.actor_network.in_keys
+            *self.actor_network.in_keys, strict=False
         )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
         # tensordict_actor = tensordict_actor.contiguous()
@@ -520,9 +537,7 @@ class REDQLoss(LossModule):
             next_action_log_prob_qvalue,
         ) = sample_log_prob.unbind(0)
 
-        loss_actor = -(
-            state_action_value_actor - self.alpha * action_log_prob_actor
-        ).mean(0)
+        loss_actor = -(state_action_value_actor - self.alpha * action_log_prob_actor)
 
         next_state_value = (
             next_state_action_value_qvalue - self.alpha * next_action_log_prob_qvalue
@@ -542,7 +557,7 @@ class REDQLoss(LossModule):
             pred_val,
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
-        ).mean(0)
+        )
 
         tensordict.set(self.tensor_keys.priority, td_error.detach().max(0)[0])
 
@@ -553,19 +568,24 @@ class REDQLoss(LossModule):
             )
         td_out = TensorDict(
             {
-                "loss_actor": loss_actor.mean(),
-                "loss_qvalue": loss_qval.mean(),
-                "loss_alpha": loss_alpha.mean(),
+                "loss_actor": loss_actor,
+                "loss_qvalue": loss_qval,
+                "loss_alpha": loss_alpha,
                 "alpha": self.alpha.detach(),
-                "entropy": -sample_log_prob.mean().detach(),
-                "state_action_value_actor": state_action_value_actor.mean().detach(),
-                "action_log_prob_actor": action_log_prob_actor.mean().detach(),
-                "next.state_value": next_state_value.mean().detach(),
-                "target_value": target_value.mean().detach(),
+                "entropy": -sample_log_prob.detach().mean(),
+                "state_action_value_actor": state_action_value_actor.detach(),
+                "action_log_prob_actor": action_log_prob_actor.detach(),
+                "next.state_value": next_state_value.detach(),
+                "target_value": target_value.detach(),
             },
             [],
         )
-
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
+        )
         return td_out
 
     def _loss_alpha(self, log_pi: Tensor) -> Tensor:

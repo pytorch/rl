@@ -48,7 +48,7 @@ def test_gym():
     assert _has_gym
     from _utils_internal import PONG_VERSIONED
 
-    env = GymEnv(PONG_VERSIONED)
+    env = GymEnv(PONG_VERSIONED())
     env.reset()
 
 

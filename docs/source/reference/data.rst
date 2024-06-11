@@ -24,6 +24,8 @@ widely used replay buffers:
 Composable Replay Buffers
 -------------------------
 
+.. _ref_buffers:
+
 We also give users the ability to compose a replay buffer.
 We provide a wide panel of solutions for replay buffer usage, including support for
 almost any data type; storage in memory, on device or on physical memory;
@@ -134,23 +136,31 @@ using the following components:
     :template: rl_template.rst
 
 
-    Sampler
+    FlatStorageCheckpointer
+    H5StorageCheckpointer
+    ImmutableDatasetWriter
+    LazyMemmapStorage
+    LazyTensorStorage
+    ListStorage
+    ListStorageCheckpointer
+    NestedStorageCheckpointer
     PrioritizedSampler
     PrioritizedSliceSampler
     RandomSampler
+    RoundRobinWriter
+    Sampler
     SamplerWithoutReplacement
     SliceSampler
     SliceSamplerWithoutReplacement
     Storage
-    ListStorage
-    LazyTensorStorage
-    LazyMemmapStorage
-    TensorStorage
-    Writer
-    ImmutableDatasetWriter
-    RoundRobinWriter
-    TensorDictRoundRobinWriter
+    StorageCheckpointerBase
+    StorageEnsembleCheckpointer
     TensorDictMaxValueWriter
+    TensorDictRoundRobinWriter
+    TensorStorage
+    TensorStorageCheckpointer
+    Writer
+
 
 Storage choice is very influential on replay buffer sampling latency, especially
 in distributed reinforcement learning settings with larger data volumes.
@@ -218,24 +228,128 @@ Storing trajectories
 ~~~~~~~~~~~~~~~~~~~~
 
 It is not too difficult to store trajectories in the replay buffer.
-One element to pay attention to is that the size of the replay buffer is always
+One element to pay attention to is that the size of the replay buffer is by default
 the size of the leading dimension of the storage: in other words, creating a
 replay buffer with a storage of size 1M when storing multidimensional data
 does not mean storing 1M frames but 1M trajectories. However, if trajectories
 (or episodes/rollouts) are flattened before being stored, the capacity will still
 be 1M steps.
 
+There is a way to circumvent this by telling the storage how many dimensions
+it should take into account when saving data. This can be done through the ``ndim``
+keyword argument which is accepted by all contiguous storages such as
+:class:`~torchrl.data.replay_buffers.TensorStorage` and the likes. When a
+multidimensional storage is passed to a buffer, the buffer will automatically
+consider the last dimension as the "time" dimension, as it is conventional in
+TorchRL. This can be overridden through the ``dim_extend`` keyword argument
+in :class:`~torchrl.data.ReplayBuffer`.
+This is the recommended way to save trajectories that are obtained through
+:class:`~torchrl.envs.ParallelEnv` or its serial counterpart, as we will see
+below.
+
 When sampling trajectories, it may be desirable to sample sub-trajectories
 to diversify learning or make the sampling more efficient.
 TorchRL offers two distinctive ways of accomplishing this:
+
 - The :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` allows to
   sample a given number of slices of trajectories stored one after another
   along the leading dimension of the :class:`~torchrl.data.replay_buffers.samplers.TensorStorage`.
   This is the recommended way of sampling sub-trajectories in TorchRL __especially__
   when using offline datasets (which are stored using that convention).
   This strategy requires to flatten the trajectories before extending the replay
-  buffer and reshaping them after sampling. The :class:`~torchrl.data.replay_buffers.samplers.SliceSampler`
+  buffer and reshaping them after sampling.
+  The :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` class docstrings
   gives extensive details about this storage and sampling strategy.
+  Note that :class:`~torchrl.data.replay_buffers.samplers.SliceSampler`
+  is compatible with multidimensional storages. The following examples show
+  how to use this feature with and without flattening of the tensordict.
+  In the first scenario, we are collecting data from a single environment. In
+  that case, we are happy with a storage that concatenates the data coming in
+  along the first dimension, since there will be no interruption introduced
+  by the collection schedule:
+
+        >>> from torchrl.envs import TransformedEnv, StepCounter, GymEnv
+        >>> from torchrl.collectors import SyncDataCollector, RandomPolicy
+        >>> from torchrl.data import ReplayBuffer, LazyTensorStorage, SliceSampler
+        >>> env = TransformedEnv(GymEnv("CartPole-v1"), StepCounter())
+        >>> collector = SyncDataCollector(env,
+        ...     RandomPolicy(env.action_spec),
+        ...     frames_per_batch=10, total_frames=-1)
+        >>> rb = ReplayBuffer(
+        ...     storage=LazyTensorStorage(100),
+        ...     sampler=SliceSampler(num_slices=8, traj_key=("collector", "traj_ids"),
+        ...         truncated_key=None, strict_length=False),
+        ...     batch_size=64)
+        >>> for i, data in enumerate(collector):
+        ...     rb.extend(data)
+        ...     if i == 10:
+        ...         break
+        >>> assert len(rb) == 100, len(rb)
+        >>> print(rb[:]["next", "step_count"])
+        tensor([[32],
+                [33],
+                [34],
+                [35],
+                [36],
+                [37],
+                [38],
+                [39],
+                [40],
+                [41],
+                [11],
+                [12],
+                [13],
+                [14],
+                [15],
+                [16],
+                [17],
+                [...
+
+  If there are more than one environment run in a batch, we could still store
+  the data in the same buffer as before by calling ``data.reshape(-1)`` which
+  will flatten the ``[B, T]`` size into ``[B * T]`` but that means that the
+  trajectories of, say, the first environment of the batch will be interleaved
+  by trajectories of the other environments, a scenario that ``SliceSampler``
+  cannot handle. To solve this, we suggest to use the ``ndim`` argument in the
+  storage constructor:
+
+        >>> env = TransformedEnv(SerialEnv(2,
+        ...     lambda: GymEnv("CartPole-v1")), StepCounter())
+        >>> collector = SyncDataCollector(env,
+        ...     RandomPolicy(env.action_spec),
+        ...     frames_per_batch=1, total_frames=-1)
+        >>> rb = ReplayBuffer(
+        ...     storage=LazyTensorStorage(100, ndim=2),
+        ...     sampler=SliceSampler(num_slices=8, traj_key=("collector", "traj_ids"),
+        ...         truncated_key=None, strict_length=False),
+        ...     batch_size=64)
+        >>> for i, data in enumerate(collector):
+        ...     rb.extend(data)
+        ...     if i == 100:
+        ...         break
+        >>> assert len(rb) == 100, len(rb)
+        >>> print(rb[:]["next", "step_count"].squeeze())
+        tensor([[ 6,  5],
+                [ 2,  2],
+                [ 3,  3],
+                [ 4,  4],
+                [ 5,  5],
+                [ 6,  6],
+                [ 7,  7],
+                [ 8,  8],
+                [ 9,  9],
+                [10, 10],
+                [11, 11],
+                [12, 12],
+                [13, 13],
+                [14, 14],
+                [15, 15],
+                [16, 16],
+                [17, 17],
+                [18,  1],
+                [19,  2],
+                [...
+
 
 - Trajectories can also be stored independently, with the each element of the
   leading dimension pointing to a different trajectory. This requires
@@ -278,21 +392,71 @@ TorchRL offers two distinctive ways of accomplishing this:
 Checkpointing Replay Buffers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+.. _checkpoint-rb:
+
 Each component of the replay buffer can potentially be stateful and, as such,
 require a dedicated way of being serialized.
 Our replay buffer enjoys two separate APIs for saving their state on disk:
 :meth:`~torchrl.data.ReplayBuffer.dumps` and :meth:`~torchrl.data.ReplayBuffer.loads` will save the
 data of each component except transforms (storage, writer, sampler) using memory-mapped
-tensors and json files for the metadata. This will work across all classes except
+tensors and json files for the metadata.
+
+This will work across all classes except
 :class:`~torchrl.data.replay_buffers.storages.ListStorage`, which content
 cannot be anticipated (and as such does not comply with memory-mapped data
 structures such as those that can be found in the tensordict library).
+
 This API guarantees that a buffer that is saved and then loaded back will be in
 the exact same state, whether we look at the status of its sampler (eg, priority trees)
 its writer (eg, max writer heaps) or its storage.
-Under the hood, :meth:`~torchrl.data.ReplayBuffer.dumps` will just call the public
+
+Under the hood, a naive call to :meth:`~torchrl.data.ReplayBuffer.dumps` will just call the public
 `dumps` method in a specific folder for each of its components (except transforms
 which we don't assume to be serializable using memory-mapped tensors in general).
+
+Saving data in :ref:`TED-format <TED-format>` may however consume much more memory than required. If continuous
+trajectories are stored in a buffer, we can avoid saving duplicated observations by saving all the
+observations at the root plus only the last element of the `"next"` sub-tensordict's observations, which
+can reduce the storage consumption up to two times. To enable this, three checkpointer classes are available:
+:class:`~torchrl.data.FlatStorageCheckpointer` will discard duplicated observations to compress the TED format. At
+load time, this class will re-write the observations in the correct format. If the buffer is saved on disk,
+the operations executed by this checkpointer will not require any additional RAM.
+The :class:`~torchrl.data.NestedStorageCheckpointer` will save the trajectories using nested tensors to make the data
+representation more apparent (each item along the first dimension representing a distinct trajectory).
+Finally, the :class:`~torchrl.data.H5StorageCheckpointer` will save the buffer in an H5DB format, enabling users to
+compress the data and save some more space.
+
+.. warning:: The checkpointers make some restrictive assumption about the replay buffers. First, it is assumed that
+  the ``done`` state accurately represents the end of a trajectory (except for the last trajectory which was written
+  for which the writer cursor indicates where to place the truncated signal). For MARL usage, one should note that
+  only done states that have as many elements as the root tensordict are allowed:
+  if the done state has extra elements that are not represented in
+  the batch-size of the storage, these checkpointers will fail. For example, a done state with shape ``torch.Size([3, 4, 5])``
+  within a storage of shape ``torch.Size([3, 4])`` is not allowed.
+
+Here is a concrete example of how an H5DB checkpointer could be used in practice:
+
+  >>> from torchrl.data import ReplayBuffer, H5StorageCheckpointer, LazyMemmapStorage
+  >>> from torchrl.collectors import SyncDataCollector
+  >>> from torchrl.envs import GymEnv, SerialEnv
+  >>> import torch
+  >>> env = SerialEnv(3, lambda: GymEnv("CartPole-v1", device=None))
+  >>> env.set_seed(0)
+  >>> torch.manual_seed(0)
+  >>> collector = SyncDataCollector(
+  >>>     env, policy=env.rand_step, total_frames=200, frames_per_batch=22
+  >>> )
+  >>> rb = ReplayBuffer(storage=LazyMemmapStorage(100, ndim=2))
+  >>> rb_test = ReplayBuffer(storage=LazyMemmapStorage(100, ndim=2))
+  >>> rb.storage.checkpointer = H5StorageCheckpointer()
+  >>> rb_test.storage.checkpointer = H5StorageCheckpointer()
+  >>> for i, data in enumerate(collector):
+  ...     rb.extend(data)
+  ...     assert rb._storage.max_size == 102
+  ...     rb.dumps(path_to_save_dir)
+  ...     rb_test.loads(path_to_save_dir)
+  ...     assert_allclose_td(rb_test[:], rb[:])
+
 
 Whenever saving data using :meth:`~torchrl.data.ReplayBuffer.dumps` is not possible, an
 alternative way is to use :meth:`~torchrl.data.ReplayBuffer.state_dict`, which returns a data
@@ -413,6 +577,19 @@ should have a considerably lower memory footprint than observations, for instanc
 
 This format eliminates any ambiguity regarding the matching of an observation with
 its action, info, or done state.
+
+Flattening TED to reduce memory consumption
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+TED copies the observations twice in the memory, which can impact the feasibility of using this format
+in practice. Since it is being used mostly for ease of representation, one can store the data
+in a flat manner but represent it as TED during training.
+
+This is particularly useful when serializing replay buffers:
+For instance, the :class:`~torchrl.data.TED2Flat` class ensures that a TED-formatted data
+structure is flattened before being written to disk, whereas the :class:`~torchrl.data.Flat2TED`
+load hook will unflatten this structure during deserialization.
+
 
 Dimensionality of the Tensordict
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -554,12 +731,53 @@ Here's an example:
   the latest wheels are not published on PyPI. For OpenML, `scikit-learn <https://pypi.org/project/scikit-learn/>`_ and
   `pandas <https://pypi.org/project/pandas>`_ are required.
 
+Transforming datasets
+~~~~~~~~~~~~~~~~~~~~~
+
+In many instances, the raw data isn't going to be used as-is.
+The natural solution could be to pass a :class:`~torchrl.envs.transforms.Transform`
+instance to the dataset constructor and modify the sample on-the-fly. This will
+work but it will incur an extra runtime for the transform.
+If the transformations can be (at least a part) pre-applied to the dataset,
+a conisderable disk space and some incurred overhead at sampling time can be
+saved. To do this, the
+:meth:`~torchrl.data.datasets.BaseDatasetExperienceReplay.preprocess` can be
+used. This method will run a per-sample preprocessing pipeline on each element
+of the dataset, and replace the existing dataset by its transformed version.
+
+Once transformed, re-creating the same dataset will produce another object with
+the same transformed storage (unless ``download="force"`` is being used):
+
+    >>> dataset = RobosetExperienceReplay(
+    ...     "FK1-v4(expert)/FK1_MicroOpenRandom_v2d-v4", batch_size=32, download="force"
+    ... )
+    >>>
+    >>> def func(data):
+    ...     return data.set("obs_norm", data.get("observation").norm(dim=-1))
+    ...
+    >>> dataset.preprocess(
+    ...     func,
+    ...     num_workers=max(1, os.cpu_count() - 2),
+    ...     num_chunks=1000,
+    ...     mp_start_method="fork",
+    ... )
+    >>> sample = dataset.sample()
+    >>> assert "obs_norm" in sample.keys()
+    >>> # re-recreating the dataset gives us the transformed version back.
+    >>> dataset = RobosetExperienceReplay(
+    ...     "FK1-v4(expert)/FK1_MicroOpenRandom_v2d-v4", batch_size=32
+    ... )
+    >>> sample = dataset.sample()
+    >>> assert "obs_norm" in sample.keys()
+
+
 .. currentmodule:: torchrl.data.datasets
 
 .. autosummary::
     :toctree: generated/
     :template: rl_template.rst
 
+    BaseDatasetExperienceReplay
     AtariDQNExperienceReplay
     D4RLExperienceReplay
     GenDGRLExperienceReplay
@@ -651,6 +869,8 @@ such that they can be stacked together during sampling.
 TensorSpec
 ----------
 
+.. _ref_specs:
+
 The `TensorSpec` parent class and subclasses define the basic properties of observations and actions in TorchRL, such
 as shape, device, dtype and domain.
 It is important that your environment specs match the input and output that it sends and receives, as
@@ -670,6 +890,7 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
     DiscreteTensorSpec
     MultiDiscreteTensorSpec
     MultiOneHotDiscreteTensorSpec
+    NonTensorSpec
     OneHotDiscreteTensorSpec
     UnboundedContinuousTensorSpec
     UnboundedDiscreteTensorSpec
@@ -720,3 +941,17 @@ Utils
     consolidate_spec
     check_no_exclusive_keys
     contains_lazy_spec
+    Nested2TED
+    Flat2TED
+    H5Combine
+    H5Split
+    TED2Flat
+    TED2Nested
+
+.. currentmodule:: torchrl.envs.transforms.rb_transforms
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    MultiStepTransform

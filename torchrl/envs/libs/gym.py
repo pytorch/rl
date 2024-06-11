@@ -17,7 +17,8 @@ import numpy as np
 import torch
 from packaging import version
 
-from tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
+from torch.utils._pytree import tree_map
 
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
@@ -26,6 +27,7 @@ from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
+    LazyStackedTensorSpec,
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
@@ -37,7 +39,7 @@ from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_d
 from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
 
-from torchrl.envs.gym_like import BaseInfoDictReader, GymLikeEnv
+from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
 
 from torchrl.envs.utils import _classproperty
 
@@ -244,8 +246,8 @@ def _gym_to_torchrl_spec_transform(
         ).expand(batch_size)
     gym_spaces = gym_backend("spaces")
     if isinstance(spec, gym_spaces.tuple.Tuple):
-        return torch.stack(
-            [
+        result = LazyStackedTensorSpec(
+            *[
                 _gym_to_torchrl_spec_transform(
                     s,
                     device=device,
@@ -254,8 +256,9 @@ def _gym_to_torchrl_spec_transform(
                 )
                 for s in spec
             ],
-            0,
+            dim=0,
         )
+        return result
     if isinstance(spec, gym_spaces.discrete.Discrete):
         action_space_cls = (
             DiscreteTensorSpec
@@ -272,6 +275,23 @@ def _gym_to_torchrl_spec_transform(
         return BinaryDiscreteTensorSpec(
             spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
         )
+    # a spec type cannot be a string, so we're sure that versions of gym that don't have Sequence will just skip through this
+    elif isinstance(spec, getattr(gym_spaces, "Sequence", str)):
+        if not hasattr(spec, "stack"):
+            # gym does not have a stack attribute in sequence
+            raise ValueError(
+                "gymnasium should be used whenever a Sequence is present, as it needs to be stacked. "
+                "If you need the gym backend at all price, please raise an issue on the TorchRL GitHub repository."
+            )
+        if not getattr(spec, "stack", False):
+            raise ValueError(
+                "Sequence spaces must have the stack argument set to ``True``. "
+            )
+        space = spec.feature_space
+        out = _gym_to_torchrl_spec_transform(space, device=device, dtype=dtype)
+        out = out.unsqueeze(0)
+        out.make_neg_dim(0)
+        return out
     elif isinstance(spec, gym_spaces.multi_discrete.MultiDiscrete):
         if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
             dtype = (
@@ -417,6 +437,15 @@ def _torchrl_to_gym_spec_transform(
     """
     gym_spaces = gym_backend("spaces")
     shape = spec.shape
+    if any(s == -1 for s in spec.shape):
+        if spec.shape[0] == -1:
+            spec = spec.clone()
+            spec = spec[0]
+            return gym_spaces.Sequence(_torchrl_to_gym_spec_transform(spec), stack=True)
+        else:
+            return gym_spaces.Tuple(
+                tuple(_torchrl_to_gym_spec_transform(spec) for spec in spec.unbind(0))
+            )
     if isinstance(spec, MultiDiscreteTensorSpec):
         return _multidiscrete_convert(gym_spaces, spec)
     if isinstance(spec, MultiOneHotDiscreteTensorSpec):
@@ -494,12 +523,11 @@ def _get_gym_envs():  # noqa: F811
 
 
 def _is_from_pixels(env):
-    gym = gym_backend()
     observation_spec = env.observation_space
     try:
         PixelObservationWrapper = gym_backend(
-            "wrappers.pixel_observation.PixelObservationWrapper"
-        )
+            "wrappers.pixel_observation"
+        ).PixelObservationWrapper
     except ModuleNotFoundError:
 
         class PixelObservationWrapper:
@@ -509,22 +537,33 @@ def _is_from_pixels(env):
         GymPixelObservationWrapper as LegacyPixelObservationWrapper,
     )
 
+    gDict = gym_backend("spaces").dict.Dict
+    Box = gym_backend("spaces").Box
+
     if isinstance(observation_spec, (Dict,)):
         if "pixels" in set(observation_spec.keys()):
             return True
-    if isinstance(observation_spec, (gym.spaces.dict.Dict,)):
+    if isinstance(observation_spec, (gDict,)):
         if "pixels" in set(observation_spec.spaces.keys()):
             return True
     elif (
-        isinstance(observation_spec, gym.spaces.Box)
+        isinstance(observation_spec, Box)
         and (observation_spec.low == 0).all()
         and (observation_spec.high == 255).all()
         and observation_spec.low.shape[-1] == 3
         and observation_spec.low.ndim == 3
     ):
         return True
-    elif isinstance(env, (LegacyPixelObservationWrapper, PixelObservationWrapper)):
-        return True
+    else:
+        while True:
+            if isinstance(
+                env, (LegacyPixelObservationWrapper, PixelObservationWrapper)
+            ):
+                return True
+            if hasattr(env, "env"):
+                env = env.env
+            else:
+                break
     return False
 
 
@@ -566,8 +605,11 @@ class _AsyncMeta(_EnvPostInit):
                     )
                     add_info_dict = False
             if add_info_dict:
-                instance.set_info_dict_reader(
-                    terminal_obs_reader(instance.observation_spec, backend=backend)
+                # register terminal_obs_reader
+                instance.auto_register_info_dict(
+                    info_dict_reader=terminal_obs_reader(
+                        instance.observation_spec, backend=backend
+                    )
                 )
             return TransformedEnv(instance, VecGymEnvTransform())
         return instance
@@ -656,6 +698,28 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         if no other reader is provided. To provide another reader, refer to
         :meth:`~.set_info_dict_reader`. To automatically register the info_dict
         content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
+        For parallel (Vectorized) environments, the info dictionary reader is automatically set and should
+        not be set manually.
+
+    .. note:: Gym spaces are not completely covered.
+        The following spaces are accounted for provided that they can be represented by a torch.Tensor, a nested tensor
+        and/or within a tensordict:
+
+          - spaces.Box
+          - spaces.Sequence
+          - spaces.Tuple
+          - spaces.Discrete
+          - spaces.MultiBinary
+          - spaces.MultiDiscrete
+          - spaces.Dict
+
+        Some considerations should be made when working with gym spaces. For instance, a tuple of spaces
+        can only be supported if the spaces are semantically identical (same dtype and same number of dimensions).
+        Ragged dimension can be supported through :func:`~torch.nested.nested_tensor`, but then there should be only
+        one level of tuple and data should be stacked along the first dimension (as nested_tensors can only be
+        stacked along the first dimension).
+
+        Check the example in examples/envs/gym_conversion_examples.py to know more!
 
     """
 
@@ -759,8 +823,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @implement_for("gymnasium")  # gymnasium wants the unwrapped env
     def _get_batch_size(self, env):  # noqa: F811
-        if hasattr(env, "num_envs"):
-            batch_size = torch.Size([env.unwrapped.num_envs, *self.batch_size])
+        env_unwrapped = env.unwrapped
+        if hasattr(env_unwrapped, "num_envs"):
+            batch_size = torch.Size([env_unwrapped.num_envs, *self.batch_size])
         else:
             batch_size = self.batch_size
         return batch_size
@@ -904,7 +969,10 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 f"Calling env.seed from now on."
             )
             self._seed_calls_reset = False
-            self._env.seed(seed=seed)
+            try:
+                self._env.seed(seed=seed)
+            except AttributeError as err2:
+                raise err from err2
 
     @implement_for("gymnasium")
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
@@ -919,7 +987,22 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self._seed_calls_reset = False
             self._env.seed(seed=seed)
 
+    @implement_for("gym")
+    def _reward_space(self, env):
+        if hasattr(env, "reward_space") and env.reward_space is not None:
+            return env.reward_space
+
+    @implement_for("gymnasium")
+    def _reward_space(self, env):  # noqa: F811
+        env = env.unwrapped
+        if hasattr(env, "reward_space") and env.reward_space is not None:
+            rs = env.reward_space
+            return rs
+
     def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
+        # If batch_size is provided, we se it to tell what batch size must be used
+        # instead of self.batch_size
+        cur_batch_size = self.batch_size if batch_size is None else torch.Size([])
         action_spec = _gym_to_torchrl_spec_transform(
             env.action_space,
             device=self.device,
@@ -933,18 +1016,19 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         if not isinstance(observation_spec, CompositeSpec):
             if self.from_pixels:
                 observation_spec = CompositeSpec(
-                    pixels=observation_spec, shape=self.batch_size
+                    pixels=observation_spec, shape=cur_batch_size
                 )
             else:
                 observation_spec = CompositeSpec(
-                    observation=observation_spec, shape=self.batch_size
+                    observation=observation_spec, shape=cur_batch_size
                 )
-        elif observation_spec.shape[: len(self.batch_size)] != self.batch_size:
-            observation_spec.shape = self.batch_size
+        elif observation_spec.shape[: len(cur_batch_size)] != cur_batch_size:
+            observation_spec.shape = cur_batch_size
 
-        if hasattr(env, "reward_space") and env.reward_space is not None:
+        reward_space = self._reward_space(env)
+        if reward_space is not None:
             reward_spec = _gym_to_torchrl_spec_transform(
-                env.reward_space,
+                reward_space,
                 device=self.device,
                 categorical_action_encoding=self._categorical_action_encoding,
             )
@@ -959,10 +1043,11 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             observation_spec = observation_spec.expand(
                 *batch_size, *observation_spec.shape
             )
+
         self.done_spec = self._make_done_spec()
         self.action_spec = action_spec
-        if reward_spec.shape[: len(self.batch_size)] != self.batch_size:
-            self.reward_spec = reward_spec.expand(*self.batch_size, *reward_spec.shape)
+        if reward_spec.shape[: len(cur_batch_size)] != cur_batch_size:
+            self.reward_spec = reward_spec.expand(*cur_batch_size, *reward_spec.shape)
         else:
             self.reward_spec = reward_spec
         self.observation_spec = observation_spec
@@ -1020,6 +1105,12 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @implement_for("gym", None, "0.26")
     def _reset_output_transform(self, reset_data):  # noqa: F811
+        if (
+            isinstance(reset_data, tuple)
+            and len(reset_data) == 2
+            and isinstance(reset_data[1], dict)
+        ):
+            return reset_data
         return reset_data, None
 
     @implement_for("gym", "0.26", None)
@@ -1052,6 +1143,11 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             # if it's not a ndarray, we must return bool
             # since it's not a bool, we make it so
             terminated = bool(terminated)
+
+        if isinstance(observations, list) and len(observations) == 1:
+            # Until gym 0.25.2 we had rendered frames returned in lists of length 1
+            observations = observations[0]
+
         return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.24", "0.26")
@@ -1073,6 +1169,11 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             # if it's not a ndarray, we must return bool
             # since it's not a bool, we make it so
             terminated = bool(terminated)
+
+        if isinstance(observations, list) and len(observations) == 1:
+            # Until gym 0.25.2 we had rendered frames returned in lists of length 1
+            observations = observations[0]
+
         return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.26", None)
@@ -1114,28 +1215,25 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         self._env = self._build_env(**self._constructor_kwargs)
         self._make_specs(self._env)
 
-    @property
-    def info_dict_reader(self):
-        return self._info_dict_reader
-
-    @info_dict_reader.setter
-    def info_dict_reader(self, value: callable):
-        self._info_dict_reader = value
-
     def _reset(
         self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
         if self._is_batched:
             # batched (aka 'vectorized') env reset is a bit special: envs are
             # automatically reset. What we do here is just to check if _reset
-            # is present. If it is not, we just reset. Otherwise we just skip.
+            # is present. If it is not, we just reset. Otherwise, we just skip.
             if tensordict is None:
-                return super()._reset(tensordict)
+                return super()._reset(tensordict, **kwargs)
             reset = tensordict.get("_reset", None)
-            if reset is None:
-                return super()._reset(tensordict)
-            elif reset is not None:
-                return tensordict.exclude("_reset")
+            if reset is not None:
+                # we must copy the tensordict because the transform
+                # expects a tuple (tensordict, tensordict_reset) where the
+                # first still carries a _reset
+                tensordict = tensordict.exclude("_reset")
+            if reset is None or reset.all():
+                return super()._reset(tensordict, **kwargs)
+            else:
+                return tensordict
         return super()._reset(tensordict, **kwargs)
 
 
@@ -1199,6 +1297,9 @@ class GymEnv(GymWrapper):
             >>> print(env.spec.max_episode_steps)
             200
 
+
+        If a use-case is not covered by TorchRL, please submit an issue on GitHub.
+
     Examples:
         >>> from torchrl.envs import GymEnv
         >>> env = GymEnv("Pendulum-v1")
@@ -1243,6 +1344,26 @@ class GymEnv(GymWrapper):
         :meth:`~.set_info_dict_reader`. To automatically register the info_dict
         content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
 
+    .. note:: Gym spaces are not completely covered.
+        The following spaces are accounted for provided that they can be represented by a torch.Tensor, a nested tensor
+        and/or within a tensordict:
+
+          - spaces.Box
+          - spaces.Sequence
+          - spaces.Tuple
+          - spaces.Discrete
+          - spaces.MultiBinary
+          - spaces.MultiDiscrete
+          - spaces.Dict
+
+        Some considerations should be made when working with gym spaces. For instance, a tuple of spaces
+        can only be supported if the spaces are semantically identical (same dtype and same number of dimensions).
+        Ragged dimension can be supported through :func:`~torch.nested.nested_tensor`, but then there should be only
+        one level of tuple and data should be stacked along the first dimension (as nested_tensors can only be
+        stacked along the first dimension).
+
+        Check the example in examples/envs/gym_conversion_examples.py to know more!
+
     """
 
     def __init__(self, env_name, **kwargs):
@@ -1265,7 +1386,7 @@ class GymEnv(GymWrapper):
     ) -> None:
         kwargs.setdefault("disable_env_checker", True)
 
-    @implement_for("gymnasium", "0.27.0", None)
+    @implement_for("gymnasium")
     def _set_gym_args(  # noqa: F811
         self,
         kwargs,
@@ -1429,7 +1550,7 @@ class MOGymEnv(GymEnv):
     _make_specs = set_gym_backend("gymnasium")(GymEnv._make_specs)
 
 
-class terminal_obs_reader(BaseInfoDictReader):
+class terminal_obs_reader(default_info_dict_reader):
     """Terminal observation reader for 'vectorized' gym environments.
 
     When running envs in parallel, Gym(nasium) writes the result of the true call
@@ -1460,14 +1581,17 @@ class terminal_obs_reader(BaseInfoDictReader):
         "sb3": "terminal_observation",
         "gym": "final_observation",
     }
+    backend_info_key = {
+        "sb3": "terminal_info",
+        "gym": "final_info",
+    }
 
     def __init__(self, observation_spec: CompositeSpec, backend, name="final"):
+        super().__init__()
         self.name = name
-        self._info_spec = CompositeSpec(
-            {(self.name, key): item.clone() for key, item in observation_spec.items()},
-            shape=observation_spec.shape,
-        )
+        self._obs_spec = observation_spec.clone()
         self.backend = backend
+        self._final_validated = False
 
     @property
     def info_spec(self):
@@ -1481,6 +1605,11 @@ class terminal_obs_reader(BaseInfoDictReader):
             # presented as a np.ndarray. The key should be pixels or observation.
             # We just write that value at its location in the tensor
             tensor[index] = torch.as_tensor(obs, device=tensor.device)
+        if isinstance(obs, torch.Tensor):
+            # Simplest case: there is one observation,
+            # presented as a np.ndarray. The key should be pixels or observation.
+            # We just write that value at its location in the tensor
+            tensor[index] = obs.to(device=tensor.device)
         elif isinstance(obs, dict):
             if key not in obs:
                 raise KeyError(
@@ -1504,16 +1633,54 @@ class terminal_obs_reader(BaseInfoDictReader):
             )
 
     def __call__(self, info_dict, tensordict):
-        terminal_obs = info_dict.get(self.backend_key[self.backend], None)
-        for key, item in self.info_spec.items(True, True):
-            key = (key,) if isinstance(key, str) else key
-            final_obs_buffer = item.zero()
+        def replace_none(nparray):
+            if not isinstance(nparray, np.ndarray) or nparray.dtype != np.dtype("O"):
+                return nparray
+            is_none = np.array([info is None for info in nparray])
+            if is_none.any():
+                # Then it is a final observation and we delegate the registration to the appropriate reader
+                nz = (~is_none).nonzero()[0][0]
+                zero_like = tree_map(lambda x: np.zeros_like(x), nparray[nz])
+                for idx in is_none.nonzero()[0]:
+                    nparray[idx] = zero_like
+            return tree_map(lambda *x: np.stack(x), *nparray)
+
+        info_dict = tree_map(replace_none, info_dict)
+        # convert info_dict to a tensordict
+        info_dict = TensorDict(info_dict)
+        # get the terminal observation
+        terminal_obs = info_dict.pop(self.backend_key[self.backend], None)
+        # get the terminal info dict
+        terminal_info = info_dict.pop(self.backend_info_key[self.backend], None)
+
+        if terminal_info is None:
+            terminal_info = {}
+
+        super().__call__(info_dict, tensordict)
+        if not self._final_validated:
+            self.info_spec[self.name] = self._obs_spec.update(self.info_spec)
+            self._final_validated = True
+
+        final_info = terminal_info.copy()
+        if terminal_obs is not None:
+            final_info["observation"] = terminal_obs
+
+        for key in self.info_spec[self.name].keys():
+
+            spec = self.info_spec[self.name, key]
+
+            final_obs_buffer = spec.zero()
+            terminal_obs = final_info.get(key, None)
             if terminal_obs is not None:
                 for i, obs in enumerate(terminal_obs):
                     # writes final_obs inplace with terminal_obs content
-                    self._read_obs(obs, key[-1], final_obs_buffer, index=i)
-            tensordict.set(key, final_obs_buffer)
+                    self._read_obs(obs, key, final_obs_buffer, index=i)
+            tensordict.set((self.name, key), final_obs_buffer)
         return tensordict
+
+    def reset(self):
+        super().reset()
+        self._final_validated = False
 
 
 def _flip_info_tuple(info: Tuple[Dict]) -> Dict[str, tuple]:

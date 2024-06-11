@@ -2,15 +2,15 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import contextlib
-import functools
-import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -19,6 +19,7 @@ from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
+    _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
     default_value_kwargs,
@@ -75,6 +76,11 @@ class A2CLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        clip_value (float, optional): If provided, it will be used to compute a clipped version of the value
+            prediction with respect to the input value estimate and use it to calculate the value loss.
+            The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
+            and preventing large updates. However, it will have no impact if the value estimate was done by the current
+            version of the value estimator. Defaults to ``None``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -224,6 +230,13 @@ class A2CLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.GAE
 
+    actor_network: TensorDictModule
+    critic_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    critic_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_critic_network_params: TensorDictParams
+
     def __init__(
         self,
         actor_network: ProbabilisticTensorDictSequential = None,
@@ -242,6 +255,7 @@ class A2CLoss(LossModule):
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
         reduction: str = None,
+        clip_value: float | None = None,
     ):
         if actor is not None:
             actor_network = actor
@@ -302,54 +316,23 @@ class A2CLoss(LossModule):
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.loss_critic_type = loss_critic_type
 
+        if clip_value is not None:
+            if isinstance(clip_value, float):
+                clip_value = torch.tensor(clip_value)
+            elif isinstance(clip_value, torch.Tensor):
+                if clip_value.numel() != 1:
+                    raise ValueError(
+                        f"clip_value must be a float or a scalar tensor, got {clip_value}."
+                    )
+            else:
+                raise ValueError(
+                    f"clip_value must be a float or a scalar tensor, got {clip_value}."
+                )
+        self.register_buffer("clip_value", clip_value)
+
     @property
     def functional(self):
         return self._functional
-
-    @property
-    def actor(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.actor is deprecated, use {self.__class__.__name__}.actor_network instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.actor_network
-
-    @property
-    def critic(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.critic is deprecated, use {self.__class__.__name__}.critic_network instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.critic_network
-
-    @property
-    def actor_params(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.actor_network_params
-
-    @property
-    def critic_params(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.critic_params is deprecated, use {self.__class__.__name__}.critic_network_params instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.critic_network_params
-
-    @property
-    def target_critic_params(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.target_critic_params is deprecated, use {self.__class__.__name__}.target_critic_network_params instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.target_critic_network_params
 
     @property
     def in_keys(self):
@@ -412,7 +395,9 @@ class A2CLoss(LossModule):
             raise RuntimeError(
                 f"tensordict stored {self.tensor_keys.action} require grad."
             )
-        tensordict_clone = tensordict.select(*self.actor_network.in_keys).clone()
+        tensordict_clone = tensordict.select(
+            *self.actor_network.in_keys, strict=False
+        ).clone()
         with self.actor_network_params.to_module(
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
@@ -422,11 +407,23 @@ class A2CLoss(LossModule):
         return log_prob, dist
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
+        if self.clip_value:
+            try:
+                old_state_value = tensordict.get(self.tensor_keys.value).clone()
+            except KeyError:
+                raise KeyError(
+                    f"clip_value is set to {self.clip_value}, but "
+                    f"the key {self.tensor_keys.value} was not found in the input tensordict. "
+                    f"Make sure that the value_key passed to A2C exists in the input tensordict."
+                )
+
         try:
             # TODO: if the advantage is gathered by forward, this introduces an
             # overhead that we could easily reduce.
             target_return = tensordict.get(self.tensor_keys.value_target)
-            tensordict_select = tensordict.select(*self.critic_network.in_keys)
+            tensordict_select = tensordict.select(
+                *self.critic_network.in_keys, strict=False
+            )
             with self.critic_network_params.to_module(
                 self.critic_network
             ) if self.functional else contextlib.nullcontext():
@@ -446,7 +443,17 @@ class A2CLoss(LossModule):
                 f"TDLambdaEstimate and TDEstimate all return a 'value_target' entry that "
                 f"can be used for the value loss."
             )
-        return self.critic_coef * loss_value
+        clip_fraction = None
+        if self.clip_value:
+            loss_value, clip_fraction = _clip_value_loss(
+                old_state_value,
+                state_value,
+                self.clip_value.to(state_value.device),
+                target_return,
+                loss_value,
+                self.loss_critic_type,
+            )
+        return self.critic_coef * loss_value, clip_fraction
 
     @property
     @_cache_values
@@ -472,13 +479,18 @@ class A2CLoss(LossModule):
         td_out = TensorDict({"loss_objective": loss}, batch_size=[])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
-            td_out.set("entropy", entropy.detach())  # for logging
+            td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
-            loss_critic = self.loss_critic(tensordict)
+            loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
-        td_out = td_out.apply(
-            functools.partial(_reduce, reduction=self.reduction), batch_size=[]
+            if value_clip_fraction is not None:
+                td_out.set("value_clip_fraction", value_clip_fraction)
+        td_out = td_out.named_apply(
+            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            if name.startswith("loss_")
+            else value,
+            batch_size=[],
         )
         return td_out
 

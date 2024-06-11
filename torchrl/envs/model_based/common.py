@@ -5,9 +5,8 @@
 
 import abc
 import warnings
-from typing import List, Optional, Union
+from typing import List, Optional
 
-import numpy as np
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
@@ -17,7 +16,7 @@ from torchrl.envs.common import EnvBase
 
 
 class ModelBasedEnvBase(EnvBase):
-    """Basic environnement for Model Based RL algorithms.
+    """Basic environnement for Model Based RL sota-implementations.
 
     Wrapper around the model of the MBRL algorithm.
     It is meant to give an env framework to a world model (including but not limited to observations, reward, done state and safety constraints models).
@@ -117,13 +116,11 @@ class ModelBasedEnvBase(EnvBase):
         params: Optional[List[torch.Tensor]] = None,
         buffers: Optional[List[torch.Tensor]] = None,
         device: DEVICE_TYPING = "cpu",
-        dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
     ):
         super(ModelBasedEnvBase, self).__init__(
             device=device,
-            dtype=dtype,
             batch_size=batch_size,
             run_type_checks=run_type_checks,
         )
@@ -139,11 +136,15 @@ class ModelBasedEnvBase(EnvBase):
 
     def set_specs_from_env(self, env: EnvBase):
         """Sets the specs of the environment from the specs of the given environment."""
-        self.observation_spec = env.observation_spec.clone().to(self.device)
-        self.reward_spec = env.reward_spec.clone().to(self.device)
-        self.action_spec = env.action_spec.clone().to(self.device)
-        self.done_spec = env.done_spec.clone().to(self.device)
-        self.state_spec = env.state_spec.clone().to(self.device)
+        device = self.device
+        output_spec = env.output_spec.clone()
+        input_spec = env.input_spec.clone()
+        if device is not None:
+            output_spec = output_spec.to(device)
+            input_spec = input_spec.to(device)
+        self.__dict__["_output_spec"] = output_spec
+        self.__dict__["_input_spec"] = input_spec
+        self.empty_cache()
 
     def _step(
         self,
@@ -161,12 +162,13 @@ class ModelBasedEnvBase(EnvBase):
         else:
             tensordict_out = self.world_model(tensordict_out)
         # done can be missing, it will be filled by `step`
-        return tensordict_out.select(
+        tensordict_out = tensordict_out.select(
             *self.observation_spec.keys(),
             *self.full_done_spec.keys(),
             *self.full_reward_spec.keys(),
             strict=False,
         )
+        return tensordict_out
 
     @abc.abstractmethod
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:

@@ -1,644 +1,132 @@
-{# TEMPLATE VAR SETTINGS #}
-{%- set url_root = pathto('', 1) %}
-{%- if url_root == '#' %}{% set url_root = '' %}{% endif %}
-{%- if not embedded and docstitle %}
-  {%- set titlesuffix = " &mdash; "|safe + docstitle|e %}
-{%- else %}
-  {%- set titlesuffix = "" %}
-{%- endif %}
-{%- set lang_attr = 'en' if language == None else (language | replace('_', '-')) %}
-{% import 'theme_variables.jinja' as theme_variables %}
+{% extends "!layout.html" %}
 
-<!DOCTYPE html>
-<!--[if IE 8]><html class="no-js lt-ie9" lang="{{ lang_attr }}" > <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js" lang="{{ lang_attr }}" > <!--<![endif]-->
-<head>
-  <meta charset="utf-8">
-  {{ metatags }}
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  {% block htmltitle %}
-  <title>{{ title|striptags|e }}{{ titlesuffix }}</title>
-  {% endblock %}
+{% block sidebartitle %}
+    <div class="version">
+      <a href="{{ pathto('../versions.html', 1) }}"><span style="font-size:110%">{{ version }} &#x25BC</span></a>
+    </div>
+    {% include "searchbox.html" %}
+{% endblock %}
 
-  {# FAVICON #}
-  {% if favicon %}
-    <link rel="shortcut icon" href="{{ pathto('_static/' + favicon, 1) }}"/>
-  {% endif %}
-  {# CANONICAL URL #}
-  {% if theme_canonical_url %}
-    <link rel="canonical" href="{{ theme_canonical_url }}{{ pagename }}.html"/>
-  {% endif %}
+{#
+    ################################################################################
+    # Adding Colab / notebook header like tutorials repo
+    # Based off of
+    # https://github.com/pytorch/pytorch_sphinx_theme/blob/fe1f3d5b9233497d81d04f55f5750ccad92500be/pytorch_sphinx_theme/layout.html#L275-L319
+    ################################################################################
+#}
 
-  {# CSS #}
+{%- block content %}
+    {% if 'tutorial' in pagename %}
 
-  {# OPENSEARCH #}
-  {% if not embedded %}
-    {% if use_opensearch %}
-      <link rel="search" type="application/opensearchdescription+xml"
-            title="{% trans docstitle=docstitle|e %}Search within {{ docstitle }}{% endtrans %}"
-            href="{{ pathto('_static/opensearch.xml', 1) }}"/>
+    <div class="pytorch-call-to-action-links">
+      <div id="tutorial-type">{{ pagename }}</div>
+
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="{{ pathto('_static/images/pytorch-colab.svg', 1) }}"/>
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="{{ pathto('_static/images/pytorch-download.svg', 1) }}"/>
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="{{ pathto('_static/images/pytorch-github.svg', 1) }}"/>
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </div>
+
     {% endif %}
+    {{ super() }}
 
-  {% endif %}
+{% endblock %}
 
-  <link rel="stylesheet" href="{{ pathto('_static/' + style, 1) }}" type="text/css" />
-  <!-- <link rel="stylesheet" href="{{ pathto('_static/pygments.css', 1) }}" type="text/css" /> -->
-  {%- for css in css_files %}
-    {%- if css|attr("rel") %}
-  <link rel="{{ css.rel }}" href="{{ pathto(css.filename, 1) }}" type="text/css"{% if css.title is not none %} title="{{ css.title }}"{% endif %} />
-    {%- else %}
-  <link rel="stylesheet" href="{{ pathto(css, 1) }}" type="text/css" />
-    {%- endif %}
-  {%- endfor %}
-  {%- for cssfile in extra_css_files %}
-    <link rel="stylesheet" href="{{ pathto(cssfile, 1) }}" type="text/css" />
-  {%- endfor %}
+{#
+    ################################################################################
+    # Because the repo URL is hardcoded to pytorch/tutorials,
+    # we need to modify the URL to pytorch/rl.
+    # We insert the script in footer so that it is executed after the main `theme.js` is loaded
+    # Based off of
+    # https://github.com/pytorch/pytorch_sphinx_theme/blob/b4d00058a48604d8fb63771b513a50450f0ee188/js/theme.js#L245-L263
+    ################################################################################
+#}
 
-  {%- block linktags %}
-    {%- if hasdoc('about') %}
-    <link rel="author" title="{{ _('About these documents') }}" href="{{ pathto('about') }}" />
-    {%- endif %}
-    {%- if hasdoc('genindex') %}
-    <link rel="index" title="{{ _('Index') }}" href="{{ pathto('genindex') }}" />
-    {%- endif %}
-    {%- if hasdoc('search') %}
-    <link rel="search" title="{{ _('Search') }}" href="{{ pathto('search') }}" />
-    {%- endif %}
-    {%- if hasdoc('copyright') %}
-    <link rel="copyright" title="{{ _('Copyright') }}" href="{{ pathto('copyright') }}" />
-    {%- endif %}
-    {%- if next %}
-    <link rel="next" title="{{ next.title|striptags|e }}" href="{{ next.link|e }}" />
-    {%- endif %}
-    {%- if prev %}
-    <link rel="prev" title="{{ prev.title|striptags|e }}" href="{{ prev.link|e }}" />
-    {%- endif %}
-  {%- endblock %}
+{%- block footer %}
+    {{ super() }}
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".reference.download")[1].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
 
-  {%- block extrahead %}
-  <!-- Google Analytics -->
-  {% if theme_analytics_id %}
-    <script async src="https://www.googletagmanager.com/gtag/js?id={{ theme_analytics_id }}"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
 
-      gtag('config', '{{ theme_analytics_id }}');
-    </script>
-  {% endif %}
-  <!-- End Google Analytics -->
-  {% endblock %}
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
 
-  {# Keep modernizr in head - http://modernizr.com/docs/#installing #}
-  <script src="{{ pathto('_static/js/modernizr.min.js', 1) }}"></script>
-
-  {% include "fonts.html" %}
-  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
-</head>
-
-<div class="container-fluid header-holder tutorials-header" id="header-holder">
-  <div class="container">
-    <div class="header-container">
-      <a class="header-logo" href="{{ theme_variables.external_urls['home'] }}" aria-label="PyTorch"></a>
-
-      <div class="main-menu">
-        <ul>
-          <li>
-            <a href="{{ theme_variables.external_urls['get_started'] }}">Get Started</a>
-          </li>
-
-          <li>
-            <a href="{{ theme_variables.external_urls['ecosystem'] }}">Ecosystem</a>
-          </li>
-
-          <li>
-            <a href="{{ theme_variables.external_urls['mobile'] }}">Mobile</a>
-          </li>
-
-          <li>
-            <a href="{{ theme_variables.external_urls['blog'] }}">Blog</a>
-          </li>
-
-          <li {%- if theme_pytorch_project == 'tutorials' %} class="active"{% endif %}>
-            <a href="{{ theme_variables.external_urls['tutorials'] }}">Tutorials</a>
-          </li>
-
-          <li {%- if theme_pytorch_project == 'docs' %} class="active docs-active"{% endif %}>
-            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="resource-option with-down-orange-arrow">
-                Docs
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="doc-dropdown-option nav-dropdown-item" href="{{ theme_variables.external_urls['docs'] }}">
-                  <span class="dropdown-title">PyTorch</span>
-                  <p></p>
-                </a>
-                <a class="doc-dropdown-option nav-dropdown-item" href="{{ theme_variables.external_urls['audio'] }}">
-                  <span class="dropdown-title">torchaudio</span>
-                  <p></p>
-                </a>
-                <a class="doc-dropdown-option nav-dropdown-item" href="{{ theme_variables.external_urls['text'] }}">
-                  <span class="dropdown-title">torchtext</span>
-                  <p></p>
-                </a>
-                <a class="doc-dropdown-option nav-dropdown-item" href="{{ theme_variables.external_urls['vision'] }}">
-                  <span class="dropdown-title">torchvision</span>
-                  <p></p>
-                </a>
-                <a class="doc-dropdown-option nav-dropdown-item" href="{{ theme_variables.external_urls['torcharrow'] }}">
-                  <span class="dropdown-title">torcharrow</span>
-                  <p></p>
-                </a>
-                <a class="doc-dropdown-option nav-dropdown-item" href="{{ theme_variables.external_urls['data'] }}">
-                  <span class="dropdown-title">TorchData</span>
-                  <p></p>
-                </a>
-                <a class="doc-dropdown-option nav-dropdown-item" href="{{ theme_variables.external_urls['torchrec'] }}">
-                  <span class="dropdown-title">TorchRec</span>
-                  <p></p>
-                </a>
-                <a class="doc-dropdown-option nav-dropdown-item" href="{{ theme_variables.external_urls['serve'] }}">
-                  <span class="dropdown-title">TorchServe</span>
-                  <p></p>
-                </a>
-                <a class="doc-dropdown-option nav-dropdown-item" href="{{ theme_variables.external_urls['torchx'] }}">
-                  <span class="dropdown-title">TorchX</span>
-                  <p></p>
-                </a>
-                <a class="doc-dropdown-option nav-dropdown-item" href="{{ theme_variables.external_urls['xla'] }}">
-                  <span class="dropdown-title">PyTorch on XLA Devices</span>
-                  <p></p>
-                </a>
-            </div>
-          </li>
-
-          <li>
-            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="resource-option with-down-arrow">
-                Resources
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="{{ theme_variables.external_urls['features'] }}">
-                  <span class="dropdown-title">About</span>
-                  <p>Learn about PyTorch’s features and capabilities</p>
-                </a>
-                <a class="nav-dropdown-item" href="{{ theme_variables.external_urls['foundation'] }}">
-                  <span class="dropdown-title">PyTorch Foundation</span>
-                  <p>Learn about the PyTorch foundation</p>
-                </a>
-                <a class="nav-dropdown-item" href="{{ theme_variables.external_urls['community'] }}">
-                  <span class="dropdown-title">Community</span>
-                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered.</p>
-                </a>
-                <a class="nav-dropdown-item" href="{{ theme_variables.external_urls['community-stories'] }}">
-                  <span class="dropdown-title">Community Stories</span>
-                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch.</p>
-                </a>
-                <a class="nav-dropdown-item" href="{{ theme_variables.external_urls['resources'] }}">
-                  <span class="dropdown-title">Developer Resources</span>
-                  <p>Find resources and get questions answered</p>
-                </a>
-                <a class="nav-dropdown-item" href="{{ theme_variables.external_urls['events'] }}">
-                  <span class="dropdown-title">Events</span>
-                  <p>Find events, webinars, and podcasts</p>
-                </a>
-                <a class="nav-dropdown-item" href="{{ theme_variables.external_urls['forums'] }}" target="_blank">
-                  <span class="dropdown-title">Forums</span>
-                  <p>A place to discuss PyTorch code, issues, install, research</p>
-                </a>
-                <a class="nav-dropdown-item" href="{{ theme_variables.external_urls['hub'] }}">
-                  <span class="dropdown-title">Models (Beta)</span>
-                  <p>Discover, publish, and reuse pre-trained models</p>
-                </a>
-              </div>
-            </div>
-          </li>
-
-          <li>
-            <a href="{{ theme_variables.external_urls['github'] }}">GitHub</a>
-          </li>
-        </ul>
-      </div>
-
-      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
-    </div>
-  </div>
-</div>
-
-<body class="pytorch-body">
-
-  {% block extrabody %} {% endblock %}
-
-    {# SIDE NAV, TOGGLES ON MOBILE #}
-
-    <div class="table-of-contents-link-wrapper">
-      <span>Table of Contents</span>
-      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
-    </div>
-
-    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
-      <div class="pytorch-side-scroll">
-        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-          <div class="pytorch-left-menu-search">
-            {% block sidebartitle %}
-
-            {% if theme_display_version %}
-              {%- set nav_version = version %}
-              {% if READTHEDOCS and current_version %}
-                {%- set nav_version = current_version %}
-              {% endif %}
-              {% if nav_version %}
-                <div class="version">
-                  {{ nav_version }}
-                </div>
-              {% endif %}
-            {% endif %}
-
-            {% include "searchbox.html" %}
-
-            {% endblock %}
-          </div>
-
-          {% block menu %}
-            {#
-              The singlehtml builder doesn't handle this toctree call when the
-              toctree is empty. Skip building this for now.
-            #}
-            {% if 'singlehtml' not in builder %}
-              {% set global_toc = toctree(maxdepth=1,
-                                          collapse=theme_collapse_navigation|tobool,
-                                          includehidden=theme_includehidden|tobool,
-                                          titles_only=theme_titles_only|tobool) %}
-            {% endif %}
-            {% if global_toc %}
-              {{ global_toc }}
-            {% else %}
-              <!-- Local TOC -->
-              <div class="local-toc">{{ toc }}</div>
-            {% endif %}
-          {% endblock %}
-        </div>
-      </div>
-    </nav>
-
-    <div class="pytorch-container">
-      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
-        <div class="pytorch-breadcrumbs-wrapper">
-          {% include "breadcrumbs.html" %}
-        </div>
-
-        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
-          Shortcuts
-        </div>
-      </div>
-
-      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
-        <div class="pytorch-content-left">
-
-        {% if theme_pytorch_project == 'tutorials' or theme_pytorch_project == 'torchrl'%}
-          <div class="pytorch-call-to-action-links">
-            <div id="tutorial-type">{{ pagename }}</div>
-
-            <div id="google-colab-link">
-              <img class="call-to-action-img" src="{{ pathto('_static/images/pytorch-colab.svg', 1) }}"/>
-              <div class="call-to-action-desktop-view">Run in Google Colab</div>
-              <div class="call-to-action-mobile-view">Colab</div>
-            </div>
-            <div id="download-notebook-link">
-              <img class="call-to-action-notebook-img" src="{{ pathto('_static/images/pytorch-download.svg', 1) }}"/>
-              <div class="call-to-action-desktop-view">Download Notebook</div>
-              <div class="call-to-action-mobile-view">Notebook</div>
-            </div>
-            <div id="github-view-link">
-              <img class="call-to-action-img" src="{{ pathto('_static/images/pytorch-github.svg', 1) }}"/>
-              <div class="call-to-action-desktop-view">View on GitHub</div>
-              <div class="call-to-action-mobile-view">GitHub</div>
-            </div>
-          </div>
-
-        {% endif %}
-
-        {%- block content %}
-          {% if theme_style_external_links|tobool %}
-          <div class="rst-content style-external-links">
-          {% else %}
-          <div class="rst-content">
-          {% endif %}
-            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
-            {%- block document %}
-             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
-              {% block body %}{% endblock %}
-             </article>
-             {% if self.comments()|trim %}
-             <div class="articleComments">
-              {% block comments %}{% endblock %}
-             </div>
-             {% endif%}
-            </div>
-            {%- endblock %}
-            {% include "footer.html" %}
-          </div>
-        {%- endblock %}
-        </div>
-
-        <div class="pytorch-content-right" id="pytorch-content-right">
-          <div class="pytorch-right-menu" id="pytorch-right-menu">
-            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
-              {{ toc }}
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-
-  {% include "versions.html" %}
-
-  {% if not embedded %}
-
-     {% if sphinx_version >= "1.8.0" %}
-       <script type="text/javascript" id="documentation_options" data-url_root="{{ pathto('', 1) }}" src="{{ pathto('_static/documentation_options.js', 1) }}"></script>
-       {%- for scriptfile in script_files %}
-         {{ js_tag(scriptfile) }}
-       {%- endfor %}
-     {% else %}
-       <script type="text/javascript">
-           var DOCUMENTATION_OPTIONS = {
-               URL_ROOT:'{{ url_root }}',
-               VERSION:'{{ release|e }}',
-               LANGUAGE:'{{ language }}',
-               COLLAPSE_INDEX:false,
-               FILE_SUFFIX:'{{ '' if no_search_suffix else file_suffix }}',
-               HAS_SOURCE:  {{ has_source|lower }},
-               SOURCELINK_SUFFIX: '{{ sourcelink_suffix }}'
+      {#
+       # Override the right side menu bar behavior so that subsections
+       # are shown by default in tutorial page.
+       # Based off of
+       # https://github.com/pytorch/pytorch_sphinx_theme/blob/b4d00058a48604d8fb63771b513a50450f0ee188/pytorch_sphinx_theme/static/js/theme.js#L568-L579
+       #}
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
            };
-       </script>
-       {%- for scriptfile in script_files %}
-         <script type="text/javascript" src="{{ pathto(scriptfile, 1) }}"></script>
-       {%- endfor %}
-     {% endif %}
+       });
+    </script>
 
-  {% endif %}
-
-  <script type="text/javascript" src="{{ pathto('_static/js/vendor/popper.min.js', 1) }}"></script>
-  <script type="text/javascript" src="{{ pathto('_static/js/vendor/bootstrap.min.js', 1) }}"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
-  <script type="text/javascript" src="{{ pathto('_static/js/theme.js', 1) }}"></script>
-
-  <script type="text/javascript">
-      jQuery(function () {
-          SphinxRtdTheme.Navigation.enable({{ 'true' if theme_sticky_navigation|tobool else 'false' }});
+    {% if 'libtorchaudio' in pagename %}
+    {#
+     # change the layout of signature one param per line if #params >= 2
+     #}
+    <script type="text/javascript">
+      $(window).ready(function() {
+          $("dt.sig.sig-object.cpp").each(function(i) {
+              let newline = "<br>\20\20\20\20";
+              let params = $(this).children(".sig-param");
+              if (params.length >= 2) {
+                  $(this).html($(this).html().replace(/, /g, "," + newline));
+                  $(this).children(".sig-paren").each(function(i) {
+                      console.log(i, $(this));
+                      if (i == 0) {
+                          $(this).html($(this).html() + newline + "\20");
+                      } else if (i == 1) {
+                          $(this).html("<br>" + $(this).html());
+                      }
+                  });
+              }
+          });
       });
-  </script>
-
-  {%- block footer %} {% endblock %}
-
-  <!-- Begin Footer -->
-
-  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
-    <div class="container">
-      <div class="row">
-        <div class="col-md-4 text-center">
-          <h2>Docs</h2>
-          <p>Access comprehensive developer documentation for PyTorch</p>
-          <a class="with-right-arrow" href="{{ theme_variables.external_urls['docs'] }}">View Docs</a>
-        </div>
-
-        <div class="col-md-4 text-center">
-          <h2>Tutorials</h2>
-          <p>Get in-depth tutorials for beginners and advanced developers</p>
-          <a class="with-right-arrow" href="{{ theme_variables.external_urls['tutorials'] }}">View Tutorials</a>
-        </div>
-
-        <div class="col-md-4 text-center">
-          <h2>Resources</h2>
-          <p>Find development resources and get your questions answered</p>
-          <a class="with-right-arrow" href="{{ theme_variables.external_urls['resources'] }}">View Resources</a>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <footer class="site-footer">
-    <div class="container footer-container">
-      <div class="footer-logo-wrapper">
-        <a href="{{ theme_variables.external_urls['home'] }}" class="footer-logo"></a>
-      </div>
-
-      <div class="footer-links-wrapper">
-        <div class="footer-links-col">
-          <ul>
-            <li class="list-title"><a href="{{ theme_variables.external_urls['home'] }}">PyTorch</a></li>
-            <li><a href="{{ theme_variables.external_urls['get_started'] }}">Get Started</a></li>
-            <li><a href="{{ theme_variables.external_urls['features'] }}">Features</a></li>
-            <li><a href="{{ theme_variables.external_urls['ecosystem'] }}">Ecosystem</a></li>
-            <li><a href="{{ theme_variables.external_urls['blog'] }}">Blog</a></li>
-            <li><a href="{{ theme_variables.external_urls['contributing'] }}">Contributing</a></li>
-          </ul>
-        </div>
-
-        <div class="footer-links-col">
-          <ul>
-            <li class="list-title"><a href="{{ theme_variables.external_urls['resources'] }}">Resources</a></li>
-            <li><a href="{{ theme_variables.external_urls['tutorials'] }}">Tutorials</a></li>
-            <li><a href="{{ theme_variables.external_urls['docs'] }}">Docs</a></li>
-            <li><a href="{{ theme_variables.external_urls['discuss'] }}" target="_blank">Discuss</a></li>
-            <li><a href="{{ theme_variables.external_urls['github_issues'] }}" target="_blank">Github Issues</a></li>
-            <li><a href="{{ theme_variables.external_urls['brand_guidelines'] }}" target="_blank">Brand Guidelines</a></li>
-          </ul>
-        </div>
-
-        <div class="footer-links-col">
-          <ul>
-            <li class="list-title">Stay up to date</li>
-            <li><a href="{{ theme_variables.external_urls['facebook'] }}" target="_blank">Facebook</a></li>
-            <li><a href="{{ theme_variables.external_urls['twitter'] }}" target="_blank">Twitter</a></li>
-            <li><a href="{{ theme_variables.external_urls['youtube'] }}" target="_blank">YouTube</a></li>
-            <li><a href="{{ theme_variables.external_urls['linkedIn'] }}" target="_blank">LinkedIn</a></li>
-          </ul>
-          </div>
-
-        <div class="footer-links-col">
-          <ul>
-            <li class="list-title">PyTorch Podcasts</li>
-            <li><a href="{{ theme_variables.external_urls['spotify'] }}" target="_blank">Spotify</a></li>
-            <li><a href="{{ theme_variables.external_urls['apple'] }}" target="_blank">Apple</a></li>
-            <li><a href="{{ theme_variables.external_urls['google'] }}" target="_blank">Google</a></li>
-            <li><a href="{{ theme_variables.external_urls['amazon'] }}" target="_blank">Amazon</a></li>
-          </ul>
-         </div>
-        </div>
-
-        <div class="privacy-policy">
-          <ul>
-            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
-            <li class="privacy-policy-links">|</li>
-            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
-          </ul>
-        </div>
-        <div class="copyright">
-        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
-          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
-          <a href="www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
-          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
-          please see <a href="www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
-      </div>
-     </div>
-
-  </footer>
-
-  {% include "cookie_banner.html" %}
-
-  <!-- End Footer -->
-
-  <!-- Begin Mobile Menu -->
-
-  <div class="mobile-main-menu">
-    <div class="container-fluid">
-      <div class="container">
-        <div class="mobile-main-menu-header-container">
-          <a class="header-logo" href="{{ theme_variables.external_urls['home'] }}" aria-label="PyTorch"></a>
-          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
-        </div>
-      </div>
-    </div>
-
-    <div class="mobile-main-menu-links-container">
-      <div class="main-menu">
-        <ul>
-          <li>
-            <a href="{{ theme_variables.external_urls['get_started'] }}">Get Started</a>
-          </li>
-
-          <li>
-            <a href="{{ theme_variables.external_urls['ecosystem'] }}">Ecosystem</a>
-          </li>
-
-          <li>
-            <a href="{{ theme_variables.external_urls['mobile'] }}">Mobile</a>
-          </li>
-
-          <li>
-            <a href="{{ theme_variables.external_urls['blog'] }}">Blog</a>
-          </li>
-
-          <li {%- if theme_pytorch_project == 'tutorials' %} class="active"{%- endif %}>
-            <a href="{{ theme_variables.external_urls['tutorials'] }}">Tutorials</a>
-          </li>
-
-          <li class="resources-mobile-menu-title" {%- if theme_pytorch_project == 'docs' %} class="active"{%- endif %}>
-            Docs
-          </li>
-
-          <ul class="resources-mobile-menu-items">
-            <li>
-              <a href="{{ theme_variables.external_urls['docs'] }}">PyTorch</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['audio'] }}">torchaudio</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['text'] }}">torchtext</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['vision'] }}">torchvision</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['torcharrow'] }}">torcharrow</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['data'] }}">TorchData</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['torchrec'] }}">TorchRec</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['serve'] }}">TorchServe</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['torchx'] }}">TorchX</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['xla'] }}">PyTorch on XLA Devices</a>
-            </li>
-          </ul>
-
-          <li class="resources-mobile-menu-title">
-            Resources
-          </li>
-
-           <ul class="resources-mobile-menu-items">
-
-            <li>
-              <a href="{{ theme_variables.external_urls['features'] }}">About</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['foundation'] }}">PyTorch Foundation</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['community'] }}">Community</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['community-stories'] }}">Community Stories</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['resources'] }}">Developer Resources</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['events'] }}">Events</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['forums'] }}">Forums</a>
-            </li>
-
-            <li>
-              <a href="{{ theme_variables.external_urls['hub'] }}">Models (Beta)</a>
-            </li>
-          </ul>
-
-          <li>
-            <a href="{{ theme_variables.external_urls['github'] }}">Github</a>
-          </li>
-        </ul>
-      </div>
-    </div>
-  </div>
-
-  <!-- End Mobile Menu -->
-
-  <script type="text/javascript" src="{{ pathto('_static/js/vendor/anchor.min.js', 1) }}"></script>
-
-  <script type="text/javascript">
-    $(document).ready(function() {
-      mobileMenu.bind();
-      mobileTOC.bind();
-      pytorchAnchors.bind();
-      sideMenus.bind();
-      scrollToAnchor.bind();
-      highlightNavigation.bind();
-      mainMenuDropdown.bind();
-      filterTags.bind();
-
-      // Add class to links that have code blocks, since we cannot create links in code blocks
-      $("article.pytorch-article a span.pre").each(function(e) {
-        $(this).closest("a").addClass("has-code");
-      });
-    })
-  </script>
-</body>
-</html>
+    </script>
+    {% endif %}
+{% endblock %}
