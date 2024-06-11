@@ -1044,7 +1044,6 @@ class SliceSampler(Sampler):
         return result
 
     def _get_stop_and_length(self, storage, fallback=True):
-        last_cursor = getattr(storage, "_last_cursor", None)
         if self.cache_values and "stop-and-length" in self._cache:
             return self._cache.get("stop-and-length")
 
