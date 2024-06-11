@@ -24,12 +24,10 @@ import torch
 from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
-    NonTensorData,
     TensorDict,
     TensorDictBase,
 )
 from tensordict._tensordict import unravel_key
-from tensordict.tensorclass import NonTensorStack
 from torch import multiprocessing as mp
 from torchrl._utils import (
     _check_for_faulty_process,
