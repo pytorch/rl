@@ -2120,7 +2120,9 @@ class NonTensorSpec(TensorSpec):
         return (
             isinstance(val, NonTensorData)
             and val.shape == shape
-            and val.device == self.device
+            # We relax constrains on device as they're hard to enforce for non-tensor
+            #  tensordicts and pointless
+            # and val.device == self.device
             and val.dtype == self.dtype
         )
 
