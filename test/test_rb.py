@@ -3182,6 +3182,9 @@ class TestCheckpointers:
             if frames_per_batch > 100:
                 assert rb._storage._is_full
                 assert len(rb) == 102
+                # Checks that when writing to the buffer with a batch greater than the total
+                # size, we get the last step written properly.
+                assert (rb[:]["next", "step_count"][:, -1] != 0).any()
             rb.dumps(tmpdir)
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
