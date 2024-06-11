@@ -460,6 +460,16 @@ class Flat2TED:
         if _storage_shape is not None and len(_storage_shape) > 1:
             # iterate over data and allocate
             if out is None:
+                # out = TensorDict(batch_size=_storage_shape)
+                # for i in range(out.ndim):
+                #     if i >= 2:
+                #         # FLattening the lazy stack will make the data unavailable - we need to find a way to make this
+                #         # possible.
+                #         raise RuntimeError(
+                #             "Checkpointing an uninitialized buffer with more than 2 dimensions is currently not supported. "
+                #             "Please file an issue on GitHub to ask for this feature!"
+                #         )
+                #     out = LazyStackedTensorDict(*out.unbind(i), stack_dim=i)
                 out = TensorDict(batch_size=_storage_shape)
                 for i in range(1, out.ndim):
                     if i >= 2:

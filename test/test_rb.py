@@ -93,6 +93,7 @@ from torchrl.envs.transforms.transforms import (
     RewardClipping,
     RewardScaling,
     SqueezeTransform,
+    StepCounter,
     ToTensorImage,
     UnsqueezeTransform,
     VecNorm,
@@ -3114,12 +3115,16 @@ class TestCheckpointers:
         "checkpointer",
         [FlatStorageCheckpointer, H5StorageCheckpointer, NestedStorageCheckpointer],
     )
-    def test_simple_env(self, storage_type, checkpointer, tmpdir):
+    @pytest.mark.parametrize("frames_per_batch", [22, 122])
+    def test_simple_env(self, storage_type, checkpointer, tmpdir, frames_per_batch):
         env = GymEnv(CARTPOLE_VERSIONED(), device=None)
         env.set_seed(0)
         torch.manual_seed(0)
         collector = SyncDataCollector(
-            env, policy=env.rand_step, total_frames=200, frames_per_batch=22
+            env,
+            policy=env.rand_step,
+            total_frames=200,
+            frames_per_batch=frames_per_batch,
         )
         rb = ReplayBuffer(storage=storage_type(100))
         rb_test = ReplayBuffer(storage=storage_type(100))
@@ -3137,18 +3142,28 @@ class TestCheckpointers:
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])
+            assert rb._writer._cursor == rb_test._writer._cursor
 
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    @pytest.mark.parametrize("frames_per_batch", [22, 122])
     @pytest.mark.parametrize(
         "checkpointer",
         [FlatStorageCheckpointer, NestedStorageCheckpointer, H5StorageCheckpointer],
     )
-    def test_multi_env(self, storage_type, checkpointer, tmpdir):
-        env = SerialEnv(3, lambda: GymEnv(CARTPOLE_VERSIONED(), device=None))
+    def test_multi_env(self, storage_type, checkpointer, tmpdir, frames_per_batch):
+        env = SerialEnv(
+            3,
+            lambda: GymEnv(CARTPOLE_VERSIONED(), device=None).append_transform(
+                StepCounter()
+            ),
+        )
         env.set_seed(0)
         torch.manual_seed(0)
         collector = SyncDataCollector(
-            env, policy=env.rand_step, total_frames=200, frames_per_batch=22
+            env,
+            policy=env.rand_step,
+            total_frames=200,
+            frames_per_batch=frames_per_batch,
         )
         rb = ReplayBuffer(storage=storage_type(100, ndim=2))
         rb_test = ReplayBuffer(storage=storage_type(100, ndim=2))
@@ -3164,10 +3179,14 @@ class TestCheckpointers:
         for data in collector:
             rb.extend(data)
             assert rb._storage.max_size == 102
+            if frames_per_batch > 100:
+                assert rb._storage._is_full
+                assert len(rb) == 102
             rb.dumps(tmpdir)
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])
+            assert rb._writer._cursor == rb_test._writer._cursor
 
 
 if __name__ == "__main__":

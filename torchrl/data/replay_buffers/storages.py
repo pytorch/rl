@@ -432,6 +432,7 @@ class TensorStorage(Storage):
                 leaf = next(tree_iter(self._storage))
                 _total_shape = leaf.shape[: self.ndim]
             self.__dict__["_total_shape_value"] = _total_shape
+            self._len = torch.Size([self._len_along_dim0, *_total_shape[1:]]).numel()
         return _total_shape
 
     @property
@@ -443,10 +444,10 @@ class TensorStorage(Storage):
     def _len_along_dim0(self):
         # returns the length of the buffer along dim0
         len_along_dim = len(self)
-        if self.ndim:
+        if self.ndim > 1:
             _total_shape = self._total_shape
             if _total_shape is not None:
-                len_along_dim = len_along_dim // _total_shape[1:].numel()
+                len_along_dim = -(len_along_dim // -_total_shape[1:].numel())
             else:
                 return None
         return len_along_dim
@@ -454,7 +455,7 @@ class TensorStorage(Storage):
     def _max_size_along_dim0(self, *, single_data=None, batched_data=None):
         # returns the max_size of the buffer along dim0
         max_size = self.max_size
-        if self.ndim:
+        if self.ndim > 1:
             shape = self.shape
             if shape is None:
                 if single_data is not None:
@@ -471,14 +472,14 @@ class TensorStorage(Storage):
                         break
                 if batched_data is not None:
                     datashape = datashape[1:]
-                max_size = max_size // datashape.numel()
+                max_size = -(max_size // -datashape.numel())
             else:
-                max_size = max_size // self._total_shape[1:].numel()
+                max_size = -(max_size // -self._total_shape[1:].numel())
         return max_size
 
     @property
     def shape(self):
-        # Shape, turncated where needed to accomodate for the length of the storage
+        # Shape, truncated where needed to accommodate for the length of the storage
         if self._is_full:
             return self._total_shape
         _total_shape = self._total_shape
