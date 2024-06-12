@@ -926,7 +926,9 @@ class SliceSampler(Sampler):
         )
 
     @classmethod
-    def _find_start_stop_traj(cls, *, trajectory=None, end=None, at_capacity: bool):
+    def _find_start_stop_traj(
+        cls, *, trajectory=None, end=None, at_capacity: bool, cursor=None
+    ):
         if trajectory is not None:
             # slower
             # _, stop_idx = torch.unique_consecutive(trajectory, return_counts=True)
@@ -954,12 +956,28 @@ class SliceSampler(Sampler):
                 dim=0,
                 value=1,
             )
-        elif not end.any(0).all():
-            # we must have at least one end by traj to delimitate trajectories
+        else:
+            # we must have at least one end by traj to individuate trajectories
             # so if no end can be found we set it manually
-            mask = ~end.any(0, True)
-            mask = torch.cat([torch.zeros_like(end[:-1]), mask])
-            end = torch.masked_fill(mask, end, 1)
+            if cursor is not None:
+                if isinstance(cursor, torch.Tensor):
+                    cursor = cursor[-1].item()
+                elif isinstance(cursor, range):
+                    cursor = cursor[-1]
+                if not _is_int(cursor):
+                    raise RuntimeError(
+                        "cursor should be an integer or a 1d tensor or a range."
+                    )
+                end = torch.index_fill(
+                    end,
+                    index=torch.tensor(cursor, device=end.device, dtype=torch.long),
+                    dim=0,
+                    value=1,
+                )
+            if not end.any(0).all():
+                mask = ~end.any(0, True)
+                mask = torch.cat([torch.zeros_like(end[:-1]), mask])
+                end = torch.masked_fill(mask, end, 1)
         ndim = end.ndim
         if ndim == 0:
             raise RuntimeError(
@@ -994,7 +1012,7 @@ class SliceSampler(Sampler):
             # In this case we have only one start and stop has already been set
             pass
         lengths = stop_idx[:, 0] - start_idx[:, 0] + 1
-        lengths[lengths < 0] = lengths[lengths < 0] + length
+        lengths[lengths <= 0] = lengths[lengths <= 0] + length
         return start_idx, stop_idx, lengths
 
     def _start_to_end(self, st: torch.Tensor, length: int):
@@ -1072,7 +1090,9 @@ class SliceSampler(Sampler):
                         "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                     )
                 vals = self._find_start_stop_traj(
-                    end=done.squeeze()[: len(storage)], at_capacity=storage._is_full
+                    end=done.squeeze()[: len(storage)],
+                    at_capacity=storage._is_full,
+                    cursor=getattr(storage, "_last_cursor", None),
                 )
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals
@@ -1270,7 +1290,6 @@ class SliceSampler(Sampler):
             ],
             1,
         )
-
         index = self._tensor_slices_from_startend(seq_length, starts, storage_length)
         if self.truncated_key is not None:
             truncated_key = self.truncated_key

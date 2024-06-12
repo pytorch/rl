@@ -2609,9 +2609,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             for key in self.done_keys:
                 if _ends_with(key, "truncated"):
                     val = out_td.get(("next", key))
+                    done = out_td.get(("next", _replace_last(key, "done")))
                     val[(slice(None),) * (out_td.ndim - 1) + (-1,)] = True
                     out_td.set(("next", key), val)
-                    out_td.set(("next", _replace_last(key, "done")), val)
+                    out_td.set(("next", _replace_last(key, "done")), val | done)
                     found_truncated = True
             if not found_truncated:
                 raise RuntimeError(
