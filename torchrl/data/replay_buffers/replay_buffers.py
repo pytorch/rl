@@ -395,6 +395,9 @@ class ReplayBuffer:
             return
         index = _to_numpy(index)
 
+        if self._transform is not None and len(self._transform):
+            value = self._transform.inv(value)
+
         if self.dim_extend > 0:
             index = (slice(None),) * self.dim_extend + (index,)
             with self._replay_lock:
