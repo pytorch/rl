@@ -1927,12 +1927,13 @@ class TestSamplers:
         s = new_replay_buffer.sample(batch_size=1)
         assert (s.exclude("index") == 0).all()
 
-    def test_sampler_without_replacement_cap_prefetch(self):
+    @pytest.mark.parametrize("drop_last", [False, True])
+    def test_sampler_without_replacement_cap_prefetch(self, drop_last):
         torch.manual_seed(0)
-        data = TensorDict({"a": torch.arange(10)}, batch_size=[10])
+        data = TensorDict({"a": torch.arange(11)}, batch_size=[11])
         rb = ReplayBuffer(
-            storage=LazyTensorStorage(10),
-            sampler=SamplerWithoutReplacement(),
+            storage=LazyTensorStorage(11),
+            sampler=SamplerWithoutReplacement(drop_last=drop_last),
             batch_size=2,
             prefetch=3,
         )
@@ -1941,10 +1942,13 @@ class TestSamplers:
         for _ in range(100):
             s = set()
             for i, d in enumerate(rb):
-                assert i <= 4
+                assert i <= (4 + int(not drop_last)), i
                 s = s.union(set(d["a"].tolist()))
-            assert i == 4
-            assert s == set(range(10))
+            assert i == (4 + int(not drop_last)), i
+            if drop_last:
+                assert s != set(range(11))
+            else:
+                assert s == set(range(11))
 
     @pytest.mark.parametrize(
         "batch_size,num_slices,slice_len,prioritized",
