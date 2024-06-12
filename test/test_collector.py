@@ -34,6 +34,7 @@ from mocking_classes import (
     DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
+    EnvWithDynamicSpec,
     HeterogeneousCountingEnv,
     HeterogeneousCountingEnvPolicy,
     MockSerialEnv,
@@ -559,17 +560,20 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
         total_frames=20000,
         device="cpu",
     )
-    for i, d in enumerate(collector):
-        if i == 0:
-            b1 = d
-        elif i == 1:
-            b2 = d
-        else:
-            break
-    assert d.names[-1] == "time"
-    with pytest.raises(AssertionError):
-        assert_allclose_td(b1, b2)
-    collector.shutdown()
+    try:
+        assert collector._use_buffers
+        for i, d in enumerate(collector):
+            if i == 0:
+                b1 = d
+            elif i == 1:
+                b2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(b1, b2)
+    finally:
+        collector.shutdown()
 
     ccollector = aSyncDataCollector(
         create_env_fn=env_fn,
@@ -586,14 +590,19 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
             b2c = d
         else:
             break
-    assert d.names[-1] == "time"
-    with pytest.raises(AssertionError):
-        assert_allclose_td(b1c, b2c)
 
-    assert_allclose_td(b1c, b1)
-    assert_allclose_td(b2c, b2)
+    try:
+        assert ccollector._use_buffers
+        assert d.names[-1] == "time"
 
-    ccollector.shutdown()
+        with pytest.raises(AssertionError):
+            assert_allclose_td(b1c, b2c)
+
+        assert_allclose_td(b1c, b1)
+        assert_allclose_td(b2c, b2)
+    finally:
+        ccollector.shutdown()
+        del ccollector
 
 
 @pytest.mark.skipif(not _has_gym, reason="gym library is not installed")
@@ -789,12 +798,8 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 
 
 @pytest.mark.parametrize("num_env", [1, 2])
-@pytest.mark.parametrize(
-    "env_name",
-    [
-        "vec",
-    ],
-)  # 1226: for efficiency, we just test vec, not "conv"
+# 1226: for efficiency, we just test vec, not "conv"
+@pytest.mark.parametrize("env_name", ["vec"])
 def test_collector_batch_size(
     num_env, env_name, seed=100, num_workers=2, frames_per_batch=20
 ):
@@ -943,10 +948,12 @@ def test_collector_consistency(num_env, env_name, seed=100):
     env.set_seed(seed)
     rollout1b = env.rollout(policy=policy, max_steps=50, auto_reset=True)
     rollout2 = env.rollout(policy=policy, max_steps=50, auto_reset=True)
-    assert_allclose_td(rollout1a, rollout1b)
-    with pytest.raises(AssertionError):
-        assert_allclose_td(rollout1a, rollout2)
-    env.close()
+    try:
+        assert_allclose_td(rollout1a, rollout1b)
+        with pytest.raises(AssertionError):
+            assert_allclose_td(rollout1a, rollout2)
+    finally:
+        env.close()
 
     collector = SyncDataCollector(
         create_env_fn=env_fn,
@@ -960,17 +967,19 @@ def test_collector_consistency(num_env, env_name, seed=100):
     collector_iter = iter(collector)
     b1 = next(collector_iter)
     b2 = next(collector_iter)
-    with pytest.raises(AssertionError):
-        assert_allclose_td(b1, b2)
 
     # if num_env == 1:
     #     # rollouts collected through DataCollector are padded using pad_sequence, which introduces a first dimension
     #     rollout1a = rollout1a.unsqueeze(0)
-    assert (
-        rollout1a.batch_size == b1.batch_size
-    ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
-    assert_allclose_td(rollout1a, b1.select(*rollout1a.keys(True, True)))
-    collector.shutdown()
+    try:
+        with pytest.raises(AssertionError):
+            assert_allclose_td(b1, b2)
+        assert (
+            rollout1a.batch_size == b1.batch_size
+        ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
+        assert_allclose_td(rollout1a, b1.select(*rollout1a.keys(True, True)))
+    finally:
+        collector.shutdown()
 
 
 @pytest.mark.parametrize("num_env", [1, 2])
@@ -1072,6 +1081,7 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
 
     collector20.shutdown()
     del collector20
+
     data20 = torch.cat(data20, data1.ndim - 1)
     data20 = data20[..., :max_frames_per_traj]
 
@@ -1136,8 +1146,16 @@ def test_collector_vecnorm_envcreator(static_seed):
 
     s = c.state_dict()
 
-    td1 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"]["td"].clone()
-    td2 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"]["td"].clone()
+    td1 = (
+        TensorDict(s["worker0"]["env_state_dict"]["worker3"]["_extra_state"])
+        .unflatten_keys(VecNorm.SEP)
+        .clone()
+    )
+    td2 = (
+        TensorDict(s["worker1"]["env_state_dict"]["worker0"]["_extra_state"])
+        .unflatten_keys(VecNorm.SEP)
+        .clone()
+    )
     assert (td1 == td2).all()
 
     next(c_iter)
@@ -1145,8 +1163,16 @@ def test_collector_vecnorm_envcreator(static_seed):
 
     s = c.state_dict()
 
-    td3 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"]["td"].clone()
-    td4 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"]["td"].clone()
+    td3 = (
+        TensorDict(s["worker0"]["env_state_dict"]["worker3"]["_extra_state"])
+        .unflatten_keys(VecNorm.SEP)
+        .clone()
+    )
+    td4 = (
+        TensorDict(s["worker1"]["env_state_dict"]["worker0"]["_extra_state"])
+        .unflatten_keys(VecNorm.SEP)
+        .clone()
+    )
     assert (td3 == td4).all()
     assert (td1 != td4).any()
     c.shutdown()
@@ -1398,6 +1424,7 @@ def test_collector_device_combinations(device, storing_device):
         device=device,
         storing_device=storing_device,
     )
+    assert collector._use_buffers
     batch = next(collector.iterator())
     assert batch.device == torch.device(storing_device)
     collector.shutdown()
@@ -1710,11 +1737,13 @@ def test_maxframes_error():
 @pytest.mark.parametrize("env_device", [None, *get_available_devices()])
 @pytest.mark.parametrize("storing_device", [None, *get_available_devices()])
 @pytest.mark.parametrize("parallel", [False, True])
+@pytest.mark.parametrize("share_individual_td", [False, True])
 def test_reset_heterogeneous_envs(
     policy_device: torch.device,
     env_device: torch.device,
     storing_device: torch.device,
     parallel,
+    share_individual_td,
 ):
     if (
         policy_device is not None
@@ -1730,7 +1759,9 @@ def test_reset_heterogeneous_envs(
         cls = ParallelEnv
     else:
         cls = SerialEnv
-    env = cls(2, [env1, env2], device=env_device, share_individual_td=True)
+    env = cls(
+        2, [env1, env2], device=env_device, share_individual_td=share_individual_td
+    )
     collector = SyncDataCollector(
         env,
         RandomPolicy(env.action_spec),
@@ -1806,6 +1837,7 @@ def test_set_truncated(collector_cls):
             break
     finally:
         collector.shutdown()
+        del collector
 
 
 class TestNestedEnvsCollector:
@@ -2488,7 +2520,7 @@ class TestLibThreading:
             torch.set_num_threads(num_threads)
 
     @pytest.mark.skipif(
-        IS_OSX,
+        IS_OSX or IS_WINDOWS,
         reason="setting different threads across workers can randomly fail on OSX.",
     )
     def test_auto_num_threads(self):
@@ -2546,6 +2578,7 @@ class TestUniqueTraj:
         try:
             for d in c:
                 buffer.extend(d)
+            assert c._use_buffers
             traj_ids = buffer[:].get(("collector", "traj_ids"))
             # check that we have as many trajs as expected (no skip)
             assert traj_ids.unique().numel() == traj_ids.max() + 1
@@ -2565,6 +2598,47 @@ class TestUniqueTraj:
         finally:
             c.shutdown()
             del c
+
+
+class TestDynamicEnvs:
+    def test_dynamic_sync_collector(self):
+        env = EnvWithDynamicSpec()
+        policy = RandomPolicy(env.action_spec)
+        collector = SyncDataCollector(
+            env, policy, frames_per_batch=20, total_frames=100
+        )
+        for data in collector:
+            assert isinstance(data, LazyStackedTensorDict)
+            assert data.names[-1] == "time"
+
+    def test_dynamic_multisync_collector(self):
+        env = EnvWithDynamicSpec
+        policy = RandomPolicy(env().action_spec)
+        collector = MultiSyncDataCollector(
+            [env],
+            policy,
+            frames_per_batch=20,
+            total_frames=100,
+            use_buffers=False,
+            cat_results="stack",
+        )
+        for data in collector:
+            assert isinstance(data, LazyStackedTensorDict)
+            assert data.names[-1] == "time"
+
+    def test_dynamic_multiasync_collector(self):
+        env = EnvWithDynamicSpec
+        policy = RandomPolicy(env().action_spec)
+        collector = MultiaSyncDataCollector(
+            [env],
+            policy,
+            frames_per_batch=20,
+            total_frames=100,
+            # use_buffers=False,
+        )
+        for data in collector:
+            assert isinstance(data, LazyStackedTensorDict)
+            assert data.names[-1] == "time"
 
 
 if __name__ == "__main__":

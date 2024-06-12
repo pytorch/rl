@@ -11,6 +11,7 @@ import torch
 
 from tensordict import TensorDictBase, unravel_key
 from tensordict.nn import (
+    CompositeDistribution,
     dispatch,
     TensorDictModule,
     TensorDictModuleBase,
@@ -158,7 +159,7 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
             the output value. Should be one of: 'InteractionType.MODE',
             'InteractionType.MEDIAN', 'InteractionType.MEAN' or
             'InteractionType.RANDOM' (in which case the value is sampled
-            randomly from the distribution). Defaults to is 'InteractionType.RANDOM'.
+            randomly from the distribution). Defaults to is 'InteractionType.MODE'.
 
             .. note:: When a sample is drawn, the :class:`ProbabilisticActor` instance will
               first look for the interaction mode dictated by the
@@ -174,6 +175,14 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
             A :class:`torch.distributions.Distribution` class to
             be used for sampling.
             Default is :class:`tensordict.nn.distributions.Delta`.
+
+            .. note:: if ``distribution_class`` is of type :class:`~tensordict.nn.distributions.CompositeDistribution`,
+                the keys will be inferred from the ``distribution_map`` / ``name_map`` keyword arguments of that
+                distribution. If this distribution is used with another constructor (e.g.,  partial or lambda function)
+                then the out_keys will need to be provided explicitly.
+                Note also that actions will __not__ be prefixed with an ``"action"`` key, see the example below
+                on how this can be  achieved with a ``ProbabilisticActor``.
+
         distribution_kwargs (dict, optional): keyword-only argument.
             Keyword-argument pairs to be passed to the distribution.
         return_log_prob (bool, optional): keyword-only argument.
@@ -276,6 +285,75 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
             device=None,
             is_shared=False)
 
+    Using a probabilistic actor with a composite distribution can be achieved using the following
+    example code:
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import CompositeDistribution
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torch import distributions as d
+        >>> from torch import nn
+        >>>
+        >>> from torchrl.modules import ProbabilisticActor
+        >>>
+        >>>
+        >>> class Module(nn.Module):
+        ...     def forward(self, x):
+        ...         return x[..., :3], x[..., 3:6], x[..., 6:]
+        ...
+        >>>
+        >>> module = TensorDictModule(Module(),
+        ...                           in_keys=["x"],
+        ...                           out_keys=[
+        ...                               ("params", "normal", "loc"), ("params", "normal", "scale"), ("params", "categ", "logits")
+        ...                           ])
+        >>> actor = ProbabilisticActor(module,
+        ...                            in_keys=["params"],
+        ...                            distribution_class=CompositeDistribution,
+        ...                            distribution_kwargs={"distribution_map": {"normal": d.Normal, "categ": d.Categorical},
+        ...                                                 "name_map": {"normal": ("action", "normal"),
+        ...                                                              "categ": ("action", "categ")}}
+        ...                            )
+        >>> print(actor.out_keys)
+        [('params', 'normal', 'loc'), ('params', 'normal', 'scale'), ('params', 'categ', 'logits'), ('action', 'normal'), ('action', 'categ')]
+        >>>
+        >>> data = TensorDict({"x": torch.rand(10)}, [])
+        >>> module(data)
+        >>> print(actor(data))
+        TensorDict(
+            fields={
+                action: TensorDict(
+                    fields={
+                        categ: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                        normal: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=None,
+                    is_shared=False),
+                params: TensorDict(
+                    fields={
+                        categ: TensorDict(
+                            fields={
+                                logits: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=None,
+                            is_shared=False),
+                        normal: TensorDict(
+                            fields={
+                                loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                                scale: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=None,
+                    is_shared=False),
+                x: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
     """
 
     def __init__(
@@ -287,8 +365,22 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
         spec: Optional[TensorSpec] = None,
         **kwargs,
     ):
+        distribution_class = kwargs.get("distribution_class")
         if out_keys is None:
-            out_keys = ["action"]
+            if distribution_class is CompositeDistribution:
+                if "distribution_map" not in kwargs.get("distribution_kwargs", {}):
+                    raise KeyError(
+                        "'distribution_map' must be provided within "
+                        "distribution_kwargs whenever the distribution is of type CompositeDistribution."
+                    )
+                distribution_map = kwargs["distribution_kwargs"]["distribution_map"]
+                name_map = kwargs["distribution_kwargs"].get("name_map", None)
+                if name_map is not None:
+                    out_keys = list(name_map.values())
+                else:
+                    out_keys = list(distribution_map.keys())
+            else:
+                out_keys = ["action"]
         if (
             len(out_keys) == 1
             and spec is not None

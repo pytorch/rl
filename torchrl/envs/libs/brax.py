@@ -7,6 +7,7 @@ import importlib.util
 from typing import Dict, Optional, Union
 
 import torch
+from packaging import version
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import (
@@ -15,9 +16,6 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
-from torchrl.envs.utils import _classproperty
-
-_has_brax = importlib.util.find_spec("brax") is not None
 from torchrl.envs.libs.jax_utils import (
     _extract_spec,
     _ndarray_to_tensor,
@@ -27,6 +25,9 @@ from torchrl.envs.libs.jax_utils import (
     _tree_flatten,
     _tree_reshape,
 )
+from torchrl.envs.utils import _classproperty
+
+_has_brax = importlib.util.find_spec("brax") is not None
 
 
 def _get_envs():
@@ -204,12 +205,14 @@ class BraxWrapper(_EnvWrapper):
 
     def _check_kwargs(self, kwargs: Dict):
         brax = self.lib
+        if version.parse(brax.__version__) < version.parse("0.10.4"):
+            raise ImportError("Brax v0.10.4 or greater is required.")
 
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
-        if not isinstance(env, brax.envs.env.Env):
-            raise TypeError("env is not of type 'brax.envs.env.Env'.")
+        if not isinstance(env, brax.envs.Env):
+            raise TypeError("env is not of type 'brax.envs.Env'.")
 
     def _build_env(
         self,

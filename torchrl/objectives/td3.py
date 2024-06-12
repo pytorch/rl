@@ -9,7 +9,7 @@ from typing import Optional, Tuple
 
 import torch
 
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec, TensorSpec
@@ -207,6 +207,13 @@ class TD3Loss(LossModule):
         "next_state_value",
         "target_value",
     ]
+
+    actor_network: TensorDictModule
+    qvalue_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    qvalue_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
 
     def __init__(
         self,

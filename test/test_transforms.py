@@ -7777,7 +7777,9 @@ class TestVecNorm:
         for idx in range(nprc):
             queues[idx][1].put(msg)
 
-        td = make_env.state_dict()["transforms.1._extra_state"]["td"]
+        td = TensorDict(
+            make_env.state_dict()["transforms.1._extra_state"]
+        ).unflatten_keys(VecNorm.SEP)
 
         obs_sum = td.get(("some", "obs_sum")).clone()
         obs_ssq = td.get(("some", "obs_ssq")).clone()
@@ -7878,7 +7880,9 @@ class TestVecNorm:
         parallel_sd = parallel_env.state_dict()
         assert "worker0" in parallel_sd
         worker_sd = parallel_sd["worker0"]
-        td = worker_sd["transforms.1._extra_state"]["td"]
+        td = TensorDict(worker_sd["transforms.1._extra_state"]).unflatten_keys(
+            VecNorm.SEP
+        )
         queue_out.put("start")
         msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "first round"
@@ -7951,6 +7955,54 @@ class TestVecNorm:
         assert transform.__dict__.keys() == transform2.__dict__.keys()
         for key in sorted(transform.__dict__.keys()):
             assert isinstance(transform.__dict__[key], type(transform2.__dict__[key]))
+
+    def test_state_dict_vecnorm(self):
+        transform0 = Compose(
+            VecNorm(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+        )
+        td = TensorDict({"a": torch.randn(3, 4), ("b", "c"): torch.randn(3, 4)}, [3, 4])
+        with pytest.warns(UserWarning, match="Querying state_dict on an uninitialized"):
+            sd_empty = transform0.state_dict()
+
+        transform1 = transform0.clone()
+        # works fine
+        transform1.load_state_dict(sd_empty)
+        transform1._step(td, td)
+        with pytest.raises(KeyError, match="Could not find a tensordict"):
+            transform1.load_state_dict(sd_empty)
+
+        transform0._step(td, td)
+        sd = transform0.state_dict()
+
+        transform1 = transform0.clone()
+        assert transform0[0]._td.is_shared() is transform1[0]._td.is_shared()
+
+        def assert_differs(a, b):
+            assert a.untyped_storage().data_ptr() == b.untyped_storage().data_ptr()
+
+        transform1[0]._td.apply(assert_differs, transform0[0]._td, filter_empty=True)
+
+        transform1 = Compose(
+            VecNorm(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+        )
+        with pytest.warns(UserWarning, match="VecNorm wasn't initialized"):
+            transform1.load_state_dict(sd)
+        transform1._step(td, td)
+
+        transform1 = Compose(
+            VecNorm(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+        )
+        transform1._step(td, td)
+        transform1.load_state_dict(sd)
+
+    def test_to_obsnorm_multikeys(self):
+        transform0 = Compose(
+            VecNorm(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+        )
+        td = TensorDict({"a": torch.randn(3, 4), ("b", "c"): torch.randn(3, 4)}, [3, 4])
+        td0 = transform0._step(td, td.clone())
+        td1 = transform0[0].to_observation_norm()._step(td, td.clone())
+        assert_allclose_td(td0, td1)
 
 
 def test_added_transforms_are_in_eval_mode_trivial():
@@ -9173,6 +9225,7 @@ class TestKLRewardTransform(TransformBase):
     )
     def test_transform_env(self, out_key):
         base_env = self.envclass()
+        torch.manual_seed(0)
         actor = self._make_actor()
         # we need to patch the env and create a sample_log_prob spec to make check_env_specs happy
         env = TransformedEnv(
@@ -9182,6 +9235,7 @@ class TestKLRewardTransform(TransformBase):
                 KLRewardTransform(actor, out_keys=out_key),
             ),
         )
+        torch.manual_seed(0)
         actor = self._make_actor()
         td1 = env.rollout(3, actor)
         tdparams = TensorDict(dict(actor.named_parameters()), []).unflatten_keys(".")

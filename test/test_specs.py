@@ -323,8 +323,10 @@ def test_discrete_conversion(n, device, shape):
     assert categorical.to_one_hot_spec() == one_hot
     assert one_hot.to_categorical_spec() == categorical
 
-    assert categorical.is_in(one_hot.to_categorical(one_hot.rand(shape)))
-    assert one_hot.is_in(categorical.to_one_hot(categorical.rand(shape)))
+    categorical_recon = one_hot.to_categorical(one_hot.rand(shape))
+    assert categorical.is_in(categorical_recon), (categorical, categorical_recon)
+    one_hot_recon = categorical.to_one_hot(categorical.rand(shape))
+    assert one_hot.is_in(one_hot_recon), (one_hot, one_hot_recon)
 
 
 @pytest.mark.parametrize("ns", [[5], [5, 2, 3], [4, 5, 1, 3]])
@@ -338,8 +340,10 @@ def test_multi_discrete_conversion(ns, shape, device):
     assert categorical.to_one_hot_spec() == one_hot
     assert one_hot.to_categorical_spec() == categorical
 
-    assert categorical.is_in(one_hot.to_categorical(one_hot.rand(shape)))
-    assert one_hot.is_in(categorical.to_one_hot(categorical.rand(shape)))
+    categorical_recon = one_hot.to_categorical(one_hot.rand(shape))
+    assert categorical.is_in(categorical_recon), (categorical, categorical_recon)
+    one_hot_recon = categorical.to_one_hot(categorical.rand(shape))
+    assert one_hot.is_in(one_hot_recon), (one_hot, one_hot_recon)
 
 
 @pytest.mark.parametrize("is_complete", [True, False])
@@ -1903,6 +1907,169 @@ class TestUnbind:
         assert spec == torch.stack(spec.unbind(0), 0)
         assert spec == torch.stack(spec.unbind(-1), -1)
 
+    def test_composite_encode_err(self):
+        c = CompositeSpec(
+            a=UnboundedContinuousTensorSpec(
+                1,
+            ),
+            b=UnboundedContinuousTensorSpec(
+                2,
+            ),
+        )
+        with pytest.raises(KeyError, match="The CompositeSpec instance with keys"):
+            c.encode({"c": 0})
+        with pytest.raises(
+            RuntimeError, match="raised a RuntimeError. Scroll up to know more"
+        ):
+            c.encode({"a": 0, "b": 0})
+
+
+@pytest.mark.parametrize(
+    "device",
+    [torch.device("cpu")]
+    + [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())],
+)
+class TestTo:
+    @pytest.mark.parametrize("shape1", [(5, 4)])
+    def test_binary(self, shape1, device):
+        spec = BinaryDiscreteTensorSpec(
+            n=4, shape=shape1, device="cpu", dtype=torch.bool
+        )
+        assert spec.to(device).device == device
+
+    @pytest.mark.parametrize(
+        "shape1,mini,maxi",
+        [
+            [(10,), -torch.ones([]), torch.ones([])],
+            [None, -torch.ones([10]), torch.ones([])],
+            [None, -torch.ones([]), torch.ones([10])],
+            [(10,), -torch.ones([]), torch.ones([10])],
+            [(10,), -torch.ones([10]), torch.ones([])],
+            [(10,), -torch.ones([10]), torch.ones([10])],
+        ],
+    )
+    def test_bounded(self, shape1, mini, maxi, device):
+        spec = BoundedTensorSpec(
+            mini, maxi, shape=shape1, device="cpu", dtype=torch.bool
+        )
+        assert spec.to(device).device == device
+
+    def test_composite(self, device):
+        batch_size = (5,)
+        spec1 = BoundedTensorSpec(
+            -torch.ones([*batch_size, 10]),
+            torch.ones([*batch_size, 10]),
+            shape=(
+                *batch_size,
+                10,
+            ),
+            device="cpu",
+            dtype=torch.bool,
+        )
+        spec2 = BinaryDiscreteTensorSpec(
+            n=4, shape=(*batch_size, 4), device="cpu", dtype=torch.bool
+        )
+        spec3 = DiscreteTensorSpec(
+            n=4, shape=batch_size, device="cpu", dtype=torch.long
+        )
+        spec4 = MultiDiscreteTensorSpec(
+            nvec=(4, 5, 6), shape=(*batch_size, 3), device="cpu", dtype=torch.long
+        )
+        spec5 = MultiOneHotDiscreteTensorSpec(
+            nvec=(4, 5, 6), shape=(*batch_size, 15), device="cpu", dtype=torch.long
+        )
+        spec6 = OneHotDiscreteTensorSpec(
+            n=15, shape=(*batch_size, 15), device="cpu", dtype=torch.long
+        )
+        spec7 = UnboundedContinuousTensorSpec(
+            shape=(*batch_size, 9),
+            device="cpu",
+            dtype=torch.float64,
+        )
+        spec8 = UnboundedDiscreteTensorSpec(
+            shape=(*batch_size, 9),
+            device="cpu",
+            dtype=torch.long,
+        )
+        spec = CompositeSpec(
+            spec1=spec1,
+            spec2=spec2,
+            spec3=spec3,
+            spec4=spec4,
+            spec5=spec5,
+            spec6=spec6,
+            spec7=spec7,
+            spec8=spec8,
+            shape=batch_size,
+        )
+        assert spec.to(device).device == device
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_discrete(
+        self,
+        shape1,
+        device,
+    ):
+        spec = DiscreteTensorSpec(n=4, shape=shape1, device="cpu", dtype=torch.long)
+        assert spec.to(device).device == device
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_multidiscrete(self, shape1, device):
+        if shape1 is None:
+            shape1 = (3,)
+        else:
+            shape1 = (*shape1, 3)
+        spec = MultiDiscreteTensorSpec(
+            nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long
+        )
+        assert spec.to(device).device == device
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_multionehot(self, shape1, device):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = MultiOneHotDiscreteTensorSpec(
+            nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long
+        )
+        assert spec.to(device).device == device
+
+    def test_non_tensor(self, device):
+        spec = NonTensorSpec(shape=(3, 4), device="cpu")
+        assert spec.to(device).device == device
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_onehot(self, shape1, device):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = OneHotDiscreteTensorSpec(
+            n=15, shape=shape1, device="cpu", dtype=torch.long
+        )
+        assert spec.to(device).device == device
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_unbounded(self, shape1, device):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = UnboundedContinuousTensorSpec(
+            shape=shape1, device="cpu", dtype=torch.float64
+        )
+        assert spec.to(device).device == device
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_unboundeddiscrete(self, shape1, device):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = UnboundedDiscreteTensorSpec(shape=shape1, device="cpu", dtype=torch.long)
+        assert spec.to(device).device == device
+
 
 @pytest.mark.parametrize(
     "shape,stack_dim",
@@ -3402,6 +3569,124 @@ class TestSpecMasking:
             assert (sp.sum(-1) == 2).all()
         else:
             assert (sp != s).all()
+
+
+class TestDynamicSpec:
+    def test_all(self):
+        spec = UnboundedContinuousTensorSpec((-1, 1, 2))
+        unb = spec
+        assert spec.shape == (-1, 1, 2)
+        x = torch.randn(3, 1, 2)
+        xunb = x
+        assert spec.is_in(x)
+
+        spec = UnboundedDiscreteTensorSpec((-1, 1, 2))
+        unbd = spec
+        assert spec.shape == (-1, 1, 2)
+        x = torch.randint(10, (3, 1, 2))
+        xunbd = x
+        assert spec.is_in(x)
+
+        spec = BoundedTensorSpec(shape=(-1, 1, 2), low=-1, high=1)
+        bound = spec
+        assert spec.shape == (-1, 1, 2)
+        x = torch.rand((3, 1, 2))
+        xbound = x
+        assert spec.is_in(x)
+
+        spec = OneHotDiscreteTensorSpec(shape=(-1, 1, 2, 4), n=4)
+        oneh = spec
+        assert spec.shape == (-1, 1, 2, 4)
+        x = torch.zeros((3, 1, 2, 4), dtype=torch.bool)
+        x[..., 0] = 1
+        xoneh = x
+        assert spec.is_in(x)
+
+        spec = DiscreteTensorSpec(shape=(-1, 1, 2), n=4)
+        disc = spec
+        assert spec.shape == (-1, 1, 2)
+        x = torch.randint(4, (3, 1, 2))
+        xdisc = x
+        assert spec.is_in(x)
+
+        spec = MultiOneHotDiscreteTensorSpec(shape=(-1, 1, 2, 7), nvec=[3, 4])
+        moneh = spec
+        assert spec.shape == (-1, 1, 2, 7)
+        x = torch.zeros((3, 1, 2, 7), dtype=torch.bool)
+        x[..., 0] = 1
+        x[..., -1] = 1
+        xmoneh = x
+        assert spec.is_in(x)
+
+        spec = MultiDiscreteTensorSpec(shape=(-1, 1, 2, 2), nvec=[3, 4])
+        mdisc = spec
+        assert spec.mask is None
+        assert spec.shape == (-1, 1, 2, 2)
+        x = torch.randint(3, (3, 1, 2, 2))
+        xmdisc = x
+        assert spec.is_in(x)
+
+        spec = CompositeSpec(
+            unb=unb,
+            unbd=unbd,
+            bound=bound,
+            oneh=oneh,
+            disc=disc,
+            moneh=moneh,
+            mdisc=mdisc,
+            shape=(-1, 1, 2),
+        )
+        assert spec.shape == (-1, 1, 2)
+
+        data = TensorDict(
+            {
+                "unb": xunb,
+                "unbd": xunbd,
+                "bound": xbound,
+                "oneh": xoneh,
+                "disc": xdisc,
+                "moneh": xmoneh,
+                "mdisc": xmdisc,
+            },
+            [3, 1, 2],
+        )
+        assert spec.is_in(data)
+
+    def test_expand(self):
+        unb = UnboundedContinuousTensorSpec((-1, 1, 2))
+        unbd = UnboundedDiscreteTensorSpec((-1, 1, 2))
+        bound = BoundedTensorSpec(shape=(-1, 1, 2), low=-1, high=1)
+        oneh = OneHotDiscreteTensorSpec(shape=(-1, 1, 2, 4), n=4)
+        disc = DiscreteTensorSpec(shape=(-1, 1, 2), n=4)
+        moneh = MultiOneHotDiscreteTensorSpec(shape=(-1, 1, 2, 7), nvec=[3, 4])
+        mdisc = MultiDiscreteTensorSpec(shape=(-1, 1, 2, 2), nvec=[3, 4])
+
+        spec = CompositeSpec(
+            unb=unb,
+            unbd=unbd,
+            bound=bound,
+            oneh=oneh,
+            disc=disc,
+            moneh=moneh,
+            mdisc=mdisc,
+            shape=(-1, 1, 2),
+        )
+        assert spec.shape == (-1, 1, 2)
+        # runs
+        spec.expand(-1, 4, 2)
+        # runs
+        spec.expand(3, -1, 1, 2)
+        # breaks
+        with pytest.raises(ValueError, match="The last 3 of the expanded shape"):
+            spec.expand(3, 3, 1, 2)
+
+
+class TestNonTensorSpec:
+    def test_sample(self):
+        nts = NonTensorSpec(shape=(3, 4))
+        assert nts.one((2,)).shape == (2, 3, 4)
+        assert nts.rand((2,)).shape == (2, 3, 4)
+        assert nts.zero((2,)).shape == (2, 3, 4)
 
 
 if __name__ == "__main__":

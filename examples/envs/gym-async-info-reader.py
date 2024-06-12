@@ -15,6 +15,7 @@ from gymnasium import spaces
 parser = argparse.ArgumentParser()
 parser.add_argument("--use_wrapper", action="store_true")
 
+
 # Create the dummy environment
 class CustomEnv(gym.Env):
     def __init__(self, render_mode=None):

@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import collections
 import functools
 import importlib.util
 import multiprocessing as mp
@@ -4511,6 +4510,11 @@ class TensorDictPrimer(Transform):
         tensor([[1., 1., 1.],
                 [1., 1., 1.]])
 
+    .. note:: Some TorchRL modules rely on specific keys being present in the environment TensorDicts,
+        like :class:`~torchrl.modules.models.LSTM` or :class:`~torchrl.modules.models.GRU`.
+        To facilitate this process, the method :func:`~torchrl.models.utils.get_primers_from_module`
+        automatically checks for required primer transforms in a module and its submodules and
+        generates them.
     """
 
     def __init__(
@@ -4696,15 +4700,18 @@ class TensorDictPrimer(Transform):
         spec shape is assumed to match the tensordict's.
 
         """
-        shape = (
-            ()
-            if (not self.parent or self.parent.batch_locked)
-            else tensordict.batch_size
-        )
         _reset = _get_reset(self.reset_key, tensordict)
         if _reset.any():
             for key, spec in self.primers.items(True, True):
+                if spec.shape[: len(tensordict.batch_size)] != tensordict.batch_size:
+                    expanded_spec = self._expand_shape(spec)
+                    self.primers[key] = spec = expanded_spec
                 if self.random:
+                    shape = (
+                        ()
+                        if (not self.parent or self.parent.batch_locked)
+                        else tensordict.batch_size
+                    )
                     value = spec.rand(shape)
                 else:
                     value = self.default_value[key]
@@ -4808,6 +4815,8 @@ class VecNorm(Transform):
             Defaults to ``in_keys``.
         shared_td (TensorDictBase, optional): A shared tensordict containing the
             keys of the transform.
+        lock (mp.Lock): a lock to prevent race conditions between processes.
+            Defaults to None (lock created during init).
         decay (number, optional): decay rate of the moving average.
             default: 0.99
         eps (number, optional): lower bound of the running standard
@@ -4892,7 +4901,7 @@ class VecNorm(Transform):
         if self.lock is not None:
             self.lock.acquire()
 
-        for key in self.in_keys:
+        for key, key_out in zip(self.in_keys, self.out_keys):
             if key not in tensordict.keys(include_nested=True):
                 # TODO: init missing rewards with this
                 # for key_suffix in [_append_last(key, suffix) for suffix in ("_sum", "_ssq", "_count")]:
@@ -4904,7 +4913,7 @@ class VecNorm(Transform):
                 key, tensordict.get(key), N=max(1, tensordict.numel())
             )
 
-            tensordict.set(key, new_val)
+            tensordict.set(key_out, new_val)
 
         if self.lock is not None:
             self.lock.release()
@@ -4998,7 +5007,7 @@ class VecNorm(Transform):
     def to_observation_norm(self) -> Union[Compose, ObservationNorm]:
         """Converts VecNorm into an ObservationNorm class that can be used at inference time."""
         out = []
-        for key in self.in_keys:
+        for key, key_out in zip(self.in_keys, self.out_keys):
             _sum = self._td.get(_append_last(key, "_sum"))
             _ssq = self._td.get(_append_last(key, "_ssq"))
             _count = self._td.get(_append_last(key, "_count"))
@@ -5009,13 +5018,13 @@ class VecNorm(Transform):
                 loc=mean,
                 scale=std,
                 standard_normal=True,
-                in_keys=self.in_keys,
+                in_keys=key,
+                out_keys=key_out,
             )
-            if len(self.in_keys) == 1:
-                return _out
-            else:
-                out += ObservationNorm
-        return Compose(*out)
+            out += [_out]
+        if len(self.in_keys) > 1:
+            return Compose(*out)
+        return _out
 
     @staticmethod
     def build_td_for_shared_vecnorm(
@@ -5082,29 +5091,44 @@ class VecNorm(Transform):
             return td_select.memmap_()
         return td_select.share_memory_()
 
+    # We use a different separator to ensure that keys can have points within them.
+    SEP = "-<.>-"
+
     def get_extra_state(self) -> OrderedDict:
-        return collections.OrderedDict({"lock": self.lock, "td": self._td})
+        if self._td is None:
+            warnings.warn(
+                "Querying state_dict on an uninitialized VecNorm transform will "
+                "return a `None` value for the summary statistics. "
+                "Loading such a state_dict on an initialized VecNorm will result in "
+                "an error."
+            )
+            return
+        return self._td.flatten_keys(self.SEP).to_dict()
 
     def set_extra_state(self, state: OrderedDict) -> None:
-        lock = state["lock"]
-        if lock is not None:
-            """
-            since locks can't be serialized, we have use cases for stripping them
-            for example in ParallelEnv, in which case keep the lock we already have
-            to avoid an updated tensor dict being sent between processes to erase locks
-            """
-            self.lock = lock
-        td = state["td"]
-        if td is not None and not td.is_shared():
-            raise RuntimeError(
-                "Only shared tensordicts can be set in VecNorm transforms"
-            )
-        self._td = td
+        if state is not None:
+            td = TensorDict(state).unflatten_keys(self.SEP)
+            if self._td is None and not td.is_shared():
+                warnings.warn(
+                    "VecNorm wasn't initialized and the tensordict is not shared. In single "
+                    "process settings, this is ok, but if you need to share the statistics "
+                    "between workers this should require some attention. "
+                    "Make sure that the content of VecNorm is transmitted to the workers "
+                    "after calling load_state_dict and not before, as other workers "
+                    "may not have access to the loaded TensorDict."
+                )
+                td.share_memory_()
+            if self._td is not None:
+                self._td.update_(td)
+            else:
+                self._td = td
+        elif self._td is not None:
+            raise KeyError("Could not find a tensordict in the state_dict.")
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(decay={self.decay:4.4f},"
-            f"eps={self.eps:4.4f}, keys={self.in_keys})"
+            f"eps={self.eps:4.4f}, in_keys={self.in_keys}, out_keys={self.out_keys})"
         )
 
     def __getstate__(self) -> Dict[str, Any]:
@@ -6988,16 +7012,29 @@ class VecGymEnvTransform(Transform):
         if (
             reset is not done
             and (reset != done).any()
-            and (not reset.all() or not reset.any())
+            # it can happen that all are reset, in which case
+            # it's fine (doesn't need to match done)
+            and not reset.all()
         ):
             raise RuntimeError(
-                "Cannot partially reset a gym(nasium) async env with a reset mask that does not match the done mask. "
+                "Cannot partially reset a gym(nasium) async env with a "
+                "reset mask that does not match the done mask. "
                 f"Got reset={reset}\nand done={done}"
             )
         # if not reset.any(), we don't need to do anything.
         # if reset.all(), we don't either (bc GymWrapper will call a plain reset).
-        if reset is not None and reset.any() and not reset.all():
+        if reset is not None and reset.any():
+            if reset.all():
+                # We're fine: this means that a full reset was passed and the
+                # env was manually reset
+                tensordict_reset.pop(self.final_name, None)
+                return tensordict_reset
             saved_next = self._memo["saved_next"]
+            if saved_next is None:
+                raise RuntimeError(
+                    "Did not find a saved tensordict while the reset mask was "
+                    f"not empty: reset={reset}. Done was {done}."
+                )
             # reset = reset.view(tensordict.shape)
             # we have a data container from the previous call to step
             # that contains part of the observation we need.

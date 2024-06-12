@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import abc
+from textwrap import indent
 from typing import Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
@@ -28,17 +29,26 @@ class MultiAgentNetBase(nn.Module):
         self,
         *,
         n_agents: int,
-        centralised: bool,
-        share_params: bool,
-        agent_dim: int,
+        centralized: bool | None = None,
+        share_params: bool | None = None,
+        agent_dim: int | None = None,
         vmap_randomness: str = "different",
         **kwargs,
     ):
         super().__init__()
 
+        # For backward compatibility
+        centralized = kwargs.pop("centralised", centralized)
+        if centralized is None:
+            raise TypeError("centralized arg must be passed.")
+        if share_params is None:
+            raise TypeError("share_params arg must be passed.")
+        if agent_dim is None:
+            raise TypeError("agent_dim arg must be passed.")
+
         self.n_agents = n_agents
         self.share_params = share_params
-        self.centralised = centralised
+        self.centralized = centralized
         self.agent_dim = agent_dim
         self._vmap_randomness = vmap_randomness
 
@@ -97,7 +107,7 @@ class MultiAgentNetBase(nn.Module):
         inputs = self._pre_forward_check(inputs)
         # If parameters are not shared, each agent has its own network
         if not self.share_params:
-            if self.centralised:
+            if self.centralized:
                 output = self.vmap_func_module(
                     self._empty_net, (0, None), (-2,), randomness=self.vmap_randomness
                 )(self.params, inputs)
@@ -114,8 +124,8 @@ class MultiAgentNetBase(nn.Module):
             with self.params.to_module(self._empty_net):
                 output = self._empty_net(inputs)
 
-            if self.centralised:
-                # If the parameters are shared, and it is centralised, all agents will have the same output
+            if self.centralized:
+                # If the parameters are shared, and it is centralized, all agents will have the same output
                 # We expand it to maintain the agent dimension, but values will be the same for all agents
                 n_agent_outputs = output.shape[-1]
                 output = output.view(*output.shape[:-1], n_agent_outputs)
@@ -131,6 +141,16 @@ class MultiAgentNetBase(nn.Module):
             )
 
         return output
+
+    def __repr__(self):
+        empty_net = self.__dict__["_empty_net"]
+        with self.params.to_module(empty_net):
+            module_repr = indent(str(empty_net), 4 * " ")
+        n_agents = indent(f"n_agents={self.n_agents}", 4 * " ")
+        share_params = indent(f"share_params={self.share_params}", 4 * " ")
+        centralized = indent(f"centralized={self.centralized}", 4 * " ")
+        agent_dim = indent(f"agent_dim={self.agent_dim}", 4 * " ")
+        return f"{self.__class__.__name__}(\n{module_repr},\n{n_agents},\n{share_params},\n{centralized},\n{agent_dim})"
 
     def reset_parameters(self):
         """Resets the parameters of the model."""
@@ -163,7 +183,7 @@ class MultiAgentMLP(MultiAgentNetBase):
     If `share_params` is True, the same MLP will be used to make the forward pass for all agents (homogeneous policies).
     Otherwise, each agent will use a different MLP to process its input (heterogeneous policies).
 
-    If `centralised` is True, each agent will use the inputs of all agents to compute its output
+    If `centralized` is True, each agent will use the inputs of all agents to compute its output
     (n_agent_inputs * n_agents will be the number of inputs for one agent).
     Otherwise, each agent will only use its data as input.
 
@@ -172,7 +192,7 @@ class MultiAgentMLP(MultiAgentNetBase):
             the number of inputs is lazily instantiated during the first call.
         n_agent_outputs (int): number of outputs for each agent.
         n_agents (int): number of agents.
-        centralised (bool): If `centralised` is True, each agent will use the inputs of all agents to compute its output
+        centralized (bool): If `centralized` is True, each agent will use the inputs of all agents to compute its output
             (n_agent_inputs * n_agents will be the number of inputs for one agent).
             Otherwise, each agent will only use its data as input.
         share_params (bool): If `share_params` is True, the same MLP will be used to make the forward pass
@@ -205,7 +225,7 @@ class MultiAgentMLP(MultiAgentNetBase):
         ...     n_agent_inputs=n_agent_inputs,
         ...     n_agent_outputs=n_agent_outputs,
         ...     n_agents=n_agents,
-        ...     centralised=False,
+        ...     centralized=False,
         ...     share_params=True,
         ...     depth=2,
         ... )
@@ -222,12 +242,12 @@ class MultiAgentMLP(MultiAgentNetBase):
           )
         )
         >>> assert mlp(obs).shape == (batch, n_agents, n_agent_outputs)
-        Now let's instantiate a centralised network shared by all agents (e.g. a centalised value function)
+        Now let's instantiate a centralized network shared by all agents (e.g. a centalised value function)
         >>> mlp = MultiAgentMLP(
         ...     n_agent_inputs=n_agent_inputs,
         ...     n_agent_outputs=n_agent_outputs,
         ...     n_agents=n_agents,
-        ...     centralised=True,
+        ...     centralized=True,
         ...     share_params=True,
         ...     depth=2,
         ... )
@@ -244,16 +264,16 @@ class MultiAgentMLP(MultiAgentNetBase):
           )
         )
         We can see that the input to the first layer is n_agents * n_agent_inputs,
-        this is because in the case the net acts as a centralised mlp (like a single huge agent)
+        this is because in the case the net acts as a centralized mlp (like a single huge agent)
         >>> assert mlp(obs).shape == (batch, n_agents, n_agent_outputs)
         Outputs will be identical for all agents.
         Now we can do both examples just shown but with an independent set of parameters for each agent
-        Let's show the centralised=False case.
+        Let's show the centralized=False case.
         >>> mlp = MultiAgentMLP(
         ...     n_agent_inputs=n_agent_inputs,
         ...     n_agent_outputs=n_agent_outputs,
         ...     n_agents=n_agents,
-        ...     centralised=False,
+        ...     centralized=False,
         ...     share_params=False,
         ...     depth=2,
         ... )
@@ -278,8 +298,8 @@ class MultiAgentMLP(MultiAgentNetBase):
         n_agent_inputs: int | None,
         n_agent_outputs: int,
         n_agents: int,
-        centralised: bool,
-        share_params: bool,
+        centralized: bool | None = None,
+        share_params: bool | None = None,
         device: Optional[DEVICE_TYPING] = None,
         depth: Optional[int] = None,
         num_cells: Optional[Union[Sequence, int]] = None,
@@ -290,14 +310,14 @@ class MultiAgentMLP(MultiAgentNetBase):
         self.n_agent_inputs = n_agent_inputs
         self.n_agent_outputs = n_agent_outputs
         self.share_params = share_params
-        self.centralised = centralised
+        self.centralized = centralized
         self.num_cells = num_cells
         self.activation_class = activation_class
         self.depth = depth
 
         super().__init__(
             n_agents=n_agents,
-            centralised=centralised,
+            centralized=centralized,
             share_params=share_params,
             device=device,
             agent_dim=-2,
@@ -311,13 +331,13 @@ class MultiAgentMLP(MultiAgentNetBase):
                 f" but got {inputs.shape}"
             )
         # If the model is centralized, agents have full observability
-        if self.centralised:
+        if self.centralized:
             inputs = inputs.flatten(-2, -1)
         return inputs
 
     def _build_single_net(self, *, device, **kwargs):
         n_agent_inputs = self.n_agent_inputs
-        if self.centralised and n_agent_inputs is not None:
+        if self.centralized and n_agent_inputs is not None:
             n_agent_inputs = self.n_agent_inputs * self.n_agents
         return MLP(
             in_features=n_agent_inputs,
@@ -339,7 +359,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
 
     Args:
         n_agents (int): number of agents.
-        centralised (bool): If ``True``, each agent will use the inputs of all agents to compute its output, resulting in input of shape ``(*B, n_agents * channels, x, y)``. Otherwise, each agent will only use its data as input.
+        centralized (bool): If ``True``, each agent will use the inputs of all agents to compute its output, resulting in input of shape ``(*B, n_agents * channels, x, y)``. Otherwise, each agent will only use its data as input.
         share_params (bool): If ``True``, the same :class:`~torchrl.modules.ConvNet` will be used to make the forward pass
             for all agents (homogeneous policies). Otherwise, each agent will use a different :class:`~torchrl.modules.ConvNet` to process
             its input (heterogeneous policies).
@@ -368,10 +388,10 @@ class MultiAgentConvNet(MultiAgentNetBase):
         >>> n_agents = 7
         >>> channels, x, y = 3, 100, 100
         >>> obs = torch.randn(*batch, n_agents, channels, x, y)
-        >>> # First lets consider a centralised network with shared parameters.
+        >>> # First lets consider a centralized network with shared parameters.
         >>> cnn = MultiAgentConvNet(
         ...     n_agents,
-        ...     centralised = True,
+        ...     centralized = True,
         ...     share_params = True
         ... )
         >>> print(cnn)
@@ -396,10 +416,10 @@ class MultiAgentConvNet(MultiAgentNetBase):
         >>> print(all(result[0,0,0] == result[0,0,1]))
         True
 
-        >>> # Alternatively, a local network with parameter sharing (eg. decentralised weight sharing policy)
+        >>> # Alternatively, a local network with parameter sharing (eg. decentralized weight sharing policy)
         >>> cnn = MultiAgentConvNet(
         ...     n_agents,
-        ...     centralised = False,
+        ...     centralized = False,
         ...     share_params = True
         ... )
         >>> print(cnn)
@@ -425,7 +445,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
         >>> # Or multiple local networks identical in structure but with differing weights.
         >>> cnn = MultiAgentConvNet(
         ...     n_agents,
-        ...     centralised = False,
+        ...     centralized = False,
         ...     share_params = False
         ... )
         >>> print(cnn)
@@ -450,7 +470,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
         >>> # Or where inputs are shared but not parameters.
         >>> cnn = MultiAgentConvNet(
         ...     n_agents,
-        ...     centralised = True,
+        ...     centralized = True,
         ...     share_params = False
         ... )
         >>> print(cnn)
@@ -476,8 +496,8 @@ class MultiAgentConvNet(MultiAgentNetBase):
     def __init__(
         self,
         n_agents: int,
-        centralised: bool,
-        share_params: bool,
+        centralized: bool | None = None,
+        share_params: bool | None = None,
         *,
         in_features: int | None = None,
         device: DEVICE_TYPING | None = None,
@@ -496,7 +516,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
         self.activation_class = activation_class
         super().__init__(
             n_agents=n_agents,
-            centralised=centralised,
+            centralized=centralized,
             share_params=share_params,
             device=device,
             agent_dim=-4,
@@ -505,7 +525,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
 
     def _build_single_net(self, *, device, **kwargs):
         in_features = self.in_features
-        if self.centralised and in_features is not None:
+        if self.centralized and in_features is not None:
             in_features = in_features * self.n_agents
         return ConvNet(
             in_features=in_features,
@@ -527,7 +547,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
             raise ValueError(
                 f"""Multi-agent network expects {self.n_agents} but got {inputs.shape[-4]}"""
             )
-        if self.centralised:
+        if self.centralized:
             # If the model is centralized, agents have full observability
             inputs = torch.flatten(inputs, -4, -3)
         return inputs

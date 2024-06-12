@@ -3,6 +3,10 @@ Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
 ===========================================================================
 **Author**: `Matteo Bettini <https://github.com/matteobettini>`_
 
+.. seealso::
+   The `BenchMARL <https://github.com/facebookresearch/BenchMARL>`__ library provides state-of-the-art
+   implementations of MARL algorithms using TorchRL.
+
 This tutorial demonstrates how to use PyTorch and TorchRL to
 solve a Competitive Multi-Agent Reinforcement Learning (MARL) problem.
 
