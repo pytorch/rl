@@ -245,7 +245,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         spec: Optional[TensorSpec] = None,
     ):
         raise RuntimeError(
-            "This class is not removed in favour of torchrl.modules.EGreedyModule."
+            "This class has been deprecated in favor of torchrl.modules.EGreedyModule."
         )
 
 

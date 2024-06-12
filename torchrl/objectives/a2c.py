@@ -5,13 +5,12 @@
 from __future__ import annotations
 
 import contextlib
-import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -231,6 +230,13 @@ class A2CLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.GAE
 
+    actor_network: TensorDictModule
+    critic_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    critic_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_critic_network_params: TensorDictParams
+
     def __init__(
         self,
         actor_network: ProbabilisticTensorDictSequential = None,
@@ -327,51 +333,6 @@ class A2CLoss(LossModule):
     @property
     def functional(self):
         return self._functional
-
-    @property
-    def actor(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.actor is deprecated, use {self.__class__.__name__}.actor_network instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.actor_network
-
-    @property
-    def critic(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.critic is deprecated, use {self.__class__.__name__}.critic_network instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.critic_network
-
-    @property
-    def actor_params(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.actor_network_params
-
-    @property
-    def critic_params(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.critic_params is deprecated, use {self.__class__.__name__}.critic_network_params instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.critic_network_params
-
-    @property
-    def target_critic_params(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.target_critic_params is deprecated, use {self.__class__.__name__}.target_critic_network_params instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.target_critic_network_params
 
     @property
     def in_keys(self):

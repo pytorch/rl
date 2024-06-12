@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import abc
 import warnings
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
@@ -25,7 +24,7 @@ from torchrl.objectives.value import ValueEstimatorBase
 
 
 def _updater_check_forward_prehook(module, *args, **kwargs):
-    if not all(v for v in module._has_update_associated.values()) and RL_WARNINGS:
+    if not all(module._has_update_associated.values()) and RL_WARNINGS:
         warnings.warn(
             module.TARGET_NET_WARNING,
             category=UserWarning,
@@ -217,12 +216,16 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 will carry gradients as expected.
 
         """
-        if kwargs.pop("funs_to_decorate", None) is not None:
-            warnings.warn(
-                "funs_to_decorate is without effect with the new objective API. This "
-                "warning will be replaced by an error in v0.4.0.",
-                category=DeprecationWarning,
-            )
+        for name in (
+            module_name,
+            module_name + "_params",
+            "target_" + module_name + "_params",
+        ):
+            if name not in self.__class__.__annotations__.keys():
+                warnings.warn(
+                    f"The name {name} wasn't part of the annotations ({self.__class__.__annotations__.keys()}). Make sure it is present in the definition class."
+                )
+
         if kwargs:
             raise TypeError(f"Unrecognised keyword arguments {list(kwargs.keys())}")
         # To make it robust to device casting, we must register list of
@@ -295,13 +298,9 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
         setattr(self, param_name, params)
 
-        # set the functional module: we need to convert the params to non-differentiable params
-        # otherwise they will appear twice in parameters
-        with params.apply(
-            self._make_meta_params, device=torch.device("meta"), filter_empty=False
-        ).to_module(module):
-            # avoid buffers and params being exposed
-            self.__dict__[module_name] = deepcopy(module)
+        # Set the module in the __dict__ directly to avoid listing its params
+        # A deepcopy with meta device could be used but that assumes that the model is copyable!
+        self.__dict__[module_name] = module
 
         name_params_target = "target_" + module_name
         if create_target_params:

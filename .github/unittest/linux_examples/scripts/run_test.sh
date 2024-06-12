@@ -36,7 +36,6 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/de
   optim.pretrain_gradient_steps=55 \
   optim.updates_per_episode=3 \
   optim.warmup_steps=10 \
-  optim.device=cuda:0 \
   logger.backend= \
   env.backend=gymnasium \
   env.name=HalfCheetah-v4
@@ -44,16 +43,13 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/de
   optim.pretrain_gradient_steps=55 \
   optim.updates_per_episode=3 \
   optim.warmup_steps=10 \
-  optim.device=cuda:0 \
   env.backend=gymnasium \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iql/iql_offline.py \
   optim.gradient_steps=55 \
-  optim.device=cuda:0 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cql/cql_offline.py \
   optim.gradient_steps=55 \
-  optim.device=cuda:0 \
   logger.backend=
 
 # ==================================================================================== #
@@ -86,14 +82,10 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dd
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
   collector.env_per_collector=2 \
-  collector.device=cuda:0 \
-  network.device=cuda:0 \
   optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
-#  record_video=True \
-#  record_frames=4 \
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/a2c/a2c_mujoco.py \
   env.env_name=HalfCheetah-v4 \
   collector.total_frames=40 \
@@ -112,7 +104,6 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dq
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
   buffer.batch_size=10 \
-  device=cuda:0 \
   loss.num_updates=1 \
   logger.backend= \
   buffer.buffer_size=120
@@ -122,7 +113,6 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cq
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
   collector.env_per_collector=2 \
-  collector.device=cuda:0 \
   replay_buffer.size=120 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/redq/redq.py \
@@ -131,10 +121,9 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/re
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
   collector.env_per_collector=2 \
-  collector.device=cuda:0 \
   buffer.batch_size=10 \
   optim.steps_per_batch=1 \
-  logger.record_video=True \
+  logger.video=True \
   logger.record_frames=4 \
   buffer.size=120 \
   logger.backend=
@@ -143,22 +132,18 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/sa
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
   collector.env_per_collector=2 \
-  collector.device=cuda:0 \
   optim.batch_size=10 \
   optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
-  network.device=cuda:0 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/discrete_sac/discrete_sac.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
   collector.env_per_collector=1 \
-  collector.device=cuda:0 \
   optim.batch_size=10 \
   optim.utd_ratio=1 \
-  network.device=cuda:0 \
   optim.batch_size=10 \
   optim.utd_ratio=1 \
   replay_buffer.size=120 \
@@ -171,27 +156,25 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cr
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
   collector.env_per_collector=2 \
-  collector.device=cuda:0 \
+  collector.device= \
   optim.batch_size=10 \
   optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
-  network.device=cuda:0 \
+  network.device= \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dreamer/dreamer.py \
-  total_frames=200 \
-  init_random_frames=10 \
-  batch_size=10 \
-  frames_per_batch=200 \
-  num_workers=4 \
-  env_per_collector=2 \
-  collector_device=cuda:0 \
-  model_device=cuda:0 \
-  optim_steps_per_batch=1 \
-  record_video=True \
-  record_frames=4 \
-  buffer_size=120 \
-  rssm_hidden_dim=17
+  collector.total_frames=200 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=200 \
+  env.n_parallel_envs=4 \
+  optimization.optim_steps_per_batch=1 \
+  logger.video=True \
+  logger.backend=csv \
+  replay_buffer.buffer_size=120 \
+  replay_buffer.batch_size=24 \
+  replay_buffer.batch_length=12 \
+  networks.rssm_hidden_dim=17
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -199,9 +182,6 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td
   collector.frames_per_batch=16 \
   collector.num_workers=4 \
   collector.env_per_collector=2 \
-  collector.device=cuda:0 \
-  collector.device=cuda:0 \
-  network.device=cuda:0 \
   logger.mode=offline \
   env.name=Pendulum-v1 \
   logger.backend=
@@ -210,8 +190,6 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iq
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
   env.train_num_envs=2 \
-  optim.device=cuda:0 \
-  collector.device=cuda:0 \
   logger.mode=offline \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iql/discrete_iql.py \
@@ -219,8 +197,6 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iq
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
   env.train_num_envs=2 \
-  optim.device=cuda:0 \
-  collector.device=cuda:0 \
   logger.mode=offline \
   logger.backend=
   python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cql/cql_online.py \
@@ -228,46 +204,37 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iq
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
   env.train_num_envs=2 \
-  collector.device=cuda:0 \
-  optim.device=cuda:0 \
   logger.mode=offline \
   logger.backend=
 
 # With single envs
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dreamer/dreamer.py \
-  total_frames=200 \
-  init_random_frames=10 \
-  batch_size=10 \
-  frames_per_batch=200 \
-  num_workers=2 \
-  env_per_collector=1 \
-  collector_device=cuda:0 \
-  model_device=cuda:0 \
-  optim_steps_per_batch=1 \
-  record_video=True \
-  record_frames=4 \
-  buffer_size=120 \
-  rssm_hidden_dim=17
+  collector.total_frames=200 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=200 \
+  env.n_parallel_envs=1 \
+  optimization.optim_steps_per_batch=1 \
+  logger.backend=csv \
+  logger.video=True \
+  replay_buffer.buffer_size=120 \
+  replay_buffer.batch_size=24 \
+  replay_buffer.batch_length=12 \
+  networks.rssm_hidden_dim=17
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
   collector.env_per_collector=1 \
-  collector.device=cuda:0 \
-  network.device=cuda:0 \
   optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
-#  record_video=True \
-#  record_frames=4 \
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dqn/dqn_atari.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
   buffer.batch_size=10 \
-  device=cuda:0 \
   loss.num_updates=1 \
   logger.backend= \
   buffer.buffer_size=120
@@ -278,9 +245,8 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/re
   collector.frames_per_batch=16 \
   collector.env_per_collector=1 \
   buffer.batch_size=10 \
-  collector.device=cuda:0 \
   optim.steps_per_batch=1 \
-  logger.record_video=True \
+  logger.video=True \
   logger.record_frames=4 \
   buffer.size=120 \
   logger.backend=
@@ -290,8 +256,6 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iq
   collector.frames_per_batch=16 \
   env.train_num_envs=1 \
   logger.mode=offline \
-  optim.device=cuda:0 \
-  collector.device=cuda:0 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cql/cql_online.py \
   collector.total_frames=48 \
@@ -299,8 +263,6 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cq
   collector.frames_per_batch=16 \
   collector.env_per_collector=1 \
   logger.mode=offline \
-  optim.device=cuda:0 \
-  collector.device=cuda:0 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td3/td3.py \
   collector.total_frames=48 \
@@ -308,11 +270,9 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td
   collector.frames_per_batch=16 \
   collector.num_workers=2 \
   collector.env_per_collector=1 \
-  collector.device=cuda:0 \
   logger.mode=offline \
   optim.batch_size=10 \
   env.name=Pendulum-v1 \
-  network.device=cuda:0 \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/multiagent/mappo_ippo.py \
   collector.n_iters=2 \

@@ -244,8 +244,6 @@ class TruncatedNormal(D.Independent):
     def update(self, loc: torch.Tensor, scale: torch.Tensor) -> None:
         if self.tanh_loc:
             loc = (loc / self.upscale).tanh() * self.upscale
-        if self.non_trivial_max or self.non_trivial_min:
-            loc = loc + (self.max - self.min) / 2 + self.min
         self.loc = loc
         self.scale = scale
 

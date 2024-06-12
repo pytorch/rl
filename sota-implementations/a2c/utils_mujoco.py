@@ -20,14 +20,20 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
+from torchrl.record import VideoRecorder
+
 
 # ====================================================================
 # Environment utils
 # --------------------------------------------------------------------
 
 
-def make_env(env_name="HalfCheetah-v4", device="cpu"):
-    env = GymEnv(env_name, device=device)
+def make_env(
+    env_name="HalfCheetah-v4", device="cpu", from_pixels=False, pixels_only=False
+):
+    env = GymEnv(
+        env_name, device=device, from_pixels=from_pixels, pixels_only=pixels_only
+    )
     env = TransformedEnv(env)
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
@@ -125,6 +131,11 @@ def make_ppo_models(env_name):
 # --------------------------------------------------------------------
 
 
+def dump_video(module):
+    if isinstance(module, VideoRecorder):
+        module.dump()
+
+
 def eval_model(actor, test_env, num_episodes=3):
     test_rewards = []
     for _ in range(num_episodes):
@@ -137,5 +148,6 @@ def eval_model(actor, test_env, num_episodes=3):
         )
         reward = td_test["next", "episode_reward"][td_test["next", "done"]]
         test_rewards = np.append(test_rewards, reward.cpu().numpy())
+        test_env.apply(dump_video)
     del td_test
     return test_rewards.mean()

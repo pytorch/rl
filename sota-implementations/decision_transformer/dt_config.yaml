@@ -27,6 +27,7 @@ logger:
   pretrain_log_interval: 500 # record interval in frames
   fintune_log_interval: 1
   eval_steps: 1000
+  video: False
 
 # replay buffer
 replay_buffer:
@@ -42,7 +43,7 @@ replay_buffer:
 
 # optimization
 optim:
-  device: cuda:0
+  device: null
   lr: 1.0e-4
   weight_decay: 5.0e-4
   batch_size: 64

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 
 Get started with Environments, TED and transforms

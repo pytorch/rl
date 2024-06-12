@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Using Replay Buffers
 ====================
@@ -779,6 +778,7 @@ t = Compose(
     ),
     Resize(in_keys=["pixels_trsf", ("next", "pixels_trsf")], w=64, h=64),
     GrayScale(in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
+    UnsqueezeTransform(-4, in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
     CatFrames(dim=-4, N=4, in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
 )
 rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(size), transform=t, batch_size=16)
@@ -787,7 +787,7 @@ rb.add(data_exclude)
 
 
 ######################################################################
-# Let us sample one element from the buffer. The shape of the transformed
+# Let us sample one batch from the buffer. The shape of the transformed
 # pixel keys should have a length of 4 along the 4th dimension starting from
 # the end:
 #
@@ -874,3 +874,4 @@ print("steps are successive", sample["steps"])
 #   :class:`~torchrl.data.PrioritizedSliceSampler` and
 #   :class:`~torchrl.data.SliceSamplerWithoutReplacement`, or other writers
 #   such as :class:`~torchrl.data.TensorDictMaxValueWriter`.
+# - Check how to checkpoint ReplayBuffers in :ref:`the doc <checkpoint-rb>`.

@@ -30,6 +30,7 @@ logger:
   eval_steps: 200
   mode: online
   eval_iter: 1000
+  video: False
 
 # Buffer
 replay_buffer:
@@ -41,7 +42,7 @@ replay_buffer:
 # Optimization
 optim:
   utd_ratio: 1
-  device: cuda:0
+  device: null
   lr: 1e-3
   weight_decay: 0.0
   batch_size: 256

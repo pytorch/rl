@@ -44,7 +44,9 @@ def get_logger(
     elif logger_type == "csv":
         from torchrl.record.loggers.csv import CSVLogger
 
-        logger = CSVLogger(log_dir=logger_name, exp_name=experiment_name)
+        logger = CSVLogger(
+            log_dir=logger_name, exp_name=experiment_name, video_format="mp4"
+        )
     elif logger_type == "wandb":
         from torchrl.record.loggers.wandb import WandbLogger
 

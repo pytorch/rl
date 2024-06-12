@@ -12,6 +12,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
 
+from torchrl._utils import timeit
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
@@ -19,6 +20,7 @@ from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
     distance_loss,
+    # distance_loss,
     hold_out_net,
     ValueEstimators,
 )
@@ -112,6 +114,8 @@ class DreamerModelLoss(LossModule):
         self.free_nats = free_nats
         self.delayed_clamp = delayed_clamp
         self.global_average = global_average
+        self.__dict__["decoder"] = self.world_model[0][-1]
+        self.__dict__["reward_model"] = self.world_model[1]
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
@@ -148,6 +152,7 @@ class DreamerModelLoss(LossModule):
             reward_loss = reward_loss.squeeze(-1)
         reward_loss = reward_loss.mean().unsqueeze(-1)
         # import ipdb; ipdb.set_trace()
+
         return (
             TensorDict(
                 {
@@ -159,6 +164,12 @@ class DreamerModelLoss(LossModule):
             ),
             tensordict.detach(),
         )
+
+    @staticmethod
+    def normal_log_probability(x, mean, std):
+        return (
+            -0.5 * ((x.to(mean.dtype) - mean) / std).pow(2) - std.log()
+        )  # - 0.5 * math.log(2 * math.pi)
 
     def kl_loss(
         self,
@@ -237,13 +248,13 @@ class DreamerActorLoss(LossModule):
         model_based_env: DreamerEnv,
         *,
         imagination_horizon: int = 15,
-        discount_loss: bool = False,  # for consistency with paper
+        discount_loss: bool = True,  # for consistency with paper
         gamma: int = None,
         lmbda: int = None,
     ):
         super().__init__()
         self.actor_model = actor_model
-        self.value_model = value_model
+        self.__dict__["value_model"] = value_model
         self.model_based_env = model_based_env
         self.imagination_horizon = imagination_horizon
         self.discount_loss = discount_loss
@@ -259,14 +270,13 @@ class DreamerActorLoss(LossModule):
             )
 
     def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
-        with torch.no_grad():
-            tensordict = tensordict.select("state", self.tensor_keys.belief)
-            tensordict = tensordict.reshape(-1)
+        tensordict = tensordict.select("state", self.tensor_keys.belief).detach()
+        tensordict = tensordict.reshape(-1)
 
-        with hold_out_net(self.model_based_env), set_exploration_type(
-            ExplorationType.RANDOM
-        ):
-            tensordict = self.model_based_env.reset(tensordict.clone(recurse=False))
+        with timeit("actor_loss/time-rollout"), hold_out_net(
+            self.model_based_env
+        ), set_exploration_type(ExplorationType.RANDOM):
+            tensordict = self.model_based_env.reset(tensordict.copy())
             fake_data = self.model_based_env.rollout(
                 max_steps=self.imagination_horizon,
                 policy=self.actor_model,
@@ -274,10 +284,7 @@ class DreamerActorLoss(LossModule):
                 tensordict=tensordict,
             )
 
-            next_tensordict = step_mdp(
-                fake_data,
-                keep_other=True,
-            )
+            next_tensordict = step_mdp(fake_data, keep_other=True)
             with hold_out_net(self.value_model):
                 next_tensordict = self.value_model(next_tensordict)
 
@@ -342,6 +349,7 @@ class DreamerActorLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
+                vectorized=True,  # TODO: vectorized version seems not to be similar to the non vectorised
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
@@ -391,7 +399,7 @@ class DreamerValueLoss(LossModule):
         self,
         value_model: TensorDictModule,
         value_loss: Optional[str] = None,
-        discount_loss: bool = False,  # for consistency with paper
+        discount_loss: bool = True,  # for consistency with paper
         gamma: int = 0.99,
     ):
         super().__init__()
@@ -435,6 +443,5 @@ class DreamerValueLoss(LossModule):
                 .sum((-1, -2))
                 .mean()
             )
-
         loss_tensordict = TensorDict({"loss_value": value_loss}, [])
         return loss_tensordict, fake_data

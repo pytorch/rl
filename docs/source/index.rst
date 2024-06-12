@@ -42,7 +42,7 @@ Installation
 
 TorchRL releases are synced with PyTorch, so make sure you always enjoy the latest
 features of the library with the `most recent version of PyTorch <https://pytorch.org/get-started/locally/>`__ (although core features
-are guaranteed to be backward compatible with pytorch>=1.13).
+are guaranteed to be backward compatible with pytorch>=2.0).
 Nightly releases can be installed via
 
 .. code-block::
@@ -111,6 +111,7 @@ Advanced
 .. toctree::
    :maxdepth: 1
 
+   tutorials/multiagent_competitive_ddpg
    tutorials/multi_task
    tutorials/coding_ddpg
    tutorials/coding_dqn

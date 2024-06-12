@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Introduction to TorchRL
 =======================
@@ -61,7 +60,6 @@ This demo was presented at ICML 2022 on the industry demo day.
 #       │   │   └── "replay_buffers.py"
 #       │   │   └── "samplers.py"
 #       │   │   └── "storages.py"
-#       │   │   └── "transforms.py"
 #       │   │   └── "writers.py"
 #       │   ├── "rlhf"
 #       │   │   └── "dataset.py"
@@ -94,7 +92,6 @@ This demo was presented at ICML 2022 on the industry demo day.
 #       │   │   └── "gym_transforms.py"
 #       │   │   └── "r3m.py"
 #       │   │   └── "rlhf.py"
-#       │   │   └── "transforms.py"
 #       │   │   └── "vc1.py"
 #       │   │   └── "vip.py"
 #       │   └── "vec_envs.py"
@@ -440,6 +437,7 @@ from torchrl.envs import ParallelEnv
 base_env = ParallelEnv(
     4,
     lambda: GymEnv("Pendulum-v1", frame_skip=3, from_pixels=True, pixels_only=False),
+    mp_start_method="fork",  # This will break on Windows machines! Remove and decorate with if __name__ == "__main__"
 )
 env = TransformedEnv(
     base_env, Compose(StepCounter(), ToTensorImage())
@@ -732,13 +730,17 @@ from tensordict.nn import TensorDictModule
 
 from torchrl.collectors import MultiaSyncDataCollector, MultiSyncDataCollector
 
-from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs import EnvCreator, SerialEnv
 from torchrl.envs.libs.gym import GymEnv
 
 ###############################################################################
 # EnvCreator makes sure that we can send a lambda function from process to process
+# We use a SerialEnv for simplicity, but for larger jobs a ParallelEnv would be better suited.
 
-parallel_env = ParallelEnv(3, EnvCreator(lambda: GymEnv("Pendulum-v1")))
+parallel_env = SerialEnv(
+    3,
+    EnvCreator(lambda: GymEnv("Pendulum-v1")),
+)
 create_env_fn = [parallel_env, parallel_env]
 
 actor_module = nn.Linear(3, 1)
