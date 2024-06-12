@@ -116,6 +116,7 @@ class Storage:
         return self.get(item)
 
     def __setitem__(self, index, value):
+        """Sets values in the storage without updating the cursor or length."""
         return self.set(index, value, set_cursor=False)
 
     def __iter__(self):
@@ -719,7 +720,7 @@ class TensorStorage(Storage):
             if len(cursor) > self._len_along_dim0:
                 warnings.warn(
                     "A cursor of length superior to the storage capacity was provided. "
-                    "To accomodate for this, the cursor will be truncated to its last "
+                    "To accommodate for this, the cursor will be truncated to its last "
                     "element such that its length matched the length of the storage. "
                     "This may **not** be the optimal behaviour for your application! "
                     "Make sure that the storage capacity is big enough to support the "

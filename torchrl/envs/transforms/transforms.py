@@ -2004,12 +2004,12 @@ class FlattenObservation(ObservationTransform):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         if not allow_positive_dim and first_dim >= 0:
             raise ValueError(
-                "first_dim should be smaller than 0 to accomodate for "
+                "first_dim should be smaller than 0 to accommodate for "
                 "envs of different batch_sizes."
             )
         if not allow_positive_dim and last_dim >= 0:
             raise ValueError(
-                "last_dim should be smaller than 0 to accomodate for "
+                "last_dim should be smaller than 0 to accommodate for "
                 "envs of different batch_sizes."
             )
         self._first_dim = first_dim
@@ -2108,8 +2108,8 @@ class UnsqueezeTransform(Transform):
         self.allow_positive_dim = allow_positive_dim
         if unsqueeze_dim >= 0 and not allow_positive_dim:
             raise RuntimeError(
-                "unsqueeze_dim should be smaller than 0 to accomodate for "
-                "envs of different batch_sizes. Turn allow_positive_dim to accomodate "
+                "unsqueeze_dim should be smaller than 0 to accommodate for "
+                "envs of different batch_sizes. Turn allow_positive_dim to accommodate "
                 "for positive unsqueeze_dim."
             )
         self._unsqueeze_dim = unsqueeze_dim
